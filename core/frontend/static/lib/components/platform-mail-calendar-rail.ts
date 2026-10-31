@@ -29,7 +29,7 @@ export class PlatformMailCalendarRail extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                width: var(--mail-rail-width, 64px);
+                width: var(--mail-rail-width);
                 min-height: 0;
                 padding: var(--space-4) var(--space-2);
                 padding-top: max(var(--space-4), env(safe-area-inset-top, 0px));

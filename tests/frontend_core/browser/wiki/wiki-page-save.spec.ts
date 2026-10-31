@@ -21,13 +21,14 @@ import {
 import { WikiPageView } from '../../../../apps/wiki/ui/pages/wiki-page-view.js';
 import '../../../../apps/wiki/ui/pages/wiki-home-page.js';
 import '../../../../apps/wiki/ui/components/wiki-sidebar.js';
+import type { TestEl } from '../helpers/dom.js';
 
 const PAGE_CONTENT = {
     type: 'doc',
     content: [{ type: 'paragraph', content: [{ type: 'text', text: 'текст' }] }],
 };
 
-function buildPage(id, overrides = {}) {
+function buildPage(id: string, overrides: Record<string, unknown> = {}) {
     return {
         wiki_page_id: id,
         company_id: 'cmp_1',
@@ -64,8 +65,8 @@ const EMPTY_LIST = { items: [], total: 0, limit: 100, offset: 0 };
 
 // WS-стаб: один оригинал, вызовы пишутся в wsCalls, ответы берутся из wsHandlers.
 const realRequest = platformWs.request;
-let wsCalls = [];
-let wsHandlers = {};
+let wsCalls: any[] = [];
+let wsHandlers: Record<string, unknown> = {};
 
 function installWs() {
     wsCalls = [];
@@ -88,12 +89,12 @@ function uninstallWs() {
 
 // Поллинг готовности редактора — не предмет spec'а: подмена на прототипе
 // детерминирована относительно _loadPage, который стартует из updated().
-const realRefreshOutline = WikiPageView.prototype._refreshOutlineWhenEditorReady;
+const realRefreshOutline = (WikiPageView.prototype as unknown as Record<string, unknown>)._refreshOutlineWhenEditorReady;
 function stubOutlineRefresh() {
-    WikiPageView.prototype._refreshOutlineWhenEditorReady = async () => {};
+    (WikiPageView.prototype as unknown as Record<string, unknown>)._refreshOutlineWhenEditorReady = async () => {};
 }
 function restoreOutlineRefresh() {
-    WikiPageView.prototype._refreshOutlineWhenEditorReady = realRefreshOutline;
+    (WikiPageView.prototype as unknown as Record<string, unknown>)._refreshOutlineWhenEditorReady = realRefreshOutline;
 }
 
 /**
@@ -101,7 +102,7 @@ function restoreOutlineRefresh() {
  * только для подключённого элемента.
  */
 async function mountPageView(pageId = 'wpg_1') {
-    const view = await fixture(html`<wiki-page-view page-id=${pageId}></wiki-page-view>`);
+    const view = await fixture<TestEl>(html`<wiki-page-view page-id=${pageId}></wiki-page-view>`);
     await waitUntil(() => view._page !== null);
     return view;
 }
@@ -172,7 +173,7 @@ describe('wiki page save — WS транспорт и форма ответа', 
     });
 
     it('правки за время полёта сохранения не затираются ответом', async () => {
-        let releaseSave;
+        let releaseSave: any;
         wsHandlers['wiki/pages/content_update_requested'] = () =>
             new Promise((resolve) => {
                 releaseSave = resolve;
@@ -214,7 +215,7 @@ describe('wiki page save — WS транспорт и форма ответа', 
     });
 
     it('поздний ответ досохранения не трогает экран новой страницы', async () => {
-        let releaseSave;
+        let releaseSave: any;
         wsHandlers['wiki/pages/content_update_requested'] = () =>
             new Promise((resolve) => {
                 releaseSave = resolve;
@@ -250,40 +251,40 @@ describe('wiki create — навигация по развёрнутому от�
     });
 
     it('wiki-home-page переходит на созданную страницу по её id', async () => {
-        const home = document.createElement('wiki-home-page');
+        const home = (document.createElement('wiki-home-page') as TestEl);
         let navigated = null;
-        home.navigate = (routeKey, params) => {
+        home.navigate = (routeKey: any, params: any) => {
             navigated = { routeKey, params };
         };
         await home._createRootPage();
 
         expect(navigated).to.not.equal(null);
-        expect(navigated.routeKey).to.equal('wiki_page');
-        expect(navigated.params.pageId).to.equal('wpg_new');
+        expect(navigated!.routeKey).to.equal('wiki_page');
+        expect(navigated!.params.pageId).to.equal('wpg_new');
     });
 
     it('wiki-sidebar переходит на созданную корневую страницу по её id', async () => {
-        const sidebar = document.createElement('wiki-sidebar');
+        const sidebar = (document.createElement('wiki-sidebar') as TestEl);
         let navigated = null;
-        sidebar.navigate = (routeKey, params) => {
+        sidebar.navigate = (routeKey: any, params: any) => {
             navigated = { routeKey, params };
         };
         await sidebar._createRootPage();
 
         expect(navigated).to.not.equal(null);
-        expect(navigated.params.pageId).to.equal('wpg_new');
+        expect(navigated!.params.pageId).to.equal('wpg_new');
     });
 
     it('wiki-sidebar переходит на созданную дочернюю страницу по её id', async () => {
-        const sidebar = document.createElement('wiki-sidebar');
+        const sidebar = (document.createElement('wiki-sidebar') as TestEl);
         let navigated = null;
-        sidebar.navigate = (routeKey, params) => {
+        sidebar.navigate = (routeKey: any, params: any) => {
             navigated = { routeKey, params };
         };
         await sidebar._createChildPage('wpg_parent');
 
         const createCall = wsCalls.find((c) => c.type === 'wiki/pages/create_requested');
         expect(createCall.payload.parent_page_id).to.equal('wpg_parent');
-        expect(navigated.params.pageId).to.equal('wpg_new');
+        expect(navigated!.params.pageId).to.equal('wpg_new');
     });
 });

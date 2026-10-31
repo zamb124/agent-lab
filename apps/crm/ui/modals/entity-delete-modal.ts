@@ -59,8 +59,8 @@ export class CRMEntityDeleteModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: rgba(255, 96, 96, 0.12);
-                color: var(--color-danger, #ef4444);
+                background: var(--error-bg);
+                color: var(--error);
                 border-radius: 50%;
             }
             .question {
@@ -109,9 +109,9 @@ export class CRMEntityDeleteModal extends PlatformModal {
                 color: var(--text-primary);
             }
             .btn-danger {
-                background: var(--color-danger, #ef4444);
+                background: var(--error);
                 color: white;
-                border-color: var(--color-danger, #ef4444);
+                border-color: var(--error);
             }
             .btn-danger:hover:not(:disabled) { filter: brightness(1.05); }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -109,7 +109,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.3,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     }
   },
   {
@@ -126,7 +126,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.1,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     },
     "react": {
       "loop_mode": "explicit",
@@ -149,7 +149,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.2,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     },
     "react": {
       "loop_mode": "explicit",
@@ -183,7 +183,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.2,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     }
   },
   {
@@ -200,7 +200,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.2,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     }
   },
   {
@@ -224,7 +224,7 @@
     "llm": {
       "model": "auto",
       "temperature": 0.2,
-      "provider": "humanitec_llm"
+      "provider": "linnex_llm"
     }
   }
 ]

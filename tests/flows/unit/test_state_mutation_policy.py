@@ -24,8 +24,8 @@ from apps.flows.src.state.mutation_policy import (
     user_code_state_mutation_guard,
 )
 from core.errors import FrozenStateFieldError
-from core.ui_document.document import FlowUIMarkdownText
 from core.types import JsonObject
+from core.ui_document.document import FlowUIMarkdownText
 
 
 def _minimal_state() -> ExecutionState:

@@ -1,26 +1,26 @@
 # Multi-brand (primary apex: linnex.io)
 
 После добавления `linnex.io` зарегистрируйте callback URL на apex **каждого** brand-домена.
-Primary deployment apex — **linnex.io**; humanitec.ru остаётся legacy brand.
+Primary deployment apex — **linnex.io**; linnex.io остаётся legacy brand.
 
 ## Yandex OAuth
 
-- `https://humanitec.ru/auth/callback/yandex`
+- `https://linnex.io/auth/callback/yandex`
 - `https://linnex.io/auth/callback/yandex`
 
 ## Google OAuth
 
-- `https://humanitec.ru/auth/callback/google`
+- `https://linnex.io/auth/callback/google`
 - `https://linnex.io/auth/callback/google`
 
 ## GitHub OAuth
 
-- `https://humanitec.ru/auth/callback/github`
+- `https://linnex.io/auth/callback/github`
 - `https://linnex.io/auth/callback/github`
 
 ## Apple Sign-In
 
-- Service ID / Return URLs для `app.linnex.io` (отдельно от `app.humanitec.ru`)
+- Service ID / Return URLs для `app.linnex.io` (отдельно от `app.linnex.io`)
 - Associated Domains: `linnex.io`, `*.linnex.io`
 
 ## amoCRM (если используется)

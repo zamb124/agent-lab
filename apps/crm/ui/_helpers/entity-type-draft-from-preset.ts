@@ -13,7 +13,7 @@ import { entityTypeNoteSubtreeLocked } from './entity-type-note-subtree-lock.js'
  * @param {{ namespaceIds: boolean }} opts — для templates-page: true, для namespace-detail: false
  */
 export function buildEntityTypeDraftFromTemplateTypeItem<TDraft>(
-    item: Record<string, any> | null,
+    item: Record<string, unknown> | null,
     catalogRows: { type_id: string; parent_type_id?: string }[] | null | undefined,
     makeTypeDraft: (overrides?: Record<string, unknown>) => TDraft,
     opts?: { namespaceIds?: boolean },
@@ -30,7 +30,7 @@ export function buildEntityTypeDraftFromTemplateTypeItem<TDraft>(
         { type_id: item.type_id, parent_type_id: parentId },
         catalogRows,
     );
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
         type_id: item.type_id,
         name: typeof item.name === 'string' ? item.name : '',
         description: typeof item.description === 'string' ? item.description : '',

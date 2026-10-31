@@ -72,7 +72,7 @@ export class SyncMessageList extends PlatformElement {
             justify-content: flex-start;
             align-items: stretch;
             gap: var(--space-3);
-            background: var(--bg-primary, var(--glass-solid));
+            background: var(--bg-primary);
         }
         .scroll > sync-message-bubble {
             flex: 0 0 auto;
@@ -90,10 +90,10 @@ export class SyncMessageList extends PlatformElement {
         .day-pill {
             font-size: var(--text-xs);
             color: var(--text-secondary);
-            background: var(--glass-tint-subtle, var(--glass-hover));
-            border: 1px solid var(--glass-border);
+            background: var(--glass-tint-subtle);
+            border: 1px solid var(--glass-border-medium);
             padding: 4px 12px;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             font-weight: var(--font-medium);
         }
         platform-empty-state { margin: auto; }
@@ -115,7 +115,7 @@ export class SyncMessageList extends PlatformElement {
         }
         .skeleton-row {
             height: 48px;
-            background: linear-gradient(90deg, var(--glass-hover) 0%, var(--glass-active, var(--glass-hover)) 50%, var(--glass-hover) 100%);
+            background: linear-gradient(90deg, var(--glass-tint-medium) 0%, var(--glass-tint-strong) 50%, var(--glass-tint-medium) 100%);
             background-size: 200% 100%;
             border-radius: var(--radius-md);
             animation: skeleton-shimmer 1.4s ease-in-out infinite;
@@ -136,16 +136,16 @@ export class SyncMessageList extends PlatformElement {
             gap: 6px;
             padding: 8px 14px;
             background: var(--accent);
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             border: none;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             font-size: var(--text-sm);
             font-weight: var(--font-semibold);
             cursor: pointer;
-            box-shadow: 0 6px 18px var(--accent-subtle, rgba(153, 166, 249, 0.32));
-            transition: transform var(--duration-fast), background var(--duration-fast);
+            box-shadow: 0 6px 18px var(--accent-subtle);
+            transition: transform var(--motion-duration-micro), background var(--motion-duration-micro);
         }
-        .unread-jump:hover { background: var(--accent-hover, var(--accent)); transform: translateY(-1px); }
+        .unread-jump:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .unread-jump:active { transform: translateY(0); }
     `;
     private _store: ControllerFor<'sync/messages_store'>;
@@ -327,7 +327,7 @@ export class SyncMessageList extends PlatformElement {
     _channelUnread() {
         const slice = this._channelsSel.value;
         if (!slice || !Array.isArray(slice.items)) return 0;
-        const ch = slice.items.find((c: Record<string, any>) => c && c.channel_id === this.channelId);
+        const ch = slice.items.find((c: Record<string, unknown>) => c && c.channel_id === this.channelId);
         if (!ch) return 0;
         const n = typeof ch.unread_count === 'number' ? ch.unread_count : 0;
         return n > 0 ? n : 0;
@@ -337,12 +337,12 @@ export class SyncMessageList extends PlatformElement {
     _pinnedIdsSet(): Set<string> {
         const slice = this._channelsSel.value;
         if (!slice || !Array.isArray(slice.items)) return new Set<string>();
-        const ch = slice.items.find((c: Record<string, any>) => c && c.channel_id === this.channelId);
+        const ch = slice.items.find((c: Record<string, unknown>) => c && c.channel_id === this.channelId);
         if (!ch || !Array.isArray(ch.pinned_message_ids)) return new Set<string>();
         return new Set<string>((ch.pinned_message_ids as string[]).filter((id) => typeof id === 'string' && id !== ''));
     }
 
-    _messageForBubble(raw: Record<string, any>, pinnedSet: ReadonlySet<string>) {
+    _messageForBubble(raw: Record<string, unknown>, pinnedSet: ReadonlySet<string>) {
         const mid = typeof raw.message_id === 'string' ? raw.message_id : '';
         const pinned = mid !== '' && pinnedSet.has(mid);
         return Object.freeze({ ...raw, is_pinned: pinned });

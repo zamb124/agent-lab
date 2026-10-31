@@ -14,6 +14,7 @@ import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { seedPlatformMarkdownEditorI18n, platformEn } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-markdown-editor.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 async function prepare() {
     resetPlatformState();
@@ -22,8 +23,8 @@ async function prepare() {
     await seedPlatformMarkdownEditorI18n();
 }
 
-async function mountVariables({ value, variables, variableCatalog }) {
-    const editor = await fixture(html`
+async function mountVariables({ value, variables, variableCatalog }: any) {
+    const editor = await fixture<TestEl>(html`
         <platform-markdown-editor
             ?enable-variables=${true}
             .value=${value}
@@ -35,10 +36,10 @@ async function mountVariables({ value, variables, variableCatalog }) {
     return editor;
 }
 
-async function previewText(editor) {
+async function previewText(editor: any) {
     editor._setMode('preview');
     await elementUpdated(editor);
-    const preview = editor.shadowRoot.querySelector('.preview-container');
+    const preview = qs(shadow(editor), '.preview-container');
     if (!preview) {
         throw new Error('preview-container missing');
     }
@@ -82,11 +83,11 @@ describe('platform-markdown-editor variable contract', () => {
             ],
         });
 
-        const chip = editor.shadowRoot.querySelector('.syntax-chip[data-source="upstream"]');
+        const chip = qs(shadow(editor), '.syntax-chip[data-source="upstream"]');
         expect(chip).to.exist;
         expect(chip.textContent.trim()).to.equal('{customer_name}');
         expect(chip.title).to.include('customer_name');
-        chip.click();
+        (chip as TestEl).click();
         await waitUntil(() => editor.getValue() === '{customer_name}', 'variable inserted');
 
         const text = await previewText(editor);
@@ -175,7 +176,7 @@ describe('platform-markdown-editor variable contract', () => {
             variables: {},
             variableCatalog: [],
         });
-        const status = editor.shadowRoot.querySelector('.syntax-list .editor-status');
+        const status = qs(shadow(editor), '.syntax-list .editor-status');
         expect(status.textContent).to.equal(platformEn.markdown_editor.no_available_variables);
     });
 
@@ -185,9 +186,9 @@ describe('platform-markdown-editor variable contract', () => {
             variables: {},
             variableCatalog: [],
         });
-        const monoButtons = [...editor.shadowRoot.querySelectorAll('.tool-btn.mono')];
+        const monoButtons = [...qsa(shadow(editor), '.tool-btn.mono')];
         expect(monoButtons.length).to.be.at.least(3);
-        monoButtons[0].click();
+        monoButtons[0]!.click();
         await waitUntil(() => editor.getValue().includes('{variable}'), 'placeholder inserted');
     });
 });

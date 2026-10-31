@@ -30,8 +30,8 @@ from core.ai.company_settings.platform_defaults import (
 from core.ai.company_settings.schema import (
     CUSTOM_PROVIDER_REF_PREFIX,
     CUSTOM_PROVIDER_SLUG,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     AICapability,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
@@ -290,14 +290,14 @@ def resolve_company_llm(
             f"capability {capability} expects CompanyLLMOverride, got {type(override).__name__}"
         )
 
-    if override.provider == HUMANITEC_LLM_PROVIDER:
+    if override.provider == LINNEX_LLM_PROVIDER:
         model = (
             override.model
             or platform_default_model(capability, override.provider)
-            or HUMANITEC_LLM_AUTO_MODEL
+            or LINNEX_LLM_AUTO_MODEL
         )
         resolved = CompanyResolvedLLM(
-            provider=HUMANITEC_LLM_PROVIDER,
+            provider=LINNEX_LLM_PROVIDER,
             model=str(model).strip(),
             cost_origin=COST_ORIGIN_PLATFORM,
             custom_provider_id=None,

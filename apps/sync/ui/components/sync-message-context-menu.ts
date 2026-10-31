@@ -28,7 +28,7 @@ import '@platform/lib/components/platform-popover.js';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😄', '🎉', '🤔', '👀'];
 
-function isStoreRecord(value: unknown): value is Record<string, any> {
+function isStoreRecord(value: unknown): value is Record<string, unknown> {
     return isPlainRecord(value);
 }
 
@@ -49,11 +49,11 @@ export class SyncMessageContextMenu extends PlatformElement {
             flex-wrap: nowrap;
             gap: var(--space-1);
             padding: var(--space-2) var(--space-3);
-            border-bottom: 1px solid var(--glass-border-subtle, var(--glass-border));
+            border-bottom: 1px solid var(--glass-border-subtle);
         }
         .reactions span {
             cursor: pointer;
-            font-size: var(--text-lg, 18px);
+            font-size: var(--text-lg);
             padding: 4px;
             border-radius: var(--radius-sm);
             line-height: 1;
@@ -65,7 +65,7 @@ export class SyncMessageContextMenu extends PlatformElement {
     private _react: OpController;
     private _pin: OpController;
     private _threads: ControllerFor<'sync/threads'>;
-    private _messagesStoreSel: SelectController<Record<string, any> | undefined>;
+    private _messagesStoreSel: SelectController<Record<string, unknown> | undefined>;
     private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
@@ -80,7 +80,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         this._authSel = this.select((s) => s.auth.user);
     }
 
-    _currentTarget(): Record<string, any> | null {
+    _currentTarget(): Record<string, unknown> | null {
         const slice = this._messagesStoreSel.value;
         const t = slice && slice.contextMenuTarget;
         return isStoreRecord(t) ? t : null;
@@ -97,7 +97,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         return '';
     }
 
-    _currentMessage(): Record<string, any> | null {
+    _currentMessage(): Record<string, unknown> | null {
         const target = this._currentTarget();
         if (!target) return null;
         const slice = this._messagesStoreSel.value;
@@ -108,7 +108,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         if (channelId === '') return null;
         const channelData = slice.byChannelId[channelId];
         if (!channelData || !Array.isArray(channelData.items)) return null;
-        const found = channelData.items.find((m: Record<string, any>) => m.message_id === target.messageId);
+        const found = channelData.items.find((m: Record<string, unknown>) => m.message_id === target.messageId);
         if (found) return found;
         const pendingMap = channelData.pendingByLocalId;
         if (pendingMap && typeof pendingMap === 'object' && pendingMap[target.messageId]) {

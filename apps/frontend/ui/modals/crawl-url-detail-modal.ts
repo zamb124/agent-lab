@@ -5,15 +5,16 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/crawl-report/crawl-report-metadata-panels.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function detailRecord(value: unknown): Record<string, any> | null {
+function detailRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -115,11 +116,6 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
                 text-align: center;
                 color: var(--text-tertiary);
             }
-            .loading {
-                display: flex;
-                justify-content: center;
-                padding: var(--space-8);
-            }
             .mono {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
@@ -134,7 +130,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         this._activeTab = 'metadata';
         this._loaded = false;
         this._detailOp = this.useOp('search/crawl_url_detail');
-        this._localeSel = this.select((state: Record<string, any>) => {
+        this._localeSel = this.select((state: Record<string, unknown>) => {
             const locale = state.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
                 throw new Error('crawl-url-detail-modal: i18n.locale is required');
@@ -171,7 +167,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         return formatPlatformDateTime(value as string | number | Date, this._localeSel.value as string);
     }
 
-    _renderMetadata(detail: Record<string, any>) {
+    _renderMetadata(detail: Record<string, unknown>) {
         const url = detail.url;
         return html`
             <div class="meta-grid">
@@ -217,7 +213,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         return html`<div class="markdown-preview">${unsafeHTML(htmlContent)}</div>`;
     }
 
-    _renderIndexedTab(detail: Record<string, any>) {
+    _renderIndexedTab(detail: Record<string, unknown>) {
         const indexed = detail.indexed_content;
         if (!detail.url.document_id) {
             return html`<div class="state">${this.t('crawl_report_page.url_detail_indexed_not_ready')}</div>`;
@@ -242,7 +238,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         `;
     }
 
-    _detailForCurrentUrl(): Record<string, any> | null {
+    _detailForCurrentUrl(): Record<string, unknown> | null {
         const detail = detailRecord(this._detailOp.state.lastResult);
         if (detail === null) return null;
         const url = detailRecord(detail.url);
@@ -254,16 +250,16 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         const { busy, error } = this._detailOp.state;
         const detail = this._detailForCurrentUrl();
         if (busy && !detail) {
-            return html`<div class="loading"><platform-spinner size="sm"></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (error && error.includes('404')) {
-            return html`<div class="state">${this.t('crawl_report_page.url_detail_not_found')}</div>`;
+            return html`<platform-empty-state icon="error" title=${this.t('crawl_report_page.url_detail_not_found')}></platform-empty-state>`;
         }
         if (!detail) {
             if (busy) {
-                return html`<div class="loading"><platform-spinner size="sm"></platform-spinner></div>`;
+                return html`<platform-empty-state loading></platform-empty-state>`;
             }
-            return html`<div class="state">${this.t('crawl_report_page.url_detail_unavailable')}</div>`;
+            return html`<platform-empty-state icon="error" title=${this.t('crawl_report_page.url_detail_unavailable')}></platform-empty-state>`;
         }
         return html`
             <div class="tabs" role="tablist">

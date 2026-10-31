@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { routerReducer, initialRouterState } from '@platform/lib/events/reducers/router.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('routerReducer', () => {
     it('initial: routeKey=null, params={}, notFound=false', () => {

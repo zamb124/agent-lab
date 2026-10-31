@@ -90,7 +90,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
         `,
     ];
 
-    _tone(provider: Record<string, any>) {
+    _tone(provider: Record<string, unknown>) {
         if (provider.availability === 'not_configured') {
             return 'tertiary';
         }
@@ -109,7 +109,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
         throw new Error(`llm-provider-status-strip: unknown availability ${provider.availability}`);
     }
 
-    _chipMeta(provider: Record<string, any>) {
+    _chipMeta(provider: Record<string, unknown>) {
         if (provider.availability === 'not_configured') {
             return this.t('settings_page.model_scoring.meta_no_key');
         }
@@ -132,7 +132,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
         return '';
     }
 
-    _hintText(provider: Record<string, any>) {
+    _hintText(provider: Record<string, unknown>) {
         const parts: any[] = [];
         const translate = (key: string) => this.t(key);
         if (provider.error_class !== null) {

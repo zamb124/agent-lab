@@ -23,11 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     PLATFORM_LLM_PROVIDER_ORDER,
     AICapability,
-    split_humanitec_llms_model_ref,
+    split_linnex_llms_model_ref,
     validate_platform_provider_for_capability,
 )
 from core.llm_context.models import LLMContextPatch
@@ -149,7 +149,7 @@ class CompanyLLMOverride(BaseModel):
                     'For provider=custom:<id> fields api_key_encrypted/base_url/'
                     + 'extra_request_headers are unused — set them on custom_providers'
                 )
-        if self.provider == HUMANITEC_LLM_PROVIDER:
+        if self.provider == LINNEX_LLM_PROVIDER:
             if (
                 self.api_key_encrypted
                 or self.base_url
@@ -157,29 +157,29 @@ class CompanyLLMOverride(BaseModel):
                 or self.extra_request_headers
             ):
                 raise ValueError(
-                    'provider=humanitec_llm is a virtual platform provider; '
+                    'provider=linnex_llm is a virtual platform provider; '
                     + "api_key_encrypted/base_url/folder_id/"
                     + 'extra_request_headers must not be set'
                 )
             if (
                 self.model
-                and self.model != HUMANITEC_LLM_AUTO_MODEL
-                and split_humanitec_llms_model_ref(self.model) is None
+                and self.model != LINNEX_LLM_AUTO_MODEL
+                and split_linnex_llms_model_ref(self.model) is None
             ):
                 raise ValueError(
-                    "provider=humanitec_llm supports model='auto' or "
+                    "provider=linnex_llm supports model='auto' or "
                     + "provider-prefixed free-pool model '<provider>:<model_id>'"
                 )
         self.fallback_models = validate_fallback_model_configs(self.fallback_models)
         for idx, fallback in enumerate(self.fallback_models or []):
             if fallback.provider is None:
                 raise ValueError(f"fallback_models[{idx}].provider is required")
-            if fallback.provider == HUMANITEC_LLM_PROVIDER and (
-                fallback.model != HUMANITEC_LLM_AUTO_MODEL
-                and split_humanitec_llms_model_ref(fallback.model) is None
+            if fallback.provider == LINNEX_LLM_PROVIDER and (
+                fallback.model != LINNEX_LLM_AUTO_MODEL
+                and split_linnex_llms_model_ref(fallback.model) is None
             ):
                 raise ValueError(
-                    f"fallback_models[{idx}]: provider=humanitec_llm supports "
+                    f"fallback_models[{idx}]: provider=linnex_llm supports "
                     + "model='auto' or a provider-prefixed free-pool model '<provider>:<model_id>'"
                 )
             _ = _validate_provider_ref(fallback.provider, allow_custom=True)
@@ -231,8 +231,8 @@ class CompanyEmbeddingOverride(BaseModel):
 
     @model_validator(mode="after")
     def _v_byok_only_for_platform(self) -> "CompanyEmbeddingOverride":
-        if self.provider == HUMANITEC_LLM_PROVIDER:
-            raise ValueError('provider=humanitec_llm does not support embedding')
+        if self.provider == LINNEX_LLM_PROVIDER:
+            raise ValueError('provider=linnex_llm does not support embedding')
         if self.mrl_output_dimension is not None and self.mrl_output_dimension > self.dimension:
             raise ValueError('embedding.mrl_output_dimension cannot exceed embedding.dimension')
         if _is_custom_ref(self.provider):
@@ -542,8 +542,8 @@ __all__ = [
     "CompanyVoiceOverride",
     "CUSTOM_PROVIDER_REF_PREFIX",
     "CUSTOM_PROVIDER_SLUG",
-    "HUMANITEC_LLM_AUTO_MODEL",
-    "HUMANITEC_LLM_PROVIDER",
+    "LINNEX_LLM_AUTO_MODEL",
+    "LINNEX_LLM_PROVIDER",
     "METADATA_KEY",
     "PLATFORM_LLM_PROVIDERS",
 ]

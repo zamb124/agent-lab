@@ -56,9 +56,9 @@ export class OfficeExplorerNavRail extends PlatformElement {
                 background: var(--glass-solid-subtle);
             }
             .item.active {
-                background: var(--documents-selected-bg, var(--accent-subtle));
-                border-color: var(--documents-selected-stroke, var(--accent));
-                color: var(--documents-selected-text, var(--accent));
+                background: var(--documents-selected-bg);
+                border-color: var(--documents-selected-stroke);
+                color: var(--documents-selected-text);
                 font-weight: 600;
             }
             .item:disabled {

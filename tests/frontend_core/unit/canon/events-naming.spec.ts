@@ -21,7 +21,7 @@ import { createResourceCollection } from '@platform/lib/events/factories/resourc
 import { createForm } from '@platform/lib/events/factories/form.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 
-const REGISTRIES = [
+const REGISTRIES: Array<[string, Record<string, string>]> = [
     ['CoreEvents', CoreEvents],
     ['CoreAuthEvents', CoreAuthEvents],
     ['ICON_EVENTS', ICON_EVENTS],

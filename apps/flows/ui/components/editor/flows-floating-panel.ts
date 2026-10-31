@@ -42,8 +42,8 @@ interface PanelRect {
     top: number;
     width: number;
     height: number;
-    expandedWidth?: number;
-    expandedHeight?: number;
+    expandedWidth?: number | undefined;
+    expandedHeight?: number | undefined;
 }
 
 interface PanelLayoutSnapshot extends PanelRect {
@@ -331,7 +331,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 justify-content: center;
                 gap: 3px;
                 background: color-mix(in oklab, var(--bg-secondary) 88%, var(--bg-primary));
-                transition: background var(--duration-fast) var(--easing-default);
+                transition: background var(--motion-duration-micro) var(--motion-ease-standard);
             }
 
             .assistant-resize-handle::before,
@@ -344,8 +344,8 @@ export class FlowsFloatingPanel extends PlatformElement {
                 opacity: 0.85;
                 pointer-events: none;
                 transition:
-                    background var(--duration-fast) var(--easing-default),
-                    opacity var(--duration-fast) var(--easing-default);
+                    background var(--motion-duration-micro) var(--motion-ease-standard),
+                    opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
 
             .assistant-resize-grip {
@@ -356,8 +356,8 @@ export class FlowsFloatingPanel extends PlatformElement {
                 opacity: 0.85;
                 pointer-events: none;
                 transition:
-                    background var(--duration-fast) var(--easing-default),
-                    opacity var(--duration-fast) var(--easing-default);
+                    background var(--motion-duration-micro) var(--motion-ease-standard),
+                    opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
 
             .assistant-resize-handle:hover,

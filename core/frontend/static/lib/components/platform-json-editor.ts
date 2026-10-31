@@ -69,7 +69,7 @@ export class PlatformJsonEditor extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 background: var(--bg-primary);
-                box-shadow: var(--shadow-xl);
+                box-shadow: var(--glass-shadow-strong);
             }
             :host([fill-parent]) {
                 display: flex;

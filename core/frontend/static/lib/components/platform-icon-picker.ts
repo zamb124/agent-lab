@@ -32,9 +32,9 @@ export class PlatformIconPicker extends PlatformElement {
             .trigger {
                 width: 100%;
                 min-height: 44px;
-                border: 1px solid var(--crm-stroke, var(--border-subtle));
-                border-radius: var(--radius-xl, 14px);
-                background: var(--crm-surface-elevated, var(--glass-solid-subtle));
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-xl);
+                background: var(--crm-surface-elevated);
                 color: var(--text-primary);
                 padding: var(--space-2) var(--space-3);
                 display: flex;
@@ -46,8 +46,8 @@ export class PlatformIconPicker extends PlatformElement {
 
             .trigger:focus-visible {
                 outline: none;
-                border-color: var(--accent, #3b82f6);
-                box-shadow: 0 0 0 1px var(--accent, #3b82f6);
+                border-color: var(--accent);
+                box-shadow: 0 0 0 1px var(--accent);
             }
 
             :host([disabled]) .trigger {
@@ -84,9 +84,9 @@ export class PlatformIconPicker extends PlatformElement {
             }
 
             .option {
-                border: 1px solid var(--crm-stroke, var(--border-subtle));
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-md);
-                background: var(--crm-surface-elevated, var(--glass-solid-subtle));
+                background: var(--crm-surface-elevated);
                 color: var(--text-primary);
                 min-height: 36px;
                 padding: 0 var(--space-2);
@@ -98,13 +98,13 @@ export class PlatformIconPicker extends PlatformElement {
             }
 
             .option:hover {
-                border-color: var(--crm-selected-stroke, var(--accent));
+                border-color: var(--crm-selected-stroke);
             }
 
             .option.active {
-                border-color: var(--crm-selected-stroke, var(--accent));
-                background: var(--crm-selected-bg, rgba(59, 130, 246, 0.12));
-                color: var(--crm-selected-text, var(--text-primary));
+                border-color: var(--crm-selected-stroke);
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
             }
 
             .option-label {

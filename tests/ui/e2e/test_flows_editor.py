@@ -128,7 +128,7 @@ async def test_flows_configure_agent_answers(
     await flows_set_selected_llm_config(
         page,
         {
-            "provider": "humanitec_llm",
+            "provider": "linnex_llm",
             "model": "auto",
             "temperature": 0.4,
             "max_tokens": 800,

@@ -37,8 +37,8 @@ import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
-const HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
-const HUMANITEC_LLM_AUTO_MODEL = 'auto';
+const LINNEX_LLM_PROVIDER = 'linnex_llm';
+const LINNEX_LLM_AUTO_MODEL = 'auto';
 const DEFAULT_LLM_CAPABILITY = 'llm_chat';
 
 export class FlowsLlmConfigEditor extends PlatformElement {
@@ -73,7 +73,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             .grid {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 width: 100%;
                 min-width: 0;
                 box-sizing: border-box;
@@ -143,7 +143,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 border-style: solid;
                 border-width: 4px 0 4px 6px;
                 border-color: transparent transparent transparent var(--text-tertiary);
-                transition: transform var(--duration-fast, 120ms) ease;
+                transition: transform var(--motion-duration-micro) ease;
             }
             details.advanced[open] summary.advanced-summary::before {
                 transform: rotate(90deg);
@@ -197,7 +197,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 overflow: clip;
             }
             .fallback-item.drag-over {
-                border-color: var(--accent, var(--focus-ring));
+                border-color: var(--accent);
             }
             .fallback-summary {
                 display: grid;
@@ -219,7 +219,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 border-style: solid;
                 border-width: 4px 0 4px 6px;
                 border-color: transparent transparent transparent var(--text-tertiary);
-                transition: transform var(--duration-fast, 120ms) ease;
+                transition: transform var(--motion-duration-micro) ease;
             }
             .fallback-item[open] > .fallback-summary::before {
                 transform: rotate(90deg);
@@ -455,18 +455,18 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._emitFallbackModels(items.filter((_, i) => i !== idx));
     }
 
-    _isHumanitecLlmProvider(provider: string) {
-        return provider === HUMANITEC_LLM_PROVIDER;
+    _isLinnexLlmProvider(provider: string) {
+        return provider === LINNEX_LLM_PROVIDER;
     }
 
     _onProviderChange(value: unknown) {
         const base = isPlainObject(this.config) ? this.config : {};
         const provider = typeof value === 'string' ? value : '';
-        if (this._isHumanitecLlmProvider(provider)) {
+        if (this._isLinnexLlmProvider(provider)) {
             const next: Record<string, unknown> = {
                 ...base,
-                provider: HUMANITEC_LLM_PROVIDER,
-                model: HUMANITEC_LLM_AUTO_MODEL,
+                provider: LINNEX_LLM_PROVIDER,
+                model: LINNEX_LLM_AUTO_MODEL,
             };
             for (const field of [
                 'api_key',
@@ -484,7 +484,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         if (provider.length === 0) {
             delete next.provider;
         }
-        if (base.provider === HUMANITEC_LLM_PROVIDER && next.model === HUMANITEC_LLM_AUTO_MODEL) {
+        if (base.provider === LINNEX_LLM_PROVIDER && next.model === LINNEX_LLM_AUTO_MODEL) {
             delete next.model;
         }
         this.emit('change', { config: next });
@@ -593,15 +593,15 @@ export class FlowsLlmConfigEditor extends PlatformElement {
     }
 
     _providerHint(provider: string) {
-        if (provider === HUMANITEC_LLM_PROVIDER) {
-            return this.t('llm_config_editor.humanitec_llms_provider_tooltip');
+        if (provider === LINNEX_LLM_PROVIDER) {
+            return this.t('llm_config_editor.linnex_llms_provider_tooltip');
         }
         return this.t('llm_config_editor.provider_hint');
     }
 
     _modelHint(provider: string, model: string) {
-        if (provider === HUMANITEC_LLM_PROVIDER && (!model || model === HUMANITEC_LLM_AUTO_MODEL)) {
-            return this.t('llm_config_editor.humanitec_llms_auto_tooltip');
+        if (provider === LINNEX_LLM_PROVIDER && (!model || model === LINNEX_LLM_AUTO_MODEL)) {
+            return this.t('llm_config_editor.linnex_llms_auto_tooltip');
         }
         return this.t('llm_config_editor.model_hint');
     }
@@ -620,8 +620,8 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const folderId = this._readString('folder_id');
         const baseUrl = this._readString('base_url');
         const reasoning = this._readString('reasoning_effort');
-        const humanitecLlm = this._isHumanitecLlmProvider(provider);
-        const model = humanitecLlm && rawModel.length === 0 ? HUMANITEC_LLM_AUTO_MODEL : rawModel;
+        const linnexLlm = this._isLinnexLlmProvider(provider);
+        const model = linnexLlm && rawModel.length === 0 ? LINNEX_LLM_AUTO_MODEL : rawModel;
         const extraJson = cfg.extra_request_body && typeof cfg.extra_request_body === 'object'
             ? formatJsonPretty(cfg.extra_request_body)
             : '{}';
@@ -888,7 +888,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                       </div>
                                   `
                                 : ''}
-                            ${humanitecLlm
+                            ${linnexLlm
                                 ? ''
                                 : html`
                                       <div class="field full">
@@ -906,7 +906,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                           ></platform-field>
                                       </div>
                                   `}
-                            ${provider === 'yandex' && !humanitecLlm
+                            ${provider === 'yandex' && !linnexLlm
                                 ? html`
                                       <div class="field full">
                                           <platform-field
@@ -927,7 +927,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                       </div>
                                   `
                                 : ''}
-                            ${humanitecLlm
+                            ${linnexLlm
                                 ? ''
                                 : html`
                                       <div class="field full">
@@ -1022,14 +1022,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                         : (e: CustomEvent) => this._onString('reasoning_effort', typeof e.detail.value === 'string' ? e.detail.value : '')}
                                 ></platform-field>
                             </div>
-                            ${this.readOnly || humanitecLlm
+                            ${this.readOnly || linnexLlm
                                 ? ''
                                 : html`
                                       <div class="field full extra">
                                           <p class="extra">${this.t('llm_config_editor.merge_layers_hint')}</p>
                                       </div>
                                   `}
-                            ${humanitecLlm
+                            ${linnexLlm
                                 ? ''
                                 : html`
                                       <div class="field full extra">

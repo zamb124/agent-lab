@@ -31,7 +31,7 @@
         "platform-workspace"
       ],
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }

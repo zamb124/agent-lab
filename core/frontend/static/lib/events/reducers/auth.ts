@@ -19,7 +19,7 @@ import type { PlatformEvent } from '../contract.js';
 export type AuthStatus = 'unknown' | 'validating' | 'authenticated' | 'unauthenticated' | 'error';
 
 export interface AuthUser extends Record<string, unknown> {
-    company_id?: string;
+    company_id?: string | undefined;
 }
 
 export interface AuthProvidersState {

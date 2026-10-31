@@ -25,7 +25,7 @@ export const REFLECTION_POLICY_PRESET_IDS = Object.freeze([
 export const REFLECTION_EXIT_PORTS = Object.freeze(['approved', 'blocked']);
 
 const REFLECTION_LLM_TEMPLATE = Object.freeze({
-    provider: 'humanitec_llm',
+    provider: 'linnex_llm',
     model: 'auto',
 });
 

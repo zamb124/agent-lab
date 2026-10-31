@@ -26,7 +26,7 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
     """
     pwa_dir = platform_pwa_assets_dir(project_root)
     manifest_path = pwa_dir / "manifest.json"
-    sw_path = pwa_dir / "sw.js"
+    sw_path = project_root / "core" / "frontend" / "embed-dist" / "pwa" / "sw.js"
     offline_path = pwa_dir / "offline.html"
     assetlinks_path = pwa_dir / "assetlinks.json"
     aasa_path = pwa_dir / "apple-app-site-association"

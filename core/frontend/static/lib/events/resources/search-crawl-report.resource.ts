@@ -10,6 +10,19 @@ import { createAsyncOp, createResourceCollection } from '../index.js';
 import { CoreEvents } from '../contract.js';
 import type { EffectCtx } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
+import type {
+    CrawlDomain,
+    CrawlDomainRunResponse,
+    CrawlJob,
+    CrawlJobQueuedResponse,
+    CrawlProfileSummary,
+    CrawlProfileWithIndex,
+    CrawlUrl,
+    CrawlUrlDetail,
+    CrawlUrlListItem,
+    OffsetPage_CrawlProfileWithIndex_,
+    UpsertStats,
+} from '../wire/search.gen.js';
 
 type QueryObject = Record<string, unknown>;
 
@@ -34,7 +47,7 @@ function _toast(ctx: EffectCtx, key: string): void {
     ctx.dispatch(CoreEvents.UI_TOAST_SHOW, { type: 'success', i18n_key: key }, { source: 'local' });
 }
 
-export const crawlProfilesLoadOp = createAsyncOp({
+export const crawlProfilesLoadOp = createAsyncOp<OffsetPage_CrawlProfileWithIndex_>({
     name: 'search/crawl_profiles_load',
     silent: true,
     transport: 'ws',
@@ -43,7 +56,7 @@ export const crawlProfilesLoadOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/search/api/v1/crawl/profiles' },
 });
 
-export const crawlSummaryLoadOp = createAsyncOp({
+export const crawlSummaryLoadOp = createAsyncOp<CrawlProfileSummary>({
     name: 'search/crawl_summary_load',
     silent: true,
     transport: 'ws',
@@ -56,7 +69,7 @@ function _reloadSummary(ctx: EffectCtx, crawlProfileId: string): void {
     ctx.dispatch(crawlSummaryLoadOp.events.REQUESTED, { crawl_profile_id: crawlProfileId }, { source: 'local' });
 }
 
-export const crawlDomainsResource = createResourceCollection({
+export const crawlDomainsResource = createResourceCollection<CrawlDomain>({
     name: 'search/crawl_domains',
     baseUrl: '/search/api/v1/crawl/domains',
     idField: 'crawl_domain_id',
@@ -72,7 +85,7 @@ export const crawlDomainsResource = createResourceCollection({
     restMirror: { list: { method: 'GET', path: '/search/api/v1/crawl/domains' } },
 });
 
-export const crawlUrlsResource = createResourceCollection({
+export const crawlUrlsResource = createResourceCollection<CrawlUrlListItem>({
     name: 'search/crawl_urls',
     baseUrl: '/search/api/v1/crawl/urls',
     idField: 'crawl_url_id',
@@ -92,7 +105,7 @@ export const crawlUrlsResource = createResourceCollection({
     restMirror: { list: { method: 'GET', path: '/search/api/v1/crawl/urls' } },
 });
 
-export const crawlJobsResource = createResourceCollection({
+export const crawlJobsResource = createResourceCollection<CrawlJob>({
     name: 'search/crawl_jobs',
     baseUrl: '/search/api/v1/crawl/jobs',
     idField: 'crawl_job_id',
@@ -108,7 +121,7 @@ export const crawlJobsResource = createResourceCollection({
     restMirror: { list: { method: 'GET', path: '/search/api/v1/crawl/jobs' } },
 });
 
-export const crawlUrlDetailOp = createAsyncOp({
+export const crawlUrlDetailOp = createAsyncOp<CrawlUrlDetail>({
     name: 'search/crawl_url_detail',
     silent: true,
     transport: 'ws',
@@ -117,7 +130,7 @@ export const crawlUrlDetailOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/search/api/v1/crawl/urls/:crawl_url_id' },
 });
 
-export const crawlQueueTickOp = createAsyncOp({
+export const crawlQueueTickOp = createAsyncOp<CrawlJobQueuedResponse>({
     name: 'search/crawl_queue_tick',
     silent: true,
     transport: 'ws',
@@ -134,7 +147,7 @@ export const crawlQueueTickOp = createAsyncOp({
     },
 });
 
-export const crawlDomainRunOp = createAsyncOp({
+export const crawlDomainRunOp = createAsyncOp<CrawlDomainRunResponse>({
     name: 'search/crawl_domain_run',
     silent: true,
     transport: 'ws',
@@ -153,7 +166,7 @@ export const crawlDomainRunOp = createAsyncOp({
     },
 });
 
-export const crawlProfilePatchOp = createAsyncOp({
+export const crawlProfilePatchOp = createAsyncOp<CrawlProfileWithIndex>({
     name: 'search/crawl_profile_patch',
     silent: true,
     transport: 'ws',
@@ -170,7 +183,7 @@ export const crawlProfilePatchOp = createAsyncOp({
     },
 });
 
-export const crawlDomainCreateOp = createAsyncOp({
+export const crawlDomainCreateOp = createAsyncOp<CrawlDomain>({
     name: 'search/crawl_domain_create',
     silent: true,
     transport: 'ws',
@@ -188,7 +201,7 @@ export const crawlDomainCreateOp = createAsyncOp({
     },
 });
 
-export const crawlDomainPatchOp = createAsyncOp({
+export const crawlDomainPatchOp = createAsyncOp<CrawlDomain>({
     name: 'search/crawl_domain_patch',
     silent: true,
     transport: 'ws',
@@ -206,7 +219,7 @@ export const crawlDomainPatchOp = createAsyncOp({
     },
 });
 
-export const crawlDomainDeleteOp = createAsyncOp({
+export const crawlDomainDeleteOp = createAsyncOp<null>({
     name: 'search/crawl_domain_delete',
     silent: true,
     transport: 'ws',
@@ -224,7 +237,7 @@ export const crawlDomainDeleteOp = createAsyncOp({
     },
 });
 
-export const crawlUrlAddOp = createAsyncOp({
+export const crawlUrlAddOp = createAsyncOp<UpsertStats>({
     name: 'search/crawl_url_add',
     silent: true,
     transport: 'ws',
@@ -242,7 +255,7 @@ export const crawlUrlAddOp = createAsyncOp({
     },
 });
 
-export const crawlUrlRecrawlOp = createAsyncOp({
+export const crawlUrlRecrawlOp = createAsyncOp<CrawlUrl>({
     name: 'search/crawl_url_recrawl',
     silent: true,
     transport: 'ws',

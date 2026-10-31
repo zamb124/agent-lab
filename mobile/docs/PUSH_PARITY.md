@@ -28,7 +28,7 @@
 ## Android (Capacitor + FCM)
 
 1. Зависимость `@capacitor/push-notifications` ставится через `mobile/package.json` (плагин общий для iOS и Android, нативные модули добавляет `npx cap sync android`).
-2. **Firebase project** (бесплатный): Console → Project settings → **Add app → Android**, package name `ru.humanitec.app`. Скачать `google-services.json`, положить в `mobile/android/app/google-services.json` (в `.gitignore`).
+2. **Firebase project** (бесплатный): Console → Project settings → **Add app → Android**, package name `io.linnex.app`. Скачать `google-services.json`, положить в `mobile/android/app/google-services.json` (в `.gitignore`).
 3. В `mobile/android/build.gradle` уже подключён `classpath 'com.google.gms:google-services:...'`, в `mobile/android/app/build.gradle` — условный `apply plugin: 'com.google.gms.google-services'` при наличии `google-services.json`.
 4. JS на `Capacitor.getPlatform() === 'android'` зовёт `PushNotifications.register()` и шлёт `transport: "android_fcm"` + `keys.device_token`.
 5. Backend: учётные данные собирает [`resolve_fcm_credentials`](../../core/push/fcm_credentials.py) из `push.fcm_credentials_json` (объект service account JSON либо строка JSON в ENV `PUSH__FCM_CREDENTIALS_JSON`). Service account — Firebase Console → **Project settings → Service accounts → Generate new private key**. `project_id` берётся из самого JSON, либо переопределяется `push.fcm_project_id`.

@@ -169,7 +169,7 @@ def flows_llm_payload(
                 "tools": tools if tools is not None else [],
                 "agent_skills": agent_skills if agent_skills is not None else [],
                 "llm": {
-                    "provider": "humanitec_llm",
+                    "provider": "linnex_llm",
                     "model": "auto",
                     "temperature": 0.2,
                     "max_tokens": 1024,
@@ -203,7 +203,7 @@ def flows_llm_with_reflection_payload(
         "pos_x": 420,
         "pos_y": 120,
         "llm": {
-            "provider": "humanitec_llm",
+            "provider": "linnex_llm",
             "model": "auto",
             "temperature": 0.0,
             "max_tokens": 512,
@@ -1171,7 +1171,7 @@ def flows_background_task_payload(
                 ),
                 "tools": ["work_item_create"],
                 "llm": {
-                    "provider": "humanitec_llm",
+                    "provider": "linnex_llm",
                     "model": "auto",
                     "temperature": 0.2,
                     "max_tokens": 1024,
@@ -1444,7 +1444,7 @@ async def flows_drop_node(
                         tools: [],
                         agent_skills: [],
                         llm: {
-                            provider: 'humanitec_llm',
+                            provider: 'linnex_llm',
                             model: 'auto',
                             temperature: 0.2,
                             max_tokens: 1024,
@@ -4189,7 +4189,7 @@ def flows_multi_orchestrator_payload(flow_id: str, *, name: str) -> dict[str, An
                 "prompt": "Направляй запросы подходящему помощнику магазина.",
                 "tools": [],
                 "llm": {
-                    "provider": "humanitec_llm",
+                    "provider": "linnex_llm",
                     "model": "auto",
                     "temperature": 0.2,
                     "max_tokens": 1024,

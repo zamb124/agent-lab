@@ -12,6 +12,7 @@ import {
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/platform-file-picker-modal.js';
 import { buildWikiPageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const catalogsOp = createAsyncOp({
     name: 'test/picker_catalogs',
@@ -32,7 +33,7 @@ const documentsOp = createAsyncOp({
     name: 'test/picker_documents',
     silent: true,
     restMirror: { method: 'GET', path: '/documents/api/v1/documents', service: 'office' },
-    request: async ({ payload }) => {
+    request: async ({ payload }: { payload: any }) => {
         if (
             !payload
             || !Array.isArray(payload.catalog_ids)
@@ -74,7 +75,7 @@ const uploadOp = createAsyncOp({
     name: 'test/picker_upload',
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/v1/files/uploads' },
-    request: async ({ payload }) => {
+    request: async ({ payload }: { payload: any }) => {
         if (!payload || !(payload.file instanceof File)) {
             throw new Error('test/picker_upload: file required');
         }
@@ -91,7 +92,7 @@ const uploadOp = createAsyncOp({
     },
 });
 
-function jsonResponse(body, status = 200) {
+function jsonResponse(body: any, status = 200) {
     return new Response(JSON.stringify(body), {
         status,
         headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -100,7 +101,7 @@ function jsonResponse(body, status = 200) {
 
 function installFetchMock() {
     const previousFetch = window.fetch;
-    window.fetch = async (rawUrl, init = {}) => {
+    window.fetch = async (rawUrl, init: any = {}) => {
         const method = (init.method || 'GET').toUpperCase();
         const url = new URL(String(rawUrl), window.location.href);
 
@@ -142,7 +143,7 @@ function installFetchMock() {
     };
 }
 
-function openPicker(props) {
+function openPicker(props: any) {
     getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, {
         kind: 'platform.file_picker',
         props: {
@@ -160,7 +161,7 @@ function openPicker(props) {
 }
 
 describe('platform-file-picker-modal', () => {
-    let fetchMock;
+    let fetchMock: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -172,7 +173,7 @@ describe('platform-file-picker-modal', () => {
 
     afterEach(() => {
         fetchMock.uninstall();
-        document.querySelectorAll('platform-file-picker-modal').forEach((node) => node.remove());
+        qsa(document!, 'platform-file-picker-modal').forEach((node) => node.remove());
     });
 
     it('buildWikiPageFileCreateSpecJson задаёт wiki_page source', () => {
@@ -188,64 +189,64 @@ describe('platform-file-picker-modal', () => {
     });
 
     it('выбор карточки вызывает onSelect и закрывает модалку', async () => {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
-        let selected = null;
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
+        let selected: { file_id?: string; original_name?: string; content_type?: string; is_public?: boolean } | null = null;
         openPicker({
             acceptMimePrefix: 'image/',
-            onSelect: (file) => {
+            onSelect: (file: any) => {
                 selected = file;
             },
         });
         await elementUpdated(stack);
 
         await waitUntil(
-            () => document.querySelector('platform-file-picker-modal') !== null,
+            () => q(document!, 'platform-file-picker-modal') !== null,
             'file picker mounted',
         );
-        const modal = document.querySelector('platform-file-picker-modal');
+        const modal = qs(document!, 'platform-file-picker-modal');
         expect(modal).to.exist;
 
         await waitUntil(
-            () => modal.shadowRoot.querySelectorAll('platform-file-card').length > 0,
+            () => qsa(shadow(modal), 'platform-file-card').length > 0,
             'document cards rendered',
         );
         await elementUpdated(modal);
 
-        const cards = modal.shadowRoot.querySelectorAll('platform-file-card');
+        const cards = qsa(shadow(modal), 'platform-file-card');
         expect(cards.length).to.equal(1);
-        expect(cards[0].fileName).to.equal('cover.png');
+        expect(cards[0]!.fileName).to.equal('cover.png');
 
-        cards[0].shadowRoot.querySelector('.card').click();
+        qs(shadow(cards[0]!), '.card').click();
         await waitUntil(() => selected !== null, 'onSelect called');
-        expect(selected.file_id).to.equal('doc-image-1');
-        expect(selected.original_name).to.equal('cover.png');
+        expect(selected!.file_id).to.equal('doc-image-1');
+        expect(selected!.original_name).to.equal('cover.png');
 
         await waitUntil(
-            () => document.querySelector('platform-file-picker-modal[open]') === null,
+            () => q(document!, 'platform-file-picker-modal[open]') === null,
             'picker closed after select',
         );
     });
 
     it('upload нового файла отдаёт результат в onSelect', async () => {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
-        let selected = null;
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
+        let selected: { file_id?: string; original_name?: string; content_type?: string; is_public?: boolean } | null = null;
         openPicker({
             acceptMimePrefix: '',
-            onSelect: (file) => {
+            onSelect: (file: any) => {
                 selected = file;
             },
         });
         await elementUpdated(stack);
 
         await waitUntil(
-            () => document.querySelector('platform-file-picker-modal') !== null,
+            () => q(document!, 'platform-file-picker-modal') !== null,
             'file picker mounted',
         );
-        const modal = document.querySelector('platform-file-picker-modal');
+        const modal = qs(document!, 'platform-file-picker-modal');
         expect(modal).to.exist;
         await elementUpdated(modal);
 
-        const input = modal.shadowRoot.querySelector('input[type="file"]');
+        const input = qs(shadow(modal), 'input[type="file"]');
         expect(input).to.exist;
         const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
         const transfer = new DataTransfer();
@@ -254,9 +255,9 @@ describe('platform-file-picker-modal', () => {
         input.dispatchEvent(new Event('change', { bubbles: true }));
 
         await waitUntil(() => selected !== null, 'upload onSelect called');
-        expect(selected.file_id).to.equal('uploaded-1');
-        expect(selected.original_name).to.equal('notes.txt');
-        expect(selected.content_type).to.equal('text/plain');
-        expect(selected.is_public).to.equal(true);
+        expect(selected!.file_id).to.equal('uploaded-1');
+        expect(selected!.original_name).to.equal('notes.txt');
+        expect(selected!.content_type).to.equal('text/plain');
+        expect(selected!.is_public).to.equal(true);
     });
 });

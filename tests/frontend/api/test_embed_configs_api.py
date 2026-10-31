@@ -591,7 +591,7 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     apex_from_token = f"{te_parts.scheme}://{te_parts.netloc}"
     assert f'data-platform-ui-origin="{apex_from_token}"' in html_code
     assert "flow-ui-embed-autoload.js" in html_code
-    assert "humanitec-embed-autoload.js" not in html_code
+    assert "linnex-embed-autoload.js" not in html_code
     assert 'type="module"' in html_code
     assert "data-embed-id=" in html_code
     assert embed_id in html_code
@@ -1079,11 +1079,11 @@ async def test_get_embed_code_production_urls(
     data = response.json()
     html_code = data["html_code"]
 
-    assert data["script_url"] == "https://cdn.humanitec.ru/lib/embed-flow-ui/flow-ui-embed-autoload.js"
-    assert 'data-flows-base-url="https://api.humanitec.ru/flows"' in html_code
-    assert 'data-platform-ui-origin="https://api.humanitec.ru"' in html_code
-    assert 'data-voice-base-url="https://api.humanitec.ru/voice"' in html_code
-    assert data["token_endpoint"].startswith("https://api.humanitec.ru/frontend/api/embed/configs/")
+    assert data["script_url"] == "https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+    assert 'data-flows-base-url="https://api.linnex.io/flows"' in html_code
+    assert 'data-platform-ui-origin="https://api.linnex.io"' in html_code
+    assert 'data-voice-base-url="https://api.linnex.io/voice"' in html_code
+    assert data["token_endpoint"].startswith("https://api.linnex.io/frontend/api/embed/configs/")
     assert company_id in html_code
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)

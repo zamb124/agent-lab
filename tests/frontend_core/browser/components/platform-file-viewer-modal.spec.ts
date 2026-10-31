@@ -19,6 +19,8 @@ import {
     registerFactory,
     collectFactories,
 } from '@platform/lib/events/index.js';
+import type { PlatformFactory } from '@platform/lib/events/factory-registry.js';
+import type { CollectableFactory } from '@platform/lib/events/factories/register.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/platform-file-viewer-modal.js';
@@ -58,6 +60,13 @@ import { platformFileCreateOp } from '@platform/lib/events/factories/platform-fi
 import { namespacesResource } from '../../../../apps/crm/ui/events/resources/namespaces.resource.js';
 import { graphViewSlice } from '../../../../apps/crm/ui/events/resources/graph-view.resource.js';
 import { noteComposeSlice } from '../../../../apps/crm/ui/events/resources/note-compose.resource.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
+
+declare global {
+    interface Window {
+        __platformFileViewerSpecEditors?: Array<{ destroyed: boolean; destroyEditor(): void }>;
+    }
+}
 
 const DOC_SERVER_URL = 'https://docs.example.test';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -65,17 +74,17 @@ const PDF_MIME = 'application/pdf';
 const MINIMAL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 2h12v12H2z"/></svg>';
 
 class PlatformFileViewerOpenFixture extends PlatformElement {
-    static properties = {
+    static override properties = {
         file: { type: Object },
     };
 
     constructor() {
         super();
-        this.file = null;
+        (this as TestEl).file = null;
     }
 
-    render() {
-        return html`<button type="button" @click=${() => this.openFile(this.file, { source: 'spec' })}>Open</button>`;
+    override render() {
+        return html`<button type="button" @click=${() => (this as TestEl).openFile((this as TestEl).file, { source: 'spec' })}>Open</button>`;
     }
 }
 
@@ -83,12 +92,12 @@ if (!customElements.get('platform-file-viewer-open-fixture')) {
     customElements.define('platform-file-viewer-open-fixture', PlatformFileViewerOpenFixture);
 }
 
-function base64urlJson(value) {
+function base64urlJson(value: any) {
     const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))));
     return encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function editorConfigFor(fileId, title = `${fileId}.docx`) {
+function editorConfigFor(fileId: any, title = `${fileId}.docx`) {
     if (title.toLowerCase().endsWith('.html') || title.toLowerCase().endsWith('.htm')) {
         return {
             handler: 'text',
@@ -158,16 +167,16 @@ function editorConfigFor(fileId, title = `${fileId}.docx`) {
     };
 }
 
-function queryDocumentViewerHost(modal) {
-    return modal.shadowRoot?.querySelector('platform-document-viewer-host') || null;
+function queryDocumentViewerHost(modal: any) {
+    return qs(shadow(modal), 'platform-document-viewer-host') || null;
 }
 
-function queryOnlyOfficeHost(modal) {
+function queryOnlyOfficeHost(modal: any) {
     const viewerHost = queryDocumentViewerHost(modal);
     return viewerHost?.shadowRoot?.querySelector('platform-onlyoffice-host') || null;
 }
 
-function jsonResponse(body, status = 200) {
+function jsonResponse(body: any, status = 200) {
     return new Response(JSON.stringify(body), {
         status,
         headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -183,8 +192,8 @@ function svgResponse() {
 
 function installOfficeFetchMock() {
     const previousFetch = window.fetch;
-    const calls = [];
-    window.fetch = async (rawUrl, init = {}) => {
+    const calls: any[] = [];
+    window.fetch = async (rawUrl, init: any = {}) => {
         const method = (init.method || 'GET').toUpperCase();
         const url = new URL(String(rawUrl), window.location.href);
         calls.push({ method, url: `${url.pathname}${url.search}`, init });
@@ -230,7 +239,7 @@ function installOfficeFetchMock() {
 
         const editorMatch = url.pathname.match(/^\/documents\/api\/v1\/files\/([^/]+)\/editor-config$/);
         if (method === 'GET' && editorMatch) {
-            const fileId = decodeURIComponent(editorMatch[1]);
+            const fileId = decodeURIComponent(editorMatch[1]!);
             const titleHint = url.searchParams.get('title');
             const title = typeof titleHint === 'string' && titleHint.length > 0
                 ? titleHint
@@ -247,7 +256,7 @@ function installOfficeFetchMock() {
 
         const syncMatch = url.pathname.match(/^\/documents\/api\/v1\/files\/([^/]+)\/sync$/);
         if (method === 'POST' && syncMatch) {
-            const fileId = decodeURIComponent(syncMatch[1]);
+            const fileId = decodeURIComponent(syncMatch[1]!);
             return jsonResponse({ file_id: fileId, checksum: `sha-${fileId}`, file_size: 42 });
         }
 
@@ -265,11 +274,11 @@ function installDocsApiFake() {
     const prevDocsApi = window.DocsAPI;
     const prevOrigin = window.__ooDocsApiOrigin;
     const prevSpecEditors = window.__platformFileViewerSpecEditors;
-    const editors = [];
+    const editors: any[] = [];
     window.__platformFileViewerSpecEditors = editors;
     window.__ooDocsApiOrigin = DOC_SERVER_URL;
     window.DocsAPI = {
-        DocEditor: function DocEditor(id, config) {
+        DocEditor: (function DocEditor(id: string, config: Record<string, unknown>) {
             const iframe = document.createElement('iframe');
             iframe.name = 'frameEditor';
             iframe.src = `about:blank?frameEditorId=${encodeURIComponent(id)}`;
@@ -288,13 +297,14 @@ function installDocsApiFake() {
                 },
             };
             editors.push(editor);
+            const events = (config as { events?: Record<string, ((arg?: unknown) => void) | undefined> }).events;
             setTimeout(() => {
-                config.events?.onAppReady?.();
-                config.events?.onDocumentReady?.();
-                config.events?.onDocumentStateChange?.({ data: true });
+                events?.onAppReady?.();
+                events?.onDocumentReady?.();
+                events?.onDocumentStateChange?.({ data: true });
             }, 0);
             return editor;
-        },
+        }) as unknown as new (placeholderId: string, init: Record<string, unknown>) => { destroyEditor(): void },
     };
 
     return {
@@ -319,7 +329,7 @@ function installDocsApiFake() {
     };
 }
 
-function mouse(target, type, x, y) {
+function mouse(target: any, type: any, x: any, y: any) {
     target.dispatchEvent(new MouseEvent(type, {
         bubbles: true,
         composed: true,
@@ -331,15 +341,15 @@ function mouse(target, type, x, y) {
     }));
 }
 
-function registerFactoriesForTest(factories) {
+function registerFactoriesForTest(factories: any) {
     const unique = [...new Set(factories)];
     for (const factory of unique) {
-        registerFactory(factory);
+        registerFactory(factory as PlatformFactory);
     }
-    return collectFactories(unique);
+    return collectFactories(unique as CollectableFactory[]);
 }
 
-function setupBusWithFactories(factories = []) {
+function setupBusWithFactories(factories: any[] = []) {
     const collected = registerFactoriesForTest(factories);
     return bootstrapTestBus({ slices: collected.slices, effects: [] });
 }
@@ -380,34 +390,34 @@ function crmFactories() {
 }
 
 async function mountStack() {
-    const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+    const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
     await elementUpdated(stack);
     return stack;
 }
 
-async function waitForViewerCount(count) {
+async function waitForViewerCount(count: any) {
     await waitUntil(
-        () => document.querySelectorAll('platform-file-viewer-modal[open]').length >= count,
+        () => qsa(document!, 'platform-file-viewer-modal[open]').length >= count,
         `${count} file viewer modal(s) mounted`,
     );
-    const modals = Array.from(document.querySelectorAll('platform-file-viewer-modal[open]'));
+    const modals = Array.from(qsa(document!, 'platform-file-viewer-modal[open]'));
     await Promise.all(modals.map((modal) => modal.updateComplete));
     return modals;
 }
 
-async function waitForOnlyOfficeIframe(modal) {
+async function waitForOnlyOfficeIframe(modal: any) {
     await waitUntil(
         () => queryOnlyOfficeHost(modal),
         'onlyoffice host mounted',
     );
     const host = queryOnlyOfficeHost(modal);
-    await elementUpdated(host);
+    await elementUpdated(host!);
     await waitUntil(
-        () => Boolean(host.config?.token),
+        () => Boolean((host as TestEl).config.token),
         'onlyoffice config assigned',
     );
     await waitUntil(
-        () => Boolean(host._configKey),
+        () => Boolean((host as TestEl)._configKey),
         'onlyoffice boot key computed',
     );
     expect(window.DocsAPI?.DocEditor, 'fake DocsAPI is installed before editor boot').to.be.a('function');
@@ -417,30 +427,30 @@ async function waitForOnlyOfficeIframe(modal) {
         throw new Error(`OnlyOffice host emitted error: ${modal._error}`);
     }
     await waitUntil(
-        () => window.__platformFileViewerSpecEditors?.length > 0,
+        () => window.__platformFileViewerSpecEditors!.length > 0,
         'fake OnlyOffice DocEditor constructed',
     );
     await waitUntil(
-        () => Boolean(host.shadowRoot?.querySelector('iframe[name="frameEditor"]')),
+        () => Boolean(q(shadow(host!), 'iframe[name="frameEditor"]')),
         'fake OnlyOffice iframe reparented into the host',
     );
-    return host.shadowRoot.querySelector('iframe[name="frameEditor"]');
+    return qs(shadow(host!), 'iframe[name="frameEditor"]');
 }
 
-async function clickOpenButton(file) {
-    const opener = await fixture(html`<platform-file-viewer-open-fixture .file=${file}></platform-file-viewer-open-fixture>`);
-    opener.shadowRoot.querySelector('button').click();
+async function clickOpenButton(file: any) {
+    const opener = await fixture<TestEl>(html`<platform-file-viewer-open-fixture .file=${file}></platform-file-viewer-open-fixture>`);
+    qs(shadow(opener), 'button').click();
     return opener;
 }
 
-function lastFileOpenEvent(events) {
-    const items = events.filter((event) => event.type === FILES_EVENTS.OPEN_REQUESTED);
+function lastFileOpenEvent(events: any) {
+    const items = events.filter((event: any) => event.type === FILES_EVENTS.OPEN_REQUESTED);
     return items[items.length - 1] || null;
 }
 
 describe('platform-file-viewer-modal global viewer', () => {
-    let fetchMock;
-    let docsApi;
+    let fetchMock: any;
+    let docsApi: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -453,8 +463,8 @@ describe('platform-file-viewer-modal global viewer', () => {
         docsApi.uninstall();
         fetchMock.uninstall();
         fixtureCleanup();
-        document.querySelectorAll('platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
-        document.querySelectorAll('[data-file-viewer-underlay]').forEach((node) => node.remove());
+        qsa(document!, 'platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
+        qsa(document!, '[data-file-viewer-underlay]').forEach((node) => node.remove());
     });
 
     it('opens through openFile, fetches editor config from FileRecord endpoint, renders invisible shell and syncs on close', async () => {
@@ -469,34 +479,34 @@ describe('platform-file-viewer-modal global viewer', () => {
         const iframe = await waitForOnlyOfficeIframe(modal);
 
         expect(iframe.getAttribute('allow')).to.include('clipboard-read');
-        expect(fetchMock.calls.some((call) => call.method === 'GET' && call.url === '/documents/api/v1/files/contract-docx/editor-config')).to.equal(true);
+        expect(fetchMock.calls.some((call: any) => call.method === 'GET' && call.url === '/documents/api/v1/files/contract-docx/editor-config')).to.equal(true);
         expect(docsApi.editors[0].config.document.title).to.equal('contract-docx.docx');
 
-        const scrimStyle = getComputedStyle(modal.shadowRoot.querySelector('.modal-scrim'));
-        const headerStyle = getComputedStyle(modal.shadowRoot.querySelector('.modal-header'));
-        const shellRect = modal.shadowRoot.querySelector('.viewer-shell').getBoundingClientRect();
+        const scrimStyle = getComputedStyle(qs(shadow(modal!), '.modal-scrim'));
+        const headerStyle = getComputedStyle(qs(shadow(modal!), '.modal-header'));
+        const shellRect = qs(shadow(modal!), '.viewer-shell').getBoundingClientRect();
         expect(scrimStyle.backgroundColor).to.equal('rgba(0, 0, 0, 0)');
         expect(headerStyle.position).to.equal('fixed');
         expect(shellRect.width).to.be.greaterThan(window.innerWidth * 0.9);
         expect(shellRect.height).to.be.greaterThan(window.innerHeight * 0.9);
 
-        modal.shadowRoot.querySelector('.header-buttons .header-btn:last-child').click();
+        qs(shadow(modal!), '.header-buttons .header-btn:last-child').click();
         await waitUntil(
-            () => fetchMock.calls.some((call) => call.method === 'POST' && call.url === '/documents/api/v1/files/contract-docx/sync'),
+            () => fetchMock.calls.some((call: any) => call.method === 'POST' && call.url === '/documents/api/v1/files/contract-docx/sync'),
             'editor sync requested before close',
         );
-        const syncCall = fetchMock.calls.find((call) => call.method === 'POST' && call.url === '/documents/api/v1/files/contract-docx/sync');
+        const syncCall = fetchMock.calls.find((call: any) => call.method === 'POST' && call.url === '/documents/api/v1/files/contract-docx/sync');
         expect(JSON.parse(syncCall.init.body)).to.include({ close: true, dirty: true });
         await waitUntil(
-            () => document.querySelector('platform-file-viewer-modal[open]') === null,
+            () => q(document!, 'platform-file-viewer-modal[open]') === null,
             'viewer removed after synced close',
         );
     });
 
     it('minimizes to a compact draggable file chip, restores, drags full controls, and supports multiple viewers', async () => {
         await mountStack();
-        const underlay = document.createElement('button');
-        underlay.dataset.fileViewerUnderlay = 'true';
+        const underlay = (document.createElement('button') as TestEl);
+        (underlay as TestEl).dataset.fileViewerUnderlay = 'true';
         underlay.textContent = 'Underlying action';
         underlay.style.cssText = 'position:fixed;left:24px;top:24px;width:180px;height:44px;z-index:10;';
         let underlayClicks = 0;
@@ -509,27 +519,27 @@ describe('platform-file-viewer-modal global viewer', () => {
         let [first] = await waitForViewerCount(1);
         const firstIframe = await waitForOnlyOfficeIframe(first);
 
-        const minimizeButton = first.shadowRoot.querySelector('.header-buttons .header-btn:first-child');
-        minimizeButton.click();
-        await elementUpdated(first);
+        const minimizeButton = qs(shadow(first!), '.header-buttons .header-btn:first-child');
+        (minimizeButton as TestEl).click();
+        await elementUpdated(first!);
         await aTimeout(0);
-        expect(first.minimized).to.equal(true);
-        expect(first.shadowRoot.querySelector('.drag-dots')).to.exist;
-        expect(first.shadowRoot.querySelector('platform-icon[file-icon]')).to.exist;
-        expect(first.shadowRoot.querySelector('.header-buttons .header-btn:first-child platform-icon').name).to.equal('fullscreen');
-        expect(getComputedStyle(first.shadowRoot.querySelector('.modal-scrim')).display).to.equal('none');
-        expect(first.shadowRoot.querySelector('platform-document-viewer-host').suspended).to.equal(true);
+        expect(first!.minimized).to.equal(true);
+        expect(qs(shadow(first!), '.drag-dots')).to.exist;
+        expect(qs(shadow(first!), 'platform-icon[file-icon]')).to.exist;
+        expect(qs(shadow(first!), '.header-buttons .header-btn:first-child platform-icon').name).to.equal('fullscreen');
+        expect(getComputedStyle(qs(shadow(first!), '.modal-scrim')).display).to.equal('none');
+        expect(qs(shadow(first!), 'platform-document-viewer-host').suspended).to.equal(true);
         expect(firstIframe.style.pointerEvents).to.equal('none');
         const hit = document.elementFromPoint(48, 40);
         expect(hit === underlay || underlay.contains(hit)).to.equal(true);
-        hit.click();
+        (hit as TestEl).click();
         expect(underlayClicks).to.equal(1);
-        const chip = first.shadowRoot.querySelector('.modal');
+        const chip = qs(shadow(first!), '.modal');
         const chipRect = chip.getBoundingClientRect();
         expect(chipRect.width).to.be.lessThan(340);
         expect(chipRect.height).to.be.lessThan(70);
 
-        const chipHeader = first.shadowRoot.querySelector('.modal-header');
+        const chipHeader = qs(shadow(first!), '.modal-header');
         mouse(chipHeader, 'mousedown', chipRect.left + 24, chipRect.top + 24);
         document.dispatchEvent(new MouseEvent('mousemove', {
             bubbles: true,
@@ -538,7 +548,7 @@ describe('platform-file-viewer-modal global viewer', () => {
             buttons: 1,
         }));
         document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: chipRect.left - 70, clientY: chipRect.top - 60 }));
-        await elementUpdated(first);
+        await elementUpdated(first!);
         const draggedChipRect = chip.getBoundingClientRect();
         expect(draggedChipRect.left).to.be.lessThan(chipRect.left - 30);
         expect(draggedChipRect.top).to.be.lessThan(chipRect.top - 20);
@@ -551,18 +561,18 @@ describe('platform-file-viewer-modal global viewer', () => {
             buttons: 1,
         }));
         document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: -2000, clientY: -2000 }));
-        await elementUpdated(first);
+        await elementUpdated(first!);
         const clampedChipRect = chip.getBoundingClientRect();
         expect(clampedChipRect.left).to.be.at.least(0);
         expect(clampedChipRect.top).to.be.at.least(0);
         expect(clampedChipRect.right).to.be.at.most(window.innerWidth);
         expect(clampedChipRect.bottom).to.be.at.most(window.innerHeight);
 
-        first.shadowRoot.querySelector('.header-buttons .header-btn:first-child').click();
-        await elementUpdated(first);
-        expect(first.minimized).to.equal(false);
+        qs(shadow(first!), '.header-buttons .header-btn:first-child').click();
+        await elementUpdated(first!);
+        expect(first!.minimized).to.equal(false);
 
-        const fullHeader = first.shadowRoot.querySelector('.modal-header');
+        const fullHeader = qs(shadow(first!), '.modal-header');
         const fullHeaderRect = fullHeader.getBoundingClientRect();
         mouse(fullHeader, 'mousedown', fullHeaderRect.left + 28, fullHeaderRect.top + 20);
         document.dispatchEvent(new MouseEvent('mousemove', {
@@ -581,7 +591,7 @@ describe('platform-file-viewer-modal global viewer', () => {
         const modals = await waitForViewerCount(2);
         await Promise.all(modals.map((modal) => waitForOnlyOfficeIframe(modal)));
         expect(modals.map((modal) => modal.fileId).sort()).to.deep.equal(['first-docx', 'second-docx']);
-        expect(document.querySelectorAll('platform-file-viewer-modal[open]').length).to.equal(2);
+        expect(qsa(document!, 'platform-file-viewer-modal[open]').length).to.equal(2);
     });
 
     it('HTML text presentation defaults to preview iframe and switches to raw code via header actions', async () => {
@@ -594,45 +604,45 @@ describe('platform-file-viewer-modal global viewer', () => {
 
         const [modal] = await waitForViewerCount(1);
         await waitUntil(
-            () => Boolean(modal.config?.text?.presentation === 'html'),
+            () => Boolean(modal!.config.text?.presentation === 'html'),
             'html open config assigned',
         );
 
-        const typeActions = modal.shadowRoot.querySelector('.header-type-actions');
+        const typeActions = qs(shadow(modal!), '.header-type-actions');
         expect(typeActions).to.exist;
-        const modeButtons = [...typeActions.querySelectorAll('.header-btn-label')];
+        const modeButtons = [...qsa(typeActions!, '.header-btn-label')];
         expect(modeButtons).to.have.length(2);
-        expect(modeButtons[0].getAttribute('aria-pressed')).to.equal('true');
-        expect(modeButtons[1].getAttribute('aria-pressed')).to.equal('false');
+        expect(modeButtons[0]!.getAttribute('aria-pressed')).to.equal('true');
+        expect(modeButtons[1]!.getAttribute('aria-pressed')).to.equal('false');
 
         const viewerHost = queryDocumentViewerHost(modal);
         await waitUntil(
             () => Boolean(viewerHost?.shadowRoot?.querySelector('platform-document-text-viewer')),
             'text viewer mounted',
         );
-        const textViewer = viewerHost.shadowRoot.querySelector('platform-document-text-viewer');
+        const textViewer = qs(shadow(viewerHost), 'platform-document-text-viewer');
         await waitUntil(
-            () => Boolean(textViewer.shadowRoot?.querySelector('iframe.html-preview-frame')),
+            () => Boolean(q(shadow(textViewer), 'iframe.html-preview-frame')),
             'html preview iframe rendered',
         );
-        expect(textViewer.shadowRoot.querySelector('platform-code-editor')).to.equal(null);
+        expect(q(shadow(textViewer), 'platform-code-editor')).to.equal(null);
 
-        modeButtons[1].click();
-        await elementUpdated(modal);
+        modeButtons[1]!.click();
+        await elementUpdated(modal!);
         await waitUntil(
-            () => Boolean(textViewer.shadowRoot?.querySelector('platform-code-editor')),
+            () => Boolean(q(shadow(textViewer), 'platform-code-editor')),
             'raw code editor rendered after Raw click',
         );
-        expect(textViewer.shadowRoot.querySelector('iframe.html-preview-frame')).to.equal(null);
-        expect(modeButtons[0].getAttribute('aria-pressed')).to.equal('false');
-        expect(modeButtons[1].getAttribute('aria-pressed')).to.equal('true');
+        expect(q(shadow(textViewer), 'iframe.html-preview-frame')).to.equal(null);
+        expect(modeButtons[0]!.getAttribute('aria-pressed')).to.equal('false');
+        expect(modeButtons[1]!.getAttribute('aria-pressed')).to.equal('true');
     });
 });
 
 describe('global file entrypoints dispatch the shared viewer event', () => {
-    let fetchMock;
-    let docsApi;
-    let events;
+    let fetchMock: any;
+    let docsApi: any;
+    let events: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -645,15 +655,15 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         docsApi.uninstall();
         fetchMock.uninstall();
         fixtureCleanup();
-        document.querySelectorAll('platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
+        qsa(document!, 'platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
     });
 
     it('sync message file attachment opens through the same global viewer event', async () => {
         setupBusWithFactories(syncFactories());
-        getPlatformBus().subscribeAny((event) => events.push(event));
+        getPlatformBus().subscribeAny((event: any) => events.push(event));
         await mountStack();
 
-        const bubble = await fixture(html`
+        const bubble = await fixture<TestEl>(html`
             <sync-message-bubble
                 .message=${{
                     message_id: 'm1',
@@ -681,24 +691,24 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
             ></sync-message-bubble>
         `);
         await elementUpdated(bubble);
-        const syncRows = [...bubble.shadowRoot.querySelectorAll('.file')];
-        const syncIcons = [...bubble.shadowRoot.querySelectorAll('.file platform-icon[file-icon]')].map((icon) => icon.name);
+        const syncRows = [...qsa(shadow(bubble), '.file')];
+        const syncIcons = [...qsa(shadow(bubble), '.file platform-icon[file-icon]')].map((icon) => icon.name);
         expect(syncRows).to.have.length(2);
         expect(syncIcons).to.deep.equal(['word', 'pdf']);
-        const firstRect = syncRows[0].getBoundingClientRect();
-        const secondRect = syncRows[1].getBoundingClientRect();
+        const firstRect = syncRows[0]!.getBoundingClientRect();
+        const secondRect = syncRows[1]!.getBoundingClientRect();
         expect(secondRect.top - firstRect.bottom).to.be.greaterThan(6);
-        syncRows[0].click();
+        syncRows[0]!.click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'sync-docx', 'sync attachment opened file');
         expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Sync.docx');
     });
 
     it('CRM entity and note attachment rows/actions open through the same global viewer event', async () => {
         setupBusWithFactories(crmFactories());
-        getPlatformBus().subscribeAny((event) => events.push(event));
+        getPlatformBus().subscribeAny((event: any) => events.push(event));
         await mountStack();
 
-        const entityCard = document.createElement('crm-entity-card');
+        const entityCard = (document.createElement('crm-entity-card') as TestEl);
         entityCard._openEntityAttachmentItem({
             id: 'crm-entity-docx',
             filename: 'Entity.docx',
@@ -716,13 +726,13 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
             download_url: '/api/v1/files/download/crm-entity-row-docx',
             status: 'ready',
         }];
-        const entityPopover = await fixture(html`${entityCard._renderEntityAttachmentsPopover('view')}`);
-        expect(entityPopover.querySelector('.attachments-popover-row platform-icon[file-icon]').name).to.equal('word');
-        entityPopover.querySelector('.attachments-popover-row').click();
+        const entityPopover = await fixture<TestEl>(html`${entityCard._renderEntityAttachmentsPopover('view')}`);
+        expect(qs(entityPopover!, '.attachments-popover-row platform-icon[file-icon]').name).to.equal('word');
+        qs(entityPopover!, '.attachments-popover-row').click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-entity-row-docx', 'CRM entity attachment row opened file');
 
         events.length = 0;
-        const noteCard = document.createElement('crm-note-card-view');
+        const noteCard = (document.createElement('crm-note-card-view') as TestEl);
         noteCard._openAttachmentItem({
             id: 'crm-note-docx',
             filename: 'Note.docx',
@@ -734,7 +744,7 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Note.docx');
 
         events.length = 0;
-        const noteRow = await fixture(html`${noteCard._renderAttachmentRow({
+        const noteRow = await fixture<TestEl>(html`${noteCard._renderAttachmentRow({
             id: 'crm-note-row-docx',
             filename: 'Note Row.docx',
             contentType: DOCX_MIME,
@@ -743,8 +753,8 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
             downloadUrl: '/api/v1/files/download/crm-note-row-docx',
             canDelete: true,
         }, 'view')}`);
-        expect(noteRow.querySelector('platform-icon[file-icon]').name).to.equal('word');
-        noteRow.click();
+        expect(qs(noteRow!, 'platform-icon[file-icon]').name).to.equal('word');
+        (noteRow as TestEl).click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-note-row-docx', 'CRM note attachment row opened file');
         expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Note Row.docx');
     });

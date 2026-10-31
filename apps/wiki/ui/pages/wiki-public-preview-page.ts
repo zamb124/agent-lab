@@ -42,6 +42,7 @@ interface WikiPublicTree {
     [key: string]: unknown;
 }
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-rich-editor.js';
@@ -405,7 +406,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
             </div>`;
         }
         if (this._page === null) {
-            return html`<div class="state"><platform-spinner size="sm"></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <div class="site">

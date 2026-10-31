@@ -50,7 +50,7 @@ export class FlowUIHtmlBlock extends LitElement {
             display: block; width: 100%; min-height: var(--flow-ui-html-min-height, 0);
             border: 0; border-radius: var(--flow-ui-radius-md, 12px); background: transparent;
         }
-        .error { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--error, #ff718d) 14%, transparent); color: var(--error, #ff718d); font-size: 12px; white-space: pre-wrap; font-family: var(--font-mono); }
+        .error { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); font-size: 12px; white-space: pre-wrap; font-family: var(--font-mono); }
     `;
 
     constructor() {

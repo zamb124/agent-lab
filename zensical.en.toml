@@ -1,14 +1,14 @@
 [project]
-site_name = "Humanitec"
+site_name = "Linnex"
 site_description = "Platform for AI agents, RAG, NetWorkle, and automation"
-site_url = "https://humanitec.ru/documentation/en/"
-site_author = "Humanitec"
+site_url = "https://linnex.io/documentation/en/"
+site_author = "Linnex"
 docs_dir = "build/documentation-en"
 site_dir = "build/zensical-en-out"
 dev_addr = "127.0.0.1:8000"
 use_directory_urls = true
 
-copyright = "Humanitec"
+copyright = "Linnex"
 
 extra_css = [
   "assets/stylesheets/documentation-header.css",

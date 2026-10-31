@@ -17,9 +17,9 @@ from apps.flows.src.runtime.flow_interface_context import (
 from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.mutation_policy import FrozenStateFieldError
 from apps.flows.tools.flows.flow_ui_tools import state_set, ui_navigate, ui_render
+from core.types import JsonObject, require_json_object
 from core.ui_document.document import FlowUIDocument
 from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
-from core.types import JsonObject, require_json_object
 
 
 def _state(unique_id: str) -> ExecutionState:

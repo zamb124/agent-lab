@@ -39,7 +39,7 @@ function _assertCompanyOverviewItemsShape(items: unknown[]) {
     }
 }
 
-function _toastError(ctx: Record<string, any>, key: string) {
+function _toastError(ctx: Record<string, unknown>, key: string) {
     ctx.dispatch(
         CoreEvents.UI_TOAST_SHOW,
         { i18n_key: key },

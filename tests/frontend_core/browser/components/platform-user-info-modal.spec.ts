@@ -9,6 +9,7 @@ import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
 import platformEn from '../../../../core/i18n/translations/en/platform.json' with { type: 'json' };
 import '@platform/lib/components/platform-user-info-modal.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const EMPLOYEE = {
     user_id: 'flow_employee_test_flow',
@@ -56,20 +57,20 @@ function seedAuthUser({
     });
 }
 
-function seedTeamMembers(items) {
+function seedTeamMembers(items: any) {
     getPlatformBus().dispatch(TEAM_EVENTS.MEMBERS_LOADED, { items });
 }
 
-async function mountOtherUserModal(userId) {
-    const el = await fixture(html`
+async function mountOtherUserModal(userId: any) {
+    const el = await fixture<TestEl>(html`
         <platform-user-info-modal user-id=${userId} .open=${true}></platform-user-info-modal>
     `);
     await elementUpdated(el);
     return el;
 }
 
-function footerText(el) {
-    const footer = el.shadowRoot.querySelector('.modal-footer, .actions');
+function footerText(el: any) {
+    const footer = qs(shadow(el), '.modal-footer, .actions');
     return footer ? footer.textContent : '';
 }
 
@@ -90,15 +91,15 @@ describe('platform-user-info-modal flow employee', () => {
         seedTeamMembers([EMPLOYEE]);
         const el = await mountOtherUserModal(EMPLOYEE.user_id);
 
-        const badge = el.shadowRoot.querySelector('.role-chip');
+        const badge = qs(shadow(el), '.role-chip');
         expect(badge).to.exist;
         expect(badge.textContent).to.include('AI employee');
 
-        const section = el.shadowRoot.querySelector('.channels-section');
+        const section = qs(shadow(el), '.channels-section');
         expect(section).to.exist;
         expect(section.textContent).to.include('AI employee');
 
-        const editorLink = section.querySelector('a[href="/flows/editor/test_flow"]');
+        const editorLink = qs(section!, 'a[href="/flows/editor/test_flow"]');
         expect(editorLink).to.exist;
     });
 
@@ -107,7 +108,7 @@ describe('platform-user-info-modal flow employee', () => {
         seedTeamMembers([EMPLOYEE]);
         const el = await mountOtherUserModal(EMPLOYEE.user_id);
 
-        const curatorChip = el.shadowRoot.querySelector('platform-user-chip[user-id="curator_1"]');
+        const curatorChip = qs(shadow(el), 'platform-user-chip[user-id="curator_1"]');
         expect(curatorChip).to.exist;
     });
 
@@ -149,8 +150,8 @@ describe('platform-user-info-modal flow employee', () => {
         }]);
         const el = await mountOtherUserModal('human_1');
 
-        const body = el.shadowRoot.textContent;
+        const body = shadow(el).textContent;
         expect(body).to.not.include('flow_employee_open_editor');
-        expect(el.shadowRoot.querySelector('.channels-section')).to.be.null;
+        expect(q(shadow(el), '.channels-section')).to.be.null;
     });
 });

@@ -35,13 +35,13 @@ async def test_serp_cache_store_and_slice(unique_id) -> None:
     ranked = [_sample_result(index) for index in range(1, 26)]
     try:
         cache_key = await service.store_pool(
-            query="humanitec",
+            query="linnex",
             mode="quick",
             index_ids=["runet"],
             ranked=ranked,
         )
         page, total_count, has_more, query = await service.slice(cache_key, offset=10, limit=10)
-        assert query == "humanitec"
+        assert query == "linnex"
         assert total_count == 25
         assert has_more is True
         assert len(page) == 10

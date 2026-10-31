@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { notificationsReducer, initialNotificationsState, NOTIFICATIONS_EVENTS, notificationsSlice } from '@platform/lib/events/reducers/notifications.js';
+import type { PlatformEvent } from '../../../../core/frontend/static/lib/events/contract.js';
 
-const ev = (type, payload, ts = 1000) => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'ws' } });
+const ev = (type: string, payload: unknown, ts = 1000): PlatformEvent => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'ws', causation_id: null, correlation_id: null, trace_id: null } });
 
 describe('notificationsReducer', () => {
     it('initial', () => {
@@ -37,20 +38,20 @@ describe('notificationsReducer', () => {
 
     it('notify без _received сохраняет kind', () => {
         const next = notificationsReducer(initialNotificationsState, ev('notify/crm/note_created', { title: 'N' }));
-        expect(next.list[0].kind).toBe('note_created');
+        expect(next.list[0]?.kind).toBe('note_created');
     });
 
     it('READ помечает read и уменьшает unread', () => {
         const seeded = notificationsReducer(initialNotificationsState, ev('notify/x/y_received', { title: 't' }));
-        const id = seeded.list[0].id;
+        const id = seeded.list[0]?.id;
         const next = notificationsReducer(seeded, ev(NOTIFICATIONS_EVENTS.READ, { id }));
-        expect(next.list[0].read).toBe(true);
+        expect(next.list[0]?.read).toBe(true);
         expect(next.unread).toBe(0);
     });
 
     it('READ повторный — без изменения unread', () => {
         let s = notificationsReducer(initialNotificationsState, ev('notify/x/y', { title: 't' }));
-        const id = s.list[0].id;
+        const id = s.list[0]?.id;
         s = notificationsReducer(s, ev(NOTIFICATIONS_EVENTS.READ, { id }));
         const next = notificationsReducer(s, ev(NOTIFICATIONS_EVENTS.READ, { id }));
         expect(next.unread).toBe(0);
@@ -60,7 +61,7 @@ describe('notificationsReducer', () => {
         let s = notificationsReducer(initialNotificationsState, ev('notify/x/y', { title: 't1' }));
         s = notificationsReducer(s, ev('notify/x/y', { title: 't2' }));
         expect(s.unread).toBe(2);
-        const targetId = s.list[0].id;
+        const targetId = s.list[0]?.id;
         const next = notificationsReducer(s, ev(NOTIFICATIONS_EVENTS.DISMISS, { id: targetId }));
         expect(next.list).toHaveLength(1);
         expect(next.unread).toBe(1);

@@ -47,7 +47,7 @@ class Company(PlatformModel):
     subdomain: str | None = DbField(
         default=None,
         title="Поддомен",
-        description="Поддомен компании (company.humanitec.ru)",
+        description="Поддомен компании (company.linnex.io)",
         json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     owner_user_id: str | None = Field(

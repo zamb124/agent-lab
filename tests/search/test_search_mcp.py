@@ -31,7 +31,7 @@ async def test_meta_search_reports_missing_serper_key(
     response = await meta_search_service_builder(
         SearchIntegrationConfig(),
         provider_state_store,
-    ).search(MetaSearchRequest(query="humanitec", providers=["serper"]))
+    ).search(MetaSearchRequest(query="linnex", providers=["serper"]))
 
     assert response.results == []
     assert response.providers["serper"].ok is False
@@ -114,7 +114,7 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
                 "jsonrpc": "2.0",
                 "id": 8,
                 "method": "tools/call",
-                "params": {"name": "unknown", "arguments": {"query": "humanitec"}},
+                "params": {"name": "unknown", "arguments": {"query": "linnex"}},
             },
         )
         assert "Tool not found: unknown" in unknown_tool.json()["error"]["message"]
@@ -127,7 +127,7 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
                 "method": "tools/call",
                 "params": {
                     "name": "meta_web_search",
-                    "arguments": {"query": "humanitec", "providers": ["unsupported"]},
+                    "arguments": {"query": "linnex", "providers": ["unsupported"]},
                 },
             },
         )
@@ -139,9 +139,9 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
         assert payload["content"][0]["type"] == "text"
 
         result = {
-            "title": "Humanitec Search",
+            "title": "Linnex Search",
             "url": "https://example.com/search",
-            "snippet": "Humanitec search platform",
+            "snippet": "Linnex search platform",
             "display_url": "example.com",
             "provider": "serper",
             "provider_rank": 1,
@@ -159,7 +159,7 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
                 "params": {
                     "name": "search_suggest",
                     "arguments": {
-                        "query": "Humanitec Search",
+                        "query": "Linnex Search",
                         "results": [result],
                         "mode": "research",
                         "limit": 4,
@@ -179,7 +179,7 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
                 "params": {
                     "name": "search_result_insights",
                     "arguments": {
-                        "query": "Humanitec Search",
+                        "query": "Linnex Search",
                         "results": [result],
                         "mode": "deep",
                     },

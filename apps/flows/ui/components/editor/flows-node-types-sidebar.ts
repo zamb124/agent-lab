@@ -265,12 +265,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .empty-row {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                padding: var(--space-2);
-                text-align: center;
-            }
+
         `,
     ];
     private _nodeTypesOp: OpController;
@@ -684,7 +679,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 ? html`<platform-empty-state loading></platform-empty-state>`
                 : ''}
             ${(filteredNodes.length === 0 && filteredResources.length === 0 && nodeTypes.length > 0)
-                ? html`<div class="empty-row">${this.t('node_types_sidebar.empty_search')}</div>`
+                ? html`<platform-empty-state icon="search" title=${this.t('node_types_sidebar.empty_search')}></platform-empty-state>`
                 : ''}
         `;
     }

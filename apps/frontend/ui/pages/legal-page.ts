@@ -67,8 +67,8 @@ export class LegalPage extends PlatformPage {
     constructor() {
         super();
         this.kind = 'policy';
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
-        this._bundleSel = this.select((s: Record<string, any>) => s.i18n.translations[s.i18n.locale]);
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._bundleSel = this.select((s: Record<string, unknown>) => s.i18n.translations[s.i18n.locale]);
         this._siteBundle = this.useOp('frontend/public_site_bundle');
     }
     private _localeSel: SelectController<any>;
@@ -118,7 +118,7 @@ export class LegalPage extends PlatformPage {
         if (!legal) {
             return {};
         }
-        const vars: Record<string, any> = {};
+        const vars: Record<string, unknown> = {};
         for (const key of LEGAL_I18N_STRING_KEYS) {
             const value = legal[key];
             if (typeof value !== 'string' || value === '') {

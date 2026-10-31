@@ -14,22 +14,23 @@ const API_PAYLOAD = {
     support_email: 'support@linnex.io',
     logo_path: '/static/core/assets/service_logos/frontend_logo.svg',
     apex_origin: 'https://linnex.io/',
-    supported_domains: ['linnex.io', 'humanitec.ru'],
+    supported_domains: ['linnex.io', 'linnex.io'],
     models_product_name: 'Linnex Models',
     voice_product_name: 'Linnex Voice',
     llms_display_label: 'Linnex LLMs',
     flows_product_label: 'Linnex Flows',
 };
 
-let fetchMock;
-let dom;
+let fetchMock: ReturnType<typeof installFetchMock> | undefined;
+let dom: ReturnType<typeof installDomShim> | undefined;
 
 beforeEach(() => {
     dom = installDomShim();
+    if (!dom) throw new Error('dom shim required');
     dom.window.location.hostname = 'linnex.io';
     dom.window.location.protocol = 'https:';
     dom.window.location.host = 'linnex.io';
-    dom.window.location.port = '';
+    Reflect.set(dom.window.location, 'port', '');
     dom.window.location.href = 'https://linnex.io/';
     fetchMock = installFetchMock();
     if (typeof globalThis.window !== 'undefined') {
@@ -38,8 +39,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    fetchMock.uninstall();
-    dom.uninstall();
+    fetchMock?.uninstall();
+    dom?.uninstall();
     if (typeof globalThis.window !== 'undefined') {
         delete globalThis.window.__PLATFORM_BRAND__;
     }
@@ -47,14 +48,14 @@ afterEach(() => {
 
 describe('loadPlatformBrandBootstrap', () => {
     it('загружает brand с API и сохраняет bootstrap', async () => {
-        fetchMock.respondJson('GET', BRAND_URL, API_PAYLOAD);
+        fetchMock?.respondJson('GET', BRAND_URL, API_PAYLOAD);
         const brand = await loadPlatformBrandBootstrap();
         expect(brand.baseDomain).toBe('linnex.io');
         expect(brand.platformName).toBe('Linnex');
         expect(brand.protocol).toBe('https');
         expect(getPlatformBrandBootstrap()).toEqual(brand);
-        expect(fetchMock.calls).toHaveLength(1);
-        expect(fetchMock.calls[0].url).toBe(BRAND_URL);
+        expect(fetchMock?.calls).toHaveLength(1);
+        expect(fetchMock?.calls[0]?.url).toBe(BRAND_URL);
     });
 
     it('возвращает кеш без HTTP если bootstrap уже установлен', async () => {
@@ -64,6 +65,6 @@ describe('loadPlatformBrandBootstrap', () => {
         }
         const brand = await loadPlatformBrandBootstrap();
         expect(brand).toEqual(cached);
-        expect(fetchMock.calls).toHaveLength(0);
+        expect(fetchMock?.calls).toHaveLength(0);
     });
 });

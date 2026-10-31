@@ -82,7 +82,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 height: 28px;
                 padding: 0 9px;
                 box-sizing: border-box;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1;

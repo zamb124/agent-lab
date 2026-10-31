@@ -11,7 +11,7 @@
 ``user``); пустого текста и отсутствия ``company_id`` в контексте
 запроса не допускается (``Zero-Guess``). Если TTS не вернул ни одного
 ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
-HTTP ``4xx`` от Humanitec Voice (``TTSLitserveHttpError``) пробрасываются
+HTTP ``4xx`` от Linnex Voice (``TTSLitserveHttpError``) пробрасываются
 клиенту с тем же кодом и ``detail``; ответы ``5xx`` апстрима — ``502``.
 Сетевые сбои до HTTP-ответа апстрима (``httpx2.RequestError``, в т.ч. нет TCP) —
 ``503`` с пояснением, не ``500``.

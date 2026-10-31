@@ -38,7 +38,7 @@ const HINT_BUBBLE_CSS = `
             line-height: 1.45;
             text-align: left;
             white-space: normal;
-            color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            color: var(--text-primary);
             box-sizing: border-box;
         }
         .platform-help-hint-portal-bubble--wide {
@@ -54,19 +54,19 @@ const HINT_BUBBLE_CSS = `
         }
         .platform-help-hint-portal-summary {
             margin: 0 0 4px;
-            color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            color: var(--text-primary);
             font-size: 12px;
             font-weight: 650;
             line-height: 1.3;
         }
         .platform-help-hint-portal-body {
-            color: var(--text-secondary, rgba(255, 255, 255, 0.74));
+            color: var(--text-secondary);
         }
         .platform-help-hint-portal-link {
             display: inline-flex;
             align-items: center;
             margin-top: 8px;
-            color: var(--accent, #60a5fa);
+            color: var(--accent);
             font-weight: 600;
             text-decoration: none;
         }
@@ -120,29 +120,29 @@ export class PlatformHelpHint extends PlatformElement {
                 font-size: 11px;
                 font-weight: 600;
                 line-height: 1;
-                color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+                color: var(--text-tertiary);
                 background: rgba(255, 255, 255, 0.06);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-                border-radius: var(--radius-full, 999px);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-full);
                 cursor: help;
                 transition:
-                    color var(--duration-fast, 0.2s) ease,
-                    background var(--duration-fast, 0.2s) ease,
-                    border-color var(--duration-fast, 0.2s) ease;
+                    color var(--motion-duration-micro) ease,
+                    background var(--motion-duration-micro) ease,
+                    border-color var(--motion-duration-micro) ease;
             }
 
             :host([size='md']) .hint-btn {
                 width: 32px;
                 height: 32px;
                 font-size: 14px;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
             }
 
             .hint-btn:hover,
             .hint-root:focus-within .hint-btn {
-                color: var(--text-primary, rgba(255, 255, 255, 0.92));
+                color: var(--text-primary);
                 background: rgba(255, 255, 255, 0.1);
-                border-color: var(--border-default, rgba(255, 255, 255, 0.14));
+                border-color: var(--border-default);
             }
 
         `,

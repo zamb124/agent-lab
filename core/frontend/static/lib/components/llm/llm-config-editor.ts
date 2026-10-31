@@ -35,7 +35,7 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 
 const _CUSTOM_REF_PREFIX = 'custom:';
-const _HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
+const _LINNEX_LLM_PROVIDER = 'linnex_llm';
 
 interface ProviderModelOption {
     value?: unknown;
@@ -126,11 +126,11 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             }
             .badge {
                 font-size: var(--text-xs);
-                padding: 2px 8px; border-radius: var(--radius-pill);
+                padding: 2px 8px; border-radius: var(--radius-full);
                 background: var(--glass-solid-subtle); color: var(--text-secondary);
                 border: 1px solid var(--glass-border-subtle);
             }
-            .badge[data-kind="company"] { color: var(--success-text, var(--text-primary)); border-color: var(--success-border, var(--glass-border-subtle)); }
+            .badge[data-kind="company"] { color: var(--success); border-color: var(--success-border); }
             .actions { display: flex; gap: var(--space-2); align-items: center; }
             .help { color: var(--text-tertiary); font-size: var(--text-xs); }
             .fallback-policy {
@@ -212,8 +212,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return typeof value === 'string' && value.startsWith(_CUSTOM_REF_PREFIX);
     }
 
-    _isHumanitecLlmProvider(value: unknown): boolean {
-        return value === _HUMANITEC_LLM_PROVIDER;
+    _isLinnexLlmProvider(value: unknown): boolean {
+        return value === _LINNEX_LLM_PROVIDER;
     }
 
     _isEmbeddingCapability(): boolean {
@@ -269,14 +269,14 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.base_url = null;
             patch.extra_request_headers = null;
         }
-        if (this._isHumanitecLlmProvider(value)) {
+        if (this._isLinnexLlmProvider(value)) {
             patch.api_key = null;
             patch.base_url = null;
             patch.folder_id = null;
             patch.extra_request_headers = null;
             patch.model = 'auto';
         }
-        if (!this._isHumanitecLlmProvider(value) && value !== currentProvider) {
+        if (!this._isLinnexLlmProvider(value) && value !== currentProvider) {
             patch.model = null;
             patch.dimension = null;
             patch.mrl_output_dimension = null;
@@ -445,7 +445,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _fallbackDefaultModel(provider: string): string {
-        if (this._isHumanitecLlmProvider(provider)) {
+        if (this._isLinnexLlmProvider(provider)) {
             return 'auto';
         }
         const first = this._modelOptionsForProvider(provider)[0];
@@ -522,20 +522,20 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _providerHint(provider: string): string {
-        if (this._isHumanitecLlmProvider(provider)) {
-            return this.t('settings_page.ai_providers.humanitec_llms_provider_tooltip');
+        if (this._isLinnexLlmProvider(provider)) {
+            return this.t('settings_page.ai_providers.linnex_llms_provider_tooltip');
         }
         return '';
     }
 
     _modelHint(provider: string, model: unknown): string {
-        if (this._isHumanitecLlmProvider(provider) && (!model || model === 'auto')) {
-            return this.t('settings_page.ai_providers.humanitec_llms_auto_tooltip');
+        if (this._isLinnexLlmProvider(provider) && (!model || model === 'auto')) {
+            return this.t('settings_page.ai_providers.linnex_llms_auto_tooltip');
         }
         if (this.capability === 'voice_stt' || this.capability === 'voice_tts' || this.capability === 'voice_vad') {
             return this.t('settings_page.ai_providers.voice_model_help');
         }
-        if (!this._isHumanitecLlmProvider(provider) && !this._isCustomProvider(provider)) {
+        if (!this._isLinnexLlmProvider(provider) && !this._isCustomProvider(provider)) {
             return this.t('settings_page.ai_providers.model_required_help');
         }
         return this.t('settings_page.ai_providers.model_override_help');
@@ -554,14 +554,14 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     override render(): TemplateResult {
         const provider = typeof this.config?.provider === 'string' ? this.config.provider : '';
         const isCustom = this._isCustomProvider(provider);
-        const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
+        const isLinnexLlm = this._isLinnexLlmProvider(provider);
         const selectedProvider = this._selectedProviderCatalogItem();
         const byokAllowed = selectedProvider ? selectedProvider.byok_allowed !== false : true;
-        const showByok = byokAllowed && !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
+        const showByok = byokAllowed && !isCustom && !isLinnexLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const showFallbackPolicy = this._supportsFallbackPolicy();
         const rawModelValue = typeof this.config?.model === 'string' ? this.config.model : '';
-        const modelValue = isHumanitecLlm && !rawModelValue ? 'auto' : rawModelValue;
+        const modelValue = isLinnexLlm && !rawModelValue ? 'auto' : rawModelValue;
         const providerModels = this._selectedProviderModels();
         const modelFieldType = providerModels.length > 0 ? 'enum' : 'string';
         const fallbackModels = this._fallbackModels();

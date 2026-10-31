@@ -14,8 +14,8 @@ from core.ai.free_pool import (
 )
 from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     split_provider_prefixed_model,
 )
 from core.clients.llm.client import LLMClient
@@ -43,16 +43,16 @@ from core.clients.llm.openai_compat import (
     merge_openai_compatible_usage_into_usage_data as _merge_openai_compatible_usage_into_usage_data,
 )
 from core.clients.llm.platform_pool import (
-    _first_non_humanitec_fallback,
-    _make_humanitec_llms_candidate_chain_resolver,
+    _first_non_linnex_fallback,
+    _make_linnex_llms_candidate_chain_resolver,
     _make_platform_default_candidate_resolver,
-    bootstrap_humanitec_llms_config,
-    candidate_chain_uses_humanitec_llms,
+    bootstrap_linnex_llms_config,
+    candidate_chain_uses_linnex_llms,
 )
 from core.clients.llm.provider_resolution import (
     _detect_provider,
     _get_default_base_url,
-    _is_humanitec_llm_provider,
+    _is_linnex_llm_provider,
     _platform_default_pool_is_configured,
     _resolve_headers_vars,
     _resolve_llm_call_config,
@@ -117,7 +117,7 @@ def create_llm_transport_client(
         temperature: Температура
         provider: Провайдер (openai, openrouter, bothub, yandex, groq, cerebras, google,
             github, huggingface, nvidia, mistral, zai, sambanova, deepinfra, caila,
-            humanitec_llm)
+            linnex_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
@@ -135,12 +135,12 @@ def create_llm_transport_client(
     if split_provider is not None:
         provider = split_provider
     model = split_model if split_model is not None else model_name
-    if provider is None and model is None and _is_humanitec_llm_provider(settings.llm.provider):
-        provider = HUMANITEC_LLM_PROVIDER
-        model = settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
-    if _is_humanitec_llm_provider(provider):
-        humanitec_model = model or settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
-        model = str(humanitec_model).strip() or HUMANITEC_LLM_AUTO_MODEL
+    if provider is None and model is None and _is_linnex_llm_provider(settings.llm.provider):
+        provider = LINNEX_LLM_PROVIDER
+        model = settings.llm.default_model or LINNEX_LLM_AUTO_MODEL
+    if _is_linnex_llm_provider(provider):
+        linnex_model = model or settings.llm.default_model or LINNEX_LLM_AUTO_MODEL
+        model = str(linnex_model).strip() or LINNEX_LLM_AUTO_MODEL
 
     if _should_use_platform_default_pool(
         model=model,
@@ -155,8 +155,8 @@ def create_llm_transport_client(
         resolved_temperature = temperature if temperature is not None else settings.llm.temperature
         resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
         primary_config = LLMCallConfig(
-            provider=HUMANITEC_LLM_PROVIDER if _is_humanitec_llm_provider(provider) else None,
-            model=HUMANITEC_LLM_AUTO_MODEL,
+            provider=LINNEX_LLM_PROVIDER if _is_linnex_llm_provider(provider) else None,
+            model=LINNEX_LLM_AUTO_MODEL,
             temperature=resolved_temperature,
             max_tokens=resolved_max_tokens,
             top_p=top_p,
@@ -190,14 +190,14 @@ def create_llm_transport_client(
             source=PLATFORM_PAID_FALLBACK_SOURCE,
         )
         candidate_resolver = (
-            _make_humanitec_llms_candidate_chain_resolver(
+            _make_linnex_llms_candidate_chain_resolver(
                 primary_config,
                 fallback_models,
                 settings=settings,
                 variables=variables,
                 include_paid_fallback=allow_platform_paid_fallback,
             )
-            if _is_humanitec_llm_provider(provider)
+            if _is_linnex_llm_provider(provider)
             else _make_platform_default_candidate_resolver(
                 settings,
                 include_paid_fallback=allow_platform_paid_fallback,
@@ -230,31 +230,31 @@ def create_llm_transport_client(
             context_length=primary_candidate.context_length,
         )
 
-    if testing and _is_humanitec_llm_provider(provider):
+    if testing and _is_linnex_llm_provider(provider):
         logger.warning(
-            "llm.testing_humanitec_replaced",
-            original_provider=HUMANITEC_LLM_PROVIDER,
+            "llm.testing_linnex_replaced",
+            original_provider=LINNEX_LLM_PROVIDER,
             original_model=model,
             replacement_model="mock-gpt-4",
         )
         provider = None
         model = "mock-gpt-4"
 
-    if _is_humanitec_llm_provider(provider):
+    if _is_linnex_llm_provider(provider):
         if any(
             value is not None and str(value).strip()
             for value in (api_key, base_url, folder_id)
         ):
             raise ValueError(
-                "humanitec_llm: api_key/base_url/folder_id are not set — this is a virtual "
+                "linnex_llm: api_key/base_url/folder_id are not set — this is a virtual "
                 + "platform provider"
             )
         pool_configured = _platform_default_pool_is_configured(settings)
-        authored_fallback = _first_non_humanitec_fallback(fallback_models)
+        authored_fallback = _first_non_linnex_fallback(fallback_models)
         resolved_temperature = temperature if temperature is not None else settings.llm.temperature
         resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
         primary_config = LLMCallConfig(
-            provider=HUMANITEC_LLM_PROVIDER,
+            provider=LINNEX_LLM_PROVIDER,
             model=model,
             temperature=resolved_temperature,
             max_tokens=resolved_max_tokens,
@@ -269,14 +269,14 @@ def create_llm_transport_client(
             source=PLATFORM_FREE_MODEL_SOURCE,
         )
         if pool_configured:
-            primary_candidate = bootstrap_humanitec_llms_config(
+            primary_candidate = bootstrap_linnex_llms_config(
                 primary_config,
                 settings=settings,
                 variables=variables,
             )
         elif authored_fallback is None:
             raise ValueError(
-                "humanitec_llm is unavailable: enable llm.platform_free_pool and configure "
+                "linnex_llm is unavailable: enable llm.platform_free_pool and configure "
                 + "credentials for at least one free-pool provider from core.ai.providers"
             )
         else:
@@ -296,7 +296,7 @@ def create_llm_transport_client(
             default_headers=dict(primary_candidate.default_headers),
             llm_provider=primary_candidate.provider,
             candidates=[primary_candidate],
-            candidate_resolver=_make_humanitec_llms_candidate_chain_resolver(
+            candidate_resolver=_make_linnex_llms_candidate_chain_resolver(
                 primary_config,
                 fallback_models,
                 settings=settings,
@@ -365,7 +365,7 @@ def create_llm_transport_client(
         context_length=model_config.context_length if model_config else None,
         source="explicit",
     )
-    if candidate_chain_uses_humanitec_llms(primary_config, fallback_models):
+    if candidate_chain_uses_linnex_llms(primary_config, fallback_models):
         candidates = [
             _resolve_llm_call_config(
                 primary_config,
@@ -374,7 +374,7 @@ def create_llm_transport_client(
                 source=primary_config.source,
             )
         ]
-        candidate_resolver = _make_humanitec_llms_candidate_chain_resolver(
+        candidate_resolver = _make_linnex_llms_candidate_chain_resolver(
             primary_config,
             fallback_models,
             settings=settings,

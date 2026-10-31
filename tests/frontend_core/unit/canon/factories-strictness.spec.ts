@@ -16,12 +16,12 @@ afterEach(() => resetFactories());
 
 describe('canon: factory strictness', () => {
     it('createAsyncOp без options — throw', () => {
-        expect(() => createAsyncOp()).toThrow();
-        expect(() => createAsyncOp(null)).toThrow();
+        expect(() => Reflect.apply(createAsyncOp, null, [])).toThrow();
+        expect(() => Reflect.apply(createAsyncOp, null, [null])).toThrow();
     });
 
     it('createAsyncOp HTTP без request — throw', () => {
-        expect(() => createAsyncOp({ name: 'svc/x', silent: true })).toThrow(/request/);
+        expect(() => Reflect.apply(createAsyncOp, null, [{ name: 'svc/x', silent: true }])).toThrow(/request/);
     });
 
     it('createAsyncOp WS без wsTimeoutMs — throw', () => {
@@ -39,12 +39,12 @@ describe('canon: factory strictness', () => {
 
     it('createAsyncOp дубль name — throw', () => {
         createAsyncOp({ name: 'svc/dup', silent: true, request: async () => ({}) });
-        expect(() => createAsyncOp({ name: 'svc/dup', silent: true, request: async () => ({}) })).toThrow(/already/);
+        expect(() => Reflect.apply(createAsyncOp, null, [{ name: 'svc/dup', silent: true, request: async () => ({}) }])).toThrow(/already/);
     });
 
     it('createResourceCollection без baseUrl/idField — throw', () => {
-        expect(() => createResourceCollection({ name: 'svc/x' })).toThrow(/baseUrl/);
-        expect(() => createResourceCollection({ name: 'svc/x', baseUrl: '/x' })).toThrow(/idField/);
+        expect(() => Reflect.apply(createResourceCollection, null, [{ name: 'svc/x' }])).toThrow(/baseUrl/);
+        expect(() => Reflect.apply(createResourceCollection, null, [{ name: 'svc/x', baseUrl: '/x' }])).toThrow(/idField/);
     });
 
     it('createResourceCollection без toastKeys.create — throw', () => {
@@ -56,7 +56,7 @@ describe('canon: factory strictness', () => {
     });
 
     it('createCursorList без pageSize — throw', () => {
-        expect(() => createCursorList({ name: 'svc/x', baseUrl: '/x', buildQuery: () => ({}) })).toThrow(/pageSize/);
+        expect(() => Reflect.apply(createCursorList, null, [{ name: 'svc/x', baseUrl: '/x', buildQuery: () => ({}) }])).toThrow(/pageSize/);
     });
 
     it('createCursorList restMirror.method не из (GET, POST) — throw', () => {
@@ -69,12 +69,12 @@ describe('canon: factory strictness', () => {
     });
 
     it('createFacets без debounceMs/minQueryLength — throw', () => {
-        expect(() => createFacets({ name: 'svc/x', baseUrl: '/x', facets: { a: 'a' }, minQueryLength: 0 })).toThrow(/debounceMs/);
-        expect(() => createFacets({ name: 'svc/x', baseUrl: '/x', facets: { a: 'a' }, debounceMs: 0 })).toThrow(/minQueryLength/);
+        expect(() => Reflect.apply(createFacets, null, [{ name: 'svc/x', baseUrl: '/x', facets: { a: 'a' }, minQueryLength: 0 }])).toThrow(/debounceMs/);
+        expect(() => Reflect.apply(createFacets, null, [{ name: 'svc/x', baseUrl: '/x', facets: { a: 'a' }, debounceMs: 0 }])).toThrow(/minQueryLength/);
     });
 
     it('createForm без submitEvent — throw', () => {
-        expect(() => createForm({ name: 'svc/x', schema: { a: {} }, initial: { a: '' } })).toThrow(/submitEvent/);
+        expect(() => Reflect.apply(createForm, null, [{ name: 'svc/x', schema: { a: {} }, initial: { a: '' } }])).toThrow(/submitEvent/);
     });
 
     it('createForm: каждое поле schema должно быть в initial — throw', () => {
@@ -89,7 +89,7 @@ describe('canon: factory strictness', () => {
     it('имя фабрики должно быть scope/entity', () => {
         const tests = ['just_one', 'three/segments/here', 'Caps/no', 'foo-bar/x'];
         for (const bad of tests) {
-            expect(() => createAsyncOp({ name: bad, silent: true, request: async () => ({}) })).toThrow();
+            expect(() => Reflect.apply(createAsyncOp, null, [{ name: bad, silent: true, request: async () => ({}) }])).toThrow();
         }
     });
 });

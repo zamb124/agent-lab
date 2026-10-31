@@ -98,7 +98,7 @@ export class PlatformEchartsHost extends PlatformElement {
                 padding: var(--space-4);
             }
             .state-error {
-                color: var(--danger);
+                color: var(--error);
             }
         `,
     ];

@@ -25,7 +25,7 @@ export interface HitlConversation {
 export interface FlowUIHitlTransportOptions {
     workItemId: string;
     conversation: HitlConversation;
-    mode?: string;
+    mode?: string | undefined;
     baseUrl: string;
     credentials?: RequestCredentials;
     getHeaders?: () => Promise<Record<string, string>> | Record<string, string>;

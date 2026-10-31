@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from apps.search.tasks.task_names import CRAWL_DISCOVER_DOMAIN
 from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -17,6 +16,7 @@ from apps.search.models import (
     CrawlUrl,
     SitemapEntry,
 )
+from apps.search.tasks.task_names import CRAWL_DISCOVER_DOMAIN
 from core.search.index_models import SearchIndexCreateRequest
 from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.conftest import make_search_index_slug

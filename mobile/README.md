@@ -9,9 +9,9 @@
 | **iOS** — Capacitor, Xcode, safe area, иконки, OAuth | [`docs/IOS_CAPACITOR.md`](docs/IOS_CAPACITOR.md) |
 | **Android** — Capacitor, AndroidManifest, App Links, FCM | [`android/README.md`](android/README.md) |
 | **App Store** — где кликать в Apple | [`docs/APPLE_MANUAL.md`](docs/APPLE_MANUAL.md) |
-| **App Store** — поля и тексты Humanitec | [`docs/APP_STORE_HUMANITEC.md`](docs/APP_STORE_HUMANITEC.md) |
+| **App Store** — поля и тексты Linnex | [`docs/APP_STORE_LINNEX.md`](docs/APP_STORE_LINNEX.md) |
 | **Google Play** — где кликать в Console | [`docs/PLAY_MANUAL.md`](docs/PLAY_MANUAL.md) |
-| **Google Play** — поля и тексты Humanitec | [`docs/PLAY_HUMANITEC.md`](docs/PLAY_HUMANITEC.md) |
+| **Google Play** — поля и тексты Linnex | [`docs/PLAY_LINNEX.md`](docs/PLAY_LINNEX.md) |
 | **Push** — паритет Web / APNs / FCM | [`docs/PUSH_PARITY.md`](docs/PUSH_PARITY.md) |
 | **Скриншоты** — ресайз под слоты ASC и Play | [`screens/README.md`](screens/README.md), `uv run python mobile/screens/generate_app_store_screenshots.py` |
 
@@ -20,7 +20,7 @@
 Нужны для той же среды, что откроет оболочка.
 
 - Манифест и SW: [`scripts/check-pwa-manifest-url.sh`](scripts/check-pwa-manifest-url.sh) — в `mobile/.env` задать `PWA_MANIFEST_URL` (см. [`config/env.example`](config/env.example)).
-- Lighthouse: `export PWA_LIGHTHOUSE_URL="https://<host>/"`, затем [`scripts/run-lighthouse-ci.sh`](scripts/run-lighthouse-ci.sh) или `npm run pwa:lighthouse` в `mobile/`; пороги — [`lighthouserc.cjs`](lighthouserc.cjs).
+- Lighthouse: `export PWA_LIGHTHOUSE_URL="https://<host>/"`, затем [`scripts/run-lighthouse-ci.sh`](scripts/run-lighthouse-ci.sh) или `npm run pwa:lighthouse` в `mobile/`; пороги — [`lighthouserc.json`](lighthouserc.json).
 - VAPID: `GET /<service>/api/push/vapid-public-key` на том же origin (см. [`core/push/router.py`](../core/push/router.py)).
 
 ## Релизы и обновления
@@ -67,7 +67,7 @@ npm install
 mobile/
   capacitor.config.json
   package.json
-  lighthouserc.cjs
+  lighthouserc.json
   android/                          # Capacitor Android (см. android/README.md)
     app/                            # Gradle module: src/main/{AndroidManifest, java, res}
     build.gradle, settings.gradle, ...
@@ -76,9 +76,9 @@ mobile/
     WATERFALL.md
     IOS_CAPACITOR.md
     APPLE_MANUAL.md
-    APP_STORE_HUMANITEC.md
+    APP_STORE_LINNEX.md
     PLAY_MANUAL.md
-    PLAY_HUMANITEC.md
+    PLAY_LINNEX.md
     PUSH_PARITY.md
     TENANT_START_URL.md
     RU_OPS_ACCOUNTS.md

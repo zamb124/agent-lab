@@ -284,7 +284,7 @@ export class PlatformNotificationManager extends PlatformElement {
         this.dispatch(NOTIFICATIONS_EVENTS.DISMISS_ALL, null);
     }
 
-    _splitQualifiedKey(raw: string | null | undefined): { key: string; namespace?: string } | null {
+    _splitQualifiedKey(raw: string | null | undefined): { key: string; namespace?: string | undefined } | null {
         if (typeof raw !== 'string' || raw.length === 0) return null;
         const [nsOrKey, ...rest] = raw.split(':');
         if (rest.length === 0) return { key: raw, namespace: undefined };

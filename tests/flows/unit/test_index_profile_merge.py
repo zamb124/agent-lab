@@ -1,11 +1,11 @@
 """Слияние частичного index_profile_config с базовым профилем."""
 
-from core.config import get_settings
 from apps.flows.src.resources.index_profile_merge import (
     deep_merge_dict,
     merge_index_profile_config,
     merge_index_profile_dict_overlays,
 )
+from core.config import get_settings
 from core.rag_indexing_schema import IndexProfileConfig
 
 

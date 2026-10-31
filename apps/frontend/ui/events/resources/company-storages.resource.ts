@@ -131,7 +131,7 @@ export const companyStorageMigrationSlice = createSlice({
         if (typeof payload.storage_migration_id !== 'string') {
             return state;
         }
-        const progress: Record<string, any> = {};
+        const progress: Record<string, unknown> = {};
         for (const [key, field] of Object.entries(payload)) {
             progress[key] = field;
         }

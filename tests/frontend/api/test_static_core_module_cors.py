@@ -5,7 +5,7 @@ import pytest
 
 _EMBED_AUTOLOAD_PATHS = (
     "/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js",
-    "/static/core/lib/embed-chat/humanitec-embed-autoload.js",
+    "/static/core/lib/embed-chat/linnex-embed-autoload.js",
 )
 
 

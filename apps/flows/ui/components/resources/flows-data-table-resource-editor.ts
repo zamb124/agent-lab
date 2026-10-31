@@ -28,7 +28,7 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
         _formError: { state: true },
     }
     declare resourceId: string;
-    declare resource: Record<string, any> | null;
+    declare resource: Record<string, unknown> | null;
     declare flowId: string;
     declare compactHeader: boolean;
     declare _draftName: string;
@@ -173,7 +173,7 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
             }
             .form-error {
                 margin: 0;
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
             }
         `,

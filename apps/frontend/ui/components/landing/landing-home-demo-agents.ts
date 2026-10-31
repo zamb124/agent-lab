@@ -7,6 +7,7 @@ import '@platform/lib/flow-ui/shell/drawer.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -55,7 +56,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
             }
             .lede {
                 font-family: var(--font-sans);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 line-height: 1.6;
                 color: var(--text-secondary);
                 max-width: 40rem;
@@ -178,7 +179,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
         return { Authorization: `Bearer ${token}` };
     };
 
-    _tryAgent(card: Record<string, any>) {
+    _tryAgent(card: Record<string, unknown>) {
         if (typeof card.embed_id !== 'string' || card.embed_id === '') {
             throw new Error('landing_home_demo_agents: card.embed_id required');
         }
@@ -290,16 +291,16 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 </header>
 
                 ${busy && allItems.length === 0
-                    ? html`<div class="state-center"><platform-spinner></platform-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : ''}
                 ${err !== null && allItems.length === 0
-                    ? html`<div class="state-center err">${this.t('digital_workers.load_error')}</div>`
+                    ? html`<platform-empty-state icon="error" title=${this.t('digital_workers.load_error')}></platform-empty-state>`
                     : ''}
                 ${!busy && err === null && allItems.length === 0
-                    ? html`<div class="state-center">${this.t('digital_workers.empty')}</div>`
+                    ? html`<platform-empty-state icon="agent" title=${this.t('digital_workers.empty')}></platform-empty-state>`
                     : ''}
                 ${!busy && err === null && allItems.length > 0 && items.length === 0
-                    ? html`<div class="state-center">${this.t('home_demo_agents.filter_empty')}</div>`
+                    ? html`<platform-empty-state icon="search" title=${this.t('home_demo_agents.filter_empty')}></platform-empty-state>`
                     : ''}
 
                 ${items.length > 0

@@ -169,14 +169,14 @@ Traceback:
 tests/flows/services/test_agent_toolkit_service.py:12: in <module>
     from apps.flows.src.services.agent_toolkit_service import (
 E   ImportError: cannot import name 'bootstrap_agent_toolkits_from_registry' from 'apps.flows.src.services.agent_toolkit_service' (/Users/viktor-shved/PycharmProjects/agent-lab/apps/flows/src/services/agent_toolkit_service.py)
-_____ ERROR collecting tests/flows/services/test_humanitec_agent_bundle.py _____
-ImportError while importing test module '/Users/viktor-shved/PycharmProjects/agent-lab/tests/flows/services/test_humanitec_agent_bundle.py'.
+_____ ERROR collecting tests/flows/services/test_linnex_agent_bundle.py _____
+ImportError while importing test module '/Users/viktor-shved/PycharmProjects/agent-lab/tests/flows/services/test_linnex_agent_bundle.py'.
 Hint: make sure your test modules/packages have valid Python names.
 Traceback:
 ../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/importlib/__init__.py:88: in import_module
     return _bootstrap._gcd_import(name[level:], package, level)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-tests/flows/services/test_humanitec_agent_bundle.py:10: in <module>
+tests/flows/services/test_linnex_agent_bundle.py:10: in <module>
     from apps.flows.src.services.agent_toolkit_service import bootstrap_agent_toolkits_from_registry
 E   ImportError: cannot import name 'bootstrap_agent_toolkits_from_registry' from 'apps.flows.src.services.agent_toolkit_service' (/Users/viktor-shved/PycharmProjects/agent-lab/apps/flows/src/services/agent_toolkit_service.py)
 ________ ERROR collecting tests/flows/unit/test_flow_authz_backfill.py _________
@@ -6461,7 +6461,7 @@ ERROR tests/flows/e2e/test_evaluation_lab_api.py - ImportError while importin...
 ERROR tests/flows/integration/test_oauth_interrupt_flow.py - ImportError whil...
 ERROR tests/flows/integration/test_tracing_full.py - ImportError while import...
 ERROR tests/flows/services/test_agent_toolkit_service.py - ImportError while ...
-ERROR tests/flows/services/test_humanitec_agent_bundle.py - ImportError while...
+ERROR tests/flows/services/test_linnex_agent_bundle.py - ImportError while...
 ERROR tests/flows/unit/test_flow_authz_backfill.py - ImportError while import...
 ERROR tests/flows/api/test_agent_platform_mcp.py::test_platform_mcp_flow_sticky_context_id
 ERROR tests/flows/api/test_agent_platform_mcp.py::test_platform_mcp_tools_call_unknown_flow

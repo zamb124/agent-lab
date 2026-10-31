@@ -11,7 +11,7 @@ from apps.flows.src.models.registry_contracts import (
     RegistryProviderOption,
 )
 from core.ai.company_settings import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
-from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
+from core.ai.providers import LINNEX_LLM_PROVIDER, AICapability
 from core.context import require_active_company
 from core.models.identity_models import User
 from core.pagination import ListResponse
@@ -80,10 +80,10 @@ def _platform_provider_options(
 ) -> list[str | RegistryProviderOption]:
     out: list[str | RegistryProviderOption] = []
     for provider in providers:
-        if provider == HUMANITEC_LLM_PROVIDER:
+        if provider == LINNEX_LLM_PROVIDER:
             out.append(
                 RegistryProviderOption(
-                    value=HUMANITEC_LLM_PROVIDER,
+                    value=LINNEX_LLM_PROVIDER,
                     label=llms_display_label,
                     kind="virtual",
                 )

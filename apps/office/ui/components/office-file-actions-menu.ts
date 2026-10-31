@@ -47,7 +47,7 @@ export class OfficeFileActionsMenu extends PlatformElement {
                 position: absolute;
                 top: calc(100% + 4px);
                 right: 0;
-                z-index: var(--z-popover, 1100);
+                z-index: var(--platform-popover-z-index);
                 min-width: 10rem;
                 padding: var(--space-1);
                 background: var(--glass-solid-strong);
@@ -73,7 +73,7 @@ export class OfficeFileActionsMenu extends PlatformElement {
                 background: var(--glass-solid-medium);
             }
             .item.danger {
-                color: var(--danger);
+                color: var(--error);
             }
         `,
     ];

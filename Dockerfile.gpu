@@ -15,7 +15,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.base.json ./
-COPY scripts/build/ui.mjs ./scripts/build/ui.mjs
+COPY scripts/build/ui.ts ./scripts/build/ui.ts
 COPY core/frontend/static ./core/frontend/static
 COPY tests/ui/design-system/components ./tests/ui/design-system/components
 COPY apps/ ./apps/

@@ -31,7 +31,7 @@ describe('createPlatformFileCreateOp', () => {
                 type: platformFileCreateOp.events.REQUESTED,
                 payload: { spec: '{}' },
                 id: 'r1',
-                meta: {},
+                meta: { ts: 0, source: 'local', causation_id: null, correlation_id: null, trace_id: null },
             },
             buildCtx(),
         )).rejects.toThrow(/payload.file \(File\) required/);
@@ -44,7 +44,7 @@ describe('createPlatformFileCreateOp', () => {
                 type: platformFileCreateOp.events.REQUESTED,
                 payload: { file, spec: '' },
                 id: 'r2',
-                meta: {},
+                meta: { ts: 0, source: 'local', causation_id: null, correlation_id: null, trace_id: null },
             },
             buildCtx(),
         )).rejects.toThrow(/payload.spec \(JSON FileCreateSpec\) required/);

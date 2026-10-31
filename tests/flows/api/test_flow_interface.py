@@ -10,13 +10,13 @@ from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.context import Context, clear_context, set_context
+from core.models.identity_models import Company, User
+from core.types import JsonObject
 from core.ui_document.document import (
     FlowUIAgentIdentity,
     FlowUIConversation,
     FlowUIDocument,
 )
-from core.models.identity_models import Company, User
-from core.types import JsonObject
 
 INTERFACE_KEYS = {
     "flow_id",
@@ -351,7 +351,7 @@ async def test_embed_interface_same_origin_get_without_origin_header(
     token_response = await frontend_client.post(
         f"/frontend/api/embed/configs/{embed_id}/session-token",
         headers=auth_headers,
-        json={"origin": "http://humanitec.ru", "expires_in_seconds": 300},
+        json={"origin": "http://linnex.io", "expires_in_seconds": 300},
     )
     assert token_response.status_code == 200, token_response.text
     embed_token = token_response.json()["token"]

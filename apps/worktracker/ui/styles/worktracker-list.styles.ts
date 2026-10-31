@@ -11,7 +11,7 @@ export const worktrackerListStyles = css`
         display: flex;
         flex-direction: column;
         min-width: 0;
-        gap: var(--worktracker-list-gap, var(--space-3));
+        gap: var(--worktracker-list-gap);
         overflow: visible;
         background: transparent;
         border: none;
@@ -27,9 +27,9 @@ export const worktrackerListStyles = css`
         box-shadow: var(--glass-shadow-subtle);
         overflow: hidden;
         transition:
-            background var(--duration-fast, 120ms) ease,
-            border-color var(--duration-fast, 120ms) ease,
-            box-shadow var(--duration-fast, 120ms) ease;
+            background var(--motion-duration-micro) ease,
+            border-color var(--motion-duration-micro) ease,
+            box-shadow var(--motion-duration-micro) ease;
     }
     .wt-list-row:hover,
     ::slotted(.wt-list-row:hover) {

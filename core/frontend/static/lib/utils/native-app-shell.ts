@@ -88,7 +88,7 @@ function _sameProductSiteHostnames(a: string, b: string): boolean {
     if (h1 === h2) {
         return true;
     }
-    const suffixes = ['.humanitec.ru', '.humanetic.ru', '.agents-lab.ru'];
+    const suffixes = ['.linnex.io', '.humanetic.ru', '.agents-lab.ru'];
     for (const s of suffixes) {
         if (h1.endsWith(s) && h2.endsWith(s)) {
             return true;

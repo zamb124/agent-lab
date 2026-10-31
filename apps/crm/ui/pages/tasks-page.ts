@@ -37,7 +37,7 @@ export class CRMTasksPage extends CRMNamespacePage {
     };
     declare _viewMode: 'list' | 'board';
     declare _selectedId: string;
-    declare _selectedItem: Record<string, any> | null;
+    declare _selectedItem: Record<string, unknown> | null;
 
     static override styles: CSSResultGroup = [
         CRMNamespacePage.styles,
@@ -88,19 +88,19 @@ export class CRMTasksPage extends CRMNamespacePage {
                 overflow: auto;
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
-                background: var(--bg-elevated, var(--glass-solid-medium));
+                background: var(--bg-elevated);
             }
             .panel {
                 min-height: 0;
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 overflow: hidden;
-                background: var(--bg-elevated, var(--glass-solid-medium));
+                background: var(--bg-elevated);
             }
         `,
     ];
 
-    private _routeParamsSel: SelectController<Record<string, any> | undefined>;
+    private _routeParamsSel: SelectController<Record<string, unknown> | undefined>;
     private _workItems: ResourceController | null;
     private _createOp!: OpController;
     private _lastNs: string | null | undefined = null;
@@ -111,7 +111,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         this._selectedId = '';
         this._selectedItem = null;
         this._workItems = null;
-        this._routeParamsSel = this.select((s: Record<string, any>) => s.router.params);
+        this._routeParamsSel = this.select((s: Record<string, unknown>) => s.router.params);
     }
 
     override connectedCallback(): void {
@@ -202,7 +202,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         const showPanel = Boolean(selectedId) && !isMobileViewport();
         this.toggleAttribute('data-no-panel', !showPanel);
 
-        const routeKey = this.select((s: Record<string, any>) => s.router.routeKey).value;
+        const routeKey = this.select((s: Record<string, unknown>) => s.router.routeKey).value;
         const fromCache = selectedId && this._workItems && this._workItems.byId
             ? this._workItems.byId[selectedId]
             : null;

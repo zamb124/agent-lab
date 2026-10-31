@@ -136,7 +136,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
         this._extraBodyJson = '';
     }
 
-    _seedFromProvider(p: Record<string, any>) {
+    _seedFromProvider(p: Record<string, unknown>) {
         if (!p || typeof p !== 'object') {
             this._resetForm();
             return;
@@ -215,7 +215,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         const id = this._id.trim();
         if (!id || !/^[a-z0-9_-]{1,32}$/.test(id)) {
             errors.id = this.t('settings_page.ai_providers.custom_modal_id_invalid');

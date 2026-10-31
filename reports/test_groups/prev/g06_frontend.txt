@@ -2578,16 +2578,16 @@ ERROR tests/frontend/api/test_company_host_access_middleware.py::test_session_ho
 ERROR tests/frontend/api/test_company_creation.py::test_company_creation_with_agents_initialization
 ERROR tests/frontend/api/test_company_creation.py::test_company_init_endpoint_directly
 ERROR tests/frontend/api/test_company_creation.py::test_check_slug_availability
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_register_success
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_register_pairing_code_single_use
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_list_devices_after_register
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_agent_login_authenticated
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_revoke_blocks_tunnel_reconnect
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_device_token_success
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_update_device_policy
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_create_pairing_code
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_revoke_device - At...
-ERROR tests/frontend/api/test_humanitec_agent_api.py::test_agent_tunnel_ping_pong
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_register_success
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_register_pairing_code_single_use
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_list_devices_after_register
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_agent_login_authenticated
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_revoke_blocks_tunnel_reconnect
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_device_token_success
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_update_device_policy
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_create_pairing_code
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_revoke_device - At...
+ERROR tests/frontend/api/test_linnex_agent_api.py::test_agent_tunnel_ping_pong
 ERROR tests/frontend/api/test_leads_api.py::test_list_lead_requests_forbidden_for_non_system
 ERROR tests/frontend/api/test_invites_api.py::TestInvitesGenerateAPI::test_generate_success_returns_url_and_role
 ERROR tests/frontend/api/test_api_keys_api.py::TestApiKeysAPI::test_list_api_keys_success

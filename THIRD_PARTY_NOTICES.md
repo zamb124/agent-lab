@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Платформа Humanitec (`agent-lab`) распространяется под [Elastic License 2.0](LICENSE).
+Платформа Linnex (`agent-lab`) распространяется под [Elastic License 2.0](LICENSE).
 Copyright (c) 2024-2026 Шведов Виктор Викторович.
 
 Ниже перечислены компоненты с отличной от ELv2 лицензией. Их условия сохраняются

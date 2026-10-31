@@ -741,9 +741,9 @@ tests/flows/api/test_platform_assistant_skills.py:170: in test_platform_assistan
     self.gen = func(*args, **kwds)
                ^^^^^^^^^^^^^^^^^^^
 E   TypeError: company_scope() missing 1 required positional argument: 'di'
-______ test_humanitec_llm_models_are_virtual_and_not_read_from_repository ______
+______ test_linnex_llm_models_are_virtual_and_not_read_from_repository ______
 [gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
-tests/flows/api/test_registry.py:105: in test_humanitec_llm_models_are_virtual_and_not_read_from_repository
+tests/flows/api/test_registry.py:105: in test_linnex_llm_models_are_virtual_and_not_read_from_repository
     service = LLMModelsService(Repo(), AsyncMock(), redis)  # pyright: ignore[reportArgumentType]
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E   TypeError: LLMModelsService.__init__() takes 3 positional arguments but 4 were given
@@ -2643,7 +2643,7 @@ FAILED tests/flows/api/test_observability_logs_api.py::TestLogsBySpanApi::test_r
 FAILED tests/flows/api/test_observability_logs_api.py::TestLogsByUserApi::test_returns_entries
 FAILED tests/flows/api/test_platform_assistant_skills.py::test_seed_platform_assistant_skills_idempotent
 FAILED tests/flows/api/test_platform_assistant_skills.py::test_platform_assistant_skill_load_docs_viz_and_depends_on
-FAILED tests/flows/api/test_registry.py::test_humanitec_llm_models_are_virtual_and_not_read_from_repository
+FAILED tests/flows/api/test_registry.py::test_linnex_llm_models_are_virtual_and_not_read_from_repository
 FAILED tests/flows/core/services/test_services.py::TestFlowsLoader::test_load_tools_to_db
 FAILED tests/flows/core/services/test_services.py::TestFlowDiscoveryService::test_health_check_all
 FAILED tests/flows/core/state/test_node_files.py::test_validate_node_files_list_rejects_bad_shape

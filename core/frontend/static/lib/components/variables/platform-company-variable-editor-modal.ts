@@ -16,7 +16,7 @@ import './platform-variable-secret-policy.js';
 import './platform-variable-resolve-preview.js';
 
 interface VariableMatchEntry {
-    field?: string;
+    field?: string | undefined;
     op?: string;
     ref_key?: string | null;
     value?: unknown;

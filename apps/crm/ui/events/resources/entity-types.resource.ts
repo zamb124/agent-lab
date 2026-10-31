@@ -75,7 +75,7 @@ export const entityTypesResource = createResourceCollection({
         }
         const limit = typeof payload.limit === 'number' ? payload.limit : 200;
         const offset = typeof payload.offset === 'number' ? payload.offset : 0;
-        const query: Record<string, any> = { limit, offset };
+        const query: Record<string, unknown> = { limit, offset };
         if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
             query.namespace = payload.namespace;
         }

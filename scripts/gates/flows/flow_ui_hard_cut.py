@@ -46,7 +46,7 @@ MAX_EDITOR_LINES = 2900
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "a2ui",
-        re.compile(r"a2ui|A2UI|humanitec\.ai/a2ui|supportedCatalogIds|\bplatformUi\b", re.IGNORECASE),
+        re.compile(r"a2ui|A2UI|linnex\.ai/a2ui|supportedCatalogIds|\bplatformUi\b", re.IGNORECASE),
     ),
     (
         "legacy chat settings",

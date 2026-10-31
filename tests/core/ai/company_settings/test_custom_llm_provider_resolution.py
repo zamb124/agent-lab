@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from core.ai.company_settings import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     METADATA_KEY,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
@@ -72,13 +72,13 @@ def test_resolve_custom_llm_provider_ref_expands_transport(monkeypatch):
     assert resolved.metadata["custom_provider_id"] == "corp"
 
 
-def test_resolve_humanitec_llm_company_override_is_platform_virtual_provider():
+def test_resolve_linnex_llm_company_override_is_platform_virtual_provider():
     company = Company(
         company_id="c2",
         name="Company 2",
         metadata={
             METADATA_KEY: CompanyAIProviders(
-                llm_chat=CompanyLLMOverride(provider=HUMANITEC_LLM_PROVIDER)
+                llm_chat=CompanyLLMOverride(provider=LINNEX_LLM_PROVIDER)
             ).to_metadata_dict()
         },
     )
@@ -88,24 +88,24 @@ def test_resolve_humanitec_llm_company_override_is_platform_virtual_provider():
     resolved = resolve_ai_model(AICapability.LLM_CHAT, include_platform_default=False)
 
     assert resolved is not None
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
-    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.provider == LINNEX_LLM_PROVIDER
+    assert resolved.model == LINNEX_LLM_AUTO_MODEL
     assert resolved.api_key is None
     assert resolved.base_url is None
     assert resolved.cost_origin == "platform"
 
 
-def test_resolve_humanitec_llms_concrete_free_model_and_fallback_policy():
+def test_resolve_linnex_llms_concrete_free_model_and_fallback_policy():
     company = Company(
         company_id="c2",
         name="Company 2",
         metadata={
             METADATA_KEY: CompanyAIProviders(
                 llm_chat=CompanyLLMOverride(
-                    provider=HUMANITEC_LLM_PROVIDER,
+                    provider=LINNEX_LLM_PROVIDER,
                     model="openrouter:qwen/qwen3-coder:free",
                     fallback_models=[
-                        {"provider": HUMANITEC_LLM_PROVIDER, "model": HUMANITEC_LLM_AUTO_MODEL},
+                        {"provider": LINNEX_LLM_PROVIDER, "model": LINNEX_LLM_AUTO_MODEL},
                     ],
                 )
             ).to_metadata_dict()
@@ -117,31 +117,31 @@ def test_resolve_humanitec_llms_concrete_free_model_and_fallback_policy():
     resolved = resolve_ai_model(AICapability.LLM_CHAT, include_platform_default=False)
 
     assert resolved is not None
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.provider == LINNEX_LLM_PROVIDER
     assert resolved.model == "openrouter:qwen/qwen3-coder:free"
-    assert resolved.fallback_models[0]["provider"] == HUMANITEC_LLM_PROVIDER
-    assert resolved.fallback_models[0]["model"] == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.fallback_models[0]["provider"] == LINNEX_LLM_PROVIDER
+    assert resolved.fallback_models[0]["model"] == LINNEX_LLM_AUTO_MODEL
 
 
-def test_resolve_llm_platform_default_is_humanitec_auto():
+def test_resolve_llm_platform_default_is_linnex_auto():
     resolved = resolve_ai_model(
         AICapability.LLM_VISION,
         include_platform_default=True,
     )
 
     assert resolved is not None
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
-    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.provider == LINNEX_LLM_PROVIDER
+    assert resolved.model == LINNEX_LLM_AUTO_MODEL
     assert resolved.cost_origin == "platform"
 
 
-def test_humanitec_llm_company_override_supports_vision_capability():
+def test_linnex_llm_company_override_supports_vision_capability():
     company = Company(
         company_id="c3",
         name="Company 3",
         metadata={
             METADATA_KEY: CompanyAIProviders(
-                llm_vision=CompanyLLMOverride(provider=HUMANITEC_LLM_PROVIDER)
+                llm_vision=CompanyLLMOverride(provider=LINNEX_LLM_PROVIDER)
             ).to_metadata_dict()
         },
     )
@@ -151,8 +151,8 @@ def test_humanitec_llm_company_override_supports_vision_capability():
     resolved = resolve_ai_model(AICapability.LLM_VISION, include_platform_default=False)
 
     assert resolved is not None
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
-    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.provider == LINNEX_LLM_PROVIDER
+    assert resolved.model == LINNEX_LLM_AUTO_MODEL
 
 
 def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
@@ -175,7 +175,7 @@ def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     assert resolved.cost_origin == "company"
 
 
-def test_text_transform_uses_humanitec_default_without_company_override():
+def test_text_transform_uses_linnex_default_without_company_override():
     service = TextTransformService()
 
     resolved = service._resolve_company_llm_args(
@@ -184,8 +184,8 @@ def test_text_transform_uses_humanitec_default_without_company_override():
         model=None,
     )
 
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
-    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.provider == LINNEX_LLM_PROVIDER
+    assert resolved.model == LINNEX_LLM_AUTO_MODEL
     assert resolved.api_key is None
     assert resolved.base_url is None
     assert resolved.headers == {}

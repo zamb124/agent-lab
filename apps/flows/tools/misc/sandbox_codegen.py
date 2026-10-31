@@ -131,7 +131,7 @@ def _system_prompt(
     if output_json_schema and output_json_schema.strip():
         schema_hint = f"\nExpected result JSON Schema:\n{output_json_schema.strip()}\n"
     return (
-        "Generate production-quality user code for Humanitec isolated code runners.\n"
+        "Generate production-quality user code for Linnex isolated code runners.\n"
         f"Target language: {language}.\n"
         f"{_entrypoint_contract(language, entrypoint)}.\n"
         "Do not import apps.* or core.*. Do not call platform internals directly.\n"
@@ -194,7 +194,7 @@ def _state_json(state: ExecutionState) -> JsonObject:
 @tool(
     name="sandbox_codegen",
     description=(
-        "Generate and execute code in an isolated Humanitec language runner. "
+        "Generate and execute code in an isolated Linnex language runner. "
         "Supports python, javascript, typescript, go and csharp. The generated code uses capability-gateway for every platform capability."
     ),
     tags=["misc"],

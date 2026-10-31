@@ -5,8 +5,10 @@
 import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-menu.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
+import type { PlatformMenuItem } from '@platform/lib/components/platform-menu.js';
 
-const ITEMS = [
+const ITEMS: PlatformMenuItem[] = [
     { id: 'section', kind: 'section', label: 'Действия' },
     { id: 'rename', label: 'Переименовать', icon: 'edit', hint: 'F2' },
     { id: 'duplicate', label: 'Дублировать', icon: 'copy' },
@@ -15,14 +17,14 @@ const ITEMS = [
     { id: 'delete', label: 'Удалить', icon: 'trash', danger: true },
 ];
 
-async function mountMenu(items = ITEMS) {
-    const el = await fixture(html`<platform-menu .items=${items}></platform-menu>`);
+async function mountMenu(items: PlatformMenuItem[] = ITEMS) {
+    const el = await fixture<TestEl>(html`<platform-menu .items=${items}></platform-menu>`);
     await elementUpdated(el);
     return el;
 }
 
-function itemButtons(el) {
-    return Array.from(el.shadowRoot.querySelectorAll('.item'));
+function itemButtons(el: any) {
+    return Array.from(qsa(shadow(el), '.item'));
 }
 
 describe('platform-menu', () => {
@@ -35,28 +37,28 @@ describe('platform-menu', () => {
         const el = await mountMenu();
 
         expect(itemButtons(el).length).to.equal(4);
-        expect(el.shadowRoot.querySelectorAll('.separator').length).to.equal(1);
-        expect(el.shadowRoot.querySelector('.section').textContent.trim()).to.equal('Действия');
+        expect(qsa(shadow(el), '.separator').length).to.equal(1);
+        expect(qs(shadow(el), '.section').textContent.trim()).to.equal('Действия');
     });
 
     it('показывает подпись, иконку и горячую клавишу', async () => {
         const el = await mountMenu();
-        const rename = el.shadowRoot.querySelector('[data-menu-item="rename"]');
+        const rename = qs(shadow(el), '[data-menu-item="rename"]');
 
-        expect(rename.querySelector('.label').textContent.trim()).to.equal('Переименовать');
-        expect(rename.querySelector('.hint').textContent.trim()).to.equal('F2');
-        expect(rename.querySelector('platform-icon')).to.exist;
+        expect(qs(rename!, '.label').textContent.trim()).to.equal('Переименовать');
+        expect(qs(rename!, '.hint').textContent.trim()).to.equal('F2');
+        expect(qs(rename!, 'platform-icon')).to.exist;
     });
 
     it('клик по пункту эмитит menu-select с id', async () => {
         const el = await mountMenu();
 
         const selected = oneEvent(el, 'menu-select');
-        el.shadowRoot.querySelector('[data-menu-item="duplicate"]').click();
+        qs(shadow(el), '[data-menu-item="duplicate"]').click();
         const event = await selected;
 
-        expect(event.detail.id).to.equal('duplicate');
-        expect(event.detail.item.label).to.equal('Дублировать');
+        expect((event as CustomEvent).detail.id).to.equal('duplicate');
+        expect((event as CustomEvent).detail.item.label).to.equal('Дублировать');
     });
 
     it('отключённый пункт не выбирается', async () => {
@@ -66,7 +68,7 @@ describe('platform-menu', () => {
             fired = true;
         });
 
-        el.shadowRoot.querySelector('[data-menu-item="archive"]').click();
+        qs(shadow(el), '[data-menu-item="archive"]').click();
         await elementUpdated(el);
 
         expect(fired).to.be.false;
@@ -76,7 +78,7 @@ describe('platform-menu', () => {
         const el = await mountMenu();
 
         expect(
-            el.shadowRoot.querySelector('[data-menu-item="delete"]').classList.contains('is-danger'),
+            qs(shadow(el), '[data-menu-item="delete"]').classList.contains('is-danger'),
         ).to.be.true;
     });
 
@@ -86,8 +88,8 @@ describe('platform-menu', () => {
         el.focusFirstItem();
         await elementUpdated(el);
 
-        const active = el.shadowRoot.querySelector('.item.is-active');
-        expect(active.dataset.menuItem).to.equal('rename');
+        const active = qs(shadow(el), '.item.is-active');
+        expect((active as TestEl).dataset.menuItem).to.equal('rename');
     });
 
     it('стрелка вниз идёт по пунктам, пропуская разделители и отключённые', async () => {
@@ -95,20 +97,20 @@ describe('platform-menu', () => {
         el.focusFirstItem();
         await elementUpdated(el);
 
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('duplicate');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('duplicate');
 
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
         await elementUpdated(el);
         // archive отключён, поэтому следующий доступный — delete
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('delete');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('delete');
     });
 
     it('стрелка вниз с последнего пункта возвращается к первому', async () => {
         const el = await mountMenu();
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         el.focusFirstItem();
         await elementUpdated(el);
 
@@ -117,39 +119,39 @@ describe('platform-menu', () => {
             await elementUpdated(el);
         }
 
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('rename');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('rename');
     });
 
     it('стрелка вверх идёт в обратном порядке', async () => {
         const el = await mountMenu();
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         el.focusFirstItem();
         await elementUpdated(el);
 
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('delete');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('delete');
     });
 
     it('Home и End переходят к краям списка', async () => {
         const el = await mountMenu();
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         el.focusFirstItem();
         await elementUpdated(el);
 
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('delete');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('delete');
 
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('rename');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('rename');
     });
 
     it('Enter выбирает активный пункт', async () => {
         const el = await mountMenu();
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         el.focusFirstItem();
         await elementUpdated(el);
 
@@ -157,19 +159,19 @@ describe('platform-menu', () => {
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         const event = await selected;
 
-        expect(event.detail.id).to.equal('rename');
+        expect((event as CustomEvent).detail.id).to.equal('rename');
     });
 
     it('набор букв переводит фокус на подходящий пункт', async () => {
         const el = await mountMenu();
-        const menu = el.shadowRoot.querySelector('[role="menu"]');
+        const menu = qs(shadow(el), '[role="menu"]');
         el.focusFirstItem();
         await elementUpdated(el);
 
         menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'у', bubbles: true }));
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.menuItem).to.equal('delete');
+        expect(qs(shadow(el), '.item.is-active').dataset.menuItem).to.equal('delete');
     });
 
     it('роли и tabindex соответствуют меню', async () => {
@@ -177,9 +179,9 @@ describe('platform-menu', () => {
         el.focusFirstItem();
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('[role="menu"]')).to.exist;
+        expect(qs(shadow(el), '[role="menu"]')).to.exist;
         expect(itemButtons(el).every((node) => node.getAttribute('role') === 'menuitem')).to.be.true;
-        const active = el.shadowRoot.querySelector('.item.is-active');
+        const active = qs(shadow(el), '.item.is-active');
         expect(active.getAttribute('tabindex')).to.equal('0');
         const others = itemButtons(el).filter((node) => node !== active);
         expect(others.every((node) => node.getAttribute('tabindex') === '-1')).to.be.true;
@@ -189,20 +191,20 @@ describe('platform-menu', () => {
         const el = await mountMenu();
 
         expect(
-            el.shadowRoot.querySelector('[data-menu-item="archive"]').getAttribute('aria-disabled'),
+            qs(shadow(el), '[data-menu-item="archive"]').getAttribute('aria-disabled'),
         ).to.equal('true');
     });
 
     it('отмеченный пункт показывает галочку', async () => {
         const el = await mountMenu([{ id: 'ru', label: 'Русский', selected: true }]);
 
-        expect(el.shadowRoot.querySelector('.check')).to.exist;
+        expect(qs(shadow(el), '.check')).to.exist;
     });
 
     it('пустой список показывает слот вместо пунктов', async () => {
         const el = await mountMenu([]);
 
-        expect(el.shadowRoot.querySelector('.empty')).to.exist;
+        expect(qs(shadow(el), '.empty')).to.exist;
         expect(itemButtons(el).length).to.equal(0);
     });
 });

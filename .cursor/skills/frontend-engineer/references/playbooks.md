@@ -33,13 +33,13 @@ Playbook устраняет класс находок целиком, а не о
 | tsc в lint-ts | цель `ui-typecheck` в рецепте `lint-ts` (`mk/lint.mk`) |
 | tsc в Docker | `npm run typecheck:ui` в стадии `ui-builder` (`Dockerfile`) до `npm run build:ui` |
 | сборка в make app, test-up, doc | `ui-build` — предпосылка целей `app` (`mk/app.mk`), `test-up` (`mk/test.mk`) и `doc` (`Makefile`: `extract_openapi.py` импортирует приложения) |
-| watch в make app | процесс `ui_watch` (`npm run watch:ui`) в `mprocs.yaml` и `scripts/dev/run.py`; watch-режим `build_ui.mjs` не удаляет `ui-dist` и `embed-dist` — сервисы уже раздают их |
+| watch в make app | процесс `ui_watch` (`npm run watch:ui`) в `mprocs.yaml` и `scripts/dev/run.py`; watch-режим `ui.ts` не удаляет `ui-dist` и `embed-dist` — сервисы уже раздают их |
 | сборка в GPU-образе | стадия `ui-builder` в `Dockerfile.gpu`, как в `Dockerfile` |
 | granian на исходниках | маунты на `apps/<svc>/ui-dist`; `/static/core/lib` → `core/frontend/embed-dist` до `/static/core` в `scripts/dev/run.py`, `deploy/helm/agent-lab/values.yaml`, `templates/50-gpu/litserve.yaml`; отсутствующий маунт в `run.py` — ошибка |
 | `make lint <file>.ts` | ветка `*.ts)` в `lint-file` и `%.ts` в `LINT_PATH_GOALS` (`mk/lint.mk`) |
 | раздача без ui-dist | `resolve_ui_static_dir` и `mount_core_frontend` (`core/app/spa.py`) бросают с подсказкой `make ui-build`; ветки возврата исходников нет |
 
-`scripts/build/ui.mjs` в том же срезе: одна точка входа `index.ts` и падение при её отсутствии, `gitSha` без значения `'unknown'`.
+`scripts/build/ui.ts` в том же срезе: одна точка входа `index.ts` и падение при её отсутствии, `gitSha` без значения `'unknown'`.
 
 Закрыт: все пункты § Конвейер — OK; `make lint-ts` падает на подложенной ошибке типа.
 
@@ -49,8 +49,8 @@ Playbook устраняет класс находок целиком, а не о
 
 1. Импорты Lit — `from 'lit'` и `from 'lit/directives/<name>.js'`; `lit-shim` удаляется вместе со всеми импортами на него.
 2. Embed-автолоады собираются самодостаточно в `core/frontend/embed-dist/`: проверка, требовавшая относительных vendored-путей в замыкании embed, и `exempt_in_embed_closure` удаляются; вместо них — проверка собранного embed-бандла на отсутствие голых спецификаторов.
-3. Import map в `apps/*/ui/index.html`, в HTML, который отдаёт `core/app`, и в `web-test-runner.config.mjs` удаляется; WTR резолвит npm `lit`.
-4. Переписывание vendored-путей в `scripts/build/ui.mjs`, vendored-копии Lit, `marked`, `centrifuge` и их записи в precache `core/frontend/pwa/sw.js` удаляются; DOMPurify и прочие — тем же шагом, если пакет есть в npm.
+3. Import map в `apps/*/ui/index.html`, в HTML, который отдаёт `core/app`, и в `web-test-runner.config.ts` удаляется; WTR резолвит npm `lit`.
+4. Переписывание vendored-путей в `scripts/build/ui.ts`, vendored-копии Lit, `marked`, `centrifuge` и их записи в precache `core/frontend/static/lib/pwa/sw.ts` удаляются; DOMPurify и прочие — тем же шагом, если пакет есть в npm.
 5. `frontend.mdc`, `testing.mdc`, `flow_ui.mdc` — as-is.
 
 Закрыт: § Мосты без Lit-пунктов; в логе `make test-frontend-core-browser` нет `Multiple versions of Lit`.
@@ -105,7 +105,7 @@ Playbook устраняет класс находок целиком, а не о
 Признак: `ui_js_files` в `tests/**`; § Мосты — «мост резолва тестового раннера», «подмена внутренностей плагина».
 
 1. Конверсия по `../recipes.md` § 16: `*.spec.js` → `*.spec.ts`, `tests/frontend_core/helpers/**` → `.ts`.
-2. `web-test-runner.config.mjs`, `vitest.config.mjs`, `package.json`: маски `.spec.ts`; мосты резолва удаляются.
+2. `web-test-runner.config.ts`, `vitest.config.ts`, `package.json`: маски `.spec.ts`; мосты резолва удаляются.
 3. `scripts/gates/frontend/ui_kit_docs.py` и `ui_components.mdc` § UI Kit Documentation System — `contract.spec.ts`; `testing.mdc` § UI-тесты — as-is.
 4. Тесты исполняются на npm `lit` (§ Один Lit).
 

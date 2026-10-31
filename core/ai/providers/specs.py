@@ -7,9 +7,9 @@ initializing LLM transports.
 
 from __future__ import annotations
 
-HUMANITEC_LLM_PROVIDER = "humanitec_llm"
-HUMANITEC_LLM_AUTO_MODEL = "auto"
-HUMANITEC_LLMS_DISPLAY_LABEL = "Humanitec LLMs"
+LINNEX_LLM_PROVIDER = "linnex_llm"
+LINNEX_LLM_AUTO_MODEL = "auto"
+LINNEX_LLMS_DISPLAY_LABEL = "Linnex LLMs"
 
 OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER: tuple[str, ...] = (
     "openrouter",
@@ -57,7 +57,7 @@ PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER: tuple[str, ...] = tuple(
 )
 
 PLATFORM_LLM_PROVIDER_ORDER: tuple[str, ...] = (
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_PROVIDER,
     *OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
 )
 PLATFORM_LLM_PROVIDER_SLUGS = frozenset(PLATFORM_LLM_PROVIDER_ORDER)
@@ -183,21 +183,21 @@ def split_provider_prefixed_model(
     return provider_prefix, model_without_provider_prefix
 
 
-def humanitec_llms_model_ref(provider: str, model_id: str) -> str:
+def linnex_llms_model_ref(provider: str, model_id: str) -> str:
     resolved_provider = provider.strip()
     resolved_model_id = model_id.strip()
     if not resolved_provider or not resolved_model_id:
-        raise ValueError("Humanitec LLMs model ref requires provider and model_id")
+        raise ValueError("Linnex LLMs model ref requires provider and model_id")
     if resolved_provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
-        raise ValueError(f"Humanitec LLMs model provider is not a free-pool provider: {provider!r}")
+        raise ValueError(f"Linnex LLMs model provider is not a free-pool provider: {provider!r}")
     return f"{resolved_provider}:{resolved_model_id}"
 
 
-def split_humanitec_llms_model_ref(model: str | None) -> tuple[str, str] | None:
+def split_linnex_llms_model_ref(model: str | None) -> tuple[str, str] | None:
     if model is None:
         return None
     raw_model = str(model).strip()
-    if not raw_model or raw_model == HUMANITEC_LLM_AUTO_MODEL:
+    if not raw_model or raw_model == LINNEX_LLM_AUTO_MODEL:
         return None
     provider, separator, model_id = raw_model.partition(":")
     if not separator or not provider.strip() or not model_id.strip():
@@ -211,9 +211,9 @@ def split_humanitec_llms_model_ref(model: str | None) -> tuple[str, str] | None:
 __all__ = [
     "ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS",
     "GITHUB_MODELS_API_VERSION",
-    "HUMANITEC_LLM_AUTO_MODEL",
-    "HUMANITEC_LLM_PROVIDER",
-    "HUMANITEC_LLMS_DISPLAY_LABEL",
+    "LINNEX_LLM_AUTO_MODEL",
+    "LINNEX_LLM_PROVIDER",
+    "LINNEX_LLMS_DISPLAY_LABEL",
     "LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER",
     "LLM_PROVIDER_DEFAULT_BASE_URLS",
     "LLM_PROVIDER_DEFAULT_MODELS_URLS",
@@ -227,7 +227,7 @@ __all__ = [
     "PLATFORM_LLM_PROVIDER_ORDER",
     "PLATFORM_LLM_PROVIDER_SLUGS",
     "ZERO_PRICE_LLM_PROVIDER_SLUGS",
-    "humanitec_llms_model_ref",
-    "split_humanitec_llms_model_ref",
+    "linnex_llms_model_ref",
+    "split_linnex_llms_model_ref",
     "split_provider_prefixed_model",
 ]

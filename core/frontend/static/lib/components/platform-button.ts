@@ -42,13 +42,13 @@ export class PlatformButton extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: var(--space-2, 8px);
-            padding: var(--btn-padding, 8px 24px);
-            font-size: var(--btn-font-size, 16px);
-            font-weight: var(--btn-font-weight, 400);
+            gap: var(--space-2);
+            padding: var(--btn-padding);
+            font-size: var(--btn-font-size);
+            font-weight: var(--btn-font-weight);
             font-family: inherit;
-            line-height: var(--btn-line-height, 20px);
-            border-radius: var(--btn-radius, 22px);
+            line-height: var(--btn-line-height);
+            border-radius: var(--btn-radius);
             border: none;
             cursor: pointer;
             transition: var(--motion-transition-interactive);
@@ -65,13 +65,13 @@ export class PlatformButton extends PlatformElement {
         }
 
         :host([density="compact"]) button {
-            padding: var(--btn-padding, 6px 14px);
-            font-size: var(--btn-font-size, var(--text-sm, 14px));
+            padding: var(--btn-padding);
+            font-size: var(--btn-font-size);
         }
 
         :host([density="dense"]) button {
-            padding: var(--btn-padding, 4px 10px);
-            font-size: var(--btn-font-size, var(--text-xs, 12px));
+            padding: var(--btn-padding);
+            font-size: var(--btn-font-size);
         }
 
         :host([icon-only]) button {
@@ -79,7 +79,7 @@ export class PlatformButton extends PlatformElement {
             min-width: var(--platform-button-icon-size, 36px);
             height: var(--platform-button-icon-size, 36px);
             padding: 0;
-            border-radius: var(--platform-button-icon-radius, var(--radius-full, 999px));
+            border-radius: var(--platform-button-icon-radius, var(--radius-full));
             line-height: 1;
         }
 
@@ -98,16 +98,16 @@ export class PlatformButton extends PlatformElement {
         
         /* Primary — violet */
         button.primary {
-            color: var(--platform-btn-primary-text, #ffffff);
+            color: var(--platform-btn-primary-text);
             -webkit-text-fill-color: currentColor;
-            background: var(--platform-btn-primary-bg, #99A6F9);
-            box-shadow: var(--platform-btn-primary-shadow, none);
+            background: var(--platform-btn-primary-bg);
+            box-shadow: var(--platform-btn-primary-shadow);
         }
 
         button.primary:hover:not(:disabled) {
-            color: var(--platform-btn-primary-text, #ffffff);
-            background: var(--platform-btn-primary-bg-hover, #8794F0);
-            box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+            color: var(--platform-btn-primary-text);
+            background: var(--platform-btn-primary-bg-hover);
+            box-shadow: var(--platform-btn-primary-shadow-hover);
         }
 
         ::slotted(*) {
@@ -116,32 +116,32 @@ export class PlatformButton extends PlatformElement {
 
         /* Accent — orange */
         button.accent {
-            color: var(--platform-btn-accent-text, #ffffff);
-            background: var(--platform-btn-accent-bg, #FF885C);
-            box-shadow: var(--platform-btn-accent-shadow, none);
+            color: var(--platform-btn-accent-text);
+            background: var(--platform-btn-accent-bg);
+            box-shadow: var(--platform-btn-accent-shadow);
         }
 
         button.accent:hover:not(:disabled) {
-            background: var(--platform-btn-accent-bg-hover, #F2784A);
-            box-shadow: var(--platform-btn-accent-shadow-hover, 0 0 10px rgba(255, 136, 92, 0.6));
+            background: var(--platform-btn-accent-bg-hover);
+            box-shadow: var(--platform-btn-accent-shadow-hover);
         }
         
         /* Secondary */
         button.secondary {
-            color: var(--platform-btn-secondary-text, #99A6F9);
-            background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.15));
+            color: var(--platform-btn-secondary-text);
+            background: var(--platform-btn-secondary-bg);
             border: none;
         }
         
         button.secondary:hover:not(:disabled) {
-            background: var(--platform-btn-secondary-bg-hover, rgba(153, 166, 249, 0.1));
-            box-shadow: var(--platform-btn-secondary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.2));
+            background: var(--platform-btn-secondary-bg-hover);
+            box-shadow: var(--platform-btn-secondary-shadow-hover);
         }
         
         /* Danger */
         button.danger {
             color: white;
-            background: var(--error, #f43f5e);
+            background: var(--error);
         }
         
         button.danger:hover:not(:disabled) {
@@ -150,52 +150,52 @@ export class PlatformButton extends PlatformElement {
         }
 
         button.ghost-danger {
-            color: var(--error, #f43f5e);
+            color: var(--error);
             background: transparent;
         }
 
         button.ghost-danger:hover:not(:disabled) {
-            color: var(--error, #f43f5e);
-            background: var(--error-bg, rgba(244, 63, 94, 0.12));
+            color: var(--error);
+            background: var(--error-bg);
         }
         
         /* Ghost */
         button.ghost {
-            color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+            color: var(--text-secondary);
             background: transparent;
         }
         
         button.ghost:hover:not(:disabled) {
-            color: var(--text-primary, rgba(255, 255, 255, 0.95));
-            background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
+            color: var(--text-primary);
+            background: var(--glass-tint-subtle);
         }
         
         /* Светлая тема */
         :host-context([data-theme="light"]) button.secondary {
-            color: var(--platform-btn-secondary-text, #8794F0);
-            background: var(--platform-btn-secondary-bg, rgba(135, 148, 240, 0.12));
+            color: var(--platform-btn-secondary-text);
+            background: var(--platform-btn-secondary-bg);
         }
         
         :host-context([data-theme="light"]) button.secondary:hover:not(:disabled) {
-            background: var(--platform-btn-secondary-bg-hover, rgba(135, 148, 240, 0.08));
+            background: var(--platform-btn-secondary-bg-hover);
         }
         
         :host-context([data-theme="light"]) button.ghost {
-            color: var(--text-secondary, #475569);
+            color: var(--text-secondary);
         }
         
         :host-context([data-theme="light"]) button.ghost:hover:not(:disabled) {
-            color: var(--text-primary, #1e293b);
-            background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.02));
+            color: var(--text-primary);
+            background: var(--glass-tint-subtle);
         }
 
         :host-context([data-theme="light"]) button.ghost-danger {
-            color: var(--error, #e11d48);
+            color: var(--error);
         }
 
         :host-context([data-theme="light"]) button.ghost-danger:hover:not(:disabled) {
-            color: var(--error, #e11d48);
-            background: var(--error-bg, rgba(244, 63, 94, 0.1));
+            color: var(--error);
+            background: var(--error-bg);
         }
     `;
 

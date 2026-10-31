@@ -2,7 +2,7 @@
 
 Конспект по экранам **Apple Developer** и **App Store Connect**. Тексты витрины, скриншоты и метаданные вводятся **только в веб-интерфейсе** App Store Connect (или через **Transporter** для билдов) — отдельного конвейера в репозитории нет.
 
-**Поля и черновики текстов под Платформу:** [`APP_STORE_HUMANITEC.md`](APP_STORE_HUMANITEC.md).
+**Поля и черновики текстов под Платформу:** [`APP_STORE_LINNEX.md`](APP_STORE_LINNEX.md).
 
 ---
 
@@ -34,8 +34,8 @@
 
 | Шаг | Где | Что сделать |
 |-----|-----|-------------|
-| 2.1a.1 | **Identifiers** → **+** | Тип **Services IDs**. Identifier = **Services ID** (например `app.humanitec.ru`) — это значение **`client_id`** в `auth.providers.apple` на сервере. |
-| 2.1a.2 | У Services ID → **Sign in with Apple** → **Configure** | Primary App ID — приложение iOS; **Domains and Subdomains** — публичный домен (например `humanitec.ru`); **Return URLs** — ровно **`https://humanitec.ru/auth/callback/apple`** (без завершающего слэша; должен совпадать с тем, что отдаёт фронтовый сервис при старте OAuth). |
+| 2.1a.1 | **Identifiers** → **+** | Тип **Services IDs**. Identifier = **Services ID** (например `app.linnex.io`) — это значение **`client_id`** в `auth.providers.apple` на сервере. |
+| 2.1a.2 | У Services ID → **Sign in with Apple** → **Configure** | Primary App ID — приложение iOS; **Domains and Subdomains** — публичный домен (например `linnex.io`); **Return URLs** — ровно **`https://linnex.io/auth/callback/apple`** (без завершающего слэша; должен совпадать с тем, что отдаёт фронтовый сервис при старте OAuth). |
 | 2.1a.3 | **Keys** → ключ **Sign in with Apple** | Создать ключ, скачать **один раз** файл `.p8`, сохранить **Key ID** и **Team ID**. Содержимое `.p8` — в секретах как **`apple_private_key`** (в JSON строка с `\n`). |
 
 ### 2.2 Сертификаты

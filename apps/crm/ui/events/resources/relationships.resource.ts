@@ -37,7 +37,7 @@ export const relationshipsListResource = createCursorList({
         if (!filters || typeof filters !== 'object') {
             throw new Error('relationshipsListResource.buildQuery: filters required');
         }
-        const query: Record<string, any> = {};
+        const query: Record<string, unknown> = {};
         if (typeof filters.namespace === 'string' && filters.namespace.length > 0) {
             query.namespace = filters.namespace;
         }

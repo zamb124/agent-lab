@@ -60,7 +60,7 @@ export class FlowsAgentSkillsList extends PlatformElement {
                 font: inherit;
             }
             .card:hover {
-                border-color: var(--border-strong, var(--accent));
+                border-color: var(--border-strong);
             }
             .card[data-selected='true'] {
                 border-color: var(--accent);
@@ -108,7 +108,7 @@ export class FlowsAgentSkillsList extends PlatformElement {
                 align-items: center;
                 gap: 4px;
                 padding: 2px 8px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: var(--bg-surface);
                 color: var(--text-tertiary);
                 font-size: 11px;
@@ -118,11 +118,6 @@ export class FlowsAgentSkillsList extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
                 text-align: center;
-            }
-            .loading {
-                display: flex;
-                justify-content: center;
-                padding: var(--space-6);
             }
         `,
     ];
@@ -176,7 +171,7 @@ export class FlowsAgentSkillsList extends PlatformElement {
                 @change=${this._onQuery}
             ></platform-field>
             ${this.loading
-                ? html`<div class="loading"><platform-spinner size="24"></platform-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     <div class="list">
                         ${filtered.length === 0

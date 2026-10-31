@@ -1,5 +1,5 @@
 /**
- * HumanitecModelsSidebar — навигация реестра системных моделей Humanitec.
+ * LinnexModelsSidebar — навигация реестра системных моделей Linnex.
  *
  * Активный маршрут берётся из `state.router.routeKey`. Переходы — через
  * `this.navigate(routeKey)`. У сервиса один экран — реестр моделей.
@@ -25,7 +25,7 @@ const NAV_ITEMS: LitserveNavItem[] = [
     { route: 'models', icon: 'database', label_key: 'sidebar.models' },
 ];
 
-export class HumanitecModelsSidebar extends PlatformElement {
+export class LinnexModelsSidebar extends PlatformElement {
     static i18nNamespace = 'litserve';
 
     static override styles = [
@@ -63,7 +63,7 @@ export class HumanitecModelsSidebar extends PlatformElement {
                 border-color: var(--accent);
                 color: var(--accent);
                 font-weight: var(--font-semibold);
-                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.15);
+                box-shadow: 0 4px 16px var(--accent-subtle);
             }
             .nav-label { flex: 1; }
             platform-service-sidebar[collapsed] .nav-label { display: none; }
@@ -154,4 +154,4 @@ export class HumanitecModelsSidebar extends PlatformElement {
     }
 }
 
-customElements.define('litserve-sidebar', HumanitecModelsSidebar);
+customElements.define('litserve-sidebar', LinnexModelsSidebar);

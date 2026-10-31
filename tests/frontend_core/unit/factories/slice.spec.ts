@@ -14,53 +14,53 @@ afterEach(() => resetFactories());
 
 describe('createSlice: contract', () => {
     it('требует options', () => {
-        expect(() => createSlice(null)).toThrow(/options/);
-        expect(() => createSlice()).toThrow();
+        expect(() => Reflect.apply(createSlice, null, [null])).toThrow(/options/);
+        expect(() => Reflect.apply(createSlice, null, [])).toThrow();
     });
 
     it('требует валидное name', () => {
-        expect(() => createSlice({ extraInitial: { a: 1 }, extraReducer: (s) => s })).toThrow(/name/);
-        expect(() => createSlice({ name: 'bad', extraInitial: { a: 1 }, extraReducer: (s) => s })).toThrow(/scope\/entity/);
-        expect(() => createSlice({ name: 'svc/Bad', extraInitial: { a: 1 }, extraReducer: (s) => s })).toThrow(/scope\/entity/);
+        expect(() => Reflect.apply(createSlice, null, [{ extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/name/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'bad', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/scope\/entity/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/Bad', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/scope\/entity/);
     });
 
     it('запрещает transport / request / restMirror / wsTimeoutMs / effect', () => {
-        const base = { name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s };
-        expect(() => createSlice({ ...base, transport: 'ws' })).toThrow(/transport is forbidden/);
-        expect(() => createSlice({ ...base, request: async () => ({}) })).toThrow(/request is forbidden/);
-        expect(() => createSlice({ ...base, restMirror: { method: 'GET', path: '/x' } })).toThrow(/restMirror is forbidden/);
-        expect(() => createSlice({ ...base, wsTimeoutMs: 1000 })).toThrow(/wsTimeoutMs is forbidden/);
-        expect(() => createSlice({ ...base, effect: async () => {} })).toThrow(/effect is forbidden/);
+        const base = { name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state };
+        expect(() => Reflect.apply(createSlice, null, [{ ...base, transport: 'ws' }])).toThrow(/transport is forbidden/);
+        expect(() => Reflect.apply(createSlice, null, [{ ...base, request: async () => ({}) }])).toThrow(/request is forbidden/);
+        expect(() => Reflect.apply(createSlice, null, [{ ...base, restMirror: { method: 'GET', path: '/x' } }])).toThrow(/restMirror is forbidden/);
+        expect(() => Reflect.apply(createSlice, null, [{ ...base, wsTimeoutMs: 1000 }])).toThrow(/wsTimeoutMs is forbidden/);
+        expect(() => Reflect.apply(createSlice, null, [{ ...base, effect: async () => {} }])).toThrow(/effect is forbidden/);
     });
 
     it('требует extraInitial как объект с минимум одним ключом', () => {
-        expect(() => createSlice({ name: 'svc/x', extraReducer: (s) => s })).toThrow(/extraInitial/);
-        expect(() => createSlice({ name: 'svc/x', extraInitial: [], extraReducer: (s) => s })).toThrow(/plain object/);
-        expect(() => createSlice({ name: 'svc/x', extraInitial: {}, extraReducer: (s) => s })).toThrow(/at least one key/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/x', extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/extraInitial/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/x', extraInitial: [], extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/plain object/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/x', extraInitial: {}, extraReducer: (state: Record<string, unknown>) => state }])).toThrow(/at least one key/);
     });
 
     it('требует extraReducer-функцию', () => {
-        expect(() => createSlice({ name: 'svc/x', extraInitial: { a: 1 } })).toThrow(/extraReducer/);
-        expect(() => createSlice({ name: 'svc/x', extraInitial: { a: 1 }, extraReducer: 'not a function' })).toThrow();
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/x', extraInitial: { a: 1 } }])).toThrow(/extraReducer/);
+        expect(() => Reflect.apply(createSlice, null, [{ name: 'svc/x', extraInitial: { a: 1 }, extraReducer: 'not a function' }])).toThrow();
     });
 
     it('extraEvents.<key>: пустой verb — throw', () => {
         expect(() => createSlice({
-            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s,
+            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state,
             extraEvents: { FOO: '' },
         })).toThrow(/extraEvents/);
     });
 
     it('actions.<methodName>: пустой verb — throw', () => {
         expect(() => createSlice({
-            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s,
+            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state,
             actions: { open: '' },
         })).toThrow(/actions/);
     });
 
     it('actions: пустой methodName — throw', () => {
         expect(() => createSlice({
-            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s,
+            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (state: Record<string, unknown>) => state,
             actions: { '': 'open' },
         })).toThrow(/method name/);
     });
@@ -95,7 +95,7 @@ describe('createSlice: shape', () => {
         const factory = createSlice({
             name: 'svc/frz',
             extraInitial: { v: 'x' },
-            extraReducer: (s) => s,
+            extraReducer: (state: Record<string, unknown>) => state,
         });
         expect(Object.isFrozen(factory.slice.initial)).toBe(true);
     });
@@ -104,7 +104,7 @@ describe('createSlice: shape', () => {
         const factory = createSlice({
             name: 'svc/missing',
             extraInitial: { v: 'x' },
-            extraReducer: (s) => s,
+            extraReducer: (state: Record<string, unknown>) => state,
         });
         expect(() => factory.selectors.slice({})).toThrow(/not registered in bus/);
     });
@@ -115,9 +115,9 @@ describe('createSlice: reducer integration через bus', () => {
         const factory = createSlice({
             name: 'svc/cnt',
             extraInitial: { n: 0 },
-            extraReducer: (state, event) => {
+            extraReducer: (state: Record<string, unknown>, event: { type: string }) => {
                 if (event.type === 'svc/cnt/inc') {
-                    return { ...state, n: state.n + 1 };
+                    return { ...state, n: Number(state['n'] ?? 0) + 1 };
                 }
                 return state;
             },

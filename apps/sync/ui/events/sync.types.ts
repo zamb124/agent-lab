@@ -4,7 +4,7 @@
  * Динамические actions фабрик (`useSlice`/`useOp`/`useResource`) видны на
  * контроллере только через index-signature `[action: string]: unknown` —
  * не вызываемы без сужения. Здесь — типизированные интерфейсы контроллеров
- * и shape slice'ов, чтобы компоненты не размножали `Record<string, any>`-касты.
+ * и shape slice'ов, чтобы компоненты не размножали `Record<string, unknown>`-касты.
  */
 
 import type {
@@ -44,8 +44,8 @@ export interface SyncChatUiSlice extends Record<string, unknown> {
 
 /** Данные ленты сообщений одного канала внутри messages_store. */
 export interface SyncChannelMessagesData extends Record<string, unknown> {
-    items: readonly Record<string, any>[];
-    pendingByLocalId: Readonly<Record<string, Record<string, any>>>;
+    items: readonly Record<string, unknown>[];
+    pendingByLocalId: Readonly<Record<string, Record<string, unknown>>>;
     loading: boolean;
     loadingOlder: boolean;
     loadingNewer: boolean;
@@ -73,8 +73,8 @@ export interface SyncMessagesStoreSlice extends Record<string, unknown> {
 // ============================================================================
 
 export interface SyncCallUiSlice extends Record<string, unknown> {
-    activeCall: Record<string, any> | null;
-    incomingCall: Record<string, any> | null;
+    activeCall: Record<string, unknown> | null;
+    incomingCall: Record<string, unknown> | null;
     overlayMinimized: boolean;
     bannerHangupGuardUntil: number;
     overlayChatOpen: boolean;

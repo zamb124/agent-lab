@@ -146,7 +146,7 @@ class TestEntityResponseList:
                         "type": "llm_node",
                         "prompt": "Use calculator then answer",
                         "tools": ["calculator"],
-                        "llm": {"provider": "humanitec_llm", "model": "auto"},
+                        "llm": {"provider": "linnex_llm", "model": "auto"},
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],

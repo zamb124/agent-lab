@@ -6,15 +6,17 @@ import { installFetchMock } from '../../helpers/mock-fetch.js';
 import { installDomShim } from '../../helpers/dom-shim.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
-let dom;
-let storage;
-let fetchMock;
+let dom: ReturnType<typeof installDomShim>;
+let storage: ReturnType<typeof installFakeStorage>;
+let fetchMock: ReturnType<typeof installFetchMock>;
 
 beforeEach(() => {
     dom = installDomShim();
     storage = installFakeStorage();
     fetchMock = installFetchMock();
     // document.cookie shim
+    if (!dom) throw new Error('dom required');
+
     dom.document.cookie = '';
 });
 afterEach(() => {
@@ -23,31 +25,33 @@ afterEach(() => {
     dom.uninstall();
 });
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
+import { prop } from '../../helpers/prop.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
 
 describe('createI18nEffect: bootstrap', () => {
     it('эмитит I18N_LOCALE_REQUESTED с stored locale', async () => {
         storage.localStorage.setItem('platform:core:locale', 'en');
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
-        expect(req.payload.locale).toBe('en');
+        expect(prop(req?.payload, 'locale')).toBe('en');
     });
 
     it('без сохранённого locale — en из navigator.language', async () => {
         Object.defineProperty(globalThis.navigator, 'language', { value: 'en-US', configurable: true });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
-        expect(req.payload.locale).toBe('en');
+        expect(prop(req?.payload, 'locale')).toBe('en');
     });
 
     it('без сохранённого locale — не-en язык браузера даёт ru', async () => {
         Object.defineProperty(globalThis.navigator, 'language', { value: 'fr-FR', configurable: true });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
-        expect(req.payload.locale).toBe('ru');
+        expect(prop(req?.payload, 'locale')).toBe('ru');
     });
 });
 
@@ -58,7 +62,7 @@ describe('createI18nEffect: LOCALE_REQUESTED', () => {
 
     it('успех → LOADED + CHANGED + persists в localStorage', async () => {
         fetchMock.respondJson('GET', '/api/i18n/en', { hello: 'Hello' });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.I18N_LOCALE_REQUESTED, { locale: 'en' }), buildCtx(() => ({}), dispatched));
         const types = dispatched.map((d) => d.type);
         expect(types).toContain(CoreEvents.I18N_LOCALE_LOADED);
@@ -68,7 +72,7 @@ describe('createI18nEffect: LOCALE_REQUESTED', () => {
 
     it('ошибка → LOCALE_FAILED', async () => {
         fetchMock.respondStatus('GET', '/api/i18n/en', 500);
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.I18N_LOCALE_REQUESTED, { locale: 'en' }), buildCtx(() => ({}), dispatched));
         expect(dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_FAILED)).toBeTruthy();
     });
@@ -83,7 +87,7 @@ describe('translate', () => {
             new_brace: 'Old {name}',
         },
     };
-    const stateWith = (defaultNamespace) => ({
+    const stateWith = (defaultNamespace: string | null) => ({
         translations: bundle,
         locale: 'ru',
         defaultNamespace,

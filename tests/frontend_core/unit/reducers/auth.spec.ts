@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { authReducer, initialAuthState } from '@platform/lib/events/reducers/auth.js';
+import type { AuthState } from '@platform/lib/events/reducers/auth.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
+import type { PlatformEvent } from '../../../../core/frontend/static/lib/events/contract.js';
 
-const ev = (type, payload = null, ts = 1000) => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'local' } });
+const ev = (type: string, payload: unknown = null, ts = 1000): PlatformEvent => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'local', causation_id: null, correlation_id: null, trace_id: null } });
 
 describe('authReducer: initialAuthState', () => {
     it('заморожен и имеет ожидаемые поля', () => {
@@ -90,7 +92,7 @@ describe('authReducer: events', () => {
     });
 
     it('AUTH_LOGGED_OUT сохраняет providers и demo', () => {
-        const withPublic = {
+        const withPublic: AuthState = {
             ...initialAuthState,
             providers: { list: [{ name: 'google' }], loading: false, error: null },
             demo: { enabled: true, email: 'demo@demo.ru', loaded: true },

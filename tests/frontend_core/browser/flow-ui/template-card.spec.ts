@@ -7,6 +7,7 @@ import { elementUpdated, expect, fixture, fixtureCleanup, html, oneEvent, waitUn
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { blockElement } from '@platform/lib/flow-ui/editor/selection.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-template-card.js';
+import {q, qs, type TestEl} from '../helpers/dom.js';
 
 const TEMPLATE = {
     template_id: 'lead_form',
@@ -35,21 +36,21 @@ describe('flows-interface-template-card', () => {
     afterEach(() => fixtureCleanup());
 
     it('mounts the live preview once visible and renders title and description', async () => {
-        const element = await fixture(html`<flows-interface-template-card .template=${TEMPLATE} style="display:block;width:320px"></flows-interface-template-card>`);
-        await waitUntil(() => element.renderRoot.querySelector('platform-flow-ui') !== null, 'preview did not mount');
-        const preview = element.renderRoot.querySelector('platform-flow-ui');
-        expect(preview.editing).to.equal(true);
+        const element = await fixture<TestEl>(html`<flows-interface-template-card .template=${TEMPLATE} style="display:block;width:320px"></flows-interface-template-card>`);
+        await waitUntil(() => q(element.renderRoot, 'platform-flow-ui') !== null, 'preview did not mount');
+        const preview = q(element.renderRoot, 'platform-flow-ui');
+        expect(preview!.editing).to.equal(true);
         await waitUntil(() => blockElement(preview, 'title') !== null, 'preview page did not render');
-        expect(blockElement(preview, 'title').textContent).to.contain('Оставьте заявку');
-        expect(element.renderRoot.querySelector('.title').textContent).to.contain('Форма заявки');
-        expect(element.renderRoot.querySelector('.description').textContent).to.equal('Имя, email и кнопка отправки');
+        expect(blockElement(preview, 'title')!.textContent).to.contain('Оставьте заявку');
+        expect(qs(element.renderRoot, '.title').textContent).to.contain('Форма заявки');
+        expect(qs(element.renderRoot, '.description').textContent).to.equal('Имя, email и кнопка отправки');
     });
 
     it('emits template-select with the template id on click and keyboard', async () => {
-        const element = await fixture(html`<flows-interface-template-card .template=${TEMPLATE}></flows-interface-template-card>`);
-        const card = element.renderRoot.querySelector('.card');
+        const element = await fixture<TestEl>(html`<flows-interface-template-card .template=${TEMPLATE}></flows-interface-template-card>`);
+        const card = qs(element.renderRoot, '.card');
         const clicked = oneEvent(element, 'template-select');
-        card.click();
+        (card as TestEl).click();
         expect((await clicked).detail).to.deep.equal({ templateId: 'lead_form' });
 
         const pressed = oneEvent(element, 'template-select');

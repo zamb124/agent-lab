@@ -18,6 +18,7 @@ import {
 import { presenceResource } from '../../../../apps/sync/ui/events/resources/presence.resource.js';
 import syncEn from '../../../../core/i18n/translations/en/sync.json' with { type: 'json' };
 import '../../../../apps/sync/ui/components/sync-chat-list.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     channelsResource,
@@ -44,8 +45,8 @@ function seedSyncTranslations() {
     );
 }
 
-function seedChannels(count) {
-    const items = [];
+function seedChannels(count: any) {
+    const items: any[] = [];
     for (let i = 0; i < count; i += 1) {
         items.push({
             channel_id: `ch-scroll-${i}`,
@@ -67,7 +68,7 @@ function seedChannels(count) {
     );
 }
 
-function hitStackHasChannelRow(x, y) {
+function hitStackHasChannelRow(x: any, y: any) {
     const stack = document.elementsFromPoint(x, y);
     for (const node of stack) {
         if (node.tagName === 'SYNC-CHANNEL-ROW') return true;
@@ -97,23 +98,23 @@ describe('sync-chat-list sidebar scroll clip', () => {
     afterEach(() => fixtureCleanup());
 
     it('карточки ленты не наезжают на поиск и заголовок секции', async () => {
-        const shell = await fixture(html`
+        const shell = await fixture<TestEl>(html`
             <div style="display:flex;flex-direction:column;height:360px;width:280px;overflow:hidden;">
                 <sync-chat-list mode="sidebar"></sync-chat-list>
             </div>
         `);
-        const list = shell.querySelector('sync-chat-list');
+        const list = qs(shell!, 'sync-chat-list');
         seedChannels(24);
         await elementUpdated(list);
         await waitUntil(
-            () => list.shadowRoot.querySelectorAll('sync-channel-row').length >= 8,
+            () => qsa(shadow(list), 'sync-channel-row').length >= 8,
             'channel rows rendered',
         );
 
-        const header = list.shadowRoot.querySelector('.header');
-        const search = list.shadowRoot.querySelector('.search-box');
-        const title = list.shadowRoot.querySelector('.section-title');
-        const sectionContent = list.shadowRoot.querySelector('.section-content');
+        const header = q(shadow(list), '.header');
+        const search = q(shadow(list), '.search-box');
+        const title = q(shadow(list), '.section-title');
+        const sectionContent = qs(shadow(list), '.section-content');
         expect(header).to.not.equal(null);
         expect(search).to.not.equal(null);
         expect(title).to.not.equal(null);
@@ -121,16 +122,16 @@ describe('sync-chat-list sidebar scroll clip', () => {
 
         const hostStyle = getComputedStyle(list);
         expect(hostStyle.overflow).to.equal('hidden');
-        expect(sectionContent.scrollHeight).to.be.greaterThan(sectionContent.clientHeight);
+        expect(sectionContent!.scrollHeight).to.be.greaterThan(sectionContent!.clientHeight);
 
-        const headerTopBefore = header.getBoundingClientRect().top;
-        sectionContent.scrollTop = 140;
+        const headerTopBefore = header!.getBoundingClientRect().top;
+        sectionContent!.scrollTop = 140;
         await elementUpdated(list);
 
-        expect(header.getBoundingClientRect().top).to.equal(headerTopBefore);
+        expect(header!.getBoundingClientRect().top).to.equal(headerTopBefore);
 
-        const searchBox = search.getBoundingClientRect();
-        const titleBox = title.getBoundingClientRect();
+        const searchBox = search!.getBoundingClientRect();
+        const titleBox = title!.getBoundingClientRect();
         expect(hitStackHasChannelRow(searchBox.left + searchBox.width / 2, searchBox.top + searchBox.height / 2)).to.equal(false);
         expect(hitStackHasChannelRow(titleBox.left + titleBox.width / 2, titleBox.top + titleBox.height / 2)).to.equal(false);
     });

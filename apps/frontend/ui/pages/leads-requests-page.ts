@@ -18,8 +18,9 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
-import type { CursorListController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 
 export class FrontendLeadsRequestsPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -83,7 +84,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
         super();
         this._list = this.useCursorList('frontend/lead_requests', { autoload: true });
     }
-    private _list: CursorListController;
+    private _list: ControllerFor<'frontend/lead_requests'>;
 
 
     _renderForbidden() {
@@ -113,7 +114,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
         `;
     }
 
-    _renderTable(list: Record<string, any>[]) {
+    _renderTable(list: Record<string, unknown>[]) {
         return html`
             <table>
                 <thead><tr>
@@ -168,7 +169,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
         const error = this._list.error;
         let body;
         if (loading && list.length === 0) {
-            body = html`<div class="state"><platform-spinner></platform-spinner></div>`;
+            body = html`<platform-empty-state loading></platform-empty-state>`;
         } else if (terminal === 'forbidden') {
             body = this._renderForbidden();
         } else if (error) {

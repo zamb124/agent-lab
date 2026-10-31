@@ -25,6 +25,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { buildChatSubtitle, channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { isOnline, findCompanyMember } from '../_helpers/sync-presence.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -72,8 +73,8 @@ export class SyncChatHeader extends PlatformElement {
             align-items: center;
             gap: var(--space-3);
             padding: var(--space-3) var(--space-6);
-            border-bottom: 1px solid var(--glass-border);
-            background: var(--glass-solid-soft, var(--glass-solid));
+            border-bottom: 1px solid var(--glass-border-medium);
+            background: var(--glass-solid-subtle);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             min-height: 72px;
@@ -82,8 +83,8 @@ export class SyncChatHeader extends PlatformElement {
             z-index: 10;
         }
         :host([data-call-banner]) {
-            background: var(--accent-gradient, linear-gradient(135deg, #6366f1, #8b5cf6));
-            color: var(--text-inverse, #fff);
+            background: var(--accent-gradient);
+            color: var(--text-inverse);
         }
         /* Mobile shell 2026: гамбургер удалён, back-кнопка только на мобиле для channel-маршрута */
         .back-btn {
@@ -93,10 +94,10 @@ export class SyncChatHeader extends PlatformElement {
             color: var(--text-primary);
             padding: var(--space-2);
             margin-left: calc(var(--space-2) * -1);
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             cursor: pointer;
         }
-        .back-btn:hover { background: var(--glass-hover); }
+        .back-btn:hover { background: var(--glass-tint-medium); }
         @media (max-width: 767px) {
             .back-btn { display: inline-flex; }
         }
@@ -107,16 +108,16 @@ export class SyncChatHeader extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             font-weight: var(--font-semibold);
             font-size: var(--text-sm);
             flex-shrink: 0;
             position: relative;
             overflow: hidden;
-            background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
+            background: var(--accent-subtle);
+            box-shadow: 0 1px 4px var(--glass-shadow-subtle), inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
             cursor: pointer;
-            transition: transform var(--duration-fast);
+            transition: transform var(--motion-duration-micro);
         }
         .avatar.pastel-initials {
             --sync-avatar-h: 0;
@@ -137,8 +138,8 @@ export class SyncChatHeader extends PlatformElement {
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            background: var(--success, #22c55e);
-            border: 2px solid var(--bg-elevated, var(--glass-solid));
+            background: var(--success);
+            border: 2px solid var(--bg-elevated);
         }
         .text {
             display: flex;
@@ -165,15 +166,15 @@ export class SyncChatHeader extends PlatformElement {
         }
         .subtitle.online { color: var(--accent); font-weight: var(--font-medium); }
         :host([data-call-banner]) .title,
-        :host([data-call-banner]) .subtitle { color: var(--text-inverse, #fff); }
-        :host([data-call-banner]) .subtitle { color: rgba(255, 255, 255, 0.88); }
+        :host([data-call-banner]) .subtitle { color: var(--text-inverse); }
+        :host([data-call-banner]) .subtitle { color: var(--text-on-accent); }
         :host([data-call-banner]) .avatar:not(.pastel-initials) {
-            background: rgba(255, 255, 255, 0.22);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+            background: color-mix(in srgb, var(--text-on-accent) 22%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-on-accent) 28%, transparent);
         }
         :host([data-call-banner]) .avatar.pastel-initials {
-            background: rgba(255, 255, 255, 0.24);
-            color: var(--text-inverse, #fff);
+            background: color-mix(in srgb, var(--text-on-accent) 24%, transparent);
+            color: var(--text-inverse);
         }
 
         .actions {
@@ -185,44 +186,44 @@ export class SyncChatHeader extends PlatformElement {
         .actions-divider {
             width: 1px;
             height: 24px;
-            background: var(--glass-border);
+            background: var(--glass-border-medium);
             margin: 0 var(--space-1);
         }
         .icon-btn {
-            background: color-mix(in srgb, var(--glass-hover) 35%, transparent);
+            background: color-mix(in srgb, var(--glass-tint-medium) 35%, transparent);
             border: none;
             color: var(--text-tertiary);
             padding: 10px;
             cursor: pointer;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: background var(--duration-fast), color var(--duration-fast);
+            transition: background var(--motion-duration-micro), color var(--motion-duration-micro);
         }
-        .icon-btn:hover { background: var(--glass-hover); color: var(--text-primary); }
+        .icon-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
         .icon-btn:focus-visible {
             outline: 2px solid var(--accent);
             outline-offset: 2px;
         }
         .icon-btn.accent:hover {
-            background: var(--accent-subtle, rgba(153, 166, 249, 0.12));
+            background: var(--accent-subtle);
             color: var(--accent);
         }
         :host([data-call-banner]) .icon-btn {
-            color: var(--text-inverse, #fff);
-            background: rgba(255, 255, 255, 0.12);
+            color: var(--text-inverse);
+            background: color-mix(in srgb, var(--text-on-accent) 12%, transparent);
         }
         :host([data-call-banner]) .icon-btn:hover {
-            background: rgba(255, 255, 255, 0.22);
-            color: var(--text-inverse, #fff);
+            background: color-mix(in srgb, var(--text-on-accent) 22%, transparent);
+            color: var(--text-inverse);
         }
         .pulse {
             display: inline-block;
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.95);
+            background: var(--glass-tint-strong);
             animation: pulse 1.6s ease-in-out infinite;
             margin-right: 6px;
             vertical-align: middle;
@@ -237,10 +238,10 @@ export class SyncChatHeader extends PlatformElement {
             top: 100%;
             margin-top: 4px;
             min-width: 200px;
-            background: var(--glass-solid);
-            border: 1px solid var(--glass-border);
+            background: var(--glass-solid-medium);
+            border: 1px solid var(--glass-border-medium);
             border-radius: var(--radius-md);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            box-shadow: 0 8px 24px var(--glass-shadow-medium);
             padding: var(--space-1) 0;
             z-index: 30;
         }
@@ -257,7 +258,7 @@ export class SyncChatHeader extends PlatformElement {
             cursor: pointer;
             font-size: var(--text-sm);
         }
-        .menu-flyout button:hover { background: var(--glass-hover); }
+        .menu-flyout button:hover { background: var(--glass-tint-medium); }
         .menu-flyout .ws-row {
             padding: var(--space-2) var(--space-3);
             color: var(--text-secondary);
@@ -265,16 +266,16 @@ export class SyncChatHeader extends PlatformElement {
             display: flex;
             align-items: center;
             gap: var(--space-1);
-            border-top: 1px solid var(--glass-border);
+            border-top: 1px solid var(--glass-border-medium);
         }
         .ws-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #94a3b8;
+            background: var(--text-tertiary);
         }
-        .ws-dot.connected { background: #22c55e; }
-        .ws-dot.connecting { background: #eab308; }
+        .ws-dot.connected { background: var(--success); }
+        .ws-dot.connecting { background: var(--warning); }
         .avatar.list-mark {
             display: inline-flex;
             align-items: center;
@@ -394,8 +395,8 @@ export class SyncChatHeader extends PlatformElement {
         }
     }
 
-    _channel(): Record<string, any> | undefined {
-        return this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+    _channel(): Record<string, unknown> | undefined {
+        return this._channels.items.find((c: Record<string, unknown>) => c.channel_id === this.channelId);
     }
 
     _onBackClick() {
@@ -476,7 +477,7 @@ export class SyncChatHeader extends PlatformElement {
         this._callHangup.run({ call_id: callUi.activeCall.call_id });
     }
 
-    _onPeerClick(channel: Record<string, any> | null) {
+    _onPeerClick(channel: Record<string, unknown> | null) {
         if (channel === null || !isPlainRecord(channel.peer)) return;
         const userId = channel.peer.user_id;
         if (typeof userId !== 'string') return;
@@ -487,7 +488,7 @@ export class SyncChatHeader extends PlatformElement {
         this._headerAvatarFailed = true;
     }
 
-    _renderAvatar(channel: Record<string, any>) {
+    _renderAvatar(channel: Record<string, unknown>) {
         const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
         if (isDm) {
             const member = findCompanyMember(this._members.items, channel.peer.user_id);
@@ -554,7 +555,7 @@ export class SyncChatHeader extends PlatformElement {
                     <platform-icon name="chat" size="22"></platform-icon>
                 </span>
                 <div class="text">
-                    <platform-spinner></platform-spinner>
+                    <platform-empty-state loading></platform-empty-state>
                 </div>
                 <div class="actions"></div>
             `;

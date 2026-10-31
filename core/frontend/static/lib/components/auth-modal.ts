@@ -81,7 +81,7 @@ export class AuthModal extends PlatformModal {
             .provider-button {
                 display: flex; align-items: center; justify-content: center; gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
-                min-height: var(--button-height, 44px);
+                min-height: var(--button-height);
                 background: var(--glass-bg-subtle);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
@@ -108,8 +108,8 @@ export class AuthModal extends PlatformModal {
             }
             .error {
                 margin-top: var(--space-4); padding: var(--space-3);
-                background: var(--error-bg, rgba(255, 59, 48, 0.1));
-                border: 1px solid var(--error-border, rgba(255, 59, 48, 0.3));
+                background: var(--error-bg);
+                border: 1px solid var(--error-border);
                 border-radius: var(--radius-sm); color: var(--error);
                 font-size: var(--text-sm); text-align: center;
             }
@@ -119,7 +119,7 @@ export class AuthModal extends PlatformModal {
             .demo-input {
                 width: 100%; box-sizing: border-box;
                 padding: var(--space-3);
-                min-height: var(--input-height, 44px);
+                min-height: var(--input-height);
                 background: var(--glass-bg-subtle);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
@@ -129,9 +129,9 @@ export class AuthModal extends PlatformModal {
             .demo-slot {
                 min-height: calc(
                     var(--space-6) + var(--space-3) + 1.25rem
-                    + (var(--text-xs, 0.75rem) * 2) + (var(--space-2) * 2)
-                    + (var(--input-height, 44px) * 2)
-                    + var(--button-height, 44px)
+                    + (var(--text-xs) * 2) + (var(--space-2) * 2)
+                    + (var(--input-height) * 2)
+                    + var(--button-height)
                 );
             }
             .demo-slot--empty { min-height: 0; }

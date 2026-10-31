@@ -119,7 +119,7 @@ alwaysApply: false
 ### UI Kit Documentation System
 
 - Каждый `platform-*` с `customElements.define` в `core/frontend/static/lib/components/**` имеет `tests/ui/design-system/components/<tag>/` с `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.js` (WTR), `playwright.spec.py`; реестр — `tests/ui/design-system/catalog.yaml`.
-- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/docs/ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога; страница грузит модуль карточки (`import` манифеста) из `/static/core/lib/`, его собирает `scripts/build/ui.mjs` (`buildPageModules`).
+- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/docs/ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога; страница грузит модуль карточки (`import` манифеста) из `/static/core/lib/`, его собирает `scripts/build/ui.ts` (`buildPageModules`).
 
 ## Исключения
 

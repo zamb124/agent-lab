@@ -24,7 +24,7 @@ function _resolveLocale(locale: string): string {
     return lc === 'ru' ? 'ru-RU' : 'en-US';
 }
 
-function _toDate(input: Date | string | number): Date | null {
+function _toDate(input: unknown): Date | null {
     if (input instanceof Date) {
         return Number.isNaN(input.getTime()) ? null : input;
     }
@@ -45,7 +45,7 @@ function _toDate(input: Date | string | number): Date | null {
  * @param {Intl.DateTimeFormatOptions} [options]  по умолчанию — короткая дата
  * @returns {string}
  */
-export function formatPlatformDate(input: Date | string | number, locale: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' }): string {
+export function formatPlatformDate(input: unknown, locale: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' }): string {
     const d = _toDate(input);
     if (d === null) {
         return '—';
@@ -58,7 +58,7 @@ export function formatPlatformDate(input: Date | string | number, locale: string
  * @param {string} locale  'ru' | 'en'
  * @returns {string}  "DD.MM.YYYY HH:MM" или "MM/DD/YYYY, HH:MM" в зависимости от локали
  */
-export function formatPlatformDateTime(input: Date | string | number, locale: string): string {
+export function formatPlatformDateTime(input: unknown, locale: string): string {
     return formatPlatformDate(input, locale, {
         day: '2-digit',
         month: '2-digit',

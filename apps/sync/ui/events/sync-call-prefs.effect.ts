@@ -3,7 +3,7 @@
  * и платформенным storage-effect.
  *
  * - На AUTH_USER_LOADED / AUTH_LOGIN_SUCCEEDED единожды диспатчит
- *   `STORAGE_LOAD_REQUESTED` для ключа `humanitec.sync.call_prefs`.
+ *   `STORAGE_LOAD_REQUESTED` для ключа `linnex.sync.call_prefs`.
  *   Когда core storage-effect отдаст значение через `STORAGE_LOADED`,
  *   мы конвертируем его в action `sync/call_prefs/hydrated`.
  *

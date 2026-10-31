@@ -21,7 +21,7 @@ function eventRecord(payload: unknown): Record<string, unknown> | null {
 
 const EMPTY_TYPING = Object.freeze({});
 
-function _mergeChannelReadIntoItems(state: SyncChannelsSlice, result: Record<string, any> | null | undefined) {
+function _mergeChannelReadIntoItems(state: SyncChannelsSlice, result: Record<string, unknown> | null | undefined) {
     if (!result || typeof result !== 'object' || typeof result.channel_id !== 'string' || result.channel_id === '') {
         return state;
     }

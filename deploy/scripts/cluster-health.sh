@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Полная проверка здоровья платформы Humanitec.
+# Полная проверка здоровья платформы Linnex.
 # Запускать локально (с настроенным kubectl) или с master ноды.
 #
 # Возвращает exit 0 только если ВСЕ проверки прошли. Иначе exit 1 и список упавших.
@@ -10,11 +10,11 @@
 #
 # ENV:
 #   PLATFORM_NS=platform                — namespace с подами платформы
-#   APEX_HOST=humanitec.ru              — legacy single apex (если PLATFORM_APEX_HOSTS пуст)
-#   PLATFORM_APEX_HOSTS="humanitec.ru linnex.io" — все brand apex для public checks
-#   GRAFANA_HOST=grafana.humanitec.ru   — Grafana (PUBLIC)
-#   ONLYOFFICE_HOST=onlyoffice.humanitec.ru
-#   LIVEKIT_HOST=livekit.humanitec.ru
+#   APEX_HOST=linnex.io              — legacy single apex (если PLATFORM_APEX_HOSTS пуст)
+#   PLATFORM_APEX_HOSTS="linnex.io linnex.io" — все brand apex для public checks
+#   GRAFANA_HOST=grafana.linnex.io   — Grafana (PUBLIC)
+#   ONLYOFFICE_HOST=onlyoffice.linnex.io
+#   LIVEKIT_HOST=livekit.linnex.io
 #   CHECK_PUBLIC=1                      — проверить https://… через curl (требует DNS); 0 = только in-cluster
 #   PLATFORM_PUBLIC_IP=77.91.94.127     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
 
@@ -30,11 +30,11 @@ if ! command -v kubectl >/dev/null 2>&1 && ! command -v microk8s >/dev/null 2>&1
 fi
 
 K="$KUBECTL"
-APEX_HOST="${APEX_HOST:-humanitec.ru}"
-PLATFORM_APEX_HOSTS="${PLATFORM_APEX_HOSTS:-humanitec.ru linnex.io}"
-GRAFANA_HOST="${GRAFANA_HOST:-grafana.humanitec.ru}"
-ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
-LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
+APEX_HOST="${APEX_HOST:-linnex.io}"
+PLATFORM_APEX_HOSTS="${PLATFORM_APEX_HOSTS:-linnex.io linnex.io}"
+GRAFANA_HOST="${GRAFANA_HOST:-grafana.linnex.io}"
+ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.linnex.io}"
+LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.linnex.io}"
 CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-77.91.94.127}"
 

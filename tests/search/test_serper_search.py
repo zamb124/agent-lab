@@ -28,12 +28,12 @@ async def serper_stub_url(unused_tcp_port_factory):
     app.state.payload = {
         "organic": [
             {
-                "title": "Humanitec A",
+                "title": "Linnex A",
                 "link": "https://example.com/search/?utm_source=test#frag",
                 "position": 1,
             },
             {
-                "title": "Humanitec B",
+                "title": "Linnex B",
                 "link": "https://EXAMPLE.com/search",
                 "snippet": "Second result supplies snippet",
                 "position": 2,
@@ -126,7 +126,7 @@ async def provider_stub_url(unused_tcp_port_factory):
         if app.state.invalid_tavily_json:
             return Response("not-json", media_type="text/plain")
         return {
-            "query": "Humanitec",
+            "query": "Linnex",
             "results": [
                 {
                     "title": "Tavily A",
@@ -176,8 +176,8 @@ def test_parse_serper_results_normalizes_organic_items() -> None:
     payload = {
         "organic": [
             {
-                "title": "Humanitec",
-                "link": "https://humanitec.ru/?utm_source=test#frag",
+                "title": "Linnex",
+                "link": "https://linnex.io/?utm_source=test#frag",
                 "snippet": "AI platform",
                 "position": 1,
                 "date": "May 1, 2026",
@@ -194,9 +194,9 @@ def test_parse_serper_results_normalizes_organic_items() -> None:
     results = parse_serper_results(payload, limit=10)
 
     assert len(results) == 1
-    assert results[0].title == "Humanitec"
-    assert results[0].url == "https://humanitec.ru/?utm_source=test#frag"
-    assert results[0].display_url == "humanitec.ru"
+    assert results[0].title == "Linnex"
+    assert results[0].url == "https://linnex.io/?utm_source=test#frag"
+    assert results[0].display_url == "linnex.io"
     assert results[0].provider == "serper"
     assert results[0].provider_rank == 1
     assert results[0].published_at == "May 1, 2026"
@@ -349,7 +349,7 @@ async def test_serper_provider_calls_http_endpoint_and_normalizes_results(serper
 
     results, status = await provider.search(
         MetaSearchRequest(
-            query="Humanitec",
+            query="Linnex",
             limit=2,
             language="RU",
             region="RU",
@@ -358,10 +358,10 @@ async def test_serper_provider_calls_http_endpoint_and_normalizes_results(serper
 
     assert status.ok is True
     assert status.results_count == 2
-    assert [item.title for item in results] == ["Humanitec A", "Humanitec B"]
+    assert [item.title for item in results] == ["Linnex A", "Linnex B"]
     assert state.requests[0]["headers"]["x-api-key"] == "test-key"
     assert state.requests[0]["json"] == {
-        "q": "Humanitec",
+        "q": "Linnex",
         "num": 2,
         "gl": "ru",
         "hl": "ru",
@@ -372,7 +372,7 @@ async def test_serper_provider_calls_http_endpoint_and_normalizes_results(serper
 @pytest.mark.asyncio
 async def test_serper_provider_reports_disabled_and_http_errors(serper_stub_url) -> None:
     disabled = SerperSearchProvider(SearchSerperConfig(enabled=False))
-    _, disabled_status = await disabled.search(MetaSearchRequest(query="Humanitec"))
+    _, disabled_status = await disabled.search(MetaSearchRequest(query="Linnex"))
     assert disabled_status.ok is False
     assert disabled_status.error == "serper provider is disabled"
 
@@ -381,7 +381,7 @@ async def test_serper_provider_reports_disabled_and_http_errors(serper_stub_url)
     provider = SerperSearchProvider(
         SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3)
     )
-    _, status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, status = await provider.search(MetaSearchRequest(query="Linnex"))
 
     assert status.ok is False
     assert "serper returned HTTP 503" in str(status.error)
@@ -395,7 +395,7 @@ async def test_serper_provider_reports_invalid_json_response(serper_stub_url) ->
         SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3)
     )
 
-    _, status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, status = await provider.search(MetaSearchRequest(query="Linnex"))
 
     assert status.ok is False
     assert status.error
@@ -409,7 +409,7 @@ async def test_tinyfish_provider_calls_http_endpoint_and_normalizes_results(prov
     )
 
     results, status = await provider.search(
-        MetaSearchRequest(query="Humanitec", limit=2, language="RU", region="RU")
+        MetaSearchRequest(query="Linnex", limit=2, language="RU", region="RU")
     )
 
     assert status.ok is True
@@ -417,7 +417,7 @@ async def test_tinyfish_provider_calls_http_endpoint_and_normalizes_results(prov
     assert results[0].title == "TinyFish A"
     assert state.requests[0]["headers"]["x-api-key"] == "tiny-key"
     assert state.requests[0]["query"] == {
-        "query": "Humanitec",
+        "query": "Linnex",
         "location": "RU",
         "language": "ru",
     }
@@ -428,12 +428,12 @@ async def test_tinyfish_provider_reports_disabled_missing_key_and_http_errors(
     provider_stub_url,
 ) -> None:
     disabled = TinyFishSearchProvider(SearchTinyFishConfig(enabled=False))
-    _, disabled_status = await disabled.search(MetaSearchRequest(query="Humanitec"))
+    _, disabled_status = await disabled.search(MetaSearchRequest(query="Linnex"))
     assert disabled_status.ok is False
     assert disabled_status.error == "tinyfish provider is disabled"
 
     missing = TinyFishSearchProvider(SearchTinyFishConfig())
-    _, missing_status = await missing.search(MetaSearchRequest(query="Humanitec"))
+    _, missing_status = await missing.search(MetaSearchRequest(query="Linnex"))
     assert missing_status.ok is False
     assert missing_status.error == "tinyfish api key is not configured"
 
@@ -442,13 +442,13 @@ async def test_tinyfish_provider_reports_disabled_missing_key_and_http_errors(
     provider = TinyFishSearchProvider(
         SearchTinyFishConfig(api_key="tiny-key", base_url=f"{base_url}/tinyfish")
     )
-    _, status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert status.ok is False
     assert "tinyfish returned HTTP 503" in str(status.error)
 
     state.fail_tinyfish = False
     state.invalid_tinyfish_json = True
-    _, invalid_status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, invalid_status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert invalid_status.ok is False
     assert invalid_status.error
 
@@ -460,14 +460,14 @@ async def test_linkup_provider_calls_http_endpoint_and_normalizes_results(provid
         SearchLinkupConfig(api_key="linkup-key", base_url=base_url, depth="fast")
     )
 
-    results, status = await provider.search(MetaSearchRequest(query="Humanitec", limit=2))
+    results, status = await provider.search(MetaSearchRequest(query="Linnex", limit=2))
 
     assert status.ok is True
     assert status.results_count == 1
     assert results[0].title == "Linkup A"
     assert state.requests[0]["headers"]["authorization"] == "Bearer linkup-key"
     assert state.requests[0]["json"] == {
-        "q": "Humanitec",
+        "q": "Linnex",
         "depth": "fast",
         "outputType": "searchResults",
         "includeImages": False,
@@ -480,25 +480,25 @@ async def test_linkup_provider_reports_disabled_missing_key_and_http_errors(
     provider_stub_url,
 ) -> None:
     disabled = LinkupSearchProvider(SearchLinkupConfig(enabled=False))
-    _, disabled_status = await disabled.search(MetaSearchRequest(query="Humanitec"))
+    _, disabled_status = await disabled.search(MetaSearchRequest(query="Linnex"))
     assert disabled_status.ok is False
     assert disabled_status.error == "linkup provider is disabled"
 
     missing = LinkupSearchProvider(SearchLinkupConfig())
-    _, missing_status = await missing.search(MetaSearchRequest(query="Humanitec"))
+    _, missing_status = await missing.search(MetaSearchRequest(query="Linnex"))
     assert missing_status.ok is False
     assert missing_status.error == "linkup api key is not configured"
 
     base_url, state = provider_stub_url
     state.fail_linkup = True
     provider = LinkupSearchProvider(SearchLinkupConfig(api_key="linkup-key", base_url=base_url))
-    _, status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert status.ok is False
     assert "linkup returned HTTP 503" in str(status.error)
 
     state.fail_linkup = False
     state.invalid_linkup_json = True
-    _, invalid_status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, invalid_status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert invalid_status.ok is False
     assert invalid_status.error
 
@@ -510,14 +510,14 @@ async def test_tavily_provider_calls_http_endpoint_and_normalizes_results(provid
         SearchTavilyConfig(api_key="tavily-key", base_url=base_url, search_depth="advanced")
     )
 
-    results, status = await provider.search(MetaSearchRequest(query="Humanitec", limit=2))
+    results, status = await provider.search(MetaSearchRequest(query="Linnex", limit=2))
 
     assert status.ok is True
     assert status.results_count == 1
     assert results[0].title == "Tavily A"
     assert state.requests[0]["headers"]["authorization"] == "Bearer tavily-key"
     assert state.requests[0]["json"] == {
-        "query": "Humanitec",
+        "query": "Linnex",
         "max_results": 2,
         "search_depth": "advanced",
         "topic": "general",
@@ -532,25 +532,25 @@ async def test_tavily_provider_reports_disabled_missing_key_and_http_errors(
     provider_stub_url,
 ) -> None:
     disabled = TavilySearchProvider(SearchTavilyConfig(enabled=False))
-    _, disabled_status = await disabled.search(MetaSearchRequest(query="Humanitec"))
+    _, disabled_status = await disabled.search(MetaSearchRequest(query="Linnex"))
     assert disabled_status.ok is False
     assert disabled_status.error == "tavily provider is disabled"
 
     missing = TavilySearchProvider(SearchTavilyConfig())
-    _, missing_status = await missing.search(MetaSearchRequest(query="Humanitec"))
+    _, missing_status = await missing.search(MetaSearchRequest(query="Linnex"))
     assert missing_status.ok is False
     assert missing_status.error == "tavily api key is not configured"
 
     base_url, state = provider_stub_url
     state.fail_tavily = True
     provider = TavilySearchProvider(SearchTavilyConfig(api_key="tavily-key", base_url=base_url))
-    _, status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert status.ok is False
     assert "tavily returned HTTP 503" in str(status.error)
 
     state.fail_tavily = False
     state.invalid_tavily_json = True
-    _, invalid_status = await provider.search(MetaSearchRequest(query="Humanitec"))
+    _, invalid_status = await provider.search(MetaSearchRequest(query="Linnex"))
     assert invalid_status.ok is False
     assert invalid_status.error
 
@@ -571,7 +571,7 @@ async def test_meta_search_ranks_dedupes_and_reports_unsupported_providers(
 
     response = await service.search(
         MetaSearchRequest(
-            query="Humanitec",
+            query="Linnex",
             providers=["google", "unsupported"],
             provider_strategy="merge",
             limit=10,
@@ -581,7 +581,7 @@ async def test_meta_search_ranks_dedupes_and_reports_unsupported_providers(
     assert response.providers["serper"].ok is True
     assert response.providers["unsupported"].ok is False
     assert response.results[0].rank == 1
-    assert response.results[0].title == "Humanitec B"
+    assert response.results[0].title == "Linnex B"
     assert response.results[0].snippet == "Second result supplies snippet"
     assert response.results[0].score > 0
 
@@ -610,7 +610,7 @@ async def test_meta_search_keeps_unparseable_urls(
         provider_state_store,
     )
 
-    response = await service.search(MetaSearchRequest(query="Humanitec"))
+    response = await service.search(MetaSearchRequest(query="Linnex"))
 
     assert response.results[0].url == "http://["
 
@@ -632,7 +632,7 @@ async def test_meta_search_first_available_uses_redis_state_and_next_provider(
         provider_state_store,
     )
 
-    response = await service.search(MetaSearchRequest(query="Humanitec", providers=["auto"]))
+    response = await service.search(MetaSearchRequest(query="Linnex", providers=["auto"]))
 
     assert response.providers["tinyfish"].skipped is True
     assert response.providers["tinyfish"].skip_reason == "provider marked unavailable in redis"
@@ -659,7 +659,7 @@ async def test_meta_search_merge_skips_redis_unavailable_provider(
 
     response = await service.search(
         MetaSearchRequest(
-            query="Humanitec",
+            query="Linnex",
             providers=["auto"],
             provider_strategy="merge",
         )
@@ -686,7 +686,7 @@ async def test_meta_search_auto_appends_explicit_provider_after_default_order(
     )
 
     response = await service.search(
-        MetaSearchRequest(query="Humanitec", providers=["auto", "unsupported"])
+        MetaSearchRequest(query="Linnex", providers=["auto", "unsupported"])
     )
 
     assert response.providers["linkup"].ok is True
@@ -707,7 +707,7 @@ async def test_meta_search_resolves_tavily_aliases(
         provider_state_store,
     )
 
-    response = await service.search(MetaSearchRequest(query="Humanitec", providers=["travily"]))
+    response = await service.search(MetaSearchRequest(query="Linnex", providers=["travily"]))
 
     assert response.providers["tavily"].ok is True
     assert response.results[0].provider == "tavily"
@@ -730,7 +730,7 @@ async def test_meta_search_marks_failed_provider_unavailable_and_continues(
         provider_state_store,
     )
 
-    response = await service.search(MetaSearchRequest(query="Humanitec", providers=["auto"]))
+    response = await service.search(MetaSearchRequest(query="Linnex", providers=["auto"]))
     record = await provider_state_store.get("tinyfish")
 
     assert response.providers["tinyfish"].ok is False
@@ -768,7 +768,7 @@ async def test_meta_search_merge_combines_available_providers(
 
     response = await service.search(
         MetaSearchRequest(
-            query="Humanitec",
+            query="Linnex",
             providers=["auto"],
             provider_strategy="merge",
         )
@@ -798,7 +798,7 @@ async def test_meta_search_merge_marks_failed_provider_unavailable(
 
     response = await service.search(
         MetaSearchRequest(
-            query="Humanitec",
+            query="Linnex",
             providers=["auto"],
             provider_strategy="merge",
         )

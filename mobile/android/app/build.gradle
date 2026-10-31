@@ -9,16 +9,16 @@ def envOrProp = { String envName, String propName ->
     return project.hasProperty(propName) ? project.property(propName) : null
 }
 
-def releaseKeystorePath = envOrProp('ANDROID_KEYSTORE_PATH', 'humanitecKeystorePath')
-def releaseKeystorePassword = envOrProp('ANDROID_KEYSTORE_PASSWORD', 'humanitecKeystorePassword')
-def releaseKeyAlias = envOrProp('ANDROID_KEY_ALIAS', 'humanitecKeyAlias')
-def releaseKeyPassword = envOrProp('ANDROID_KEY_PASSWORD', 'humanitecKeyPassword')
+def releaseKeystorePath = envOrProp('ANDROID_KEYSTORE_PATH', 'linnexKeystorePath')
+def releaseKeystorePassword = envOrProp('ANDROID_KEYSTORE_PASSWORD', 'linnexKeystorePassword')
+def releaseKeyAlias = envOrProp('ANDROID_KEY_ALIAS', 'linnexKeyAlias')
+def releaseKeyPassword = envOrProp('ANDROID_KEY_PASSWORD', 'linnexKeyPassword')
 
 android {
-    namespace "ru.humanitec.app"
+    namespace "io.linnex.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "ru.humanitec.app"
+        applicationId "io.linnex.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
@@ -47,7 +47,7 @@ android {
             if (releaseKeystorePath && releaseKeystorePassword && releaseKeyAlias && releaseKeyPassword) {
                 signingConfig signingConfigs.release
             } else {
-                logger.warn('release: подпись не настроена — задайте ANDROID_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD или humanitec*-свойства в ~/.gradle/gradle.properties')
+                logger.warn('release: подпись не настроена — задайте ANDROID_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD или linnex*-свойства в ~/.gradle/gradle.properties')
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

@@ -9,7 +9,7 @@ describe('platformStorageKey', () => {
     });
 
     it('throws на невалидный scope', () => {
-        expect(() => platformStorageKey('humanitec', 'theme')).toThrow();
+        expect(() => platformStorageKey('linnex', 'theme')).toThrow();
         expect(() => platformStorageKey('', 'theme')).toThrow();
         expect(() => platformStorageKey('CRM', 'theme')).toThrow();
     });

@@ -533,7 +533,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 border-color: var(--border-subtle);
                 background: color-mix(in srgb, var(--glass-solid-subtle) 94%, transparent);
                 box-shadow: var(--glass-shadow-subtle);
-                transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+                transition: border-color var(--motion-duration-micro) ease, box-shadow var(--motion-duration-micro) ease;
             }
 
             .editor-wrapper:focus-within {
@@ -803,7 +803,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 flex: 1 1 auto;
-                min-height: var(--markdown-editor-min-height, 160px);
+                min-height: var(--markdown-editor-min-height);
                 height: 100%;
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
@@ -828,8 +828,8 @@ export class PlatformMarkdownEditor extends PlatformElement {
             }
             .editor-body {
                 flex: 1 1 auto;
-                min-height: var(--markdown-editor-body-min-height, 120px);
-                max-height: var(--markdown-editor-body-max-height, none);
+                min-height: var(--markdown-editor-body-min-height);
+                max-height: var(--markdown-editor-body-max-height);
                 overflow: auto;
                 padding: var(--space-4) var(--space-4) var(--space-3);
                 outline: none;
@@ -900,7 +900,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-height: var(--markdown-editor-action-bar-height, 48px);
+                min-height: var(--markdown-editor-action-bar-height);
                 padding: var(--space-2) var(--space-3);
                 border-top: 1px solid var(--border-subtle);
                 background: var(--bg-surface);

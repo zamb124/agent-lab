@@ -10,14 +10,14 @@ import pymupdf
 import pytest
 from docx import Document
 
-from core.files.checksum import compute_content_checksum_sha256
-from core.files.reader import FileReader
-from core.files.reader.models import FileReadKind
 from apps.crm.services.knowledge_text_split import (
     MAX_IMPORT_TEXT_CHARS,
     split_knowledge_text,
     validate_chunk_max_chars,
 )
+from core.files.checksum import compute_content_checksum_sha256
+from core.files.reader import FileReader
+from core.files.reader.models import FileReadKind
 
 
 def test_validate_chunk_max_chars_bounds() -> None:

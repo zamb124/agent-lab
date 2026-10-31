@@ -7,6 +7,7 @@ import { html as litHtml } from 'lit';
 import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState } from '../helpers/reset.js';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import type { PlatformAssistantStaticConfig } from '@platform/lib/base/PlatformApp.js';
 import { createAsyncOp } from '@platform/lib/events/factories/async-op.js';
 import { hasFactory } from '@platform/lib/events/factory-registry.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
@@ -14,10 +15,11 @@ import { CRMApp } from '../../../../apps/crm/ui/app/crm-app.js';
 import { FlowsApp } from '../../../../apps/flows/ui/app/flows-app.js';
 import { FrontendApp } from '../../../../apps/frontend/ui/app/frontend-app.js';
 import { OfficeApp } from '../../../../apps/office/ui/app/office-app.js';
-import { HumanitecModelsApp } from '../../../../apps/provider_litserve/ui/app/litserve-app.js';
+import { LinnexModelsApp } from '../../../../apps/provider_litserve/ui/app/litserve-app.js';
 import { RagApp } from '../../../../apps/rag/ui/app/rag-app.js';
 import { SyncApp } from '../../../../apps/sync/ui/app/sync-app.js';
 import { WorktrackerApp } from '../../../../apps/worktracker/ui/app/worktracker-app.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const PLATFORM_ASSISTANT_BRANCH_MATRIX = Object.freeze([
     { serviceId: 'frontend', branchId: 'console', app: FrontendApp },
@@ -27,7 +29,7 @@ const PLATFORM_ASSISTANT_BRANCH_MATRIX = Object.freeze([
     { serviceId: 'rag', branchId: 'documents', app: RagApp },
     { serviceId: 'office', branchId: 'documents', app: OfficeApp },
     { serviceId: 'worktracker', branchId: 'worktracker', app: WorktrackerApp },
-    { serviceId: 'litserve', branchId: 'litserve', app: HumanitecModelsApp },
+    { serviceId: 'litserve', branchId: 'litserve', app: LinnexModelsApp },
 ]);
 
 describe('PlatformApp: factories', () => {
@@ -42,18 +44,18 @@ describe('PlatformApp: factories', () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
             static factories = [op];
-            getBaseUrl() { return '/frontend'; }
-            getRoutes() { return []; }
-            rendersUnauthenticated() { return true; }
-            renderRoute() { return litHtml`<div class="content">app</div>`; }
+            override getBaseUrl() { return '/frontend'; }
+            override getRoutes() { return []; }
+            override rendersUnauthenticated() { return true; }
+            override renderRoute() { return litHtml`<div class="content">app</div>`; }
         }
         if (!customElements.get('frontend-core-test-app-1')) {
             customElements.define('frontend-core-test-app-1', App);
         }
-        const el = await fixture(html`<frontend-core-test-app-1></frontend-core-test-app-1>`);
+        const el = await fixture<TestEl>(html`<frontend-core-test-app-1></frontend-core-test-app-1>`);
         expect(hasFactory('svc/test_app_op')).to.be.true;
         // bus поднят, slice op зарегистрирован
-        const state = getPlatformBus().getState();
+        const state = (getPlatformBus().getState() as Record<string, any>);
         expect(state[op.sliceKey]).to.exist;
         expect(el).to.exist;
     });
@@ -67,13 +69,13 @@ describe('PlatformApp: factories', () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
             static factories = [op];
-            getBaseUrl() { return '/frontend'; }
-            getRoutes() { return []; }
-            rendersUnauthenticated() { return true; }
-            getServiceSlices() {
-                return { [op.sliceKey]: { reducer: (s) => s, initial: {} } };
+            override getBaseUrl() { return '/frontend'; }
+            override getRoutes() { return []; }
+            override rendersUnauthenticated() { return true; }
+            override getServiceSlices() {
+                return { [op.sliceKey]: { reducer: (s: any) => s, initial: {} } };
             }
-            renderRoute() { return litHtml`<div></div>`; }
+            override renderRoute() { return litHtml`<div></div>`; }
         }
         if (!customElements.get('frontend-core-test-app-2')) {
             customElements.define('frontend-core-test-app-2', App);
@@ -93,52 +95,52 @@ describe('PlatformApp: render', () => {
                 branchId: entry.branchId,
                 showLauncher: true,
             });
-            expect(entry.app.platformAssistant.launcherPosition).to.not.equal('bottom-left');
+            expect((entry.app.platformAssistant as PlatformAssistantStaticConfig).launcherPosition).to.not.equal('bottom-left');
         }
     });
 
     it('рендерит platform-spinner до AUTH_VALIDATED', async () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
-            static platformAssistant = {
+            static platformAssistant: PlatformAssistantStaticConfig = {
                 serviceId: 'frontend',
                 branchId: 'console',
                 showLauncher: false,
             };
-            getBaseUrl() { return '/frontend'; }
-            getRoutes() { return []; }
-            renderRoute() { return litHtml`<div class="route-content">route</div>`; }
+            override getBaseUrl() { return '/frontend'; }
+            override getRoutes() { return []; }
+            override renderRoute() { return litHtml`<div class="route-content">route</div>`; }
         }
         if (!customElements.get('frontend-core-test-app-3')) {
             customElements.define('frontend-core-test-app-3', App);
         }
-        const el = await fixture(html`<frontend-core-test-app-3></frontend-core-test-app-3>`);
-        expect(el.shadowRoot.querySelector('.loading-container')).to.exist;
-        expect(el.shadowRoot.querySelector('platform-spinner')).to.exist;
-        expect(el.shadowRoot.querySelector('.loading-text')).to.not.exist;
+        const el = await fixture<TestEl>(html`<frontend-core-test-app-3></frontend-core-test-app-3>`);
+        expect(q(shadow(el), '.loading-container')).to.exist;
+        expect(q(shadow(el), 'platform-spinner')).to.exist;
+        expect(q(shadow(el), '.loading-text')).to.not.exist;
     });
 
     it('после AUTH_USER_LOADED рендерит renderRoute() + platform-modal-stack', async () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
-            static platformAssistant = {
+            static platformAssistant: PlatformAssistantStaticConfig = {
                 serviceId: 'frontend',
                 branchId: 'console',
                 showLauncher: false,
             };
-            getBaseUrl() { return '/frontend'; }
-            getRoutes() { return []; }
-            renderRoute() { return litHtml`<div class="route-content">route</div>`; }
+            override getBaseUrl() { return '/frontend'; }
+            override getRoutes() { return []; }
+            override renderRoute() { return litHtml`<div class="route-content">route</div>`; }
         }
         if (!customElements.get('frontend-core-test-app-4')) {
             customElements.define('frontend-core-test-app-4', App);
         }
-        const el = await fixture(html`<frontend-core-test-app-4></frontend-core-test-app-4>`);
+        const el = await fixture<TestEl>(html`<frontend-core-test-app-4></frontend-core-test-app-4>`);
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'u1', name: 'A', company_id: 'c1' } });
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.route-content')).to.exist;
-        expect(el.shadowRoot.querySelector('platform-modal-stack')).to.exist;
-        const lara = el.shadowRoot.querySelector('flow-ui-drawer');
+        expect(qs(shadow(el), '.route-content')).to.exist;
+        expect(qs(shadow(el), 'platform-modal-stack')).to.exist;
+        const lara = qs(shadow(el), 'flow-ui-drawer');
         expect(lara).to.exist;
         expect(lara.config.branchId).to.equal('console');
         expect(lara.config.companyId).to.equal('c1');
@@ -147,26 +149,26 @@ describe('PlatformApp: render', () => {
     it('не монтирует Lara на маршруте, исключённом route policy', async () => {
         class App extends PlatformApp {
             static defaultI18nNamespace = 'platform';
-            static platformAssistant = {
+            static platformAssistant: PlatformAssistantStaticConfig = {
                 serviceId: 'frontend',
                 branchId: 'console',
                 showLauncher: true,
             };
-            getBaseUrl() { return '/frontend'; }
-            getRoutes() { return []; }
-            shouldRenderPlatformAssistant() { return false; }
-            renderRoute() { return litHtml`<div class="public-route">public</div>`; }
+            override getBaseUrl() { return '/frontend'; }
+            override getRoutes() { return []; }
+            override shouldRenderPlatformAssistant() { return false; }
+            override renderRoute() { return litHtml`<div class="public-route">public</div>`; }
         }
         if (!customElements.get('frontend-core-test-app-5')) {
             customElements.define('frontend-core-test-app-5', App);
         }
-        const el = await fixture(html`<frontend-core-test-app-5></frontend-core-test-app-5>`);
+        const el = await fixture<TestEl>(html`<frontend-core-test-app-5></frontend-core-test-app-5>`);
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, {
             user: { user_id: 'u2', name: 'B', company_id: 'c2' },
         });
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.public-route')).to.exist;
-        expect(el.shadowRoot.querySelector('flow-ui-drawer')).to.equal(null);
+        expect(q(shadow(el), '.public-route')).to.exist;
+        expect(q(shadow(el), 'flow-ui-drawer')).to.equal(null);
     });
 
     it('service apps hide Lara on public guest routes', () => {
@@ -187,25 +189,25 @@ for (const entry of PLATFORM_ASSISTANT_BRANCH_MATRIX) {
         it(`монтирует branch ${entry.branchId}`, async () => {
             class App extends PlatformApp {
                 static defaultI18nNamespace = 'platform';
-                static platformAssistant = {
+                static platformAssistant: PlatformAssistantStaticConfig = {
                     serviceId: entry.serviceId,
                     branchId: entry.branchId,
                     showLauncher: true,
                 };
-                getBaseUrl() { return '/frontend'; }
-                getRoutes() { return []; }
-                renderRoute() { return litHtml`<div class="route-content">${entry.serviceId}</div>`; }
+                override getBaseUrl() { return '/frontend'; }
+                override getRoutes() { return []; }
+                override renderRoute() { return litHtml`<div class="route-content">${entry.serviceId}</div>`; }
             }
             const tagName = `frontend-core-test-lara-${entry.serviceId}`;
             if (!customElements.get(tagName)) {
                 customElements.define(tagName, App);
             }
-            const el = await fixture(document.createElement(tagName));
+            const el = await fixture<TestEl>((document.createElement(tagName) as TestEl));
             getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, {
                 user: { user_id: 'u1', name: 'A', company_id: 'c1' },
             });
             await elementUpdated(el);
-            const lara = el.shadowRoot.querySelector('flow-ui-drawer');
+            const lara = qs(shadow(el), 'flow-ui-drawer');
             expect(lara).to.exist;
             expect(lara.config.branchId).to.equal(entry.branchId);
             expect(lara.config.serviceId).to.equal(entry.serviceId);

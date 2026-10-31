@@ -28,10 +28,10 @@ from httpx2 import ASGITransport, AsyncClient
 
 from tests.fixtures.service_processes import ServiceProcesses, import_service_app
 
-# ASGI-клиенты с Host: humanitec.ru получают 307 на apex домен; base_url должен
+# ASGI-клиенты с Host: linnex.io получают 307 на apex домен; base_url должен
 # совпадать с Host, иначе httpx2 сбрасывает Authorization при cross-host redirect.
-_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
-_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+_PLATFORM_ASGI_BASE_URL = "http://linnex.io"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "linnex.io"}
 # Real HTTP e2e: очередь granian под -n10. httpx2 default 5s → ReadTimeout на enable/enqueue.
 # Длинный граф всё равно SendMessage returnImmediately + GetTask poll (a2a.mdc § Клиенты).
 _E2E_HTTP_TIMEOUT_SECONDS = 60.0

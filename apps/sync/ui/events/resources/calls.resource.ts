@@ -24,8 +24,8 @@ function callRecord(payload: unknown): Record<string, unknown> | null {
     return isPlainRecord(payload) ? payload : null;
 }
 
-function mergeCall(base: Record<string, any> | null, patch: Record<string, unknown>): Record<string, any> {
-    const next: Record<string, any> = base === null ? {} : { ...base };
+function mergeCall(base: Record<string, unknown> | null, patch: Record<string, unknown>): Record<string, unknown> {
+    const next: Record<string, unknown> = base === null ? {} : { ...base };
     for (const [key, value] of Object.entries(patch)) {
         next[key] = value;
     }

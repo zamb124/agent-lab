@@ -143,11 +143,11 @@ describe('renderTemplate', () => {
     });
 
     it('accepts non-object state as empty and rejects non-string templates', () => {
-        expect(renderTemplate('{a|d}', null)).toEqual({ text: 'd', rendered: true });
-        expect(renderTemplate('{a|d}', 'state')).toEqual({ text: 'd', rendered: true });
-        expect(renderTemplate('plain', undefined)).toEqual({ text: 'plain', rendered: true });
-        expect(() => renderTemplate(null, {})).toThrow(/template must be a string/);
-        expect(() => renderTemplate({}, {})).toThrow(/template must be a string/);
+        expect(Reflect.apply(renderTemplate, null, ['{a|d}', null])).toEqual({ text: 'd', rendered: true });
+        expect(Reflect.apply(renderTemplate, null, ['{a|d}', 'state'])).toEqual({ text: 'd', rendered: true });
+        expect(Reflect.apply(renderTemplate, null, ['plain', undefined])).toEqual({ text: 'plain', rendered: true });
+        expect(() => Reflect.apply(renderTemplate, null, [null, {}])).toThrow(/template must be a string/);
+        expect(() => Reflect.apply(renderTemplate, null, [{}, {}])).toThrow(/template must be a string/);
     });
 
     it('keeps malformed but balanced expressions as literal text', () => {
@@ -180,8 +180,8 @@ describe('resolvedText / designText / blockText', () => {
         expect(designText('{?note}', {})).toBe('{?note}');
         expect(designText('{total|0}', {})).toBe('0');
         expect(designText('{a|{b}}', {})).toBe('{b}');
-        expect(designText('\\{lit\\}', null)).toBe('{lit}');
-        expect(() => designText(3, {})).toThrow(/template property must be a string/);
+        expect(Reflect.apply(designText, null, ['\\{lit\\}', null])).toBe('{lit}');
+        expect(() => Reflect.apply(designText, null, [3, {}])).toThrow(/template property must be a string/);
     });
 
     it('designText never throws while the author is still typing a brace', () => {
@@ -252,7 +252,7 @@ describe('isVisible', () => {
 
     it('rejects rules without a string path', () => {
         expect(() => isVisible({}, state)).toThrow(/visible_when requires path/);
-        expect(() => isVisible({ path: 5 }, state)).toThrow(/visible_when requires path/);
-        expect(() => isVisible('flag', state)).toThrow(/visible_when requires path/);
+        expect(() => Reflect.apply(isVisible, null, [{ path: 5 }, state])).toThrow(/visible_when requires path/);
+        expect(() => Reflect.apply(isVisible, null, ['flag', state])).toThrow(/visible_when requires path/);
     });
 });

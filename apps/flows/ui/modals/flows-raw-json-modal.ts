@@ -20,7 +20,7 @@ export class FlowsRawJsonModal extends PlatformModal {
         value: { type: Object },
         downloadFileName: { type: String, attribute: 'download-file-name' },
     }
-    declare value: Record<string, any> | null;
+    declare value: Record<string, unknown> | null;
     declare downloadFileName: string;
 ;
 

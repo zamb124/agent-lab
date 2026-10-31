@@ -13,8 +13,8 @@ export interface VariableMapEntry {
     value: unknown;
     secret: boolean;
     public?: boolean;
-    title?: string;
-    description?: string;
+    title?: string | undefined;
+    description?: string | undefined;
 }
 
 function _normalizeEntry(raw: unknown): VariableMapEntry {

@@ -50,7 +50,7 @@ function seedFrontendTranslations() {
     );
 }
 
-function templateText(value) {
+function templateText(value: any): string {
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) return value.map(templateText).join(' ');
     if (value && Array.isArray(value.values)) return value.values.map(templateText).join(' ');
@@ -59,7 +59,7 @@ function templateText(value) {
 
 function createRenderSubject() {
     const subject = Object.create(FrontendTeamPage.prototype);
-    subject.t = (key) => key === 'team_page.flow_employee_badge' ? 'AI employee' : key;
+    subject.t = (key: any) => key === 'team_page.flow_employee_badge' ? 'AI employee' : key;
     return subject;
 }
 

@@ -93,7 +93,7 @@ export class FlowsNodeRunControl extends PlatformElement {
         requestClientId: { type: String },
         _bubbleOpen: { state: true },
     }
-    declare viewModel: Record<string, any> | null;
+    declare viewModel: Record<string, unknown> | null;
     declare busy: boolean;
     declare requestClientId: string;
     declare _bubbleOpen: boolean;

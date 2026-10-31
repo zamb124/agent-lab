@@ -12,8 +12,8 @@ from apps.flows.src.flow_ui.templates import (
     default_chat_document,
     flow_ui_templates,
 )
-from core.ui_document.document import FlowUIConversation, FlowUIDocument, FlowUIInputBase
 from core.models.i18n_models import Language
+from core.ui_document.document import FlowUIConversation, FlowUIDocument, FlowUIInputBase
 
 ICONS_DIR = Path("core/frontend/static/assets/icons")
 

@@ -4,6 +4,7 @@
 
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 // THREE.js грузится lazy-чанком на window (общий инстанс с 3d-force-graph); any-фасад.
 declare global {
     interface Window {
@@ -133,10 +134,10 @@ export function createGraphTextSprite(text: unknown, color: string, fontSize = 1
     context.fillStyle = color;
     context.textBaseline = 'middle';
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    context.shadowColor = cssVar('--bg-secondary', '#1a1a2e');
     context.shadowBlur = 6;
     context.lineWidth = 4;
-    context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+    context.strokeStyle = cssVar('--bg-secondary', '#1a1a2e');
     context.strokeText(labelText, 8, canvas.height / 2);
     context.fillText(labelText, 8, canvas.height / 2);
     const texture = new window.THREE.CanvasTexture(canvas);
@@ -179,10 +180,10 @@ export function createGraphLinkLabelPlane(text: unknown, color: string, fontSize
     context.fillStyle = color;
     context.textBaseline = 'middle';
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    context.shadowColor = cssVar('--bg-secondary', '#1a1a2e');
     context.shadowBlur = 5;
     context.lineWidth = 3;
-    context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+    context.strokeStyle = cssVar('--bg-secondary', '#1a1a2e');
     context.strokeText(labelText, 7, canvas.height / 2);
     context.fillText(labelText, 7, canvas.height / 2);
     const texture = new THREE.CanvasTexture(canvas);
@@ -266,7 +267,7 @@ export function createGraphNodeLabelSprite(options: GraphNodeSpriteOptions): any
     } = options;
     const sub = typeof subtitle === 'string' && subtitle.trim().length > 0 ? subtitle.trim() : '';
     if (!sub) {
-        return createGraphTextSprite(title, typeof titleColor === 'string' ? titleColor : '#f0f4ff', titleFontSize, maxTitleLength);
+        return createGraphTextSprite(title, typeof titleColor === 'string' ? titleColor : cssVar('--text-primary', '#f0f4ff'), titleFontSize, maxTitleLength);
     }
     if (!window.THREE || typeof window.THREE.CanvasTexture !== 'function' || typeof window.THREE.Sprite !== 'function') {
         throw new Error('THREE.js is not available for text sprite rendering');
@@ -292,15 +293,15 @@ export function createGraphNodeLabelSprite(options: GraphNodeSpriteOptions): any
     canvas.height = padY + titleFontSize + gap + subtitleFontSize + padY;
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    const strokeCol = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
-    const shadowCol = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    const strokeCol = cssVar('--bg-secondary', '#1a1a2e');
+    const shadowCol = cssVar('--bg-secondary', '#1a1a2e');
 
     context.textBaseline = 'top';
     context.shadowColor = shadowCol;
     context.shadowBlur = 6;
 
     context.font = `700 ${titleFontSize}px Inter, sans-serif`;
-    context.fillStyle = typeof titleColor === 'string' ? titleColor : '#f0f4ff';
+    context.fillStyle = typeof titleColor === 'string' ? titleColor : cssVar('--text-primary', '#f0f4ff');
     context.lineWidth = 4;
     context.strokeStyle = strokeCol;
     const y1 = padY;
@@ -309,7 +310,7 @@ export function createGraphNodeLabelSprite(options: GraphNodeSpriteOptions): any
 
     const subCol = typeof subtitleColor === 'string' && subtitleColor.trim().length > 0
         ? subtitleColor.trim()
-        : (typeof titleColor === 'string' ? titleColor : '#f0f4ff');
+        : (typeof titleColor === 'string' ? titleColor : cssVar('--text-primary', '#f0f4ff'));
     context.font = `600 ${subtitleFontSize}px Inter, sans-serif`;
     context.fillStyle = subCol;
     context.lineWidth = 3;
@@ -341,13 +342,13 @@ export function createMatteSphereNodeGroup(node: MatteSphereNodeLike, options: M
         throw new Error('THREE.js is not available');
     }
     const nodeRelSize = typeof options.nodeRelSize === 'number' ? options.nodeRelSize : 4;
-    const labelColor = typeof options.labelColor === 'string' ? options.labelColor : '#f0f4ff';
+    const labelColor = typeof options.labelColor === 'string' ? options.labelColor : cssVar('--text-primary', '#f0f4ff');
     const labelFontSize = typeof options.labelFontSize === 'number' ? options.labelFontSize : 16;
     const subtitleColor = typeof options.subtitleColor === 'string' ? options.subtitleColor : labelColor;
     const radius = Math.cbrt(node.size || 1) * nodeRelSize * 0.5;
     const geometry = new THREE.SphereGeometry(radius, 32, 24);
     const material = new THREE.MeshStandardMaterial({
-        color: node.color || '#bca8ff',
+        color: node.color || cssVar('--accent-tertiary', '#8b5cf6'),
         roughness: 0.75,
         metalness: 0.05,
     });

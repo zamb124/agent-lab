@@ -331,7 +331,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 border-radius: var(--radius-lg);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
-                box-shadow: var(--shadow-xs);
+                box-shadow: var(--glass-shadow-subtle);
                 overflow: hidden;
                 flex: none;
             }
@@ -366,7 +366,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             }
             .mcp-card-titles h3 {
                 margin: 0;
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
@@ -399,13 +399,13 @@ export class FlowsMcpServersModal extends PlatformModal {
                 display: inline-block;
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
-                background: var(--info-subtle);
+                background: var(--info-bg);
                 color: var(--info);
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
             }
             .mcp-chip-warn {
-                background: var(--warning-subtle);
+                background: var(--warning-bg);
                 color: var(--warning);
             }
             .mcp-card-footer {
@@ -461,11 +461,11 @@ export class FlowsMcpServersModal extends PlatformModal {
                 border-radius: var(--radius-md);
             }
             .mcp-test-feedback.ok {
-                background: var(--success-subtle);
+                background: var(--success-bg);
                 color: var(--success);
             }
             .mcp-test-feedback.err {
-                background: var(--error-subtle);
+                background: var(--error-bg);
                 color: var(--error);
             }
             .mcp-branding-toolbar {

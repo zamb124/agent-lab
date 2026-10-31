@@ -7,7 +7,7 @@ import { createSlice } from '@platform/lib/events/index.js';
 import { searchOp } from '@platform/lib/events/resources/rag-search.resource.js';
 import type { RagNodeTestSlice } from '../editor.types.js';
 
-function _isPlainObject(value: unknown): value is Record<string, any> {
+function _isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 

@@ -45,13 +45,13 @@ TOOLING_FILES = (
     REPO / "package.json",
     REPO / "tsconfig.json",
     REPO / "tsconfig.base.json",
-    REPO / "vitest.config.mjs",
-    REPO / "web-test-runner.config.mjs",
+    REPO / "vitest.config.ts",
+    REPO / "web-test-runner.config.ts",
     REPO / "Dockerfile",
     REPO / "AGENTS.md",
 )
 TOOLING_DIRS: tuple[tuple[Path, tuple[str, ...]], ...] = (
-    (REPO / "scripts", (".py", ".sh", ".mjs")),
+    (REPO / "scripts", (".py", ".sh", ".ts")),
     (REPO / "mk", (".mk",)),
     (REPO / "core/app", (".py",)),
     (REPO / "apps/frontend/services", (".py",)),
@@ -76,13 +76,13 @@ BRIDGES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("import map при бандле", re.compile(r"type=\"importmap\"")),
 )
 BRIDGE_SCOPE: tuple[tuple[Path, tuple[str, ...]], ...] = (
-    (REPO / "scripts", (".py", ".sh", ".mjs")),
+    (REPO / "scripts", (".py", ".sh", ".ts")),
     (REPO / "core/app", (".py",)),
     (REPO / "core/frontend/static/lib", (".ts",)),
     (REPO / "core/frontend/pwa", (".js",)),
     *((ui, (".ts", ".html")) for ui in sorted((REPO / "apps").glob("*/ui"))),
 )
-BRIDGE_FILES = (REPO / "vitest.config.mjs", REPO / "web-test-runner.config.mjs", REPO / "package.json")
+BRIDGE_FILES = (REPO / "vitest.config.ts", REPO / "web-test-runner.config.ts", REPO / "package.json")
 
 UI_RULES = ("frontend", "ui_factories", "ui_components", "ui_fields", "flow_ui")
 
@@ -256,7 +256,7 @@ def section_blind() -> Findings:
                 verdict = blind_verdict(match.group(0), js_names, ts_names)
                 if verdict:
                     found[verdict].append(f"{where}: {match.group(0)}")
-            if path.suffix in (".py", ".sh", ".mjs"):
+            if path.suffix in (".py", ".sh", ".ts"):
                 for match in SUFFIX_SET.finditer(line):
                     if re.search(r"[\"']\.js[\"']", match.group(0)) and not re.search(r"[\"']\.ts[\"']", match.group(0)):
                         found["набор суффиксов без .ts"].append(f"{where}: {match.group(0)[:80]}")

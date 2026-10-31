@@ -84,7 +84,7 @@ export class DashboardServicesGrid extends PlatformElement {
         super();
         this._status = this.useOp('frontend/services_status_load');
         this._stats = this.useOp('frontend/dashboard_stats');
-        this._activeCompanyId = this.select((s: Record<string, any>) => s.auth.activeCompanyId);
+        this._activeCompanyId = this.select((s: Record<string, unknown>) => s.auth.activeCompanyId);
         this._countsBootstrapped = false;
         this._prevCompanyId = null;
     }
@@ -114,7 +114,7 @@ export class DashboardServicesGrid extends PlatformElement {
         }
     }
 
-    _healthForService(_statusResult: Record<string, any>, healthName: string, activeCompanyId: string | null) {
+    _healthForService(_statusResult: Record<string, unknown>, healthName: string, activeCompanyId: string | null) {
         if (healthName === 'provider_litserve' && activeCompanyId !== 'system') {
             return { state: 'unhealthy', latencyMs: 0 };
         }

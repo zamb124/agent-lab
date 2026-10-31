@@ -7,7 +7,7 @@
 1. `bash deploy/scripts/setup-brand-dns.sh` — A records для linnex.io (`@`, `*`, `livekit`, `onlyoffice`, `grafana`, `cdn`, `api`).
 2. `bash deploy/scripts/setup-wildcard-tls.sh` — SAN включает linnex.io и `*.linnex.io`.
 3. `kubectl describe certificate platform-tls -n platform` — `Ready=True`.
-4. `make k8s-deploy IMAGE_TAG=<sha>` и `make k8s-health CHECK_PUBLIC=1 PLATFORM_APEX_HOSTS="humanitec.ru linnex.io"`.
+4. `make k8s-deploy IMAGE_TAG=<sha>` и `make k8s-health CHECK_PUBLIC=1 PLATFORM_APEX_HOSTS="linnex.io linnex.io"`.
 
 ## OAuth providers
 
@@ -16,7 +16,7 @@
 ## Public API smoke
 
 ```bash
-for apex in humanitec.ru linnex.io; do
+for apex in linnex.io linnex.io; do
   curl -fsS "https://${apex}/frontend/api/platform/brand" | jq -e ".base_domain == \"${apex}\""
 done
 curl -fsS -H 'Host: linnex.io' https://linnex.io/manifest.json | jq -e '.short_name == "Linnex"'
@@ -30,6 +30,6 @@ curl -fsS -H 'Host: linnex.io' https://linnex.io/manifest.json | jq -e '.short_n
 4. Sync call — token `livekit_url` = `wss://livekit.linnex.io`.
 5. Office document open — OnlyOffice `https://onlyoffice.linnex.io`.
 
-## Legacy humanitec.ru
+## Legacy linnex.io
 
-Повторить пункты 1–6 для `humanitec.ru` / `*.humanitec.ru` (regression).
+Повторить пункты 1–6 для `linnex.io` / `*.linnex.io` (regression).

@@ -32,6 +32,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import { readMindmapView, writeMindmapView } from '../_helpers/mindmap-view-preference.js';
+import { cssVar } from '@platform/lib/utils/css-var.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -42,7 +43,7 @@ import type {
 const LEVEL_GAP = 340;
 const LEAF_BLOCK = 58;
 const V_GAP_SIBLINGS = 36;
-const ROOT_CENTER_FILL = '#64748b';
+const ROOT_CENTER_FILL = cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
 const ICON_SLOT = 34;
 const NODE_H = 44;
 /** Скругление ноды в user space SVG и в CSS foreignObject; обводка рисуется отдельным inset-rect. */
@@ -383,8 +384,8 @@ export class CRMMindmapCanvas extends PlatformElement {
         _viewportWidthPx: { state: true },
         _viewportHeightPx: { state: true },
     };
-    declare graphNodes: Record<string, any>[];
-    declare graphEdges: Record<string, any>[];
+    declare graphNodes: Record<string, unknown>[];
+    declare graphEdges: Record<string, unknown>[];
     declare rootEntityId: string;
     declare entityTypeColors: Record<string, string>;
     declare entityTypeIcons: Record<string, string>;
@@ -508,7 +509,7 @@ export class CRMMindmapCanvas extends PlatformElement {
         this.rootEntityId = '';
         this.entityTypeColors = {};
         this.entityTypeIcons = {};
-        this.defaultAccent = '#6366f1';
+        this.defaultAccent = cssVar('--accent', '#99A6F9');
         this.fitNonce = 0;
         this.compact = false;
         this.compactZoom = 1;
@@ -705,7 +706,7 @@ export class CRMMindmapCanvas extends PlatformElement {
      */
     _typeColor(entityType: unknown, access: boolean): string {
         if (access === false) {
-            return '#94a3b8';
+            return cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
         }
         if (typeof entityType === 'string' && entityType.length > 0) {
             const raw = this.entityTypeColors[entityType];
@@ -947,7 +948,7 @@ export class CRMMindmapCanvas extends PlatformElement {
 
         const labelMap = this._labelMap();
         const nodeIds = new Set(labelMap.keys());
-        const filteredEdges = edges.filter((raw: Record<string, any>) => {
+        const filteredEdges = edges.filter((raw: Record<string, unknown>) => {
             const ep = _edgeEndpoints(raw);
             if (ep === null) {
                 return false;
@@ -998,7 +999,7 @@ export class CRMMindmapCanvas extends PlatformElement {
                     continue;
                 }
                 const stroke = strokeByNode.get(c);
-                const strokeColor = typeof stroke === 'string' && stroke.length > 0 ? stroke : '#94a3b8';
+                const strokeColor = typeof stroke === 'string' && stroke.length > 0 ? stroke : cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
                 const depth = typeof pb.depth === 'number' ? pb.depth : 1;
                 const strokeWidth = Math.max(1.2, 3.2 - depth * 0.35);
                 const d = this._curveBetween(pa, pb);
@@ -1050,9 +1051,9 @@ export class CRMMindmapCanvas extends PlatformElement {
             const isHl = hlList.includes(id);
             let ringStroke = accent;
             if (isSel) {
-                ringStroke = '#ffffff';
+                ringStroke = cssVar('--text-primary', 'rgba(255, 255, 255, 0.95)');
             } else if (isHl) {
-                ringStroke = '#f59e0b';
+                ringStroke = cssVar('--accent-quaternary', '#f59e0b');
             }
             const sw = isSel ? 3 : 2;
             const inset = sw / 2;
@@ -1060,7 +1061,7 @@ export class CRMMindmapCanvas extends PlatformElement {
             const innerH = p.h - sw;
             const rxStroke =
                 innerW > 0 && innerH > 0 ? Math.max(0, MM_NODE_CORNER_RX - inset) : 0;
-            const fillBg = isRoot ? accent : 'var(--crm-surface)';
+            const fillBg = isRoot ? accent : cssVar('--crm-surface', 'rgba(35, 35, 55, 0.85)');
             const fo = html`
                 <div xmlns="http://www.w3.org/1999/xhtml" class=${innerCls}>
                     <platform-icon name=${iconName} size=${this.compact ? '14' : '18'}></platform-icon>

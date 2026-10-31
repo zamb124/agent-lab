@@ -111,6 +111,6 @@
 
 ---
 
-## Legacy brand (humanitec.ru)
+## Legacy brand (linnex.io)
 
-Если публикуете отдельную витрину для legacy apex **humanitec.ru**, используйте имя **Humanitec** на витрине, `https://humanitec.ru` в Marketing URL и `support@humanitec.ru` в контактах. Bundle ID `ru.humanitec.app` **не менять** после первого релиза.
+Если публикуете отдельную витрину для legacy apex **linnex.io**, используйте имя **Linnex** на витрине, `https://linnex.io` в Marketing URL и `support@linnex.io` в контактах. Bundle ID `io.linnex.app` **не менять** после первого релиза.

@@ -8,17 +8,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.search.config import SearchCrawlEnrichmentConfig
-from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
-from core.ai.models import ResolvedAIModel
-from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
-from core.ai.requirements import AIRequestRequirements, AISelection
-from core.clients.llm.client import LLMClient
 from apps.search.models import (
     CrawlDomain,
     CrawlEnrichedPageLLMOutput,
     CrawlProfile,
     CrawlStructuralSignals,
 )
+from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import LINNEX_LLM_PROVIDER, AICapability
+from core.ai.requirements import AIRequestRequirements, AISelection
+from core.clients.llm.client import LLMClient
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_chunk
 
@@ -72,11 +72,11 @@ def _taxonomy() -> SearchIndexCrawlTaxonomy:
 
 def test_resolve_enrichment_llm_structured_output_requirements() -> None:
     service = CrawlPageEnrichmentService(
-        SearchCrawlEnrichmentConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"),
+        SearchCrawlEnrichmentConfig(provider=LINNEX_LLM_PROVIDER, model="auto"),
     )
     resolved_mock = ResolvedAIModel(
         capability=AICapability.LLM_CHAT,
-        provider=HUMANITEC_LLM_PROVIDER,
+        provider=LINNEX_LLM_PROVIDER,
         model="auto",
         cost_origin="platform",
     )
@@ -95,20 +95,20 @@ def test_resolve_enrichment_llm_structured_output_requirements() -> None:
     assert requirements.json_mode is True
     selection = call_kwargs["selection"]
     assert isinstance(selection, AISelection)
-    assert selection.provider == HUMANITEC_LLM_PROVIDER
+    assert selection.provider == LINNEX_LLM_PROVIDER
     assert selection.model == "auto"
     assert call_kwargs["include_platform_default"] is False
-    assert resolved.provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.provider == LINNEX_LLM_PROVIDER
 
 
 @pytest.mark.asyncio
 async def test_invoke_enrichment_llm_allows_paid_fallback() -> None:
     service = CrawlPageEnrichmentService(
-        SearchCrawlEnrichmentConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"),
+        SearchCrawlEnrichmentConfig(provider=LINNEX_LLM_PROVIDER, model="auto"),
     )
     resolved_mock = ResolvedAIModel(
         capability=AICapability.LLM_CHAT,
-        provider=HUMANITEC_LLM_PROVIDER,
+        provider=LINNEX_LLM_PROVIDER,
         model="auto",
         cost_origin="platform",
     )

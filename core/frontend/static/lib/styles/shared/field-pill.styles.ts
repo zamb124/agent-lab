@@ -156,7 +156,7 @@ export const fieldPillStyles = css`
     fieldset.field-pill:focus-within .field-pill-float {
         top: calc(-1 * (var(--field-pill-padding-y) + var(--field-pill-legend-h) / 2));
         transform: translateY(-50%)
-            scale(calc(var(--field-pill-float-size) / var(--field-pill-input-size)));
+            scale(calc(var(--field-pill-float-size) / var(--field-pill-input-size);
         font-weight: var(--field-pill-float-weight);
         text-transform: uppercase;
         letter-spacing: var(--field-pill-label-letter);
@@ -287,7 +287,7 @@ export const fieldPillStyles = css`
     .form-group > label {
         display: block;
         font-size: var(--field-pill-label-size);
-        line-height: var(--field-pill-label-line, 1.1);
+        line-height: var(--field-pill-label-line);
         font-weight: var(--field-pill-label-weight);
         text-transform: uppercase;
         letter-spacing: var(--field-pill-label-letter);
@@ -544,9 +544,9 @@ export const fieldPillStyles = css`
         line-height: 0;
         opacity: 0.75;
         transition:
-            color var(--duration-fast) var(--easing-default),
-            opacity var(--duration-fast) var(--easing-default),
-            background var(--duration-fast) var(--easing-default);
+            color var(--motion-duration-micro) var(--motion-ease-standard),
+            opacity var(--motion-duration-micro) var(--motion-ease-standard),
+            background var(--motion-duration-micro) var(--motion-ease-standard);
     }
 
     .field-pill-file-ref-remove:hover {
@@ -666,8 +666,8 @@ export const fieldPillStyles = css`
         justify-content: center;
         line-height: 0;
         transition:
-            background var(--duration-fast) var(--easing-default),
-            color var(--duration-fast) var(--easing-default);
+            background var(--motion-duration-micro) var(--motion-ease-standard),
+            color var(--motion-duration-micro) var(--motion-ease-standard);
     }
 
     .field-pill-number-spin-btn:first-of-type {

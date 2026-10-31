@@ -5,6 +5,7 @@
 import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/schema/platform-schema-editor.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('platform-schema-editor', () => {
     beforeEach(() => {
@@ -13,24 +14,24 @@ describe('platform-schema-editor', () => {
     });
 
     it('Form mode renders empty state and emits on add parameter', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-schema-editor .value=${{ type: 'object', properties: {} }}></platform-schema-editor>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.empty')).to.exist;
-        const addBtn = el.shadowRoot.querySelector('platform-button');
+        expect(qs(shadow(el), '.empty')).to.exist;
+        const addBtn = qs(shadow(el), 'platform-button');
         expect(addBtn).to.exist;
-        setTimeout(() => addBtn.click());
+        setTimeout(() => (addBtn as TestEl).click());
         const ev = await oneEvent(el, 'schema-change');
-        expect(ev.detail.valid).to.equal(true);
-        expect(ev.detail.value).to.have.property('type', 'object');
-        expect(ev.detail.value).to.have.property('properties');
+        expect((ev as CustomEvent).detail.valid).to.equal(true);
+        expect((ev as CustomEvent).detail.value).to.have.property('type', 'object');
+        expect((ev as CustomEvent).detail.value).to.have.property('properties');
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('platform-schema-parameter-card')).to.exist;
+        expect(qs(shadow(el), 'platform-schema-parameter-card')).to.exist;
     });
 
     it('advanced schema forces JSON mode and shows banner', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-schema-editor
                 .value=${{
                     type: 'object',
@@ -40,13 +41,13 @@ describe('platform-schema-editor', () => {
             ></platform-schema-editor>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.banner')).to.exist;
-        expect(el.shadowRoot.querySelector('platform-json-editor')).to.exist;
-        expect(el.shadowRoot.querySelector('platform-schema-parameter-card')).to.not.exist;
+        expect(q(shadow(el), '.banner')).to.exist;
+        expect(q(shadow(el), 'platform-json-editor')).to.exist;
+        expect(q(shadow(el), 'platform-schema-parameter-card')).to.not.exist;
     });
 
     it('Form edits emit schema-change with required + description', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-schema-editor
                 .value=${{
                     type: 'object',
@@ -58,7 +59,7 @@ describe('platform-schema-editor', () => {
             ></platform-schema-editor>
         `);
         await elementUpdated(el);
-        const card = el.shadowRoot.querySelector('platform-schema-parameter-card');
+        const card = qs(shadow(el), 'platform-schema-parameter-card');
         expect(card).to.exist;
         setTimeout(() => {
             card.dispatchEvent(
@@ -83,8 +84,8 @@ describe('platform-schema-editor', () => {
             );
         });
         const ev = await oneEvent(el, 'schema-change');
-        expect(ev.detail.valid).to.equal(true);
-        expect(ev.detail.value.properties.query.description).to.equal('Search query');
-        expect(ev.detail.value.required).to.deep.equal(['query']);
+        expect((ev as CustomEvent).detail.valid).to.equal(true);
+        expect((ev as CustomEvent).detail.value.properties.query.description).to.equal('Search query');
+        expect((ev as CustomEvent).detail.value.required).to.deep.equal(['query']);
     });
 });

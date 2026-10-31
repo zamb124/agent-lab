@@ -98,7 +98,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (!this._contactName.trim()) errors.contact_name = this.t('cta.toast_required');
 
         const email = this._email.trim();

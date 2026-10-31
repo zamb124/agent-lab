@@ -31,6 +31,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type { CSSResultGroup, PropertyValues } from 'lit';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -186,7 +187,7 @@ export class WorkItemDetailEditor extends PlatformElement {
             }
             .wt-hitl-title {
                 margin: 0;
-                font-size: var(--font-size-sm);
+                font-size: var(--text-sm);
                 font-weight: 600;
                 color: var(--text-secondary);
             }
@@ -866,7 +867,7 @@ export class WorkItemDetailEditor extends PlatformElement {
 
         if (this.layout === 'inspector-only') {
             if (!item) {
-                return html`<div class="wt-loading"><platform-spinner></platform-spinner></div>`;
+                return html`<platform-empty-state loading></platform-empty-state>`;
             }
             return this._renderInspector(item, false);
         }

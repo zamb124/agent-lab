@@ -121,7 +121,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
         this.entityId = '';
         this.anchorRect = null;
         this._entities = this.useResource('crm/entities');
-        this._locale = this.select((s: Record<string, any>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._locale = this.select((s: Record<string, unknown>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
     }
 
     _formatDate(value: unknown): string {
@@ -148,7 +148,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
         }
     }
 
-    _iconByType(entity: Record<string, any> | null | undefined): string {
+    _iconByType(entity: Record<string, unknown> | null | undefined): string {
         const type = entity && typeof entity.entity_type === 'string' ? entity.entity_type : '';
         if (type === 'task') return 'tasks';
         if (type === 'note') return 'note';
@@ -158,14 +158,14 @@ export class CRMEntityHoverPreview extends PlatformElement {
         return 'user';
     }
 
-    _entityTypeLabel(entity: Record<string, any> | null | undefined): string {
+    _entityTypeLabel(entity: Record<string, unknown> | null | undefined): string {
         if (entity && typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0) {
             return entity.entity_subtype;
         }
         return entity && typeof entity.entity_type === 'string' ? entity.entity_type : '';
     }
 
-    _description(entity: Record<string, any> | null | undefined): string {
+    _description(entity: Record<string, unknown> | null | undefined): string {
         const text = entity && typeof entity.description === 'string' ? entity.description.trim() : '';
         if (text.length <= 180) {
             return text;

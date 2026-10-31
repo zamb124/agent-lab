@@ -131,13 +131,13 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 border: 1px solid transparent;
-                transition: background var(--duration-fast),
-                            border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro),
+                            border-color var(--motion-duration-micro);
             }
 
             .btn-primary {
                 background: var(--accent);
-                color: var(--platform-btn-primary-text, white);
+                color: var(--platform-btn-primary-text);
                 border-color: var(--accent);
             }
 
@@ -246,7 +246,7 @@ export class CRMRelationshipTypesPage extends PlatformPage {
 
             .badge.system {
                 background: rgba(255, 149, 0, 0.15);
-                color: #ff9500;
+                color: var(--warning);
                 border-color: rgba(255, 149, 0, 0.3);
             }
 

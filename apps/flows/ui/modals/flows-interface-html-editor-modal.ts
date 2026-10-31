@@ -142,11 +142,11 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     static override styles: CSSResultGroup = [PlatformModal.styles, htmlEditorStageStyles, htmlEditorInspectorStyles, css`
         .modal-content { overflow: hidden; display: flex; flex-direction: column; }
         .workspace {
-            display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(160px, 280px); gap: var(--space-3);
+            display: grid; grid-template-rows: auto minmax(220px, 1fr) minmax(160px, 280px); gap: var(--space-3);
             flex: 1 1 auto; height: 100%; min-height: 60vh; min-width: 0; overflow: hidden; isolation: isolate;
         }
-        .workspace[data-inspector='off'] { grid-template-rows: auto minmax(0, 1fr); }
-        .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(0, 1fr); }
+        .workspace[data-inspector='off'] { grid-template-rows: auto minmax(220px, 1fr); }
+        .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(220px, 1fr); }
         .panel-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
         .panel-switch .panel-toggle.is-on {
             background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -178,8 +178,8 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         .snippets platform-button { width: 100%; }
         .dirty { margin-right: 6px; color: var(--warning); }
         @media (max-width: 1200px) {
-            .workspace { grid-template-rows: auto minmax(0, 1fr) auto; }
-            .workspace[data-inspector='off'], .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(0, 1fr); }
+            .workspace { grid-template-rows: auto minmax(220px, 1fr) auto; }
+            .workspace[data-inspector='off'], .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(220px, 1fr); }
         }
         @media (max-width: 900px) {
             .panes, .workspace[data-layout='preview'] .panes, .workspace[data-layout='split'] .panes { grid-template-columns: 1fr; }

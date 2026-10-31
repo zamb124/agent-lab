@@ -1,22 +1,26 @@
 /**
  * Пакетирует вход микрофона в Float32 блоки (~4096 кадров) и шлёт в main thread через MessagePort.
  * Работает на audio rendering thread — надёжнее чем устаревший ScriptProcessorNode.
+ *
+ * Realm-файл: исполняется в AudioWorkletGlobalScope, собирается esbuild'ом в embed-dist.
+ * Типы realm'а объявлены локально — lib.webworker несовместим с lib.dom в общем tsconfig.
  */
+
+declare class AudioWorkletProcessor {
+    readonly port: MessagePort;
+    constructor();
+    process(inputs: Float32Array[][], outputs: Float32Array[][], parameters?: Record<string, Float32Array>): boolean;
+}
+
+declare function registerProcessor(name: string, processorCtor: new () => AudioWorkletProcessor): void;
+
 const VOICE_MIC_CAPTURE_BATCH_SAMPLES = 4096;
 
 class VoiceMicCaptureProcessor extends AudioWorkletProcessor {
-    constructor() {
-        super();
-        this._pending = new Float32Array(VOICE_MIC_CAPTURE_BATCH_SAMPLES);
-        this._filled = 0;
-    }
+    private readonly _pending = new Float32Array(VOICE_MIC_CAPTURE_BATCH_SAMPLES);
+    private _filled = 0;
 
-    /**
-     * @param {Float32Array[][]} inputs
-     * @param {Float32Array[][]} outputs
-     * @returns {boolean}
-     */
-    process(inputs, outputs) {
+    override process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
         const inBus = inputs[0];
         const outBus = outputs[0];
         if (!inBus || !outBus || !inBus[0] || !outBus[0]) {

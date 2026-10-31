@@ -14,8 +14,8 @@ from typing import cast, get_args
 import pytest
 
 from apps.flows.src.flow_ui.html_bindings import HTML_BIND_ATTRIBUTE, HTML_SHOW_ATTRIBUTE
-from core.ui_document.document import FlowUIBlock
 from core.types import JsonValue, require_json_array, require_json_object
+from core.ui_document.document import FlowUIBlock
 
 ROOT = Path(__file__).resolve().parents[3]
 PAGE = ROOT / "docs" / "api" / "flows" / "flow-ui-protocol.md"

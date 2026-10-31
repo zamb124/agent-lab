@@ -238,7 +238,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 align-items: center;
                 gap: 6px;
                 padding: 4px 8px 4px 10px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: var(--bg-elevated);
                 border: 1px solid var(--border-subtle);
                 font-size: var(--text-xs);

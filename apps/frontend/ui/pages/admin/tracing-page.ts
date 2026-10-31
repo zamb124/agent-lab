@@ -52,7 +52,7 @@ import '@platform/lib/components/platform-trace-viewer.js';
 import '@platform/lib/components/platform-span-attributes-viewer.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
-import type { ControllerFor, CursorListController, FacetsController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor, FacetsController } from '@platform/lib/base/use-resource.js';
 
 const FACETS = Object.freeze([
     { key: 'companies',   field: 'company_id',     labelKey: 'tracing_page.filter_company' },
@@ -98,7 +98,7 @@ export class FrontendTracingPage extends PlatformPage {
                 background: var(--bg-primary);
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-md);
-                box-shadow: var(--shadow-xl);
+                box-shadow: var(--glass-shadow-strong);
                 max-height: 240px;
                 overflow-y: auto;
                 z-index: 20;
@@ -185,7 +185,7 @@ export class FrontendTracingPage extends PlatformPage {
                 position: fixed; top: 0; right: 0; bottom: 0;
                 width: min(900px, 90vw);
                 background: var(--bg-primary);
-                box-shadow: var(--shadow-2xl);
+                box-shadow: var(--glass-shadow-ultra);
                 z-index: 101;
                 display: flex; flex-direction: column;
             }
@@ -247,7 +247,7 @@ export class FrontendTracingPage extends PlatformPage {
         this._draftFilters = {};
         this._traceDrawerSpan = null;
     }
-    private _spans: CursorListController;
+    private _spans: ControllerFor<'frontend/tracing_spans'>;
     private _facets: FacetsController;
     private _trace: ControllerFor<'frontend/tracing_trace_load'>;
 
@@ -542,7 +542,7 @@ export class FrontendTracingPage extends PlatformPage {
         const error = this._spans.error;
         let body;
         if (loading && records.length === 0) {
-            body = html`<div class="state"><platform-spinner></platform-spinner></div>`;
+            body = html`<platform-empty-state loading></platform-empty-state>`;
         } else if (terminal === 'forbidden') {
             body = html`<div class="state forbidden">
                 <div class="state-title">${this.t('tracing_page.forbidden')}</div>

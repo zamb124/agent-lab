@@ -73,7 +73,7 @@ export class PlatformMenu extends PlatformElement {
             :host {
                 display: block;
                 min-width: 200px;
-                padding: var(--space-1, 4px);
+                padding: var(--space-1);
             }
 
             :host([compact]) {
@@ -83,28 +83,28 @@ export class PlatformMenu extends PlatformElement {
             .item {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 width: 100%;
                 box-sizing: border-box;
-                padding: var(--space-2, 8px) var(--space-3, 12px);
+                padding: var(--space-2) var(--space-3);
                 border: none;
-                border-radius: var(--radius-sm, 8px);
+                border-radius: var(--radius-sm);
                 background: transparent;
                 color: var(--text-primary);
                 font-family: inherit;
-                font-size: var(--text-sm, 0.8125rem);
+                font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
-                transition: var(--motion-transition-interactive, background-color 120ms ease);
+                transition: var(--motion-transition-interactive);
             }
 
             :host([compact]) .item {
-                padding: 6px var(--space-2, 8px);
+                padding: 6px var(--space-2);
             }
 
             .item:hover:not([disabled]),
             .item.is-active:not([disabled]) {
-                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.14));
+                background: var(--glass-tint-medium);
             }
 
             .item[disabled] {
@@ -113,7 +113,7 @@ export class PlatformMenu extends PlatformElement {
             }
 
             .item.is-danger {
-                color: var(--error, #ef4444);
+                color: var(--error);
             }
 
             .item:focus-visible {
@@ -131,8 +131,8 @@ export class PlatformMenu extends PlatformElement {
 
             .hint {
                 flex-shrink: 0;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 font-variant-numeric: tabular-nums;
             }
 
@@ -143,23 +143,23 @@ export class PlatformMenu extends PlatformElement {
 
             .separator {
                 height: 1px;
-                margin: var(--space-1, 4px) var(--space-2, 8px);
-                background: var(--glass-border-subtle, rgba(120, 120, 140, 0.2));
+                margin: var(--space-1) var(--space-2);
+                background: var(--glass-border-subtle);
             }
 
             .section {
-                padding: var(--space-2, 8px) var(--space-3, 12px) var(--space-1, 4px);
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
-                font-weight: var(--font-semibold, 600);
-                letter-spacing: var(--tracking-wide, 0.04em);
+                padding: var(--space-2) var(--space-3) var(--space-1);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                letter-spacing: var(--tracking-wide);
                 text-transform: uppercase;
             }
 
             .empty {
-                padding: var(--space-3, 12px);
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-sm, 0.8125rem);
+                padding: var(--space-3);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
         `,
     ];

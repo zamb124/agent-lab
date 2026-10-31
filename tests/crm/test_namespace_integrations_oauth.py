@@ -11,7 +11,7 @@ from core.integrations.oauth_service import OAUTH_STATE_PREFIX
 
 
 @pytest.mark.parametrize("host,expected_apex", [
-    ("humanitec.ru", "humanitec.ru"),
+    ("linnex.io", "linnex.io"),
     ("linnex.io", "linnex.io"),
 ])
 @pytest.mark.asyncio

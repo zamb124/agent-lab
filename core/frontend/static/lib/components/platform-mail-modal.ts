@@ -429,9 +429,9 @@ export class PlatformMailModal extends PlatformModal {
             .mail-shell {
                 display: grid;
                 grid-template-columns:
-                    var(--mail-rail-width, 64px)
-                    var(--mail-nav-width, 260px)
-                    var(--mail-list-width, 400px)
+                    var(--mail-rail-width)
+                    var(--mail-nav-width)
+                    var(--mail-list-width)
                     minmax(0, 1fr);
                 min-height: 0;
                 flex: 1;
@@ -446,7 +446,7 @@ export class PlatformMailModal extends PlatformModal {
                 flex-direction: column;
             }
             .mail-list {
-                width: var(--mail-list-width, 400px);
+                width: var(--mail-list-width);
                 min-width: 0;
                 overflow: hidden;
                 background: var(--bg-primary);
@@ -558,9 +558,9 @@ export class PlatformMailModal extends PlatformModal {
             .folder-unseen {
                 min-width: 1.25rem;
                 padding: 0 6px;
-                border-radius: var(--radius-full, 999px);
-                background: color-mix(in srgb, var(--mail-unread-dot, var(--accent-secondary)) 18%, transparent);
-                color: var(--mail-unread-dot, var(--accent-secondary));
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--mail-unread-dot) 18%, transparent);
+                color: var(--mail-unread-dot);
                 font-size: 0.6875rem;
                 font-weight: 700;
                 line-height: 1.4;
@@ -568,7 +568,7 @@ export class PlatformMailModal extends PlatformModal {
                 font-variant-numeric: tabular-nums;
             }
             .folder-btn.active .folder-unseen {
-                background: color-mix(in srgb, var(--mail-unread-dot, var(--accent-secondary)) 24%, transparent);
+                background: color-mix(in srgb, var(--mail-unread-dot) 24%, transparent);
             }
             .upcoming {
                 margin-top: auto;
@@ -702,7 +702,7 @@ export class PlatformMailModal extends PlatformModal {
                 align-items: start;
                 width: 100%;
                 box-sizing: border-box;
-                min-height: var(--mail-row-height, 72px);
+                min-height: var(--mail-row-height);
                 padding: var(--space-3) var(--space-4);
                 border: none;
                 border-bottom: 1px solid var(--border-subtle);
@@ -744,8 +744,8 @@ export class PlatformMailModal extends PlatformModal {
                 border-radius: 50%;
                 margin-top: 14px;
                 justify-self: center;
-                background: var(--mail-unread-dot, var(--accent-secondary));
-                box-shadow: 0 0 0 1px color-mix(in srgb, var(--mail-unread-dot, var(--accent-secondary)) 35%, transparent);
+                background: var(--mail-unread-dot);
+                box-shadow: 0 0 0 1px color-mix(in srgb, var(--mail-unread-dot) 35%, transparent);
             }
             .msg-row .msg-unread-dot {
                 grid-column: 1;
@@ -829,12 +829,12 @@ export class PlatformMailModal extends PlatformModal {
                 cursor: default;
             }
             .msg-rag-status.is-failed {
-                color: var(--warning, #c47a00);
+                color: var(--warning);
                 cursor: pointer;
             }
             .msg-rag-status.is-failed:hover {
                 color: var(--text-primary);
-                background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+                background: var(--glass-tint-medium);
             }
             .msg-rag-status.is-pending {
                 animation: mail-rag-pulse 1.2s ease-in-out infinite;
@@ -882,7 +882,7 @@ export class PlatformMailModal extends PlatformModal {
                 width: 32px;
                 height: 32px;
                 font-size: 0.6875rem;
-                border: 2px solid var(--bg-primary, var(--bg-surface));
+                border: 2px solid var(--bg-primary);
             }
             .msg-avatars .msg-avatar:nth-child(2) {
                 left: 12px;
@@ -907,7 +907,7 @@ export class PlatformMailModal extends PlatformModal {
                 margin: 0;
                 padding: 0;
                 border: none;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
@@ -1062,14 +1062,14 @@ export class PlatformMailModal extends PlatformModal {
                 border: none;
                 border-left: 3px solid var(--accent);
                 border-radius: 0 8px 8px 0;
-                background: color-mix(in srgb, var(--glass-solid-soft, var(--bg-surface)) 78%, var(--accent) 8%);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 78%, var(--accent) 8%);
                 color: var(--text-secondary);
                 text-align: left;
                 cursor: pointer;
                 font: inherit;
             }
             .mail-reply-quote:hover {
-                background: color-mix(in srgb, var(--glass-solid-soft, var(--bg-surface)) 70%, var(--accent) 14%);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 70%, var(--accent) 14%);
             }
             .mail-reply-quote .who {
                 font-size: 0.75rem;
@@ -1126,7 +1126,7 @@ export class PlatformMailModal extends PlatformModal {
                 align-items: center;
                 height: 22px;
                 padding: 0 8px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 border: 1px solid var(--border-subtle);
                 background: var(--bg-elevated);
                 color: var(--text-secondary);
@@ -1139,7 +1139,7 @@ export class PlatformMailModal extends PlatformModal {
                 align-items: center;
                 gap: 4px;
                 padding: 2px 8px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: color-mix(in srgb, var(--accent) 12%, transparent);
                 color: var(--text-secondary);
             }
@@ -1255,8 +1255,8 @@ export class PlatformMailModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
-                width: var(--mail-attachment-tile, 200px);
-                flex: 0 0 var(--mail-attachment-tile, 200px);
+                width: var(--mail-attachment-tile);
+                flex: 0 0 var(--mail-attachment-tile);
                 min-width: 0;
                 max-width: 100%;
                 min-height: 56px;
@@ -1307,7 +1307,7 @@ export class PlatformMailModal extends PlatformModal {
                 height: 2.25rem;
                 padding: 0 var(--space-3);
                 border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: var(--bg-elevated);
                 color: var(--text-primary);
                 font: inherit;
@@ -1484,7 +1484,7 @@ export class PlatformMailModal extends PlatformModal {
                 align-items: center;
             }
             .empty {
-                padding: var(--space-8, 48px) var(--space-6);
+                padding: var(--space-8) var(--space-6);
                 color: var(--text-tertiary);
                 text-align: center;
             }
@@ -1738,7 +1738,7 @@ export class PlatformMailModal extends PlatformModal {
                 cursor: pointer;
             }
             .btn-icon:hover {
-                background: var(--bg-hover);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
             }
             .header-actions {
@@ -1753,7 +1753,7 @@ export class PlatformMailModal extends PlatformModal {
             @media (max-width: 767px) {
                 /* Как calendar: rail слева + контент; folders-nav скрыт. */
                 .mail-shell {
-                    grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
+                    grid-template-columns: var(--mail-rail-width) minmax(0, 1fr);
                 }
                 .mail-nav {
                     display: none !important;

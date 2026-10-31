@@ -72,7 +72,7 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (!this._name.trim()) errors.name = this.t('api_key_modal.err_name');
         if (this._scopes.size === 0) errors.scopes = this.t('api_key_modal.err_scopes');
         return errors;

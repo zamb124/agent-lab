@@ -64,8 +64,8 @@ export class SyncChannelPicker extends PlatformElement {
             display: flex;
             flex-direction: column;
             gap: var(--space-2);
-            transition: transform var(--duration-fast) var(--easing-default),
-                        box-shadow var(--duration-fast) var(--easing-default);
+            transition: transform var(--motion-duration-micro) var(--motion-ease-standard),
+                        box-shadow var(--motion-duration-micro) var(--motion-ease-standard);
         }
         .tile:hover {
             transform: translateY(-2px);
@@ -86,7 +86,7 @@ export class SyncChannelPicker extends PlatformElement {
             font-size: var(--text-sm);
             flex-shrink: 0;
             overflow: hidden;
-            background: var(--accent-subtle, rgba(99, 102, 241, 0.12));
+            background: var(--accent-subtle);
         }
         .tile-avatar.pastel-initials {
             --sync-avatar-h: 0;
@@ -140,7 +140,7 @@ export class SyncChannelPicker extends PlatformElement {
         this._tileAvatarFailed = Object.freeze(failed);
     }
 
-    _renderTileAvatar(channel: Record<string, any>) {
+    _renderTileAvatar(channel: Record<string, unknown>) {
         const seed = typeof channel.channel_id === 'string' && channel.channel_id !== '' ? channel.channel_id : 'sync';
         const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';

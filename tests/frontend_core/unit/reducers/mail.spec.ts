@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { mailReducer, initialMailState, MAIL_EVENTS, mailSlice } from '@platform/lib/events/reducers/mail.js';
+import type { PlatformEvent } from '../../../../core/frontend/static/lib/events/contract.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+const ev = (type: string, payload: unknown = null): PlatformEvent => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local', causation_id: null, correlation_id: null, trace_id: null } });
 
 describe('mailReducer', () => {
     it('initial', () => {
@@ -80,7 +81,7 @@ describe('mailReducer', () => {
             seeded,
             ev(MAIL_EVENTS.MESSAGE_STAR_COMPLETED, { uid: '1', flagged: true }),
         );
-        expect(next.messages[0].flagged).toBe(true);
+        expect(next.messages[0]?.flagged).toBe(true);
     });
 
     it('COMPOSE_DRAFT_SET merges fields', () => {
@@ -119,9 +120,9 @@ describe('mailReducer', () => {
             }),
         );
         expect(nextMine.activeMailboxBindingId).toBe('mine2');
-        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine2').is_default).toBe(true);
-        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine1').is_default).toBe(false);
-        expect(nextMine.companyBindings.find((b) => b.mailbox_binding_id === 'other1').is_default).toBe(true);
+        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine2')?.is_default).toBe(true);
+        expect(nextMine.bindings.find((b) => b.mailbox_binding_id === 'mine1')?.is_default).toBe(false);
+        expect(nextMine.companyBindings.find((b) => b.mailbox_binding_id === 'other1')?.is_default).toBe(true);
 
         const nextOther = mailReducer(
             seeded,
@@ -134,9 +135,9 @@ describe('mailReducer', () => {
             }),
         );
         expect(nextOther.activeMailboxBindingId).toBe('mine1');
-        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other2').is_default).toBe(true);
-        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other1').is_default).toBe(false);
-        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'mine1').is_default).toBe(true);
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other2')?.is_default).toBe(true);
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'other1')?.is_default).toBe(false);
+        expect(nextOther.companyBindings.find((b) => b.mailbox_binding_id === 'mine1')?.is_default).toBe(true);
     });
 
     it('BINDING_DELETED removes from my bindings and resets active', () => {
@@ -249,13 +250,13 @@ describe('mailReducer', () => {
         expect(next.messageLoading).toBe(false);
         expect(next.selectedThreadId).toBe('<root>');
         expect(next.selectedThreadMessages).toHaveLength(3);
-        expect(next.selectedMessage.uid).toBe('3');
-        expect(next.selectedThreadMessages.find((m) => m.uid === '1').unread).toBe(false);
-        expect(next.selectedThreadMessages.find((m) => m.uid === '3').unread).toBe(false);
-        expect(next.messages.find((m) => m.uid === '1').unread).toBe(false);
-        expect(next.messages.find((m) => m.uid === '3').unread).toBe(false);
-        expect(next.messages.find((m) => m.uid === '9').unread).toBe(true);
-        expect(next.folders[0].unseen_count).toBe(1);
+        expect(next.selectedMessage?.uid).toBe('3');
+        expect(next.selectedThreadMessages.find((m) => m.uid === '1')?.unread).toBe(false);
+        expect(next.selectedThreadMessages.find((m) => m.uid === '3')?.unread).toBe(false);
+        expect(next.messages.find((m) => m.uid === '1')?.unread).toBe(false);
+        expect(next.messages.find((m) => m.uid === '3')?.unread).toBe(false);
+        expect(next.messages.find((m) => m.uid === '9')?.unread).toBe(true);
+        expect(next.folders[0]?.unseen_count).toBe(1);
     });
 
     it('MESSAGE_MARK_UNSEEN_COMPLETED restores unread and increments folder badge', () => {
@@ -271,9 +272,9 @@ describe('mailReducer', () => {
             seeded,
             ev(MAIL_EVENTS.MESSAGE_MARK_UNSEEN_COMPLETED, { uid: '2', unread: true }),
         );
-        expect(next.messages[0].unread).toBe(true);
-        expect(next.selectedMessage.unread).toBe(true);
-        expect(next.folders[0].unseen_count).toBe(2);
+        expect(next.messages[0]?.unread).toBe(true);
+        expect(next.selectedMessage?.unread).toBe(true);
+        expect(next.folders[0]?.unseen_count).toBe(2);
     });
 
     it('FOLDERS_LOADED keeps list when folder unchanged', () => {
@@ -296,7 +297,7 @@ describe('mailReducer', () => {
         );
         expect(next.messages).toEqual([{ uid: '1' }]);
         expect(next.selectedUid).toBe('1');
-        expect(next.folders[0].unseen_count).toBe(2);
+        expect(next.folders[0]?.unseen_count).toBe(2);
     });
 
     it('failed events store errorMessage', () => {
@@ -341,8 +342,8 @@ describe('mailReducer', () => {
             }),
         );
         expect(next.loading).toBe(false);
-        expect(next.bindings[0].calendar_color).toBe('mint');
-        expect(next.companyBindings[0].calendar_color).toBe('mint');
+        expect(next.bindings[0]?.calendar_color).toBe('mint');
+        expect(next.companyBindings[0]?.calendar_color).toBe('mint');
     });
 
     it('MESSAGE_UPSERTED merges list item and unseen badge', () => {
@@ -366,9 +367,9 @@ describe('mailReducer', () => {
                 list_item: { uid: '2', subject: 'new', unread: true },
             }),
         );
-        expect(next.messages[0].uid).toBe('2');
+        expect(next.messages[0]?.uid).toBe('2');
         expect(next.messages).toHaveLength(2);
-        expect(next.folders[0].unseen_count).toBe(2);
+        expect(next.folders[0]?.unseen_count).toBe(2);
     });
 
     it('MESSAGE_UPSERTED ignores other mailbox', () => {
@@ -469,7 +470,7 @@ describe('mailReducer', () => {
                 member: { mailbox_binding_id: 'role1', user_id: 'u2', role: 'member' },
             }),
         );
-        expect(added.bindingMembers.role1.map((item) => item.user_id)).toEqual(['u1', 'u2']);
+        expect(added.bindingMembers.role1?.map((item) => item.user_id)).toEqual(['u1', 'u2']);
         const removed = mailReducer(
             added,
             ev(MAIL_EVENTS.BINDING_MEMBER_REMOVED, {
@@ -477,7 +478,7 @@ describe('mailReducer', () => {
                 user_id: 'u1',
             }),
         );
-        expect(removed.bindingMembers.role1.map((item) => item.user_id)).toEqual(['u2']);
+        expect(removed.bindingMembers.role1?.map((item) => item.user_id)).toEqual(['u2']);
     });
 
     it('MESSAGE_ARCHIVE_COMPLETED removes selected message', () => {

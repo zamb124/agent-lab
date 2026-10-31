@@ -202,7 +202,7 @@ export class LandingAbilities extends PlatformElement {
 
     constructor() {
         super();
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
     }
     private _localeSel: SelectController<any>;
 

@@ -14,6 +14,8 @@ from apps.flows.src.a2a.share_task_redaction import (
     task_for_share_viewer,
 )
 from core.a2a.codec import get_part_data, value_from_json
+from core.models.flow_ui_share import FlowUIShareGrant
+from core.types import JsonValue
 from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,
@@ -21,8 +23,6 @@ from core.ui_document.protocol import (
     STATE_ARTIFACT_ID,
     UI_ARTIFACT_ID,
 )
-from core.models.flow_ui_share import FlowUIShareGrant
-from core.types import JsonValue
 
 pytestmark = [pytest.mark.no_test_doubles]
 

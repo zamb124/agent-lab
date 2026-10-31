@@ -7,6 +7,7 @@ import json
 import pytest
 from httpx2 import AsyncClient
 
+from core.types import JsonObject
 from core.ui_document.document import (
     FlowUIButton,
     FlowUIConversation,
@@ -14,7 +15,6 @@ from core.ui_document.document import (
     FlowUIPage,
     FlowUITextInput,
 )
-from core.types import JsonObject
 from tests.flows._flow_ui_session import (
     a2a_get_task,
     a2a_send,

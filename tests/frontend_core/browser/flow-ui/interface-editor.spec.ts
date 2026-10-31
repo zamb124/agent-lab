@@ -9,6 +9,7 @@ import { installFetchMock } from '../helpers/fake-fetch.js';
 import { CoreEvents, getPlatformBus, platformFileCreateOp } from '@platform/lib/events/index.js';
 import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { blockElement } from '@platform/lib/flow-ui/editor/selection.js';
+import type { FlowUiDocument } from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 import schema from '../../../fixtures/flow_ui/schema.json' with { type: 'json' };
 import { interfaceEditorSlice } from '../../../../apps/flows/ui/events/resources/interface-editor.resource.js';
@@ -17,6 +18,7 @@ import { secretsVariablesResource } from '@platform/lib/events/resources/secrets
 import { flowUiAssistOp, flowUiSchemaOp } from '../../../../apps/flows/ui/events/resources/flow-ui.resource.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-editor.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-toolbar.js';
+import {q, qs, qsa, type TestEl} from '../helpers/dom.js';
 
 const INTERFACE = {
     start_page_id: 'main',
@@ -27,18 +29,18 @@ const INTERFACE = {
     }],
 };
 
-function seedTranslations(bus) {
+function seedTranslations(bus: any) {
     const locale = bus.getState().i18n.locale;
     const previous = bus.getState().i18n.translations[locale] || {};
     bus.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale, bundle: { ...previous, flows: flowsEn } }, { source: 'system' });
     bus.dispatch(CoreEvents.I18N_LOCALE_CHANGED, { locale, default_namespace: 'flows' }, { source: 'system' });
 }
 
-function editorState() {
-    return getPlatformBus().getState().flowsInterfaceEditor;
+function editorState(): any {
+    return (getPlatformBus().getState() as Record<string, any>).flowsInterfaceEditor;
 }
 
-function field(blockId, name, label, extra = {}) {
+function field(blockId: any, name: any, label: any, extra: any = {}) {
     return {
         block_id: blockId, type: 'text_input', visible_when: null, field: name, label,
         required: false, error_message: '', action: null, placeholder: '', default: '', pattern: '',
@@ -64,40 +66,40 @@ const FORM = {
     }],
 };
 
-async function mountEditor(document = INTERFACE) {
-    const element = await fixture(html`<flows-interface-editor
+async function mountEditor(document: FlowUiDocument = INTERFACE) {
+    const element = await fixture<TestEl>(html`<flows-interface-editor
         .interfaceConfig=${structuredClone(document)}
         .flowId=${'flow-1'}
         .branchId=${'default'}
         style="display:block;width:1280px;height:760px"
     ></flows-interface-editor>`);
-    await waitUntil(() => element.renderRoot.querySelector('flows-interface-add-panel') !== null, 'editor did not load schema', { timeout: 8000 });
-    const canvas = () => element.renderRoot.querySelector('platform-flow-ui');
+    await waitUntil(() => q(element.renderRoot, 'flows-interface-add-panel') !== null, 'editor did not load schema', { timeout: 8000 });
+    const canvas = () => q(element.renderRoot, 'platform-flow-ui');
     await waitUntil(() => canvas() !== null && blockElement(canvas(), 'title') !== null, 'canvas did not render', { timeout: 8000 });
     return element;
 }
 
-async function showPalette(element) {
+async function showPalette(element: any) {
     getPlatformBus().dispatch('flows/interface_editor/sidebar_tab_set', { tab: 'add' });
     await elementUpdated(element);
-    await waitUntil(() => element.renderRoot.querySelector('flows-interface-add-panel') !== null, 'palette did not open');
+    await waitUntil(() => q(element.renderRoot, 'flows-interface-add-panel') !== null, 'palette did not open');
 }
 
-function paletteItem(element, type) {
-    const panel = element.renderRoot.querySelector('flows-interface-add-panel');
-    const label = flowsEn.interface_editor[`block_${type}`];
-    return [...panel.renderRoot.querySelectorAll('article.item')].find((item) => item.getAttribute('title') === label);
+function paletteItem(element: any, type: any) {
+    const panel = qs(element.renderRoot, 'flows-interface-add-panel');
+    const label = (flowsEn.interface_editor as Record<string, string>)[`block_${type}`];
+    return [...qsa(panel.renderRoot, 'article.item')].find((item) => item.getAttribute('title') === label);
 }
 
-function paletteColumnsItem(element, count) {
-    const panel = element.renderRoot.querySelector('flows-interface-add-panel');
+function paletteColumnsItem(element: any, count: any) {
+    const panel = qs(element.renderRoot, 'flows-interface-add-panel');
     const label = flowsEn.interface_editor.palette_columns.replace('{count}', String(count));
-    return [...panel.renderRoot.querySelectorAll('article.item')].find((item) => item.getAttribute('title') === label);
+    return [...qsa(panel.renderRoot, 'article.item')].find((item) => item.getAttribute('title') === label);
 }
 
 describe('flows-interface-editor', () => {
-    let fetchMock;
-    let originalWsRequest;
+    let fetchMock: any;
+    let originalWsRequest: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -109,17 +111,17 @@ describe('flows-interface-editor', () => {
             if (opts.type === 'flows/flow_ui/schema_requested') {
                 return schema;
             }
-            return originalWsRequest(opts);
+            return originalWsRequest.call(platformWs, opts);
         };
         fetchMock = installFetchMock();
-        fetchMock.respondJson('GET', (url) => url.includes('/secrets/api/v1/variables'), { items: [], total: 0, limit: 200, offset: 0 });
-        fetchMock.respondJson('POST', (url) => url.endsWith('/api/v1/files/uploads'), {
+        fetchMock.respondJson('GET', (url: string) => url.includes('/secrets/api/v1/variables'), { items: [], total: 0, limit: 200, offset: 0 });
+        fetchMock.respondJson('POST', (url: string) => url.endsWith('/api/v1/files/uploads'), {
             upload_id: 'up_identity',
             file_id: 'file-agent',
             chunk_size_bytes: 5 * 1024 * 1024,
         });
-        fetchMock.respondJson('PUT', (url) => url.includes('/api/v1/files/uploads/up_identity/parts/'), { part_number: 1, etag: 'etag-1' });
-        fetchMock.respondJson('POST', (url) => url.endsWith('/api/v1/files/uploads/up_identity/complete'), {
+        fetchMock.respondJson('PUT', (url: string) => url.includes('/api/v1/files/uploads/up_identity/parts/'), { part_number: 1, etag: 'etag-1' });
+        fetchMock.respondJson('POST', (url: string) => url.endsWith('/api/v1/files/uploads/up_identity/complete'), {
             file_id: 'file-agent',
             original_name: 'agent.png',
             content_type: 'image/png',
@@ -143,23 +145,23 @@ describe('flows-interface-editor', () => {
         expect(editorState().documentKey).to.equal('flow-1:default');
         expect(editorState().history.present).to.deep.equal(INTERFACE);
 
-        paletteItem(element, 'text_input').click();
+        paletteItem(element, 'text_input')!.click();
         await elementUpdated(element);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'text-input') !== null, 'inserted block did not render');
 
         const state = editorState();
-        expect(state.selectedBlockId).to.equal('text-input');
-        expect(state.sidebarTab).to.equal('properties');
-        expect(state.history.present.pages[0].blocks.map((block) => block.block_id)).to.deep.equal(['title', 'text-input']);
-        expect(state.history.present.pages[0].blocks[1]).to.include({ type: 'text_input', field: 'text_input' });
-        await waitUntil(() => element.renderRoot.querySelector('flows-interface-properties-panel') !== null, 'properties panel did not open');
-        expect(element.renderRoot.querySelector('.selection')).to.not.equal(null);
+        expect(state!.selectedBlockId).to.equal('text-input');
+        expect(state!.sidebarTab).to.equal('properties');
+        expect(state!.history.present.pages[0].blocks.map((block: any) => block.block_id)).to.deep.equal(['title', 'text-input']);
+        expect(state!.history.present.pages[0].blocks[1]).to.include({ type: 'text_input', field: 'text_input' });
+        await waitUntil(() => q(element.renderRoot, 'flows-interface-properties-panel') !== null, 'properties panel did not open');
+        expect(q(element.renderRoot, '.selection')).to.not.equal(null);
     });
 
     it('undoes and redoes the draft history and keeps it in local storage', async () => {
         const element = await mountEditor();
-        paletteItem(element, 'button').click();
+        paletteItem(element, 'button')!.click();
         await elementUpdated(element);
         expect(editorState().history.past).to.have.length(1);
 
@@ -168,83 +170,83 @@ describe('flows-interface-editor', () => {
         expect(editorState().history.present).to.deep.equal(INTERFACE);
         element.redo();
         await elementUpdated(element);
-        expect(editorState().history.present.pages[0].blocks).to.have.length(2);
+        expect(editorState().history.present.pages[0]!.blocks).to.have.length(2);
 
-        const drafts = JSON.parse(globalThis.localStorage.getItem(Object.keys(globalThis.localStorage).find((key) => key.includes('interface_drafts'))));
-        expect(drafts['flow-1:default'].pages[0].blocks).to.have.length(2);
+        const drafts = JSON.parse(globalThis.localStorage.getItem(Object.keys(globalThis.localStorage).find((key) => key.includes('interface_drafts'))!)!);
+        expect(drafts['flow-1:default'].pages[0]!.blocks).to.have.length(2);
     });
 
     it('blocks publish while inputs have no action and publishes a valid draft', async () => {
         const element = await mountEditor();
-        paletteItem(element, 'text_input').click();
+        paletteItem(element, 'text_input')!.click();
         await elementUpdated(element);
-        await waitUntil(() => editorState().problems.some((problem) => problem.code === 'inputs_without_action'), 'publish gate did not report');
-        expect(element.renderRoot.querySelector('.problems')).to.equal(null);
+        await waitUntil(() => editorState().problems.some((problem: any) => problem.code === 'inputs_without_action'), 'publish gate did not report');
+        expect(q(element.renderRoot, '.problems')).to.equal(null);
         expect(element.commitDraft()).to.equal(false);
 
         await showPalette(element);
         expect(editorState().sidebarTab).to.equal('add');
-        paletteItem(element, 'button').click();
+        paletteItem(element, 'button')!.click();
         await elementUpdated(element);
         await waitUntil(() => editorState().problems.length === 0, 'problems did not clear');
 
         const published = oneEvent(element, 'interface-change');
         expect(element.commitDraft()).to.equal(true);
         const { detail } = await published;
-        expect(detail.config.pages[0].blocks.map((block) => block.type)).to.deep.equal(['heading', 'text_input', 'button']);
+        expect(detail.config.pages[0].blocks.map((block: any) => block.type)).to.deep.equal(['heading', 'text_input', 'button']);
     });
 
     it('publishes an inserted html block with its source', async () => {
         const element = await mountEditor();
-        paletteItem(element, 'html').click();
+        paletteItem(element, 'html')!.click();
         await elementUpdated(element);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block did not render');
         const published = oneEvent(element, 'interface-change');
         expect(element.commitDraft()).to.equal(true);
         const { detail } = await published;
-        const inserted = detail.config.pages[0].blocks.find((block) => block.type === 'html');
+        const inserted = detail.config.pages[0].blocks.find((block: any) => block.type === 'html');
         expect(inserted.source).to.equal(flowsEn.interface_editor.default_text_html_source);
         expect(inserted.fields).to.deep.equal(['items']);
     });
 
     it('opens the html editor from the canvas menu with the block source', async () => {
         const element = await mountEditor();
-        paletteItem(element, 'html').click();
+        paletteItem(element, 'html')!.click();
         await elementUpdated(element);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block did not render');
-        await waitUntil(() => element.renderRoot.querySelector('.kebab') !== null, 'selection menu missing');
-        const opened = [];
-        element.openModal = (kind, props) => { opened.push({ kind, props }); };
-        element.renderRoot.querySelector('.kebab').click();
+        await waitUntil(() => q(element.renderRoot, '.kebab') !== null, 'selection menu missing');
+        const opened: any[] = [];
+        element.openModal = (kind: any, props: any) => { opened.push({ kind, props }); };
+        qs(element.renderRoot, '.kebab').click();
         await elementUpdated(element);
-        element.renderRoot.querySelector('platform-menu').dispatchEvent(new CustomEvent('menu-select', { detail: { id: 'edit_html' }, bubbles: true, composed: true }));
+        qs(element.renderRoot, 'platform-menu').dispatchEvent(new CustomEvent('menu-select', { detail: { id: 'edit_html' }, bubbles: true, composed: true }));
         expect(opened[0].kind).to.equal('flows.interface_html_editor');
         expect(opened[0].props.source).to.equal(flowsEn.interface_editor.default_text_html_source);
         opened[0].props.onApply('<p>from-menu</p>');
         await elementUpdated(element);
-        expect(editorState().history.present.pages[0].blocks.find((block) => block.type === 'html').source).to.equal('<p>from-menu</p>');
+        expect(editorState().history.present.pages[0].blocks.find((block: any) => block.type === 'html').source).to.equal('<p>from-menu</p>');
     });
 
     it('uploads an agent identity icon and writes the file URL into the draft', async () => {
         const element = await mountEditor();
-        paletteItem(element, 'agent_identity').click();
+        paletteItem(element, 'agent_identity')!.click();
         await elementUpdated(element);
-        await waitUntil(() => element.renderRoot.querySelector('flows-interface-properties-panel') !== null, 'properties did not open');
-        const panel = element.renderRoot.querySelector('flows-interface-properties-panel');
-        await waitUntil(() => panel.renderRoot.querySelector('[data-image-input]') !== null, 'image picker missing');
-        const input = panel.renderRoot.querySelector('[data-image-input]');
+        await waitUntil(() => q(element.renderRoot, 'flows-interface-properties-panel') !== null, 'properties did not open');
+        const panel = q(element.renderRoot, 'flows-interface-properties-panel');
+        await waitUntil(() => q(panel!.renderRoot, '[data-image-input]') !== null, 'image picker missing');
+        const input = q(panel!.renderRoot, '[data-image-input]');
         const file = new File([new Uint8Array([1, 2, 3])], 'agent.png', { type: 'image/png' });
         const transfer = new DataTransfer();
         transfer.items.add(file);
-        input.files = transfer.files;
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input!.files = transfer.files;
+        input!.dispatchEvent(new Event('change', { bubbles: true }));
         await waitUntil(() => {
-            const identity = editorState().history.present.pages[0].blocks.find((block) => block.type === 'agent_identity');
+            const identity = editorState().history.present.pages[0].blocks.find((block: any) => block.type === 'agent_identity');
             return identity !== undefined && identity.image_url === 'https://files.test/agent.png';
         }, 'image_url was not committed');
-        const init = fetchMock.calls.find((call) => call.method === 'POST' && call.url.endsWith('/api/v1/files/uploads'));
+        const init = fetchMock.calls.find((call: any) => call.method === 'POST' && call.url.endsWith('/api/v1/files/uploads'));
         expect(init).to.exist;
         const body = JSON.parse(init.init.body);
         expect(body.spec.source_kind).to.equal('flow_asset');
@@ -253,37 +255,37 @@ describe('flows-interface-editor', () => {
 
     it('inserts a palette block into the selected columns cell', async () => {
         const element = await mountEditor();
-        paletteColumnsItem(element, 2).click();
+        paletteColumnsItem(element, 2)!.click();
         await elementUpdated(element);
-        await waitUntil(() => editorState().history.present.pages[0].blocks.some((block) => block.type === 'columns'), 'columns did not insert');
+        await waitUntil(() => editorState().history.present.pages[0].blocks.some((block: any) => block.type === 'columns'), 'columns did not insert');
         expect(editorState().selectedBlockId).to.equal('columns');
         expect(editorState().sidebarTab).to.equal('add');
-        paletteItem(element, 'heading').click();
+        paletteItem(element, 'heading')!.click();
         await elementUpdated(element);
         await waitUntil(() => {
-            const columns = editorState().history.present.pages[0].blocks.find((block) => block.type === 'columns');
-            return columns !== undefined && columns.columns[0].blocks.some((block) => block.type === 'heading');
+            const columns = editorState().history.present.pages[0].blocks.find((block: any) => block.type === 'columns');
+            return columns !== undefined && columns.columns[0].blocks.some((block: any) => block.type === 'heading');
         }, 'heading did not land in the first column');
-        const columns = editorState().history.present.pages[0].blocks.find((block) => block.type === 'columns');
-        expect(columns.columns[0].blocks.map((block) => block.block_id)).to.deep.equal(['heading']);
+        const columns = editorState().history.present.pages[0].blocks.find((block: any) => block.type === 'columns');
+        expect(columns.columns[0].blocks.map((block: any) => block.block_id)).to.deep.equal(['heading']);
         expect(columns.columns[1].blocks).to.deep.equal([]);
-        expect(editorState().history.present.pages[0].blocks.map((block) => block.block_id)).to.deep.equal(['title', 'columns']);
+        expect(editorState().history.present.pages[0].blocks.map((block: any) => block.block_id)).to.deep.equal(['title', 'columns']);
     });
 
     it('opens a newly added page on the canvas without throwing', async () => {
         const element = await mountEditor();
-        element.renderRoot.querySelector('flows-interface-pages-tabs').dispatchEvent(new CustomEvent('page-command', { detail: { command: 'add' } }));
+        qs(element.renderRoot, 'flows-interface-pages-tabs').dispatchEvent(new CustomEvent('page-command', { detail: { command: 'add' } }));
         await elementUpdated(element);
         await waitUntil(() => editorState().pageId === 'page-2', 'editor did not select the new page');
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
-        await waitUntil(() => canvas.store.pageId === 'page-2', 'canvas did not follow page-2');
-        expect(canvas.getAttribute('page-id')).to.equal('page-2');
-        expect(canvas.store.page('page-2')).to.not.equal(null);
+        const canvas = q(element.renderRoot, 'platform-flow-ui');
+        await waitUntil(() => canvas!.store.pageId === 'page-2', 'canvas did not follow page-2');
+        expect(canvas!.getAttribute('page-id')).to.equal('page-2');
+        expect(canvas!.store.page('page-2')).to.not.equal(null);
         expect(editorState().history.present.pages[1].show_title).to.equal(false);
     });
 
     it('starts a live test chat with base-url when preview is on', async () => {
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/flow-1/interface'), {
+        fetchMock.respondJson('GET', (url: any) => url.includes('/flows/api/v1/flow-1/interface'), {
             flow_id: 'flow-1',
             branch_id: 'default',
             document: INTERFACE,
@@ -295,7 +297,7 @@ describe('flows-interface-editor', () => {
         const element = await mountEditor();
         await element.setCanvasPreview(true);
         await elementUpdated(element);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         expect(canvas.hasAttribute('editing')).to.equal(false);
         expect(canvas.getAttribute('base-url')).to.equal('/flows');
         expect(canvas.profile).to.equal('editor_test');
@@ -305,7 +307,7 @@ describe('flows-interface-editor', () => {
     });
 
     it('keeps an inserted html block visible in the live test frame', async () => {
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/flow-1/interface'), {
+        fetchMock.respondJson('GET', (url: any) => url.includes('/flows/api/v1/flow-1/interface'), {
             flow_id: 'flow-1',
             branch_id: 'default',
             document: INTERFACE,
@@ -315,47 +317,47 @@ describe('flows-interface-editor', () => {
             flow_identity: { title: 'Flow', image_url: null },
         });
         const element = await mountEditor();
-        paletteItem(element, 'html').click();
+        paletteItem(element, 'html')!.click();
         await elementUpdated(element);
-        await waitUntil(() => blockElement(element.renderRoot.querySelector('platform-flow-ui'), 'html') !== null, 'html block did not insert');
+        await waitUntil(() => blockElement(q(element.renderRoot, 'platform-flow-ui'), 'html') !== null, 'html block did not insert');
         await element.setCanvasPreview(true);
         await elementUpdated(element);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         expect(canvas.hasAttribute('editing')).to.equal(false);
         await waitUntil(() => canvas._status === 'ready', 'test chat did not open the interface');
         await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block disappeared in test');
-        const host = blockElement(canvas, 'html').querySelector('flow-ui-html-block');
-        await waitUntil(() => host.getBoundingClientRect().height > 80, 'html block collapsed in test', { timeout: 4000 });
-        const frame = element.renderRoot.querySelector('.frame').getBoundingClientRect();
-        const box = host.getBoundingClientRect();
+        const host = q(blockElement(canvas, 'html')!, 'flow-ui-html-block');
+        await waitUntil(() => host!.getBoundingClientRect().height > 80, 'html block collapsed in test', { timeout: 4000 });
+        const frame = qs(element.renderRoot, '.frame').getBoundingClientRect();
+        const box = host!.getBoundingClientRect();
         expect(box.top).to.be.at.least(frame.top - 2);
         expect(box.bottom).to.be.at.most(frame.bottom + 2);
-        expect(canvas.store.document.pages[0].blocks.some((block) => block.type === 'html')).to.equal(true);
+        expect(canvas.store.document.pages[0].blocks.some((block: any) => block.type === 'html')).to.equal(true);
     });
 
     it('grows the white frame with the form instead of clipping the last button', async () => {
-        const element = await mountEditor(FORM);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const element = await mountEditor(FORM!);
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'send') !== null, 'form did not render');
-        const frame = element.renderRoot.querySelector('.frame');
-        const last = blockElement(canvas, 'send').getBoundingClientRect();
-        const card = frame.getBoundingClientRect();
+        const frame = q(element.renderRoot, '.frame');
+        const last = blockElement(canvas, 'send')!.getBoundingClientRect();
+        const card = frame!.getBoundingClientRect();
         expect(last.bottom).to.be.at.most(card.bottom + 2);
         expect(card.height).to.be.above(480);
-        const video = blockElement(canvas, 'clip').querySelector('video');
+        const video = qs(blockElement(canvas, 'clip')!, 'video');
         expect(video.getBoundingClientRect().width).to.be.above(520);
     });
 
     it('aligns the selected block from the selection chrome', async () => {
         const element = await mountEditor();
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
-        blockElement(canvas, 'title').click();
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
+        (blockElement(canvas, 'title') as TestEl)!.click();
         await elementUpdated(element);
-        await waitUntil(() => element.renderRoot.querySelector('.selection .align') !== null, 'selection chrome did not render');
-        element.renderRoot.querySelector('.selection .align [data-align="center"]').click();
-        await waitUntil(() => editorState().history.present.pages[0].blocks[0].align === 'center', 'align did not commit');
-        await waitUntil(() => blockElement(canvas, 'title')?.dataset.align === 'center', 'canvas did not apply align');
-        expect(element.renderRoot.querySelector('.resize-e')).to.not.equal(null);
+        await waitUntil(() => q(element.renderRoot, '.selection .align') !== null, 'selection chrome did not render');
+        qs(element.renderRoot, '.selection .align [data-align="center"]').click();
+        await waitUntil(() => editorState().history.present.pages[0]!.blocks[0]!.align === 'center', 'align did not commit');
+        await waitUntil(() => (blockElement(canvas, 'title') as TestEl)?.dataset.align === 'center', 'canvas did not apply align');
+        expect(q(element.renderRoot, '.resize-e')).to.not.equal(null);
     });
 
     it('selects a narrow centered button by clicking the visible control', async () => {
@@ -374,29 +376,29 @@ describe('flows-interface-editor', () => {
                 ],
             }],
         };
-        const element = await mountEditor(document);
-        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        const element = await mountEditor(document!);
+        const canvas = qs(element.renderRoot, 'platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'next') !== null, 'button did not render');
         const block = blockElement(canvas, 'next');
-        const visible = block.querySelector('.fu-button').getBoundingClientRect();
-        const hit = block.getRootNode().elementFromPoint(visible.left + visible.width / 2, visible.top + visible.height / 2);
+        const visible = qs(block!, '.fu-button').getBoundingClientRect();
+        const hit = (block!.getRootNode() as Document).elementFromPoint(visible.left + visible.width / 2, visible.top + visible.height / 2);
         expect(hit).to.equal(block);
-        hit.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+        hit!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
         await waitUntil(() => editorState().selectedBlockId === 'next', 'button click did not select the block');
-        await waitUntil(() => element.renderRoot.querySelector('.selection') !== null, 'selection chrome did not render');
-        const frame = element.renderRoot.querySelector('.selection').getBoundingClientRect();
+        await waitUntil(() => q(element.renderRoot, '.selection') !== null, 'selection chrome did not render');
+        const frame = qs(element.renderRoot, '.selection').getBoundingClientRect();
         expect(frame.width).to.be.at.least(visible.width - 2);
     });
 
     it('does not render a second publish or status chip; contextual toolbar has no primary', async () => {
         const element = await mountEditor();
-        expect(element.renderRoot.querySelector('flows-interface-toolbar')).to.equal(null);
-        expect(element.renderRoot.querySelector('.status')).to.equal(null);
-        expect(element.renderRoot.querySelector('.problems')).to.equal(null);
+        expect(q(element.renderRoot, 'flows-interface-toolbar')).to.equal(null);
+        expect(q(element.renderRoot, '.status')).to.equal(null);
+        expect(q(element.renderRoot, '.problems')).to.equal(null);
 
-        const toolbar = await fixture(html`<flows-interface-toolbar></flows-interface-toolbar>`);
+        const toolbar = await fixture<TestEl>(html`<flows-interface-toolbar></flows-interface-toolbar>`);
         await elementUpdated(toolbar);
-        expect(toolbar.renderRoot.querySelector('.status')).to.equal(null);
+        expect(q(toolbar.renderRoot, '.status')).to.equal(null);
         expect(toolbar.renderRoot.textContent).to.not.contain(flowsEn.interface_editor.publish);
         expect(toolbar.renderRoot.textContent).to.contain(flowsEn.interface_editor.preview);
     });

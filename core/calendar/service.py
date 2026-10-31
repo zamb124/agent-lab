@@ -487,7 +487,7 @@ class CalDavClient:
             [
                 "BEGIN:VCALENDAR",
                 "VERSION:2.0",
-                "PRODID:-//Humanitec//Calendar//EN",
+                "PRODID:-//Linnex//Calendar//EN",
                 "BEGIN:VEVENT",
                 f"UID:{uid}",
                 f"SUMMARY:{event.title}",

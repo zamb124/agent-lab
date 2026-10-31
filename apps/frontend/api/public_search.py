@@ -1,4 +1,4 @@
-"""Публичный session endpoint для Humanitec Search."""
+"""Публичный session endpoint для Linnex Search."""
 
 from __future__ import annotations
 

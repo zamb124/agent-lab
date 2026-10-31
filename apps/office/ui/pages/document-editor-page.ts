@@ -57,7 +57,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 min-width: 0;
                 min-height: 0;
                 background: var(--documents-stage-ambient);
-                animation: stage-enter 220ms var(--motion-ease-out, ease-out) both;
+                animation: stage-enter 220ms var(--motion-ease-standard) both;
             }
             @keyframes stage-enter {
                 from { opacity: 0; transform: translateY(6px); }

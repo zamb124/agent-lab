@@ -8,6 +8,7 @@ import '@platform/lib/flow-ui/shell/drawer.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
@@ -172,7 +173,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
         return { Authorization: `Bearer ${token}` };
     };
 
-    _tryAgent(card: Record<string, any>) {
+    _tryAgent(card: Record<string, unknown>) {
         if (typeof card.embed_id !== 'string' || card.embed_id === '') {
             throw new Error('landing_digital_workers: card.embed_id required');
         }
@@ -254,7 +255,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                     <p class="marketing-digital-workers-disclaimer">${this.t('digital_workers.disclaimer')}</p>
 
                     ${busy && items.length === 0
-                        ? html`<div class="marketing-digital-workers-state"><platform-spinner></platform-spinner></div>`
+                        ? html`<platform-empty-state loading></platform-empty-state>`
                         : ''}
                     ${err !== null && items.length === 0
                         ? html`<div class="marketing-digital-workers-state is-error">${this.t('digital_workers.load_error')}</div>`

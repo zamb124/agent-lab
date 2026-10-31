@@ -5,6 +5,7 @@
 import { fixture, html, expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-span-attributes-viewer.js';
+import { shadow, type TestEl } from '../helpers/dom.js';
 
 describe('platform-span-attributes-viewer', () => {
     beforeEach(() => {
@@ -32,11 +33,11 @@ describe('platform-span-attributes-viewer', () => {
             },
         };
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-span-attributes-viewer .span=${span}></platform-span-attributes-viewer>
         `);
 
-        const text = el.shadowRoot.textContent;
+        const text = shadow(el).textContent;
         expect(text).to.include('crm');
         expect(text).to.include('qwen/qwen3.5');
         expect(text).to.include('Daily summary: chunk');
@@ -57,11 +58,11 @@ describe('platform-span-attributes-viewer', () => {
             },
         };
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-span-attributes-viewer .span=${span}></platform-span-attributes-viewer>
         `);
 
-        const text = el.shadowRoot.textContent;
+        const text = shadow(el).textContent;
         expect(text).to.include('Краткая сводка');
         expect(text).to.include('"content": {');
         expect(text).to.not.include('Unterminated string');

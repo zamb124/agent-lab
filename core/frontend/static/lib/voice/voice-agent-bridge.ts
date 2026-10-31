@@ -78,9 +78,9 @@ export interface VoiceAgentBridgeOptions {
     /** origin + префикс flows (`https://host/flows`), без завершающего "/" */
     a2aBaseUrl: string;
     /** id flow; альтернатива `embedId` */
-    flowId?: string;
+    flowId?: string | undefined;
     /** id embed; альтернатива `flowId` */
-    embedId?: string;
+    embedId?: string | undefined;
     branchId?: string | null;
     getHeaders?: () => Promise<Record<string, string>>;
     credentials?: RequestCredentials;

@@ -1,5 +1,5 @@
 /**
- * HumanitecModelsApp — корневой компонент реестра системных моделей Humanitec.
+ * LinnexModelsApp — корневой компонент реестра системных моделей Linnex.
  *
  * Полностью event-driven canon: домен описан фабриками в
  * `events/resources/*.resource.js` и регистрируется через `static factories`.
@@ -13,27 +13,27 @@ import { html, css, type TemplateResult } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
-import { humanitecModelsResource, humanitecModelRetryOp } from '../events/resources/models.resource.js';
+import { linnexModelsResource, linnexModelRetryOp } from '../events/resources/models.resource.js';
 import { buildLitserveAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/litserve-sidebar.js';
 import '../pages/litserve-models-page.js';
 
-const HUMANITEC_MODELS_ROUTES = [
+const LINNEX_MODELS_ROUTES = [
     { key: 'models', path: '', titleKey: 'routes.models' },
     { key: 'platform_services', path: 'services', parent: 'models', titleKey: 'routes.platform_services' },
 ];
 
 /** Mobile shell: реестр моделей + профиль/переключатель сервисов (как в RAG/Sync). */
-const HUMANITEC_MODELS_BOTTOM_NAV_ITEMS = [
+const LINNEX_MODELS_BOTTOM_NAV_ITEMS = [
     { key: 'models', routeKey: 'models', icon: 'database', labelKey: 'bottom_nav.models' },
     { key: 'profile', sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
-export class HumanitecModelsApp extends PlatformApp {
+export class LinnexModelsApp extends PlatformApp {
     static defaultI18nNamespace = 'litserve';
-    static bottomNavItems = HUMANITEC_MODELS_BOTTOM_NAV_ITEMS;
+    static bottomNavItems = LINNEX_MODELS_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
     static platformAssistant = {
         branchId: 'litserve',
@@ -42,8 +42,8 @@ export class HumanitecModelsApp extends PlatformApp {
     };
 
     static factories = [
-        humanitecModelsResource,
-        humanitecModelRetryOp,
+        linnexModelsResource,
+        linnexModelRetryOp,
     ];
 
     static override styles = [
@@ -89,7 +89,7 @@ export class HumanitecModelsApp extends PlatformApp {
 
     override getServiceEffects() {
         return [
-            createRouterEffect({ baseUrl: '/litserve', routes: HUMANITEC_MODELS_ROUTES }),
+            createRouterEffect({ baseUrl: '/litserve', routes: LINNEX_MODELS_ROUTES }),
         ];
     }
 
@@ -109,10 +109,10 @@ export class HumanitecModelsApp extends PlatformApp {
                 content = html`<platform-services-page></platform-services-page>`;
                 break;
             case 'models':
-                content = html`<humanitec-models-page></humanitec-models-page>`;
+                content = html`<linnex-models-page></linnex-models-page>`;
                 break;
             default:
-                content = html`<humanitec-models-page></humanitec-models-page>`;
+                content = html`<linnex-models-page></linnex-models-page>`;
                 break;
         }
         const useIslandFullBleed = _key === 'models';
@@ -128,4 +128,4 @@ export class HumanitecModelsApp extends PlatformApp {
     }
 }
 
-customElements.define('litserve-app', HumanitecModelsApp);
+customElements.define('litserve-app', LinnexModelsApp);

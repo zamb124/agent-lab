@@ -210,9 +210,9 @@ export class SyncCallOverlayModal extends PlatformModal {
             :host {
                 position: fixed;
                 inset: 0;
-                z-index: var(--z-modal, 9999);
-                background: var(--bg-deep, #0a0a0f);
-                color: #fff;
+                z-index: var(--z-modal);
+                background: var(--sync-call-bg);
+                color: var(--sync-call-text);
                 display: flex;
                 flex-direction: column;
                 box-sizing: border-box;
@@ -235,7 +235,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 height: 100%;
                 max-width: none;
                 min-height: 0;
-                z-index: var(--platform-modal-layer-z, var(--z-modal, 9999)) !important;
+                z-index: var(--platform-modal-layer-z, var(--z-modal)) !important;
                 box-sizing: border-box;
                 padding-top: max(var(--space-2), var(--platform-safe-top));
                 padding-right: max(var(--space-2), var(--platform-safe-right));
@@ -265,7 +265,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 align-items: center;
                 justify-content: space-between;
                 padding: var(--space-4) var(--space-6) var(--space-2);
-                color: rgba(255, 255, 255, 0.65);
+                color: var(--sync-call-text-subtle);
                 font-size: var(--text-sm);
                 pointer-events: auto;
             }
@@ -290,7 +290,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background: var(--success, #22c55e);
+                background: var(--success);
                 display: inline-block;
                 margin-right: 6px;
             }
@@ -298,7 +298,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                color: var(--color-error, #ef4444);
+                color: var(--error);
                 font-size: var(--text-xs);
                 font-weight: 800;
                 letter-spacing: 0.08em;
@@ -308,7 +308,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 width: 10px;
                 height: 10px;
                 border-radius: 50%;
-                background: var(--color-error, #ef4444);
+                background: var(--error);
                 animation: rec-pulse 1.2s ease-in-out infinite;
             }
             @keyframes rec-pulse {
@@ -351,8 +351,8 @@ export class SyncCallOverlayModal extends PlatformModal {
 
             .tile {
                 position: relative;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: var(--radius-2xl, 18px);
+                background: var(--sync-call-surface);
+                border-radius: var(--radius-2xl);
                 overflow: hidden;
                 aspect-ratio: 16 / 9;
                 isolation: isolate;
@@ -360,7 +360,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 align-items: center;
                 justify-content: center;
             }
-            .tile.screen { background: #000; }
+            .tile.screen { background: var(--sync-call-tile); }
             .tile video {
                 width: 100%;
                 height: 100%;
@@ -386,14 +386,14 @@ export class SyncCallOverlayModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                color: #fff;
+                color: var(--sync-call-text);
                 font-weight: 700;
-                font-size: var(--text-2xl, 28px);
+                font-size: var(--text-2xl);
             }
             .avatar.pastel-initials {
                 --sync-avatar-h: 0;
                 background: hsl(var(--sync-avatar-h), 34%, 38%);
-                color: #fff;
+                color: var(--sync-call-text);
             }
             .name {
                 position: absolute;
@@ -403,30 +403,30 @@ export class SyncCallOverlayModal extends PlatformModal {
                 align-items: center;
                 gap: 6px;
                 padding: 4px 10px;
-                background: rgba(0, 0, 0, 0.55);
-                color: #fff;
+                background: color-mix(in srgb, var(--sync-call-tile) 55%, transparent);
+                color: var(--sync-call-text);
                 font-size: var(--text-xs);
                 border-radius: 999px;
                 pointer-events: auto;
             }
-            .crown { display: inline-flex; color: #fbbf24; }
+            .crown { display: inline-flex; color: var(--warning); }
             .tile-btn {
                 position: absolute;
                 width: 34px;
                 height: 34px;
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
                 border: none;
-                background: rgba(0, 0, 0, 0.55);
-                color: #fff;
+                background: color-mix(in srgb, var(--sync-call-tile) 55%, transparent);
+                color: var(--sync-call-text);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 z-index: 50;
                 pointer-events: auto;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
-            .tile-btn:hover { background: rgba(0, 0, 0, 0.78); }
+            .tile-btn:hover { background: color-mix(in srgb, var(--sync-call-tile) 78%, transparent); }
             .tile-btn.active { background: var(--accent); }
             .tile-fs { top: var(--space-2); right: var(--space-2); }
             .tile-actions { top: var(--space-2); left: var(--space-2); }
@@ -436,9 +436,9 @@ export class SyncCallOverlayModal extends PlatformModal {
                 left: var(--space-2);
                 min-width: 220px;
                 padding: var(--space-1);
-                background: rgba(20, 20, 26, 0.96);
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                border-radius: var(--radius-lg, 12px);
+                background: var(--sync-call-panel-strong);
+                border: 1px solid var(--sync-call-border-strong);
+                border-radius: var(--radius-lg);
                 z-index: 60;
             }
             .tile-action-menu button {
@@ -446,23 +446,23 @@ export class SyncCallOverlayModal extends PlatformModal {
                 padding: 8px 10px;
                 background: transparent;
                 border: none;
-                border-radius: var(--radius-md, 8px);
-                color: #fff;
+                border-radius: var(--radius-md);
+                color: var(--sync-call-text);
                 text-align: left;
                 cursor: pointer;
                 font-size: var(--text-sm);
             }
-            .tile-action-menu button:hover { background: rgba(255, 255, 255, 0.12); }
+            .tile-action-menu button:hover { background: var(--sync-call-surface-strong); }
 
             .chat-panel {
                 position: absolute;
                 top: var(--space-4);
                 right: var(--space-4);
                 bottom: var(--space-4);
-                width: min(360px, calc(100vw - var(--space-8)));
-                background: rgba(20, 20, 26, 0.92);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: var(--radius-2xl, 16px);
+                width: min(360px, calc(100vw - var(--space-8);
+                background: var(--sync-call-panel-strong);
+                border: 1px solid var(--sync-call-border);
+                border-radius: var(--radius-2xl);
                 display: flex;
                 flex-direction: column;
                 z-index: 130;
@@ -473,15 +473,15 @@ export class SyncCallOverlayModal extends PlatformModal {
                 justify-content: space-between;
                 gap: var(--space-2);
                 padding: var(--space-3);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                color: #fff;
+                border-bottom: 1px solid var(--sync-call-border);
+                color: var(--sync-call-text);
                 font-weight: var(--font-semibold);
             }
             .chat-close {
                 width: 30px; height: 30px;
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                background: rgba(255, 255, 255, 0.06);
-                color: #fff;
+                border: 1px solid var(--sync-call-border-strong);
+                background: var(--sync-call-surface);
+                color: var(--sync-call-text);
                 border-radius: 50%;
                 cursor: pointer;
                 display: inline-flex;
@@ -499,20 +499,20 @@ export class SyncCallOverlayModal extends PlatformModal {
             }
             .chat-empty {
                 text-align: center;
-                color: rgba(255, 255, 255, 0.55);
+                color: var(--sync-call-text-subtle);
                 font-size: var(--text-xs);
                 padding: var(--space-3);
             }
             .chat-item {
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: var(--radius-md, 10px);
+                background: var(--sync-call-surface);
+                border: 1px solid var(--sync-call-border);
+                border-radius: var(--radius-md);
                 padding: 8px 10px;
-                color: #fff;
+                color: var(--sync-call-text);
             }
             .chat-item.self {
-                background: rgba(99, 102, 241, 0.22);
-                border-color: rgba(99, 102, 241, 0.42);
+                background: color-mix(in srgb, var(--accent) 22%, transparent);
+                border-color: color-mix(in srgb, var(--accent) 42%, transparent);
             }
             .chat-meta {
                 display: flex;
@@ -520,18 +520,18 @@ export class SyncCallOverlayModal extends PlatformModal {
                 gap: 6px;
                 margin-bottom: 4px;
                 font-size: 11px;
-                color: rgba(255, 255, 255, 0.6);
+                color: var(--sync-call-text-subtle);
             }
             .chat-text {
                 margin: 0;
                 white-space: pre-wrap;
                 word-break: break-word;
-                color: rgba(255, 255, 255, 0.92);
+                color: var(--sync-call-text);
                 font-size: var(--text-sm);
                 line-height: 1.4;
             }
             .chat-composer {
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                border-top: 1px solid var(--sync-call-border);
                 padding: var(--space-2) var(--space-3);
                 display: flex;
                 gap: var(--space-2);
@@ -542,10 +542,10 @@ export class SyncCallOverlayModal extends PlatformModal {
                 min-height: 36px;
                 max-height: 120px;
                 padding: 8px 10px;
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                background: rgba(255, 255, 255, 0.06);
-                color: #fff;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--sync-call-border-strong);
+                background: var(--sync-call-surface);
+                color: var(--sync-call-text);
                 font: inherit;
                 font-size: var(--text-sm);
                 resize: none;
@@ -555,10 +555,10 @@ export class SyncCallOverlayModal extends PlatformModal {
             .chat-send {
                 height: 36px;
                 padding: 0 12px;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
                 border: 1px solid var(--accent);
                 background: var(--accent);
-                color: #fff;
+                color: var(--sync-call-text);
                 cursor: pointer;
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
@@ -596,24 +596,24 @@ export class SyncCallOverlayModal extends PlatformModal {
                 flex-shrink: 0;
                 border-radius: 50%;
                 border: none;
-                background: rgba(255, 255, 255, 0.12);
-                color: #fff;
+                background: var(--sync-call-surface-strong);
+                color: var(--sync-call-text);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                transition: background var(--duration-fast), transform var(--duration-fast);
+                transition: background var(--motion-duration-micro), transform var(--motion-duration-micro);
             }
-            .ctrl:hover { background: rgba(255, 255, 255, 0.2); }
-            .ctrl.active { background: rgba(255, 255, 255, 0.92); color: #000; }
+            .ctrl:hover { background: var(--sync-call-surface-strong); }
+            .ctrl.active { background: var(--sync-call-surface-strong); color: var(--sync-call-tile); }
             .ctrl[disabled] { opacity: 0.35; cursor: not-allowed; }
             .ctrl.hangup {
-                background: var(--color-error, #ef4444);
+                background: var(--error);
             }
-            .ctrl.hangup:hover { background: #dc2626; }
+            .ctrl.hangup:hover { background: var(--error); }
             .ctrl.recording-active {
-                background: var(--color-error, #ef4444);
-                box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+                background: var(--error);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 35%, transparent);
             }
             .ctrl.chat-active { background: var(--accent); }
             .ctrl.login-in-call {
@@ -629,10 +629,10 @@ export class SyncCallOverlayModal extends PlatformModal {
                 bottom: calc(100% + var(--space-2));
                 min-width: 240px;
                 padding: var(--space-2);
-                background: rgba(20, 20, 26, 0.96);
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                border-radius: var(--radius-lg, 12px);
-                color: #fff;
+                background: var(--sync-call-panel-strong);
+                border: 1px solid var(--sync-call-border-strong);
+                border-radius: var(--radius-lg);
+                color: var(--sync-call-text);
                 z-index: 100;
             }
             .menu.left { left: 0; }
@@ -640,16 +640,16 @@ export class SyncCallOverlayModal extends PlatformModal {
             .menu label {
                 display: block;
                 font-size: var(--text-xs);
-                color: rgba(255, 255, 255, 0.65);
+                color: var(--sync-call-text-subtle);
                 margin: var(--space-2) 0 4px;
             }
             .menu select {
                 width: 100%;
                 padding: 8px 10px;
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                background: rgba(255, 255, 255, 0.08);
-                color: #fff;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--sync-call-border-strong);
+                background: var(--sync-call-surface);
+                color: var(--sync-call-text);
                 font-size: var(--text-sm);
             }
             .menu-toggle-row {
@@ -659,7 +659,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 gap: var(--space-3);
                 padding: 8px 4px;
                 font-size: var(--text-sm);
-                color: rgba(255, 255, 255, 0.95);
+                color: var(--sync-call-text);
             }
             .menu-toggle-label {
                 flex: 1;
@@ -669,11 +669,11 @@ export class SyncCallOverlayModal extends PlatformModal {
             .menu-toggle-row platform-switch {
                 flex-shrink: 0;
             }
-            .menu-toggle-row + .menu-toggle-row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+            .menu-toggle-row + .menu-toggle-row { border-top: 1px solid var(--sync-call-border); }
             .menu-section-title {
                 padding: 6px 4px;
                 font-size: var(--text-xs);
-                color: rgba(255, 255, 255, 0.55);
+                color: var(--sync-call-text-subtle);
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
             }
@@ -682,10 +682,10 @@ export class SyncCallOverlayModal extends PlatformModal {
                 padding: var(--space-2) var(--space-3);
                 font-size: var(--text-xs);
                 line-height: 1.45;
-                color: #fde68a;
-                background: rgba(234, 179, 8, 0.12);
-                border: 1px solid rgba(234, 179, 8, 0.35);
-                border-radius: var(--radius-md, 10px);
+                color: var(--warning);
+                background: color-mix(in srgb, var(--warning) 12%, transparent);
+                border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+                border-radius: var(--radius-md);
             }
 
             /* platform-field в оверлее всегда на тёмном фоне; без локальных токенов текст enum — цвет light-theme. */
@@ -693,29 +693,29 @@ export class SyncCallOverlayModal extends PlatformModal {
             .menu-devices-inline platform-field {
                 display: block;
                 margin-bottom: var(--space-2);
-                --field-pill-bg: rgba(255, 255, 255, 0.08);
-                --field-pill-border: rgba(255, 255, 255, 0.18);
-                --field-pill-input-color: rgba(255, 255, 255, 0.95);
+                --field-pill-bg: color-mix(in srgb, var(--sync-call-text) 8%, transparent);
+                --field-pill-border: var(--sync-call-border-strong);
+                --field-pill-input-color: var(--sync-call-text);
                 --field-pill-input-size: var(--text-sm);
                 --field-pill-input-weight: var(--font-normal);
                 --field-pill-padding-y: 8px;
                 --field-pill-padding-x: 10px;
-                --field-pill-radius: var(--radius-md, 8px);
+                --field-pill-radius: var(--radius-md);
                 --field-pill-number-spin-height: 36px;
-                --field-pill-muted-color: rgba(255, 255, 255, 0.45);
-                --text-primary: rgba(255, 255, 255, 0.95);
-                --text-secondary: rgba(255, 255, 255, 0.65);
-                --text-tertiary: rgba(255, 255, 255, 0.55);
-                --glass-solid-medium: rgba(28, 28, 36, 0.98);
-                --glass-solid-subtle: rgba(255, 255, 255, 0.1);
-                --glass-border-subtle: rgba(255, 255, 255, 0.18);
-                --accent-subtle: rgba(99, 102, 241, 0.28);
+                --field-pill-muted-color: var(--sync-call-text-subtle);
+                --text-primary: color-mix(in srgb, var(--sync-call-text) 95%, transparent);
+                --text-secondary: color-mix(in srgb, var(--sync-call-text) 65%, transparent);
+                --text-tertiary: color-mix(in srgb, var(--sync-call-text) 55%, transparent);
+                --glass-solid-medium: var(--sync-call-panel-strong);
+                --glass-solid-subtle: color-mix(in srgb, var(--sync-call-text) 10%, transparent);
+                --glass-border-subtle: var(--sync-call-border-strong);
+                --accent-subtle: color-mix(in srgb, var(--accent) 28%, transparent);
             }
 
             .error-bar {
                 padding: var(--space-2) var(--space-6);
-                color: #fca5a5;
-                background: rgba(127, 29, 29, 0.32);
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 32%, transparent);
                 font-size: var(--text-xs);
                 text-align: center;
             }
@@ -727,7 +727,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 align-items: center;
                 justify-content: center;
                 gap: var(--space-3);
-                color: rgba(255, 255, 255, 0.7);
+                color: var(--sync-call-text-subtle);
             }
 
             .local-share-pip {
@@ -741,17 +741,17 @@ export class SyncCallOverlayModal extends PlatformModal {
                 gap: var(--space-2);
                 width: min(200px, 38vw);
                 padding: var(--space-2);
-                border-radius: var(--radius-lg, 12px);
-                background: rgba(12, 12, 18, 0.92);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+                border-radius: var(--radius-lg);
+                background: var(--sync-call-panel);
+                border: 1px solid var(--sync-call-border-strong);
+                box-shadow: 0 8px 32px color-mix(in srgb, var(--sync-call-tile) 45%, transparent);
                 pointer-events: auto;
             }
             .local-share-pip video {
                 width: 100%;
                 aspect-ratio: 16 / 9;
-                border-radius: var(--radius-md, 8px);
-                background: #111;
+                border-radius: var(--radius-md);
+                background: var(--sync-call-tile-alt);
                 object-fit: cover;
                 display: block;
             }
@@ -765,17 +765,17 @@ export class SyncCallOverlayModal extends PlatformModal {
                 min-width: 36px;
                 height: 36px;
                 padding: 0 8px;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
                 border: none;
-                background: rgba(255, 255, 255, 0.14);
-                color: #fff;
+                background: var(--sync-call-surface-strong);
+                color: var(--sync-call-text);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
             .local-share-pip-actions button:hover {
-                background: rgba(255, 255, 255, 0.24);
+                background: var(--sync-call-surface-strong);
             }
             .local-share-pip-restore {
                 position: absolute;
@@ -783,15 +783,15 @@ export class SyncCallOverlayModal extends PlatformModal {
                 right: var(--space-4);
                 z-index: 119;
                 padding: 8px 12px;
-                border-radius: var(--radius-md, 999px);
-                border: 1px solid rgba(255, 255, 255, 0.22);
-                background: rgba(12, 12, 18, 0.88);
-                color: rgba(255, 255, 255, 0.92);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--sync-call-border-strong);
+                background: var(--sync-call-panel);
+                color: var(--sync-call-text);
                 font-size: var(--text-xs);
                 cursor: pointer;
             }
             .local-share-pip-restore:hover {
-                background: rgba(30, 30, 40, 0.95);
+                background: var(--sync-call-panel-strong);
             }
             .local-share-pip--controls-only {
                 width: auto;
@@ -837,23 +837,23 @@ export class SyncCallOverlayModal extends PlatformModal {
                 margin: 0 0 var(--space-2);
                 padding: 10px 12px;
                 border: none;
-                border-radius: var(--radius-md, 10px);
-                background: rgba(255, 255, 255, 0.08);
-                color: #fff;
+                border-radius: var(--radius-md);
+                background: var(--sync-call-surface);
+                color: var(--sync-call-text);
                 font: inherit;
                 font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
             }
             .menu-row-btn:hover {
-                background: rgba(255, 255, 255, 0.14);
+                background: var(--sync-call-surface-strong);
             }
             .menu-row-btn[disabled] {
                 opacity: 0.4;
                 cursor: not-allowed;
             }
             .menu-row-btn.recording-active {
-                background: rgba(239, 68, 68, 0.35);
+                background: color-mix(in srgb, var(--error) 35%, transparent);
             }
             .menu-row-btn span {
                 flex: 1;
@@ -862,7 +862,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             .menu-devices-inline {
                 margin: 0 0 var(--space-3);
                 padding: 0 4px var(--space-2);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom: 1px solid var(--sync-call-border);
             }
         `,
     ];
@@ -1124,9 +1124,11 @@ export class SyncCallOverlayModal extends PlatformModal {
             const room = new lk.Room({
                 adaptiveStream: true,
                 dynacast: true,
-                publishDefaults: lk.ScreenSharePresets
-                    ? { screenShareEncoding: isPlainRecord(lk.ScreenSharePresets.h1080fps30) ? lk.ScreenSharePresets.h1080fps30.encoding : undefined }
-                    : undefined,
+                ...(lk.ScreenSharePresets
+                    && isPlainRecord(lk.ScreenSharePresets.h1080fps30)
+                    && lk.ScreenSharePresets.h1080fps30.encoding !== undefined
+                    ? { publishDefaults: { screenShareEncoding: lk.ScreenSharePresets.h1080fps30.encoding } }
+                    : {}),
             });
             this._room = room;
             const ev = lk.RoomEvent;
@@ -1424,8 +1426,8 @@ export class SyncCallOverlayModal extends PlatformModal {
         pipWin.addEventListener('pagehide', this._onPipDocPageHide);
         const doc = pipWin.document;
         doc.body.style.margin = '0';
-        doc.body.style.background = '#0c0c12';
-        doc.body.style.color = '#fff';
+        doc.body.style.background = 'var(--sync-call-bg)';
+        doc.body.style.color = 'var(--sync-call-text)';
         doc.body.style.padding = '8px';
         const sansStack = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim();
         if (!sansStack) {
@@ -1444,7 +1446,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         video.style.width = '100%';
         video.style.aspectRatio = '16 / 9';
         video.style.borderRadius = '8px';
-        video.style.background = '#111';
+        video.style.background = 'var(--sync-call-tile-alt)';
         video.style.objectFit = 'cover';
         const actions = doc.createElement('div');
         actions.style.display = 'flex';
@@ -1454,14 +1456,14 @@ export class SyncCallOverlayModal extends PlatformModal {
         const btnStop = doc.createElement('button');
         btnStop.type = 'button';
         btnStop.textContent = this.t('call_overlay.share_pip_doc_stop');
-        btnStop.style.cssText = 'padding:6px 10px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:#fff;cursor:pointer;font-size:12px;';
+        btnStop.style.cssText = 'padding:6px 10px;border-radius:8px;border:none;background:var(--sync-call-border);color:var(--sync-call-text);cursor:pointer;font-size:12px;';
         btnStop.addEventListener('click', () => {
             void this._toggleScreenShare();
         });
         const btnHide = doc.createElement('button');
         btnHide.type = 'button';
         btnHide.textContent = this.t('call_overlay.share_pip_doc_hide_panel');
-        btnHide.style.cssText = 'padding:6px 10px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:#fff;cursor:pointer;font-size:12px;';
+        btnHide.style.cssText = 'padding:6px 10px;border-radius:8px;border:none;background:var(--sync-call-border);color:var(--sync-call-text);cursor:pointer;font-size:12px;';
         btnHide.addEventListener('click', () => {
             this._dismissSharePip();
         });
@@ -2177,7 +2179,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                     ${menuOpen ? html`
                         <div class="tile-action-menu" @click=${(e: Event) => e.stopPropagation()}>
                             ${isAdmin ? html`
-                                <div style="padding:8px 10px;color:rgba(255,255,255,0.55);font-size:var(--text-xs);">
+                                <div style="padding:8px 10px;color:var(--sync-call-text-subtle);font-size:var(--text-xs);">
                                     ${this.t('call_overlay.participant_action_unavailable')}
                                 </div>
                             ` : html`
@@ -2458,7 +2460,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 <div class="chat-list" @scroll=${this._onChatScroll}>
                     ${items.length === 0 ? html`
                         <platform-empty-state icon="chat" title=${this.t('call_overlay.no_messages_yet')}></platform-empty-state>
-                    ` : items.map((m: Record<string, any>) => {
+                    ` : items.map((m: Record<string, unknown>) => {
                         const sender = m.sender !== null && typeof m.sender === 'object' ? m.sender : {};
                         const senderName = typeof sender.display_name === 'string' && sender.display_name !== ''
                             ? sender.display_name
@@ -2469,8 +2471,8 @@ export class SyncCallOverlayModal extends PlatformModal {
                             throw new Error('sync call: message contents must be an array');
                         }
                         const text = (Array.isArray(rawContents) ? rawContents : [])
-                            .filter((c: Record<string, any>) => c.type === 'text/plain' && c.data && typeof c.data.body === 'string')
-                            .map((c: Record<string, any>) => c.data.body)
+                            .filter((c: Record<string, unknown>) => c.type === 'text/plain' && c.data && typeof c.data.body === 'string')
+                            .map((c: Record<string, unknown>) => c.data.body)
                             .join('\n');
                         if (text === '') return nothing;
                         const time = typeof m.sent_at === 'string'
@@ -2579,7 +2581,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 ${this._renderHeader()}
                 <div class="center-state">
                     <platform-icon name="alert-circle" size="48"></platform-icon>
-                    <div style="font-weight:600;color:#fca5a5;">${this.t('call_overlay.call_error_title')}</div>
+                    <div style="font-weight:600;color:var(--error);">${this.t('call_overlay.call_error_title')}</div>
                     <div style="opacity:0.65;max-width:380px;text-align:center;">${this._error === null ? '' : this._error}</div>
                     <button class="ctrl hangup" @click=${this._onHangup} style="margin-top:var(--space-3);">
                         <platform-icon name="close" size="20"></platform-icon>

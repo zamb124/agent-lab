@@ -4,8 +4,10 @@
 import { describe, it, expect } from 'vitest';
 import { authzExplorerUiSlice } from '../../../../apps/frontend/ui/events/resources/authz-explorer.resource.js';
 
-function reduce(eventType, payload, state = authzExplorerUiSlice.slice.initial) {
-    return authzExplorerUiSlice.reducer(state, { type: eventType, payload });
+import { testEvent } from '../../helpers/bus-fixtures.js';
+
+function reduce(eventType: string | undefined, payload: unknown, state = authzExplorerUiSlice.slice.initial) {
+    return authzExplorerUiSlice.reducer(state, testEvent(eventType, payload));
 }
 
 describe('authzExplorerUiSlice reducer', () => {

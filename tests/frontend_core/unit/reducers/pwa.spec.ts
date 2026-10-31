@@ -3,7 +3,7 @@ import { pwaReducer, initialPwaState } from '@platform/lib/events/reducers/pwa.j
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { PWA_EVENTS } from '@platform/lib/events/effects/pwa.effect.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('pwaReducer', () => {
     it('initial', () => {

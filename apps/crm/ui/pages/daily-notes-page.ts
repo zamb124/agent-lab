@@ -289,7 +289,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 font-weight: 500;
                 padding: 0 var(--space-6);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
                 white-space: nowrap;
             }
             .cta-btn:hover { background: var(--crm-daily-notes-cta-hover); }
@@ -338,7 +338,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 box-sizing: border-box;
                 overflow: hidden;
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
             .note-card:hover {
                 background: var(--crm-list-card-bg-hover);
@@ -376,17 +376,17 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 font-size: 12px;
                 line-height: 15px;
                 border-radius: 14px;
-                color: rgba(34, 34, 34, 0.95);
+                color: color-mix(in srgb, var(--text-primary) 95%, transparent);
                 font-weight: 400;
                 border: none;
                 cursor: pointer;
-                transition: filter var(--duration-fast);
+                transition: filter var(--motion-duration-micro);
                 white-space: nowrap;
                 flex: 0 0 auto;
             }
-            .note-tag.primary { background: #99A6F9; }
-            .note-tag.secondary { background: #FAD17A; }
-            .note-tag.accent { background: #FF885C; }
+            .note-tag.primary { background: var(--accent); }
+            .note-tag.secondary { background: var(--accent-quaternary); }
+            .note-tag.accent { background: var(--accent-secondary); }
 
             .note-title {
                 font-size: 20px;
@@ -457,7 +457,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 display: block;
                 height: 100%;
                 background: var(--accent);
-                transition: width var(--duration-fast);
+                transition: width var(--motion-duration-micro);
             }
 
             .note-footer {
@@ -489,18 +489,18 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             .analyze-btn.has-draft {
                 border-color: var(--accent-secondary);
-                background: rgba(255, 136, 92, 0.18);
+                background: color-mix(in srgb, var(--accent-secondary) 18%, transparent);
                 color: var(--accent-secondary);
             }
             .analyze-btn.has-applied {
-                border-color: rgba(34, 197, 94, 0.5);
-                background: rgba(34, 197, 94, 0.12);
-                color: #16a34a;
+                border-color: color-mix(in srgb, var(--success) 50%, transparent);
+                background: color-mix(in srgb, var(--success) 12%, transparent);
+                color: var(--success);
             }
             .analyze-btn.needs-ai {
-                border-color: rgba(139, 92, 246, 0.5);
-                background: rgba(139, 92, 246, 0.14);
-                color: #8b5cf6;
+                border-color: color-mix(in srgb, var(--accent-tertiary) 50%, transparent);
+                background: color-mix(in srgb, var(--accent-tertiary) 14%, transparent);
+                color: var(--accent-tertiary);
                 animation: ai-pulse 2s ease-in-out infinite;
             }
             .analyze-btn.analysis-failed {
@@ -513,8 +513,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             .analyze-btn:disabled { opacity: 0.72; cursor: not-allowed; }
             @keyframes analyze-busy { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
             @keyframes ai-pulse {
-                0%,100% { box-shadow: 0 0 6px rgba(139,92,246,0.2); }
-                50% { box-shadow: 0 0 12px rgba(139,92,246,0.4); }
+                0%,100% { box-shadow: 0 0 6px color-mix(in srgb, var(--accent-tertiary) 20%, transparent); }
+                50% { box-shadow: 0 0 12px color-mix(in srgb, var(--accent-tertiary) 40%, transparent); }
             }
 
             .summary-panel {
@@ -687,7 +687,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 border: none;
                 background: var(--crm-summary-title-gradient);
                 color: var(--platform-btn-primary-text);
-                box-shadow: 0 2px 8px rgba(153, 166, 249, 0.35);
+                box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
             }
             .mobile-header-icon-btn.mobile-header-summary-btn:hover {
                 filter: brightness(1.06);
@@ -713,7 +713,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             .crm-mobile-date-picker-anchor {
                 position: fixed;
-                top: max(var(--space-2), var(--platform-safe-top, 0px));
+                top: max(var(--space-2), var(--platform-safe-top));
                 right: 100px;
                 width: 1px;
                 height: 1px;
@@ -749,7 +749,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 .summary-panel { display: none; }
                 .summary-overlay {
                     position: fixed; inset: 0;
-                    background: rgba(15, 23, 42, 0.55);
+                    background: color-mix(in srgb, var(--text-primary) 55%, transparent);
                     backdrop-filter: blur(6px);
                     z-index: 1300;
                     display: flex;
@@ -810,7 +810,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             .score-bar {
                 position: absolute; left: 0; top: 0; height: 100%;
-                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                background: linear-gradient(90deg, var(--info), var(--accent-tertiary));
                 opacity: 0.25;
             }
             .score-label { position: relative; z-index: 1; font-size: 10px; font-weight: 600; padding-left: 6px; }

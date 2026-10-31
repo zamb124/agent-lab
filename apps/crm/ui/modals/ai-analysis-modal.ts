@@ -455,13 +455,6 @@ export class CRMAiAnalysisModal extends PlatformModal {
             }
             .empty-state .hint { font-size: var(--text-sm); }
 
-            .loading-state {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-6);
-            }
 
             .applied-banner {
                 display: flex;
@@ -570,8 +563,8 @@ export class CRMAiAnalysisModal extends PlatformModal {
                 color: var(--text-secondary);
                 white-space: nowrap;
             }
-            .badge.dedup-existing { background: rgba(250, 209, 122, 0.34); color: var(--text-primary); }
-            .badge.dedup-new { background: rgba(142, 155, 247, 0.34); color: var(--text-primary); }
+            .badge.dedup-existing { background: color-mix(in srgb, var(--accent-quaternary) 34%, transparent); color: var(--text-primary); }
+            .badge.dedup-new { background: color-mix(in srgb, var(--accent) 34%, transparent); color: var(--text-primary); }
 
             .attrs-preview {
                 margin-top: var(--space-2);
@@ -2007,10 +2000,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         const entity = this._entity();
         if (entity === null) {
             return html`
-                <div class="loading-state">
-                    <platform-spinner></platform-spinner>
-                    <span>${this.t('ai_analysis_modal.loading_1')}</span>
-                </div>
+                <platform-empty-state loading title=${this.t('ai_analysis_modal.loading_1')}></platform-empty-state>
             `;
         }
 

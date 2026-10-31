@@ -121,7 +121,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "PUSH__ENABLED": "true",
     "PUSH__VAPID_PUBLIC_KEY": "BP1OB4uP0WSgQqumAOefg1PdsN9S7qA1-UK26qjSPa11ylB1HgbcrVi6peEUkhkdfrADeTa_dwypXYiucfbu3JQ",
     "PUSH__VAPID_PRIVATE_KEY": "lwzkecdrLZYcyUVhYUQuAnXYk92xup132qCCk5BtUEs",
-    "PUSH__VAPID_EMAIL": "test@humanitec.ru",
+    "PUSH__VAPID_EMAIL": "test@linnex.io",
     "RAG__ENABLED": "true",
     "RAG__DEFAULT_PROVIDER": "pgvector",
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",

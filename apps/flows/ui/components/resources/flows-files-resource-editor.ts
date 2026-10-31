@@ -18,18 +18,18 @@ import '@platform/lib/components/platform-variable-input.js';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function configRecord(resource: Record<string, any> | null): Record<string, any> {
+function configRecord(resource: Record<string, unknown> | null): Record<string, unknown> {
     if (resource === null || !isPlainObject(resource.config)) {
         return {};
     }
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(resource.config)) {
         row[key] = field;
     }
     return row;
 }
 
-function stringField(record: Record<string, any>, key: string, fallback: string): string {
+function stringField(record: Record<string, unknown>, key: string, fallback: string): string {
     const value = record[key];
     return typeof value === 'string' ? value : fallback;
 }
@@ -41,7 +41,7 @@ export class FlowsFilesResourceEditor extends PlatformElement {
         compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     }
     declare resourceId: string;
-    declare resource: Record<string, any> | null;
+    declare resource: Record<string, unknown> | null;
     declare compactHeader: boolean;
 ;
 

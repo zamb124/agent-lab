@@ -33,17 +33,17 @@ def test_provider_litserve_is_embedding_and_rerank_provider_not_llm() -> None:
     assert not provider_supports_capability("provider_litserve", AICapability.LLM_CHAT)
 
 
-def test_internal_litserve_providers_have_humanitec_public_labels() -> None:
+def test_internal_litserve_providers_have_linnex_public_labels() -> None:
     embedding_specs = platform_provider_specs_for_capability(AICapability.EMBEDDING)
     embedding_spec = next(spec for spec in embedding_specs if spec.provider == "provider_litserve")
-    assert embedding_spec.label == "Humanitec"
+    assert embedding_spec.label == "Linnex"
 
     voice_specs = platform_provider_specs_for_capability(AICapability.VOICE_STT)
     voice_spec = next(spec for spec in voice_specs if spec.provider == "litserve")
-    assert voice_spec.label == "Humanitec Voice"
+    assert voice_spec.label == "Linnex Voice"
 
 
-def test_voice_vad_catalog_exposes_humanitec_voice_not_internal_backends() -> None:
+def test_voice_vad_catalog_exposes_linnex_voice_not_internal_backends() -> None:
     providers = {
         spec.provider
         for spec in platform_provider_specs_for_capability(AICapability.VOICE_VAD)
@@ -137,12 +137,12 @@ def test_company_llm_override_rejects_api_key_encrypted_extra_on_custom_provider
         )
 
 
-def test_company_llm_override_rejects_api_key_encrypted_extra_on_humanitec_llm() -> None:
+def test_company_llm_override_rejects_api_key_encrypted_extra_on_linnex_llm() -> None:
     with pytest.raises(ValidationError):
         _ = CompanyAIProviders.model_validate(
             {
                 "llm_chat": {
-                    "provider": "humanitec_llm",
+                    "provider": "linnex_llm",
                     "api_key_encrypted_extra": ["should-fail"],
                 }
             }
@@ -160,7 +160,7 @@ def test_llm_chat_catalog_includes_google() -> None:
     assert "mistral" in providers
     assert "zai" in providers
     assert "sambanova" in providers
-    assert "humanitec_llm" in providers
+    assert "linnex_llm" in providers
 
 
 def test_company_resolved_llm_has_single_api_key() -> None:

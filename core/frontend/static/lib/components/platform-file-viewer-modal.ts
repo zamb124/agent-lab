@@ -255,7 +255,7 @@ export class PlatformFileViewerModal extends PlatformModal {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
-                background: var(--documents-stage-ambient, var(--bg-primary));
+                background: var(--documents-stage-ambient);
                 overflow: hidden;
                 z-index: 1;
                 padding: 0.5rem;
@@ -272,10 +272,10 @@ export class PlatformFileViewerModal extends PlatformModal {
                 width: 100%;
                 min-width: 0;
                 min-height: 0;
-                border-radius: var(--documents-stage-host-radius, 12px);
+                border-radius: var(--documents-stage-host-radius);
                 overflow: hidden;
-                box-shadow: var(--documents-stage-host-shadow, none);
-                background: var(--documents-stage-host-bg, #f0f4f9);
+                box-shadow: var(--documents-stage-host-shadow);
+                background: var(--documents-stage-host-bg);
             }
 
             .viewer-status,

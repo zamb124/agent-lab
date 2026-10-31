@@ -38,7 +38,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "tools": [
         "ask_user",

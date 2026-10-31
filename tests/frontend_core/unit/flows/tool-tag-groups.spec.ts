@@ -22,10 +22,10 @@ describe('flows-tool-tag-groups', () => {
         });
         expect(groups.map((g) => g.tag)).toEqual(['crm', 'worktracker']);
         const crm = groups.find((g) => g.tag === 'crm');
-        expect(crm.description).toBe('CRM группа');
-        expect(crm.tools.map((t) => t.tool_id)).toEqual(['a', 'b']);
+        expect(crm?.description).toBe('CRM группа');
+        expect(crm?.tools.map((t: { tool_id: string }) => t.tool_id)).toEqual(['a', 'b']);
         const worktracker = groups.find((g) => g.tag === 'worktracker');
-        expect(worktracker.tools.map((t) => t.tool_id)).toEqual(['a']);
+        expect(worktracker?.tools.map((t: { tool_id: string }) => t.tool_id)).toEqual(['a']);
     });
 
     it('buildToolTagGroups filters by search', () => {
@@ -34,6 +34,6 @@ describe('flows-tool-tag-groups', () => {
             { tool_id: 'crm_get', title: 'Get entity', tags: ['crm'], description: 'entity' },
         ], { search: 'calc' });
         expect(groups).toHaveLength(1);
-        expect(groups[0].tag).toBe('misc');
+        expect(groups[0]?.tag).toBe('misc');
     });
 });

@@ -5,9 +5,9 @@ import uuid
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.resources.rag_resource import RAGResource
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from apps.flows.src.resources.rag_resource import RAGResource
 from tests.fixtures.auth import service_client_asgi_auth_context
 
 

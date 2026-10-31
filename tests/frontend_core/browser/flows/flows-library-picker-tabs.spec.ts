@@ -11,6 +11,7 @@ import {
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { mcpServersResource, mcpServerSyncOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import '../../../../apps/flows/ui/modals/flows-library-picker-modal.js';
+import {ensureTokensLoaded, q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     toolsAllOp,
@@ -32,7 +33,7 @@ function bootstrap() {
     bootstrapTestBus({ slices: collected.slices, effects: collected.effects });
 }
 
-function jsonResponse(body) {
+function jsonResponse(body: any) {
     return new Response(JSON.stringify(body), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -40,14 +41,15 @@ function jsonResponse(body) {
 }
 
 describe('flows library picker tabs', () => {
-    let originalFetch;
-    let originalWsRequest;
+    let originalFetch: any;
+    let originalWsRequest: any;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         originalFetch = window.fetch;
         originalWsRequest = platformWs.request;
         resetPlatformState();
         bootstrap();
+        await ensureTokensLoaded();
     });
 
     afterEach(() => {
@@ -57,8 +59,8 @@ describe('flows library picker tabs', () => {
     });
 
     it('loads picker_category per active tab', async () => {
-        const requests = [];
-        window.fetch = async (url) => {
+        const requests: any[] = [];
+        window.fetch = async (url: RequestInfo | URL) => {
             const href = String(url);
             if (href.includes('/flows/api/v1/mcp/servers')) {
                 return jsonResponse({ items: [] });
@@ -71,9 +73,9 @@ describe('flows library picker tabs', () => {
             }
             if (opts.type === 'flows/tools/list_all_requested') {
                 requests.push(opts.payload);
-                const limit = opts.payload.limit;
+                const limit = (opts.payload as Record<string, any>).limit;
                 expect(limit).to.be.at.most(20);
-                expect(opts.payload.offset).to.equal(0);
+                expect((opts.payload as Record<string, any>).offset).to.equal(0);
                 return {
                     items: [],
                     total: 0,
@@ -84,7 +86,7 @@ describe('flows library picker tabs', () => {
             throw new Error(`unexpected WS command ${opts.type}`);
         };
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="all" ?open=${true}></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
@@ -100,7 +102,7 @@ describe('flows library picker tabs', () => {
 
     it('shows inline error and retry on tools_all failure', async () => {
         let attempts = 0;
-        window.fetch = async (url) => {
+        window.fetch = async (url: RequestInfo | URL) => {
             throw new Error(`unexpected fetch: ${String(url)}`);
         };
         platformWs.request = async (opts) => {
@@ -122,32 +124,32 @@ describe('flows library picker tabs', () => {
             throw new Error(`unexpected WS command ${opts.type}`);
         };
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="all" ?open=${true}></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
         await modal.updateComplete;
         await aTimeout(0);
 
-        expect(modal.shadowRoot.querySelector('.lib-load-error')).to.not.equal(null);
+        expect(q(shadow(modal), '.lib-load-error')).to.not.equal(null);
 
-        const retryButton = modal.shadowRoot.querySelector('.lib-load-error platform-button');
-        retryButton.shadowRoot.querySelector('button').click();
+        const retryButton = qs(shadow(modal), '.lib-load-error platform-button');
+        qs(shadow(retryButton), 'button').click();
         await waitUntil(
-            () => modal._pickModeRows().some((row) => row.tool_id === 'calculator'),
+            () => modal._pickModeRows().some((row: any) => row.tool_id === 'calculator'),
             'picker rows after retry',
             { timeout: 3000 },
         );
 
-        expect(modal._pickModeRows().map((row) => row.tool_id)).to.include('calculator');
+        expect(modal._pickModeRows().map((row: any) => row.tool_id)).to.include('calculator');
     });
 
     it('wraps MCP server tools in content-panel-body', async () => {
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="mcp_only"></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 ${modal._renderMcpServerSection({
                     server: {
@@ -169,27 +171,27 @@ describe('flows library picker tabs', () => {
             </div>
         `);
 
-        const panelBody = host.querySelector('.mcp-picker-server .content-panel-body');
+        const panelBody = q(host!, '.mcp-picker-server .content-panel-body');
         expect(panelBody).to.not.equal(null);
-        expect(panelBody.querySelector('.mcp-picker-tools-grid')).to.not.equal(null);
+        expect(q(panelBody!, '.mcp-picker-tools-grid')).to.not.equal(null);
 
-        const card = panelBody.querySelector('platform-picker-card');
+        const card = qs(panelBody!, 'platform-picker-card');
         expect(card).to.not.equal(null);
-        const cardInner = card.shadowRoot.querySelector('.picker-card');
-        expect(getComputedStyle(cardInner).paddingTop).to.not.equal('0px');
+        const cardInner = qs(shadow(card)!, '.picker-card');
+        expect(getComputedStyle(cardInner).paddingTop).to.not.equal('0px')!;
     });
 
     it('shows MCP bulk-add control when onPickBatch is provided', async () => {
         let batchPayload = null;
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="all"></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
         modal._modalId = 'picker-test';
-        modal.onPickBatch = (detail) => {
+        modal.onPickBatch = (detail: any) => {
             batchPayload = detail;
         };
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 ${modal._renderMcpServerSection({
                     server: {
@@ -221,17 +223,17 @@ describe('flows library picker tabs', () => {
             </div>
         `);
 
-        const bulkButtons = host.querySelectorAll('.mcp-picker-server-actions platform-button');
+        const bulkButtons = qsa(host!, '.mcp-picker-server-actions platform-button');
         expect(bulkButtons.length).to.be.greaterThan(0);
-        bulkButtons[0].shadowRoot.querySelector('button').click();
+        qs(shadow(bulkButtons[0]!), 'button').click();
         await aTimeout(0);
         expect(batchPayload).to.not.equal(null);
-        expect(Array.isArray(batchPayload.items)).to.equal(true);
-        expect(batchPayload.items).to.have.length(2);
+        expect(Array.isArray(batchPayload!.items)).to.equal(true);
+        expect(batchPayload!.items).to.have.length(2);
     });
 
     it('flat MCP search finds tool by name across servers', async () => {
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="mcp_only"></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
@@ -282,13 +284,13 @@ describe('flows library picker tabs', () => {
         expect(flat[0].tool.tool_id).to.equal('mcp:alpha:find_me');
         expect(flat[0].server.server_id).to.equal('alpha');
 
-        const host = await fixture(html`<div>${modal._renderMcpFlatSearchBody(false)}</div>`);
-        expect(host.querySelector('.mcp-picker-flat-hint')).to.not.equal(null);
-        expect(host.querySelectorAll('platform-picker-card')).to.have.length(1);
+        const host = await fixture<TestEl>(html`<div>${modal._renderMcpFlatSearchBody(false)}</div>`);
+        expect(q(host!, '.mcp-picker-flat-hint')).to.not.equal(null);
+        expect(qsa(host!, 'platform-picker-card')).to.have.length(1);
     });
 
     it('shows manage MCP CTA when MCP servers and tools are empty', async () => {
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-library-picker-modal pick-mode="mcp_only"></flows-library-picker-modal>
         `);
         modal._modalKind = 'flows.tool_picker';
@@ -299,8 +301,8 @@ describe('flows library picker tabs', () => {
             error: null,
             load: async () => {},
         };
-        const host = await fixture(html`<div>${modal._renderMcpEmptyState()}</div>`);
+        const host = await fixture<TestEl>(html`<div>${modal._renderMcpEmptyState()}</div>`);
         expect(host.textContent).to.include('tool_picker_modal.action_manage_mcp');
-        expect(host.querySelector('platform-button')).to.not.equal(null);
+        expect(q(host!, 'platform-button')).to.not.equal(null);
     });
 });

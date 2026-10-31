@@ -42,8 +42,8 @@ export interface CompanyListEntry {
 }
 
 export interface CompanyHostUser {
-    company_id?: string;
-    raw?: { company_id?: string };
+    company_id?: string | undefined;
+    raw?: { company_id?: string | undefined } | undefined;
 }
 
 export function resolveActiveCompanySubdomain(

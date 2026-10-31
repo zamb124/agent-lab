@@ -64,7 +64,7 @@ export class FrontendTopupModal extends PlatformFormModal {
         this._amount = AMOUNT_MIN;
         this.size = 'sm';
         this._topup = this.useOp('frontend/billing_topup');
-        this._locale = this.select((s: Record<string, any>) => {
+        this._locale = this.select((s: Record<string, unknown>) => {
             const locale = s.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
                 throw new Error('FrontendTopupModal: i18n.locale is required');
@@ -86,7 +86,7 @@ export class FrontendTopupModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         const amount =
             typeof this._amount === 'number' && Number.isFinite(this._amount) ? this._amount : null;
         if (amount === null) {

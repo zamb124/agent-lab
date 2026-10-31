@@ -12,7 +12,7 @@ if [[ -z "$MANIFEST" ]] && [[ -f "$ROOT/.env" ]]; then
   MANIFEST="${PWA_MANIFEST_URL:-}"
 fi
 if [[ -z "$MANIFEST" ]]; then
-  echo "Задайте PWA_MANIFEST_URL (например https://humanitec.ru/manifest.json)" >&2
+  echo "Задайте PWA_MANIFEST_URL (например https://linnex.io/manifest.json)" >&2
   exit 1
 fi
 mkdir -p "$OUT"

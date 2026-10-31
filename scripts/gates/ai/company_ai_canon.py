@@ -35,13 +35,13 @@
    pseudo-provider ``none``. Fallback policy редактируется только typed
    provider/model списком из backend catalog.
 
-10. ``llm.platform_free_pool.providers`` запрещён: Humanitec LLMs free pool
+10. ``llm.platform_free_pool.providers`` запрещён: Linnex LLMs free pool
     строится из canonical ``core.ai.providers``, а не из config provider-list.
 
 11. ``llm.model_scoring`` в conf запрещён: мировые рейтинги — AA, overlay только в БД.
 
 12. UI/i18n не должен показывать внутреннее имя ``LitServe`` /
-    ``provider_litserve`` как продуктовый provider. Публичный label — Humanitec.
+    ``provider_litserve`` как продуктовый provider. Публичный label — Linnex.
 
 13. Классификация ошибок провайдера — только ``core.ai.provider_error``.
     JS ERROR_CLASS / i18n ``error_*`` / ``AIProviderErrorClass`` совпадают.
@@ -184,7 +184,7 @@ _RAW_FALLBACK_UI_RE = re.compile(
     r"fallback_models_label[^\n]+JSON array)"
 )
 _PSEUDO_NONE_PROVIDER_UI_RE = re.compile(r"\b(_NONE_PROVIDER|_isNoneProvider)\b")
-_FORBIDDEN_HUMANITEC_MODELS_UI_LEAK_RE = re.compile(
+_FORBIDDEN_LINNEX_MODELS_UI_LEAK_RE = re.compile(
     r"LitServe|Silero \(litserve\)|provider_litserve\.infra|"
     r"provider_litserve/(models|model_retry)|frontend/dashboard_litserve_models_count|"
     r"\b(LitserveModelsPage|LitserveApp|LitserveSidebar|dashboardLitserveModelsCountOp)\b|"
@@ -321,7 +321,7 @@ def _company_ai_ui_files() -> tuple[Path, ...]:
     )
 
 
-def _humanitec_models_ui_surface_files() -> list[Path]:
+def _linnex_models_ui_surface_files() -> list[Path]:
     roots = (
         REPO_ROOT / "apps/frontend/ui",
         REPO_ROOT / "apps/provider_litserve/ui",
@@ -552,7 +552,7 @@ def main() -> int:
         if _OLD_FREE_POOL_DISCOVERY_RE.search(text) and rel != "scripts/gates/ai/company_ai_canon.py":
             failures.append(
                 f"{rel}: free-pool provider-specific discovery is forbidden; "
-                "build Humanitec LLMs free pool from core.ai.models.AIModelRecord"
+                "build Linnex LLMs free pool from core.ai.models.AIModelRecord"
             )
         if _OLD_FREE_POOL_PROVIDERS_CONFIG_RE.search(text) and rel != "scripts/gates/ai/company_ai_canon.py":
             failures.append(
@@ -670,7 +670,7 @@ def main() -> int:
                 "use typed enabled/provider/model contracts"
             )
 
-    for path in _humanitec_models_ui_surface_files():
+    for path in _linnex_models_ui_surface_files():
         if not path.exists():
             continue
         rel = path.relative_to(REPO_ROOT).as_posix()
@@ -678,11 +678,11 @@ def main() -> int:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        match = _FORBIDDEN_HUMANITEC_MODELS_UI_LEAK_RE.search(text)
+        match = _FORBIDDEN_LINNEX_MODELS_UI_LEAK_RE.search(text)
         if match:
             failures.append(
-                f"{rel}: forbidden Humanitec Models UI label leak {match.group(0)!r}; "
-                "use Humanitec/Humanitec Models public naming"
+                f"{rel}: forbidden Linnex Models UI label leak {match.group(0)!r}; "
+                "use Linnex/Linnex Models public naming"
             )
 
     if failures:

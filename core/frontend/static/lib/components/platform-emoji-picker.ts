@@ -99,10 +99,10 @@ export class PlatformEmojiPicker extends PlatformElement {
             .search {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
-                padding: var(--space-2, 8px) var(--space-3, 12px);
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
                 border-bottom: 1px solid var(--glass-border-subtle);
-                color: var(--text-tertiary, #9aa0a6);
+                color: var(--text-tertiary);
             }
 
             .search input {
@@ -112,15 +112,15 @@ export class PlatformEmojiPicker extends PlatformElement {
                 background: transparent;
                 color: var(--text-primary);
                 font-family: inherit;
-                font-size: var(--text-sm, 0.8125rem);
+                font-size: var(--text-sm);
                 outline: none;
             }
 
             .clear {
                 border: none;
                 background: transparent;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 cursor: pointer;
             }
 
@@ -131,23 +131,23 @@ export class PlatformEmojiPicker extends PlatformElement {
             .body {
                 max-height: 260px;
                 overflow-y: auto;
-                padding: var(--space-2, 8px);
+                padding: var(--space-2);
             }
 
             .group-title {
-                padding: var(--space-1, 4px) var(--space-1, 4px) var(--space-2, 8px);
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
-                font-weight: var(--font-semibold, 600);
+                padding: var(--space-1) var(--space-1) var(--space-2);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 text-transform: uppercase;
-                letter-spacing: var(--tracking-wide, 0.04em);
+                letter-spacing: var(--tracking-wide);
             }
 
             .grid {
                 display: grid;
                 grid-template-columns: repeat(8, 1fr);
                 gap: 2px;
-                margin-bottom: var(--space-2, 8px);
+                margin-bottom: var(--space-2);
             }
 
             .cell {
@@ -156,7 +156,7 @@ export class PlatformEmojiPicker extends PlatformElement {
                 justify-content: center;
                 aspect-ratio: 1;
                 border: none;
-                border-radius: var(--radius-sm, 8px);
+                border-radius: var(--radius-sm);
                 background: transparent;
                 font-size: 18px;
                 line-height: 1;
@@ -164,19 +164,19 @@ export class PlatformEmojiPicker extends PlatformElement {
             }
 
             .cell:hover {
-                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.16));
+                background: var(--glass-tint-medium);
             }
 
             .cell.is-selected {
-                background: var(--accent-subtle, rgba(99, 102, 241, 0.18));
+                background: var(--accent-subtle);
                 box-shadow: inset 0 0 0 1px var(--accent);
             }
 
             .empty {
-                padding: var(--space-4, 16px);
+                padding: var(--space-4);
                 text-align: center;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-sm, 0.8125rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
         `,
     ];

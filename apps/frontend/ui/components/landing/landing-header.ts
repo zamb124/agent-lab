@@ -607,9 +607,9 @@ export class LandingHeader extends PlatformElement {
         super();
         this.mobileMenuOpen = false;
         this.productsDropdownOpen = false;
-        this._authSel = this.select((s: Record<string, any>) => ({ status: s.auth.status, user: s.auth.user }));
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
-        this._themeSel = this.select((s: Record<string, any>) => s.theme.mode);
+        this._authSel = this.select((s: Record<string, unknown>) => ({ status: s.auth.status, user: s.auth.user }));
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._themeSel = this.select((s: Record<string, unknown>) => s.theme.mode);
     }
     private _authSel: SelectController<any>;
     private _localeSel: SelectController<any>;

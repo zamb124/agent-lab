@@ -46,8 +46,8 @@ def _make_async_client_factory(handler):
 
 def _build_service(rsa_pem: str) -> FcmPushService:
     return FcmPushService(
-        project_id="humanitec-app",
-        client_email="firebase-adminsdk-x@humanitec-app.iam.gserviceaccount.com",
+        project_id="linnex-app",
+        client_email="firebase-adminsdk-x@linnex-app.iam.gserviceaccount.com",
         private_key_pem=rsa_pem,
         token_uri="https://oauth2.googleapis.com/token",
     )
@@ -69,7 +69,7 @@ async def test_send_alert_delivers_via_fcm(rsa_pem):
             payload = json.loads(request.content)
             assert payload["message"]["token"] == "fake-token-aaaaaaaaaaaaaaaaaa"
             assert payload["message"]["notification"]["title"] == "Привет"
-            return httpx2.Response(200, json={"name": "projects/humanitec-app/messages/123"})
+            return httpx2.Response(200, json={"name": "projects/linnex-app/messages/123"})
         raise AssertionError(f"unexpected url {request.url}")
 
     service = _build_service(rsa_pem)

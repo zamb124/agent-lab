@@ -44,13 +44,13 @@ export class OfficeFileToolbar extends PlatformElement {
         css`
             :host {
                 display: block;
-                min-height: var(--documents-explorer-toolbar-height, 3rem);
+                min-height: var(--documents-explorer-toolbar-height);
             }
             .toolbar {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-height: var(--documents-explorer-toolbar-height, 3rem);
+                min-height: var(--documents-explorer-toolbar-height);
             }
             .title-wrap {
                 flex: 0 1 auto;

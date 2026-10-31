@@ -1,8 +1,8 @@
 /**
- * HumanitecModelsPage — реестр системных моделей Humanitec.
+ * LinnexModelsPage — реестр системных моделей Linnex.
  *
- * Использует фабрику `humanitec_models/models` (createResourceCollection)
- * и операцию `humanitec_models/model_retry` (createAsyncOp). Доступ к
+ * Использует фабрику `linnex_models/models` (createResourceCollection)
+ * и операцию `linnex_models/model_retry` (createAsyncOp). Доступ к
  * фабрикам — только через helpers `PlatformPage`.
  */
 
@@ -19,7 +19,7 @@ import '@platform/lib/components/platform-empty-state.js';
 
 const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 
-export class HumanitecModelsPage extends PlatformPage {
+export class LinnexModelsPage extends PlatformPage {
     static i18nNamespace = 'litserve';
 
     static override styles = [
@@ -157,8 +157,8 @@ export class HumanitecModelsPage extends PlatformPage {
         this._kind = 'embedding';
         this._hfModelId = '';
         this._apiModelId = '';
-        this._models = this.useResource('humanitec_models/models', { autoload: true });
-        this._retry = this.useOp('humanitec_models/model_retry');
+        this._models = this.useResource('linnex_models/models', { autoload: true });
+        this._retry = this.useOp('linnex_models/model_retry');
     }
 
     private _kindEnumConfig(): { values: { value: string; label: string }[] } {
@@ -173,7 +173,7 @@ export class HumanitecModelsPage extends PlatformPage {
     private _onKindChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         if (!(KIND_ENUM_VALUES as readonly string[]).includes(v)) {
-            throw new Error(`HumanitecModelsPage._onKindChange: invalid kind "${v}"`);
+            throw new Error(`LinnexModelsPage._onKindChange: invalid kind "${v}"`);
         }
         this._kind = v;
     }
@@ -319,4 +319,4 @@ export class HumanitecModelsPage extends PlatformPage {
     }
 }
 
-customElements.define('humanitec-models-page', HumanitecModelsPage);
+customElements.define('linnex-models-page', LinnexModelsPage);

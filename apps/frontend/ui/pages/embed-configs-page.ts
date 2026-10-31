@@ -85,15 +85,15 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
         this.openModal(FrontendCreateEmbedModal);
     }
 
-    _edit(cfg: Record<string, any>) {
+    _edit(cfg: Record<string, unknown>) {
         this.openModal(FrontendCreateEmbedModal, { embedConfig: cfg });
     }
 
-    _showCode(cfg: Record<string, any>) {
+    _showCode(cfg: Record<string, unknown>) {
         this.openModal(FrontendEmbedCodeModal, { embedId: cfg.embed_id });
     }
 
-    async _delete(cfg: Record<string, any>) {
+    async _delete(cfg: Record<string, unknown>) {
         if (!(await platformConfirm(this.t('embed_page.confirm_delete')))) return;
         this._configs.remove(cfg.embed_id);
     }
@@ -108,7 +108,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
         `;
     }
 
-    _renderRow(c: Record<string, any>) {
+    _renderRow(c: Record<string, unknown>) {
         const status = c.status || 'active';
         return html`
             <tr>

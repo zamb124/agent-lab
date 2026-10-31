@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER, AICapability
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL, LINNEX_LLM_PROVIDER, AICapability
 from core.config import get_settings
 
 _LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
@@ -19,8 +19,8 @@ _LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
 
 def platform_default_model(capability: AICapability, provider: str | None = None) -> str | None:
     """Платформенная модель по умолчанию без provider-specific hardcode."""
-    if capability in _LLM_CAPABILITIES and provider in (None, HUMANITEC_LLM_PROVIDER):
-        return HUMANITEC_LLM_AUTO_MODEL
+    if capability in _LLM_CAPABILITIES and provider in (None, LINNEX_LLM_PROVIDER):
+        return LINNEX_LLM_AUTO_MODEL
     return None
 
 
@@ -28,7 +28,7 @@ def platform_default_provider_for_capability(capability: AICapability) -> str:
     """Платформенный провайдер по умолчанию для capability без company override."""
     s = get_settings()
     if capability in _LLM_CAPABILITIES:
-        return HUMANITEC_LLM_PROVIDER
+        return LINNEX_LLM_PROVIDER
     if capability == AICapability.EMBEDDING:
         return s.rag.embedding.provider
     if capability == AICapability.RERANK:

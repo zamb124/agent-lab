@@ -38,12 +38,12 @@ describe('search crawl report resource', () => {
         expect(crawlUrlsResource.name).toBe('search/crawl_urls');
         expect(crawlJobsResource.name).toBe('search/crawl_jobs');
         expect(crawlUrlDetailOp.commandType).toBe('search/crawl_urls/get_requested');
-        expect(crawlQueueTickOp.restMirror.method).toBe('POST');
+        expect(crawlQueueTickOp.restMirror?.method).toBe('POST');
         expect(crawlDomainRunOp.commandType).toBe('search/crawl_domains/run_requested');
         expect(crawlProfilePatchOp.commandType).toBe('search/crawl_profiles/update_requested');
         expect(crawlDomainCreateOp.commandType).toBe('search/crawl_domains/create_requested');
         expect(crawlDomainPatchOp.commandType).toBe('search/crawl_domains/update_requested');
-        expect(crawlDomainDeleteOp.restMirror.method).toBe('DELETE');
+        expect(crawlDomainDeleteOp.restMirror?.method).toBe('DELETE');
         expect(crawlUrlAddOp.commandType).toBe('search/crawl_domains/urls_add_requested');
         expect(crawlUrlRecrawlOp.commandType).toBe('search/crawl_urls/recrawl_requested');
     });

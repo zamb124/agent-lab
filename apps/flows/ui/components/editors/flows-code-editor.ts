@@ -264,7 +264,7 @@ export class FlowsCodeEditor extends PlatformElement {
                 box-sizing: border-box;
                 padding: var(--space-3);
                 overflow: hidden;
-                background: var(--bg-primary, var(--glass-solid-elevated));
+                background: var(--bg-primary);
             }
             :host([fullscreen]) .editor-root {
                 height: 100%;

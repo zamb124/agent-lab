@@ -1,6 +1,6 @@
 /**
  * Общие стили кнопок
- * Humanitec UI Kit — фиолетовый primary, оранжевый accent, форма pill
+ * Linnex UI Kit — фиолетовый primary, оранжевый accent, форма pill
  * Поддержка темной и светлой темы
  */
 import { css } from 'lit';
@@ -10,13 +10,13 @@ export const buttonStyles = css`
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: var(--space-2, 8px);
-        padding: var(--btn-padding, 8px 24px);
-        font-size: var(--btn-font-size, 16px);
-        font-weight: var(--btn-font-weight, 400);
+        gap: var(--space-2);
+        padding: var(--btn-padding);
+        font-size: var(--btn-font-size);
+        font-weight: var(--btn-font-weight);
         font-family: inherit;
-        line-height: var(--btn-line-height, 20px);
-        border-radius: var(--btn-radius, 22px);
+        line-height: var(--btn-line-height);
+        border-radius: var(--btn-radius);
         border: none;
         cursor: pointer;
         transition: var(--motion-transition-interactive);
@@ -36,19 +36,19 @@ export const buttonStyles = css`
     .btn.primary,
     a.btn-primary:any-link,
     a.btn.primary:any-link {
-        color: var(--platform-btn-primary-text, #ffffff);
+        color: var(--platform-btn-primary-text);
         -webkit-text-fill-color: currentColor;
-        background: var(--platform-btn-primary-bg, #99A6F9);
-        box-shadow: var(--platform-btn-primary-shadow, none);
+        background: var(--platform-btn-primary-bg);
+        box-shadow: var(--platform-btn-primary-shadow);
     }
     
     .btn-primary:hover:not(:disabled),
     .btn.primary:hover:not(:disabled),
     a.btn-primary:any-link:hover,
     a.btn.primary:any-link:hover {
-        color: var(--platform-btn-primary-text, #ffffff);
-        background: var(--platform-btn-primary-bg-hover, #8794F0);
-        box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+        color: var(--platform-btn-primary-text);
+        background: var(--platform-btn-primary-bg-hover);
+        box-shadow: var(--platform-btn-primary-shadow-hover);
     }
 
     .btn-primary:active:not(:disabled),
@@ -59,15 +59,15 @@ export const buttonStyles = css`
     /* Акцентная кнопка — оранжевая */
     .btn-accent,
     .btn.accent {
-        color: var(--platform-btn-accent-text, #ffffff);
-        background: var(--platform-btn-accent-bg, #FF885C);
-        box-shadow: var(--platform-btn-accent-shadow, none);
+        color: var(--platform-btn-accent-text);
+        background: var(--platform-btn-accent-bg);
+        box-shadow: var(--platform-btn-accent-shadow);
     }
 
     .btn-accent:hover:not(:disabled),
     .btn.accent:hover:not(:disabled) {
-        background: var(--platform-btn-accent-bg-hover, #F2784A);
-        box-shadow: var(--platform-btn-accent-shadow-hover, 0 0 10px rgba(255, 136, 92, 0.6));
+        background: var(--platform-btn-accent-bg-hover);
+        box-shadow: var(--platform-btn-accent-shadow-hover);
     }
 
     .btn-accent:active:not(:disabled),
@@ -78,36 +78,36 @@ export const buttonStyles = css`
     /* Вторичная кнопка — фиолетовый текст, прозрачный фон */
     .btn-secondary,
     .btn.secondary {
-        color: var(--platform-btn-secondary-text, #99A6F9);
-        background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.15));
+        color: var(--platform-btn-secondary-text);
+        background: var(--platform-btn-secondary-bg);
         border: none;
     }
     
     .btn-secondary:hover:not(:disabled),
     .btn.secondary:hover:not(:disabled) {
-        background: var(--platform-btn-secondary-bg-hover, rgba(153, 166, 249, 0.1));
-        box-shadow: var(--platform-btn-secondary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.2));
+        background: var(--platform-btn-secondary-bg-hover);
+        box-shadow: var(--platform-btn-secondary-shadow-hover);
     }
 
     /* Accent Secondary — orange text, transparent bg */
     .btn-accent-secondary,
     .btn.accent-secondary {
-        color: var(--platform-btn-accent-secondary-text, #FF9A76);
-        background: var(--platform-btn-accent-secondary-bg, rgba(255, 136, 92, 0.15));
+        color: var(--platform-btn-accent-secondary-text);
+        background: var(--platform-btn-accent-secondary-bg);
         border: none;
     }
 
     .btn-accent-secondary:hover:not(:disabled),
     .btn.accent-secondary:hover:not(:disabled) {
-        background: var(--platform-btn-accent-secondary-bg-hover, rgba(255, 136, 92, 0.1));
-        box-shadow: var(--platform-btn-accent-secondary-shadow-hover, 0 0 10px rgba(255, 136, 92, 0.2));
+        background: var(--platform-btn-accent-secondary-bg-hover);
+        box-shadow: var(--platform-btn-accent-secondary-shadow-hover);
     }
     
     /* Опасная кнопка */
     .btn-danger,
     .btn.danger {
         color: white;
-        background: var(--error, #f43f5e);
+        background: var(--error);
         box-shadow: 0 4px 12px rgba(244, 63, 94, 0.25);
     }
     
@@ -120,35 +120,35 @@ export const buttonStyles = css`
     /* Прозрачная кнопка */
     .btn-ghost,
     .btn.ghost {
-        color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+        color: var(--text-secondary);
         background: transparent;
-        padding: var(--space-3, 12px) var(--space-4, 16px);
+        padding: var(--space-3) var(--space-4);
     }
     
     .btn-ghost:hover:not(:disabled),
     .btn.ghost:hover:not(:disabled) {
-        color: var(--text-primary, rgba(255, 255, 255, 0.95));
-        background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
+        color: var(--text-primary);
+        background: var(--glass-tint-subtle);
     }
     
     /* Sizes */
     .btn.sm {
         padding: 6px 16px;
-        font-size: var(--text-sm, 14px);
+        font-size: var(--text-sm);
     }
     
     .btn.md {
-        padding: var(--btn-padding, 8px 24px);
-        font-size: var(--btn-font-size, 16px);
+        padding: var(--btn-padding);
+        font-size: var(--btn-font-size);
     }
     
     .btn.lg {
         padding: 10px 32px;
-        font-size: var(--text-lg, 18px);
+        font-size: var(--text-lg);
     }
     
     .btn.icon-only {
-        padding: var(--space-3, 12px);
+        padding: var(--space-3);
         aspect-ratio: 1;
     }
     
@@ -166,7 +166,7 @@ export const buttonStyles = css`
         height: 18px;
         border: 2px solid currentColor;
         border-right-color: transparent;
-        border-radius: var(--radius-full, 50%);
+        border-radius: var(--radius-full);
         animation: spin 0.6s linear infinite;
     }
 
@@ -186,7 +186,7 @@ export const buttonStyles = css`
     
     .btn-group {
         display: flex;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
     }
     
     .btn-group.vertical {
@@ -197,25 +197,25 @@ export const buttonStyles = css`
     @media (max-width: 480px) {
         .btn {
             padding: 6px 16px;
-            font-size: var(--text-sm, 14px);
+            font-size: var(--text-sm);
         }
         
         .btn.lg {
-            padding: var(--btn-padding, 8px 24px);
-            font-size: var(--btn-font-size, 16px);
+            padding: var(--btn-padding);
+            font-size: var(--btn-font-size);
         }
     }
 
     /* Light Theme */
     :host-context([data-theme="light"]) .btn-secondary,
     :host-context([data-theme="light"]) .btn.secondary {
-        color: var(--platform-btn-secondary-text, #8794F0);
-        background: var(--platform-btn-secondary-bg, rgba(135, 148, 240, 0.12));
+        color: var(--platform-btn-secondary-text);
+        background: var(--platform-btn-secondary-bg);
     }
 
     :host-context([data-theme="light"]) .btn-secondary:hover:not(:disabled),
     :host-context([data-theme="light"]) .btn.secondary:hover:not(:disabled) {
-        background: var(--platform-btn-secondary-bg-hover, rgba(135, 148, 240, 0.08));
+        background: var(--platform-btn-secondary-bg-hover);
     }
 
     :host-context([data-theme="light"]) .btn-ghost,
@@ -238,18 +238,18 @@ export const iconButtonStyles = css`
         width: 36px;
         height: 36px;
         padding: 0;
-        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
-        border-radius: var(--radius-sm, 10px);
-        color: var(--text-secondary, rgba(255, 255, 255, 0.65));
-        background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        background: var(--glass-tint-subtle);
         cursor: pointer;
         transition: var(--motion-transition-interactive);
     }
     
     .btn-icon:hover:not(:disabled) {
-        color: var(--text-primary, rgba(255, 255, 255, 0.95));
-        background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
-        border-color: var(--border-strong, rgba(255, 255, 255, 0.15));
+        color: var(--text-primary);
+        background: var(--glass-tint-medium);
+        border-color: var(--border-strong);
     }
     
     .btn-icon:disabled {
@@ -260,39 +260,39 @@ export const iconButtonStyles = css`
     .btn-icon.sm {
         width: 28px;
         height: 28px;
-        border-radius: var(--radius-sm, 8px);
+        border-radius: var(--radius-sm);
     }
     
     .btn-icon.lg {
         width: 44px;
         height: 44px;
-        border-radius: var(--radius-md, 12px);
+        border-radius: var(--radius-md);
     }
     
     .btn-icon.primary {
-        color: var(--accent, #99A6F9);
+        color: var(--accent);
         border-color: rgba(153, 166, 249, 0.2);
     }
     
     .btn-icon.primary:hover:not(:disabled) {
-        color: var(--accent-hover, #8794F0);
-        background: var(--accent-subtle, rgba(153, 166, 249, 0.15));
+        color: var(--accent-hover);
+        background: var(--accent-subtle);
         border-color: rgba(153, 166, 249, 0.3);
     }
 
     .btn-icon.accent {
-        color: var(--accent-secondary, #FF885C);
+        color: var(--accent-secondary);
         border-color: rgba(255, 136, 92, 0.2);
     }
 
     .btn-icon.accent:hover:not(:disabled) {
-        color: var(--accent-secondary-hover, #F2784A);
-        background: var(--accent-secondary-subtle, rgba(255, 136, 92, 0.15));
+        color: var(--accent-secondary-hover);
+        background: var(--accent-secondary-subtle);
         border-color: rgba(255, 136, 92, 0.3);
     }
     
     .btn-icon.danger {
-        color: var(--error, #f43f5e);
+        color: var(--error);
         border-color: rgba(244, 63, 94, 0.2);
     }
     

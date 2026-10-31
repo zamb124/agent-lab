@@ -205,7 +205,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 line-height: 1.35;
-                letter-spacing: var(--tracking-tight, -0.01em);
+                letter-spacing: var(--tracking-tight);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;

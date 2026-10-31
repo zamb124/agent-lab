@@ -41,11 +41,11 @@ export class PlatformCronField extends PlatformElement {
             .stack {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
             }
             .custom {
                 font-family: var(--font-mono);
-                font-size: var(--text-sm, 14px);
+                font-size: var(--text-sm);
             }
         `,
     ];

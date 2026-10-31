@@ -5,6 +5,7 @@
 import { fixture, html, expect, oneEvent } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-trace-viewer.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 describe('platform-trace-viewer', () => {
     beforeEach(() => {
@@ -27,14 +28,14 @@ describe('platform-trace-viewer', () => {
                 children: [],
             },
         ];
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-trace-viewer .roots=${roots}></platform-trace-viewer>
         `);
-        const title = el.shadowRoot.querySelector('.title');
+        const title = qs(shadow(el), '.title');
         expect(title).to.exist;
         const p = oneEvent(el, 'trace-span-select');
-        title.click();
+        (title as TestEl).click();
         const ev = await p;
-        expect(ev.detail.span).to.deep.equal(roots[0]);
+        expect((ev as CustomEvent).detail.span).to.deep.equal(roots[0]);
     });
 });

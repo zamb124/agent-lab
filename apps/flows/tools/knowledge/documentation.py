@@ -22,7 +22,7 @@ from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 _DOCS_SEARCH_DESCRIPTION = """
-Ищет только по публичной документации Humanitec/NetWorkle и возвращает найденные
+Ищет только по публичной документации Linnex/NetWorkle и возвращает найденные
 страницы с прямыми URL для перехода пользователя.
 
 Когда вызывать:

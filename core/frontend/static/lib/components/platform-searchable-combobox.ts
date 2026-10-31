@@ -107,31 +107,30 @@ export class PlatformSearchableCombobox extends PlatformElement {
             }
             /* Компактные токены на :host — наследуются и в slotted input, и в shell. */
             :host([compact]) {
-                --field-pill-number-spin-height: 34px;
-                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
-                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
+                --field-pill-input-size: var(--field-pill-compact-input-size);
+                --field-pill-input-weight: var(--field-pill-compact-input-weight);
             }
             input {
                 width: 100%;
                 box-sizing: border-box;
                 min-width: 0;
-                min-height: var(--field-pill-number-spin-height, 38px);
+                min-height: var(--field-pill-number-spin-height);
                 padding: 0;
                 border: none;
                 border-radius: 0;
                 background: transparent;
-                color: var(--field-pill-input-color, var(--text-primary));
+                color: var(--field-pill-input-color);
                 font: inherit;
-                font-size: var(--field-pill-input-size, var(--text-sm));
-                font-weight: var(--field-pill-input-weight, var(--font-medium));
-                line-height: var(--field-pill-input-line, 1.35);
+                font-size: var(--field-pill-input-size);
+                font-weight: var(--field-pill-input-weight);
+                line-height: var(--field-pill-input-line);
                 outline: none;
             }
             :host([compact]) input {
                 min-height: var(--field-pill-number-spin-height);
             }
             .field-pill.plain input {
-                min-height: var(--input-height, 40px);
+                min-height: var(--input-height);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--border-default);

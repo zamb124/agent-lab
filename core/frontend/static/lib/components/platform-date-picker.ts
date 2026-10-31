@@ -167,9 +167,9 @@ const DATE_PICKER_POPUP_CSS = `
         .dp-portal-popup {
             width: 320px;
             max-width: min(90vw, 360px);
-            background: var(--platform-date-picker-popup-bg, var(--glass-solid-medium, #fff));
-            border: 1px solid var(--platform-date-picker-popup-border, var(--border-default, #e0e0e0));
-            border-radius: var(--radius-xl, 16px);
+            background: var(--platform-date-picker-popup-bg);
+            border: 1px solid var(--platform-date-picker-popup-border);
+            border-radius: var(--radius-xl);
             box-shadow: 0 8px 32px rgba(0,0,0,0.18);
             padding: 12px;
             display: flex;
@@ -177,72 +177,72 @@ const DATE_PICKER_POPUP_CSS = `
             gap: 12px;
             pointer-events: auto;
             font-family: var(--font-sans);
-            color: var(--text-primary, #1a1a1a);
+            color: var(--text-primary);
             box-sizing: border-box;
         }
         .dp-portal-popup .calendar-header {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
         }
         .dp-portal-popup .month-label {
-            font-size: var(--text-base, 16px); font-weight: 600; color: var(--text-primary, #1a1a1a);
+            font-size: var(--text-base); font-weight: 600; color: var(--text-primary);
             text-transform: capitalize;
         }
         .dp-portal-popup .nav-buttons { display: flex; align-items: center; gap: 4px; }
         .dp-portal-popup .icon-btn {
-            width: 30px; height: 30px; border-radius: var(--radius-md, 8px);
-            border: 1px solid var(--border-default, #e0e0e0); background: var(--glass-solid-medium, #f5f5f5);
-            color: var(--text-secondary, #666); display: inline-flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: var(--radius-md);
+            border: 1px solid var(--border-default); background: var(--glass-solid-medium);
+            color: var(--text-secondary); display: inline-flex; align-items: center; justify-content: center;
             cursor: pointer; font-size: 16px; line-height: 1;
         }
-        .dp-portal-popup .icon-btn:hover { border-color: var(--accent, #5b6abf); color: var(--text-primary, #1a1a1a); }
+        .dp-portal-popup .icon-btn:hover { border-color: var(--accent); color: var(--text-primary); }
         .dp-portal-popup .calendar-grid {
             display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px;
         }
         .dp-portal-popup .weekday {
-            text-align: center; color: var(--text-tertiary, #999); font-size: var(--text-xs, 11px);
+            text-align: center; color: var(--text-tertiary); font-size: var(--text-xs);
             font-weight: 600; padding-bottom: 4px; text-transform: uppercase;
         }
         .dp-portal-popup .day-btn {
-            height: 34px; border: 1px solid transparent; border-radius: var(--radius-md, 8px);
-            background: transparent; color: var(--text-primary, #1a1a1a); font-size: var(--text-sm, 14px);
+            height: 34px; border: 1px solid transparent; border-radius: var(--radius-md);
+            background: transparent; color: var(--text-primary); font-size: var(--text-sm);
             cursor: pointer;
         }
         .dp-portal-popup .day-btn:hover {
-            border-color: var(--platform-date-picker-day-hover-border, var(--border-default, #e0e0e0));
-            background: var(--platform-date-picker-day-hover-bg, rgba(0,0,0,0.04));
+            border-color: var(--platform-date-picker-day-hover-border);
+            background: var(--platform-date-picker-day-hover-bg);
         }
-        .dp-portal-popup .day-btn.muted { color: var(--text-disabled, #ccc); }
-        .dp-portal-popup .day-btn.today { border-color: var(--accent, #5b6abf); }
-        .dp-portal-popup .day-btn.selected { background: var(--accent, #5b6abf); color: var(--text-inverse, #fff); }
+        .dp-portal-popup .day-btn.muted { color: var(--text-disabled); }
+        .dp-portal-popup .day-btn.today { border-color: var(--accent); }
+        .dp-portal-popup .day-btn.selected { background: var(--accent); color: var(--text-inverse); }
         .dp-portal-popup .day-btn.in-range {
-            background: var(--platform-date-picker-range-bg, rgba(91,106,191,0.12));
-            color: var(--platform-date-picker-range-text, var(--text-primary, #1a1a1a));
+            background: var(--platform-date-picker-range-bg);
+            color: var(--platform-date-picker-range-text);
         }
-        .dp-portal-popup .day-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 2px rgba(91,106,191,0.4)); }
+        .dp-portal-popup .day-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
         .dp-portal-popup .footer-row {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
         }
         .dp-portal-popup .footer-actions { display: inline-flex; align-items: center; gap: 8px; }
         .dp-portal-popup .text-btn {
-            border: 1px solid var(--border-default, #e0e0e0); background: var(--glass-solid-medium, #f5f5f5);
-            color: var(--text-secondary, #666); border-radius: var(--radius-md, 8px);
-            padding: 4px 8px; font-size: var(--text-xs, 11px); cursor: pointer;
+            border: 1px solid var(--border-default); background: var(--glass-solid-medium);
+            color: var(--text-secondary); border-radius: var(--radius-md);
+            padding: 4px 8px; font-size: var(--text-xs); cursor: pointer;
         }
-        .dp-portal-popup .text-btn:hover { color: var(--text-primary, #1a1a1a); border-color: var(--accent, #5b6abf); }
-        .dp-portal-popup .range-label { font-size: var(--text-xs, 11px); color: var(--text-tertiary, #999); }
+        .dp-portal-popup .text-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+        .dp-portal-popup .range-label { font-size: var(--text-xs); color: var(--text-tertiary); }
         .dp-portal-popup .time-layout { display: grid; gap: 8px; }
-        .dp-portal-popup .time-label { font-size: var(--text-xs, 11px); color: var(--text-tertiary, #999); text-transform: uppercase; }
+        .dp-portal-popup .time-label { font-size: var(--text-xs); color: var(--text-tertiary); text-transform: uppercase; }
         .dp-portal-popup .time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .dp-portal-popup .time-field {
             display: flex; align-items: center; gap: 4px;
-            border: 1px solid var(--border-default, #e0e0e0); border-radius: var(--radius-md, 8px);
-            background: var(--glass-solid-medium, #f5f5f5); padding: 4px 8px;
+            border: 1px solid var(--border-default); border-radius: var(--radius-md);
+            background: var(--glass-solid-medium); padding: 4px 8px;
         }
         .dp-portal-popup .time-input {
             width: 100%; border: none; background: transparent;
-            color: var(--text-primary, #1a1a1a); font-size: var(--text-sm, 14px); outline: none;
+            color: var(--text-primary); font-size: var(--text-sm); outline: none;
         }
-        .dp-portal-popup .divider { color: var(--text-tertiary, #999); font-size: var(--text-sm, 14px); }
+        .dp-portal-popup .divider { color: var(--text-tertiary); font-size: var(--text-sm); }
     `;
 
 type TimeTarget = 'single' | 'start' | 'end';
@@ -358,7 +358,7 @@ export class PlatformDatePicker extends PlatformElement {
                 background: transparent;
                 padding: 0;
                 box-shadow: none;
-                font-size: var(--field-pill-input-size, var(--text-sm));
+                font-size: var(--field-pill-input-size);
             }
 
             .trigger.in-shell:focus-visible {
@@ -367,9 +367,9 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             .trigger.in-shell .trigger-text {
-                font-size: var(--field-pill-input-size, var(--text-sm));
-                font-weight: var(--field-pill-input-weight, var(--font-medium));
-                line-height: var(--field-pill-input-line, 1.35);
+                font-size: var(--field-pill-input-size);
+                font-weight: var(--field-pill-input-weight);
+                line-height: var(--field-pill-input-line);
             }
 
             :host([embedded]) .trigger {
@@ -379,13 +379,13 @@ export class PlatformDatePicker extends PlatformElement {
                 background: transparent;
                 padding: 0;
                 box-shadow: none;
-                font-size: var(--field-pill-input-size, var(--text-sm));
+                font-size: var(--field-pill-input-size);
             }
 
             :host([embedded]) .trigger-text.trigger-placeholder {
-                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
+                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size));
                 font-weight: var(--font-normal);
-                color: var(--text-disabled, var(--text-tertiary));
+                color: var(--text-disabled);
             }
 
             :host([compact]) {
@@ -400,8 +400,9 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             :host([compact]) .trigger.in-shell {
-                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
-                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
+                min-height: var(--field-pill-number-spin-height);
+                --field-pill-input-size: var(--field-pill-compact-input-size);
+                --field-pill-input-weight: var(--field-pill-compact-input-weight);
             }
 
             .trigger:focus-visible {

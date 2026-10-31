@@ -2,8 +2,8 @@
 
 import pytest
 
-from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from apps.search.models import CrawlDomain, CrawlProfileCreateRequest
+from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.search.index_models import SearchIndexCreateRequest
 from core.tasks import enqueue
 from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS

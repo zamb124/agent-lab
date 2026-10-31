@@ -1,5 +1,5 @@
 """
-Единая система токенов для платформы Humanitec.
+Единая система токенов для платформы Linnex.
 """
 
 from datetime import datetime, timedelta, timezone

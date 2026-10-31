@@ -50,9 +50,9 @@ export class OfficeFileDetailsPanel extends PlatformElement {
             :host {
                 display: flex;
                 flex-direction: column;
-                width: var(--documents-explorer-details-width, 20rem);
-                min-width: var(--documents-explorer-details-width, 20rem);
-                border-left: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
+                width: var(--documents-explorer-details-width);
+                min-width: var(--documents-explorer-details-width);
+                border-left: 1px solid var(--documents-explorer-divider);
                 background: var(--glass-solid-subtle);
                 min-height: 0;
                 height: 100%;
@@ -62,7 +62,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 align-items: center;
                 justify-content: space-between;
                 padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
+                border-bottom: 1px solid var(--documents-explorer-divider);
             }
             .head-title {
                 font-size: var(--text-sm);

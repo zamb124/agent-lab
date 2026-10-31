@@ -169,6 +169,7 @@ import '@platform/lib/components/layout/platform-island.js';
 import '../components/flows-catalog-list.js';
 import '../components/flows-sidebar.js';
 import type {CSSResultGroup, PropertyValues, TemplateResult} from 'lit';
+import '@platform/lib/components/platform-empty-state.js';
 
 registerNodeTestRunHandler(codeExecuteTestRunHandler);
 registerNodeTestRunHandler(ragSearchTestRunHandler);
@@ -640,9 +641,7 @@ export class FlowsApp extends PlatformApp {
         if (shell !== null) return shell;
         if (!this._bootstrapped) {
             return html`
-                <div class="loading-container">
-                    <platform-spinner size="xl"></platform-spinner>
-                </div>
+                <platform-empty-state class="loading-container" loading></platform-empty-state>
             `;
         }
         return super.render();

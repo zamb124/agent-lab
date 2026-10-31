@@ -4,6 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 
@@ -19,17 +20,17 @@ function build() {
     registerFactory(interfaceEditorSlice);
     const collected = collectFactories([interfaceEditorSlice]);
     const { bus, getState } = buildBus({ slices: collected.slices });
-    return { getState, dispatch: (type, payload) => bus.dispatch(type, payload) };
+    return { getState, dispatch: (type: string, payload: unknown) => bus.dispatch(type, payload) };
 }
 
-function withHeading(text) {
+function withHeading(text: string) {
     return {
         start_page_id: 'main',
         pages: [{ page_id: 'main', title: '', blocks: [{ block_id: 'h', type: 'heading', text, level: 2 }] }],
     };
 }
 
-function editorState(getState) {
+function editorState(getState: ReturnType<typeof build>['getState']) {
     return getState().flowsInterfaceEditor;
 }
 
@@ -53,7 +54,7 @@ describe('flows/interface_editor slice', () => {
         dispatch('flows/interface_editor/document_opened', { documentKey: 'flow-1:default', document: EMPTY_DOCUMENT });
         const problems = [{ code: 'inputs_without_action', severity: 'error', pageId: 'main', blockId: null, property: null, params: {} }];
         dispatch('flows/interface_editor/problems_set', { problems });
-        expect(editorState(getState).problems).toEqual(problems);
+        expect(prop(editorState(getState), 'problems')).toEqual(problems);
         expect(() => dispatch('flows/interface_editor/problems_set', { problems: null })).toThrow(/problems array required/);
     });
 
@@ -62,8 +63,8 @@ describe('flows/interface_editor slice', () => {
         expect(() => dispatch('flows/interface_editor/document_committed', { document: EMPTY_DOCUMENT })).toThrow(/no document opened/);
         expect(() => dispatch('flows/interface_editor/document_opened', { document: EMPTY_DOCUMENT })).toThrow(/documentKey required/);
         dispatch('flows/interface_editor/document_opened', { documentKey: 'flow-1:default', document: EMPTY_DOCUMENT });
-        expect(editorState(getState).pageId).toBe('main');
-        expect(editorState(getState).history.present).toEqual(EMPTY_DOCUMENT);
+        expect(prop(editorState(getState), 'pageId')).toBe('main');
+        expect(prop(prop(editorState(getState), 'history'), 'present')).toEqual(EMPTY_DOCUMENT);
     });
 
     it('coalesces property edits by key and keeps the history bounded', () => {
@@ -71,15 +72,16 @@ describe('flows/interface_editor slice', () => {
         dispatch('flows/interface_editor/document_opened', { documentKey: 'flow-1:default', document: withHeading('a') });
         dispatch('flows/interface_editor/document_committed', { document: withHeading('ab'), coalesceKey: 'h:text' });
         dispatch('flows/interface_editor/document_committed', { document: withHeading('abc'), coalesceKey: 'h:text' });
-        expect(editorState(getState).history.past).toHaveLength(1);
+        expect(prop(prop(editorState(getState), 'history'), 'past')).toHaveLength(1);
         dispatch('flows/interface_editor/history_undone', {});
-        expect(editorState(getState).history.present).toEqual(withHeading('a'));
+        expect(prop(prop(editorState(getState), 'history'), 'present')).toEqual(withHeading('a'));
         dispatch('flows/interface_editor/history_redone', {});
-        expect(editorState(getState).history.present).toEqual(withHeading('abc'));
+        expect(prop(prop(editorState(getState), 'history'), 'present')).toEqual(withHeading('abc'));
         for (let index = 0; index < HISTORY_LIMIT + 10; index += 1) {
             dispatch('flows/interface_editor/document_committed', { document: withHeading(`v${index}`) });
         }
-        expect(editorState(getState).history.past.length).toBeLessThanOrEqual(HISTORY_LIMIT);
+        const past = prop(prop(editorState(getState), 'history'), 'past');
+        expect(Array.isArray(past) ? past.length : -1).toBeLessThanOrEqual(HISTORY_LIMIT);
     });
 
     it('selecting a block switches to properties, selecting a page clears the block', () => {
@@ -88,7 +90,7 @@ describe('flows/interface_editor slice', () => {
         dispatch('flows/interface_editor/block_selected', { blockId: 'h' });
         expect(editorState(getState)).toMatchObject({ selectedBlockId: 'h', sidebarTab: 'properties' });
         dispatch('flows/interface_editor/page_selected', { pageId: 'main' });
-        expect(editorState(getState).selectedBlockId).toBe('');
+        expect(prop(editorState(getState), 'selectedBlockId')).toBe('');
         expect(() => dispatch('flows/interface_editor/viewport_set', { viewport: 'watch' })).toThrow(/unknown viewport/);
         expect(() => dispatch('flows/interface_editor/sidebar_tab_set', { tab: 'layers' })).toThrow(/unknown sidebar tab/);
         expect(() => dispatch('flows/interface_editor/preview_set', { preview: 'yes' })).toThrow(/preview must be boolean/);

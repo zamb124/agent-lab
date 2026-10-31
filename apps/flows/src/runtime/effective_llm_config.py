@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from core.ai.company_settings import (
     CUSTOM_PROVIDER_REF_PREFIX,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
 )
 from core.ai.llm_config import LLMCallConfig
 from core.ai.models import ResolvedAIModel
-from core.ai.providers import AICapability, split_humanitec_llms_model_ref
+from core.ai.providers import AICapability, split_linnex_llms_model_ref
 from core.ai.requirements import AISelection
 from core.ai.resolver import (
     COST_ORIGIN_COMPANY,
@@ -128,13 +128,13 @@ def _validate_explicit_primary(
     base: NodeLLMConfig,
     capability: AICapability,
 ) -> None:
-    if base.provider == HUMANITEC_LLM_PROVIDER:
+    if base.provider == LINNEX_LLM_PROVIDER:
         if (
-            base.model not in (None, HUMANITEC_LLM_AUTO_MODEL)
-            and split_humanitec_llms_model_ref(base.model) is None
+            base.model not in (None, LINNEX_LLM_AUTO_MODEL)
+            and split_linnex_llms_model_ref(base.model) is None
         ):
             raise ValueError(
-                f"capability {capability.value}: provider=humanitec_llm supports "
+                f"capability {capability.value}: provider=linnex_llm supports "
                 + "model='auto' or a provider-prefixed free-pool model '<provider>:<model_id>'"
             )
         return

@@ -224,9 +224,9 @@ export const panelHostStyles = css`
         border: 1px solid var(--glass-border-medium);
         border-radius: var(--radius-2xl);
         overflow: hidden;
-        transition: width var(--duration-normal) ease,
-                    min-width var(--duration-normal) ease,
-                    flex var(--duration-normal) ease;
+        transition: width var(--motion-duration-layout) ease,
+                    min-width var(--motion-duration-layout) ease,
+                    flex var(--motion-duration-layout) ease;
     }
 
     :host([collapsed]) {
@@ -405,18 +405,18 @@ export const floatingPanelStyles = css`
         display: flex;
         flex-direction: column;
         transition: 
-            top var(--duration-slow) var(--easing-default),
-            right var(--duration-slow) var(--easing-default),
-            left var(--duration-slow) var(--easing-default),
-            width var(--duration-slow) var(--easing-default),
-            height var(--duration-slow) var(--easing-default),
-            max-height var(--duration-slow) var(--easing-default),
-            transform var(--duration-slow) var(--easing-default),
-            box-shadow var(--duration-slow) var(--easing-default);
+            top var(--duration-slow) var(--motion-ease-standard),
+            right var(--duration-slow) var(--motion-ease-standard),
+            left var(--duration-slow) var(--motion-ease-standard),
+            width var(--duration-slow) var(--motion-ease-standard),
+            height var(--duration-slow) var(--motion-ease-standard),
+            max-height var(--duration-slow) var(--motion-ease-standard),
+            transform var(--duration-slow) var(--motion-ease-standard),
+            box-shadow var(--duration-slow) var(--motion-ease-standard);
     }
 
     .floating-panel.entering {
-        animation: floatingPanelSlideIn var(--duration-normal) ease-out;
+        animation: floatingPanelSlideIn var(--motion-duration-layout) ease-out;
     }
 
     @keyframes floatingPanelSlideIn {
@@ -449,7 +449,7 @@ export const floatingPanelStyles = css`
         background: rgba(0, 0, 0, 0);
         z-index: 99;
         pointer-events: none;
-        transition: background var(--duration-slow) var(--easing-default);
+        transition: background var(--duration-slow) var(--motion-ease-standard);
     }
 
     .floating-panel-backdrop.visible {

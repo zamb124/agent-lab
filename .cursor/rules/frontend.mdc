@@ -11,7 +11,7 @@ alwaysApply: false
 
 # Frontend
 
-UI каждого сервиса — Lit 3 SPA на TypeScript strict (`tsconfig.base.json`) и core-базе `core/frontend/static/lib/**`, без Zustand/Redux/MobX; esbuild (`scripts/build/ui.mjs`) собирает бандл сервиса в `apps/<svc>/ui-dist/`. Браузер получает только результат сборки: бандл сервиса из `ui-dist` и `/static/core/lib` из `core/frontend/embed-dist/` (embed-бандлы, css и AudioWorklet из lib/, а также модули страниц, которые строит backend: `core/frontend/embed-dist/flow-ui/shell/page-host.js`, `core/frontend/embed-dist/flow-ui/components/platform-flow-ui.js` и `import` каждой UIKDS-карточки `tests/ui/design-system/components/*/manifest.yaml` — со склеенными общими chunk-ами `_chunks/`; import map в HTML этих страниц нет); FastAPI монтирует их через `mount_core_frontend` и `resolve_ui_static_dir` (`core/app/spa.py`), granian — теми же маршрутами в `scripts/dev/run.py` и Helm; без сборки сервис не стартует. Состояние и контракт UI-события → `ui_factories.mdc`; core UI Kit, модалки, mobile shell → `ui_components.mdc`; поля форм → `ui_fields.mdc`; `PlatformEvent` и шина → `events.mdc`; интерфейс flow → `flow_ui.mdc`.
+UI каждого сервиса — Lit 3 SPA на TypeScript strict (`tsconfig.base.json`) и core-базе `core/frontend/static/lib/**`, без Zustand/Redux/MobX; esbuild (`scripts/build/ui.ts`) собирает бандл сервиса в `apps/<svc>/ui-dist/`. Браузер получает только результат сборки: бандл сервиса из `ui-dist` и `/static/core/lib` из `core/frontend/embed-dist/` (embed-бандлы, css и AudioWorklet из lib/, а также модули страниц, которые строит backend: `core/frontend/embed-dist/flow-ui/shell/page-host.js`, `core/frontend/embed-dist/flow-ui/components/platform-flow-ui.js` и `import` каждой UIKDS-карточки `tests/ui/design-system/components/*/manifest.yaml` — со склеенными общими chunk-ами `_chunks/`; import map в HTML этих страниц нет); FastAPI монтирует их через `mount_core_frontend` и `resolve_ui_static_dir` (`core/app/spa.py`), granian — теми же маршрутами в `scripts/dev/run.py` и Helm; без сборки сервис не стартует. Состояние и контракт UI-события → `ui_factories.mdc`; core UI Kit, модалки, mobile shell → `ui_components.mdc`; поля форм → `ui_fields.mdc`; `PlatformEvent` и шина → `events.mdc`; интерфейс flow → `flow_ui.mdc`.
 
 ## Инварианты
 
@@ -60,6 +60,7 @@ _helpers/           чистые функции сервиса, резолвер
 ### Дизайн
 
 - В компонентах — только токены `core/frontend/static/assets/css/tokens.css` и core-компоненты; локальные hex, rgb и rgba, свои `box-shadow`, `backdrop-filter`, `border-radius` shared-примитивов запрещены; повтор визуального примитива — токен `--<svc>-<domain>-<role>` в `tokens.css` или core-компонент; тема — `[data-theme="dark|light"]`. `[без гейта]`
+- JS-контексты без CSS (canvas `fillStyle`/`strokeStyle`/`shadowColor`, Three.js материалы, ECharts, значения в backend-данных) не принимают строку `var(--x)` — цвет резолвится `cssVar('--token', '#literal')` из `core/frontend/static/lib/utils/css-var.ts`; persisted-палитры хранят конкретные hex (данные, не токены). `[без гейта]`
 - Анимация — motion-слой → `ui_components.mdc` § Motion; `transition: all` запрещён.
 - Шрифты — manifest `core/frontend/static/assets/fonts/platform-typography.json`, `platform-fonts.css` и `tokens.css`: в CSS только `var(--font-sans)` и `var(--font-mono)` без fallback-стека; свои `@font-face`, `<link>` на шрифты, литералы `font-family` и прочие font-токены запрещены.
 - Текст на solid primary/accent — `--platform-btn-primary-text`, `--platform-btn-accent-text`, `--text-on-accent` или `<platform-button>`; `--text-inverse` — контраст к фону поверхности. `[без гейта]`
@@ -69,7 +70,7 @@ _helpers/           чистые функции сервиса, резолвер
 
 ### PWA
 
-- `/static/core/**`, `/static/frontend/**` и UI-static сервисов — mutable ES-модули по стабильным URL: Service Worker `core/frontend/pwa/sw.js` отдаёт их только network-first, Cache Storage — offline fallback; cache-first и stale-while-revalidate запрещены. `[без гейта]`
+- `/static/core/**`, `/static/frontend/**` и UI-static сервисов — mutable ES-модули по стабильным URL: Service Worker `core/frontend/static/lib/pwa/sw.ts` (esbuild → `embed-dist/pwa/sw.js`) отдаёт их только network-first, Cache Storage — offline fallback; cache-first и stale-while-revalidate запрещены. `[без гейта]`
 - Версия релиза — `server.deployment_version` (`SERVER__DEPLOYMENT_VERSION`) в `/health`; клиент хранит её под `platformStorageKey('core', 'deployment_version')` и при расхождении удаляет кэши `humanitec-*`, обновляет SW и перезагружает окно; `state.pwa.deploymentVersion` — только показ. `[без гейта]`
 - `/sw.js` отдаётся с `Cache-Control: no-cache, no-store, must-revalidate` и `Service-Worker-Allowed: /`; смена стратегии кэша поднимает `CACHE_SCHEMA_VERSION`. `[без гейта]`
 
@@ -95,6 +96,7 @@ _helpers/           чистые функции сервиса, резолвер
 ## Исключения
 
 - Исключение: hex и rgba — только файлы из allowlist п.23 `scripts/gates/frontend/ui_canon.sh` (холст графа и обложки flows) → `flows.mdc`.
+- Исключение: `innerHTML` — только `core/frontend/static/lib/utils/markdown-html.ts` (сам санитайзер `sanitizeMarkdownEditorHtml` + `htmlToPlainText` через `<template>`), `platform-markdown-editor.ts` (только через `sanitizeMarkdownEditorHtml`), `platform-mermaid-host.ts` (`.innerHTML=` sanitised mermaid SVG), `platform-onlyoffice-host.ts` (`innerHTML=''` очистка хоста). `[без гейта]`
 - Исключение: контроллеры фабрик (`core/frontend/static/lib/base/use-resource.ts`) читают slice селектором фабрики из `bus.getState()` — это реализация `use*` (glob `RUNTIME_ANTI_GLOBS`, п.14 `scripts/gates/frontend/ui_canon.sh`).
 
 ## Гейты

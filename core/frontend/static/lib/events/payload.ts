@@ -3,9 +3,29 @@
  */
 
 import type { PlatformEvent } from './contract.js';
+import type { PlatformEventMap } from './wire/index.js';
 
 export function isPlainRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Событие с payload, типизированным реестром platform events (`<svc>.gen.ts EventMap`). */
+export type TypedPlatformEvent<K extends keyof PlatformEventMap> =
+    PlatformEvent & { type: K; payload: PlatformEventMap[K] };
+
+/**
+ * Сужение события по типу: после проверки `event.payload` несёт сгенерированный
+ * контракт события. Форма значений по-прежнему валидируется fail-closed —
+ * тип фиксирует имена полей, не гарантирует их наличие на проводе.
+ */
+export function isPlatformEventType<K extends keyof PlatformEventMap>(
+    event: PlatformEvent,
+    type: K | readonly K[],
+): event is TypedPlatformEvent<K> {
+    const match = typeof type === 'string'
+        ? event.type === type
+        : (type as readonly K[]).includes(event.type as K);
+    return match && isPlainRecord(event.payload);
 }
 
 /**

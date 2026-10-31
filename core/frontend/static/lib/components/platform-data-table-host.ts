@@ -209,7 +209,7 @@ export class PlatformDataTableHost extends PlatformElement {
                 padding: var(--space-4);
                 font-size: var(--text-sm);
             }
-            .error { color: var(--color-danger, var(--error)); }
+            .error { color: var(--error); }
             .toolbar {
                 display: flex;
                 flex-wrap: wrap;
@@ -218,7 +218,7 @@ export class PlatformDataTableHost extends PlatformElement {
                 justify-content: space-between;
                 padding: var(--space-2) var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
-                background: var(--bg-secondary, var(--glass-solid-medium));
+                background: var(--bg-secondary);
                 min-width: 0;
             }
             .toolbar-start, .toolbar-end, .toolbar-group {
@@ -233,7 +233,7 @@ export class PlatformDataTableHost extends PlatformElement {
             }
             .table-tab {
                 border-bottom: 2px solid transparent;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
             }
             .table-tab.is-active {
                 border-bottom-color: var(--accent);
@@ -247,9 +247,9 @@ export class PlatformDataTableHost extends PlatformElement {
             .form-error.banner {
                 margin: 0;
                 padding: var(--space-2) var(--space-3);
-                border-bottom: 1px solid var(--error-border, var(--border-subtle));
-                background: var(--error-bg, transparent);
-                color: var(--color-danger, var(--error));
+                border-bottom: 1px solid var(--error-border);
+                background: var(--error-bg);
+                color: var(--error);
                 font-size: var(--text-sm);
             }
             .grid-wrap {
@@ -279,20 +279,20 @@ export class PlatformDataTableHost extends PlatformElement {
             th {
                 position: sticky;
                 top: 0;
-                background: var(--bg-elevated, var(--bg-secondary, var(--glass-solid-medium)));
+                background: var(--bg-elevated);
                 z-index: 1;
                 font-weight: var(--font-semibold);
                 color: var(--text-secondary);
                 box-shadow: 0 1px 0 var(--border-subtle);
             }
             tbody tr:nth-child(even) td {
-                background: var(--bg-secondary, var(--glass-solid-medium));
+                background: var(--bg-secondary);
             }
             tbody tr:hover td {
-                background: var(--bg-hover, var(--glass-solid-strong, var(--bg-secondary)));
+                background: var(--glass-tint-strong);
             }
             th.sys, td.sys {
-                color: var(--text-tertiary, var(--text-secondary));
+                color: var(--text-tertiary);
                 font-variant-numeric: tabular-nums;
                 min-width: 4.5rem;
                 width: 4.5rem;
@@ -308,7 +308,7 @@ export class PlatformDataTableHost extends PlatformElement {
                 z-index: 1;
             }
             th.row-actions {
-                background: var(--bg-elevated, var(--bg-secondary, var(--glass-solid-medium)));
+                background: var(--bg-elevated);
                 z-index: 2;
             }
             .col-head {
@@ -326,7 +326,7 @@ export class PlatformDataTableHost extends PlatformElement {
                 min-width: 0;
                 padding: 0.2rem 0.45rem;
                 border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 background: var(--bg-primary);
                 color: var(--text-primary);
                 font: inherit;
@@ -355,7 +355,7 @@ export class PlatformDataTableHost extends PlatformElement {
                 outline: none;
             }
             .cell-placeholder {
-                color: var(--text-tertiary, var(--text-secondary));
+                color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
             .schema-list {

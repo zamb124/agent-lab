@@ -15,6 +15,7 @@ import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import platformEn from '../../../../core/i18n/translations/en/platform.json' with { type: 'json' };
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import '@platform/lib/components/platform-variable-input.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 function seedI18n() {
     const bus = getPlatformBus();
@@ -45,7 +46,7 @@ async function prepare() {
     const fetchMock = installFetchMock();
     fetchMock.respondJson(
         'GET',
-        (url) => String(url).includes('/secrets/api/v1/variables'),
+        (url: string) => String(url).includes('/secrets/api/v1/variables'),
         { items: [], next_cursor: null, has_more: false },
     );
     bootstrapTestBus({ factories: [secretsVariablesResource] });
@@ -57,8 +58,7 @@ async function prepare() {
 describe('platform-variable-input at-ref', function () {
     this.timeout(20_000);
 
-    /** @type {{ uninstall: () => void } | null} */
-    let fetchMock = null;
+    let fetchMock: { uninstall(): void } | null = null;
 
     afterEach(() => {
         fixtureCleanup();
@@ -70,7 +70,7 @@ describe('platform-variable-input at-ref', function () {
 
     it('mounts CodeMirror and highlights @state:content', async () => {
         fetchMock = await prepare();
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-variable-input
                 .value=${'Оператор: @state:content'}
                 .statePreview=${{ content: 'hello' }}
@@ -80,31 +80,31 @@ describe('platform-variable-input at-ref', function () {
             ></platform-variable-input>
         `);
         await waitUntil(
-            () => el._editorView !== null && Boolean(el.shadowRoot?.querySelector('#cm-host .cm-editor')),
+            () => el._editorView !== null && Boolean(q(shadow(el), '#cm-host .cm-editor')),
             'CodeMirror editor mounted',
             { timeout: 15_000 },
         );
         expect(customElements.get('platform-variable-input')).to.exist;
-        const marked = el.shadowRoot.querySelectorAll('.cm-ref-state');
+        const marked = qsa(shadow(el), '.cm-ref-state');
         expect(marked.length, '@state:content should be highlighted').to.be.greaterThan(0);
-        expect(el.value).to.equal('Оператор: @state:content');
+        expect((el as TestEl).value).to.equal('Оператор: @state:content');
     });
 
     it('emits change when document edits', async () => {
         fetchMock = await prepare();
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-variable-input .value=${'@var:topic'}></platform-variable-input>
         `);
         await waitUntil(() => el._editorView !== null, 'editor view ready', { timeout: 15_000 });
         let last = null;
         el.addEventListener('change', (e) => {
-            last = e.detail;
+            last = (e as CustomEvent).detail;
         });
         const doc = el._editorView.state.doc;
         el._editorView.dispatch({
             changes: { from: 0, to: doc.length, insert: '@var:topic @state:content' },
         });
         expect(last).to.deep.equal({ value: '@var:topic @state:content' });
-        expect(el.value).to.equal('@var:topic @state:content');
+        expect((el as TestEl).value).to.equal('@var:topic @state:content');
     });
 });

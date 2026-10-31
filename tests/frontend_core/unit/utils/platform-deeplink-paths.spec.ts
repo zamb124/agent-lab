@@ -31,22 +31,22 @@ describe('getAasaPathPatterns', () => {
 
 describe('hrefForDeepLinkNavigation', () => {
     it('тот же origin — pathname + search + hash', () => {
-        const opened = new URL('https://humanitec.ru/join?x=1#frag');
-        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('/join?x=1#frag');
+        const opened = new URL('https://linnex.io/join?x=1#frag');
+        expect(hrefForDeepLinkNavigation(opened, 'https://linnex.io')).toBe('/join?x=1#frag');
     });
 
     it('короткая ссылка /l/ обрабатывается как внутренний path', () => {
-        const opened = new URL('https://humanitec.ru/l/PFOGc35jDs7b3SkH');
-        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('/l/PFOGc35jDs7b3SkH');
+        const opened = new URL('https://linnex.io/l/PFOGc35jDs7b3SkH');
+        expect(hrefForDeepLinkNavigation(opened, 'https://linnex.io')).toBe('/l/PFOGc35jDs7b3SkH');
     });
 
     it('другой origin — полный href', () => {
-        const opened = new URL('https://acme.humanitec.ru/crm/');
-        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('https://acme.humanitec.ru/crm/');
+        const opened = new URL('https://acme.linnex.io/crm/');
+        expect(hrefForDeepLinkNavigation(opened, 'https://linnex.io')).toBe('https://acme.linnex.io/crm/');
     });
 
     it('на корне без search/hash — просто /', () => {
-        const opened = new URL('https://humanitec.ru/');
-        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('/');
+        const opened = new URL('https://linnex.io/');
+        expect(hrefForDeepLinkNavigation(opened, 'https://linnex.io')).toBe('/');
     });
 });

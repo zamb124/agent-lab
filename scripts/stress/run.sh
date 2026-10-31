@@ -69,11 +69,20 @@ if [[ -n "$RPS" ]]; then
   fi
 fi
 
-SCRIPT="$ROOT_DIR/scripts/stress/services/$SERVICE.js"
-if [[ ! -f "$SCRIPT" ]]; then
-  echo "Stress service script not found: $SCRIPT" >&2
+SCRIPT_SRC="$ROOT_DIR/scripts/stress/services/$SERVICE.ts"
+if [[ ! -f "$SCRIPT_SRC" ]]; then
+  echo "Stress service script not found: $SCRIPT_SRC" >&2
   exit 2
 fi
+
+SCRIPT="$ROOT_DIR/scripts/stress/.dist/services/$SERVICE.js"
+ESBUILD="$ROOT_DIR/node_modules/.bin/esbuild"
+if [[ ! -x "$ESBUILD" ]]; then
+  echo "esbuild not found at $ESBUILD; run npm install" >&2
+  exit 2
+fi
+mkdir -p "$(dirname "$SCRIPT")"
+"$ESBUILD" "$SCRIPT_SRC" --bundle --format=esm --platform=neutral --external:k6 --external:k6/* --log-level=warning --outfile="$SCRIPT"
 
 if ! command -v k6 >/dev/null 2>&1; then
   echo "k6 is required. Install Grafana k6 and rerun make stress." >&2

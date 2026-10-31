@@ -211,9 +211,9 @@ export class CRMShareModal extends PlatformModal {
                 cursor: pointer;
             }
             .revoke-btn:hover {
-                background: rgba(220, 38, 38, 0.1);
-                border-color: var(--color-danger);
-                color: var(--color-danger);
+                background: color-mix(in srgb, var(--error) 10%, transparent);
+                border-color: var(--error);
+                color: var(--error);
             }
             .revoke-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -374,7 +374,7 @@ export class CRMShareModal extends PlatformModal {
             }
             .footer-actions .submit-error {
                 margin-right: auto;
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
                 align-self: center;
             }

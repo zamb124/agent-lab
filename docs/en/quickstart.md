@@ -28,7 +28,7 @@ export PLATFORM_BASE_URL="https://linnex.io/flows/api/v1/${PLATFORM_FLOW_ID}"
 
 !!! note "Legacy domain"
 
-    On `humanitec.ru` the API paths and JSON-RPC contract are the same. Use `https://humanitec.ru/flows/api/v1/{flow_id}` instead of `linnex.io` if your integration is tied to the legacy apex.
+    On `linnex.io` the API paths and JSON-RPC contract are the same. Use `https://linnex.io/flows/api/v1/{flow_id}` instead of `linnex.io` if your integration is tied to the legacy apex.
 
 ## 2. Fetch The Agent Card
 

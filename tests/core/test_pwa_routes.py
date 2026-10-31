@@ -42,9 +42,9 @@ def test_sw_js(pwa_client: TestClient) -> None:
     assert response.headers["content-type"].startswith("application/javascript")
     assert response.headers.get("service-worker-allowed") == "/"
     assert "no-store" in response.headers.get("cache-control", "").lower()
-    assert b"humanitec-static-" in response.content
-    assert b"humanitec-dynamic-" in response.content
-    assert b"CACHE_SCHEMA_VERSION" in response.content
+    assert b"linnex-static-" in response.content
+    assert b"linnex-dynamic-" in response.content
+    assert b"linnex-metadata-v1" in response.content
 
 
 def test_offline_html(pwa_client: TestClient) -> None:
@@ -65,10 +65,14 @@ def test_assetlinks_json_when_file_present(tmp_path: Path) -> None:
     """При наличии core/frontend/pwa/assetlinks.json — отдача /.well-known/assetlinks.json."""
     repo_root = Path(__file__).resolve().parent.parent.parent
     src_pwa = repo_root / "core" / "frontend" / "pwa"
+    src_sw = repo_root / "core" / "frontend" / "embed-dist" / "pwa" / "sw.js"
     dst_pwa = tmp_path / "core" / "frontend" / "pwa"
+    dst_sw = tmp_path / "core" / "frontend" / "embed-dist" / "pwa"
     dst_pwa.mkdir(parents=True)
-    for name in ("manifest.json", "sw.js", "offline.html"):
+    dst_sw.mkdir(parents=True)
+    for name in ("manifest.json", "offline.html"):
         (dst_pwa / name).write_bytes((src_pwa / name).read_bytes())
+    (dst_sw / "sw.js").write_bytes(src_sw.read_bytes())
     (dst_pwa / "assetlinks.json").write_text(
         '[{"relation":["delegate_permission/common.handle_all_urls"],'
         '"target":{"namespace":"android_app","package_name":"ru.test.twa",'
@@ -89,10 +93,14 @@ def test_apple_app_site_association_when_file_present(tmp_path: Path) -> None:
     """При наличии apple-app-site-association — отдача /.well-known/apple-app-site-association."""
     repo_root = Path(__file__).resolve().parent.parent.parent
     src_pwa = repo_root / "core" / "frontend" / "pwa"
+    src_sw = repo_root / "core" / "frontend" / "embed-dist" / "pwa" / "sw.js"
     dst_pwa = tmp_path / "core" / "frontend" / "pwa"
+    dst_sw = tmp_path / "core" / "frontend" / "embed-dist" / "pwa"
     dst_pwa.mkdir(parents=True)
-    for name in ("manifest.json", "sw.js", "offline.html"):
+    dst_sw.mkdir(parents=True)
+    for name in ("manifest.json", "offline.html"):
         (dst_pwa / name).write_bytes((src_pwa / name).read_bytes())
+    (dst_sw / "sw.js").write_bytes(src_sw.read_bytes())
     (dst_pwa / "apple-app-site-association").write_bytes(
         (src_pwa / "apple-app-site-association").read_bytes()
     )
@@ -104,4 +112,4 @@ def test_apple_app_site_association_when_file_present(tmp_path: Path) -> None:
     assert "application/json" in response.headers["content-type"]
     data = response.json()
     assert "applinks" in data
-    assert data["applinks"]["details"][0]["appIDs"][0].endswith("ru.humanitec.app")
+    assert data["applinks"]["details"][0]["appIDs"][0].endswith("io.linnex.app")

@@ -32,11 +32,11 @@ describe('trace-view-model', () => {
         ];
         const n = normalizeTraceRoots(roots);
         expect(n).to.have.length(1);
-        expect(n[0].title).to.equal('llm_call');
-        expect(n[0].subtitle).to.include('flows');
-        expect(n[0].subtitle).to.include('react.iteration');
-        expect(n[0].durationMs).to.equal(1000);
-        expect(n[0].raw).to.deep.equal(roots[0]);
+        expect(n[0]?.title).to.equal('llm_call');
+        expect(n[0]?.subtitle).to.include('flows');
+        expect(n[0]?.subtitle).to.include('react.iteration');
+        expect(n[0]?.durationMs).to.equal(1000);
+        expect(n[0]?.raw).to.deep.equal(roots[0]);
     });
 
     it('inferUiKind: gen_ai.operation.name chat -> generation', () => {
@@ -85,7 +85,7 @@ describe('trace-view-model', () => {
             },
         ];
         const r = computeTraceTimeRangeMs(roots);
-        expect(r).to.not.be.null;
+        if (r === null) throw new Error('expected non-null range');
         expect(r.min).to.be.lessThan(r.max);
     });
 
@@ -130,8 +130,8 @@ describe('trace-view-model', () => {
         const matched = collectMatchingSpanIds(roots, (rr) => spanMatchesQuery(rr, 'llm'));
         const pruned = pruneTraceViewNodes(norm, matched);
         expect(pruned).to.have.length(1);
-        expect(pruned[0].children).to.have.length(1);
-        expect(pruned[0].children[0].id).to.equal('keep');
+        expect(pruned[0]?.children).to.have.length(1);
+        expect(pruned[0]?.children[0]?.id).to.equal('keep');
     });
 
     it('treeDurationBarPct относительно родителя', () => {
@@ -162,7 +162,8 @@ describe('trace-view-model', () => {
         ];
         const norm = normalizeTraceRoots(roots);
         const parent = norm[0];
-        const child = parent.children[0];
+        const child = parent?.children[0];
+        if (parent === undefined || child === undefined) throw new Error('expected parent+child');
         const pct = treeDurationBarPct(child, parent, 4000);
         expect(pct).to.be.closeTo(25, 0.1);
     });

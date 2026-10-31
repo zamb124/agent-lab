@@ -23,7 +23,7 @@ export class CRMGraphLegend extends PlatformElement {
         selectedNodeId: { type: String, attribute: 'selected-node-id' },
         selectedEdgeId: { type: String, attribute: 'selected-edge-id' },
     };
-    declare nodes: Record<string, any>[];
+    declare nodes: Record<string, unknown>[];
     declare entityTypeColors: Record<string, string> | Map<string, string>;
     declare canvasHint: string;
     declare selectedNodeId: string;
@@ -111,7 +111,7 @@ export class CRMGraphLegend extends PlatformElement {
             const typeId = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
             if (!typeId || typeId === 'hidden' || seen.has(typeId)) continue;
             seen.add(typeId);
-            result.push({ typeId, color: palette.get(typeId) || '#888' });
+            result.push({ typeId, color: palette.get(typeId) || 'var(--text-tertiary)' });
         }
         return result;
     }
@@ -149,9 +149,9 @@ export class CRMGraphLegend extends PlatformElement {
                         <span class="dot" style="background:${color}"></span>${typeId}
                     </div>
                 `)}
-                <div class="legend-item"><span class="dot" style="background:#7f7f8f"></span>${this.t('graph.legend_hidden')}</div>
-                <div class="legend-item"><span class="dot" style="background:#41d36d"></span>${this.t('graph.legend_path_directed')}</div>
-                <div class="legend-item"><span class="dot" style="background:#f2c94c"></span>${this.t('graph.legend_path_undirected')}</div>
+                <div class="legend-item"><span class="dot" style="background:var(--text-tertiary)"></span>${this.t('graph.legend_hidden')}</div>
+                <div class="legend-item"><span class="dot" style="background:var(--success)"></span>${this.t('graph.legend_path_directed')}</div>
+                <div class="legend-item"><span class="dot" style="background:var(--warning)"></span>${this.t('graph.legend_path_undirected')}</div>
             </div>
             <div class="row">
                 <span class="hint-pill">${this.canvasHint}</span>

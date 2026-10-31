@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -15,12 +14,13 @@ from apps.search.models import (
     CrawlProfileCreateRequest,
     CrawlUrl,
 )
+from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
     poll_enriched_urls,
-    require_crawl_humanitec_llm_live_gate,
+    require_crawl_linnex_llm_live_gate,
 )
 
 pytestmark = [
@@ -39,7 +39,7 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
     crawl_search_di,
     unique_id,
 ):
-    require_crawl_humanitec_llm_live_gate()
+    require_crawl_linnex_llm_live_gate()
     _ = provider_litserve_service, search_worker
     search_di = crawl_search_di
     search_index_id = make_search_index_slug(unique_id)

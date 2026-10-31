@@ -6,9 +6,10 @@ import { fixture, html, expect, elementUpdated, aTimeout } from '../helpers/rend
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-notification-manager.js';
+import { q, qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 /** Inbox наполняется любым событием шины с префиксом `notify/`. */
-function pushNotification(payload) {
+function pushNotification(payload: any) {
     getPlatformBus().dispatch(
         `notify/${payload.scope ?? 'platform'}/${payload.kind ?? 'generic'}`,
         {
@@ -20,17 +21,17 @@ function pushNotification(payload) {
 }
 
 async function mountManager() {
-    const el = await fixture(html`<platform-notification-manager></platform-notification-manager>`);
+    const el = await fixture<TestEl>(html`<platform-notification-manager></platform-notification-manager>`);
     await elementUpdated(el);
     return el;
 }
 
-function bellOf(el) {
-    return el.shadowRoot.querySelector('.bell');
+function bellOf(el: any) {
+    return qs(shadow(el), '.bell');
 }
 
-function panelOf(el) {
-    return el.shadowRoot.querySelector('.platform-notif-portal');
+function panelOf(el: any) {
+    return q(shadow(el), '.platform-notif-portal');
 }
 
 describe('platform-notification-manager', () => {
@@ -61,7 +62,7 @@ describe('platform-notification-manager', () => {
         bellOf(el).click();
         await elementUpdated(el);
 
-        const popover = el.shadowRoot.querySelector('platform-popover');
+        const popover = qs(shadow(el), 'platform-popover');
         expect(popover.matches(':popover-open')).to.be.true;
     });
 
@@ -82,7 +83,7 @@ describe('platform-notification-manager', () => {
         bellOf(el).click();
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('.platform-notif-portal__empty')).to.exist;
+        expect(qs(shadow(el), '.platform-notif-portal__empty')).to.exist;
     });
 
     it('полученное уведомление появляется в списке и в счётчике', async () => {
@@ -91,14 +92,14 @@ describe('platform-notification-manager', () => {
         pushNotification({ title: 'Новая задача' });
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('.badge').textContent.trim()).to.equal('1');
+        expect(qs(shadow(el), '.badge').textContent.trim()).to.equal('1');
 
         bellOf(el).click();
         await elementUpdated(el);
 
-        const items = el.shadowRoot.querySelectorAll('.platform-notif-portal__item');
+        const items = qsa(shadow(el), '.platform-notif-portal__item');
         expect(items.length).to.equal(1);
-        expect(items[0].textContent).to.contain('Новая задача');
+        expect(items[0]!.textContent).to.contain('Новая задача');
     });
 
     it('Escape закрывает панель', async () => {

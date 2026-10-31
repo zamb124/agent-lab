@@ -70,7 +70,7 @@ export class WorktrackerBoardPicker extends PlatformElement {
                 position: absolute;
                 top: calc(100% + 6px);
                 left: 0;
-                z-index: var(--z-popover, 1100);
+                z-index: var(--platform-popover-z-index);
                 min-width: 220px;
                 max-width: min(360px, 90vw);
                 max-height: min(420px, 60vh);

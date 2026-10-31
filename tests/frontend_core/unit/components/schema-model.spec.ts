@@ -1,3 +1,4 @@
+import { prop } from '../../helpers/prop.js';
 import { describe, it, expect } from 'vitest';
 import {
     createEmptyParameterRow,
@@ -37,11 +38,11 @@ describe('schema-model', () => {
         });
         const rows = schemaToParameterRows(normalized);
         expect(rows).toHaveLength(2);
-        expect(rows[0].key).toBe('query');
-        expect(rows[0].required).toBe(true);
-        expect(rows[0].uiType).toBe('string');
-        expect(rows[1].key).toBe('limit');
-        expect(rows[1].uiType).toBe('integer');
+        expect(rows[0]?.key).toBe('query');
+        expect(rows[0]?.required).toBe(true);
+        expect(rows[0]?.uiType).toBe('string');
+        expect(rows[1]?.key).toBe('limit');
+        expect(rows[1]?.uiType).toBe('integer');
         const back = parameterRowsToSchema(rows, normalized.rest);
         expect(back).toEqual({
             additionalProperties: false,
@@ -66,10 +67,10 @@ describe('schema-model', () => {
         };
         const parsed = parseSchemaForEditor(raw);
         expect(parsed.advanced).toBe(false);
-        expect(parsed.rows[0].uiType).toBe('enum');
-        expect(parsed.rows[0].enumValues).toEqual(['text', 'vision']);
-        expect(parsed.rows[1].uiType).toBe('array');
-        expect(parsed.rows[1].itemsUiType).toBe('enum');
+        expect(parsed.rows[0]?.uiType).toBe('enum');
+        expect(parsed.rows[0]?.enumValues).toEqual(['text', 'vision']);
+        expect(parsed.rows[1]?.uiType).toBe('array');
+        expect(parsed.rows[1]?.itemsUiType).toBe('enum');
         expect(parameterRowsToSchema(parsed.rows, parsed.rest)).toEqual({
             type: 'object',
             properties: {
@@ -96,9 +97,9 @@ describe('schema-model', () => {
         };
         const parsed = parseSchemaForEditor(raw);
         expect(parsed.advanced).toBe(false);
-        expect(parsed.rows[0].uiType).toBe('object');
-        expect(parsed.rows[0].nestedRows).toHaveLength(2);
-        expect(parameterRowsToSchema(parsed.rows, parsed.rest).properties.meta).toEqual({
+        expect(parsed.rows[0]?.uiType).toBe('object');
+        expect(parsed.rows[0]?.nestedRows).toHaveLength(2);
+        expect(prop(parameterRowsToSchema(parsed.rows, parsed.rest).properties, 'meta')).toEqual({
             type: 'object',
             properties: {
                 source: { type: 'string', description: 'Origin' },

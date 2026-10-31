@@ -25,8 +25,8 @@ from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
-from core.ui_document.document import FlowUISkillActivity
 from core.models.identity_models import Company, User
+from core.ui_document.document import FlowUISkillActivity
 from tests.flows._flow_ui import conversation_blocks
 from tests.flows.agent_skills_harness import company_scope
 

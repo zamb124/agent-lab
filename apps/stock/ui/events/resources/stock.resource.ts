@@ -5,8 +5,10 @@
  * канонический `<svc>/<entity>/<verb>_requested`.
  */
 
-import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { createAsyncOp, createResourceCollection, reloadLastList } from '@platform/lib/events/index.js';
+import { isPlatformEventType } from '@platform/lib/events/payload.js';
+import type { ResourceCollectionFactory, ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
+import type { StockMoveLine, StockQuant, StockTransfer, StockWave } from '@platform/lib/events/wire/stock.gen.js';
 
 export const stockProductsResource = createResourceCollection({
     name: 'stock/products',
@@ -28,12 +30,13 @@ export const stockLocationsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/container/moved' || !isPlainRecord(event.payload)) return state;
+        if (!isPlatformEventType(event, 'stock/container/moved')) return state;
         const payload = event.payload;
+        const toParentId = payload.to_parent_id;
         const index = state.items.findIndex((row) => row && row.location_id === payload.container_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
-            position === index ? { ...row, parent_id: payload.to_parent_id } : row
+            position === index ? { ...row, parent_id: toParentId } : row
         ));
         return { ...state, items };
     },
@@ -59,17 +62,13 @@ export const stockTransfersResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type === 'stock/transfer/done' && isPlainRecord(event.payload) && event.payload.transfer_id) {
-            const donePayload = event.payload;
-            const id = donePayload.transfer_id;
-            const index = state.items.findIndex((row) => row && row.transfer_id === id);
-            if (index === -1) return state;
-            const items = state.items.map((row, position) => (
-                position === index ? { ...row, state: 'done' } : row
-            ));
-            return { ...state, items };
-        }
-        return state;
+        if (!isPlatformEventType(event, 'stock/transfer/done')) return state;
+        const index = state.items.findIndex((row) => row && row.transfer_id === event.payload.transfer_id);
+        if (index === -1) return state;
+        const items = state.items.map((row, position): StockTransfer => (
+            position === index ? { ...row, state: 'done' } : row
+        ));
+        return { ...state, items };
     },
 });
 
@@ -82,11 +81,11 @@ export const stockQuantsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/quant/changed' || !isPlainRecord(event.payload)) return state;
+        if (!isPlatformEventType(event, 'stock/quant/changed')) return state;
         const payload = event.payload;
         const index = state.items.findIndex((row) => row && row.quant_id === payload.quant_id);
         if (index === -1) return state;
-        const items = state.items.map((row, position) => (
+        const items = state.items.map((row, position): StockQuant => (
             position === index
                 ? { ...row, quantity: payload.quantity, reserved_quantity: payload.reserved_quantity }
                 : row
@@ -95,7 +94,7 @@ export const stockQuantsResource = createResourceCollection({
     },
 });
 
-export const stockQueueResource = createResourceCollection({
+export const stockQueueResource: ResourceCollectionFactory<ResourceCollectionSlice<StockMoveLine>> = createResourceCollection<StockMoveLine>({
     name: 'stock/queue',
     baseUrl: '/stock/api/v1/move-lines/queue',
     idField: 'move_line_id',
@@ -107,27 +106,37 @@ export const stockQueueResource = createResourceCollection({
         list: { method: 'POST', path: '/stock/api/v1/move-lines/queue' },
     },
     extraReducer: (state, event) => {
-        if (!isPlainRecord(event.payload) || !event.payload.move_line_id) return state;
-        const movePayload = event.payload;
-        if (event.type === 'stock/move_line/assigned') {
-            const payload = movePayload;
+        if (isPlatformEventType(event, 'stock/move_line/assigned')) {
+            const payload = event.payload;
             const index = state.items.findIndex((row) => row && row.move_line_id === payload.move_line_id);
-            const patch = {
-                assigned_user_id: payload.assigned_user_id,
-                resource_id: payload.resource_id,
-            };
-            const items = index === -1
-                ? [...state.items, payload]
-                : state.items.map((row, position) => (position === index ? { ...row, ...patch } : row));
+            // `stock/move_line/assigned` — лёгкое уведомление (9 полей), не полная
+            // строка: новая позиция очереди дозагружается списком в extraEffect,
+            // существующая мержит только поля назначения.
+            if (index === -1) return state;
+            const items = state.items.map((row, position): StockMoveLine => (
+                position === index
+                    ? {
+                        ...row,
+                        assigned_user_id: payload.assigned_user_id,
+                        resource_id: payload.resource_id,
+                    }
+                    : row
+            ));
             return { ...state, items };
         }
-        if (event.type === 'stock/move_line/exception') {
+        if (isPlatformEventType(event, 'stock/move_line/exception')) {
             const items = state.items.filter(
-                (row) => row && row.move_line_id !== movePayload.move_line_id,
+                (row) => row && row.move_line_id !== event.payload.move_line_id,
             );
             return { ...state, items };
         }
         return state;
+    },
+    extraEffect: (event, ctx): boolean => {
+        if (isPlatformEventType(event, 'stock/move_line/assigned')) {
+            return reloadLastList(ctx, stockQueueResource);
+        }
+        return false;
     },
 });
 
@@ -143,11 +152,11 @@ export const stockWavesResource = createResourceCollection({
         list: { method: 'POST', path: '/stock/api/v1/waves/list' },
     },
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/wave/released' || !isPlainRecord(event.payload)) return state;
+        if (!isPlatformEventType(event, 'stock/wave/released')) return state;
         const payload = event.payload;
         const index = state.items.findIndex((row) => row && row.wave_id === payload.wave_id);
         if (index === -1) return state;
-        const items = state.items.map((row, position) => (
+        const items = state.items.map((row, position): StockWave => (
             position === index
                 ? { ...row, state: 'released', released_at: payload.released_at }
                 : row

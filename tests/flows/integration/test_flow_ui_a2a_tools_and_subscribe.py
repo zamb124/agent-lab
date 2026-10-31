@@ -16,6 +16,7 @@ from httpx2 import AsyncClient
 
 from core.clients.flow_ui_client import FlowUIStateEvent, decode_task_events
 from core.context import require_context
+from core.types import JsonObject, require_json_object
 from core.ui_document.document import FlowUIDocument, FlowUIMetric
 from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
@@ -26,7 +27,6 @@ from core.ui_document.protocol import (
     FlowUINavigate,
     FlowUIRender,
 )
-from core.types import JsonObject, require_json_object
 from tests.flows._a2a_v1 import (
     A2A_HEADERS,
     SEND_STREAMING_MESSAGE,

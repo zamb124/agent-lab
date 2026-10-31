@@ -133,8 +133,8 @@ class TestSettingsAPI:
         assert "embedding" in body["catalog"]
         prov_items = body["catalog"]["llm_summarize"]
         from core.ai.providers import (
-            HUMANITEC_LLM_PROVIDER,
-            HUMANITEC_LLMS_DISPLAY_LABEL,
+            LINNEX_LLM_PROVIDER,
+            LINNEX_LLMS_DISPLAY_LABEL,
             PLATFORM_LLM_PROVIDER_ORDER,
         )
 
@@ -142,12 +142,12 @@ class TestSettingsAPI:
         assert provider_values[: len(PLATFORM_LLM_PROVIDER_ORDER)] == list(
             PLATFORM_LLM_PROVIDER_ORDER
         )
-        humanitec_item = next(
-            item for item in prov_items if item["value"] == HUMANITEC_LLM_PROVIDER
+        linnex_item = next(
+            item for item in prov_items if item["value"] == LINNEX_LLM_PROVIDER
         )
-        assert humanitec_item["kind"] == "virtual"
-        assert humanitec_item["label"] == HUMANITEC_LLMS_DISPLAY_LABEL
-        assert humanitec_item["models"][0] == {
+        assert linnex_item["kind"] == "virtual"
+        assert linnex_item["label"] == LINNEX_LLMS_DISPLAY_LABEL
+        assert linnex_item["models"][0] == {
             "value": "auto",
             "label": "auto",
             "kind": "auto",
@@ -178,7 +178,7 @@ class TestSettingsAPI:
         from core.platform_brand.resolver import resolve_brand
 
         settings = get_settings()
-        brand = resolve_brand("humanitec.ru")
+        brand = resolve_brand("linnex.io")
         assert embedding_litserve["label"] == brand.models_product_name
         assert {
             "value": embedding_model_id,
@@ -194,14 +194,14 @@ class TestSettingsAPI:
         voice_tts_values = {item["value"] for item in voice_tts}
         assert "litserve" in voice_tts_values
         assert "cloud_ru" in voice_tts_values
-        humanitec_voice_tts = next(item for item in voice_tts if item["value"] == "litserve")
-        assert humanitec_voice_tts["label"] == brand.voice_product_name
-        assert humanitec_voice_tts["byok_allowed"] is False
+        linnex_voice_tts = next(item for item in voice_tts if item["value"] == "litserve")
+        assert linnex_voice_tts["label"] == brand.voice_product_name
+        assert linnex_voice_tts["byok_allowed"] is False
         assert {
             "value": settings.provider_litserve.infra.tts_models[0].api_model_id,
             "label": settings.provider_litserve.infra.tts_models[0].api_model_id,
             "kind": "voice_model",
-        } in humanitec_voice_tts["models"]
+        } in linnex_voice_tts["models"]
         cloud_ru_tts = next(item for item in voice_tts if item["value"] == "cloud_ru")
         assert {
             "value": "openai/tts-1",
@@ -211,14 +211,14 @@ class TestSettingsAPI:
 
         voice_vad = body["catalog"]["voice_vad"]
         assert [item["value"] for item in voice_vad] == ["litserve"]
-        humanitec_voice_vad = voice_vad[0]
-        assert humanitec_voice_vad["label"] == brand.voice_product_name
-        assert humanitec_voice_vad["byok_allowed"] is False
+        linnex_voice_vad = voice_vad[0]
+        assert linnex_voice_vad["label"] == brand.voice_product_name
+        assert linnex_voice_vad["byok_allowed"] is False
         assert {
             "value": settings.provider_litserve.infra.vad_models[0].api_model_id,
             "label": settings.provider_litserve.infra.vad_models[0].api_model_id,
             "kind": "voice_model",
-        } in humanitec_voice_vad["models"]
+        } in linnex_voice_vad["models"]
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}
         assert body["llm_context"]["resolved"]["profile"] == "off"
@@ -306,7 +306,7 @@ class TestSettingsAPI:
         frontend_client: AsyncClient,
         auth_headers,
     ):
-        """Обычный provider не принимает implicit auto: auto живёт только в Humanitec LLMs."""
+        """Обычный provider не принимает implicit auto: auto живёт только в Linnex LLMs."""
         response = await frontend_client.put(
             "/frontend/api/settings/ai-providers/llm_chat",
             headers=auth_headers,

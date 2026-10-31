@@ -22,8 +22,8 @@ export class SyncSelectionBar extends PlatformElement {
     static override styles: CSSResultGroup = css`
         :host {
             display: block;
-            background: var(--glass-solid);
-            border-bottom: 1px solid var(--glass-border);
+            background: var(--glass-solid-medium);
+            border-bottom: 1px solid var(--glass-border-medium);
         }
         .row {
             display: flex;
@@ -44,14 +44,14 @@ export class SyncSelectionBar extends PlatformElement {
             gap: var(--space-1);
             padding: var(--space-1) var(--space-2);
             background: transparent;
-            border: 1px solid var(--glass-border);
+            border: 1px solid var(--glass-border-medium);
             border-radius: var(--radius-sm);
             color: var(--text-primary);
             cursor: pointer;
             font-size: var(--text-sm);
         }
-        .btn:hover { background: var(--glass-hover); }
-        .btn.danger { color: var(--error, #ef4444); border-color: var(--error, #ef4444); }
+        .btn:hover { background: var(--glass-tint-medium); }
+        .btn.danger { color: var(--error); border-color: var(--error); }
     `;
     private _chatUi: ControllerFor<'sync/chat_ui'>;
     private _delete: OpController;

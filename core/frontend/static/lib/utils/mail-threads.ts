@@ -279,7 +279,7 @@ export function findThreadByUid<T extends { messages: MailMessageLike[] }>(threa
  * @param {string | null | undefined} messageId
  * @returns {(typeof messages)[number] | null}
  */
-export function findThreadMessageByMessageId(messages: MailMessageLike[], messageId: string) {
+export function findThreadMessageByMessageId(messages: MailMessageLike[], messageId: string | null | undefined) {
     if (!Array.isArray(messages)) {
         throw new Error('findThreadMessageByMessageId: messages must be an array');
     }
@@ -307,7 +307,7 @@ export function findThreadMessageByMessageId(messages: MailMessageLike[], messag
  * @param {number} [maxLen=80]
  * @returns {string}
  */
-export function mailReplyPreviewText(message: MailMessageLike, maxLen = 80): string {
+export function mailReplyPreviewText(message: { snippet?: string | null; body_text?: string | null } | null | undefined, maxLen = 80): string {
     if (typeof maxLen !== 'number' || !Number.isFinite(maxLen) || maxLen < 1) {
         throw new Error('mailReplyPreviewText: maxLen must be a positive number');
     }

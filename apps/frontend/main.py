@@ -245,10 +245,10 @@ async def _seed_platform_pronunciation_rules() -> None:
 
     seed_rules: list[tuple[PronunciationRuleKind, str, str, str]] = [
         ("alias", "Хуманитик", "хуманитэк", "ru"),
-        ("alias", "Humanitec", "хуманитэк", "ru"),
-        ("alias", "humanitec", "хуманитэк", "ru"),
+        ("alias", "Linnex", "хуманитэк", "ru"),
+        ("alias", "linnex", "хуманитэк", "ru"),
         ("stress", "Хуманитик", "хум+анитэк", "ru"),
-        ("stress", "humanitec", "хум+анитэк", "ru"),
+        ("stress", "linnex", "хум+анитэк", "ru"),
     ]
     for kind, pattern, replacement, lang in seed_rules:
         if (kind, pattern, lang) not in existing_patterns:
@@ -592,7 +592,7 @@ _PWA_MANIFEST_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "manifest.json"
 )
 _PWA_SW_TEMPLATE_PATH = (
-    Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "sw.js"
+    Path(__file__).resolve().parents[2] / "core" / "frontend" / "embed-dist" / "pwa" / "sw.js"
 )
 _PWA_OFFLINE_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "offline.html"

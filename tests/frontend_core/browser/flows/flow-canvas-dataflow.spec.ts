@@ -10,6 +10,7 @@ import {
     SAMPLE_BRANCH_NODES,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/flow-canvas/flows-flow-canvas.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('flows-flow-canvas dataflow smoke', () => {
     beforeEach(() => {
@@ -38,12 +39,12 @@ describe('flows-flow-canvas dataflow smoke', () => {
         seedEditorDataflow(bus);
         bus.dispatch('flows/editor/data_wires_toggled', {});
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
-        const wiresLayer = el.shadowRoot.querySelector('.data-wires-layer');
+        const wiresLayer = q(shadow(el), '.data-wires-layer');
         expect(wiresLayer).to.not.equal(null);
-        expect(wiresLayer.children.length).to.be.greaterThan(0);
+        expect(wiresLayer!.children.length).to.be.greaterThan(0);
     });
 
     it('renders output chip hit targets for pointer wire drag', async () => {
@@ -63,12 +64,12 @@ describe('flows-flow-canvas dataflow smoke', () => {
         });
         seedEditorDataflow(bus);
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
-        const hits = el.shadowRoot.querySelectorAll('.node-dataflow-chip-hit');
+        const hits = qsa(shadow(el), '.node-dataflow-chip-hit');
         expect(hits.length).to.be.greaterThan(0);
-        const inputHits = el.shadowRoot.querySelectorAll('.node-dataflow-chip-hit[data-chip-side="in"]');
+        const inputHits = qsa(shadow(el), '.node-dataflow-chip-hit[data-chip-side="in"]');
         expect(inputHits.length).to.be.greaterThan(0);
     });
 
@@ -90,19 +91,19 @@ describe('flows-flow-canvas dataflow smoke', () => {
         seedEditorDataflow(bus);
         bus.dispatch('flows/editor/data_wires_toggled', {});
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
-        const outputHit = el.shadowRoot.querySelector(
+        const outputHit = q(shadow(el), 
             'rect.node-dataflow-chip-hit[data-chip-node-id="code_1"][data-chip-side="out"]',
         );
         expect(outputHit).to.not.equal(null);
-        outputHit.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+        outputHit!.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
         await elementUpdated(el);
 
-        const highlighted = el.shadowRoot.querySelector('.data-wire-path[data-highlighted]');
+        const highlighted = q(shadow(el), '.data-wire-path[data-highlighted]');
         expect(highlighted).to.not.equal(null);
-        const dimmed = el.shadowRoot.querySelectorAll('.data-wire-path[data-dimmed]');
+        const dimmed = qsa(shadow(el), '.data-wire-path[data-dimmed]');
         expect(dimmed.length).to.equal(0);
     });
 
@@ -161,19 +162,19 @@ describe('flows-flow-canvas dataflow smoke', () => {
         });
         bus.dispatch('flows/editor/data_wires_toggled', {});
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
-        const inputHit = el.shadowRoot.querySelector(
+        const inputHit = q(shadow(el), 
             'rect.node-dataflow-chip-hit[data-chip-node-id="llm_2"][data-chip-side="in"]',
         );
         expect(inputHit).to.not.equal(null);
-        inputHit.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+        inputHit!.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
         await elementUpdated(el);
 
-        const highlighted = el.shadowRoot.querySelectorAll('.data-wire-path[data-highlighted]');
+        const highlighted = qsa(shadow(el), '.data-wire-path[data-highlighted]');
         expect(highlighted.length).to.equal(2);
-        const dimmed = el.shadowRoot.querySelectorAll('.data-wire-path[data-dimmed]');
+        const dimmed = qsa(shadow(el), '.data-wire-path[data-dimmed]');
         expect(dimmed.length).to.equal(0);
     });
 
@@ -193,10 +194,10 @@ describe('flows-flow-canvas dataflow smoke', () => {
         });
         seedEditorDataflow(bus);
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
-        const badge = el.shadowRoot.querySelector('.badge-problems');
+        const badge = q(shadow(el), '.badge-problems');
         expect(badge).to.not.equal(null);
     });
 });

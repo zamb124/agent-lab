@@ -27,7 +27,7 @@ curl -X POST https://linnex.io/api/companies \
 
 !!! note "Legacy-домен"
 
-    На `humanitec.ru` те же пути API. Подставьте `https://humanitec.ru/api/companies`, если интеграция привязана к legacy apex.
+    На `linnex.io` те же пути API. Подставьте `https://linnex.io/api/companies`, если интеграция привязана к legacy apex.
 
 ### Проверка slug
 

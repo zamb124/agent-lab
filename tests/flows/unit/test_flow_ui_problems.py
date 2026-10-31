@@ -19,9 +19,9 @@ from apps.flows.src.flow_ui.problems import (
 )
 from apps.flows.src.flow_ui.templates import flow_ui_templates
 from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
-from core.ui_document.document import FlowUIDocument
 from core.models.i18n_models import Language
 from core.types import JsonObject
+from core.ui_document.document import FlowUIDocument
 
 LIMITS = FlowUILimits()
 

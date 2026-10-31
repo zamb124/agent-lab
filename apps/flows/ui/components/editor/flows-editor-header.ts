@@ -108,13 +108,13 @@ function issueText(value: unknown): string {
 
 const HEADER_MENU_CSS = `
         .flows-editor-header-menu-portal {
-            width: min(320px, calc(100vw - 2 * var(--space-4, 16px)));
-            max-width: calc(100vw - 2 * var(--space-4, 16px));
+            width: min(320px, calc(100vw - 2 * var(--space-4);
+            max-width: calc(100vw - 2 * var(--space-4));
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: var(--space-1, 4px);
-            padding: var(--space-1, 4px);
+            gap: var(--space-1);
+            padding: var(--space-1);
         }
         .flows-editor-header-menu-portal.problems-flyout {
             max-height: min(60vh, 420px);
@@ -122,9 +122,9 @@ const HEADER_MENU_CSS = `
             scrollbar-width: thin;
         }
         .flows-editor-header-menu-portal .problems-header {
-            padding: var(--space-1, 4px) var(--space-2, 8px);
-            font-size: var(--text-xs, 12px);
-            font-weight: var(--font-semibold, 600);
+            padding: var(--space-1) var(--space-2);
+            font-size: var(--text-xs);
+            font-weight: var(--font-semibold);
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.04em;
@@ -132,12 +132,12 @@ const HEADER_MENU_CSS = `
         .flows-editor-header-menu-portal .problem-item {
             display: flex;
             align-items: flex-start;
-            gap: var(--space-2, 8px);
+            gap: var(--space-2);
             width: 100%;
             text-align: left;
-            padding: var(--space-2, 8px);
+            padding: var(--space-2);
             border: none;
-            border-radius: var(--radius-sm, 8px);
+            border-radius: var(--radius-sm);
             background: transparent;
             color: var(--text-primary);
             cursor: pointer;
@@ -158,11 +158,11 @@ const HEADER_MENU_CSS = `
             min-width: 0;
         }
         .flows-editor-header-menu-portal .problem-node {
-            font-size: var(--text-xs, 12px);
-            font-weight: var(--font-semibold, 600);
+            font-size: var(--text-xs);
+            font-weight: var(--font-semibold);
         }
         .flows-editor-header-menu-portal .problem-msg {
-            font-size: var(--text-xs, 12px);
+            font-size: var(--text-xs);
             color: var(--text-secondary);
         }
 `;
@@ -393,8 +393,8 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             .problems-btn[data-severity="error"] {
-                border-color: var(--error-border, var(--border-subtle));
-                background: var(--error-bg, color-mix(in oklab, var(--error) 12%, transparent));
+                border-color: var(--error-border);
+                background: var(--error-bg);
                 color: var(--error);
             }
 

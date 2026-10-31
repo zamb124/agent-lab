@@ -38,7 +38,7 @@ function isBeforeInstallPrompt(event: Event): event is BeforeInstallPromptEvent 
 }
 
 const VERSION_POLL_MS = 60_000;
-const HUMANITEC_CACHE_PREFIX = 'humanitec-';
+const LINNEX_CACHE_PREFIX = 'linnex-';
 const DEPLOYMENT_VERSION_STORAGE_KEY = platformStorageKey('core', 'deployment_version');
 let reloadPageForTests: (() => void) | null = null;
 
@@ -184,12 +184,12 @@ async function _registerWebPush(base: string): Promise<{ transport: string; endp
     return { transport: 'web_vapid', endpoint: subscription.endpoint };
 }
 
-async function _deleteHumanitecCaches() {
+async function _deleteLinnexCaches() {
     if (typeof caches === 'undefined') {
         return;
     }
     const names = await caches.keys();
-    const toDelete = names.filter((name) => name.startsWith(HUMANITEC_CACHE_PREFIX));
+    const toDelete = names.filter((name) => name.startsWith(LINNEX_CACHE_PREFIX));
     await Promise.all(toDelete.map((name) => caches.delete(name)));
 }
 
@@ -247,7 +247,7 @@ async function _fetchDeploymentVersion(base: string): Promise<string | null> {
 
 async function _reloadAfterDeployment(version: unknown): Promise<void> {
     _writeStoredDeploymentVersion(version);
-    await _deleteHumanitecCaches();
+    await _deleteLinnexCaches();
     const sw = typeof navigator !== 'undefined' && navigator.serviceWorker;
     if (sw && typeof sw.getRegistration === 'function') {
         const reg = await sw.getRegistration();
@@ -282,10 +282,10 @@ function _handleServiceWorkerMessage(event: MessageEvent): void {
     if (!isPlainRecord(data)) {
         return;
     }
-    if (data.type === 'humanitec-deployment-updated') {
+    if (data.type === 'linnex-deployment-updated') {
         void _reloadAfterDeployment(data.to);
     }
-    if (data.type === 'humanitec-deployment-reload-requested') {
+    if (data.type === 'linnex-deployment-reload-requested') {
         void _reloadAfterDeployment(null);
     }
 }

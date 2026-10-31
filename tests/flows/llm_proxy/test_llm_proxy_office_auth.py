@@ -10,7 +10,7 @@ import pytest
 from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL
 from core.clients.onlyoffice import sign_onlyoffice_jwt_hs256
 from core.office.ai_settings import IMAGE_AUTO_MODEL_ID, LARA_DOCUMENTS_MODEL_ID
 from core.office.jwt_secret import resolve_onlyoffice_jwt_secret
@@ -64,7 +64,7 @@ async def test_llm_proxy_office_jwt_lists_models(
     )
     assert response.status_code == 200
     model_ids = {item["id"] for item in response.json()["data"] if isinstance(item, dict)}
-    assert HUMANITEC_LLM_AUTO_MODEL in model_ids
+    assert LINNEX_LLM_AUTO_MODEL in model_ids
     assert IMAGE_AUTO_MODEL_ID in model_ids
     assert LARA_DOCUMENTS_MODEL_ID in model_ids
 

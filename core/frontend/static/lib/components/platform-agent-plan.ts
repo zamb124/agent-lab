@@ -68,20 +68,20 @@ export class PlatformAgentPlan extends PlatformElement {
                 display: block;
             }
             .shell {
-                border: 1px solid var(--border-subtle, var(--glass-border-subtle));
-                border-radius: var(--radius-lg, 10px);
-                background: var(--surface-elevated, var(--glass-solid-subtle));
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
                 overflow: hidden;
             }
             .header {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
-                padding: var(--space-3, 12px) var(--space-4, 14px);
-                border-bottom: 1px solid var(--border-subtle, var(--glass-border-subtle));
+                gap: var(--space-2);
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--border-subtle);
             }
             .header-title {
-                font-size: var(--text-sm, 0.875rem);
+                font-size: var(--text-sm);
                 font-weight: 600;
                 color: var(--text-primary);
                 margin: 0;
@@ -89,18 +89,18 @@ export class PlatformAgentPlan extends PlatformElement {
             .list {
                 list-style: none;
                 margin: 0;
-                padding: var(--space-2, 8px);
+                padding: var(--space-2);
             }
             .row {
                 display: flex;
                 align-items: flex-start;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
                 padding: 6px 8px;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
                 animation: agent-plan-in 0.22s ease-out both;
             }
             .row:hover {
-                background: var(--glass-solid-subtle, rgba(0, 0, 0, 0.03));
+                background: var(--glass-solid-subtle);
             }
             .icon-wrap {
                 flex-shrink: 0;
@@ -110,19 +110,19 @@ export class PlatformAgentPlan extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 margin-top: 1px;
-                color: var(--text-muted);
+                color: var(--text-tertiary);
             }
             .row[data-status='completed'] .icon-wrap {
-                color: var(--success, #16a34a);
+                color: var(--success);
             }
             .row[data-status='in_progress'] .icon-wrap {
-                color: var(--accent, #2563eb);
+                color: var(--accent);
             }
             .row[data-status='need_help'] .icon-wrap {
-                color: var(--warning, #ca8a04);
+                color: var(--warning);
             }
             .row[data-status='failed'] .icon-wrap {
-                color: var(--danger, #dc2626);
+                color: var(--error);
             }
             .body {
                 flex: 1;
@@ -130,16 +130,16 @@ export class PlatformAgentPlan extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
             }
             .title {
-                font-size: var(--text-sm, 0.875rem);
+                font-size: var(--text-sm);
                 color: var(--text-primary);
                 line-height: 1.35;
                 word-break: break-word;
             }
             .row[data-status='completed'] .title {
-                color: var(--text-muted);
+                color: var(--text-tertiary);
                 text-decoration: line-through;
             }
             .badge {
@@ -148,10 +148,10 @@ export class PlatformAgentPlan extends PlatformElement {
                 font-weight: 600;
                 line-height: 1;
                 padding: 3px 6px;
-                border-radius: var(--radius-sm, 4px);
+                border-radius: var(--radius-sm);
                 text-transform: lowercase;
-                color: var(--text-muted);
-                background: var(--surface-muted, rgba(0, 0, 0, 0.06));
+                color: var(--text-tertiary);
+                background: var(--glass-tint-medium);
             }
             .row[data-status='completed'] .badge {
                 color: #166534;

@@ -13,6 +13,7 @@ import {
     SAMPLE_DATAFLOW_NODES,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/editor/flows-editor-header.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [editorResource, flowsResource, flowUpdateOp, flowReloadFromBundleOp, branchRemoveOp];
 
@@ -41,12 +42,12 @@ describe('flows-editor-header problems flyout', () => {
         });
         bus.dispatch('flows/editor/dataflow_set', { dataflow: { nodes: SAMPLE_DATAFLOW_NODES } });
 
-        const el = await fixture(html`<flows-editor-header flow-id="flow_test"></flows-editor-header>`);
+        const el = await fixture<TestEl>(html`<flows-editor-header flow-id="flow_test"></flows-editor-header>`);
         await elementUpdated(el);
 
-        const btn = el.shadowRoot.querySelector('.problems-btn');
+        const btn = q(shadow(el), '.problems-btn');
         expect(btn).to.not.equal(null);
-        expect(el.shadowRoot.querySelector('.problems-count').textContent).to.equal('2');
+        expect(qs(shadow(el), '.problems-count').textContent).to.equal('2');
     });
 
     it('opens flyout and navigates to problem node', async () => {
@@ -63,15 +64,15 @@ describe('flows-editor-header problems flyout', () => {
         });
         bus.dispatch('flows/editor/dataflow_set', { dataflow: { nodes: SAMPLE_DATAFLOW_NODES } });
 
-        const el = await fixture(html`<flows-editor-header flow-id="flow_test"></flows-editor-header>`);
+        const el = await fixture<TestEl>(html`<flows-editor-header flow-id="flow_test"></flows-editor-header>`);
         await elementUpdated(el);
 
-        el.shadowRoot.querySelector('.problems-btn').click();
+        qs(shadow(el), '.problems-btn').click();
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.problems-flyout')).to.not.equal(null);
+        expect(q(shadow(el), '.problems-flyout')).to.not.equal(null);
 
-        const item = el.shadowRoot.querySelector('.problem-item');
-        item.click();
+        const item = qs(shadow(el), '.problem-item');
+        (item as TestEl).click();
         await elementUpdated(el);
         expect(el._problemsOpen).to.equal(false);
     });
@@ -90,15 +91,15 @@ describe('flows-editor-header problems flyout', () => {
         });
         bus.dispatch('flows/editor/dataflow_set', { dataflow: { nodes: SAMPLE_DATAFLOW_NODES } });
 
-        const el = await fixture(html`<flows-editor-header
+        const el = await fixture<TestEl>(html`<flows-editor-header
             flow-id="flow_test"
             .interfaceDirty=${true}
             .interfaceProblems=${[{ code: 'inputs_without_action', severity: 'error', pageId: 'main', blockId: null, params: {} }]}
         ></flows-editor-header>`);
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelectorAll('.status-badge').length).to.equal(1);
-        expect(el.shadowRoot.querySelector('.status-badge').getAttribute('data-status')).to.equal('dirty');
-        expect(el.shadowRoot.querySelector('.problems-count').textContent).to.equal('3');
+        expect(qsa(shadow(el), '.status-badge').length).to.equal(1);
+        expect(qs(shadow(el), '.status-badge').getAttribute('data-status')).to.equal('dirty');
+        expect(qs(shadow(el), '.problems-count').textContent).to.equal('3');
     });
 });

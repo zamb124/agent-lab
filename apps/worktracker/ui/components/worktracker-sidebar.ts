@@ -45,7 +45,7 @@ export class WorktrackerSidebar extends PlatformElement {
                 padding: 0 5px;
                 border-radius: var(--radius-full);
                 background: var(--accent);
-                color: var(--text-on-accent, #fff);
+                color: var(--text-on-accent);
                 font-size: 11px;
                 font-weight: var(--font-semibold);
                 display: inline-flex;

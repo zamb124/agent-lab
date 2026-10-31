@@ -40,8 +40,8 @@ export class FrontendApiKeysPage extends PlatformPage {
             .secret-banner {
                 display: flex; flex-direction: column; gap: var(--space-2);
                 padding: var(--space-4);
-                background: rgba(59, 130, 246, 0.08);
-                border: 1px solid rgba(59, 130, 246, 0.4);
+                background: color-mix(in srgb, var(--info) 8%, transparent);
+                border: 1px solid color-mix(in srgb, var(--info) 40%, transparent);
                 border-radius: var(--radius-lg);
                 margin-bottom: var(--space-4);
             }
@@ -107,11 +107,11 @@ export class FrontendApiKeysPage extends PlatformPage {
         this.openModal(FrontendCreateApiKeyModal);
     }
 
-    _rename(key: Record<string, any>) {
+    _rename(key: Record<string, unknown>) {
         this.openModal(FrontendEditApiKeyModal, { item: key });
     }
 
-    async _revoke(key: Record<string, any>) {
+    async _revoke(key: Record<string, unknown>) {
         const ok = await platformConfirm(
             this.t('api_keys_page.confirm_revoke', { name: key.name }),
             {
@@ -179,7 +179,7 @@ export class FrontendApiKeysPage extends PlatformPage {
         `;
     }
 
-    _renderRow(k: Record<string, any>) {
+    _renderRow(k: Record<string, unknown>) {
         return html`
             <tr>
                 <td>${k.name}</td>

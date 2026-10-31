@@ -6,11 +6,12 @@ import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/rend
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import '@platform/lib/components/platform-resizable-split.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 const STORAGE_KEY = platformStorageKey('wiki', 'split.tree');
 
-async function mountSplit(props = {}) {
-    const el = await fixture(html`
+async function mountSplit(props: any = {}) {
+    const el = await fixture<TestEl>(html`
         <platform-resizable-split
             storage-key=${props.storageKey ?? ''}
             storage-scope="wiki"
@@ -26,12 +27,12 @@ async function mountSplit(props = {}) {
     return el;
 }
 
-function handleOf(el) {
-    return el.shadowRoot.querySelector('.handle');
+function handleOf(el: any) {
+    return qs(shadow(el), '.handle');
 }
 
-function sideWidth(el) {
-    return el.shadowRoot.querySelector('.side').getBoundingClientRect().width;
+function sideWidth(el: any) {
+    return qs(shadow(el), '.side').getBoundingClientRect().width;
 }
 
 describe('platform-resizable-split', () => {
@@ -44,8 +45,8 @@ describe('platform-resizable-split', () => {
     it('рисует обе панели и разделитель', async () => {
         const el = await mountSplit();
 
-        expect(el.shadowRoot.querySelector('.side')).to.exist;
-        expect(el.shadowRoot.querySelector('.main')).to.exist;
+        expect(qs(shadow(el), '.side')).to.exist;
+        expect(qs(shadow(el), '.main')).to.exist;
         expect(handleOf(el).getAttribute('role')).to.equal('separator');
     });
 
@@ -94,7 +95,7 @@ describe('platform-resizable-split', () => {
         window.dispatchEvent(new PointerEvent('pointermove', { clientX: 330 }));
         const event = await resized;
 
-        expect(event.detail.size).to.equal(290);
+        expect((event as CustomEvent).detail.size).to.equal(290);
     });
 
     it('стрелки двигают границу с клавиатуры', async () => {

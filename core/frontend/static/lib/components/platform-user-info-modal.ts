@@ -61,7 +61,7 @@ interface AuthUserRecord {
 
 interface AuthSliceView {
     status?: string;
-    user?: AuthUserRecord;
+    user?: AuthUserRecord | undefined;
 }
 
 interface TeamMemberRecord {
@@ -91,8 +91,8 @@ interface UserInfoUser {
     first_name?: string;
     last_name?: string;
     bio?: string;
-    email?: string | null;
-    avatar_url?: string | null;
+    email?: string | null | undefined;
+    avatar_url?: string | null | undefined;
     roles: string[];
     joined_at?: string | null;
     language?: string;
@@ -230,21 +230,21 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: var(--space-3, 12px);
-                padding: var(--space-2, 8px) 0 var(--space-4, 16px);
+                gap: var(--space-3);
+                padding: var(--space-2) 0 var(--space-4);
             }
 
             .avatar-lg {
                 width: 96px;
                 height: 96px;
                 border-radius: 50%;
-                background: var(--accent-subtle, rgba(99, 102, 241, 0.18));
-                color: var(--accent, #6366f1);
+                background: var(--accent-subtle);
+                color: var(--accent);
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-size: 36px;
-                font-weight: var(--font-semibold, 600);
+                font-weight: var(--font-semibold);
                 overflow: hidden;
                 flex-shrink: 0;
             }
@@ -257,15 +257,15 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             }
 
             .name {
-                font-size: var(--text-xl, 20px);
-                font-weight: var(--font-semibold, 600);
+                font-size: var(--text-xl);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
                 text-align: center;
             }
 
             .email {
-                font-size: var(--text-sm, 14px);
-                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
                 text-align: center;
                 word-break: break-all;
             }
@@ -274,13 +274,13 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 width: 100%;
                 display: grid;
                 grid-template-columns: max-content 1fr;
-                gap: var(--space-2, 8px) var(--space-3, 12px);
-                margin-top: var(--space-2, 8px);
+                gap: var(--space-2) var(--space-3);
+                margin-top: var(--space-2);
             }
 
             .meta-label {
-                color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
-                font-size: var(--text-xs, 12px);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
                 align-self: center;
@@ -288,22 +288,22 @@ export class PlatformUserInfoModal extends PlatformFormModal {
 
             .meta-value {
                 color: var(--text-primary);
-                font-size: var(--text-sm, 14px);
+                font-size: var(--text-sm);
             }
 
             .role-chips {
                 display: flex;
                 flex-wrap: wrap;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
             }
 
             .role-chip {
                 padding: 2px 10px;
-                border-radius: var(--radius-full, 999px);
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
+                border-radius: var(--radius-full);
+                background: var(--glass-tint-medium);
                 color: var(--text-primary);
-                font-size: var(--text-xs, 12px);
-                font-weight: var(--font-medium, 500);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
             }
 
             .actions {
@@ -311,7 +311,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 flex-direction: row;
                 flex-wrap: wrap;
                 align-items: center;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
                 width: 100%;
             }
 
@@ -329,36 +329,36 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             }
 
             .empty {
-                padding: var(--space-4, 16px);
+                padding: var(--space-4);
                 color: var(--text-tertiary);
-                font-size: var(--text-sm, 14px);
+                font-size: var(--text-sm);
                 text-align: center;
             }
 
             .roles-section {
-                margin-top: var(--space-4, 16px);
-                padding-top: var(--space-4, 16px);
+                margin-top: var(--space-4);
+                padding-top: var(--space-4);
                 border-top: 1px solid var(--glass-border-subtle);
             }
 
             .roles-section-title {
-                font-size: var(--text-sm, 14px);
-                font-weight: var(--font-semibold, 600);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
-                margin-bottom: var(--space-2, 8px);
+                margin-bottom: var(--space-2);
             }
 
             .roles-list {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
             }
 
             .role-row {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3, 12px);
-                padding: var(--space-2, 8px) var(--space-3, 12px);
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-3);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
@@ -388,22 +388,22 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             }
 
             .channels-section {
-                margin-top: var(--space-4, 16px);
-                padding-top: var(--space-4, 16px);
+                margin-top: var(--space-4);
+                padding-top: var(--space-4);
                 border-top: 1px solid var(--glass-border-subtle);
             }
 
             .channels-section-title {
-                font-size: var(--text-sm, 14px);
-                font-weight: var(--font-semibold, 600);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
-                margin-bottom: var(--space-2, 8px);
+                margin-bottom: var(--space-2);
             }
 
             .channels-grid {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
             }
 
             .channel-cell {
@@ -422,11 +422,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             }
 
             .channels-empty {
-                padding: var(--space-3, 12px);
+                padding: var(--space-3);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 color: var(--text-tertiary);
-                font-size: var(--text-sm, 14px);
+                font-size: var(--text-sm);
                 background: var(--glass-solid-subtle);
             }
         `,

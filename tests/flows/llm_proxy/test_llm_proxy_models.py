@@ -35,8 +35,8 @@ from apps.flows.src.llm_proxy.proxy import (
 from core.a2a import struct_from_mapping
 from core.ai.models import AIModelRecord, ResolvedAIModel
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     AICapability,
 )
 from core.websocket import WsCommandError
@@ -44,7 +44,7 @@ from tests.flows.llm_proxy._helpers import company_id_from_auth_token, ensure_co
 
 
 def test_llm_proxy_option_value_reads_string_and_json_object() -> None:
-    assert _llm_proxy_option_value("auto") == HUMANITEC_LLM_AUTO_MODEL
+    assert _llm_proxy_option_value("auto") == LINNEX_LLM_AUTO_MODEL
     assert _llm_proxy_option_value({"value": "openrouter:qwen/qwen3-coder:free"}) == (
         "openrouter:qwen/qwen3-coder:free"
     )
@@ -52,7 +52,7 @@ def test_llm_proxy_option_value_reads_string_and_json_object() -> None:
 
 
 def test_validate_requested_agent_model_rejects_unknown_model() -> None:
-    allowed = {HUMANITEC_LLM_AUTO_MODEL, "openrouter:qwen/qwen3-coder:free"}
+    allowed = {LINNEX_LLM_AUTO_MODEL, "openrouter:qwen/qwen3-coder:free"}
     with pytest.raises(WsCommandError) as exc_info:
         _validate_requested_llm_proxy_model("anthropic:claude-3.5-sonnet", allowed)
     assert exc_info.value.code == "ws_invalid_payload"
@@ -60,8 +60,8 @@ def test_validate_requested_agent_model_rejects_unknown_model() -> None:
 
 
 def test_validate_requested_agent_model_accepts_auto() -> None:
-    allowed = {HUMANITEC_LLM_AUTO_MODEL}
-    assert _validate_requested_llm_proxy_model("auto", allowed) == HUMANITEC_LLM_AUTO_MODEL
+    allowed = {LINNEX_LLM_AUTO_MODEL}
+    assert _validate_requested_llm_proxy_model("auto", allowed) == LINNEX_LLM_AUTO_MODEL
 
 
 @pytest.mark.asyncio
@@ -88,23 +88,23 @@ async def test_read_llm_proxy_model_ids_uses_catalog_and_llm_models_service(
         if stored is not None:
             _ = await stored.delete()
 
-    assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
+    assert model_ids[0] == LINNEX_LLM_AUTO_MODEL
     assert "image-auto" in model_ids
     assert "lara:documents" in model_ids
     assert f"openrouter:{model_id}" in model_ids
 
 
 @pytest.mark.asyncio
-async def test_read_llm_proxy_model_ids_falls_back_to_humanitec_llm_options(
+async def test_read_llm_proxy_model_ids_falls_back_to_linnex_llm_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm_models_service = MagicMock()
     llm_models_service.get_configured_providers_by_capability.return_value = [
-        HUMANITEC_LLM_PROVIDER,
+        LINNEX_LLM_PROVIDER,
     ]
     llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
         return_value=[
-            {"value": HUMANITEC_LLM_AUTO_MODEL, "label": HUMANITEC_LLM_AUTO_MODEL},
+            {"value": LINNEX_LLM_AUTO_MODEL, "label": LINNEX_LLM_AUTO_MODEL},
             {"value": "groq:llama-3.1-8b-instant", "label": "groq / llama-3.1-8b-instant"},
         ],
     )
@@ -115,19 +115,19 @@ async def test_read_llm_proxy_model_ids_falls_back_to_humanitec_llm_options(
 
     model_ids = await read_llm_proxy_model_ids(llm_models_service)
 
-    assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
+    assert model_ids[0] == LINNEX_LLM_AUTO_MODEL
     assert "image-auto" in model_ids
     assert "lara:documents" in model_ids
     assert "groq:llama-3.1-8b-instant" in model_ids
 
 
-def test_resolve_llm_proxy_model_auto_uses_humanitec_llm(
+def test_resolve_llm_proxy_model_auto_uses_linnex_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expected = ResolvedAIModel(
         capability=AICapability.LLM_CHAT,
-        provider=HUMANITEC_LLM_PROVIDER,
-        model=HUMANITEC_LLM_AUTO_MODEL,
+        provider=LINNEX_LLM_PROVIDER,
+        model=LINNEX_LLM_AUTO_MODEL,
         cost_origin="platform",
     )
 
@@ -140,12 +140,12 @@ def test_resolve_llm_proxy_model_auto_uses_humanitec_llm(
     ) -> ResolvedAIModel | None:
         _ = capability, requirements, include_platform_default
         assert selection is not None
-        assert getattr(selection, "provider") == HUMANITEC_LLM_PROVIDER
-        assert getattr(selection, "model") == HUMANITEC_LLM_AUTO_MODEL
+        assert getattr(selection, "provider") == LINNEX_LLM_PROVIDER
+        assert getattr(selection, "model") == LINNEX_LLM_AUTO_MODEL
         return expected
 
     monkeypatch.setattr("apps.flows.src.llm_proxy.proxy.resolve_ai_model", fake_resolve_ai_model)
-    resolved = _resolve_llm_proxy_model(HUMANITEC_LLM_AUTO_MODEL)
+    resolved = _resolve_llm_proxy_model(LINNEX_LLM_AUTO_MODEL)
     assert resolved == expected
 
 
@@ -177,9 +177,9 @@ def test_resolve_llm_proxy_auto_mock_bridge_uses_mock_when_env_set(
     previous = settings.llm_proxy_use_mock_auto
     settings.llm_proxy_use_mock_auto = True
     try:
-        bridged = _resolve_llm_proxy_auto_mock_bridge(HUMANITEC_LLM_AUTO_MODEL)
+        bridged = _resolve_llm_proxy_auto_mock_bridge(LINNEX_LLM_AUTO_MODEL)
         assert bridged == expected
-        resolved = _resolve_llm_proxy_model(HUMANITEC_LLM_AUTO_MODEL)
+        resolved = _resolve_llm_proxy_model(LINNEX_LLM_AUTO_MODEL)
         assert resolved == expected
     finally:
         settings.llm_proxy_use_mock_auto = previous

@@ -17,7 +17,7 @@ const BRAND = {
     supportEmail: 'support@linnex.io',
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://linnex.io/',
-    supportedDomains: ['linnex.io', 'humanitec.ru'],
+    supportedDomains: ['linnex.io', 'linnex.io'],
     modelsProductName: 'Linnex Models',
     voiceProductName: 'Linnex Voice',
     llmsDisplayLabel: 'Linnex LLMs',

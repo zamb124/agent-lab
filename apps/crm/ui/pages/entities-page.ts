@@ -49,7 +49,7 @@ import type {
     TemplateResult,
 } from 'lit';
 import type {
-    CursorListController,
+    ControllerFor,
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
@@ -57,6 +57,7 @@ import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const STATUS_FILTERS = ['active', 'archived'];
@@ -264,7 +265,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 font-weight: 500;
                 padding: 0 var(--space-5);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
                 white-space: nowrap;
                 flex-shrink: 0;
             }
@@ -347,7 +348,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 color: var(--text-tertiary);
                 cursor: pointer;
                 padding: 0;
-                transition: background var(--duration-fast), color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro);
             }
 
             .view-toggle-btn:hover {
@@ -539,8 +540,8 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 height: 22px;
                 padding: 0 6px;
                 border-radius: var(--radius-full);
-                background: var(--accent, #3b82f6);
-                color: #fff;
+                background: var(--accent);
+                color: var(--text-primary);
                 font-size: 11px;
                 font-weight: 700;
             }
@@ -557,7 +558,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             }
             .bulk-action-btn:hover {
                 transform: scale(1.1);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+                box-shadow: 0 2px 8px var(--glass-shadow-medium);
             }
             .bulk-action-btn:disabled {
                 opacity: 0.5;
@@ -566,12 +567,12 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 box-shadow: none;
             }
             .bulk-action-btn--status {
-                background: var(--accent, #3b82f6);
-                color: #fff;
+                background: var(--accent);
+                color: var(--text-primary);
             }
             .bulk-action-btn--delete {
-                background: var(--error, #f43f5e);
-                color: #fff;
+                background: var(--error);
+                color: var(--text-primary);
             }
             .bulk-action-btn--clear {
                 background: var(--crm-surface-muted);
@@ -723,20 +724,20 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             .entities-table tbody tr {
                 border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
 
             .entities-table tbody tr:hover,
             .entities-table tbody tr.active {
-                background: rgba(153, 166, 249, 0.08);
+                background: color-mix(in srgb, var(--accent) 8%, transparent);
             }
 
             .entities-table tbody tr.selected {
-                background: rgba(59, 130, 246, 0.08);
+                background: color-mix(in srgb, var(--info) 8%, transparent);
             }
 
             .entities-table tbody tr.merge-drop-hover {
-                box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.35);
+                box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
             }
 
             .entities-table td {
@@ -752,7 +753,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                color: rgba(34, 34, 34, 0.2);
+                color: color-mix(in srgb, var(--text-primary) 20%, transparent);
                 cursor: grab;
             }
             .table-grip:active { cursor: grabbing; }
@@ -837,7 +838,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 left: 0;
                 top: 0;
                 height: 100%;
-                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                background: linear-gradient(90deg, var(--info), var(--accent-tertiary));
                 opacity: 0.25;
             }
             .card-score .score-label {
@@ -870,7 +871,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 max-width: 100%;
                 box-sizing: border-box;
                 cursor: pointer;
-                transition: border-color var(--duration-fast), background var(--duration-fast);
+                transition: border-color var(--motion-duration-micro), background var(--motion-duration-micro);
             }
             .entity-card-item:hover {
                 background: var(--crm-list-card-bg-hover);
@@ -880,14 +881,14 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 background: color-mix(in srgb, var(--crm-selected-bg) 82%, var(--crm-list-card-bg));
             }
             .entity-card-item.selected {
-                border-color: var(--accent, #3b82f6);
-                background: rgba(59, 130, 246, 0.06);
-                box-shadow: 0 0 0 1px var(--accent, #3b82f6);
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--info) 6%, transparent);
+                box-shadow: 0 0 0 1px var(--accent);
             }
             .entity-card-item.merge-drag-source { opacity: 0.55; }
             .entity-card-item.merge-drop-hover {
                 border-color: var(--accent);
-                box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
             }
 
             .card-header {
@@ -944,7 +945,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 color: var(--text-tertiary);
             }
             .semantic-index-icon--pending_embedding {
-                color: color-mix(in srgb, var(--warning, #f59e0b) 90%, var(--text-primary));
+                color: color-mix(in srgb, var(--warning) 90%, var(--text-primary));
             }
             .semantic-index-icon--absent {
                 opacity: 0.85;
@@ -969,7 +970,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 cursor: grab;
                 touch-action: none;
                 user-select: none;
-                transition: color var(--duration-fast), background var(--duration-fast);
+                transition: color var(--motion-duration-micro), background var(--motion-duration-micro);
             }
             .entity-card-drag-handle * { pointer-events: none; }
             .entity-card-drag-handle:hover {
@@ -1054,15 +1055,15 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 justify-content: center;
                 padding: 0;
                 border-radius: var(--radius-md);
-                border: 1px solid rgba(244, 63, 94, 0.35);
+                border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
                 background: var(--crm-surface-muted);
-                color: var(--error, #f43f5e);
+                color: var(--error);
                 cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), border-color var(--motion-duration-micro);
             }
             .card-delete-btn:hover {
-                background: rgba(244, 63, 94, 0.12);
-                border-color: var(--error, #f43f5e);
+                background: color-mix(in srgb, var(--error) 12%, transparent);
+                border-color: var(--error);
             }
 
             platform-empty-state { min-height: 200px; }
@@ -1092,7 +1093,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 overflow: hidden;
                 box-sizing: border-box;
                 background: var(--crm-surface);
-                border-radius: var(--radius-xl, 20px) 0 0 var(--radius-xl, 20px);
+                border-radius: var(--radius-xl) 0 0 var(--radius-xl);
                 border: 1px solid var(--crm-stroke);
                 border-right: none;
                 box-shadow: -10px 0 36px color-mix(in srgb, var(--text-primary) 10%, transparent);
@@ -1216,7 +1217,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 background: var(--crm-surface);
                 border: 1px solid var(--crm-stroke);
                 border-right: none;
-                border-radius: var(--radius-xl, 20px) 0 0 var(--radius-xl, 20px);
+                border-radius: var(--radius-xl) 0 0 var(--radius-xl);
                 box-shadow: -10px 0 36px color-mix(in srgb, var(--text-primary) 10%, transparent);
             }
 
@@ -1305,7 +1306,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `,
     ];
 
-    private _entities: CursorListController;
+    private _entities: ControllerFor<'crm/entities_list'>;
     private _entityTypes: ResourceController;
     private _aggregate: OpController;
     private _bulkDelete: OpController;
@@ -1715,13 +1716,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 const label = nm.length > 0 ? nm : typeId;
                 return {
                     icon: this._resolveIconName(match.icon),
-                    color: typeof match.color === 'string' && match.color.length > 0 ? match.color : 'var(--text-tertiary)',
+                    color: typeof match.color === 'string' && match.color.length > 0 ? match.color : cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)'),
                     label,
                 };
             }
         }
         const et = typeof entity.entity_type === 'string' ? entity.entity_type : '';
-        return { icon: 'folder', color: 'var(--text-tertiary)', label: et.length > 0 ? et : 'entity' };
+        return { icon: 'folder', color: cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)'), label: et.length > 0 ? et : 'entity' };
     }
 
     _resolveIconName(iconName: unknown): string {
@@ -1732,10 +1733,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
     _hexToRgba(hex: unknown, alpha: number): string {
         if (typeof hex !== 'string' || hex.length === 0 || hex.startsWith('var(')) {
-            return `rgba(148, 163, 184, ${alpha})`;
+            return `color-mix(in srgb, var(--text-tertiary) calc(alpha * 100%), transparent)`;
         }
         const clean = hex.replace('#', '');
-        if (clean.length !== 6) return `rgba(148, 163, 184, ${alpha})`;
+        if (clean.length !== 6) return `color-mix(in srgb, var(--text-tertiary) calc(alpha * 100%), transparent)`;
         const r = parseInt(clean.substring(0, 2), 16);
         const g = parseInt(clean.substring(2, 4), 16);
         const b = parseInt(clean.substring(4, 6), 16);

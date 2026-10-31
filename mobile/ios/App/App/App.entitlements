@@ -6,9 +6,9 @@
 	<string>development</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:humanitec.ru</string>
-		<string>applinks:www.humanitec.ru</string>
-		<string>applinks:*.humanitec.ru</string>
+		<string>applinks:linnex.io</string>
+		<string>applinks:www.linnex.io</string>
+		<string>applinks:*.linnex.io</string>
 		<string>applinks:humanetic.ru</string>
 		<string>applinks:www.humanetic.ru</string>
 		<string>applinks:*.humanetic.ru</string>

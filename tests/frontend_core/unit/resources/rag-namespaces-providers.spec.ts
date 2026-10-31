@@ -4,7 +4,8 @@ import {
     namespacesResource,
 } from '@platform/lib/events/resources/rag-namespaces.resource.js';
 import { providersResource } from '@platform/lib/events/resources/rag-providers.resource.js';
-import { buildCtx } from '../../helpers/bus-fixtures.js';
+import { buildCtx, testEvent } from '../../helpers/bus-fixtures.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 
 beforeEach(() => {
@@ -27,47 +28,27 @@ describe('rag/namespaces', () => {
     });
 
     it('create form submit trim и пустое description → null', () => {
-        const opened = namespaceCreateForm.reducer(namespaceCreateForm.slice.initial, {
-            type: namespaceCreateForm.events.OPENED,
-            payload: { initial: { name: 'kb-support', description: '  notes  ' } },
-            id: 'open1',
-            meta: {},
-        });
-        const dispatched = [];
+        const opened = namespaceCreateForm.reducer(namespaceCreateForm.slice.initial, testEvent(namespaceCreateForm.events.OPENED, { initial: { name: 'kb-support', description: '  notes  ' } }));
+        const dispatched: DispatchedRecord[] = [];
         namespaceCreateForm.effect(
-            {
-                type: namespaceCreateForm.events.SUBMIT_REQUESTED,
-                payload: null,
-                id: 'sub1',
-                meta: {},
-            },
+            testEvent(namespaceCreateForm.events.SUBMIT_REQUESTED, null),
             buildCtx(() => ({ [namespaceCreateForm.sliceKey]: opened }), dispatched),
         );
-        expect(dispatched[0].type).toBe(namespacesResource.events.CREATE_REQUESTED);
-        expect(dispatched[0].payload).toEqual({
+        expect(dispatched[0]?.type).toBe(namespacesResource.events.CREATE_REQUESTED);
+        expect(dispatched[0]?.payload).toEqual({
             name: 'kb-support',
             description: 'notes',
         });
     });
 
     it('create form пустое description становится null', () => {
-        const opened = namespaceCreateForm.reducer(namespaceCreateForm.slice.initial, {
-            type: namespaceCreateForm.events.OPENED,
-            payload: { initial: { name: 'kb', description: '   ' } },
-            id: 'open2',
-            meta: {},
-        });
-        const dispatched = [];
+        const opened = namespaceCreateForm.reducer(namespaceCreateForm.slice.initial, testEvent(namespaceCreateForm.events.OPENED, { initial: { name: 'kb', description: '   ' } }));
+        const dispatched: DispatchedRecord[] = [];
         namespaceCreateForm.effect(
-            {
-                type: namespaceCreateForm.events.SUBMIT_REQUESTED,
-                payload: null,
-                id: 'sub2',
-                meta: {},
-            },
+            testEvent(namespaceCreateForm.events.SUBMIT_REQUESTED, null),
             buildCtx(() => ({ [namespaceCreateForm.sliceKey]: opened }), dispatched),
         );
-        expect(dispatched[0].payload).toEqual({ name: 'kb', description: null });
+        expect(dispatched[0]?.payload).toEqual({ name: 'kb', description: null });
     });
 });
 
@@ -82,27 +63,18 @@ describe('rag/providers', () => {
     });
 
     it('SUCCEEDED кладёт items и current_provider', () => {
-        const next = providersResource.reducer(providersResource.slice.initial, {
-            type: providersResource.events.SUCCEEDED,
-            payload: {
+        const next = providersResource.reducer(providersResource.slice.initial, testEvent(providersResource.events.SUCCEEDED, {
                 result: {
                     items: [{ id: 'pgvector' }],
                     current_provider: 'pgvector',
                 },
-            },
-        });
+            }));
         expect(next.items).toEqual([{ id: 'pgvector' }]);
         expect(next.current).toBe('pgvector');
     });
 
     it('SUCCEEDED без items/current_provider — throw', () => {
-        expect(() => providersResource.reducer(providersResource.slice.initial, {
-            type: providersResource.events.SUCCEEDED,
-            payload: { result: { current_provider: 'pgvector' } },
-        })).toThrow(/result.items must be array/);
-        expect(() => providersResource.reducer(providersResource.slice.initial, {
-            type: providersResource.events.SUCCEEDED,
-            payload: { result: { items: [], current_provider: 1 } },
-        })).toThrow(/current_provider must be string/);
+        expect(() => providersResource.reducer(providersResource.slice.initial, testEvent(providersResource.events.SUCCEEDED, { result: { current_provider: 'pgvector' } }))).toThrow(/result.items must be array/);
+        expect(() => providersResource.reducer(providersResource.slice.initial, testEvent(providersResource.events.SUCCEEDED, { result: { items: [], current_provider: 1 } }))).toThrow(/current_provider must be string/);
     });
 });

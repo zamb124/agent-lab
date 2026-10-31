@@ -5,8 +5,9 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { ProvidersView } from '../wire/rag.gen.js';
 
-export const providersResource = createAsyncOp({
+export const providersResource = createAsyncOp<ProvidersView>({
     name: 'rag/providers',
     silent: true,
     transport: 'ws',

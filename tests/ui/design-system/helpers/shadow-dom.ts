@@ -1,19 +1,21 @@
 /** Shadow DOM helpers for UI Kit WTR contract tests. */
 
-export function shadowQuery(host, selector) {
-    if (!host || !host.shadowRoot) {
+export function shadowQuery<T extends Element = HTMLElement>(host: Element, selector: string): T {
+    const root = host.shadowRoot;
+    if (!root) {
         throw new Error('shadowQuery: host shadowRoot missing');
     }
-    const node = host.shadowRoot.querySelector(selector);
+    const node = root.querySelector(selector);
     if (!node) {
         throw new Error(`shadowQuery: selector not found: ${selector}`);
     }
-    return node;
+    return node as T;
 }
 
-export function shadowQueryAll(host, selector) {
-    if (!host || !host.shadowRoot) {
+export function shadowQueryAll<T extends Element = HTMLElement>(host: Element, selector: string): T[] {
+    const root = host.shadowRoot;
+    if (!root) {
         throw new Error('shadowQueryAll: host shadowRoot missing');
     }
-    return [...host.shadowRoot.querySelectorAll(selector)];
+    return [...root.querySelectorAll(selector)] as T[];
 }

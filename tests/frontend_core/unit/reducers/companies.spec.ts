@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { companiesReducer, initialCompaniesState, COMPANIES_EVENTS, companiesSlice } from '@platform/lib/events/reducers/companies.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('companiesReducer', () => {
     it('initial', () => {

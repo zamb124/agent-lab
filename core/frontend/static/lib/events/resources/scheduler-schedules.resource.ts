@@ -20,6 +20,10 @@ import {
 } from '../index.js';
 import { CoreEvents } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
+import type {
+    PlatformRedisScheduleSnapshot,
+    PlatformScheduledTask,
+} from '../wire/scheduler.gen.js';
 
 function booleanMap(value: unknown, label: string): Record<string, boolean> {
     if (!isPlainRecord(value)) {
@@ -54,7 +58,7 @@ const SCHEDULE_TASK_MUTATION_SUCCEEDED = new Set([
     'scheduler/schedule_run_now/succeeded',
 ]);
 
-export const schedulerTasksResource = createResourceCollection({
+export const schedulerTasksResource = createResourceCollection<PlatformScheduledTask>({
     name: 'scheduler/schedule_tasks',
     baseUrl: '/scheduler/api/v1/schedules',
     idField: 'schedule_task_id',
@@ -82,7 +86,7 @@ export const schedulerTasksResource = createResourceCollection({
     },
 });
 
-export const schedulerPauseOp = createAsyncOp({
+export const schedulerPauseOp = createAsyncOp<PlatformScheduledTask>({
     name: 'scheduler/schedule_pause',
     silent: true,
     transport: 'ws',
@@ -91,7 +95,7 @@ export const schedulerPauseOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/pause' },
 });
 
-export const schedulerResumeOp = createAsyncOp({
+export const schedulerResumeOp = createAsyncOp<PlatformScheduledTask>({
     name: 'scheduler/schedule_resume',
     silent: true,
     transport: 'ws',
@@ -100,7 +104,7 @@ export const schedulerResumeOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/resume' },
 });
 
-export const schedulerCancelOp = createAsyncOp({
+export const schedulerCancelOp = createAsyncOp<PlatformScheduledTask>({
     name: 'scheduler/schedule_cancel',
     silent: true,
     transport: 'ws',
@@ -109,7 +113,7 @@ export const schedulerCancelOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/cancel' },
 });
 
-export const schedulerRunNowOp = createAsyncOp({
+export const schedulerRunNowOp = createAsyncOp<PlatformScheduledTask>({
     name: 'scheduler/schedule_run_now',
     silent: true,
     transport: 'ws',
@@ -125,7 +129,7 @@ export const schedulerRunNowOp = createAsyncOp({
     },
 });
 
-export const schedulerRedisOp = createAsyncOp({
+export const schedulerRedisOp = createAsyncOp<PlatformRedisScheduleSnapshot>({
     name: 'scheduler/schedule_redis',
     silent: true,
     transport: 'ws',

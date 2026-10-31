@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 import { mapEditorA2aFrame } from '../../../../apps/flows/ui/_helpers/flows-editor-a2a-run.js';
 
 const CONTEXT_ID = 'context:65b4c118-763f-4080-bf46-ee4dc5b01cd6';
@@ -11,7 +12,7 @@ const SESSION = Object.freeze({
     traceIndexBase: 0,
 });
 
-function rpcFrame(result) {
+function rpcFrame(result: unknown) {
     return { jsonrpc: '2.0', id: 'rpc:test', result };
 }
 
@@ -85,9 +86,10 @@ describe('mapEditorA2aFrame', () => {
         });
         expect(mapped.terminal).toBe(false);
         expect(mapped.runEvents).toHaveLength(1);
-        expect(mapped.runEvents[0].type).toBe('flows/run/node_failed');
-        expect(mapped.runEvents[0].payload.node_id).toBe('main');
-        expect(mapped.runEvents[0].payload.error).toBe(
+        expect(prop(mapped.runEvents[0], 'type')).toBe('flows/run/node_failed');
+        const failedPayload = prop(mapped.runEvents[0], 'payload');
+        expect(prop(failedPayload, 'node_id')).toBe('main');
+        expect(prop(failedPayload, 'error')).toBe(
             "LLM node 'main' returned empty final response after 1 iteration(s)",
         );
         expect(mapped.traceEntries[0].kind).toBe('node_error');

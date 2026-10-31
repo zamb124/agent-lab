@@ -8,7 +8,7 @@ import {
 } from '@platform/lib/utils/platform-files-url.js';
 import { installDomShim } from '../../helpers/dom-shim.js';
 
-let dom;
+let dom: ReturnType<typeof installDomShim>;
 
 beforeEach(() => {
     clearPlatformFilesRouteSegment();

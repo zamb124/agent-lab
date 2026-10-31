@@ -1,4 +1,4 @@
-"""Crawl enrichment E2E: real HTTP fetch + Humanitec LLM + RAG ingest."""
+"""Crawl enrichment E2E: real HTTP fetch + Linnex LLM + RAG ingest."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -14,13 +13,14 @@ from apps.search.models import (
     CrawlProfile,
     CrawlProfileCreateRequest,
 )
+from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
     poll_enriched_urls,
     poll_index_search_hits,
-    require_crawl_humanitec_llm_live_gate,
+    require_crawl_linnex_llm_live_gate,
 )
 
 pytestmark = [
@@ -42,7 +42,7 @@ async def test_crawl_enrichment_indexes_example_com_with_page_summary(
     search_system_context,
     unique_id,
 ):
-    require_crawl_humanitec_llm_live_gate()
+    require_crawl_linnex_llm_live_gate()
     _ = (
         search_worker,
         rag_worker,

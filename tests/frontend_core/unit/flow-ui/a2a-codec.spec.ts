@@ -68,7 +68,7 @@ describe('flow-ui a2a codec', () => {
         const plain = buildSendMessageBody(message, { streaming: false, branchId: 'sales', variables: { plan: 'pro' } });
         expect(plain.method).toBe('SendMessage');
         expect(plain.params.metadata).toEqual({ branch: 'sales', variables: { plan: 'pro' } });
-        expect(() => buildSendMessageBody(message, { variables: ['x'] })).toThrow(/plain object/);
+        expect(() => Reflect.apply(buildSendMessageBody, null, [message, { variables: ['x'] }])).toThrow(/plain object/);
     });
 
     it('builds ListTasks, SubscribeToTask and CancelTask bodies fail-closed', () => {

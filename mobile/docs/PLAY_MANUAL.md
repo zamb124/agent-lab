@@ -1,6 +1,6 @@
 # Google Play: что и где заполнять вручную (Android)
 
-Конспект по экранам **Google Play Console**. Сборка AAB и подпись описаны в [`mobile/android/README.md`](../android/README.md). Тексты витрины и графика — в [`PLAY_HUMANITEC.md`](PLAY_HUMANITEC.md).
+Конспект по экранам **Google Play Console**. Сборка AAB и подпись описаны в [`mobile/android/README.md`](../android/README.md). Тексты витрины и графика — в [`PLAY_LINNEX.md`](PLAY_LINNEX.md).
 
 ---
 
@@ -47,7 +47,7 @@
 
 ## 4. Store presence → Main store listing
 
-Поля и черновики текстов — [`PLAY_HUMANITEC.md`](PLAY_HUMANITEC.md). Кратко: App name, Short description (≤80), Full description (≤4000), категория, иконка 512×512 (`mobile/screens/play_icon_512.png`), Feature graphic 1024×500 (`mobile/screens/play_feature_graphic_1024x500.png`), screenshots (`mobile/screens/generated/play_*`), URL поддержки и e-mail.
+Поля и черновики текстов — [`PLAY_LINNEX.md`](PLAY_LINNEX.md). Кратко: App name, Short description (≤80), Full description (≤4000), категория, иконка 512×512 (`mobile/screens/play_icon_512.png`), Feature graphic 1024×500 (`mobile/screens/play_feature_graphic_1024x500.png`), screenshots (`mobile/screens/generated/play_*`), URL поддержки и e-mail.
 
 ---
 
@@ -67,8 +67,8 @@
 
 | Шаг | Где | Что сделать |
 |-----|-----|-------------|
-| 6.1 | На сервере | На каждом **апексном** домене (`humanitec.ru`, `humanetic.ru`, `agents-lab.ru`) должен отдаваться `GET https://<host>/.well-known/assetlinks.json` с `Content-Type: application/json`. Этого достаточно: для wildcard-хостов из [`AndroidManifest.xml`](../android/app/src/main/AndroidManifest.xml) (`*.humanitec.ru` и т.д.) Android (API 31+) берёт `assetlinks.json` с апекса, отдельный файл на каждом slug-поддомене **не нужен**. Бэкенд платформы делает это через [`core/app/pwa_routes.py`](../../core/app/pwa_routes.py) условно — если файл `core/frontend/pwa/assetlinks.json` присутствует. |
-| 6.2 | `core/frontend/pwa/assetlinks.json` | По шаблону [`assetlinks.json.example`](../../core/frontend/pwa/assetlinks.json.example): `package_name = ru.humanitec.app`, в `sha256_cert_fingerprints` — **оба** fingerprint из п. 5.2 (upload + app signing). На каждом из трёх апексов нужен свой `/.well-known/assetlinks.json` с тем же содержимым. |
+| 6.1 | На сервере | На каждом **апексном** домене (`linnex.io`, `humanetic.ru`, `agents-lab.ru`) должен отдаваться `GET https://<host>/.well-known/assetlinks.json` с `Content-Type: application/json`. Этого достаточно: для wildcard-хостов из [`AndroidManifest.xml`](../android/app/src/main/AndroidManifest.xml) (`*.linnex.io` и т.д.) Android (API 31+) берёт `assetlinks.json` с апекса, отдельный файл на каждом slug-поддомене **не нужен**. Бэкенд платформы делает это через [`core/app/pwa_routes.py`](../../core/app/pwa_routes.py) условно — если файл `core/frontend/pwa/assetlinks.json` присутствует. |
+| 6.2 | `core/frontend/pwa/assetlinks.json` | По шаблону [`assetlinks.json.example`](../../core/frontend/pwa/assetlinks.json.example): `package_name = io.linnex.app`, в `sha256_cert_fingerprints` — **оба** fingerprint из п. 5.2 (upload + app signing). На каждом из трёх апексов нужен свой `/.well-known/assetlinks.json` с тем же содержимым. |
 | 6.3 | **Release → Setup → Deep links** | После релиза Play Console сам проверяет статус verification по каждому хосту, включая wildcard-домены. Если статус `Failed`, проблема обычно в недоступности `assetlinks.json` на апексе или в опечатке fingerprint. Проверка вручную: [Statement List Generator](https://developers.google.com/digital-asset-links/tools/generator). |
 
 ---

@@ -94,7 +94,7 @@ export class PlatformVizHost extends PlatformElement {
                 min-height: 0;
                 height: 100%;
                 width: 100%;
-                background: var(--glass-solid-subtle, transparent);
+                background: var(--glass-solid-subtle);
             }
             :host([compact]) {
                 flex: none;
@@ -154,7 +154,7 @@ export class PlatformVizHost extends PlatformElement {
                 padding: var(--space-4);
             }
             .state-error {
-                color: var(--danger);
+                color: var(--error);
             }
         `,
     ];

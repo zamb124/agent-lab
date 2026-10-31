@@ -11,7 +11,7 @@ def test_legacy_embed_files_removed() -> None:
 def test_no_legacy_widget_snippet_in_embed_configs_api() -> None:
     root = Path(__file__).resolve().parents[2]
     content = (root / "apps/frontend/api/embed_configs.py").read_text(encoding="utf-8")
-    assert "new HumanitecChat" not in content
+    assert "new LinnexChat" not in content
     assert "chat-widget.min.js" not in content
 
 

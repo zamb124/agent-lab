@@ -128,7 +128,7 @@ export async function sendA2ARequest({ url, body, headers = {}, credentials = 'i
         headers: a2aRequestHeaders(headers),
         credentials,
         body: JSON.stringify(body),
-        signal,
+        signal: signal ?? null,
     });
     if (!response.ok) throw await responseError(response);
     let parsed: unknown;
@@ -164,7 +164,7 @@ export async function consumeA2AStream(
         headers: a2aRequestHeaders(headers, { stream: true }),
         credentials,
         body: JSON.stringify(body),
-        signal,
+        signal: signal ?? null,
     });
     if (!response.ok) throw await responseError(response);
     const contentType = response.headers.get('content-type');

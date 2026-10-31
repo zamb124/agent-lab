@@ -8,17 +8,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-
-export interface RagNamespace {
-    name?: string;
-    description?: unknown;
-    [key: string]: unknown;
-}
+import type { Namespace } from '@platform/lib/events/wire/rag.gen.js';
 
 export class NamespaceCard extends PlatformElement {
     static i18nNamespace = 'rag';
 
-    declare namespace: RagNamespace | null;
+    declare namespace: Namespace | null;
 
     static override properties = {
         namespace: { type: Object },

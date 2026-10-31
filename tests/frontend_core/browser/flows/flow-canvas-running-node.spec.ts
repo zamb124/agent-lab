@@ -8,6 +8,7 @@ import {
     SAMPLE_BRANCH_NODES,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/flow-canvas/flows-flow-canvas.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('flows-flow-canvas running node orbit', () => {
     beforeEach(() => {
@@ -33,25 +34,25 @@ describe('flows-flow-canvas running node orbit', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_started', { node_id: 'code_1', task_id: 't1' });
         await elementUpdated(el);
 
-        const runningNode = el.shadowRoot.querySelector('g.node[data-node-id="code_1"][data-state="running"]');
+        const runningNode = q(shadow(el), 'g.node[data-node-id="code_1"][data-state="running"]');
         expect(runningNode).to.not.equal(null);
 
-        const orbit = runningNode.querySelector('.node-run-orbit[data-run-tone="info"]');
+        const orbit = q(runningNode!, '.node-run-orbit[data-run-tone="info"]');
         expect(orbit).to.not.equal(null);
 
-        const head = orbit.querySelector('.node-run-firefly-head animateMotion');
+        const head = q(orbit!, '.node-run-firefly-head animateMotion');
         expect(head).to.not.equal(null);
-        expect(head.getAttribute('repeatCount')).to.equal('indefinite');
+        expect(head!.getAttribute('repeatCount')).to.equal('indefinite');
 
-        const arc = orbit.querySelector('.node-run-arc');
+        const arc = q(orbit!, '.node-run-arc');
         expect(arc).to.not.equal(null);
-        expect(arc.getAttribute('pathLength')).to.equal('100');
+        expect(arc!.getAttribute('pathLength')).to.equal('100');
     });
 
     it('renders warning-toned orbit on breakpoint hit', async () => {
@@ -69,17 +70,17 @@ describe('flows-flow-canvas running node orbit', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/breakpoint/hit', { node_id: 'code_1' });
         await elementUpdated(el);
 
-        const hitNode = el.shadowRoot.querySelector('g.node[data-node-id="code_1"][data-state="breakpoint-hit"]');
+        const hitNode = q(shadow(el), 'g.node[data-node-id="code_1"][data-state="breakpoint-hit"]');
         expect(hitNode).to.not.equal(null);
 
-        const orbit = hitNode.querySelector('.node-run-orbit[data-run-tone="warning"]');
+        const orbit = q(hitNode!, '.node-run-orbit[data-run-tone="warning"]');
         expect(orbit).to.not.equal(null);
-        expect(orbit.querySelector('.node-run-firefly-head')).to.not.equal(null);
+        expect(q(orbit!, '.node-run-firefly-head')).to.not.equal(null);
     });
 });

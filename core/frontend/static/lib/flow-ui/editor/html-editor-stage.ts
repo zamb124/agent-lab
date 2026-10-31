@@ -15,7 +15,7 @@ interface HtmlEditorStageToolbarArgs {
     onTheme: (theme: unknown) => void;
     onReload: () => void;
     onCollapse: () => void;
-    collapseDisabled?: boolean;
+    collapseDisabled?: boolean | undefined;
 }
 
 export interface HtmlEditorStageRenderArgs extends HtmlEditorStageToolbarArgs {

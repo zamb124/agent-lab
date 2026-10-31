@@ -67,7 +67,7 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (!this._domain.trim()) errors.domain = this.t('crawl_report_page.err_domain_required');
         if (this._refreshInterval !== '' && Number(this._refreshInterval) < 60) {
             errors.refresh_interval_seconds = this.t('crawl_report_page.err_interval_min');

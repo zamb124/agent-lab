@@ -384,6 +384,8 @@ export function buildLlmRequestView(attrs: Record<string, unknown>) {
 /**
  * @param {unknown} content
  */
+const EMPTY_STATISTICS: Record<string, unknown> = {};
+
 export function buildStructuredContentView(content: unknown) {
     const parsed = parseTraceJsonValue(content);
     if (!parsed.ok || !isJsonObject(parsed.value)) {
@@ -393,14 +395,14 @@ export function buildStructuredContentView(content: unknown) {
             entities: [],
             highlights: [],
             keyEvents: [],
-            statistics: {},
+            statistics: EMPTY_STATISTICS,
         };
     }
     const data = parsed.value;
     const entities = Array.isArray(data.entities) ? data.entities.map((v) => traceScalarText(v)).filter((v) => v.length > 0) : [];
     const highlights = Array.isArray(data.highlights) ? data.highlights.map((v) => traceScalarText(v)).filter((v) => v.length > 0) : [];
     const keyEvents = Array.isArray(data.key_events) ? data.key_events.map((v) => traceScalarText(v)).filter((v) => v.length > 0) : [];
-    const statistics = isJsonObject(data.statistics) ? data.statistics : {};
+    const statistics: Record<string, unknown> = isJsonObject(data.statistics) ? data.statistics : {};
     return {
         parsed,
         summary: typeof data.summary === 'string' ? data.summary : '',

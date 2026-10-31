@@ -37,14 +37,14 @@ export class FlowUITurnToasts extends LitElement {
             padding: 12px 14px;
             border: 1px solid var(--flow-ui-border, var(--border-subtle));
             border-radius: var(--flow-ui-radius-lg, 16px);
-            background: var(--flow-ui-panel-strong, var(--glass-solid-medium, rgba(22, 33, 62, 0.94)));
+            background: var(--flow-ui-panel-strong, var(--glass-solid-medium));
             color: var(--flow-ui-text, var(--text-primary));
             box-shadow: var(--flow-ui-panel-shadow, 0 10px 28px color-mix(in srgb, #000 28%, transparent));
             backdrop-filter: blur(14px);
             animation: toast-in 160ms ease;
         }
         .toast[data-kind='error'] {
-            border-color: color-mix(in srgb, var(--flow-ui-danger, var(--error, #ff718d)) 55%, transparent);
+            border-color: color-mix(in srgb, var(--flow-ui-danger, var(--error)) 55%, transparent);
         }
         .toast[data-kind='response'] {
             border-color: color-mix(in srgb, var(--flow-ui-accent, var(--accent)) 45%, transparent);
@@ -75,7 +75,7 @@ export class FlowUITurnToasts extends LitElement {
             flex-shrink: 0;
         }
         .toast[data-kind='error'] .pulse {
-            background: var(--error, #ff718d);
+            background: var(--error);
             animation: none;
         }
         .body {

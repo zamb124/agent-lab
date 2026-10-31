@@ -147,10 +147,10 @@ export class PlatformBottomNav extends PlatformElement {
                 font-weight: var(--font-medium);
                 line-height: 1.1;
                 cursor: pointer;
-                transition: background var(--duration-fast) var(--easing-default),
-                            color var(--duration-fast) var(--easing-default),
-                            border-color var(--duration-fast) var(--easing-default),
-                            transform var(--duration-fast) var(--easing-default);
+                transition: background var(--motion-duration-micro) var(--motion-ease-standard),
+                            color var(--motion-duration-micro) var(--motion-ease-standard),
+                            border-color var(--motion-duration-micro) var(--motion-ease-standard),
+                            transform var(--motion-duration-micro) var(--motion-ease-standard);
                 -webkit-tap-highlight-color: transparent;
             }
 

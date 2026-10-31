@@ -55,7 +55,8 @@
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
 import type { SyncChannelMessagesData, SyncMessagesStoreSlice } from '../sync.types.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
+import { opSucceededResult } from '@platform/lib/events/factories/merge.js';
 
 function createEmptyChannelData(): SyncChannelMessagesData {
     const items: Record<string, unknown>[] = [];
@@ -334,9 +335,7 @@ export const messagesStoreSlice = createSlice({
                 };
             }
             case 'sync/messages/succeeded': {
-                const payload = payloadRecord(event);
-                if (!payload || !payload.result) return state;
-                const result = isPlainRecord(payload.result) ? payload.result : null;
+                const result = opSucceededResult(event, messagesResource);
                 if (result === null || !Array.isArray(result.items) || result.items.length === 0) return state;
                 const firstItem = result.items[0];
                 const channelId = firstItem && typeof firstItem.channel_id === 'string' ? firstItem.channel_id : '';
@@ -465,9 +464,9 @@ export const messagesStoreSlice = createSlice({
             case 'sync/message/created':
             case 'sync/messages_store/send_confirmed': {
                 const payload = payloadRecord(event);
-                const raw = event.type === 'sync/messages_store/send_confirmed'
-                    ? (payload !== null ? payload.message : undefined)
-                    : event.payload;
+                const raw = isPlatformEventType(event, 'sync/message/created')
+                    ? event.payload
+                    : (payload !== null ? payload.message : undefined);
                 const m = _normalizeMessage(raw);
                 if (!m || typeof m.channel_id !== 'string' || typeof m.message_id !== 'string') return state;
                 const localIdFromConfirm = event.type === 'sync/messages_store/send_confirmed'
@@ -497,7 +496,9 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/updated': {
-                const m = _normalizeMessage(payloadRecord(event));
+                const m = isPlatformEventType(event, 'sync/message/updated')
+                    ? _normalizeMessage(event.payload)
+                    : null;
                 if (!m || typeof m.channel_id !== 'string' || typeof m.message_id !== 'string') return state;
                 return updateChannel(m.channel_id, (cur) => {
                     const idx = cur.items.findIndex((x) => x.message_id === m.message_id);
@@ -507,16 +508,16 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/deleted': {
-                const p = payloadRecord(event);
-                if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
+                if (!isPlatformEventType(event, 'sync/message/deleted')) return state;
+                const p = event.payload;
                 return updateChannel(p.channel_id, (cur) => ({
                     ...cur,
                     items: Object.freeze(cur.items.filter((x) => x.message_id !== p.message_id)),
                 }));
             }
             case 'sync/message/reaction_changed': {
-                const p = payloadRecord(event);
-                if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
+                if (!isPlatformEventType(event, 'sync/message/reaction_changed')) return state;
+                const p = event.payload;
                 const reactions = Array.isArray(p.reactions) ? p.reactions : [];
                 return updateChannel(p.channel_id, (cur) => {
                     const idx = cur.items.findIndex((x) => x.message_id === p.message_id);
@@ -526,9 +527,11 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/status_changed': {
-                const p = payloadRecord(event);
-                if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
-                return updateChannel(p.channel_id, (cur) => {
+                if (!isPlatformEventType(event, 'sync/message/status_changed')) return state;
+                const p = event.payload;
+                const channelId = p.channel_id;
+                if (typeof channelId !== 'string' || channelId === '') return state;
+                return updateChannel(channelId, (cur) => {
                     const idx = cur.items.findIndex((x) => x.message_id === p.message_id);
                     if (idx === -1) return cur;
                     const items = cur.items.map((x, i) => (i === idx ? Object.freeze({ ...x, status: p.status }) : x));

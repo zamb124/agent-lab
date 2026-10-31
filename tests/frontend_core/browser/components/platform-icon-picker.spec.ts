@@ -5,14 +5,15 @@
 import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-icon-picker.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 const ICONS = ['user', 'folder', 'star'];
 
-async function mountPicker(props = {}) {
-    const el = await fixture(html`
+async function mountPicker(props: any = {}) {
+    const el = await fixture<TestEl>(html`
         <platform-icon-picker
             .icons=${ICONS}
-            .value=${props.value ?? ''}
+            .value=${(props as TestEl).value ?? ''}
             ?disabled=${props.disabled === true}
         ></platform-icon-picker>
     `);
@@ -20,12 +21,12 @@ async function mountPicker(props = {}) {
     return el;
 }
 
-function triggerOf(el) {
-    return el.shadowRoot.querySelector('.trigger');
+function triggerOf(el: any) {
+    return qs(shadow(el), '.trigger');
 }
 
-function optionsOf(el) {
-    return Array.from(el.shadowRoot.querySelectorAll('.option'));
+function optionsOf(el: any) {
+    return Array.from(qsa(shadow(el), '.option'));
 }
 
 describe('platform-icon-picker', () => {
@@ -68,12 +69,12 @@ describe('platform-icon-picker', () => {
         await elementUpdated(el);
 
         const changed = oneEvent(el, 'change');
-        optionsOf(el)[1].click();
+        optionsOf(el)[1]!.click();
         const event = await changed;
         await elementUpdated(el);
 
-        expect(event.detail.value).to.equal('folder');
-        expect(el.value).to.equal('folder');
+        expect((event as CustomEvent).detail.value).to.equal('folder');
+        expect((el as TestEl).value).to.equal('folder');
         expect(optionsOf(el).length).to.equal(0);
     });
 
@@ -84,7 +85,7 @@ describe('platform-icon-picker', () => {
 
         const active = optionsOf(el).filter((node) => node.classList.contains('active'));
         expect(active.length).to.equal(1);
-        expect(active[0].textContent.trim()).to.equal('star');
+        expect(active[0]!.textContent.trim()).to.equal('star');
     });
 
     it('Enter на триггере открывает панель', async () => {
@@ -134,7 +135,7 @@ describe('platform-icon-picker', () => {
         triggerOf(el).click();
         await elementUpdated(el);
 
-        const popover = el.shadowRoot.querySelector('platform-popover');
+        const popover = qs(shadow(el), 'platform-popover');
         expect(popover.matches(':popover-open')).to.be.true;
     });
 });

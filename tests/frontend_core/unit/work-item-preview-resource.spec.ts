@@ -14,6 +14,8 @@ import {
 } from '@platform/lib/events/resources/work-items.resource.js';
 import { buildCtx } from '../helpers/bus-fixtures.js';
 import { resetFactories } from '../helpers/factory-fixtures.js';
+import type { DispatchedRecord } from '../helpers/bus-fixtures.js';
+import { testEvent } from '../helpers/bus-fixtures.js';
 
 beforeEach(() => {
     resetFactories();
@@ -27,6 +29,7 @@ const countsState = {
     error: null,
     lastResult: null,
     lastRequestId: null,
+    lastRequest: null,
     assigned_open_count: 0,
     queue_inbox_count: 0,
     total_open_count: 0,
@@ -54,16 +57,13 @@ describe('worktrackerWorkItemFactories', () => {
 
 describe('workItemCountsOp', () => {
     it('extraReducer сохраняет счётчики из SUCCEEDED', () => {
-        const next = workItemCountsOp.reducer(countsState, {
-            type: workItemCountsOp.events.SUCCEEDED,
-            payload: {
+        const next = workItemCountsOp.reducer(countsState, testEvent(workItemCountsOp.events.SUCCEEDED, {
                 result: {
                     assigned_open_count: 2,
                     queue_inbox_count: 3,
                     work_queue_ids: ['q1', 'q2', '', 7],
                 },
-            },
-        });
+            }));
         expect(next.assigned_open_count).toBe(2);
         expect(next.queue_inbox_count).toBe(3);
         expect(next.total_open_count).toBe(5);
@@ -71,73 +71,65 @@ describe('workItemCountsOp', () => {
     });
 
     it('extraReducer: REQUESTED не трогает счётчики', () => {
-        const requested = workItemCountsOp.reducer(countsState, {
-            type: workItemCountsOp.events.REQUESTED,
-            payload: {},
-        });
+        const requested = workItemCountsOp.reducer(countsState, testEvent(workItemCountsOp.events.REQUESTED, {}));
         expect(requested.assigned_open_count).toBe(0);
         expect(requested.queue_inbox_count).toBe(0);
         expect(requested.busy).toBe(true);
     });
 
     it('extraReducer бросает на битый result', () => {
-        expect(() => workItemCountsOp.reducer(countsState, {
-            type: workItemCountsOp.events.SUCCEEDED,
-            payload: { result: null },
-        })).toThrow(/result must be object/);
-        expect(() => workItemCountsOp.reducer(countsState, {
-            type: workItemCountsOp.events.SUCCEEDED,
-            payload: { result: { assigned_open_count: 'x', queue_inbox_count: null } },
-        })).toThrow(/required numbers/);
+        expect(() => workItemCountsOp.reducer(countsState, testEvent(workItemCountsOp.events.SUCCEEDED, { result: null }))).toThrow(/result must be object/);
+        expect(() => workItemCountsOp.reducer(countsState, testEvent(workItemCountsOp.events.SUCCEEDED, { result: { assigned_open_count: 'x', queue_inbox_count: null } }))).toThrow(/required numbers/);
     });
 });
 
 describe('workItemsResource', () => {
+    function workItem(id: string, title: string) {
+        return {
+            work_item_id: id,
+            company_id: 'c-1',
+            title,
+            created_by: { kind: 'user', user_id: 'u-1' },
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+        };
+    }
+
     it('push created/updated мержит work_item в items и byId', () => {
         const initial = workItemsResource.slice.initial;
-        const created = workItemsResource.reducer(initial, {
-            type: 'worktracker/work_item/created',
-            payload: { work_item: { work_item_id: 'wi-1', title: 'A' } },
-        });
-        expect(created.items).toEqual([{ work_item_id: 'wi-1', title: 'A' }]);
-        expect(created.byId['wi-1'].title).toBe('A');
+        const created = workItemsResource.reducer(initial,
+            testEvent('worktracker/work_item/created', { work_item: workItem('wi-1', 'A') }));
+        expect(created.items).toEqual([workItem('wi-1', 'A')]);
+        expect(created.byId['wi-1']?.title).toBe('A');
 
-        const updated = workItemsResource.reducer(created, {
-            type: 'worktracker/work_item/updated',
-            payload: { work_item: { work_item_id: 'wi-1', title: 'B' } },
-        });
-        expect(updated.items).toEqual([{ work_item_id: 'wi-1', title: 'B' }]);
-        expect(updated.byId['wi-1'].title).toBe('B');
+        const updated = workItemsResource.reducer(created,
+            testEvent('worktracker/work_item/updated', { work_item: workItem('wi-1', 'B') }));
+        expect(updated.items).toEqual([workItem('wi-1', 'B')]);
+        expect(updated.byId['wi-1']?.title).toBe('B');
     });
 
     it('push без валидного work_item не меняет state', () => {
         const initial = workItemsResource.slice.initial;
         expect(
-            workItemsResource.reducer(initial, {
-                type: 'worktracker/work_item/moved',
-                payload: null,
-            }),
+            workItemsResource.reducer(initial,
+                testEvent('worktracker/work_item/moved', null)),
         ).toBe(initial);
         expect(
-            workItemsResource.reducer(initial, {
-                type: 'worktracker/work_item/completed',
-                payload: { work_item: { title: 'no-id' } },
-            }),
+            workItemsResource.reducer(initial,
+                testEvent('worktracker/work_item/completed', { work_item: { title: 'no-id' } })),
         ).toBe(initial);
         expect(
-            workItemsResource.reducer(initial, {
-                type: 'other/event',
-                payload: { work_item: { work_item_id: 'x' } },
-            }),
+            workItemsResource.reducer(initial,
+                testEvent('other/event', { work_item: { work_item_id: 'x' } })),
         ).toBe(initial);
     });
 });
 
 describe('createWorktrackerWorkItemCountsAuthEffect', () => {
     it('игнорирует чужие события', () => {
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         createWorktrackerWorkItemCountsAuthEffect()(
-            { type: 'other/event', id: 'x', payload: {}, meta: { ts: 0, source: 'local' } },
+            testEvent('other/event', {}),
             buildCtx(() => ({}), dispatched),
         );
         expect(dispatched).toEqual([]);

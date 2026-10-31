@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import (
     GITHUB_MODELS_API_VERSION,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     LLM_PROVIDER_DEFAULT_BASE_URLS,
     LLM_PROVIDER_DETECTION_HOSTS,
     LLM_ROUTING_PROVIDER_SLUGS,
@@ -156,8 +156,8 @@ def _detect_provider(base_url: str | None) -> str | None:
     return None
 
 
-def _is_humanitec_llm_provider(provider: str | None) -> bool:
-    return str(provider or "").strip() == HUMANITEC_LLM_PROVIDER
+def _is_linnex_llm_provider(provider: str | None) -> bool:
+    return str(provider or "").strip() == LINNEX_LLM_PROVIDER
 
 
 def _ensure_known_provider(provider: str) -> None:
@@ -462,9 +462,9 @@ def _should_use_platform_default_pool(
         value is not None and str(value).strip()
         for value in (api_key, base_url, folder_id)
     )
-    explicit_humanitec_llm = _is_humanitec_llm_provider(provider)
-    explicit_humanitec_auto = explicit_humanitec_llm and (
-        model is None or str(model).strip() == HUMANITEC_LLM_AUTO_MODEL
+    explicit_linnex_llm = _is_linnex_llm_provider(provider)
+    explicit_linnex_auto = explicit_linnex_llm and (
+        model is None or str(model).strip() == LINNEX_LLM_AUTO_MODEL
     )
     implicit_default_route = (
         model is None
@@ -474,14 +474,14 @@ def _should_use_platform_default_pool(
     return (
         not has_explicit_transport
         and _platform_default_pool_is_configured(settings)
-        and (explicit_humanitec_auto or implicit_default_route)
+        and (explicit_linnex_auto or implicit_default_route)
     )
 
 
 __all__ = [
     "_detect_provider",
     "_get_default_base_url",
-    "_is_humanitec_llm_provider",
+    "_is_linnex_llm_provider",
     "_platform_default_pool_is_configured",
     "_resolve_headers_vars",
     "_resolve_llm_call_config",

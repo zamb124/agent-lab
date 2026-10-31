@@ -12,7 +12,7 @@ from core.models.identity_models import User
 
 
 @pytest.mark.parametrize("host,expected_url", [
-    ("humanitec.ru", "wss://livekit.humanitec.ru"),
+    ("linnex.io", "wss://livekit.linnex.io"),
     ("linnex.io", "wss://livekit.linnex.io"),
     ("acme.linnex.io", "wss://livekit.linnex.io"),
 ])

@@ -41,7 +41,7 @@ export class PlatformMiniBarChart extends PlatformElement {
             }
             .segment {
                 min-width: 2px;
-                transition: flex-grow var(--duration-normal) var(--easing-default);
+                transition: flex-grow var(--motion-duration-layout) var(--motion-ease-standard);
             }
             .legend {
                 display: flex;

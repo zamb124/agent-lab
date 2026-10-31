@@ -1,4 +1,4 @@
-package ru.humanitec.app;
+package io.linnex.app;
 
 import android.os.Bundle;
 import android.webkit.WebSettings;
@@ -7,14 +7,14 @@ import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Точка входа Android-оболочки Humanitec.
+ * Точка входа Android-оболочки Linnex.
  *
  * После super.onCreate бридж уже создал WebView с дефолтным BridgeWebChromeClient
  * (он не обрабатывает window.open / target=_blank, и Android по умолчанию глотает
  * такие запросы). Включаем поддержку нескольких окон и подменяем chrome-клиента
- * на HumanitecBridgeWebChromeClient — внутри-продуктовые URL грузятся в текущем
+ * на LinnexBridgeWebChromeClient — внутри-продуктовые URL грузятся в текущем
  * WebView, остальные открываются системным браузером. Симметрично iOS-swizzle
- * HumanitecWebViewNewWindowFix.swift.
+ * LinnexWebViewNewWindowFix.swift.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -26,6 +26,6 @@ public class MainActivity extends BridgeActivity {
         WebSettings settings = webView.getSettings();
         settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        webView.setWebChromeClient(new HumanitecBridgeWebChromeClient(bridge));
+        webView.setWebChromeClient(new LinnexBridgeWebChromeClient(bridge));
     }
 }

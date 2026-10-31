@@ -44,7 +44,7 @@ export class PlatformConfirmModal extends PlatformModal {
             .confirm-header-leading {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 flex: 1;
                 min-width: 0;
             }
@@ -56,16 +56,16 @@ export class PlatformConfirmModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: var(--radius-lg, 12px);
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
+                border-radius: var(--radius-lg);
+                background: var(--glass-tint-medium);
             }
 
             .modal-icon.warning {
-                color: var(--warning, #f59e0b);
+                color: var(--warning);
             }
 
             .modal-icon.danger {
-                color: var(--error, #f43f5e);
+                color: var(--error);
             }
 
             .modal-icon.info {
@@ -81,20 +81,20 @@ export class PlatformConfirmModal extends PlatformModal {
                 white-space: normal;
                 overflow: visible;
                 text-overflow: unset;
-                font-size: var(--text-lg, 18px);
+                font-size: var(--text-lg);
                 line-height: 1.3;
             }
 
             .modal-subtitle {
-                margin-top: var(--space-1, 4px);
-                font-size: var(--text-sm, 14px);
-                color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+                margin-top: var(--space-1);
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
                 line-height: 1.4;
             }
 
             .modal-message {
-                font-size: var(--text-base, 16px);
-                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+                font-size: var(--text-base);
+                color: var(--text-secondary);
                 line-height: 1.5;
             }
 
@@ -110,7 +110,7 @@ export class PlatformConfirmModal extends PlatformModal {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: nowrap;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 justify-content: flex-end;
                 align-items: center;
                 width: 100%;

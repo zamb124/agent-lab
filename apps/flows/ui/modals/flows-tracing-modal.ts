@@ -276,8 +276,7 @@ export class FlowsTracingModal extends PlatformModal {
         const busy = this._busy();
         if (this._waitingForTrace(spans, busy)) {
             return html`
-                <div class="tracing-loading">
-                    <platform-spinner></platform-spinner>
+                <platform-empty-state class="tracing-loading" loading></platform-empty-state>
                     <div>${this.t('tracing_modal.waiting')}</div>
                 </div>
             `;

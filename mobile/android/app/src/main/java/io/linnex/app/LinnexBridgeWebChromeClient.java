@@ -1,4 +1,4 @@
-package ru.humanitec.app;
+package io.linnex.app;
 
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -27,11 +27,11 @@ import java.util.Locale;
  * из capacitor.config.json — тот же список, по которому работает
  * BridgeWebViewClient.shouldOverrideUrlLoading + Bridge.launchIntent.
  */
-public class HumanitecBridgeWebChromeClient extends BridgeWebChromeClient {
+public class LinnexBridgeWebChromeClient extends BridgeWebChromeClient {
 
     private final Bridge bridge;
 
-    public HumanitecBridgeWebChromeClient(Bridge bridge) {
+    public LinnexBridgeWebChromeClient(Bridge bridge) {
         super(bridge);
         this.bridge = bridge;
     }

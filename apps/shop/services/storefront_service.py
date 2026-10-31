@@ -12,7 +12,6 @@ import hashlib
 import json
 
 from apps.shop.config import ShopSettings
-from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models import (
     Shop,
     ShopCategory,
@@ -22,6 +21,7 @@ from apps.shop.models import (
     ShopPromo,
     ShopStatus,
 )
+from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.redis_client import RedisClient

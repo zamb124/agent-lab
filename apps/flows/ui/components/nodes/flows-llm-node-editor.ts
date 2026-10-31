@@ -313,7 +313,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 --btn-padding: 2px 9px;
                 --btn-font-size: 11px;
                 --btn-line-height: 16px;
-                --btn-font-weight: var(--font-semibold, 600);
+                --btn-font-weight: var(--font-semibold);
                 --platform-btn-secondary-text: var(--accent);
                 --platform-btn-secondary-bg: color-mix(in srgb, var(--accent) 10%, transparent);
                 --platform-btn-secondary-bg-hover: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -348,7 +348,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 border-radius: var(--radius-md);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro), border-color var(--motion-duration-micro);
             }
             .toggle button[active] {
                 background: var(--accent-subtle);

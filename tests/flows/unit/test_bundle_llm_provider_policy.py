@@ -18,7 +18,7 @@ def _iter_llm_configs(value: Any):
             yield from _iter_llm_configs(child)
 
 
-def test_all_bundle_llm_configs_use_humanitec_virtual_provider() -> None:
+def test_all_bundle_llm_configs_use_linnex_virtual_provider() -> None:
     offenders: list[str] = []
 
     for path in sorted(BUNDLES_DIR.rglob("*.json")):
@@ -26,7 +26,7 @@ def test_all_bundle_llm_configs_use_humanitec_virtual_provider() -> None:
         for llm in _iter_llm_configs(payload):
             provider = llm.get("provider")
             model = llm.get("model")
-            if provider != "humanitec_llm" or model != "auto":
+            if provider != "linnex_llm" or model != "auto":
                 offenders.append(f"{path}: provider={provider!r}, model={model!r}")
 
     assert offenders == []

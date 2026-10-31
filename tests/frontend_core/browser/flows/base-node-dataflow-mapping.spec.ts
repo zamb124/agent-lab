@@ -19,6 +19,7 @@ import {
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 const FACTORIES = [
     editorResource,
@@ -58,7 +59,7 @@ describe('flows-base-node-editor dataflow mapping shortcuts', () => {
             writes: [{ path: 'response', type: 'string', source: 'node' }],
             result_keys: ['response'],
         };
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-base-node-editor
                 .nodeId=${'n1'}
                 .flowId=${'demo'}
@@ -72,18 +73,18 @@ describe('flows-base-node-editor dataflow mapping shortcuts', () => {
         `);
         await elementUpdated(el);
 
-        let lastPatch = null;
-        el.addEventListener('change', (e) => { lastPatch = e.detail.patch; });
+        let lastPatch: Record<string, unknown> | null = null;
+        el.addEventListener('change', (e) => { lastPatch = (e as CustomEvent).detail.patch; });
 
-        const readButton = el.shadowRoot.querySelector('.dataflow-lane:first-child article.dataflow-chip');
-        readButton.click();
+        const readButton = qs(shadow(el), '.dataflow-lane:first-child article.dataflow-chip');
+        (readButton as TestEl).click();
         expect(lastPatch).to.deep.equal({ input_mapping: { content: '@state:content' } });
 
-        el.nodeConfig = { ...node, ...lastPatch };
+        el.nodeConfig = { ...node, ...(lastPatch as unknown as Record<string, unknown>) };
         await elementUpdated(el);
 
-        const writeButton = el.shadowRoot.querySelector('.dataflow-lane:nth-child(2) article.dataflow-chip');
-        writeButton.click();
+        const writeButton = qs(shadow(el), '.dataflow-lane:nth-child(2) article.dataflow-chip');
+        (writeButton as TestEl).click();
         expect(lastPatch).to.deep.equal({ output_mapping: { response: 'response' } });
     });
 });

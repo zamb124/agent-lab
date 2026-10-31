@@ -108,7 +108,7 @@ def _is_low_quality_icon_source(source: str) -> bool:
 
 
 def _fetch_bytes(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "humanitec-mcp-branding-fetch/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "linnex-mcp-branding-fetch/1.0"})
     with urllib.request.urlopen(request, timeout=45) as response:
         return response.read()
 

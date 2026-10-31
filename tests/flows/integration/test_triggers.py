@@ -860,7 +860,7 @@ class TestTelegramTriggerHandler:
         assert url == "https://example.com/flows/api/v1/triggers/telegram/my_agent/my_trigger"
 
     @pytest.mark.parametrize("host,expected_origin", [
-        ("humanitec.ru", "https://humanitec.ru"),
+        ("linnex.io", "https://linnex.io"),
         ("linnex.io", "https://linnex.io"),
     ])
     def test_handler_generates_webhook_url_brand_host(

@@ -8,8 +8,8 @@ from core.ai.free_pool import (
     serialize_platform_free_models,
 )
 from core.ai.llm_config import LLMCallConfig
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
-from core.clients.llm.platform_pool import _make_humanitec_llms_candidate_chain_resolver
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL, LINNEX_LLM_PROVIDER
+from core.clients.llm.platform_pool import _make_linnex_llms_candidate_chain_resolver
 from core.clients.llm.runtime import create_llm_transport_client
 from core.clients.redis_client import RedisClient
 from core.config import BaseSettings, get_settings, set_settings
@@ -98,14 +98,14 @@ async def test_auto_empty_redis_without_fallbacks_raises(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         None,
         settings=settings,
         variables=None,
         include_paid_fallback=False,
     )
-    with pytest.raises(RuntimeError, match="humanitec_llm auto: нет кандидатов"):
+    with pytest.raises(RuntimeError, match="linnex_llm auto: нет кандидатов"):
         await resolver()
 
 
@@ -115,8 +115,8 @@ async def test_auto_empty_redis_with_paid_fallback(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=True)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         None,
         settings=settings,
         variables=None,
@@ -133,8 +133,8 @@ async def test_auto_empty_redis_uses_authored_fallback(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         [
             LLMCallConfig(
                 provider="openai",
@@ -153,15 +153,15 @@ async def test_auto_empty_redis_uses_authored_fallback(
 
 
 @pytest.mark.asyncio
-async def test_empty_humanitec_fallback_skips_to_openai(
+async def test_empty_linnex_fallback_skips_to_openai(
     platform_free_cache_key: str,
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         [
-            LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+            LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
             LLMCallConfig(
                 provider="openai",
                 model="gpt-4o-mini",
@@ -183,8 +183,8 @@ async def test_pinned_missing_without_fallback_raises(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model="groq:missing-id"),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model="groq:missing-id"),
         None,
         settings=settings,
         variables=None,
@@ -200,8 +200,8 @@ async def test_pinned_missing_uses_authored_fallback(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model="groq:missing-id"),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model="groq:missing-id"),
         [
             LLMCallConfig(
                 provider="openai",
@@ -232,14 +232,14 @@ async def test_records_without_api_key_are_skipped(
     )
     assert wrote is True
     settings = _expand_settings(paid=False, groq_key=None)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         None,
         settings=settings,
         variables=None,
         include_paid_fallback=False,
     )
-    with pytest.raises(RuntimeError, match="humanitec_llm auto: нет кандидатов"):
+    with pytest.raises(RuntimeError, match="linnex_llm auto: нет кандидатов"):
         await resolver()
 
 
@@ -249,8 +249,8 @@ async def test_paid_disabled_still_uses_authored_fallback(
 ) -> None:
     _ = platform_free_cache_key
     settings = _expand_settings(paid=True)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         [
             LLMCallConfig(
                 provider="openai",
@@ -280,8 +280,8 @@ async def test_empty_models_snapshot_uses_authored_fallback(
     )
     assert wrote is True
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         [
             LLMCallConfig(
                 provider="openai",
@@ -314,8 +314,8 @@ async def test_empty_redis_authored_fallback_http_only_openai(
         update={
             "testing": False,
             "llm": LLMConfig(
-                provider=HUMANITEC_LLM_PROVIDER,
-                default_model=HUMANITEC_LLM_AUTO_MODEL,
+                provider=LINNEX_LLM_PROVIDER,
+                default_model=LINNEX_LLM_AUTO_MODEL,
                 openai=OpenAIProviderConfig(
                     api_key="sk-openai",
                     base_url=server.base_url,
@@ -328,8 +328,8 @@ async def test_empty_redis_authored_fallback_http_only_openai(
         set_settings(settings)
         with _production_llm_env():
             client = create_llm_transport_client(
-                provider=HUMANITEC_LLM_PROVIDER,
-                model_name=HUMANITEC_LLM_AUTO_MODEL,
+                provider=LINNEX_LLM_PROVIDER,
+                model_name=LINNEX_LLM_AUTO_MODEL,
                 fallback_models=[
                     LLMCallConfig(
                         provider="openai",
@@ -356,8 +356,8 @@ async def test_corrupt_cache_raises_and_does_not_use_fallback(
     wrote = await redis_client.set(platform_free_cache_key, "{bad-json", ttl=120)
     assert wrote is True
     settings = _expand_settings(paid=False)
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         [
             LLMCallConfig(
                 provider="openai",
@@ -379,18 +379,18 @@ def test_constructor_without_pool_and_without_fallbacks_raises() -> None:
     settings = BaseSettings(
         testing=False,
         llm=LLMConfig(
-            provider=HUMANITEC_LLM_PROVIDER,
-            default_model=HUMANITEC_LLM_AUTO_MODEL,
+            provider=LINNEX_LLM_PROVIDER,
+            default_model=LINNEX_LLM_AUTO_MODEL,
             platform_free_pool=PlatformFreePoolConfig(enabled=True),
         ),
     )
     try:
         set_settings(settings)
         with _production_llm_env():
-            with pytest.raises(ValueError, match="humanitec_llm is unavailable"):
+            with pytest.raises(ValueError, match="linnex_llm is unavailable"):
                 create_llm_transport_client(
-                    provider=HUMANITEC_LLM_PROVIDER,
-                    model_name=HUMANITEC_LLM_AUTO_MODEL,
+                    provider=LINNEX_LLM_PROVIDER,
+                    model_name=LINNEX_LLM_AUTO_MODEL,
                 )
     finally:
         set_settings(old_settings)
@@ -401,8 +401,8 @@ def test_constructor_without_pool_uses_authored_fallback() -> None:
     settings = BaseSettings(
         testing=False,
         llm=LLMConfig(
-            provider=HUMANITEC_LLM_PROVIDER,
-            default_model=HUMANITEC_LLM_AUTO_MODEL,
+            provider=LINNEX_LLM_PROVIDER,
+            default_model=LINNEX_LLM_AUTO_MODEL,
             openai=OpenAIProviderConfig(
                 api_key="sk-openai",
                 base_url="https://api.openai.example/v1",
@@ -414,8 +414,8 @@ def test_constructor_without_pool_uses_authored_fallback() -> None:
         set_settings(settings)
         with _production_llm_env():
             client = create_llm_transport_client(
-                provider=HUMANITEC_LLM_PROVIDER,
-                model_name=HUMANITEC_LLM_AUTO_MODEL,
+                provider=LINNEX_LLM_PROVIDER,
+                model_name=LINNEX_LLM_AUTO_MODEL,
                 fallback_models=[
                     LLMCallConfig(
                         provider="openai",
@@ -451,8 +451,8 @@ async def test_auto_expands_one_model_per_api_key(
         groq_key="sk-main",
         groq_api_keys=["sk-extra-a", "sk-extra-b"],
     )
-    resolver = _make_humanitec_llms_candidate_chain_resolver(
-        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+    resolver = _make_linnex_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=LINNEX_LLM_PROVIDER, model=LINNEX_LLM_AUTO_MODEL),
         None,
         settings=settings,
         variables=None,

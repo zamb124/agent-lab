@@ -67,7 +67,7 @@ describe('prompt variable catalog', () => {
         expect(result.values.topic).toBe('local');
         expect(result.values.company).toBe('ACME');
         expect(result.values.current_date).toBe('2026-01-02');
-        expect(result.catalog.find((entry) => entry.name === 'topic').source).toBe('local');
+        expect(result.catalog.find((entry) => entry.name === 'topic')?.source).toBe('local');
     });
 
     it('catalogs interface fields from incoming_state as plain top-level values', () => {

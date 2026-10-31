@@ -120,7 +120,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
                 opacity: 0.55;
             }
             platform-work-item-row {
-                background: var(--bg-elevated, var(--glass-solid-medium));
+                background: var(--bg-elevated);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
             }

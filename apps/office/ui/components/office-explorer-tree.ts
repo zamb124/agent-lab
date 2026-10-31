@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import './office-catalog-context-menu.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import '@platform/lib/components/platform-empty-state.js';
 
 interface CatalogRecord {
     catalog_id: string;
@@ -141,9 +142,9 @@ export class OfficeExplorerTree extends PlatformElement {
                 background: var(--glass-solid-subtle);
             }
             .treeitem.active {
-                background: var(--documents-selected-bg, var(--accent-subtle));
-                border-color: var(--documents-selected-stroke, var(--accent));
-                color: var(--documents-selected-text, var(--accent));
+                background: var(--documents-selected-bg);
+                border-color: var(--documents-selected-stroke);
+                color: var(--documents-selected-text);
                 font-weight: 600;
             }
             .treeitem.drop-target {
@@ -215,11 +216,7 @@ export class OfficeExplorerTree extends PlatformElement {
             .children {
                 margin-left: var(--documents-tree-indent, 0.75rem);
             }
-            .empty-tree {
-                padding: var(--space-3) var(--space-3) var(--space-2);
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-            }
+
         `,
     ];
 
@@ -426,7 +423,7 @@ export class OfficeExplorerTree extends PlatformElement {
             </div>
             <div class="list" role="tree">
                 ${roots.length === 0 ? html`
-                    <div class="empty-tree">${this.t('explorer.noCatalogsInline')}</div>
+                    <platform-empty-state icon="folder" title=${this.t('explorer.noCatalogsInline')}></platform-empty-state>
                 ` : roots.map((catalog: CatalogRecord) => this._renderCatalogNode(catalog, catalogChildrenMap, 0))}
             </div>
             <office-catalog-context-menu

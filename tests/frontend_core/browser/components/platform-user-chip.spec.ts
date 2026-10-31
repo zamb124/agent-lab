@@ -13,12 +13,13 @@ import {
     workItemCountsOp,
     worktrackerWorkItemFactories,
 } from '@platform/lib/events/resources/work-items.resource.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 describe('platform-user-chip', () => {
     beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
 
     it('без user-id — _resolveUser бросает', async () => {
-        const el = document.createElement('platform-user-chip');
+        const el = (document.createElement('platform-user-chip') as TestEl);
         document.body.appendChild(el);
         // _resolveUser требует hostConnected SelectController'а, поэтому
         // ждём первый цикл (даже если render внутри упадёт — мы это сразу
@@ -29,7 +30,7 @@ describe('platform-user-chip', () => {
     });
 
     it('size != sm|md — throw при updated', async () => {
-        const el = document.createElement('platform-user-chip');
+        const el = (document.createElement('platform-user-chip') as TestEl);
         el.setAttribute('user-id', 'u1');
         document.body.appendChild(el);
         await el.updateComplete;
@@ -47,9 +48,9 @@ describe('platform-user-chip', () => {
     it('диспатчит MEMBERS_LOAD_REQUESTED при первом монтировании если auth=authenticated и список пустой', async () => {
         // 1) auth.user_loaded — переводим в authenticated
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'self', name: 'me' } });
-        const events = [];
-        getPlatformBus().subscribeAny((e) => events.push(e));
-        const el = await fixture(html`<platform-user-chip user-id="u1"></platform-user-chip>`);
+        const events: any[] = [];
+        getPlatformBus().subscribeAny((e: any) => events.push(e));
+        const el = await fixture<TestEl>(html`<platform-user-chip user-id="u1"></platform-user-chip>`);
         await elementUpdated(el);
         const req = events.find((e) => e.type === TEAM_EVENTS.MEMBERS_LOAD_REQUESTED);
         expect(req).to.exist;
@@ -58,9 +59,9 @@ describe('platform-user-chip', () => {
     it('клик по интерактивному чипу с найденным членом → openModal platform.user_info', async () => {
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'self', name: 'me' } });
         getPlatformBus().dispatch(TEAM_EVENTS.MEMBERS_LOADED, { items: [{ user_id: 'u1', name: 'Alice', email: 'a@b' }] });
-        const events = [];
-        getPlatformBus().subscribeAny((e) => events.push(e));
-        const el = await fixture(html`<platform-user-chip user-id="u1"></platform-user-chip>`);
+        const events: any[] = [];
+        getPlatformBus().subscribeAny((e: any) => events.push(e));
+        const el = await fixture<TestEl>(html`<platform-user-chip user-id="u1"></platform-user-chip>`);
         await elementUpdated(el);
         el._onClick();
         const open = events.find((e) => e.type === CoreEvents.UI_MODAL_OPEN);
@@ -72,10 +73,10 @@ describe('platform-user-chip', () => {
     it('interactive=false → клик не открывает модалку', async () => {
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'self', name: 'me' } });
         getPlatformBus().dispatch(TEAM_EVENTS.MEMBERS_LOADED, { items: [{ user_id: 'u1', name: 'Alice' }] });
-        const el = await fixture(html`<platform-user-chip user-id="u1" .interactive=${false}></platform-user-chip>`);
+        const el = await fixture<TestEl>(html`<platform-user-chip user-id="u1" .interactive=${false}></platform-user-chip>`);
         await elementUpdated(el);
-        const events = [];
-        getPlatformBus().subscribeAny((e) => events.push(e));
+        const events: any[] = [];
+        getPlatformBus().subscribeAny((e: any) => events.push(e));
         el._onClick();
         expect(events.find((e) => e.type === CoreEvents.UI_MODAL_OPEN)).to.be.undefined;
     });
@@ -94,9 +95,9 @@ describe('platform-user-chip', () => {
         getPlatformBus().dispatch(workItemCountsOp.events.SUCCEEDED, {
             result: { assigned_open_count: 2, queue_inbox_count: 1 },
         });
-        const el = await fixture(html`<platform-user-chip user-id="self" show-work-count></platform-user-chip>`);
+        const el = await fixture<TestEl>(html`<platform-user-chip user-id="self" show-work-count></platform-user-chip>`);
         await elementUpdated(el);
-        const badge = el.shadowRoot.querySelector('.work-count');
+        const badge = qs(shadow(el), '.work-count');
         expect(badge).to.exist;
         expect(badge.textContent.trim()).to.equal('3');
     });

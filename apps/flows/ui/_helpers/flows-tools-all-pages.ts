@@ -27,7 +27,7 @@ export async function fetchToolsAllPage(
         picker_category?: string;
         q?: string;
     }) => Promise<unknown>,
-    opts: { offset?: number; picker_category?: string; q?: string } = {},
+    opts: { offset?: number; picker_category?: string; q?: string | undefined } = {},
 ) {
     if (typeof runOp !== 'function') {
         throw new Error('fetchToolsAllPage: runOp required');

@@ -1,4 +1,4 @@
-"""LLM enrichment of crawled pages via platform humanitec_llm free pool."""
+"""LLM enrichment of crawled pages via platform linnex_llm free pool."""
 
 from __future__ import annotations
 

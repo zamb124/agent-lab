@@ -75,8 +75,8 @@ export class DashboardServiceCard extends PlatformElement {
                 box-shadow: var(--glass-shadow-medium);
                 overflow: hidden;
                 isolation: isolate;
-                transition: transform var(--duration-normal) var(--easing-default),
-                            box-shadow var(--duration-normal) var(--easing-default);
+                transition: transform var(--motion-duration-layout) var(--motion-ease-standard),
+                            box-shadow var(--motion-duration-layout) var(--motion-ease-standard);
             }
             a.card { text-decoration: none; }
             .card::before {
@@ -174,8 +174,8 @@ export class DashboardServiceCard extends PlatformElement {
         this.descriptionKey = '';
         this.logoSrc = '';
         this.href = '';
-        this.brandFrom = '#6366f1';
-        this.brandTo = '#0ea5e9';
+        this.brandFrom = 'var(--accent)';
+        this.brandTo = 'var(--info)';
         this.metricValue = '';
         this.healthState = 'loading';
         this.latencyMs = 0;

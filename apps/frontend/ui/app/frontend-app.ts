@@ -234,6 +234,7 @@ import '../pages/admin/billing-admin-page.js';
 import type {CSSResultGroup, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 const FRONTEND_ROUTES = [
     { key: 'landing',                 path: '',                                                titleKey: 'routes.landing' },
@@ -645,7 +646,7 @@ export class FrontendApp extends PlatformApp {
 
     override renderRoute(routeKey: string, params: Record<string, string>) {
         if (!routeKey) {
-            return html`<div class="loading-container"><platform-spinner size="xl"></platform-spinner></div>`;
+            return html`<platform-empty-state class="loading-container" loading></platform-empty-state>`;
         }
         if (PUBLIC_ROUTE_KEYS.has(routeKey)) {
             return this._renderPublic(routeKey, params);
@@ -767,7 +768,7 @@ export class FrontendApp extends PlatformApp {
 
     _maybeBootstrapPublicAnalytics() {
         if (typeof window === 'undefined') return;
-        if (Reflect.get(window, '__humanitecAnalyticsInjected') === true) return;
+        if (Reflect.get(window, '__linnexAnalyticsInjected') === true) return;
         const route = this._routerSelect ? this._routerSelect.value : null;
         const routeKey = route ? route.routeKey : null;
         if (!routeKey || !LANDING_ROUTE_KEYS.has(routeKey)) return;
@@ -847,7 +848,7 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (injected) {
-            Reflect.set(window, '__humanitecAnalyticsInjected', true);
+            Reflect.set(window, '__linnexAnalyticsInjected', true);
         }
     }
 

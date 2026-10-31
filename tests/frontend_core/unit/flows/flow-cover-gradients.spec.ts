@@ -10,7 +10,7 @@ describe('flow-cover-gradients', () => {
     it('resolveFlowCoverGradient returns token var from palette', () => {
         const gradient = resolveFlowCoverGradient('demo_flow');
         expect(FLOW_COVER_GRADIENT_VARS).toContain(gradient);
-        expect(gradient.startsWith('var(--flows-cover-gradient-')).toBe(true);
+        expect(gradient?.startsWith('var(--flows-cover-gradient-')).toBe(true);
     });
 
     it('resolveFlowCoverGradient is stable for same flowId', () => {

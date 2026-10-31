@@ -40,7 +40,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
             }
             .type-btn[data-active="true"] {
                 border-color: var(--accent);
-                background: var(--accent-soft, rgba(99,102,241,0.1));
+                background: var(--accent-subtle);
                 color: var(--text-primary);
             }
             .json-textarea {
@@ -102,7 +102,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (!this._targetService.trim()) errors.target_service = this.t('scheduler_modal.err_service');
         if (!this._taskName.trim()) errors.task_name = this.t('scheduler_modal.err_task');
         if (this._scheduleType === 'cron' && !this._cron.trim()) {

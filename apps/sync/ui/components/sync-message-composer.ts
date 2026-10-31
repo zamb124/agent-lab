@@ -95,10 +95,10 @@ export class SyncMessageComposer extends PlatformElement {
             flex-direction: column;
             padding: var(--space-4) var(--space-6) var(--space-4);
             gap: var(--space-2);
-            background: var(--sync-composer-host-bg, var(--glass-solid-soft, var(--glass-solid)));
+            background: var(--sync-composer-host-bg, var(--glass-solid-subtle));
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            border-top: 1px solid var(--glass-border-subtle, var(--glass-border));
+            border-top: 1px solid var(--glass-border-subtle);
         }
         @media (max-width: 767px) {
             :host { padding: var(--space-3) var(--space-4); }
@@ -110,7 +110,7 @@ export class SyncMessageComposer extends PlatformElement {
             font-size: var(--text-xs);
             color: var(--text-secondary);
             padding: var(--space-2) var(--space-3);
-            background: var(--glass-tint-subtle, var(--glass-hover));
+            background: var(--glass-tint-subtle);
             border-left: 3px solid var(--accent);
             border-radius: var(--radius-md);
         }
@@ -126,21 +126,21 @@ export class SyncMessageComposer extends PlatformElement {
             align-items: center;
             justify-content: center;
         }
-        .mode-bar .cancel:hover { background: var(--glass-hover); color: var(--text-primary); }
+        .mode-bar .cancel:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
         .pill {
             display: flex;
             align-items: center;
             gap: var(--space-1);
             padding: 6px 8px;
-            background: var(--sync-composer-capsule-bg, var(--glass-tint-subtle, var(--glass-hover)));
-            border: 1px solid var(--sync-composer-capsule-border, var(--glass-border-subtle, var(--glass-border)));
+            background: var(--sync-composer-capsule-bg, var(--glass-tint-subtle));
+            border: 1px solid var(--sync-composer-capsule-border, var(--glass-border-subtle));
             border-radius: 24px;
             box-shadow: var(--sync-composer-capsule-shadow, none);
-            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+            transition: border-color var(--motion-duration-micro), box-shadow var(--motion-duration-micro);
         }
         .pill:focus-within {
             border-color: var(--accent);
-            box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16)), var(--sync-composer-capsule-shadow, none);
+            box-shadow: 0 0 0 4px var(--accent-subtle), var(--sync-composer-capsule-shadow, none);
         }
         /* Высота textarea подгоняется под одну строку (24px) и совпадает с
            высотой иконок 40px (height = 24 + 16 padding = 40). При вводе
@@ -158,7 +158,7 @@ export class SyncMessageComposer extends PlatformElement {
             background: transparent;
             color: var(--text-primary);
             font: inherit;
-            font-size: var(--text-base, 15px);
+            font-size: var(--text-base);
             line-height: 1.4;
             resize: none;
             outline: none;
@@ -170,42 +170,42 @@ export class SyncMessageComposer extends PlatformElement {
             align-items: center;
             justify-content: center;
             padding: 10px;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             background: transparent;
             color: var(--text-tertiary);
             border: none;
             cursor: pointer;
-            transition: background var(--duration-fast), color var(--duration-fast);
+            transition: background var(--motion-duration-micro), color var(--motion-duration-micro);
             flex-shrink: 0;
         }
-        button.icon:hover { background: var(--glass-hover); color: var(--accent); }
-        button.icon.recording { color: var(--color-error, #ef4444); }
+        button.icon:hover { background: var(--glass-tint-medium); color: var(--accent); }
+        button.icon.recording { color: var(--error); }
         button.send {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             padding: 12px;
             background: var(--accent);
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             border: none;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             cursor: pointer;
-            box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.32));
-            transition: transform var(--duration-fast), box-shadow var(--duration-fast);
+            box-shadow: 0 2px 8px var(--accent-subtle);
+            transition: transform var(--motion-duration-micro), box-shadow var(--motion-duration-micro);
             flex-shrink: 0;
         }
-        button.send:hover { transform: translateY(-1px); background: var(--accent-hover, var(--accent)); }
+        button.send:hover { transform: translateY(-1px); background: var(--accent-hover); }
         button.send:active { transform: translateY(0); }
         button.send:disabled, button.icon:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
         button.send.recording {
-            background: var(--color-error, #ef4444);
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+            background: var(--error);
+            box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 60%, transparent);
             animation: rec-pulse 1.4s ease-in-out infinite;
         }
         @keyframes rec-pulse {
-            0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
-            70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+            0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent); }
+            70%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--error) 0%, transparent); }
+            100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 0%, transparent); }
         }
         .attachments {
             display: flex;
@@ -216,9 +216,9 @@ export class SyncMessageComposer extends PlatformElement {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            background: var(--glass-tint-subtle, var(--glass-hover));
+            background: var(--glass-tint-subtle);
             padding: 4px 10px;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             font-size: var(--text-xs);
             color: var(--text-secondary);
             cursor: pointer;
@@ -232,8 +232,8 @@ export class SyncMessageComposer extends PlatformElement {
             min-width: 0;
             padding: var(--space-2) var(--space-3);
             border-radius: var(--radius-lg);
-            border: 1px solid var(--glass-border-subtle, var(--glass-border));
-            background: var(--glass-tint-subtle, var(--glass-hover));
+            border: 1px solid var(--glass-border-subtle);
+            background: var(--glass-tint-subtle);
             box-sizing: border-box;
         }
         .voice-draft-mic {
@@ -243,8 +243,8 @@ export class SyncMessageComposer extends PlatformElement {
             flex-shrink: 0;
             width: 36px;
             height: 36px;
-            border-radius: var(--radius-full, 999px);
-            background: var(--accent-subtle, rgba(153, 166, 249, 0.2));
+            border-radius: var(--radius-full);
+            background: var(--accent-subtle);
             color: var(--accent);
         }
         .voice-draft-waves {
@@ -283,33 +283,33 @@ export class SyncMessageComposer extends PlatformElement {
             padding: 6px;
             margin: -4px -4px -4px 0;
             border: none;
-            border-radius: var(--radius-full, 999px);
+            border-radius: var(--radius-full);
             background: transparent;
             color: var(--text-tertiary);
             cursor: pointer;
         }
         .voice-draft-remove:hover {
-            background: var(--glass-hover);
+            background: var(--glass-tint-medium);
             color: var(--text-primary);
         }
         .mention-popup {
             position: absolute;
             bottom: 100%;
             left: var(--space-6);
-            background: var(--glass-solid);
-            border: 1px solid var(--glass-border);
+            background: var(--glass-solid-medium);
+            border: 1px solid var(--glass-border-medium);
             border-radius: var(--radius-lg);
             min-width: 220px;
             max-height: 240px;
             overflow-y: auto;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+            box-shadow: 0 8px 24px var(--glass-shadow-medium);
             z-index: 10;
         }
         .mention-popup .item {
             padding: var(--space-2) var(--space-3);
             cursor: pointer;
         }
-        .mention-popup .item:hover, .mention-popup .item.active { background: var(--glass-hover); }
+        .mention-popup .item:hover, .mention-popup .item.active { background: var(--glass-tint-medium); }
         .emoji-anchor {
             position: relative;
             display: inline-flex;
@@ -322,19 +322,19 @@ export class SyncMessageComposer extends PlatformElement {
             bottom: 100%;
             margin-bottom: 8px;
             background: var(--glass-solid-strong);
-            border: 1px solid var(--glass-border);
+            border: 1px solid var(--glass-border-medium);
             border-radius: var(--radius-lg);
             min-width: 240px;
             padding: var(--space-2);
             display: grid;
             grid-template-columns: repeat(6, 1fr);
             gap: 4px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+            box-shadow: 0 8px 24px var(--glass-shadow-medium);
             z-index: 10;
             box-sizing: border-box;
             max-width: calc(100dvw - var(--platform-safe-left) - var(--platform-safe-right) - 16px);
         }
-        .warn { color: var(--color-error, #ef4444); font-size: var(--text-xs); padding: 0 var(--space-3); }
+        .warn { color: var(--error); font-size: var(--text-xs); padding: 0 var(--space-3); }
     `;
     private _sendOp: OpController;
     private _editOp: OpController;

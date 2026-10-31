@@ -138,7 +138,7 @@ export class SyncApp extends PlatformApp {
         serviceId: 'sync',
         showLauncher: true,
     };
-    private _authUserSel: SelectController<Record<string, any> | null>;
+    private _authUserSel: SelectController<Record<string, unknown> | null>;
     private _channelsSliceSel: SelectController<SyncChannelsSlice | undefined>;
     private _threadsSliceSel: SelectController<SyncThreadsSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;

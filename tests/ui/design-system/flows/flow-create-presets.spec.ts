@@ -4,6 +4,8 @@
 import { fixture, html, expect, oneEvent } from '../../../frontend_core/browser/helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../../../frontend_core/browser/helpers/reset.js';
 import '@platform/lib/components/platform-picker-card.js';
+import { shadowQuery, shadowQueryAll } from '../helpers/shadow-dom.js';
+import type { TestEl } from '../../../frontend_core/browser/helpers/dom.js';
 
 describe('flows consumer: flow-create preset cards', () => {
     beforeEach(() => {
@@ -12,14 +14,14 @@ describe('flows consumer: flow-create preset cards', () => {
     });
 
     it('preset card emits value on select', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-picker-card
                 title="Graph agent"
                 subtitle="Multi-node graph"
                 value="graph"
             ></platform-picker-card>
         `);
-        setTimeout(() => el.shadowRoot.querySelector('.picker-card').click());
+        setTimeout(() => shadowQuery(el, '.picker-card').click());
         const ev = await oneEvent(el, 'select');
         expect(ev.detail.value).to.equal('graph');
     });

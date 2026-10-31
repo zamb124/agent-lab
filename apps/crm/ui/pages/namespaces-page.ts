@@ -129,8 +129,8 @@ export class CRMNamespacesPage extends PlatformPage {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: #242428;
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
             }
             .integration-icon {
                 width: 70%;
@@ -183,12 +183,12 @@ export class CRMNamespacesPage extends PlatformPage {
     ];
 
     private _namespaces: ResourceController;
-    private _authSel: SelectController<Record<string, any> | undefined>;
+    private _authSel: SelectController<Record<string, unknown> | undefined>;
 
     constructor() {
         super();
         this._namespaces = this.useResource(NAMESPACES_NAME, { autoload: true });
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
+        this._authSel = this.select((s: Record<string, unknown>) => s.auth.user);
     }
 
     _onCreate() {
@@ -208,7 +208,7 @@ export class CRMNamespacesPage extends PlatformPage {
         this.navigate('notes');
     }
 
-    _connectedIntegrationBadges(ns: Record<string, any>) {
+    _connectedIntegrationBadges(ns: Record<string, unknown>) {
         const raw = ns.integration_badges;
         if (!Array.isArray(raw)) {
             throw new Error('CRMNamespacesPage: integration_badges required');
@@ -258,7 +258,7 @@ export class CRMNamespacesPage extends PlatformPage {
         `;
     }
 
-    _renderCard(ns: Record<string, any>): TemplateResult {
+    _renderCard(ns: Record<string, unknown>): TemplateResult {
         const description = typeof ns.description === 'string' && ns.description.length > 0
             ? ns.description
             : '';

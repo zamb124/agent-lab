@@ -11,6 +11,7 @@ import {
     FLOW_UI_HTML_MIN_HEIGHT,
     HtmlSandboxBridge,
 } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
+import type { TestEl } from '../helpers/dom.js';
 
 const ECHO_SRCDOC = '<!doctype html><html><body><script>'
     + 'window.addEventListener("message", (event) => { if (event.source === parent && event.data && event.data.type === "__echo") parent.postMessage(event.data.message, "*"); });'
@@ -18,26 +19,26 @@ const ECHO_SRCDOC = '<!doctype html><html><body><script>'
     + '</script></body></html>';
 
 function recorder() {
-    const calls = { action: [], value: [], resize: [], error: [], openUrl: [] };
+    const calls: { action: any[]; value: any[]; resize: any[]; error: any[]; openUrl: any[] } = { action: [], value: [], resize: [], error: [], openUrl: [] };
     return {
         calls,
         handlers: {
-            onAction: (name, payload) => calls.action.push({ name, payload }),
-            onValue: (value) => calls.value.push(value),
-            onResize: (height) => calls.resize.push(height),
-            onError: (error) => calls.error.push(error),
-            onOpenUrl: (url) => calls.openUrl.push(url),
+            onAction: (name: any, payload: any) => calls.action.push({ name, payload }),
+            onValue: (value: any) => calls.value.push(value!),
+            onResize: (height: any) => calls.resize.push(height!),
+            onError: (error: any) => calls.error.push(error!),
+            onOpenUrl: (url: any) => calls.openUrl.push(url!),
         },
     };
 }
 
-const mounted = [];
+const mounted: any[] = [];
 
 /** Слушатель ``load`` ставится до вставки в DOM: srcdoc может загрузиться раньше await fixture. */
 async function mountIframe() {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('sandbox', 'allow-scripts');
-    const loaded = new Promise((resolve) => iframe.addEventListener('load', () => resolve(), { once: true }));
+    const loaded = new Promise<void>((resolve) => iframe.addEventListener('load', () => resolve(), { once: true }));
     iframe.srcdoc = ECHO_SRCDOC;
     document.body.appendChild(iframe);
     mounted.push(iframe);
@@ -50,7 +51,7 @@ function nextTick() {
 }
 
 /** Просит iframe отправить хосту ``message`` от своего лица, как это делает ``flowUi``. */
-async function fromFrame(iframe, message) {
+async function fromFrame(iframe: any, message: any) {
     iframe.contentWindow.postMessage({ type: '__echo', message }, '*');
     await nextTick();
 }
@@ -58,7 +59,7 @@ async function fromFrame(iframe, message) {
 describe('HtmlSandboxBridge', function () {
     this.timeout(10_000);
 
-    let bridges = [];
+    let bridges: any[] = [];
 
     afterEach(() => {
         for (const bridge of bridges) bridge.dispose();
@@ -66,7 +67,7 @@ describe('HtmlSandboxBridge', function () {
         for (const iframe of mounted.splice(0)) iframe.remove();
     });
 
-    function attach(iframe, handlers) {
+    function attach(iframe: any, handlers: any) {
         const bridge = new HtmlSandboxBridge({ iframe, ...handlers });
         bridges.push(bridge);
         return bridge;
@@ -75,10 +76,10 @@ describe('HtmlSandboxBridge', function () {
     it('requires an iframe and every handler', async () => {
         const iframe = await mountIframe();
         const { handlers } = recorder();
-        expect(() => new HtmlSandboxBridge(null)).to.throw(/requires iframe/);
-        expect(() => new HtmlSandboxBridge({ iframe: document.body, ...handlers })).to.throw(/requires iframe/);
+        expect(() => new HtmlSandboxBridge(null!)).to.throw(/requires iframe/);
+        expect(() => new HtmlSandboxBridge({ iframe: document.body as unknown as HTMLIFrameElement, ...handlers })).to.throw(/requires iframe/);
         for (const name of Object.keys(handlers)) {
-            expect(() => new HtmlSandboxBridge({ iframe, ...handlers, [name]: null }), name).to.throw(new RegExp(`requires ${name}`));
+            expect(() => new HtmlSandboxBridge({ iframe, ...handlers, [name]: null as any }), name).to.throw(new RegExp(`requires ${name}`));
         }
     });
 
@@ -193,6 +194,6 @@ describe('HtmlSandboxBridge', function () {
             { type: 'theme', css: ':root{--flow-ui-text:#123;--flow-ui-accent:abc}' },
             { type: 'state', state: { total: 1 } },
         ]);
-        expect(() => bridge._post({ type: 'action', name: 'x' })).to.throw(/host cannot send action/);
+        expect(() => (bridge as unknown as { _post(msg: unknown): void })._post({ type: 'action', name: 'x' })).to.throw(/host cannot send action/);
     });
 });

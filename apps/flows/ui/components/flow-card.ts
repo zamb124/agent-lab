@@ -22,7 +22,7 @@ export class FlowCard extends PlatformElement {
         expanded: { type: Boolean, reflect: true },
         collapsed: { type: Boolean, reflect: true },
     }
-    declare flow: Record<string, any> | null;
+    declare flow: Record<string, unknown> | null;
     declare active: boolean;
     declare expanded: boolean;
     declare collapsed: boolean;
@@ -69,7 +69,7 @@ export class FlowCard extends PlatformElement {
                 padding-right: calc(var(--space-2) + 22px);
                 cursor: pointer;
                 position: relative;
-                transition: padding-right var(--duration-fast) var(--easing-default);
+                transition: padding-right var(--motion-duration-micro) var(--motion-ease-standard);
                 min-width: 0;
             }
 
@@ -191,7 +191,7 @@ export class FlowCard extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 color: var(--text-tertiary);
-                transition: transform var(--duration-fast);
+                transition: transform var(--motion-duration-micro);
                 position: absolute;
                 right: var(--space-2);
                 top: 50%;
@@ -204,7 +204,7 @@ export class FlowCard extends PlatformElement {
 
             .flow-details {
                 padding: 0 var(--space-4) var(--space-4);
-                animation: slideDown var(--duration-normal) var(--easing-default);
+                animation: slideDown var(--motion-duration-layout) var(--motion-ease-standard);
             }
 
             @keyframes slideDown {
@@ -353,7 +353,7 @@ export class FlowCard extends PlatformElement {
         }));
     }
 
-    _requireFlow(): Record<string, any> {
+    _requireFlow(): Record<string, unknown> {
         const flow = this.flow;
         if (flow === null) {
             throw new Error('flow-card: flow required');

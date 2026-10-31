@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calendarReducer, initialCalendarState, CALENDAR_EVENTS, calendarSlice } from '@platform/lib/events/reducers/calendar.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('calendarReducer', () => {
     it('initial', () => {
@@ -34,7 +34,7 @@ describe('calendarReducer', () => {
     it('EVENT_UPDATED заменяет по event_id', () => {
         const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1', title: 'a' } }));
         const next = calendarReducer(seeded, ev(CALENDAR_EVENTS.EVENT_UPDATED, { event: { event_id: 'e1', title: 'b' } }));
-        expect(next.events[0].title).toBe('b');
+        expect(next.events[0]?.title).toBe('b');
     });
 
     it('EVENT_DELETED удаляет', () => {

@@ -86,17 +86,17 @@ export class PlatformFileCard extends PlatformElement {
             }
             .card:hover {
                 background: var(--glass-solid-medium);
-                border-color: var(--documents-selected-stroke, var(--glass-border-medium));
+                border-color: var(--documents-selected-stroke);
                 box-shadow: var(--glass-shadow-medium);
                 transform: translateY(-1px);
             }
             :host([selected]) .card {
-                border-color: var(--documents-selected-stroke, var(--accent));
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                border-color: var(--documents-selected-stroke);
+                background: var(--documents-selected-bg);
             }
             :host([drop-target]) .card {
                 border-color: var(--accent);
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                background: var(--documents-selected-bg);
                 box-shadow: var(--glass-shadow-medium);
             }
             .icon-wrap {
@@ -118,7 +118,7 @@ export class PlatformFileCard extends PlatformElement {
                 width: 1.125rem;
                 height: 1.125rem;
                 border-radius: var(--radius-full);
-                background: var(--glass-solid-strong, var(--bg-primary, #fff));
+                background: var(--glass-solid-strong);
                 box-shadow: var(--glass-shadow-subtle);
                 color: var(--text-tertiary);
             }

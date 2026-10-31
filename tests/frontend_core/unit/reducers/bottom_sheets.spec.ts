@@ -5,12 +5,10 @@ import {
 } from '@platform/lib/events/reducers/bottom_sheets.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
-const ev = (type, payload, ts = 1234) => ({
-    id: `id_${type}`,
-    type,
-    payload,
-    meta: { ts, source: 'local' },
-});
+import { testEvent } from '../../helpers/bus-fixtures.js';
+
+const ev = (type: string, payload: unknown, ts = 1234) =>
+    ({ ...testEvent(type, payload), meta: { ...testEvent(type, payload).meta, ts } });
 
 describe('bottomSheetsReducer', () => {
     it('initial: пустой stack', () => {
@@ -23,9 +21,9 @@ describe('bottomSheetsReducer', () => {
             ev(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, { id: 's1', kind: 'crm.workspace_picker', props: { a: 1 } }),
         );
         expect(next.stack).toHaveLength(1);
-        expect(next.stack[0].id).toBe('s1');
-        expect(next.stack[0].kind).toBe('crm.workspace_picker');
-        expect(next.stack[0].props).toEqual({ a: 1 });
+        expect(next.stack[0]?.id).toBe('s1');
+        expect(next.stack[0]?.kind).toBe('crm.workspace_picker');
+        expect(next.stack[0]?.props).toEqual({ a: 1 });
     });
 
     it('CLOSE_REQUESTED с id помечает sheet closing', () => {
@@ -33,8 +31,8 @@ describe('bottomSheetsReducer', () => {
         s = bottomSheetsReducer(s, ev(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, { id: 's2', kind: 'a.c' }));
         const next = bottomSheetsReducer(s, ev(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, { id: 's1' }));
         expect(next.stack.map((item) => item.id)).toEqual(['s1', 's2']);
-        expect(next.stack[0].closing).toBe(true);
-        expect(next.stack[1].closing).toBeUndefined();
+        expect(next.stack[0]?.closing).toBe(true);
+        expect(next.stack[1]?.closing).toBeUndefined();
     });
 
     it('CLOSE_REQUESTED без id/kind помечает верхний sheet closing', () => {
@@ -42,8 +40,8 @@ describe('bottomSheetsReducer', () => {
         s = bottomSheetsReducer(s, ev(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, { id: 's2', kind: 'a.c' }));
         const next = bottomSheetsReducer(s, ev(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, null));
         expect(next.stack).toHaveLength(2);
-        expect(next.stack[0].closing).toBeUndefined();
-        expect(next.stack[1].closing).toBe(true);
+        expect(next.stack[0]?.closing).toBeUndefined();
+        expect(next.stack[1]?.closing).toBe(true);
     });
 
     it('CLOSED удаляет sheet из stack', () => {

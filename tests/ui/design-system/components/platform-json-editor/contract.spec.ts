@@ -4,6 +4,7 @@
 import { fixture, html, expect } from '../../../../frontend_core/browser/helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../../../../frontend_core/browser/helpers/reset.js';
 import '@platform/lib/components/platform-json-editor.js';
+import type { TestEl } from '../../../../frontend_core/browser/helpers/dom.js';
 
 describe('platform-json-editor', () => {
     beforeEach(() => {
@@ -12,7 +13,7 @@ describe('platform-json-editor', () => {
     });
 
     it('renders readonly value', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-json-editor readonly value='{"ok":true}'></platform-json-editor>
         `);
         expect(el.shadowRoot).to.exist;

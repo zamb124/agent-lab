@@ -1,6 +1,6 @@
 # Android: Capacitor Shell для Google Play
 
-Android-оболочка построена на **Capacitor 6** — тот же стек, что у iOS-сборки. `applicationId = ru.humanitec.app` совпадает с iOS bundle id; общий [`mobile/capacitor.config.json`](../capacitor.config.json), общий [`www/`](../www/), общий import map в `apps/<svc>/ui/index.html`. Веб-код, deeplink-префиксы и shell-helpers ([`native-app-shell.js`](../../core/frontend/static/lib/utils/native-app-shell.js) уже обрабатывает `androidBridge`) — без изменений между платформами.
+Android-оболочка построена на **Capacitor 6** — тот же стек, что у iOS-сборки. `applicationId = io.linnex.app` совпадает с iOS bundle id; общий [`mobile/capacitor.config.json`](../capacitor.config.json), общий [`www/`](../www/), общий import map в `apps/<svc>/ui/index.html`. Веб-код, deeplink-префиксы и shell-helpers ([`native-app-shell.js`](../../core/frontend/static/lib/utils/native-app-shell.js) уже обрабатывает `androidBridge`) — без изменений между платформами.
 
 ## Предварительные условия
 
@@ -23,9 +23,9 @@ mobile/android/
     capacitor.build.gradle                             # генерируется cap sync
     src/main/
       AndroidManifest.xml                              # permissions + intent-filter с autoVerify (App Links)
-      java/ru/humanitec/app/
+      java/io/linnex/app/
         MainActivity.java
-        HumanitecBridgeWebChromeClient.java            # перехват window.open, аналог HumanitecWebViewNewWindowFix.swift
+        LinnexBridgeWebChromeClient.java            # перехват window.open, аналог LinnexWebViewNewWindowFix.swift
       res/
         mipmap-*/ic_launcher*.png                      # генерируется scripts/generate/pwa_icons.py
         mipmap-anydpi-v26/ic_launcher*.xml             # adaptive icon
@@ -49,9 +49,9 @@ npm run cap:android:open    # открыть проект в Android Studio
 Подпись — Play App Signing: локально только **upload key** (`*.jks`). Параметры берутся из ENV:
 
 ```bash
-export ANDROID_KEYSTORE_PATH=/abs/path/humanitec-upload.jks
+export ANDROID_KEYSTORE_PATH=/abs/path/linnex-upload.jks
 export ANDROID_KEYSTORE_PASSWORD='...'
-export ANDROID_KEY_ALIAS=humanitec-upload
+export ANDROID_KEY_ALIAS=linnex-upload
 export ANDROID_KEY_PASSWORD='...'
 
 npm run cap:android:build   # mobile/scripts/build-android.sh: cap sync android + ./gradlew bundleRelease
@@ -63,7 +63,7 @@ npm run cap:android:build   # mobile/scripts/build-android.sh: cap sync android 
 
 ## Window.open / target=_blank (аналог iOS swizzle)
 
-Capacitor по умолчанию игнорирует `window.open` в Android WebView. В [`MainActivity.java`](app/src/main/java/ru/humanitec/app/MainActivity.java) включается `setSupportMultipleWindows(true)` и устанавливается [`HumanitecBridgeWebChromeClient`](app/src/main/java/ru/humanitec/app/HumanitecBridgeWebChromeClient.java): URL продукта (`server.url`, `localUrl`, шаблоны `server.allowNavigation` из [`capacitor.config.json`](../capacitor.config.json)) загружаются в текущем WebView, остальные — `Intent.ACTION_VIEW` в системный браузер. Симметрично [`HumanitecWebViewNewWindowFix.swift`](../ios/App/App/HumanitecWebViewNewWindowFix.swift) на iOS.
+Capacitor по умолчанию игнорирует `window.open` в Android WebView. В [`MainActivity.java`](app/src/main/java/io/linnex/app/MainActivity.java) включается `setSupportMultipleWindows(true)` и устанавливается [`LinnexBridgeWebChromeClient`](app/src/main/java/io/linnex/app/LinnexBridgeWebChromeClient.java): URL продукта (`server.url`, `localUrl`, шаблоны `server.allowNavigation` из [`capacitor.config.json`](../capacitor.config.json)) загружаются в текущем WebView, остальные — `Intent.ACTION_VIEW` в системный браузер. Симметрично [`LinnexWebViewNewWindowFix.swift`](../ios/App/App/LinnexWebViewNewWindowFix.swift) на iOS.
 
 JS-уровень ([`native-app-shell.js`](../../core/frontend/static/lib/utils/native-app-shell.js)) дополнительно патчит `window.open` и перехватывает клики по `<a target="_blank">` — это работает независимо от платформы и срабатывает раньше нативного fallback.
 
@@ -71,13 +71,13 @@ JS-уровень ([`native-app-shell.js`](../../core/frontend/static/lib/utils/
 
 `intent-filter` с `android:autoVerify="true"` для апексов и wildcard-поддоменов (синхронизировано с [`mobile/ios/App/App/App.entitlements`](../ios/App/App/App.entitlements)):
 
-- `humanitec.ru` + `*.humanitec.ru`
+- `linnex.io` + `*.linnex.io`
 - `humanetic.ru` + `*.humanetic.ru`
 - `agents-lab.ru` + `*.agents-lab.ru`
 
-Wildcard покрывает tenant slug-поддомены каждой компании (`artflash.humanitec.ru`, `mycompany.humanitec.ru`, …) — пользователь нажимает `https://artflash.humanitec.ru/sync/c/...` в любом приложении и попадает прямо в Humanitec. Префиксы путей синхронизированы с [`DEEPLINK_PATH_PREFIXES`](../../core/frontend/static/lib/utils/platform-deeplink-paths.js).
+Wildcard покрывает tenant slug-поддомены каждой компании (`artflash.linnex.io`, `mycompany.linnex.io`, …) — пользователь нажимает `https://artflash.linnex.io/sync/c/...` в любом приложении и попадает прямо в Linnex. Префиксы путей синхронизированы с [`DEEPLINK_PATH_PREFIXES`](../../core/frontend/static/lib/utils/platform-deeplink-paths.js).
 
-**Верификация:** wildcard-хосты требуют Android 12+ (API 31+). Android берёт `assetlinks.json` с **апексного** домена (`https://humanitec.ru/.well-known/assetlinks.json`) — этот один файл покрывает и сам апекс, и все его поддомены. То есть монтировать отдельный JSON на каждый slug **не нужно**, достаточно по одному файлу на корневой домен (`humanitec.ru`, `humanetic.ru`, `agents-lab.ru`).
+**Верификация:** wildcard-хосты требуют Android 12+ (API 31+). Android берёт `assetlinks.json` с **апексного** домена (`https://linnex.io/.well-known/assetlinks.json`) — этот один файл покрывает и сам апекс, и все его поддомены. То есть монтировать отдельный JSON на каждый slug **не нужно**, достаточно по одному файлу на корневой домен (`linnex.io`, `humanetic.ru`, `agents-lab.ru`).
 
 Шаблон содержимого — [`../config/assetlinks.json.template`](../config/assetlinks.json.template). В `sha256_cert_fingerprints` нужны **оба** fingerprint: upload key и Play App Signing key — оба берутся в **Play Console → Release → Setup → App signing** после первой загрузки AAB.
 
@@ -87,7 +87,7 @@ Wildcard покрывает tenant slug-поддомены каждой комп
 
 См. [`docs/PUSH_PARITY.md`](../docs/PUSH_PARITY.md). Кратко:
 
-1. Firebase Console → Add app → Android, package `ru.humanitec.app`. Скачать `google-services.json` → положить в `mobile/android/app/google-services.json` (в `.gitignore`).
+1. Firebase Console → Add app → Android, package `io.linnex.app`. Скачать `google-services.json` → положить в `mobile/android/app/google-services.json` (в `.gitignore`).
 2. `mobile/android/build.gradle` уже содержит `classpath 'com.google.gms:google-services:...'`; `mobile/android/app/build.gradle` подключает плагин при наличии файла.
 3. Service account JSON (Firebase Console → Project settings → Service accounts → Generate new private key) → ENV `PUSH__FCM_CREDENTIALS_JSON` или поле `push.fcm_credentials_json` в `conf.json`. См. [`core/push/fcm_credentials.py`](../../core/push/fcm_credentials.py), [`core/push/fcm_service.py`](../../core/push/fcm_service.py).
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 # Сборка Android AAB для Google Play.
 # Перед запуском задайте ANDROID_KEYSTORE_PATH / ANDROID_KEYSTORE_PASSWORD /
-# ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD (либо humanitec*-свойства в ~/.gradle/gradle.properties).
+# ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD (либо linnex*-свойства в ~/.gradle/gradle.properties).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ANDROID_DIR="$ROOT/android"
 if [[ ! -d "$ANDROID_DIR" ]]; then

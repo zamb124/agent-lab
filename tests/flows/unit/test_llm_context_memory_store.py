@@ -5,6 +5,12 @@ import uuid
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.runtime.llm_context_memory_store import (
+    RAGLLMContextMemoryStore,
+    _clamp_score,
+    _parse_datetime,
+    llm_context_memory_namespace_id,
+)
 from core.context import clear_context, get_context, set_context
 from core.llm_context.memory import (
     LLMContextMemoryEpisode,
@@ -14,12 +20,6 @@ from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_RECALL_CONTENT
 from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from apps.flows.src.runtime.llm_context_memory_store import (
-    RAGLLMContextMemoryStore,
-    _clamp_score,
-    _parse_datetime,
-    llm_context_memory_namespace_id,
-)
 from tests.fixtures.auth import service_client_asgi_auth_context
 
 

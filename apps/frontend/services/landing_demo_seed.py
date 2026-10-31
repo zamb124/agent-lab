@@ -101,7 +101,7 @@ async def ensure_system_landing_demo_embeds() -> None:
         else User(
             user_id="bootstrap_landing_demos",
             name="Bootstrap landing demos",
-            emails=["bootstrap-landing@humanitec.local"],
+            emails=["bootstrap-landing@linnex.local"],
             companies={SYSTEM_COMPANY_ID: ["admin"]},
             active_company_id=SYSTEM_COMPANY_ID,
         )

@@ -10,6 +10,7 @@ import {
     workItemGetOp,
     worktrackerWorkItemFactories,
 } from '@platform/lib/events/resources/work-items.resource.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('platform-work-item-badge', () => {
     beforeEach(() => {
@@ -25,7 +26,7 @@ describe('platform-work-item-badge', () => {
     });
 
     it('без work-item-id и .item — throw при render', async () => {
-        const el = document.createElement('platform-work-item-badge');
+        const el = (document.createElement('platform-work-item-badge') as TestEl);
         document.body.appendChild(el);
         let caught = null;
         try {
@@ -38,7 +39,7 @@ describe('platform-work-item-badge', () => {
     });
 
     it('рендерит title из .item', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-work-item-badge
                 work-item-id="wi_test"
                 .item=${{ work_item_id: 'wi_test', title: 'Fix inbox', priority: 'high', state: 'open', kind: 'generic' }}
@@ -46,11 +47,11 @@ describe('platform-work-item-badge', () => {
             ></platform-work-item-badge>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.textContent).to.contain('Fix inbox');
+        expect(shadow(el).textContent).to.contain('Fix inbox');
     });
 
     it('row/card: data-state на badge, left bar не от priority', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-work-item-badge
                 work-item-id="wi_state"
                 .item=${{ work_item_id: 'wi_state', title: 'In progress task', priority: 'normal', state: 'in_progress', kind: 'generic' }}
@@ -58,17 +59,17 @@ describe('platform-work-item-badge', () => {
             ></platform-work-item-badge>
         `);
         await elementUpdated(el);
-        const badge = el.shadowRoot.querySelector('.badge');
+        const badge = qs(shadow(el), '.badge');
         expect(badge).to.exist;
         expect(badge.getAttribute('data-state')).to.equal('in_progress');
         expect(badge.hasAttribute('data-priority')).to.equal(false);
-        const stateDot = el.shadowRoot.querySelector('.state-dot');
+        const stateDot = qs(shadow(el), '.state-dot');
         expect(stateDot).to.exist;
         expect(stateDot.getAttribute('data-state')).to.equal('in_progress');
     });
 
     it('meta: priority mark только для high/urgent', async () => {
-        const normalEl = await fixture(html`
+        const normalEl = await fixture<TestEl>(html`
             <platform-work-item-badge
                 work-item-id="wi_normal"
                 .item=${{ work_item_id: 'wi_normal', title: 'Normal', priority: 'normal', state: 'open', kind: 'generic' }}
@@ -76,9 +77,9 @@ describe('platform-work-item-badge', () => {
             ></platform-work-item-badge>
         `);
         await elementUpdated(normalEl);
-        expect(normalEl.shadowRoot.querySelector('.priority-mark')).to.equal(null);
+        expect(q(shadow(normalEl), '.priority-mark')).to.equal(null);
 
-        const urgentEl = await fixture(html`
+        const urgentEl = await fixture<TestEl>(html`
             <platform-work-item-badge
                 work-item-id="wi_urgent"
                 .item=${{ work_item_id: 'wi_urgent', title: 'Urgent', priority: 'urgent', state: 'open', kind: 'generic' }}
@@ -86,13 +87,13 @@ describe('platform-work-item-badge', () => {
             ></platform-work-item-badge>
         `);
         await elementUpdated(urgentEl);
-        const mark = urgentEl.shadowRoot.querySelector('.priority-mark');
+        const mark = qs(shadow(urgentEl), '.priority-mark');
         expect(mark).to.exist;
         expect(mark.getAttribute('data-priority')).to.equal('urgent');
     });
 
     it('invalid variant — throw при updated', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-work-item-badge
                 work-item-id="wi_test"
                 .item=${{ work_item_id: 'wi_test', title: 'A', priority: 'normal', state: 'open', kind: 'generic' }}

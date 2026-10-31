@@ -1,13 +1,13 @@
 {
-  "appId": "ru.humanitec.app",
-  "appName": "Humanitec",
+  "appId": "io.linnex.app",
+  "appName": "Linnex",
   "webDir": "www",
   "server": {
-    "url": "https://humanitec.ru",
+    "url": "https://linnex.io",
     "cleartext": false,
     "allowNavigation": [
-      "humanitec.ru",
-      "*.humanitec.ru",
+      "linnex.io",
+      "*.linnex.io",
       "humanetic.ru",
       "*.humanetic.ru",
       "agents-lab.ru",

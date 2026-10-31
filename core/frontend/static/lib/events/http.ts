@@ -190,13 +190,13 @@ export class HttpError extends Error {
  * }} req
  */
 export interface HttpRequestSpec {
-    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | undefined;
     url: string;
-    query?: Record<string, string | number | boolean | null | undefined>;
+    query?: Record<string, string | number | boolean | null | undefined> | undefined;
     body?: unknown;
-    headers?: Record<string, string>;
-    signal?: AbortSignal;
-    credentials?: RequestCredentials;
+    headers?: Record<string, string> | undefined;
+    signal?: AbortSignal | undefined;
+    credentials?: RequestCredentials | undefined;
     returnMeta?: boolean;
     captureRaw?: boolean;
 }
@@ -218,7 +218,7 @@ export async function httpRequest(req: HttpRequestSpec): Promise<unknown> {
         method,
         headers,
         credentials: req.credentials || 'include',
-        signal: req.signal,
+        signal: req.signal ?? null,
     };
     if (hasBody) {
         if (typeof FormData !== 'undefined' && requestBody instanceof FormData) {
@@ -264,8 +264,8 @@ export async function httpStream(req: HttpRequestSpec, onEvent: (data: unknown) 
         method: req.method || 'POST',
         headers: { 'Content-Type': 'application/json', ...(req.headers === undefined ? {} : req.headers) },
         credentials: req.credentials || 'include',
-        signal: req.signal,
-        body: req.body !== undefined && req.body !== null ? JSON.stringify(req.body) : undefined,
+        signal: req.signal ?? null,
+        body: req.body !== undefined && req.body !== null ? JSON.stringify(req.body) : null,
     };
     const response = await fetch(req.url, init);
     if (!response.ok) {

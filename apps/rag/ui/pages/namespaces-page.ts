@@ -65,7 +65,7 @@ export class NamespacesPage extends PlatformPage {
             </page-header>
             ${items.length > 0 ? html`
                 <div class="grid">
-                    ${items.map((ns: Record<string, unknown>) => html`<namespace-card .namespace=${ns}></namespace-card>`)}
+                    ${items.map((ns) => html`<namespace-card .namespace=${ns}></namespace-card>`)}
                 </div>
             ` : html`
                 <platform-empty-state

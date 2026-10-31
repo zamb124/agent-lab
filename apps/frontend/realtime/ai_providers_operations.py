@@ -30,10 +30,10 @@ from core.ai.company_settings import (
     platform_default_model,
     platform_default_provider_for_capability,
 )
-from core.ai.free_pool import read_humanitec_llms_model_options
+from core.ai.free_pool import read_linnex_llms_model_options
 from core.ai.models import AIModelRecord
 from core.ai.providers import (
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_PROVIDER,
     LLM_CAPABILITIES,
     PROVIDER_LITSERVE,
     VOICE_CAPABILITIES,
@@ -257,7 +257,7 @@ def _provider_display_label(
     default_label: str,
     brand: PlatformBrandConfig,
 ) -> str:
-    if provider == HUMANITEC_LLM_PROVIDER:
+    if provider == LINNEX_LLM_PROVIDER:
         return brand.llms_display_label
     if provider == PROVIDER_LITSERVE:
         return brand.models_product_name
@@ -274,7 +274,7 @@ def _provider_catalog(
     aip: CompanyAIProviders,
     *,
     brand: PlatformBrandConfig,
-    humanitec_llms_models: list[JsonObject],
+    linnex_llms_models: list[JsonObject],
     provider_models: dict[str, dict[str, list[JsonObject]]],
     embedding_models: dict[str, list[JsonObject]],
     voice_models: dict[str, dict[str, list[JsonObject]]],
@@ -304,12 +304,12 @@ def _provider_catalog(
                     "byok_allowed": spec.byok_allowed,
                     **(
                         {
-                            "models": humanitec_llms_models,
+                            "models": linnex_llms_models,
                             "tooltip_key": (
-                                "settings_page.ai_providers.humanitec_llms_provider_tooltip"
+                                "settings_page.ai_providers.linnex_llms_provider_tooltip"
                             ),
                         }
-                        if p == HUMANITEC_LLM_PROVIDER
+                        if p == LINNEX_LLM_PROVIDER
                         else (
                             {"models": provider_models[cap.value][p]}
                             if cap in (*_LLM_CAPABILITIES, AICapability.RERANK)
@@ -463,7 +463,7 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
     if payload.provider is None:
         raise_invalid(ValueError(f"capability {capability.value}: provider is required"))
     provider = payload.provider.strip()
-    if provider != HUMANITEC_LLM_PROVIDER and not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+    if provider != LINNEX_LLM_PROVIDER and not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         if payload.model is None or not payload.model.strip():
             raise_invalid(ValueError((
                     f"capability {capability.value}: model is required for provider={provider!r}; "
@@ -671,14 +671,14 @@ async def op_ai_providers_snapshot(
     company = await _require_admin_company(di)
     aip = _load_aip(company)
     brand = resolve_brand_or_primary(payload.public_host)
-    humanitec_llms_models = await read_humanitec_llms_model_options(di.redis_client)
+    linnex_llms_models = await read_linnex_llms_model_options(di.redis_client)
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
         "catalog": _provider_catalog(
             aip,
             brand=brand,
-            humanitec_llms_models=humanitec_llms_models,
+            linnex_llms_models=linnex_llms_models,
             provider_models=await _provider_model_options(),
             embedding_models=await _embedding_model_options(),
             voice_models=await _voice_model_options(),

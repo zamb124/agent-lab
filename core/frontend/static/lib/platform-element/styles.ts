@@ -47,7 +47,7 @@ export const baseStyles = css`
     :host a:any-link:not(.btn):not([class*='marketing-download-']) {
         color: var(--accent);
         text-decoration: none;
-        transition: color var(--duration-fast) var(--easing-default);
+        transition: color var(--motion-duration-micro) var(--motion-ease-standard);
     }
 
     :host a:any-link:not(.btn):not([class*='marketing-download-']):hover {

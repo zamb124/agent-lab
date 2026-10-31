@@ -12,7 +12,7 @@ export class BranchItem extends PlatformElement {
         branch: { type: Object },
         flowId: { type: String, attribute: 'flow-id' },
     }
-    declare branch: Record<string, any> | null;
+    declare branch: Record<string, unknown> | null;
     declare flowId: string;
 ;
 
@@ -59,7 +59,7 @@ export class BranchItem extends PlatformElement {
                 display: flex;
                 gap: 2px;
                 opacity: 0;
-                transition: opacity var(--duration-fast);
+                transition: opacity var(--motion-duration-micro);
                 align-items: center;
             }
 

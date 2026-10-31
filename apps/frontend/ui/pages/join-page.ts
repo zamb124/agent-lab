@@ -9,6 +9,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-user-chip.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -66,7 +67,7 @@ export class JoinPage extends PlatformPage {
                 margin-bottom: var(--space-6);
                 padding: var(--space-4);
                 border-radius: var(--radius-lg);
-                background: rgba(255, 255, 255, 0.04);
+                background: var(--glass-tint-subtle);
                 border: 1px solid var(--glass-border-subtle);
             }
             .invite-preview p { margin: 0 0 var(--space-2); color: var(--text-primary); }
@@ -84,8 +85,8 @@ export class JoinPage extends PlatformPage {
         super();
         this._invite = this.useOp('frontend/invite_accept');
         this._preview = this.useOp('frontend/invite_preview');
-        this._authStatus = this.select((s: Record<string, any>) => s.auth.status);
-        this._authUser = this.select((s: Record<string, any>) => s.auth.user);
+        this._authStatus = this.select((s: Record<string, unknown>) => s.auth.status);
+        this._authUser = this.select((s: Record<string, unknown>) => s.auth.user);
         this._oauthLoading = false;
         this._oauthError = '';
         this._previewRanFor = null;
@@ -150,9 +151,7 @@ export class JoinPage extends PlatformPage {
 
         if (busy && !res) {
             return html`
-                <div class="checking">
-                    <platform-spinner></platform-spinner>
-                </div>
+                <platform-empty-state class="checking" loading></platform-empty-state>
             `;
         }
         if (err) {
@@ -221,10 +220,7 @@ export class JoinPage extends PlatformPage {
             return html`
                 <div class="card">
                     ${this._renderInvitePreview()}
-                    <div class="checking">
-                        <platform-spinner></platform-spinner>
-                        <p>${this.t('join_page.session_checking')}</p>
-                    </div>
+                    <platform-empty-state class="checking" loading title=${this.t('join_page.session_checking')}></platform-empty-state>
                 </div>
             `;
         }

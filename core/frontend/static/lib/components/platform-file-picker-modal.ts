@@ -260,7 +260,7 @@ export class PlatformFilePickerModal extends PlatformModal {
                 background: var(--glass-tint-subtle);
             }
             .catalog-btn[data-active='true'] {
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                background: var(--documents-selected-bg);
                 border-color: var(--accent);
                 color: var(--accent);
                 font-weight: 600;

@@ -23,6 +23,7 @@ from apps.flows.src.flow_ui.html_bindings import (
 from apps.flows.src.flow_ui.problems import FlowUILimits, flow_ui_problems
 from apps.flows.src.flow_ui.projection import template_paths
 from core.a2a.codec import message_from_json_dict
+from core.types import JsonObject
 from core.ui_document.document import FlowUIDocument
 from core.ui_document.json_patch import apply_json_patch, json_patch_operations
 from core.ui_document.protocol import (
@@ -34,7 +35,6 @@ from core.ui_document.protocol import (
     FlowUIEvent,
     JsonPatchOperation,
 )
-from core.types import JsonObject
 from core.variables.resolver import VariableMap, VariableResolver
 from core.variables.template_scan import UnmatchedBracesError, unmatched_brace_message
 

@@ -41,7 +41,7 @@ const marked = new Marked({ gfm: true, breaks: true, async: false, renderer });
  * @param {string} markdown
  * @returns {string} HTML-фрагмент
  */
-export function markdownToHtml(markdown: string): string {
+export function markdownToHtml(markdown: unknown): string {
     if (typeof markdown !== 'string') {
         throw new TypeError('markdownToHtml: markdown must be a string');
     }

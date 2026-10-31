@@ -63,7 +63,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
                 align-items: center;
                 gap: var(--space-1);
                 cursor: pointer;
-                transition: color var(--duration-fast);
+                transition: color var(--motion-duration-micro);
                 background: transparent;
                 border: none;
                 padding: 0;

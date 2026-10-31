@@ -33,8 +33,8 @@ export class FlowsParametersSchemaForm extends PlatformElement {
         values: { type: Object },
         readonly: { type: Boolean },
     }
-    declare schema: Record<string, any> | null;
-    declare values: Record<string, any> | null;
+    declare schema: Record<string, unknown> | null;
+    declare values: Record<string, unknown> | null;
     declare readonly: boolean;
 ;
 

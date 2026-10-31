@@ -103,6 +103,14 @@ export class PlatformFieldShell extends PlatformElement {
                 flex: 1 1 auto;
                 min-height: 0;
             }
+
+            /* Раскладка контрола — ответственность shell: prefix/main/suffix в одну
+               строку. Не зависит от подключения shared fieldPillStyles. */
+            .field-pill-control {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
         `,
     ];
 

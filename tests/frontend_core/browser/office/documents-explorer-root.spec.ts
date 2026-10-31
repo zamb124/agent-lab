@@ -25,6 +25,7 @@ import documentsEn from '../../../../core/i18n/translations/en/documents.json' w
 import platformEn from '../../../../core/i18n/translations/en/platform.json' with { type: 'json' };
 import '../../../../apps/office/ui/pages/documents-explorer-page.js';
 import '../../../../apps/office/ui/components/office-sidebar.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     integrationStatusOp,
@@ -88,13 +89,13 @@ const FLOWS_DOC = {
     file_availability: 'available',
 };
 
-function asUrl(raw) {
+function asUrl(raw: any) {
     return new URL(String(raw), 'http://local.test');
 }
 
 function installOfficeFetch() {
     const prevFetch = window.fetch;
-    window.fetch = async (url, init = {}) => {
+    window.fetch = async (url, init: any = {}) => {
         const method = (init.method || 'GET').toUpperCase();
         const raw = String(url);
         const pathname = asUrl(raw).pathname;
@@ -121,7 +122,7 @@ function installOfficeFetch() {
 }
 
 function installOfficeWs() {
-    const calls = [];
+    const calls: any[] = [];
     const original = platformWs.request;
     platformWs.request = async (opts) => {
         if (!opts || typeof opts.type !== 'string') {
@@ -147,7 +148,8 @@ function installOfficeWs() {
             if (!payload || typeof payload !== 'object') {
                 throw new Error('documents list without payload');
             }
-            const ids = Array.isArray(payload.catalog_ids) ? payload.catalog_ids : [];
+            const catalogIds = (payload as Record<string, unknown>).catalog_ids;
+            const ids: unknown[] = Array.isArray(catalogIds) ? catalogIds : [];
             if (ids.length === 0) {
                 throw new Error('documents list without catalog_ids');
             }
@@ -201,13 +203,13 @@ function seedAuth() {
     );
 }
 
-function documentsListCalls(wsMock) {
-    return wsMock.calls.filter((call) => call.type === 'office/documents/list_requested');
+function documentsListCalls(wsMock: any) {
+    return wsMock.calls.filter((call: any) => call.type === 'office/documents/list_requested');
 }
 
 describe('office documents explorer root', () => {
-    let fetchMock;
-    let wsMock;
+    let fetchMock: any;
+    let wsMock: any;
 
     beforeEach(() => {
         window.localStorage.clear();
@@ -223,44 +225,44 @@ describe('office documents explorer root', () => {
     afterEach(() => {
         fetchMock.uninstall();
         wsMock.uninstall();
-        document.querySelectorAll('office-documents-explorer-page, office-sidebar').forEach((node) => node.remove());
+        qsa(document!, 'office-documents-explorer-page, office-sidebar').forEach((node) => node.remove());
         fixtureCleanup();
     });
 
     it('корень показывает каталоги, без GET /documents; Flows и хлебная крошка корня', async () => {
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 <office-sidebar></office-sidebar>
                 <office-documents-explorer-page></office-documents-explorer-page>
             </div>
         `);
-        const page = host.querySelector('office-documents-explorer-page');
-        const sidebar = host.querySelector('office-sidebar');
+        const page = qs(host!, 'office-documents-explorer-page');
+        const sidebar = qs(host!, 'office-sidebar');
         await waitUntil(
-            () => page.shadowRoot.querySelectorAll('platform-file-row[item-kind="catalog"]').length >= 2,
+            () => qsa(shadow(page), 'platform-file-row[item-kind="catalog"]').length >= 2,
             'root catalog rows',
             { timeout: 4000 },
         );
         await elementUpdated(page);
 
         expect(page._documents.state.activeCatalogId).to.equal(null);
-        const rootRows = [...page.shadowRoot.querySelectorAll('platform-file-row[item-kind="catalog"]')];
+        const rootRows = [...qsa(shadow(page), 'platform-file-row[item-kind="catalog"]')];
         const rootNames = rootRows.map((row) => row.getAttribute('file-name'));
         expect(rootNames).to.include('Flows');
         expect(rootNames).to.include('lara');
         expect(rootNames).to.not.include('my-flow');
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
+        expect(q(shadow(page), 'platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
         expect(documentsListCalls(wsMock)).to.have.length(0);
 
-        const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
+        const toolbar = qs(shadow(page), 'office-file-toolbar');
         expect(toolbar.actionsDisabled).to.equal(true);
-        const uploadBtn = toolbar.shadowRoot.querySelector('.actions .btn-primary');
+        const uploadBtn = qs(shadow(toolbar), '.actions .btn-primary');
         expect(uploadBtn.disabled).to.equal(true);
 
         const flowsRow = rootRows.find((row) => row.getAttribute('file-name') === 'Flows');
-        flowsRow.shadowRoot.querySelector('.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        qs(shadow(flowsRow!), '.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await waitUntil(
-            () => page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]'),
+            () => q(shadow(page), 'platform-file-row[file-name="Data table.sqlite"]'),
             'flows catalog file row',
             { timeout: 4000 },
         );
@@ -269,40 +271,40 @@ describe('office documents explorer root', () => {
         expect(page._documents.state.activeCatalogId).to.equal('cat-flows');
         const listCalls = documentsListCalls(wsMock);
         expect(listCalls.length).to.be.greaterThan(0);
-        expect(listCalls.every((call) => Array.isArray(call.payload.catalog_ids) && call.payload.catalog_ids.includes('cat-flows'))).to.equal(true);
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.exist;
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
+        expect(listCalls.every((call: any) => Array.isArray(call.payload.catalog_ids) && call.payload.catalog_ids.includes('cat-flows'))).to.equal(true);
+        expect(q(shadow(page), 'platform-file-row[file-name="Data table.sqlite"]')).to.exist;
+        expect(q(shadow(page), 'platform-file-row[file-name="lara"]')).to.equal(null);
 
-        const crumbs = [...toolbar.shadowRoot.querySelectorAll('button.crumb')];
-        expect(crumbs[0].disabled).to.equal(false);
-        crumbs[0].click();
+        const crumbs = [...qsa(shadow(toolbar), 'button.crumb')];
+        expect(crumbs[0]!.disabled).to.equal(false);
+        crumbs[0]!.click();
         await waitUntil(
             () => page._documents.state.activeCatalogId === null
-                && page.shadowRoot.querySelector('platform-file-row[file-name="lara"]'),
+                && q(shadow(page), 'platform-file-row[file-name="lara"]'),
             'breadcrumb back to root',
             { timeout: 4000 },
         );
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
+        expect(q(shadow(page), 'platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
 
-        const flowsAgain = page.shadowRoot.querySelector('platform-file-row[file-name="Flows"]');
-        flowsAgain.shadowRoot.querySelector('.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        const flowsAgain = qs(shadow(page), 'platform-file-row[file-name="Flows"]');
+        qs(shadow(flowsAgain), '.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flows',
             'reopen flows catalog',
             { timeout: 4000 },
         );
 
-        const rail = sidebar.shadowRoot.querySelector('office-explorer-nav-rail');
-        const allBtn = rail.shadowRoot.querySelector('button.item');
+        const rail = qs(shadow(sidebar), 'office-explorer-nav-rail');
+        const allBtn = qs(shadow(rail), 'button.item');
         expect(allBtn).to.exist;
-        allBtn.click();
+        (allBtn as TestEl).click();
         await waitUntil(
             () => page._documents.state.activeCatalogId === null
-                && page.shadowRoot.querySelector('platform-file-row[file-name="lara"]'),
+                && q(shadow(page), 'platform-file-row[file-name="lara"]'),
             'nav rail all documents',
             { timeout: 4000 },
         );
-        expect(documentsListCalls(wsMock).every((call) => {
+        expect(documentsListCalls(wsMock).every((call: any) => {
             const ids = call.payload && Array.isArray(call.payload.catalog_ids) ? call.payload.catalog_ids : [];
             return ids.length > 0;
         })).to.equal(true);
@@ -319,23 +321,23 @@ describe('office documents explorer root', () => {
             },
             { source: 'system' },
         );
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 <office-sidebar></office-sidebar>
                 <office-documents-explorer-page></office-documents-explorer-page>
             </div>
         `);
-        const page = host.querySelector('office-documents-explorer-page');
+        const page = qs(host!, 'office-documents-explorer-page');
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flow-child',
             'deep link nested catalog',
             { timeout: 4000 },
         );
         await elementUpdated(page);
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="Flows"]')).to.equal(null);
-        const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
-        const crumbs = [...toolbar.shadowRoot.querySelectorAll('button.crumb')];
+        expect(q(shadow(page), 'platform-file-row[file-name="lara"]')).to.equal(null);
+        expect(q(shadow(page), 'platform-file-row[file-name="Flows"]')).to.equal(null);
+        const toolbar = qs(shadow(page), 'office-file-toolbar');
+        const crumbs = [...qsa(shadow(toolbar), 'button.crumb')];
         const crumbLabels = crumbs.map((crumb) => crumb.textContent.trim());
         expect(crumbLabels).to.include('my-flow');
     });
@@ -351,22 +353,22 @@ describe('office documents explorer root', () => {
             },
             { source: 'system' },
         );
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 <office-sidebar></office-sidebar>
                 <office-documents-explorer-page></office-documents-explorer-page>
             </div>
         `);
-        const page = host.querySelector('office-documents-explorer-page');
+        const page = qs(host!, 'office-documents-explorer-page');
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flow-child',
             'deep link catalog without namespace',
             { timeout: 4000 },
         );
         await elementUpdated(page);
-        expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
-        const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
-        const crumbs = [...toolbar.shadowRoot.querySelectorAll('button.crumb')];
+        expect(q(shadow(page), 'platform-file-row[file-name="lara"]')).to.equal(null);
+        const toolbar = qs(shadow(page), 'office-file-toolbar');
+        const crumbs = [...qsa(shadow(toolbar), 'button.crumb')];
         const crumbLabels = crumbs.map((crumb) => crumb.textContent.trim());
         expect(crumbLabels).to.include('my-flow');
     });

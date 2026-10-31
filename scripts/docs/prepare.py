@@ -12,6 +12,7 @@ import html
 import json
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -631,7 +632,33 @@ def _sync_platform_logo(docs_assets_dir: Path) -> None:
 def _copy_optional_subdir(src_root: Path, name: str, dst_root: Path) -> None:
     src = src_root / name
     if src.is_dir():
-        shutil.copytree(src, dst_root / name, dirs_exist_ok=False)
+        shutil.copytree(
+            src,
+            dst_root / name,
+            dirs_exist_ok=False,
+            ignore=shutil.ignore_patterns("*.ts"),
+        )
+
+
+DOCS_SHELL_TS = Path("docs/assets/javascripts/documentation-shell.ts")
+DOCS_SHELL_OUT = Path("assets/javascripts/documentation-shell.js")
+
+
+def _transpile_docs_javascripts(dst_root: Path) -> None:
+    """docs/assets хранит .ts источники; zensical отдаёт .js — esbuild при стейдже build-дерева."""
+    src = _repo_root() / DOCS_SHELL_TS
+    if not src.is_file():
+        raise FileNotFoundError(f"Нет исходника документационного shell: {src}")
+    esbuild = _repo_root() / "node_modules" / ".bin" / "esbuild"
+    if not esbuild.is_file():
+        raise FileNotFoundError(f"Нет esbuild для docs javascripts: {esbuild}; нужен npm install")
+    out = dst_root / DOCS_SHELL_OUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [str(esbuild), str(src), "--format=iife", f"--outfile={out}"],
+        check=True,
+        capture_output=True,
+    )
 
 
 def _copy_openapi_subdir(src_root: Path, dst_root: Path) -> None:
@@ -694,6 +721,7 @@ def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path, taxonomy: ScenarioTaxon
     _copy_openapi_subdir(docs_dir, ru_dir)
     _sync_platform_logo(docs_dir / "assets")
     _copy_optional_subdir(docs_dir, "assets", ru_dir)
+    _transpile_docs_javascripts(ru_dir)
 
 
 def _prepare_en_build_tree(docs_dir: Path, en_dir: Path, taxonomy: ScenarioTaxonomy) -> None:
@@ -712,6 +740,7 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path, taxonomy: ScenarioTaxon
     _copy_openapi_subdir(docs_dir, en_dir)
     _sync_platform_logo(docs_dir / "assets")
     _copy_optional_subdir(docs_dir, "assets", en_dir)
+    _transpile_docs_javascripts(en_dir)
 
     scenarios_src = docs_dir / SCENARIOS_ROOT
     scenarios_dst = en_dir / SCENARIOS_ROOT
@@ -835,11 +864,11 @@ def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
     if not docs_root.is_dir():
         return
 
-    title = "Humanitec Documentation" if language == "en" else "Документация Humanitec"
+    title = "Linnex Documentation" if language == "en" else "Документация Linnex"
     description = (
-        "Reference documentation for the Humanitec platform: quickstart, start here, API, and UI instructions."
+        "Reference documentation for the Linnex platform: quickstart, start here, API, and UI instructions."
         if language == "en"
-        else "Справочная документация платформы Humanitec: быстрый старт, маршруты обучения, API и UI-инструкции."
+        else "Справочная документация платформы Linnex: быстрый старт, маршруты обучения, API и UI-инструкции."
     )
     pages = _iter_llms_pages(docs_root)
 
@@ -893,8 +922,8 @@ def main() -> None:
     _prepare_en_build_tree(docs_dir, en_path, taxonomy)
 
     _generate_api_docs(ru_path, en_path)
-    _generate_llms_files(ru_path, "ru", "https://humanitec.ru/documentation/")
-    _generate_llms_files(en_path, "en", "https://humanitec.ru/documentation/en/")
+    _generate_llms_files(ru_path, "ru", "https://linnex.io/documentation/")
+    _generate_llms_files(en_path, "en", "https://linnex.io/documentation/en/")
 
 
 if __name__ == "__main__":

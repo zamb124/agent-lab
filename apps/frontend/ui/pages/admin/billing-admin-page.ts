@@ -271,9 +271,9 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 cursor: pointer;
                 box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
                 transition:
-                    transform var(--duration-fast) var(--easing-default),
-                    box-shadow var(--duration-fast) var(--easing-default),
-                    background var(--duration-fast) var(--easing-default);
+                    transform var(--motion-duration-micro) var(--motion-ease-standard),
+                    box-shadow var(--motion-duration-micro) var(--motion-ease-standard),
+                    background var(--motion-duration-micro) var(--motion-ease-standard);
             }
             .field-search-btn:hover {
                 transform: translateY(-1px);
@@ -324,7 +324,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 background: var(--bg-primary);
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-md);
-                box-shadow: var(--shadow-xl);
+                box-shadow: var(--glass-shadow-strong);
                 max-height: 260px;
                 overflow-y: auto;
                 z-index: 20;

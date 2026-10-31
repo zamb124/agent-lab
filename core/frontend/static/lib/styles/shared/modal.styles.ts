@@ -10,7 +10,7 @@ export const modalStyles = css`
         display: none;
         position: fixed;
         inset: 0;
-        z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
+        z-index: var(--platform-modal-layer-z, var(--z-modal));
     }
     
     :host([open]) {
@@ -25,7 +25,7 @@ export const modalStyles = css`
         inset: 0;
         background: rgba(0, 0, 0, 0.45);
         z-index: -1;
-        animation: backdropFadeIn var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out);
+        animation: backdropFadeIn var(--modal-overlay-duration) var(--easing-smooth);
     }
     
     @keyframes backdropFadeIn {
@@ -41,19 +41,17 @@ export const modalStyles = css`
         max-height: 90vh;
         display: flex;
         flex-direction: column;
-        border-radius: var(--radius-3xl, 28px);
+        border-radius: var(--radius-3xl);
         overflow: visible;
         
         /* Solid glass surface — без backdrop-filter (flicker-safe) */
-        background: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
-        border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
+        background: var(--glass-solid-strong);
+        border: 1px solid var(--glass-border-medium);
         
         /* Multi-layer shadows для глубины стекла */
-        box-shadow: var(--glass-shadow-strong,
-            0 16px 48px rgba(0, 0, 0, 0.4),
-            0 4px 16px rgba(0, 0, 0, 0.25));
+        box-shadow: var(--glass-shadow-strong);
         
-        animation: modalEnter var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth));
+        animation: modalEnter var(--modal-panel-duration) var(--modal-panel-easing);
     }
     
     /* Псевдоэлемент liquid-блеска */
@@ -64,7 +62,7 @@ export const modalStyles = css`
         left: 0;
         right: 0;
         bottom: 0;
-        border-radius: var(--radius-3xl, 28px);
+        border-radius: var(--radius-3xl);
         background: linear-gradient(
             160deg,
             rgba(255, 255, 255, 0.15) 0%,
@@ -80,8 +78,8 @@ export const modalStyles = css`
         content: '';
         position: absolute;
         top: 0;
-        left: var(--space-5, 20px);
-        right: var(--space-5, 20px);
+        left: var(--space-5);
+        right: var(--space-5);
         height: 1px;
         background: linear-gradient(
             90deg,
@@ -90,7 +88,7 @@ export const modalStyles = css`
             rgba(255, 255, 255, 0.35) 80%,
             transparent 100%
         );
-        border-radius: var(--radius-3xl, 28px) var(--radius-3xl, 28px) 0 0;
+        border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
         z-index: 2;
     }
     
@@ -125,24 +123,24 @@ export const modalStyles = css`
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: var(--space-4, 16px) var(--space-4, 16px) 0 var(--space-4, 16px);
+        padding: var(--space-4) var(--space-4) 0 var(--space-4);
         flex-shrink: 0;
         z-index: 3;
     }
     
     .modal-title {
-        font-size: var(--text-xl, 22px);
-        font-weight: var(--font-semibold, 600);
-        color: var(--text-primary, rgba(255, 255, 255, 0.95));
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
         margin: 0;
-        letter-spacing: var(--tracking-tight, -0.02em);
+        letter-spacing: var(--tracking-tight);
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
     
     .modal-actions {
         display: flex;
         align-items: center;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
     
     .modal-action-btn {
@@ -151,19 +149,19 @@ export const modalStyles = css`
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: var(--radius-full, 50%);
-        color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-        background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
+        border-radius: var(--radius-full);
+        color: var(--text-secondary);
+        background: var(--glass-tint-medium);
         border: none;
         cursor: pointer;
         transition: var(--motion-transition-interactive);
-        font-size: var(--text-xs, 12px);
-        font-weight: var(--font-semibold, 600);
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
     }
     
     .modal-action-btn:hover {
-        background: var(--glass-tint-strong, rgba(255, 255, 255, 0.15));
-        color: var(--text-primary, rgba(255, 255, 255, 0.9));
+        background: var(--glass-tint-strong);
+        color: var(--text-primary);
         transform: scale(1.08);
     }
     
@@ -172,8 +170,8 @@ export const modalStyles = css`
         position: relative;
         flex: 1;
         overflow-y: auto;
-        padding: var(--space-4, 16px);
-        color: var(--text-primary, rgba(255, 255, 255, 0.85));
+        padding: var(--space-4);
+        color: var(--text-primary);
         z-index: 3;
     }
     
@@ -183,8 +181,8 @@ export const modalStyles = css`
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        gap: var(--space-3, 12px);
-        padding: 0 var(--space-4, 16px) var(--space-4, 16px) var(--space-4, 16px);
+        gap: var(--space-3);
+        padding: 0 var(--space-4) var(--space-4) var(--space-4);
         flex-shrink: 0;
         z-index: 3;
     }
@@ -194,14 +192,14 @@ export const modalStyles = css`
         .modal-container {
             width: 95%;
             max-height: 95vh;
-            border-radius: var(--radius-2xl, 24px);
+            border-radius: var(--radius-2xl);
         }
         
         .modal-header,
         .modal-body,
         .modal-footer {
-            padding-left: var(--space-3, 12px);
-            padding-right: var(--space-3, 12px);
+            padding-left: var(--space-3);
+            padding-right: var(--space-3);
         }
     }
 
@@ -209,8 +207,8 @@ export const modalStyles = css`
         .modal-header,
         .modal-body,
         .modal-footer {
-            padding-left: var(--space-2, 8px);
-            padding-right: var(--space-2, 8px);
+            padding-left: var(--space-2);
+            padding-right: var(--space-2);
         }
     }
 
@@ -275,10 +273,10 @@ export const modalUtilityStyles = css`
         justify-content: center;
         width: 64px;
         height: 64px;
-        border-radius: var(--radius-full, 50%);
+        border-radius: var(--radius-full);
         flex-shrink: 0;
-        font-size: var(--text-2xl, 28px);
-        margin: 0 auto var(--space-4, 16px);
+        font-size: var(--text-2xl);
+        margin: 0 auto var(--space-4);
     }
     
     .modal-icon.warning {
@@ -314,15 +312,15 @@ export const modalUtilityStyles = css`
     }
     
     .modal-subtitle {
-        font-size: var(--text-sm, 14px);
-        color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
-        margin-top: var(--space-1, 4px);
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+        margin-top: var(--space-1);
     }
     
     .modal-message {
-        font-size: var(--text-base, 15px);
-        line-height: var(--leading-relaxed, 1.6);
-        color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+        font-size: var(--text-base);
+        line-height: var(--leading-relaxed);
+        color: var(--text-secondary);
         text-align: center;
     }
 `;
@@ -364,20 +362,20 @@ export const modalShellStyles = css`
     }
 
     .backdrop:not(.modal-backdrop-no-animate) {
-        animation: platformModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--easing-smooth, ease-out) both;
+        animation: platformModalBackdropIn var(--modal-overlay-duration) var(--easing-smooth) both;
     }
 
     .modal,
     .modal-box {
-        animation: platformModalPanelIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)) both;
+        animation: platformModalPanelIn var(--modal-panel-duration) var(--modal-panel-easing) both;
     }
 
     .drawer {
-        animation: platformDrawerIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth)) both;
+        animation: platformDrawerIn var(--modal-panel-duration) var(--modal-panel-easing) both;
     }
 
     .panel {
-        animation: platformModalPanelIn var(--modal-popover-duration, var(--duration-fast)) var(--modal-panel-easing, var(--easing-smooth)) both;
+        animation: platformModalPanelIn var(--modal-popover-duration) var(--modal-panel-easing) both;
     }
 
     @media (prefers-reduced-motion: reduce) {

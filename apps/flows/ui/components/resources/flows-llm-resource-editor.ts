@@ -16,7 +16,7 @@ export class FlowsLlmResourceEditor extends PlatformElement {
         compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     }
     declare resourceId: string;
-    declare resource: Record<string, any> | null;
+    declare resource: Record<string, unknown> | null;
     declare compactHeader: boolean;
 ;
 

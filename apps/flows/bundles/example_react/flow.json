@@ -17,7 +17,7 @@
       "type": "llm_node",
       "node_id": "example_main_agent",
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }
@@ -26,7 +26,7 @@
       "type": "llm_node",
       "node_id": "example_subflow",
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }
@@ -35,7 +35,7 @@
       "type": "llm_node",
       "node_id": "explicit_finish_agent",
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }
@@ -44,7 +44,7 @@
       "type": "llm_node",
       "node_id": "explicit_relaxed_agent",
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }
@@ -157,7 +157,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.3,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           }
         }
       },
@@ -193,7 +193,7 @@
           "type": "llm_node",
           "node_id": "example_hitl_tool_agent",
           "llm": {
-            "provider": "humanitec_llm",
+            "provider": "linnex_llm",
             "model": "auto",
             "temperature": 0.2
           }
@@ -246,7 +246,7 @@
           "type": "llm_node",
           "node_id": "example_gdocs_agent",
           "llm": {
-            "provider": "humanitec_llm",
+            "provider": "linnex_llm",
             "model": "auto",
             "temperature": 0.2
           }

@@ -58,45 +58,45 @@ export class FlowUIShareMenu extends LitElement {
         .card {
             position: absolute; inset: calc(100% + 9px) 0 auto auto; z-index: 10;
             width: min(320px, calc(100vw - 28px));
-            padding: var(--space-4, 16px);
+            padding: var(--space-4);
             display: grid;
-            gap: var(--space-3, 12px);
-            border: 1px solid var(--glass-border-medium, var(--flow-ui-border-strong));
-            border-radius: var(--radius-2xl, 25px);
-            background: var(--glass-solid-strong, var(--flow-ui-panel-strong, var(--flow-ui-panel)));
-            box-shadow: var(--glass-shadow-strong, var(--flow-ui-panel-shadow));
+            gap: var(--space-3);
+            border: 1px solid var(--glass-border-medium);
+            border-radius: var(--radius-2xl);
+            background: var(--glass-solid-strong);
+            box-shadow: var(--glass-shadow-strong);
         }
-        .title { font-weight: 650; font-size: var(--font-size-sm, 14px); letter-spacing: -.01em; color: var(--flow-ui-heading, var(--text-primary)); }
-        .copy { color: var(--flow-ui-muted, var(--text-tertiary)); font-size: var(--font-size-xs, 12px); line-height: 1.45; }
-        .options { display: flex; flex-direction: column; gap: var(--space-2, 8px); }
+        .title { font-weight: 650; font-size: var(--text-sm); letter-spacing: -.01em; color: var(--flow-ui-heading, var(--text-primary)); }
+        .copy { color: var(--flow-ui-muted, var(--text-tertiary)); font-size: var(--text-xs); line-height: 1.45; }
+        .options { display: flex; flex-direction: column; gap: var(--space-2); }
         .share-btn {
             display: inline-flex; align-items: center; justify-content: center; width: 100%;
-            min-height: 36px; padding: 8px 16px; border: none; border-radius: var(--btn-radius, 22px);
-            font-family: inherit; font-size: var(--font-size-sm, 14px); font-weight: 400; line-height: 20px;
+            min-height: 36px; padding: 8px 16px; border: none; border-radius: var(--btn-radius);
+            font-family: inherit; font-size: var(--text-sm); font-weight: 400; line-height: 20px;
             white-space: nowrap; cursor: pointer; user-select: none;
-            transition: var(--motion-transition-interactive, background .15s ease, box-shadow .15s ease);
+            transition: var(--motion-transition-interactive);
         }
-        .share-btn.secondary { color: var(--platform-btn-secondary-text, #99A6F9); background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.15)); }
+        .share-btn.secondary { color: var(--platform-btn-secondary-text); background: var(--platform-btn-secondary-bg); }
         .share-btn.secondary:hover:not(:disabled) {
-            background: var(--platform-btn-secondary-bg-hover, rgba(153, 166, 249, 0.1));
-            box-shadow: var(--platform-btn-secondary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.2));
+            background: var(--platform-btn-secondary-bg-hover);
+            box-shadow: var(--platform-btn-secondary-shadow-hover);
         }
-        .share-btn.primary { color: var(--platform-btn-primary-text, #ffffff); background: var(--platform-btn-primary-bg, #99A6F9); box-shadow: var(--platform-btn-primary-shadow, none); }
+        .share-btn.primary { color: var(--platform-btn-primary-text); background: var(--platform-btn-primary-bg); box-shadow: var(--platform-btn-primary-shadow); }
         .share-btn.primary:hover:not(:disabled) {
-            background: var(--platform-btn-primary-bg-hover, #8794F0);
-            box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+            background: var(--platform-btn-primary-bg-hover);
+            box-shadow: var(--platform-btn-primary-shadow-hover);
         }
-        .share-btn.ghost { color: var(--text-secondary, var(--flow-ui-muted)); background: transparent; }
-        .share-btn.ghost:hover:not(:disabled) { color: var(--text-primary, var(--flow-ui-text)); background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.12)); }
+        .share-btn.ghost { color: var(--text-secondary); background: transparent; }
+        .share-btn.ghost:hover:not(:disabled) { color: var(--text-primary); background: var(--platform-btn-secondary-bg); }
         .share-btn:disabled { opacity: .5; cursor: wait; }
-        .result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2, 8px); align-items: center; }
+        .result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; }
         .result input {
             min-width: 0; height: 36px; padding: 0 14px;
-            border: 1px solid var(--border-default, var(--flow-ui-border)); border-radius: var(--btn-radius, 22px);
+            border: 1px solid var(--border-default); border-radius: var(--btn-radius);
             background: var(--flow-ui-input, var(--glass-solid-subtle)); color: var(--flow-ui-text);
-            font: inherit; font-size: var(--font-size-sm, 14px);
+            font: inherit; font-size: var(--text-sm);
         }
-        .error { color: var(--error, #ff8da3); font-size: 12px; }
+        .error { color: var(--error); font-size: 12px; }
     `];
 
     constructor() {

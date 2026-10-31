@@ -62,7 +62,7 @@ describe('mail-html', () => {
             html,
         );
         expect(visible).toHaveLength(1);
-        expect(visible[0].filename).toBe('invoice.pdf');
+        expect(visible[0]?.filename).toBe('invoice.pdf');
     });
 
     it('autolinkPlaintext escapes tags and links urls', () => {

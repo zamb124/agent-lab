@@ -90,7 +90,7 @@ export function buildCompanySubdomainUrl(subdomain: string, path = '/'): string 
 }
 
 /**
- * Текст превью: myco.lvh.me:8002 или myco.humanitec.ru
+ * Текст превью: myco.lvh.me:8002 или myco.linnex.io
  *
  * @param {string} subdomain
  * @returns {string}

@@ -14,6 +14,7 @@ import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { sanitizeMailHtml } from '@platform/lib/utils/mail-html.js';
 import mailEn from '../../../../core/i18n/translations/en/mail.json' with { type: 'json' };
 import '@platform/lib/components/platform-mail-html-body.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 async function seedMailI18n() {
     const bus = getPlatformBus();
@@ -75,7 +76,7 @@ describe('platform-mail-html-body', () => {
     });
 
     it('iframe srcdoc contains visible text, not escaped html source', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-mail-html-body
                 .html=${'<html><body><p>T-Bank receipt</p></body></html>'}
                 .text=${''}
@@ -83,7 +84,7 @@ describe('platform-mail-html-body', () => {
             ></platform-mail-html-body>
         `);
         await elementUpdated(el);
-        const iframe = el.shadowRoot.querySelector('iframe');
+        const iframe = qs(shadow(el), 'iframe');
         expect(iframe).to.exist;
         expect(iframe.srcdoc).to.include('T-Bank receipt');
         expect(iframe.srcdoc).to.not.include('&lt;html');
@@ -91,7 +92,7 @@ describe('platform-mail-html-body', () => {
     });
 
     it('shows load-images banner for remote http images', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-mail-html-body
                 .html=${'<img src="https://cdn.example/x.png" alt="x">'}
                 .text=${''}
@@ -99,14 +100,14 @@ describe('platform-mail-html-body', () => {
             ></platform-mail-html-body>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.textContent).to.include(mailEn.images_blocked_hint);
-        const button = el.shadowRoot.querySelector('platform-button');
+        expect(shadow(el).textContent).to.include(mailEn.images_blocked_hint);
+        const button = qs(shadow(el), 'platform-button');
         expect(button).to.exist;
         expect(button.textContent.trim()).to.equal(mailEn.load_images);
     });
 
     it('plaintext uses pre-wrap, not iframe', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-mail-html-body
                 .html=${''}
                 .text=${'hello **not markdown** https://example.com'}
@@ -114,10 +115,10 @@ describe('platform-mail-html-body', () => {
             ></platform-mail-html-body>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('iframe')).to.equal(null);
-        const plain = el.shadowRoot.querySelector('.mail-plain');
+        expect(q(shadow(el), 'iframe')).to.equal(null);
+        const plain = qs(shadow(el), '.mail-plain');
         expect(plain).to.exist;
         expect(plain.textContent).to.include('hello **not markdown**');
-        expect(plain.querySelector('a').getAttribute('href')).to.equal('https://example.com');
+        expect(qs(plain!, 'a').getAttribute('href')).to.equal('https://example.com');
     });
 });

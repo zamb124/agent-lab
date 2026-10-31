@@ -13,9 +13,9 @@ from core.ai.free_pool import (
 )
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
-    split_humanitec_llms_model_ref,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
+    split_linnex_llms_model_ref,
 )
 from core.clients.llm.provider_resolution import _resolve_headers_vars, _resolve_llm_call_config
 from core.clients.redis_client import RedisClient
@@ -159,29 +159,29 @@ def _with_authoring_overrides(
     return candidate.model_copy(update=overrides)
 
 
-def _humanitec_llms_model(config: LLMCallConfig, settings: BaseSettings) -> str:
-    model = config.model or settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
-    return str(model).strip() or HUMANITEC_LLM_AUTO_MODEL
+def _linnex_llms_model(config: LLMCallConfig, settings: BaseSettings) -> str:
+    model = config.model or settings.llm.default_model or LINNEX_LLM_AUTO_MODEL
+    return str(model).strip() or LINNEX_LLM_AUTO_MODEL
 
 
-def _humanitec_llms_ref_or_raise(model: str) -> tuple[str, str]:
-    parsed = split_humanitec_llms_model_ref(model)
+def _linnex_llms_ref_or_raise(model: str) -> tuple[str, str]:
+    parsed = split_linnex_llms_model_ref(model)
     if parsed is None:
         raise ValueError(
-            "humanitec_llm model must be 'auto' or a provider-prefixed "
+            "linnex_llm model must be 'auto' or a provider-prefixed "
             + "free-pool model '<provider>:<model_id>'"
         )
     return parsed
 
 
-def _candidate_from_humanitec_llms_ref(
+def _candidate_from_linnex_llms_ref(
     model: str,
     *,
     settings: BaseSettings,
     variables: JsonObject | None,
     source: str = PLATFORM_FREE_MODEL_SOURCE,
 ) -> LLMCallConfig:
-    provider, model_id = _humanitec_llms_ref_or_raise(model)
+    provider, model_id = _linnex_llms_ref_or_raise(model)
     return _resolve_llm_call_config(
         LLMCallConfig(provider=provider, model=model_id, source=source),
         settings=settings,
@@ -190,16 +190,16 @@ def _candidate_from_humanitec_llms_ref(
     )
 
 
-def bootstrap_humanitec_llms_config(
+def bootstrap_linnex_llms_config(
     config: LLMCallConfig,
     *,
     settings: BaseSettings,
     variables: JsonObject | None,
 ) -> LLMCallConfig:
-    model = _humanitec_llms_model(config, settings)
-    if model == HUMANITEC_LLM_AUTO_MODEL:
+    model = _linnex_llms_model(config, settings)
+    if model == LINNEX_LLM_AUTO_MODEL:
         return _platform_paid_fallback_candidate(settings)
-    return _candidate_from_humanitec_llms_ref(
+    return _candidate_from_linnex_llms_ref(
         model,
         settings=settings,
         variables=variables,
@@ -207,15 +207,15 @@ def bootstrap_humanitec_llms_config(
     )
 
 
-def _config_uses_humanitec_llms(config: LLMCallConfig) -> bool:
-    return config.provider == HUMANITEC_LLM_PROVIDER
+def _config_uses_linnex_llms(config: LLMCallConfig) -> bool:
+    return config.provider == LINNEX_LLM_PROVIDER
 
 
-def candidate_chain_uses_humanitec_llms(
+def candidate_chain_uses_linnex_llms(
     primary_config: LLMCallConfig,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
 ) -> bool:
-    if _config_uses_humanitec_llms(primary_config):
+    if _config_uses_linnex_llms(primary_config):
         return True
     for raw_fallback in fallback_models or ():
         fallback = (
@@ -223,12 +223,12 @@ def candidate_chain_uses_humanitec_llms(
             if isinstance(raw_fallback, LLMCallConfig)
             else LLMCallConfig.model_validate(raw_fallback)
         )
-        if _config_uses_humanitec_llms(fallback):
+        if _config_uses_linnex_llms(fallback):
             return True
     return False
 
 
-async def _expand_humanitec_llms_config(
+async def _expand_linnex_llms_config(
     config: LLMCallConfig,
     *,
     settings: BaseSettings,
@@ -236,9 +236,9 @@ async def _expand_humanitec_llms_config(
     variables: JsonObject | None,
     include_paid_fallback: bool,
 ) -> list[LLMCallConfig]:
-    model = _humanitec_llms_model(config, settings)
+    model = _linnex_llms_model(config, settings)
     candidates: list[LLMCallConfig] = []
-    if model == HUMANITEC_LLM_AUTO_MODEL:
+    if model == LINNEX_LLM_AUTO_MODEL:
         for record in records:
             api_keys = _api_keys_for_free_pool_provider(settings, record.provider)
             for api_key in api_keys:
@@ -263,7 +263,7 @@ async def _expand_humanitec_llms_config(
             )
         return candidates
 
-    provider, model_id = _humanitec_llms_ref_or_raise(model)
+    provider, model_id = _linnex_llms_ref_or_raise(model)
     record = _find_platform_free_record(records, provider=provider, model_id=model_id)
     if record is None:
         return []
@@ -281,17 +281,17 @@ async def _expand_humanitec_llms_config(
     ]
 
 
-def _first_non_humanitec_fallback(
+def _first_non_linnex_fallback(
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
 ) -> LLMCallConfig | None:
     for raw_fallback in fallback_models or ():
         fallback = _fallback_to_config(raw_fallback)
-        if fallback.provider != HUMANITEC_LLM_PROVIDER:
+        if fallback.provider != LINNEX_LLM_PROVIDER:
             return fallback
     return None
 
 
-def _humanitec_empty_chain_error(
+def _linnex_empty_chain_error(
     primary_config: LLMCallConfig,
     *,
     settings: BaseSettings,
@@ -299,21 +299,21 @@ def _humanitec_empty_chain_error(
 ) -> RuntimeError:
     if had_fallback_models:
         return RuntimeError(
-            "humanitec_llm: нет кандидатов после primary и fallback_models — "
+            "linnex_llm: нет кандидатов после primary и fallback_models — "
             + "пустой free-pool cache и fallbacks не дали конфигов."
         )
-    if primary_config.provider == HUMANITEC_LLM_PROVIDER:
-        model = _humanitec_llms_model(primary_config, settings)
-        if model != HUMANITEC_LLM_AUTO_MODEL:
-            parsed = split_humanitec_llms_model_ref(model)
+    if primary_config.provider == LINNEX_LLM_PROVIDER:
+        model = _linnex_llms_model(primary_config, settings)
+        if model != LINNEX_LLM_AUTO_MODEL:
+            parsed = split_linnex_llms_model_ref(model)
             if parsed is not None:
                 provider, model_id = parsed
                 return RuntimeError(
-                    "humanitec_llm model не найден в verified free-pool cache: "
+                    "linnex_llm model не найден в verified free-pool cache: "
                     + f"{provider}:{model_id}. Обновите llm.platform_free_pool cache."
                 )
     return RuntimeError(
-        "humanitec_llm auto: нет кандидатов — задайте api_key хотя бы "
+        "linnex_llm auto: нет кандидатов — задайте api_key хотя бы "
         + "для одного провайдера из free-pool (обычно llm.openrouter) "
         + "или включите paid_fallback."
     )
@@ -325,7 +325,7 @@ def _fallback_to_config(raw_fallback: LLMCallConfig | JsonObject) -> LLMCallConf
     return LLMCallConfig.model_validate(raw_fallback)
 
 
-def _make_humanitec_llms_candidate_chain_resolver(
+def _make_linnex_llms_candidate_chain_resolver(
     primary_config: LLMCallConfig,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
     *,
@@ -336,9 +336,9 @@ def _make_humanitec_llms_candidate_chain_resolver(
     async def _resolve() -> list[LLMCallConfig]:
         records = await _read_platform_free_records()
         candidates: list[LLMCallConfig] = []
-        if primary_config.provider == HUMANITEC_LLM_PROVIDER:
+        if primary_config.provider == LINNEX_LLM_PROVIDER:
             candidates.extend(
-                await _expand_humanitec_llms_config(
+                await _expand_linnex_llms_config(
                     primary_config,
                     settings=settings,
                     records=records,
@@ -359,9 +359,9 @@ def _make_humanitec_llms_candidate_chain_resolver(
 
         for raw_fallback in fallback_models or ():
             fallback = _fallback_to_config(raw_fallback)
-            if fallback.provider == HUMANITEC_LLM_PROVIDER:
+            if fallback.provider == LINNEX_LLM_PROVIDER:
                 candidates.extend(
-                    await _expand_humanitec_llms_config(
+                    await _expand_linnex_llms_config(
                         fallback,
                         settings=settings,
                         records=records,
@@ -380,7 +380,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
                 )
             )
         if not candidates:
-            raise _humanitec_empty_chain_error(
+            raise _linnex_empty_chain_error(
                 primary_config,
                 settings=settings,
                 had_fallback_models=bool(fallback_models),
@@ -423,10 +423,10 @@ def _make_platform_default_candidate_resolver(
 
 
 __all__ = [
-    "_first_non_humanitec_fallback",
+    "_first_non_linnex_fallback",
     "_make_platform_default_candidate_resolver",
-    "_make_humanitec_llms_candidate_chain_resolver",
-    "bootstrap_humanitec_llms_config",
-    "candidate_chain_uses_humanitec_llms",
+    "_make_linnex_llms_candidate_chain_resolver",
+    "bootstrap_linnex_llms_config",
+    "candidate_chain_uses_linnex_llms",
     "llm_call_configs_for_provider_model",
 ]

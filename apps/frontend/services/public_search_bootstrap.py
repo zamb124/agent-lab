@@ -85,7 +85,7 @@ def _system_user() -> User:
         groups=["admin"],
         companies={SYSTEM_COMPANY_ID: ["admin"]},
         active_company_id=SYSTEM_COMPANY_ID,
-        emails=["system@humanitec.local"],
+        emails=["system@linnex.local"],
     )
 
 

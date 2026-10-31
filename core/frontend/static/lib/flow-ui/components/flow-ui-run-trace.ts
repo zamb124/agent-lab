@@ -95,7 +95,7 @@ export class FlowUIRunTrace extends LitElement {
         .compact ol { gap: 3px; }
         li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--flow-ui-border, var(--border-default)); background: var(--flow-ui-surface-subtle, transparent); cursor: pointer; }
         .compact li { padding: 5px 8px; }
-        li[data-tone='error'] { border-color: color-mix(in srgb, var(--error, #ff718d) 45%, transparent); }
+        li[data-tone='error'] { border-color: color-mix(in srgb, var(--error) 45%, transparent); }
         li[data-tone='ok'] .glyph { opacity: .8; }
         .glyph { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; background: var(--flow-ui-chip, var(--accent-subtle)); color: var(--flow-ui-text, var(--text-primary)); }
         .glyph img { width: 12px; height: 12px; filter: var(--flow-ui-glyph-filter, brightness(0) saturate(100%) invert(88%) opacity(.92)); }

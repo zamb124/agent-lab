@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.config import SearchCrawlConfig
+from apps.search.models import CrawlDomain, CrawlDomainSeed, CrawlProfileCreateRequest
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
 from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
-from apps.search.models import CrawlDomain, CrawlDomainSeed, CrawlProfileCreateRequest
 from core.logging import clear_log_context, get_log_context
 from core.search.index_models import SearchIndexCreateRequest
 from core.tasks import TaskSpec

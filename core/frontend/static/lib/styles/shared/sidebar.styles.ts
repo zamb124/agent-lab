@@ -17,8 +17,8 @@ export const sidebarHostStyles = css`
         min-width: var(--sidebar-width, 280px);
         height: 100%;
         background: transparent;
-        transition: width var(--duration-normal, 0.25s) ease,
-                    min-width var(--duration-normal, 0.25s) ease;
+        transition: width var(--motion-duration-layout) ease,
+                    min-width var(--motion-duration-layout) ease;
         /* iOS Safe Area - учитываем notch и статус-бар */
         padding-top: env(safe-area-inset-top, 0);
     }
@@ -159,7 +159,7 @@ export const sidebarStyles = css`
         text-align: left;
         cursor: pointer;
         border-radius: var(--radius-lg);
-        transition: background var(--duration-fast);
+        transition: background var(--motion-duration-micro);
     }
 
     .sidebar-logo-hit:hover {
@@ -392,7 +392,7 @@ export const sidebarNavItemStyles = css`
         justify-content: center;
         border-radius: var(--radius-md);
         flex-shrink: 0;
-        transition: transform var(--duration-fast);
+        transition: transform var(--motion-duration-micro);
     }
 
     .nav-item:hover .nav-item-icon {
@@ -420,7 +420,7 @@ export const sidebarNavItemStyles = css`
         display: flex;
         gap: var(--space-1);
         opacity: 0;
-        transition: opacity var(--duration-fast);
+        transition: opacity var(--motion-duration-micro);
     }
 
     .nav-item:hover .nav-item-actions {
@@ -434,7 +434,7 @@ export const sidebarNavItemStyles = css`
         align-items: center;
         justify-content: center;
         color: var(--text-tertiary);
-        transition: transform var(--duration-fast);
+        transition: transform var(--motion-duration-micro);
         flex-shrink: 0;
     }
 

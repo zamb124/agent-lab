@@ -65,9 +65,9 @@ export class CRMEntityTypeEditor extends PlatformElement {
         showNamespaces: { type: Boolean },
         compactChrome: { type: Boolean, attribute: 'compact-chrome' },
     };
-    declare typeDraft: Record<string, any> | null;
-    declare schemaOptions: Record<string, any> | null;
-    declare namespaces: Record<string, any>[];
+    declare typeDraft: Record<string, unknown> | null;
+    declare schemaOptions: Record<string, unknown> | null;
+    declare namespaces: Record<string, unknown>[];
     declare parentTypeOptions: string[];
     declare entityTypeCatalogRows: { type_id?: unknown; parent_type_id?: unknown }[];
     declare editingTypeId: string;
@@ -271,7 +271,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
         this.showNamespaces = true;
     }
 
-    private get _draft(): Record<string, any> {
+    private get _draft(): Record<string, unknown> {
         const d = this.typeDraft;
         if (!d || typeof d !== 'object') {
             throw new Error('CRMEntityTypeEditor: typeDraft required');
@@ -298,7 +298,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
 
     _onParentTypeDetailChange(value: unknown): void {
         const v = typeof value === 'string' ? value : '';
-        const next: Record<string, any> = { ...this._draft, parent_type_id: v };
+        const next: Record<string, unknown> = { ...this._draft, parent_type_id: v };
         if (entityTypeNoteSubtreeLocked(next, this.entityTypeCatalogRows)) {
             next.is_context_anchor = false;
             next.is_voice_target = false;
@@ -555,7 +555,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                             )}
                             ${this.namespaces.length > 0 ? html`
                                 <div class="namespace-pills">
-                                    ${this.namespaces.map((ns: Record<string, any>) => {
+                                    ${this.namespaces.map((ns: Record<string, unknown>) => {
                                         const list = Array.isArray(this._draft.namespace_ids) ? this._draft.namespace_ids : [];
                                         const checked = list.includes(ns.name);
                                         return html`

@@ -45,7 +45,7 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
                 cursor: pointer;
             }
             .item.active {
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                background: var(--documents-selected-bg);
                 border-color: var(--accent);
                 color: var(--accent);
                 font-weight: 600;

@@ -5,23 +5,27 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { installFakeStorage } from '../../helpers/fake-storage.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
-let storage;
-let prevWindow;
+let storage: ReturnType<typeof installFakeStorage>;
+let prevWindow: typeof globalThis.window;
 
 beforeEach(() => {
     storage = installFakeStorage();
     prevWindow = globalThis.window;
-    globalThis.window = {
-        localStorage: storage.localStorage,
-        dispatchEvent: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-    };
+    Object.defineProperty(globalThis, 'window', {
+        value: {
+            localStorage: storage.localStorage,
+            dispatchEvent: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+        },
+        configurable: true,
+        writable: true,
+    });
 });
 
 afterEach(() => {
     storage.uninstall();
-    globalThis.window = prevWindow;
+    Object.defineProperty(globalThis, 'window', { value: prevWindow, configurable: true, writable: true });
 });
 
 describe('tts-output-pref', () => {

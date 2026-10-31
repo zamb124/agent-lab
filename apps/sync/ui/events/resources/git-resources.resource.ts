@@ -9,12 +9,25 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
+import type { GitResourceRefRead } from '@platform/lib/events/wire/sync.gen.js';
 
-interface SyncGitResourceGetSlice extends AsyncOpSlice {
-    byId: Readonly<Record<string, unknown>>;
+function isGitResourceRefRead(value: unknown): value is GitResourceRefRead {
+    return (
+        isPlainRecord(value)
+        && typeof value.git_ref_id === 'string'
+        && typeof value.provider === 'string'
+        && typeof value.kind === 'string'
+        && typeof value.project_key === 'string'
+        && typeof value.external_id === 'string'
+        && typeof value.url === 'string'
+    );
 }
 
-function isGitGetSlice(state: AsyncOpSlice): state is SyncGitResourceGetSlice {
+interface SyncGitResourceGetSlice extends AsyncOpSlice<GitResourceRefRead> {
+    byId: Readonly<Record<string, GitResourceRefRead>>;
+}
+
+function isGitGetSlice(state: AsyncOpSlice<GitResourceRefRead>): state is SyncGitResourceGetSlice {
     return isPlainRecord(state.byId);
 }
 
@@ -43,19 +56,15 @@ export const gitResourceGetOp = createAsyncOp({
             return state;
         }
         const payload = event.payload;
-        if (!isPlainRecord(payload)) {
-            return state;
-        }
-        const gitRefId = payload.git_ref_id;
-        if (typeof gitRefId !== 'string' || gitRefId.length === 0) {
+        if (!isGitResourceRefRead(payload) || payload.git_ref_id.length === 0) {
             return state;
         }
         if (!isGitGetSlice(state)) {
             throw new Error('sync/git_resource_get: byId must be an object');
         }
-        const byId = Object.freeze({ ...state.byId, [gitRefId]: payload });
+        const byId = Object.freeze({ ...state.byId, [payload.git_ref_id]: payload });
         const last = state.lastResult;
-        const lastResult = isPlainRecord(last) && last.git_ref_id === gitRefId
+        const lastResult = last !== null && last.git_ref_id === payload.git_ref_id
             ? payload
             : last;
         return { ...state, byId, lastResult };

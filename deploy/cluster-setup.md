@@ -11,14 +11,14 @@
 
 ## 0. Предусловия (вне кластера)
 
-Primary apex — **linnex.io**; legacy apex **humanitec.ru** остаётся для regression. DNS для обоих apex настраивается скриптом [`setup-brand-dns.sh`](scripts/setup-brand-dns.sh); см. [`docs/multi-brand-prod-smoke.md`](docs/multi-brand-prod-smoke.md).
+Primary apex — **linnex.io**; legacy apex **linnex.io** остаётся для regression. DNS для обоих apex настраивается скриптом [`setup-brand-dns.sh`](scripts/setup-brand-dns.sh); см. [`docs/multi-brand-prod-smoke.md`](docs/multi-brand-prod-smoke.md).
 
 | Что | Где | Действие |
 |---|---|---|
 | DNS A `linnex.io` → `77.91.94.127` | `setup-brand-dns.sh` / reg.ru | один раз |
 | DNS A `*.linnex.io` → `77.91.94.127` | то же | один раз |
 | DNS A `livekit` / `onlyoffice` / `grafana` / `api` / `cdn`.`linnex.io` | то же | один раз |
-| DNS A `humanitec.ru` + те же субдомены → `77.91.94.127` | то же | один раз (legacy) |
+| DNS A `linnex.io` + те же субдомены → `77.91.94.127` | то же | один раз (legacy) |
 | Ubuntu 22.04+ | BM `77.91.94.127` | один раз |
 | SSH ключ для root (`pubkey` в `/root/.ssh/authorized_keys`) | локально | один раз; `harden-ssh.sh` отключает пароль |
 | Whitelist IP `77.91.94.127` в Reg.ru API | Настройки → API | иначе DNS-01 и `setup-brand-dns` с master дадут ACCESS_DENIED |

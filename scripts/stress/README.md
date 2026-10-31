@@ -27,7 +27,7 @@ make stress PROFILE=smoke URL=http://localhost:8001
 Production с токеном:
 
 ```bash
-make stress PROFILE=prod URL=https://humanitec.ru TOKEN=<jwt-or-api-token>
+make stress PROFILE=prod URL=https://linnex.io TOKEN=<jwt-or-api-token>
 ```
 
 Или интерактивно:
@@ -75,7 +75,7 @@ make stress 100 DRY_RUN=1
 
 ## Flows
 
-`scripts/stress/services/flows.js` тестирует A2A `SendMessage` в async-режиме:
+`scripts/stress/services/flows.ts` тестирует A2A `SendMessage` в async-режиме:
 
 1. `SendMessage` с `configuration.returnImmediately=true` и header `A2A-Version: 1.0`.
 2. Получение `taskId` без ожидания выполнения flow.
@@ -113,7 +113,7 @@ make stress STRESS_USE_MOCK=false
 Новый сервис добавляется отдельным файлом:
 
 ```text
-scripts/stress/services/<service>.js
+scripts/stress/services/<service>.ts
 ```
 
 После этого запуск:

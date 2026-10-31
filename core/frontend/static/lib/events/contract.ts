@@ -47,9 +47,9 @@ export interface PlatformEvent {
 }
 
 export interface EventMetaInput {
-    causation_id?: string | null;
-    correlation_id?: string | null;
-    trace_id?: string | null;
+    causation_id?: string | null | undefined;
+    correlation_id?: string | null | undefined;
+    trace_id?: string | null | undefined;
     source?: EventSource;
     ts?: number;
 }

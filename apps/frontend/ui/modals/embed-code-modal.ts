@@ -12,6 +12,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -58,7 +59,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
                 background: var(--glass-solid-subtle);
                 padding: var(--space-3) var(--space-4);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle, var(--glass-border-subtle));
+                border: 1px solid var(--border-subtle);
                 white-space: pre;
                 overflow-x: auto;
                 overflow-y: auto;
@@ -101,10 +102,6 @@ export class FrontendEmbedCodeModal extends PlatformModal {
                 font-size: var(--text-xs);
                 padding: 4px 10px;
                 margin-bottom: var(--space-3);
-            }
-            .loading {
-                padding: var(--space-6);
-                display: flex; justify-content: center;
             }
         `,
     ];
@@ -162,7 +159,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
     override renderBody() {
         const entry = this._entry();
         if (this._isLoading() || entry === null) {
-            return html`<div class="loading"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const html_code = typeof entry.html_code === 'string' ? entry.html_code : '';
         const page_url = typeof entry.page_url === 'string' ? entry.page_url : '';

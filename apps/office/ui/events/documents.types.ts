@@ -6,30 +6,26 @@
 
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OfficeDocumentItem } from '@platform/lib/events/wire/office.gen.js';
 
-export interface OfficeDocumentItem {
-    file_id?: string;
-    catalog_id?: string;
-    title?: string;
-    [key: string]: unknown;
-}
+export type { OfficeDocumentItem };
 
 export interface DocumentsSlice extends AsyncOpSlice {
-    items?: OfficeDocumentItem[];
-    loadedCatalogIds?: string[];
-    activeCatalogId?: string | null;
-    filterCatalogIds?: string[];
-    selectedFileId?: string | null;
-    selectedCatalogId?: string | null;
-    selectedFileIds?: string[];
-    uploadJobs?: { localId?: unknown; [key: string]: unknown }[];
-    expandedCatalogIds?: string[];
-    recentFileIds?: string[];
-    starredFileIds?: string[];
-    searchQuery?: string;
-    searchMode?: string;
-    sortKey?: string;
-    sortDir?: string;
+    items?: OfficeDocumentItem[] | undefined;
+    loadedCatalogIds?: string[] | undefined;
+    activeCatalogId?: string | null | undefined;
+    filterCatalogIds?: string[] | undefined;
+    selectedFileId?: string | null | undefined;
+    selectedCatalogId?: string | null | undefined;
+    selectedFileIds?: string[] | undefined;
+    uploadJobs?: { localId?: unknown; [key: string]: unknown }[] | undefined;
+    expandedCatalogIds?: string[] | undefined;
+    recentFileIds?: string[] | undefined;
+    starredFileIds?: string[] | undefined;
+    searchQuery?: string | undefined;
+    searchMode?: string | undefined;
+    sortKey?: string | undefined;
+    sortDir?: string | undefined;
     [key: string]: unknown;
 }
 

@@ -47,7 +47,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 box-sizing: border-box;
                 --platform-namespace-add-background: var(--accent);
                 --platform-namespace-add-color: var(--platform-btn-primary-text);
-                --platform-namespace-edit-stroke: var(--border-subtle, rgba(255, 255, 255, 0.06));
+                --platform-namespace-edit-stroke: var(--border-subtle);
                 --platform-namespace-edit-fg: var(--text-secondary);
                 --platform-namespace-edit-hover-bg: var(--accent-subtle);
                 --platform-namespace-edit-hover-fg: var(--accent);
@@ -105,10 +105,10 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 cursor: pointer;
                 flex-shrink: 0;
                 transition:
-                    background var(--duration-fast),
-                    color var(--duration-fast),
-                    border-color var(--duration-fast),
-                    transform var(--duration-fast);
+                    background var(--motion-duration-micro),
+                    color var(--motion-duration-micro),
+                    border-color var(--motion-duration-micro),
+                    transform var(--motion-duration-micro);
             }
 
             .btn-edit {
@@ -163,11 +163,11 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 background: var(--accent);
                 color: var(--platform-btn-primary-text);
                 transition:
-                    background var(--duration-fast),
-                    opacity var(--duration-fast),
-                    transform var(--duration-fast),
-                    box-shadow var(--duration-fast);
-                box-shadow: 0 2px 6px var(--accent-subtle, rgba(153, 166, 249, 0.16));
+                    background var(--motion-duration-micro),
+                    opacity var(--motion-duration-micro),
+                    transform var(--motion-duration-micro),
+                    box-shadow var(--motion-duration-micro);
+                box-shadow: 0 2px 6px var(--accent-subtle);
             }
 
             ::slotted(.platform-namespace-trailing-action-btn:hover:not(:disabled)) {

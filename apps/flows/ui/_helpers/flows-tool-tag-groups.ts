@@ -18,7 +18,7 @@ export function tagsFromRegistryItem(item: any) {
  * @param {{ search?: string, descriptionsByTag?: Map<string, { description_ru?: string, description_en?: string }> | Record<string, { description_ru?: string, description_en?: string }>, locale?: string }} [opts]
  * @returns {Array<{ tag: string, description: string, tools: unknown[] }>}
  */
-export function buildToolTagGroups(items: Record<string, any>[], opts: Record<string, any> = {}) {
+export function buildToolTagGroups(items: Record<string, unknown>[], opts: Record<string, unknown> = {}) {
     const search = typeof opts.search === 'string' ? opts.search.trim().toLowerCase() : '';
     const locale = typeof opts.locale === 'string' && opts.locale.length > 0 ? opts.locale : 'ru';
     const descMap = opts.descriptionsByTag instanceof Map

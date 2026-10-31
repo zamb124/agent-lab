@@ -15,7 +15,7 @@ self-contained даёт esbuild, поэтому гейт проверяет со
     uv run python -m scripts.gates.frontend.embed_esm_closure
 
 Вызывается из ``make check-core-frontend-canon`` (слой перед browser-тестами).
-Требует свежий ``node scripts/build/ui.mjs``.
+Требует свежий ``node scripts/build/ui.ts``.
 """
 
 from __future__ import annotations
@@ -56,11 +56,11 @@ def _check_file(path: Path, text: str) -> None:
 
 def main() -> int:
     if not EMBED_DIST.is_dir():
-        fail(f"embed-dist отсутствует: запустить node scripts/build/ui.mjs")
+        fail("embed-dist отсутствует: запустить node scripts/build/ui.ts")
     else:
         js_files = sorted(EMBED_DIST.rglob("*.js"))
         if not js_files:
-            fail(f"embed-dist пуст: запустить node scripts/build/ui.mjs")
+            fail("embed-dist пуст: запустить node scripts/build/ui.ts")
         for path in js_files:
             if path.suffix != ".js" or path.name.endswith(".map.js"):
                 continue

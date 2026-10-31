@@ -36,9 +36,9 @@ export class CrawlReportChartsPanel extends PlatformElement {
         contentTypeLabel: { attribute: false },
         topicLabel: { attribute: false },
     }
-    declare summary: Record<string, any> | null;
-    declare jobs: Array<Record<string, any>>;
-    declare domains: Array<Record<string, any>>;
+    declare summary: Record<string, unknown> | null;
+    declare jobs: Array<Record<string, unknown>>;
+    declare domains: Array<Record<string, unknown>>;
     declare locale: string;
     declare collapsed: boolean;
     declare statusLabel: (status: string) => string;

@@ -6,6 +6,7 @@ import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '../../../../apps/flows/ui/components/evaluation/flows-evaluation-suite-sidebar.js';
 import '../../../../apps/flows/ui/components/evaluation/flows-evaluation-results-matrix.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('flows evaluation layout rhythm', () => {
     beforeEach(() => {
@@ -14,7 +15,7 @@ describe('flows evaluation layout rhythm', () => {
     });
 
     it('evaluation sidebar rail uses side-panel width token at 1440px viewport', async () => {
-        const wrap = await fixture(html`
+        const wrap = await fixture<TestEl>(html`
             <div style="width: 1440px; --flows-side-panel-width: 324px; --flows-side-panel-min-width: 320px;">
                 <flows-evaluation-suite-sidebar
                     .suites=${[{ suite_id: 's1', name: 'Suite' }]}
@@ -26,17 +27,17 @@ describe('flows evaluation layout rhythm', () => {
         `);
         await elementUpdated(wrap);
 
-        const sidebar = wrap.querySelector('flows-evaluation-suite-sidebar');
-        const rail = sidebar.shadowRoot.querySelector('.rail');
+        const sidebar = qs(wrap!, 'flows-evaluation-suite-sidebar');
+        const rail = qs(shadow(sidebar)!, '.rail');
         expect(rail).to.not.equal(null);
 
-        const width = rail.getBoundingClientRect().width;
+        const width = rail!.getBoundingClientRect().width;
         expect(width).to.be.at.least(320);
         expect(width).to.be.closeTo(324, 4);
     });
 
     it('results matrix case column matches side-panel width token', async () => {
-        const wrap = await fixture(html`
+        const wrap = await fixture<TestEl>(html`
             <div style="width: 1440px; --flows-side-panel-width: 324px; --flows-side-panel-min-width: 320px;">
                 <flows-evaluation-results-matrix
                     .matrix=${{
@@ -50,11 +51,11 @@ describe('flows evaluation layout rhythm', () => {
         `);
         await elementUpdated(wrap);
 
-        const matrix = wrap.querySelector('flows-evaluation-results-matrix');
-        const caseCell = matrix.shadowRoot.querySelector('.case-cell');
+        const matrix = qs(wrap!, 'flows-evaluation-results-matrix');
+        const caseCell = qs(shadow(matrix)!, '.case-cell');
         expect(caseCell).to.not.equal(null);
 
-        const width = caseCell.getBoundingClientRect().width;
+        const width = caseCell!.getBoundingClientRect().width;
         expect(width).to.be.at.least(320);
         expect(width).to.be.closeTo(324, 4);
     });

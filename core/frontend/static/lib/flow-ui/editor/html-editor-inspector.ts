@@ -41,7 +41,7 @@ export const htmlEditorInspectorStyles = css`
     .inspector {
         display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0;
         position: relative; z-index: 1; isolation: isolate; overflow: hidden;
-        background: var(--bg-elevated, var(--glass-solid-medium, #253659));
+        background: var(--bg-elevated);
         border-top: 1px solid var(--border-subtle);
         border-radius: 0 0 var(--radius-md) var(--radius-md);
         padding: 0 var(--space-2) var(--space-2);

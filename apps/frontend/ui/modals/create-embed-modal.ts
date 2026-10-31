@@ -150,7 +150,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._allowedOrigins = '';
         this._showLauncher = true;
         this._branding = true;
-        this._primaryColor = '#6366f1';
+        this._primaryColor = 'var(--accent)';
         this._assistantTitle = '';
         this._placeholder = '';
         this._landingVisible = false;
@@ -189,7 +189,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._allowedOrigins = '';
         this._showLauncher = true;
         this._branding = true;
-        this._primaryColor = '#6366f1';
+        this._primaryColor = 'var(--accent)';
         this._assistantTitle = '';
         this._landingVisible = false;
         this._landingCardImageUrl = '';

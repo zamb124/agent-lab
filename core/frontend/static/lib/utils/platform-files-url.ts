@@ -67,9 +67,9 @@ export function getPlatformFilesRouteSegment(): string | null {
  * @returns {string}
  */
 export interface PlatformFilesRouteOpts {
-    pathname?: string;
-    filesApiBase?: string;
-    routeSegment?: string;
+    pathname?: string | undefined;
+    filesApiBase?: string | undefined;
+    routeSegment?: string | undefined;
 }
 
 export function resolvePlatformFilesRouteSegment(opts: PlatformFilesRouteOpts = {}): string {

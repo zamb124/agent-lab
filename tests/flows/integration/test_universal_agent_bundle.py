@@ -252,7 +252,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
     di,
 ) -> None:
     ns = f"ua_ing_{unique_id}"
-    chunk = "Humanitec universal_agent RAG marker zeta-9 for semantic retrieval."
+    chunk = "Linnex universal_agent RAG marker zeta-9 for semantic retrieval."
     _ = mock_llm_with_queue(
         [
             {
@@ -276,7 +276,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
                 "args": {
                     "namespace_id": ns,
                     "collection_id": "universal_agent_test",
-                    "query": "zeta-9 marker Humanitec",
+                    "query": "zeta-9 marker Linnex",
                     "limit": 5,
                 },
             },
@@ -305,4 +305,4 @@ async def test_universal_agent_with_rag_ingest_and_search(
     assert len(results) >= 1
     first = _JSON_OBJECT_ADAPTER.validate_python(results[0])
     content = _required_str(first, "content")
-    assert "zeta-9" in content or "Humanitec" in content
+    assert "zeta-9" in content or "Linnex" in content

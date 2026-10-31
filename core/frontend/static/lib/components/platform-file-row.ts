@@ -85,7 +85,7 @@ export class PlatformFileRow extends PlatformElement {
                 grid-template-columns: var(--platform-file-row-columns, 2rem 1fr 6rem 8rem 7rem 8rem 6rem 2.5rem);
                 gap: var(--space-3);
                 align-items: center;
-                min-height: var(--documents-explorer-table-row-height, 3.25rem);
+                min-height: var(--documents-explorer-table-row-height);
                 padding: 0 var(--space-3);
                 border-bottom: 1px solid var(--glass-border-subtle);
                 background: transparent;
@@ -96,10 +96,10 @@ export class PlatformFileRow extends PlatformElement {
                 background: var(--glass-solid-subtle);
             }
             :host([selected]) .row {
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                background: var(--documents-selected-bg);
             }
             :host([drop-target]) .row {
-                background: var(--documents-selected-bg, var(--accent-subtle));
+                background: var(--documents-selected-bg);
                 box-shadow: inset 0 0 0 1px var(--accent);
             }
             .cell {

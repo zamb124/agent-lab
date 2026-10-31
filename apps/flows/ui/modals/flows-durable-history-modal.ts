@@ -274,17 +274,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 min-height: 0;
                 overflow: visible;
             }
-            .durable-history-loading,
-            .durable-history-empty,
-            .durable-history-error {
-                min-height: 240px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: var(--space-4);
-            }
+
             .durable-history-error {
                 color: var(--error);
                 white-space: pre-wrap;
@@ -1531,7 +1521,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }
         const events = this._historyEvents();
         if (this._historyOp.busy && events.length === 0) {
-            return html`<div class="durable-history-loading"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <div class="durable-history-body">

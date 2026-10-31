@@ -7,11 +7,12 @@ import { css } from 'lit';
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { q, qs, shadow, type TestEl } from '../helpers/dom.js';
 
 const TOKENS_HREF = '/core/frontend/static/assets/css/tokens.css';
 
 class PrimaryCtaColorProbe extends PlatformElement {
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             .cta-btn {
@@ -24,7 +25,7 @@ class PrimaryCtaColorProbe extends PlatformElement {
         `,
     ];
 
-    render() {
+    override render() {
         return html`
             <button class="cta-btn" type="button">Add note</button>
             <button class="btn btn-primary" type="button">Primary</button>
@@ -39,14 +40,14 @@ if (!customElements.get('primary-cta-color-probe')) {
 /**
  * @param {string} href
  */
-function loadStylesheet(href) {
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+function loadStylesheet(href: any) {
+    return new Promise<void>((resolve, reject) => {
+        const existing = q(document, `link[rel="stylesheet"][href="${href}"]`);
         if (existing) {
             resolve();
             return;
         }
-        const link = document.createElement('link');
+        const link = (document.createElement('link') as TestEl);
         link.rel = 'stylesheet';
         link.href = href;
         link.onload = () => resolve();
@@ -58,7 +59,7 @@ function loadStylesheet(href) {
 /**
  * @param {string} color
  */
-function isWhiteRgb(color) {
+function isWhiteRgb(color: any) {
     const match = color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
     if (!match) {
         return false;
@@ -68,7 +69,7 @@ function isWhiteRgb(color) {
 
 describe('platform button primary text color', () => {
     /** @type {string | null} */
-    let previousTheme;
+    let previousTheme: any;
 
     beforeEach(async () => {
         resetPlatformState();
@@ -88,11 +89,11 @@ describe('platform button primary text color', () => {
     });
 
     it('light theme: .cta-btn and .btn-primary keep white text over platform primary bg', async () => {
-        const el = await fixture(html`<primary-cta-color-probe></primary-cta-color-probe>`);
+        const el = await fixture<TestEl>(html`<primary-cta-color-probe></primary-cta-color-probe>`);
         await elementUpdated(el);
 
-        const cta = el.shadowRoot.querySelector('.cta-btn');
-        const primary = el.shadowRoot.querySelector('.btn-primary');
+        const cta = qs(shadow(el), '.cta-btn');
+        const primary = qs(shadow(el), '.btn-primary');
         expect(cta, '.cta-btn').to.exist;
         expect(primary, '.btn-primary').to.exist;
 

@@ -7,8 +7,8 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
-from apps.search.services.crawl.sitemap_parser import _append_entries, discover_sitemap_urls
 from apps.search.crawl.url_filter import CrawlUrlFilter
+from apps.search.services.crawl.sitemap_parser import _append_entries, discover_sitemap_urls
 from tests.core.http_proxy_helpers import install_mock_httpx_client
 
 _PERMISSIVE_FILTER = CrawlUrlFilter(include_patterns=[], exclude_patterns=[], exclude_extensions=[])

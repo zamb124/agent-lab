@@ -12,6 +12,7 @@ import {
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { seedPlatformMarkdownEditorI18n } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-voice-dictation.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 beforeEach(async () => {
     resetPlatformState();
@@ -26,34 +27,34 @@ afterEach(() => {
 describe('platform-voice-dictation', () => {
     it('registers custom element and starts idle', async () => {
         expect(customElements.get('platform-voice-dictation')).to.exist;
-        const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
+        const el = await fixture<TestEl>(html`<platform-voice-dictation></platform-voice-dictation>`);
         expect(el._phase).to.equal('idle');
-        const btn = el.shadowRoot.querySelector('button');
+        const btn = qs(shadow(el), 'button');
         expect(btn).to.exist;
         expect(btn.disabled).to.equal(false);
-        expect(btn.querySelector('platform-icon').name).to.equal('mic');
+        expect(qs(btn!, 'platform-icon').name).to.equal('mic');
     });
 
     it('disabled attribute disables the button', async () => {
-        const el = await fixture(html`<platform-voice-dictation .disabled=${true}></platform-voice-dictation>`);
-        const btn = el.shadowRoot.querySelector('button');
+        const el = await fixture<TestEl>(html`<platform-voice-dictation .disabled=${true}></platform-voice-dictation>`);
+        const btn = qs(shadow(el), 'button');
         expect(btn.disabled).to.equal(true);
     });
 
     it('emits transcribed on VAD final transcript', async () => {
-        const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
+        const el = await fixture<TestEl>(html`<platform-voice-dictation></platform-voice-dictation>`);
         const transcribedP = oneEvent(el, 'transcribed');
         el._onMediaTranscript(new CustomEvent('transcript', {
             detail: { text: 'hello world', final: true },
         }));
         const event = await transcribedP;
-        expect(event.detail.text).to.equal('hello world');
-        expect(event.detail.provider).to.equal('voice');
+        expect((event as CustomEvent).detail.text).to.equal('hello world');
+        expect((event as CustomEvent).detail.provider).to.equal('voice');
         expect(el._heardFinalText).to.equal(true);
     });
 
     it('does not emit transcribed when STT text is empty', async () => {
-        const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
+        const el = await fixture<TestEl>(html`<platform-voice-dictation></platform-voice-dictation>`);
         let emitted = false;
         el.addEventListener('transcribed', () => {
             emitted = true;
@@ -67,7 +68,7 @@ describe('platform-voice-dictation', () => {
     });
 
     it('ignores partial transcript frames', async () => {
-        const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
+        const el = await fixture<TestEl>(html`<platform-voice-dictation></platform-voice-dictation>`);
         let emitted = false;
         el.addEventListener('transcribed', () => {
             emitted = true;

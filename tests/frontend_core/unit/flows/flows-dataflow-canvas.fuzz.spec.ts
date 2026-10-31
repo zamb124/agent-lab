@@ -25,6 +25,7 @@ describe('flows-dataflow-canvas fuzz', () => {
             const { ids, edges } = randomGraph(3 + (run % 4));
             const fromId = ids[0];
             const toId = ids[ids.length - 1];
+            if (fromId === undefined || toId === undefined) throw new Error('randomGraph returned empty ids');
             const found = hasControlPath(fromId, toId, edges);
             const adj = new Map();
             for (const edge of edges) {
@@ -64,10 +65,10 @@ describe('flows-dataflow-canvas fuzz', () => {
     it('buildLineageSet always contains hover id', () => {
         for (let run = 0; run < 40; run += 1) {
             const hoverId = `h${run}`;
-            const wires = [{ from: 'a', to: hoverId }, { from: hoverId, to: 'c' }];
+            const wires = [{ from: 'a', to: hoverId, label: '', sourceLabel: '', targetParam: '', sourceKind: 'output' }, { from: hoverId, to: 'c', label: '', sourceLabel: '', targetParam: '', sourceKind: 'output' }];
             const lineage = buildLineageSet(hoverId, wires);
             expect(lineage).to.not.equal(null);
-            expect(lineage.has(hoverId)).toBe(true);
+            expect(lineage?.has(hoverId)).toBe(true);
         }
     });
 

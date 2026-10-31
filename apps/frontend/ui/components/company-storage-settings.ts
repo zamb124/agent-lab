@@ -91,7 +91,7 @@ export class CompanyStorageSettings extends PlatformElement {
         h3 {
             margin: 0;
             color: var(--text-primary);
-            font-size: var(--text-md);
+            font-size: var(--text-sm);
         }
         .connection {
             display: flex;

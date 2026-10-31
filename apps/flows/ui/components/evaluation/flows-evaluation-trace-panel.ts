@@ -41,8 +41,8 @@ export class FlowsEvaluationTracePanel extends PlatformElement {
         annotations: { type: Array },
         busy: { type: Boolean },
     }
-    declare trace: Record<string, any> | null;
-    declare caseRun: Record<string, any> | null;
+    declare trace: Record<string, unknown> | null;
+    declare caseRun: Record<string, unknown> | null;
     declare annotations: any[];
     declare busy: boolean;
 ;

@@ -1,6 +1,6 @@
 """
 Утилиты для работы с доменами.
-Поддержка нескольких доменов (humanitec.ru, agents-lab.ru) и localhost.
+Поддержка нескольких доменов (linnex.io, agents-lab.ru) и localhost.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from core.config import get_settings
 
-PRIMARY_DOMAIN = "humanitec.ru"
+PRIMARY_DOMAIN = "linnex.io"
 
 
 def _supported_platform_domains() -> tuple[str, ...]:
@@ -59,9 +59,9 @@ def extract_base_domain(host: str) -> str:
     Извлекает базовый домен из Host header.
 
     Примеры:
-        humanitec.ru → humanitec.ru
-        www.humanitec.ru → humanitec.ru
-        company.humanitec.ru → humanitec.ru
+        linnex.io → linnex.io
+        www.linnex.io → linnex.io
+        company.linnex.io → linnex.io
         agents-lab.ru → agents-lab.ru
         company.agents-lab.ru → agents-lab.ru
         localhost:8002 → localhost
@@ -97,9 +97,9 @@ def extract_subdomain(host: str) -> str | None:
     Извлекает subdomain из Host header.
 
     Примеры:
-        humanitec.ru → None
-        www.humanitec.ru → None
-        company.humanitec.ru → company
+        linnex.io → None
+        www.linnex.io → None
+        company.linnex.io → company
         my-company.agents-lab.ru → my-company
         localhost → None
         company.localhost:8002 → company
@@ -272,8 +272,8 @@ def get_host_with_port(host: str) -> str:
         lvh.me:8002 → lvh.me:8002
         company.lvh.me:8002 → lvh.me:8002
         127.0.0.1:8002 → 127.0.0.1:8002
-        humanitec.ru → humanitec.ru
-        company.humanitec.ru → humanitec.ru
+        linnex.io → linnex.io
+        company.linnex.io → linnex.io
     """
     base = extract_base_domain(host)
     _, port_part = split_host_port(host)
@@ -296,8 +296,8 @@ def get_cookie_domain(host: str) -> str | None:
         company.localhost:8002 → localhost
         lvh.me:8002 → .lvh.me
         company.lvh.me:8002 → .lvh.me
-        humanitec.ru → .humanitec.ru
-        company.humanitec.ru → .humanitec.ru
+        linnex.io → .linnex.io
+        company.linnex.io → .linnex.io
 
     Примечание:
         Для *.localhost задаём Domain=localhost, иначе кука host-only привязана к

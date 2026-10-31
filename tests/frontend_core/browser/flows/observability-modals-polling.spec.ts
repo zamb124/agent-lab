@@ -26,6 +26,7 @@ import {
 import {
     FlowsLogsModal,
 } from '../../../../apps/flows/ui/modals/flows-logs-modal.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     tracesBySessionOp,
@@ -74,18 +75,18 @@ function traceRoot() {
 }
 
 function cleanupPortaledModals() {
-    for (const el of document.querySelectorAll('flows-tracing-modal, flows-logs-modal')) {
+    for (const el of qsa(document!, 'flows-tracing-modal, flows-logs-modal')) {
         el.remove();
     }
 }
 
 describe('flows observability modals polling', () => {
-    let originalFetch;
-    let originalWsRequest;
-    let originalTraceInterval;
-    let originalTraceMax;
-    let originalLogsInterval;
-    let originalLogsMax;
+    let originalFetch: any;
+    let originalWsRequest: any;
+    let originalTraceInterval: any;
+    let originalTraceMax: any;
+    let originalLogsInterval: any;
+    let originalLogsMax: any;
 
     beforeEach(() => {
         originalFetch = window.fetch;
@@ -127,22 +128,22 @@ describe('flows observability modals polling', () => {
             throw new Error(`unexpected ws: ${opts.type}`);
         };
 
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, {
             kind: 'flows.tracing',
             props: { sessionId: 'session_1' },
         });
         await elementUpdated(stack);
-        const modal = document.querySelector('flows-tracing-modal');
+        const modal = qs(document!, 'flows-tracing-modal');
         await waitUntil(() => modal?.shadowRoot?.querySelector('.tracing-loading'), 'tracing loading state');
         await waitUntil(
-            () => modal.shadowRoot.querySelector('platform-trace-viewer'),
+            () => q(shadow(modal), 'platform-trace-viewer'),
             'trace viewer after polling',
             { timeout: 1000 },
         );
 
         expect(sessionCalls).to.be.at.least(2);
-        expect(modal.shadowRoot.querySelector('.tracing-empty')).to.equal(null);
+        expect(q(shadow(modal), '.tracing-empty')).to.equal(null);
     });
 
     it('logs modal keeps loading and retries until session log entries appear', async () => {
@@ -172,16 +173,16 @@ describe('flows observability modals polling', () => {
             throw new Error(`unexpected ws: ${opts.type}`);
         };
 
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, {
             kind: 'flows.logs',
             props: { sessionId: 'session_1' },
         });
         await elementUpdated(stack);
-        const modal = document.querySelector('flows-logs-modal');
+        const modal = qs(document!, 'flows-logs-modal');
         await waitUntil(() => modal?.shadowRoot?.querySelector('.logs-loading'), 'logs loading state');
         await waitUntil(() => {
-            const viewer = modal.shadowRoot.querySelector('platform-log-viewer');
+            const viewer = q(shadow(modal), 'platform-log-viewer');
             return viewer?.shadowRoot?.textContent.includes('indexed log line');
         }, 'log viewer after polling', { timeout: 1000 });
 

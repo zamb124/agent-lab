@@ -157,9 +157,9 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 padding: var(--space-3);
                 cursor: pointer;
                 text-align: left;
-                transition: border-color var(--duration-fast),
-                            background var(--duration-fast),
-                            transform var(--duration-fast);
+                transition: border-color var(--motion-duration-micro),
+                            background var(--motion-duration-micro),
+                            transform var(--motion-duration-micro);
             }
             .template-card:hover {
                 border-color: var(--crm-selected-stroke);
@@ -231,7 +231,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 color: var(--text-secondary);
             }
             .meta-row strong { color: var(--text-primary); font-weight: 600; }
-            .meta-loading { color: var(--text-tertiary); font-style: italic; }
+
 
             .modal-actions {
                 display: none !important;
@@ -251,8 +251,8 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: #242428;
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
             }
             .namespace-integration-icon {
                 width: 70%;
@@ -333,14 +333,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
             .revoke-btn {
                 background: transparent;
                 border: none;
-                color: var(--color-danger);
+                color: var(--error);
                 cursor: pointer;
                 padding: var(--space-1) var(--space-2);
                 border-radius: var(--radius-sm);
                 font-size: var(--text-xs);
             }
             .revoke-btn:hover:not(:disabled) {
-                background: rgba(244, 63, 94, 0.1);
+                background: color-mix(in srgb, var(--error) 10%, transparent);
             }
             .empty-block {
                 padding: var(--space-3);
@@ -487,7 +487,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 color: var(--text-tertiary);
             }
             .submit-error {
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
             }
             .grant-form-actions {
@@ -1061,7 +1061,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _renderEditabilityBadge() {
         const result = anyRecord(this._editability.lastResult);
         if (this._editability.busy && !result) {
-            return html`<div class="meta-loading"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (!result) return null;
         const usedTypeIds = result.used_type_ids;

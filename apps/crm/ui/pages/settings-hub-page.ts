@@ -62,10 +62,10 @@ export class CRMSettingsHubPage extends PlatformPage {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: border-color var(--duration-fast),
-                            background var(--duration-fast),
-                            transform var(--duration-fast),
-                            box-shadow var(--duration-fast);
+                transition: border-color var(--motion-duration-micro),
+                            background var(--motion-duration-micro),
+                            transform var(--motion-duration-micro),
+                            box-shadow var(--motion-duration-micro);
                 color: var(--text-primary);
                 text-align: left;
                 font: inherit;
@@ -75,7 +75,7 @@ export class CRMSettingsHubPage extends PlatformPage {
                 border-color: var(--accent);
                 background: var(--glass-solid-medium);
                 transform: translateY(-2px);
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+                box-shadow: 0 4px 16px var(--glass-shadow-subtle);
             }
 
             .card:focus-visible {
@@ -93,8 +93,8 @@ export class CRMSettingsHubPage extends PlatformPage {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: border-color var(--duration-fast),
-                            color var(--duration-fast);
+                transition: border-color var(--motion-duration-micro),
+                            color var(--motion-duration-micro);
             }
 
             .card:hover .card-icon {
@@ -118,8 +118,8 @@ export class CRMSettingsHubPage extends PlatformPage {
             .card-arrow {
                 color: var(--text-tertiary);
                 align-self: flex-end;
-                transition: transform var(--duration-fast),
-                            color var(--duration-fast);
+                transition: transform var(--motion-duration-micro),
+                            color var(--motion-duration-micro);
             }
 
             .card:hover .card-arrow {

@@ -68,7 +68,7 @@ export class FrontendCrawlUrlAddModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (this._urlsList().length === 0) errors.urls = this.t('crawl_report_page.err_urls_required');
         return errors;
     }

@@ -62,7 +62,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         _initialized: { state: true },
     }
     declare crawl_profile_id: string;
-    declare profile: Record<string, any> | null;
+    declare profile: Record<string, unknown> | null;
     declare _enabled: boolean;
     declare _refreshInterval: string;
     declare _maxUrlsPerDomain: string;
@@ -140,7 +140,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         this._requirePositive(this._refreshInterval, errors, 'refresh_interval_seconds', 60);
         this._requirePositive(this._maxUrlsPerDomain, errors, 'max_urls_per_domain_per_tick', 1);
         this._requirePositive(this._maxDomains, errors, 'max_domains_per_tick', 1);

@@ -22,6 +22,7 @@ dependencies = [
     "asyncmy>=0.2.17",
     "clickhouse-connect>=1.11.0",
     "oxyde>=0.8.0",
+    "segno>=1.6.6",
 ]
 [tool.uv]
 default-groups = [

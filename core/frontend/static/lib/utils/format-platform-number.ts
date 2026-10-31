@@ -7,7 +7,7 @@
 
 const _SUPPORTED_LOCALES = Object.freeze(new Set(['ru', 'en']));
 
-function _resolveLocale(locale: string): string {
+function _resolveLocale(locale: unknown): string {
     if (typeof locale !== 'string' || locale.length === 0) {
         throw new Error('format-platform-number: locale must be non-empty string');
     }
@@ -24,7 +24,7 @@ function _resolveLocale(locale: string): string {
  * @param {Intl.NumberFormatOptions} [options]
  * @returns {string}
  */
-export function formatPlatformNumber(value: number, locale: string, options: Intl.NumberFormatOptions = {}): string {
+export function formatPlatformNumber(value: unknown, locale: unknown, options: Intl.NumberFormatOptions = {}): string {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return '—';
     }

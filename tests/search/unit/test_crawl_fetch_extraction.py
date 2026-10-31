@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from apps.search.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
+from apps.search.models import CrawlStructuralSignals
 from apps.search.services.crawl.fetch_service import (
     _build_crawl_fetch_result,
     _extract_markdown_and_signals,
     _markdown_from_structural_signals,
 )
-from apps.search.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
-from apps.search.models import CrawlStructuralSignals
 
 pytestmark = pytest.mark.unit
 

@@ -19,7 +19,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.3,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       }
     },
     "preprocessor": {
@@ -32,7 +32,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.5,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       }
     }
   },

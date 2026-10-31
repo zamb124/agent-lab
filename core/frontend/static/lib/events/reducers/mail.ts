@@ -261,12 +261,12 @@ function mailMessage(value: unknown, label: string): MailMessageRecord {
     return message;
 }
 
-function messageWith(item: MailMessageRecord, patch: { unread?: boolean; flagged?: boolean; folder?: string | null; rag_index_status?: string }): MailMessageRecord {
+function messageWith(item: MailMessageRecord, patch: { unread?: boolean; flagged?: boolean; folder?: string | null; rag_index_status?: string | undefined }): MailMessageRecord {
     const next = mailMessage(item, 'mail message');
     if (patch.unread !== undefined) next.unread = patch.unread;
     if (patch.flagged !== undefined) next.flagged = patch.flagged;
     if (patch.folder === null) {
-        next.folder = undefined;
+        delete next.folder;
     } else if (typeof patch.folder === 'string') {
         next.folder = patch.folder;
     }

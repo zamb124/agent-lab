@@ -70,6 +70,6 @@ describe('placeholder-avatar', () => {
     });
 
     it('resolveAvatarImageSrc: args не объект — throw', () => {
-        expect(() => resolveAvatarImageSrc(null)).toThrow();
+        expect(() => Reflect.apply(resolveAvatarImageSrc, null, [null])).toThrow();
     });
 });

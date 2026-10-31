@@ -12,6 +12,7 @@ import {
 } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-viz-host.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const MERMAID_DOC = {
     schema_version: 1,
@@ -46,33 +47,33 @@ describe('platform-viz-host', () => {
     });
 
     it('renders platform-mermaid-host for mermaid document', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-viz-host .document=${MERMAID_DOC}></platform-viz-host>
         `);
         await elementUpdated(el);
-        const child = el.shadowRoot?.querySelector('platform-mermaid-host');
+        const child = q(shadow(el), 'platform-mermaid-host');
         expect(child).to.exist;
-        expect(el.shadowRoot?.querySelector('platform-echarts-host')).to.not.exist;
-        expect(el.shadowRoot?.querySelector('.title')?.textContent).to.equal('Flow');
+        expect(q(shadow(el), 'platform-echarts-host')).to.not.exist;
+        expect(q(shadow(el), '.title')?.textContent).to.equal('Flow');
     });
 
     it('renders platform-echarts-host for echarts document', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-viz-host .document=${ECHARTS_DOC}></platform-viz-host>
         `);
         await elementUpdated(el);
-        const child = el.shadowRoot?.querySelector('platform-echarts-host');
+        const child = q(shadow(el), 'platform-echarts-host');
         expect(child).to.exist;
-        expect(el.shadowRoot?.querySelector('platform-mermaid-host')).to.not.exist;
+        expect(q(shadow(el), 'platform-mermaid-host')).to.not.exist;
     });
 
     it('compact hides toolbar', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-viz-host compact .document=${MERMAID_DOC}></platform-viz-host>
         `);
         await elementUpdated(el);
         expect(el.compact).to.equal(true);
-        expect(el.shadowRoot?.querySelector('.toolbar')).to.not.exist;
-        expect(el.shadowRoot?.querySelector('platform-mermaid-host')).to.exist;
+        expect(q(shadow(el), '.toolbar')).to.not.exist;
+        expect(q(shadow(el), 'platform-mermaid-host')).to.exist;
     });
 });

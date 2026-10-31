@@ -203,9 +203,9 @@ export class SyncMessageBubble extends PlatformElement {
             cursor: pointer;
         }
         .bubble {
-            background: var(--glass-solid-soft, var(--glass-solid));
-            border: 1px solid var(--glass-border-subtle, var(--glass-border));
-            border-radius: var(--radius-2xl, 18px);
+            background: var(--glass-solid-subtle);
+            border: 1px solid var(--glass-border-subtle);
+            border-radius: var(--radius-2xl);
             padding: 6px var(--space-3) 4px;
             display: flex;
             flex-direction: column;
@@ -219,14 +219,14 @@ export class SyncMessageBubble extends PlatformElement {
             position: relative;
             overflow: visible;
             color: var(--text-primary);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-            transition: background var(--duration-fast);
+            box-shadow: 0 1px 2px var(--glass-shadow-subtle);
+            transition: background var(--motion-duration-micro);
         }
         :host([data-own]) .bubble {
             background: var(--accent);
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             border-color: transparent;
-            box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.18));
+            box-shadow: 0 2px 8px var(--accent-subtle);
         }
         :host(:not([data-own])) .bubble { border-bottom-left-radius: 6px; }
         :host([data-own]) .bubble { border-bottom-right-radius: 6px; }
@@ -265,15 +265,15 @@ export class SyncMessageBubble extends PlatformElement {
             border-left: 3px solid var(--accent);
             padding: 6px var(--space-3);
             margin-bottom: var(--space-2);
-            background: color-mix(in srgb, var(--glass-solid-soft, var(--glass-solid)) 82%, var(--sync-reply-quote-bg-mix));
+            background: color-mix(in srgb, var(--glass-solid-subtle) 82%, var(--sync-reply-quote-bg-mix));
             border-radius: var(--radius-sm);
             font-size: var(--text-xs);
             color: var(--text-secondary);
             cursor: pointer;
         }
         :host([data-own]) .reply-quote {
-            background: rgba(255, 255, 255, 0.24);
-            color: rgba(255, 255, 255, 0.95);
+            background: color-mix(in srgb, var(--text-on-accent) 24%, transparent);
+            color: var(--text-on-accent);
         }
         .reply-quote .who { font-weight: 600; }
         .forwarded {
@@ -298,13 +298,13 @@ export class SyncMessageBubble extends PlatformElement {
             word-break: break-word;
             line-height: 1.35;
         }
-        :host([data-own]) .forwarded { color: rgba(255,255,255,0.85); }
+        :host([data-own]) .forwarded { color: var(--text-on-accent); }
         .body {
             white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
             max-width: 100%;
-            font-size: var(--text-base, 16px);
+            font-size: var(--text-base);
             line-height: 1.45;
         }
         .body-text {
@@ -322,7 +322,7 @@ export class SyncMessageBubble extends PlatformElement {
             flex-direction: row;
             align-items: center;
             gap: 4px;
-            font-size: var(--text-xs, 12px);
+            font-size: var(--text-xs);
             line-height: 1;
             white-space: nowrap;
             opacity: 0.72;
@@ -352,19 +352,19 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .body a { color: inherit; text-decoration: underline; }
         .mention {
-            background: rgba(99, 102, 241, 0.18);
+            background: color-mix(in srgb, var(--accent) 18%, transparent);
             color: var(--accent);
             padding: 0 2px;
             border-radius: 3px;
             cursor: pointer;
         }
         :host([data-own]) .mention {
-            background: rgba(255,255,255,0.22);
+            background: color-mix(in srgb, var(--text-on-accent) 22%, transparent);
             color: white;
         }
         pre {
-            background: var(--bg-secondary, #1e293b);
-            color: #f8fafc;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
             padding: var(--space-2);
             border-radius: var(--radius-sm);
             font-family: var(--font-mono);
@@ -385,7 +385,7 @@ export class SyncMessageBubble extends PlatformElement {
             white-space: normal;
         }
         :host([data-own]) .meta {
-            color: rgba(255, 255, 255, 0.82);
+            color: var(--text-on-accent);
             opacity: 0.95;
         }
         .status-failed {
@@ -396,17 +396,17 @@ export class SyncMessageBubble extends PlatformElement {
             margin: 0;
             border: none;
             background: transparent;
-            color: var(--color-error, #ef4444);
+            color: var(--error);
             cursor: pointer;
             line-height: 0;
         }
-        .status-failed:hover { color: var(--color-error, #ef4444); opacity: 0.85; }
+        .status-failed:hover { color: var(--error); opacity: 0.85; }
         .status-failed:focus-visible {
-            outline: 2px solid var(--color-error, #ef4444);
+            outline: 2px solid var(--error);
             outline-offset: 2px;
             border-radius: 999px;
         }
-        :host([data-own]) .status-failed { color: var(--color-error, #ef4444); }
+        :host([data-own]) .status-failed { color: var(--error); }
         .reactions {
             display: flex;
             flex-wrap: wrap;
@@ -418,13 +418,13 @@ export class SyncMessageBubble extends PlatformElement {
             gap: 2px;
             padding: 2px 6px;
             border-radius: 12px;
-            background: var(--glass-hover);
+            background: var(--glass-tint-medium);
             color: var(--text-primary);
             cursor: pointer;
             font-size: var(--text-xs);
             border: 1px solid transparent;
         }
-        :host([data-own]) .reaction { background: rgba(255,255,255,0.2); color: white; }
+        :host([data-own]) .reaction { background: color-mix(in srgb, var(--text-on-accent) 20%, transparent); color: white; }
         .reaction.mine { border-color: var(--accent); }
         .file {
             display: grid;
@@ -435,19 +435,19 @@ export class SyncMessageBubble extends PlatformElement {
             width: min(100%, 520px);
             min-width: min(260px, 100%);
             padding: 10px 12px;
-            background: color-mix(in srgb, var(--glass-hover) 84%, transparent);
-            border: 1px solid var(--glass-border-subtle, rgba(15, 23, 42, 0.1));
-            border-radius: var(--radius-lg, 12px);
+            background: color-mix(in srgb, var(--glass-tint-medium) 84%, transparent);
+            border: 1px solid var(--glass-border-subtle);
+            border-radius: var(--radius-lg);
             cursor: pointer;
-            transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
+            transition: background var(--motion-duration-micro), border-color var(--motion-duration-micro), transform var(--motion-duration-micro);
         }
         .body + .file,
         .file + .file {
             margin-top: 8px;
         }
         .file:hover {
-            background: color-mix(in srgb, var(--glass-hover) 94%, var(--accent-subtle, rgba(153, 166, 249, 0.12)));
-            border-color: color-mix(in srgb, var(--glass-border-subtle, rgba(15, 23, 42, 0.1)) 64%, var(--accent));
+            background: color-mix(in srgb, var(--glass-tint-medium) 94%, var(--accent-subtle));
+            border-color: color-mix(in srgb, var(--glass-border-subtle) 64%, var(--accent));
         }
         .file:active {
             transform: translateY(1px);
@@ -462,12 +462,12 @@ export class SyncMessageBubble extends PlatformElement {
             justify-self: center;
         }
         :host([data-own]) .file {
-            background: rgba(255,255,255,0.16);
-            border-color: rgba(255,255,255,0.16);
+            background: color-mix(in srgb, var(--text-on-accent) 16%, transparent);
+            border-color: color-mix(in srgb, var(--text-on-accent) 16%, transparent);
         }
         :host([data-own]) .file:hover {
-            background: rgba(255,255,255,0.22);
-            border-color: rgba(255,255,255,0.28);
+            background: color-mix(in srgb, var(--text-on-accent) 22%, transparent);
+            border-color: color-mix(in srgb, var(--text-on-accent) 28%, transparent);
         }
         .file-info { flex: 1; min-width: 0; }
         .file-name {
@@ -483,7 +483,7 @@ export class SyncMessageBubble extends PlatformElement {
             color: var(--text-secondary);
             margin-top: 2px;
         }
-        :host([data-own]) .file-size { color: rgba(255,255,255,0.85); }
+        :host([data-own]) .file-size { color: var(--text-on-accent); }
         .file a {
             width: 34px;
             height: 34px;
@@ -494,14 +494,14 @@ export class SyncMessageBubble extends PlatformElement {
             color: inherit;
             opacity: 0.74;
             text-decoration: none;
-            transition: background var(--duration-fast), opacity var(--duration-fast);
+            transition: background var(--motion-duration-micro), opacity var(--motion-duration-micro);
         }
         .file a:hover {
-            background: rgba(15, 23, 42, 0.08);
+            background: color-mix(in srgb, var(--text-primary) 8%, transparent);
             opacity: 1;
         }
         :host([data-own]) .file a:hover {
-            background: rgba(255, 255, 255, 0.18);
+            background: color-mix(in srgb, var(--text-on-accent) 18%, transparent);
         }
         .audio-attachment {
             display: block;
@@ -522,11 +522,11 @@ export class SyncMessageBubble extends PlatformElement {
             height: auto;
             max-width: min(320px, 100%);
             max-height: 360px;
-            border-radius: var(--radius-lg, 12px);
+            border-radius: var(--radius-lg);
             display: block;
             cursor: zoom-in;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-            transition: opacity var(--duration-fast);
+            box-shadow: 0 1px 3px var(--glass-shadow-subtle);
+            transition: opacity var(--motion-duration-micro);
         }
         .image-wrap img:hover { opacity: 0.95; }
         .video-attachment {
@@ -537,15 +537,15 @@ export class SyncMessageBubble extends PlatformElement {
         .video-wrap {
             position: relative;
             display: block;
-            border-radius: var(--radius-lg, 12px);
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            background: #000;
+            background: var(--sync-call-tile);
         }
         .video-wrap video {
             max-width: 320px;
             width: 100%;
             vertical-align: bottom;
-            border-radius: var(--radius-lg, 12px);
+            border-radius: var(--radius-lg);
             background: black;
             display: block;
         }
@@ -565,9 +565,9 @@ export class SyncMessageBubble extends PlatformElement {
             height: 32px;
             padding: 0;
             border: none;
-            border-radius: var(--radius-md, 8px);
-            background: rgba(0, 0, 0, 0.52);
-            color: #fff;
+            border-radius: var(--radius-md);
+            background: color-mix(in srgb, var(--sync-call-tile) 52%, transparent);
+            color: var(--text-primary);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -575,10 +575,10 @@ export class SyncMessageBubble extends PlatformElement {
             text-decoration: none;
             backdrop-filter: blur(6px);
             -webkit-backdrop-filter: blur(6px);
-            transition: background var(--duration-fast);
+            transition: background var(--motion-duration-micro);
         }
         .video-action:hover:not([disabled]) {
-            background: rgba(0, 0, 0, 0.68);
+            background: color-mix(in srgb, var(--sync-call-tile) 68%, transparent);
         }
         .video-action[disabled] {
             opacity: 0.75;
@@ -591,7 +591,7 @@ export class SyncMessageBubble extends PlatformElement {
             letter-spacing: -0.02em;
         }
         .video-action platform-icon {
-            color: #fff;
+            color: var(--text-primary);
         }
         .call-boundary {
             display: inline-flex;
@@ -602,7 +602,7 @@ export class SyncMessageBubble extends PlatformElement {
             font-size: var(--text-xs);
             color: var(--text-secondary);
             padding: var(--space-1) var(--space-3);
-            background: var(--glass-hover);
+            background: var(--glass-tint-medium);
             border-radius: 999px;
             max-width: 100%;
         }
@@ -629,7 +629,7 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .transcribe-btn {
             background: transparent;
-            border: 1px solid var(--glass-border);
+            border: 1px solid var(--glass-border-medium);
             color: var(--text-primary);
             padding: 2px 8px;
             border-radius: var(--radius-sm);
@@ -637,8 +637,8 @@ export class SyncMessageBubble extends PlatformElement {
             font-size: var(--text-xs);
         }
         :host([data-own]) .bubble .transcribe-btn {
-            color: var(--text-inverse, #fff);
-            border-color: rgba(255, 255, 255, 0.6);
+            color: var(--text-inverse);
+            border-color: color-mix(in srgb, var(--text-on-accent) 60%, transparent);
         }
         .call-boundary .transcribe-call-a-btn {
             box-sizing: border-box;
@@ -669,11 +669,11 @@ export class SyncMessageBubble extends PlatformElement {
             flex-wrap: nowrap;
             align-items: center;
             background: var(--glass-solid-strong);
-            border: 1px solid var(--glass-border);
+            border: 1px solid var(--glass-border-medium);
             border-radius: 999px;
             padding: 2px 6px;
             gap: 2px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+            box-shadow: 0 4px 12px var(--glass-shadow-medium);
             z-index: 10;
             pointer-events: none;
         }

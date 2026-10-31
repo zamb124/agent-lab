@@ -17,11 +17,12 @@ import '../../../../apps/flows/ui/components/editor/flows-editor-header.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-toolbar.js';
 import { interfaceEditorSlice } from '../../../../apps/flows/ui/events/resources/interface-editor.resource.js';
 import '../../../../apps/flows/ui/components/evaluation/flows-evaluation-run-toolbar.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [editorResource, flowsResource, flowUpdateOp, flowReloadFromBundleOp, branchRemoveOp, interfaceEditorSlice];
 
-function buttonHeight(platformButton) {
-    return platformButton.shadowRoot.querySelector('button').getBoundingClientRect().height;
+function buttonHeight(platformButton: any) {
+    return qs(shadow(platformButton), 'button').getBoundingClientRect().height;
 }
 
 describe('flows chrome height canon', () => {
@@ -40,12 +41,12 @@ describe('flows chrome height canon', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         await elementUpdated(el);
 
-        const iconButtons = [...el.shadowRoot.querySelectorAll('platform-button[icon-only]')];
+        const iconButtons = [...qsa(shadow(el), 'platform-button[icon-only]')];
         expect(iconButtons.length).to.be.greaterThan(0);
 
         for (const btn of iconButtons) {
@@ -66,21 +67,21 @@ describe('flows chrome height canon', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const wrap = await fixture(html`
+        const wrap = await fixture<TestEl>(html`
             <div style="width: 1440px;">
                 <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
             </div>
         `);
         await elementUpdated(wrap);
 
-        const el = wrap.querySelector('flows-editor-header');
+        const el = qs(wrap!, 'flows-editor-header');
         const height = el.getBoundingClientRect().height;
         expect(height).to.be.at.most(64);
 
-        const branches = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
+        const branches = q(shadow(el), '.branches-slot platform-segmented-control');
         expect(branches).to.not.equal(null);
-        expect(el.shadowRoot.querySelectorAll('.status-badge').length).to.equal(1);
-        expect(el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
+        expect(qsa(shadow(el), '.status-badge').length).to.equal(1);
+        expect(qsa(shadow(el), '[data-action="publish"]').length).to.equal(1);
     });
 
     it('unified chrome with interface tools stays one bar (≤64px) without a second publish', async () => {
@@ -91,7 +92,7 @@ describe('flows chrome height canon', () => {
         bootstrapTestBus({ slices: collected.slices, effects: [] });
         getPlatformBus().dispatch('flows/editor/workspace_set', { workspace: 'interface' });
 
-        const wrap = await fixture(html`
+        const wrap = await fixture<TestEl>(html`
             <div style="width: 1440px;">
                 <flows-editor-header flow-id="flow-demo" branch-id="base">
                     <flows-interface-toolbar slot="workspace-tools"></flows-interface-toolbar>
@@ -101,20 +102,20 @@ describe('flows chrome height canon', () => {
         await elementUpdated(wrap);
         await nextFrame();
 
-        const el = wrap.querySelector('flows-editor-header');
+        const el = qs(wrap!, 'flows-editor-header');
         expect(el.getBoundingClientRect().height).to.be.at.most(64);
-        expect(el.shadowRoot.querySelectorAll('.status-badge').length).to.equal(1);
-        expect(el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
-        const toolbar = el.querySelector('flows-interface-toolbar');
+        expect(qsa(shadow(el), '.status-badge').length).to.equal(1);
+        expect(qsa(shadow(el), '[data-action="publish"]').length).to.equal(1);
+        const toolbar = q(el!, 'flows-interface-toolbar');
         expect(toolbar).to.not.equal(null);
-        expect(toolbar.renderRoot.querySelector('.status')).to.equal(null);
-        expect(el.querySelectorAll('[data-action="publish"]').length + el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
+        expect(q(toolbar!.renderRoot, '.status')).to.equal(null);
+        expect(qsa(el!, '[data-action="publish"]').length + qsa(shadow(el), '[data-action="publish"]').length).to.equal(1);
     });
 
     it('evaluation run toolbar shell uses flows toolbar min-height token', async () => {
         bootstrapTestBus();
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <div style="--flows-toolbar-shell-min-height: 48px;">
                 <flows-evaluation-run-toolbar
                     branch-id="base"
@@ -129,10 +130,10 @@ describe('flows chrome height canon', () => {
         `);
         await nextFrame();
 
-        const toolbar = el.querySelector('flows-evaluation-run-toolbar').shadowRoot.querySelector('.toolbar-shell');
+        const toolbar = qs(shadow(qs(el!, 'flows-evaluation-run-toolbar')), '.toolbar-shell');
         expect(toolbar).to.not.equal(null);
 
-        const styles = getComputedStyle(toolbar);
+        const styles = getComputedStyle(toolbar)!;
         expect(parseFloat(styles.minHeight)).to.be.closeTo(48, 2);
     });
 

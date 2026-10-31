@@ -30,7 +30,7 @@ export class SupportPage extends PlatformPage {
     declare _replyEmail: string;
     declare _subject: string;
     declare _message: string;
-    declare _status: Record<string, any>;
+    declare _status: Record<string, unknown>;
 ;
 
     static override styles: CSSResultGroup = [PlatformPage.styles, ...marketingPublicContentPageStyles];

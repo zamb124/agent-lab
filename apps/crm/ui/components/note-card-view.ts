@@ -376,7 +376,7 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .desktop-graph-toggle.active {
                 background: var(--accent);
-                color: #ffffff;
+                color: var(--text-primary);
             }
             .mobile-header-panels {
                 display: none;
@@ -392,13 +392,13 @@ export class CRMNoteCardView extends PlatformElement {
                 height: 18px;
                 border-radius: 999px;
                 background: var(--accent);
-                color: #fff;
+                color: var(--text-primary);
                 font-size: 11px;
                 line-height: 18px;
                 text-align: center;
                 padding: 0 5px;
                 box-sizing: border-box;
-                border: 1px solid var(--crm-surface-elevated, var(--glass-solid-strong));
+                border: 1px solid var(--crm-surface-elevated);
                 font-weight: 600;
             }
             .attachments-popover {
@@ -409,7 +409,7 @@ export class CRMNoteCardView extends PlatformElement {
                 max-height: 360px;
                 overflow: auto;
                 z-index: 40;
-                background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                background: var(--crm-surface-elevated);
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 box-shadow: var(--glass-shadow-medium);
@@ -508,7 +508,7 @@ export class CRMNoteCardView extends PlatformElement {
                 border-radius: var(--radius-full);
                 color: var(--text-primary);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
             .round-btn:hover:not(:disabled) {
                 background: var(--crm-note-action-bg-hover);
@@ -534,14 +534,14 @@ export class CRMNoteCardView extends PlatformElement {
                 padding: 8px 24px;
                 height: 44px;
                 background: var(--accent);
-                color: #FFFFFF;
+                color: var(--text-primary);
                 border: none;
                 border-radius: var(--radius-full);
                 font-size: 16px;
                 line-height: 20px;
                 font-weight: 400;
                 cursor: pointer;
-                transition: filter var(--duration-fast), background var(--duration-fast);
+                transition: filter var(--motion-duration-micro), background var(--motion-duration-micro);
             }
             .pill-btn:hover:not(:disabled) { filter: brightness(1.05); }
             .pill-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -586,8 +586,8 @@ export class CRMNoteCardView extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-                transition: background var(--duration-fast), filter var(--duration-fast);
+                box-shadow: 0 1px 2px var(--glass-shadow-subtle);
+                transition: background var(--motion-duration-micro), filter var(--motion-duration-micro);
             }
             .note-markdown-format-btn:hover:not(:disabled) {
                 background: var(--glass-tint-medium);
@@ -646,7 +646,7 @@ export class CRMNoteCardView extends PlatformElement {
                 display: block;
                 height: 100%;
                 background: var(--accent);
-                transition: width var(--duration-fast);
+                transition: width var(--motion-duration-micro);
             }
             .note-markdown-format-banner-line.indeterminate {
                 position: relative;
@@ -666,7 +666,7 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .note-text-scroll.markdown-format-status-active .markdown {
                 opacity: 0.55;
-                transition: opacity var(--duration-fast);
+                transition: opacity var(--motion-duration-micro);
             }
             .note-text-scroll .markdown {
                 min-height: 0;
@@ -737,10 +737,10 @@ export class CRMNoteCardView extends PlatformElement {
                 font-size: 0.95em;
                 cursor: pointer;
                 font-weight: 700;
-                transition: filter var(--duration-fast), transform var(--duration-fast), background var(--duration-fast);
+                transition: filter var(--motion-duration-micro), transform var(--motion-duration-micro), background var(--motion-duration-micro);
             }
             .mention-chip:hover {
-                background: rgba(153, 166, 249, 0.28);
+                background: color-mix(in srgb, var(--accent) 28%, transparent);
                 transform: translateY(-1px);
             }
 
@@ -915,7 +915,7 @@ export class CRMNoteCardView extends PlatformElement {
                 display: block;
                 height: 100%;
                 background: var(--accent);
-                transition: width var(--duration-fast);
+                transition: width var(--motion-duration-micro);
             }
             .summary-tags {
                 display: flex;
@@ -934,7 +934,7 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .summary-tag.tag-violet { background: var(--crm-accent-violet); }
             .summary-tag.tag-yellow { background: var(--crm-accent-yellow); }
-            .summary-tag.tag-orange { background: var(--crm-accent-orange); color: #FFFFFF; }
+            .summary-tag.tag-orange { background: var(--crm-accent-orange); color: var(--text-primary); }
             .summary-tag.summary-tag--clickable {
                 cursor: pointer;
                 border: none;
@@ -971,7 +971,7 @@ export class CRMNoteCardView extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 flex-shrink: 0;
-                transition: background var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), border-color var(--motion-duration-micro);
                 padding: 0;
             }
             .task-check.checked {
@@ -1067,7 +1067,7 @@ export class CRMNoteCardView extends PlatformElement {
                     overflow: auto;
                     border: 1px solid var(--crm-stroke);
                     border-radius: var(--radius-lg);
-                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                    background: var(--crm-surface-elevated);
                     box-shadow: var(--glass-shadow-medium);
                     padding: var(--space-2);
                 }
@@ -1080,7 +1080,7 @@ export class CRMNoteCardView extends PlatformElement {
                     height: 14px;
                     border-left: 1px solid var(--crm-stroke);
                     border-top: 1px solid var(--crm-stroke);
-                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                    background: var(--crm-surface-elevated);
                     transform: rotate(45deg);
                 }
                 .mobile-header-panels > .card,
@@ -1093,7 +1093,7 @@ export class CRMNoteCardView extends PlatformElement {
                 .mobile-header-panels > .neighbors-section {
                     padding: var(--space-3);
                     border-radius: var(--radius-md);
-                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                    background: var(--crm-surface-elevated);
                 }
                 .round-btn {
                     width: 40px;
@@ -1288,7 +1288,7 @@ export class CRMNoteCardView extends PlatformElement {
                 right: 0;
                 max-height: 240px;
                 overflow-y: auto;
-                background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                background: var(--crm-surface-elevated);
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-md);
                 box-shadow: var(--glass-shadow-medium);

@@ -20,7 +20,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "prompt": "Ты обрабатываешь заказы. Спроси номер заказа если не указан.",
       "tools": [
@@ -34,7 +34,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "prompt": "Ты обрабатываешь жалобы. Спроси детали если не указаны.",
       "tools": [
@@ -48,7 +48,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "prompt": "Ты отвечаешь на общие вопросы.",
       "tools": [
@@ -493,7 +493,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": []
         }

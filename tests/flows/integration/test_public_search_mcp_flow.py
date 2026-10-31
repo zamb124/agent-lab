@@ -12,6 +12,8 @@ from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state import ExecutionState
 from apps.flows.tools.builtin_specs import builtin_tool_ids
 from apps.flows.tools.web.index_search import web_search
+from core.integrations.mcp import mcp_tool_reference_id
+from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
 from core.ui_document.json_patch import apply_json_patch
 from core.ui_document.protocol import (
     JSON_MEDIA_TYPE,
@@ -19,8 +21,6 @@ from core.ui_document.protocol import (
     STATE_ARTIFACT_ID,
     JsonPatchOperation,
 )
-from core.integrations.mcp import mcp_tool_reference_id
-from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 
@@ -815,7 +815,7 @@ async def test_public_search_research_branch_runs_agentic_loop(
 
     calls = await mock_llm_capture()
     prompt_text = "\n".join(_captured_text(call) for call in calls)
-    assert "Humanitec Deep Research" in prompt_text
+    assert "Linnex Deep Research" in prompt_text
     assert query in prompt_text
 
 
@@ -1050,4 +1050,4 @@ async def test_public_search_research_branch_runs_second_search_wave(
     calls = await mock_llm_capture()
     prompt_text = "\n".join(_captured_text(call) for call in calls)
     assert marker_a in prompt_text
-    assert "Humanitec Deep Research" in prompt_text
+    assert "Linnex Deep Research" in prompt_text

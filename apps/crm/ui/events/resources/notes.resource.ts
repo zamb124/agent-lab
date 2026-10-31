@@ -71,7 +71,7 @@ function _toastOnActiveTaskConflict(ctx: EffectCtx, err: unknown, event: Platfor
     );
 }
 
-function _buildNoteDateFilter(filters: Record<string, any>): Record<string, unknown> | null {
+function _buildNoteDateFilter(filters: Record<string, unknown>): Record<string, unknown> | null {
     const leaves: Record<string, unknown>[] = [];
     if (typeof filters.date_from === 'string' && filters.date_from.length > 0) {
         leaves.push({ field: 'note_date', op: '$gte', value: filters.date_from });
@@ -89,7 +89,7 @@ function _buildNoteDateFilter(filters: Record<string, any>): Record<string, unkn
  * @param {object} filters
  * @returns {boolean}
  */
-function _noteMatchesListFilters(note: Record<string, any>, filters: Record<string, any> | null) {
+function _noteMatchesListFilters(note: Record<string, unknown>, filters: Record<string, unknown> | null) {
     if (!filters || typeof filters !== 'object') {
         return true;
     }

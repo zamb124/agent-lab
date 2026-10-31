@@ -70,7 +70,7 @@ async def format_note_description_markdown_task(
 ) -> JsonObject:
     """
     Форматирует заметку через общий TextTransformService. Модель выбирается через
-    company capability ``llm_format_markdown`` с платформенным humanitec_llm default-route.
+    company capability ``llm_format_markdown`` с платформенным linnex_llm default-route.
     """
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     snapshot_user_id = user_id

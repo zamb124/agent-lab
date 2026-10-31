@@ -5,21 +5,36 @@
 import { createAsyncOp, createForm, createResourceCollection } from '../index.js';
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
-import { isPlainRecord } from '../payload.js';
+import { isPlatformEventType, isPlainRecord } from '../payload.js';
 import type { ResourceCollectionSlice } from '../factories/resource-collection.js';
 import type { AsyncOpSlice } from '../factories/async-op.js';
+import type {
+    WorkItem,
+    WorkItemComment,
+    WorkItemCommentsList,
+    WorkItemMineSummary,
+} from '../wire/worktracker.gen.js';
 
 type JsonObject = Record<string, unknown>;
 
-function isWorkItemSlice(state: ResourceCollectionSlice): state is WorkItemSlice {
+function isWorkItemSlice(state: ResourceCollectionSlice<WorkItem>): state is WorkItemSlice {
     return Array.isArray(state.items) && isPlainRecord(state.byId);
 }
 
-function workItemRecord(value: unknown): JsonObject | null {
-    if (!isPlainRecord(value) || typeof value.work_item_id !== 'string') {
-        return null;
-    }
-    return value;
+function isWorkItem(value: unknown): value is WorkItem {
+    return (
+        isPlainRecord(value)
+        && typeof value.work_item_id === 'string'
+        && typeof value.company_id === 'string'
+        && typeof value.title === 'string'
+        && isPlainRecord(value.created_by)
+        && typeof value.created_at === 'string'
+        && typeof value.updated_at === 'string'
+    );
+}
+
+function workItemRecord(value: unknown): WorkItem | null {
+    return isWorkItem(value) ? value : null;
 }
 
 function payloadResult(payload: unknown): JsonObject | null {
@@ -36,9 +51,9 @@ function requireEventName(name: string | undefined, label: string): string {
     return name;
 }
 
-interface WorkItemSlice extends ResourceCollectionSlice {
-    byId: Readonly<Record<string, JsonObject>>;
-    items: readonly JsonObject[];
+interface WorkItemSlice extends ResourceCollectionSlice<WorkItem> {
+    byId: Readonly<Record<string, WorkItem>>;
+    items: readonly WorkItem[];
 }
 
 export const WORK_ITEM_EVENTS = [
@@ -47,7 +62,7 @@ export const WORK_ITEM_EVENTS = [
     'worktracker/work_item/moved',
     'worktracker/work_item/completed',
     'worktracker/work_item/comment_created',
-];
+] as const;
 
 export const WORK_ITEM_MUTATION_SUCCEEDED = [
     'worktracker/work_item_move/succeeded',
@@ -57,7 +72,7 @@ export const WORK_ITEM_MUTATION_SUCCEEDED = [
     'worktracker/work_item_assign/succeeded',
 ];
 
-function _mergeWorkItem(state: WorkItemSlice, item: JsonObject): WorkItemSlice {
+function _mergeWorkItem(state: WorkItemSlice, item: WorkItem): WorkItemSlice {
     const id = String(item.work_item_id);
     const existing = state.byId[id];
     let merged = item;
@@ -82,7 +97,7 @@ function _mergeWorkItem(state: WorkItemSlice, item: JsonObject): WorkItemSlice {
     return { ...state, items, byId: { ...state.byId, [id]: merged } };
 }
 
-export const workItemGetOp = createAsyncOp({
+export const workItemGetOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_get',
     silent: true,
     transport: 'ws',
@@ -91,7 +106,7 @@ export const workItemGetOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/worktracker/api/v1/work-items/:work_item_id' },
 });
 
-export const workItemCountsOp = createAsyncOp({
+export const workItemCountsOp = createAsyncOp<WorkItemMineSummary>({
     name: 'worktracker/work_item_counts',
     silent: true,
     transport: 'ws',
@@ -128,7 +143,7 @@ export const workItemCountsOp = createAsyncOp({
     },
 });
 
-export const workItemsResource = createResourceCollection({
+export const workItemsResource = createResourceCollection<WorkItem>({
     name: 'worktracker/work_items',
     baseUrl: '/worktracker/api/v1/work-items',
     idField: 'work_item_id',
@@ -176,27 +191,21 @@ export const workItemsResource = createResourceCollection({
     },
     extraReducer: (state, event) => {
         if (WORK_ITEM_MUTATION_SUCCEEDED.includes(event.type)) {
-            const item = payloadResult(event.payload);
-            if (item === null || typeof item.work_item_id !== 'string') {
+            const result = payloadResult(event.payload);
+            if (!isWorkItem(result)) {
                 return state;
             }
             if (!isWorkItemSlice(state)) {
                 throw new Error('worktracker/work_items: slice is invalid');
             }
-            return _mergeWorkItem(state, item);
+            return _mergeWorkItem(state, result);
         }
-        if (!WORK_ITEM_EVENTS.includes(event.type)) {
-            return state;
-        }
-        if (!isPlainRecord(event.payload)) {
+        if (!isPlatformEventType(event, WORK_ITEM_EVENTS)) {
             return state;
         }
         const payload = event.payload;
-        if (event.type === 'worktracker/work_item/comment_created') {
-            const workItemId = payload.work_item_id;
-            if (typeof workItemId !== 'string') {
-                return state;
-            }
+        if (isPlatformEventType(event, 'worktracker/work_item/comment_created')) {
+            const workItemId = event.payload.work_item_id;
             if (!isWorkItemSlice(state)) {
                 throw new Error('worktracker/work_items: slice is invalid');
             }
@@ -218,14 +227,10 @@ export const workItemsResource = createResourceCollection({
         return _mergeWorkItem(state, item);
     },
     extraEffect: async (event, ctx, events) => {
-        if (event.type !== 'flows/hitl_conversation/turn_appended') {
+        if (!isPlatformEventType(event, 'flows/hitl_conversation/turn_appended')) {
             return false;
         }
-        if (!isPlainRecord(event.payload)) {
-            return true;
-        }
-        const payload = event.payload;
-        const workItemId = typeof payload.work_item_id === 'string' ? payload.work_item_id : '';
+        const workItemId = event.payload.work_item_id;
         if (workItemId.length === 0) {
             return true;
         }
@@ -238,7 +243,7 @@ export const workItemsResource = createResourceCollection({
     },
 });
 
-export const workItemMoveOp = createAsyncOp({
+export const workItemMoveOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_move',
     silent: true,
     transport: 'ws',
@@ -247,7 +252,7 @@ export const workItemMoveOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/move' },
 });
 
-export const workItemClaimOp = createAsyncOp({
+export const workItemClaimOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_claim',
     transport: 'ws',
     wsTimeoutMs: 5_000,
@@ -257,7 +262,7 @@ export const workItemClaimOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/claim' },
 });
 
-export const workItemCompleteOp = createAsyncOp({
+export const workItemCompleteOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_complete',
     transport: 'ws',
     wsTimeoutMs: 5_000,
@@ -267,7 +272,7 @@ export const workItemCompleteOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/complete' },
 });
 
-export const workItemCancelOp = createAsyncOp({
+export const workItemCancelOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_cancel',
     transport: 'ws',
     wsTimeoutMs: 5_000,
@@ -277,7 +282,7 @@ export const workItemCancelOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/cancel' },
 });
 
-export const workItemAssignOp = createAsyncOp({
+export const workItemAssignOp = createAsyncOp<WorkItem>({
     name: 'worktracker/work_item_assign',
     transport: 'ws',
     wsTimeoutMs: 5_000,
@@ -287,7 +292,7 @@ export const workItemAssignOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/assign' },
 });
 
-export const workItemCommentOp = createAsyncOp({
+export const workItemCommentOp = createAsyncOp<WorkItemComment>({
     name: 'worktracker/work_item_comment',
     silent: true,
     transport: 'ws',
@@ -296,7 +301,7 @@ export const workItemCommentOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-items/:work_item_id/comments' },
 });
 
-export const workItemCommentsListOp = createAsyncOp({
+export const workItemCommentsListOp = createAsyncOp<WorkItemCommentsList>({
     name: 'worktracker/work_item_comments_list',
     silent: true,
     transport: 'ws',

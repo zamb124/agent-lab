@@ -32,8 +32,8 @@ export class SyncThreadDrawer extends PlatformElement {
         :host {
             display: none;
             width: 360px;
-            border-left: 1px solid var(--glass-border);
-            background: var(--glass-solid);
+            border-left: 1px solid var(--glass-border-medium);
+            background: var(--glass-solid-medium);
             flex-direction: column;
             min-height: 0;
         }
@@ -51,7 +51,7 @@ export class SyncThreadDrawer extends PlatformElement {
             align-items: center;
             gap: var(--space-2);
             padding: var(--space-3);
-            border-bottom: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--glass-border-medium);
             font-weight: 600;
         }
         .close {

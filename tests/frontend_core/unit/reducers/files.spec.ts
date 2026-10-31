@@ -2,17 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { filesReducer, initialFilesState, FILES_EVENTS, buildFileDownloadUrl } from '@platform/lib/events/reducers/files.js';
 import { installDomShim } from '../../helpers/dom-shim.js';
 
-const ev = (type, payload, meta = {}) => ({
-    id: `id_${type}`,
-    type,
-    payload,
-    meta: { ts: 0, source: 'local', correlation_id: null, ...meta },
-});
+import { testEvent } from '../../helpers/bus-fixtures.js';
 
-let dom;
+const ev = (type: string, payload: unknown, meta: Record<string, unknown> = {}) =>
+    ({ ...testEvent(type, payload), meta: { ...testEvent(type, payload).meta, ...meta } });
+
+let dom: ReturnType<typeof installDomShim> | undefined;
 
 beforeEach(() => {
     dom = installDomShim();
+    if (!dom) throw new Error('dom required');
     dom.window.location.pathname = '/crm/dashboard';
     Object.defineProperty(globalThis.location, 'pathname', {
         value: '/crm/dashboard',
@@ -21,7 +20,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    dom.uninstall();
+    dom?.uninstall();
 });
 
 describe('filesReducer', () => {
@@ -34,22 +33,22 @@ describe('filesReducer', () => {
         const next = filesReducer(initialFilesState, ev(FILES_EVENTS.UPLOAD_REQUESTED, { name: 'b.png' }));
         const keys = Object.keys(next.uploads);
         expect(keys).toHaveLength(1);
-        expect(next.uploads[keys[0]].name).toBe('b.png');
+        expect(next.uploads[keys[0] ?? '']?.name).toBe('b.png');
     });
 
     it('UPLOAD_COMPLETED помечает completed + кладёт file в byId', () => {
         const seeded = filesReducer(initialFilesState, ev(FILES_EVENTS.UPLOAD_REQUESTED, { name: 'a.png' }, { correlation_id: 'cid1' }));
         const next = filesReducer(seeded, ev(FILES_EVENTS.UPLOAD_COMPLETED, { file: { id: 'f1', name: 'a.png' } }, { correlation_id: 'cid1' }));
-        expect(next.uploads.cid1.status).toBe('completed');
-        expect(next.uploads.cid1.fileId).toBe('f1');
+        expect(next.uploads.cid1?.status).toBe('completed');
+        expect(next.uploads.cid1?.fileId).toBe('f1');
         expect(next.byId.f1).toEqual({ id: 'f1', name: 'a.png' });
     });
 
     it('UPLOAD_FAILED помечает failed', () => {
         const seeded = filesReducer(initialFilesState, ev(FILES_EVENTS.UPLOAD_REQUESTED, { name: 'a.png' }, { correlation_id: 'cid1' }));
         const next = filesReducer(seeded, ev(FILES_EVENTS.UPLOAD_FAILED, { message: 'oh' }, { correlation_id: 'cid1' }));
-        expect(next.uploads.cid1.status).toBe('failed');
-        expect(next.uploads.cid1.error).toBe('oh');
+        expect(next.uploads.cid1?.status).toBe('failed');
+        expect(next.uploads.cid1?.error).toBe('oh');
     });
 
     it('LOADED кладёт файл в byId', () => {

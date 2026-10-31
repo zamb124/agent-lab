@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search.services.crawl.sitemap_parser import _parse_sitemap_xml
-from apps.search.models import CrawlDomain, CrawlProfile
 from apps.search.crawl.url_filter import CrawlUrlFilter, build_url_filter
+from apps.search.models import CrawlDomain, CrawlProfile
+from apps.search.services.crawl.sitemap_parser import _parse_sitemap_xml
 
 pytestmark = pytest.mark.unit
 

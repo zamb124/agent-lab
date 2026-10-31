@@ -52,12 +52,12 @@ from core.ai.llm_models_service import LLMModelsService
 from core.ai.models import AIModelRecord, ResolvedAIModel
 from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_error
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
     AICapability,
-    humanitec_llms_model_ref,
-    split_humanitec_llms_model_ref,
+    linnex_llms_model_ref,
+    split_linnex_llms_model_ref,
 )
 from core.ai.requirements import AISelection
 from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
@@ -145,7 +145,7 @@ class OpenAIModelItem(BaseModel):
     id: str
     object: Literal["model"] = "model"
     created: int
-    owned_by: str = "humanitec"
+    owned_by: str = "linnex"
 
 
 class OpenAIModelsResponse(BaseModel):
@@ -254,7 +254,7 @@ def _llm_proxy_option_value(option: str | JsonObject) -> str | None:
 
 def _resolve_llm_proxy_auto_mock_bridge(requested_model: str) -> ResolvedAIModel | None:
     """Узкий testing-bridge: auto → mock только при llm_proxy_use_mock_auto (стек E2E)."""
-    if requested_model != HUMANITEC_LLM_AUTO_MODEL:
+    if requested_model != LINNEX_LLM_AUTO_MODEL:
         return None
     if not get_settings().llm_proxy_use_mock_auto:
         return None
@@ -269,20 +269,20 @@ def _resolve_llm_proxy_model(requested_model: str) -> ResolvedAIModel:
     bridged = _resolve_llm_proxy_auto_mock_bridge(requested_model)
     if bridged is not None:
         return bridged
-    if requested_model == HUMANITEC_LLM_AUTO_MODEL:
+    if requested_model == LINNEX_LLM_AUTO_MODEL:
         resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
             selection=AISelection(
-                provider=HUMANITEC_LLM_PROVIDER,
-                model=HUMANITEC_LLM_AUTO_MODEL,
+                provider=LINNEX_LLM_PROVIDER,
+                model=LINNEX_LLM_AUTO_MODEL,
             ),
             include_platform_default=False,
         )
         if resolved is None:
             raise WsCommandError(
                 "unavailable",
-                "humanitec_llm is unavailable for the company",
-                error_code="humanitec_llm_unavailable",
+                "linnex_llm is unavailable for the company",
+                error_code="linnex_llm_unavailable",
             )
         return resolved
 
@@ -300,7 +300,7 @@ def _resolve_llm_proxy_model(requested_model: str) -> ResolvedAIModel:
             error_code="lara_model_wrong_path",
         )
 
-    parsed_ref = split_humanitec_llms_model_ref(requested_model)
+    parsed_ref = split_linnex_llms_model_ref(requested_model)
     if parsed_ref is None:
         raise WsCommandError(
             "ws_invalid_payload",
@@ -333,7 +333,7 @@ async def read_llm_proxy_model_ids(llm_models_service: LLMModelsService) -> list
         seen.add(model_id)
         model_ids.append(model_id)
 
-    append_model_id(HUMANITEC_LLM_AUTO_MODEL)
+    append_model_id(LINNEX_LLM_AUTO_MODEL)
     append_model_id(IMAGE_AUTO_MODEL_ID)
 
     lara_branches = await load_lara_branch_ids()
@@ -344,7 +344,7 @@ async def read_llm_proxy_model_ids(llm_models_service: LLMModelsService) -> list
         AICapability.LLM_CHAT,
     )
     for provider in configured_providers:
-        if provider == HUMANITEC_LLM_PROVIDER:
+        if provider == LINNEX_LLM_PROVIDER:
             continue
         if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
             continue
@@ -353,14 +353,14 @@ async def read_llm_proxy_model_ids(llm_models_service: LLMModelsService) -> list
             AICapability.LLM_CHAT,
         )
         for record in catalog_records:
-            append_model_id(humanitec_llms_model_ref(record.provider, record.model_id))
+            append_model_id(linnex_llms_model_ref(record.provider, record.model_id))
 
     if len(model_ids) == 2 + len(lara_branches):
-        humanitec_llm_options = await llm_models_service.get_model_ids_by_provider_capability(
-            HUMANITEC_LLM_PROVIDER,
+        linnex_llm_options = await llm_models_service.get_model_ids_by_provider_capability(
+            LINNEX_LLM_PROVIDER,
             AICapability.LLM_CHAT,
         )
-        for option in humanitec_llm_options:
+        for option in linnex_llm_options:
             option_value = _llm_proxy_option_value(option)
             if option_value is not None:
                 append_model_id(option_value)
@@ -1029,7 +1029,7 @@ async def dispatch_images_generations(
             error_code="image_gen_unavailable",
         )
 
-    client = NanoBananaClient(storage=shared_storage)
+    client = NanoBananaClient()
     try:
         file_ids = await client.generate_images(prompt=body.prompt, num_images=num_images)
     except BillingBalanceBlockedError as exc:

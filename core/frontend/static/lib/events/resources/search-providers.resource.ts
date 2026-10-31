@@ -6,9 +6,10 @@
  */
 
 import { createAsyncOp } from '../index.js';
+import type { CompanySearchProvidersResponse, SearchOkResult } from '../wire/search.gen.js';
 
 
-export const searchProvidersLoadOp = createAsyncOp({
+export const searchProvidersLoadOp = createAsyncOp<CompanySearchProvidersResponse>({
     name: 'search/providers_load',
     silent: true,
     transport: 'ws',
@@ -17,7 +18,7 @@ export const searchProvidersLoadOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/search/api/v1/providers/company' },
 });
 
-export const searchProviderPutOp = createAsyncOp({
+export const searchProviderPutOp = createAsyncOp<SearchOkResult>({
     name: 'search/provider_update',
     successToastKey: 'frontend:settings_page.search_providers.toast_saved',
     errorToastKey: 'frontend:settings_page.search_providers.toast_failed',
@@ -30,7 +31,7 @@ export const searchProviderPutOp = createAsyncOp({
     },
 });
 
-export const searchProviderOrderPutOp = createAsyncOp({
+export const searchProviderOrderPutOp = createAsyncOp<SearchOkResult>({
     name: 'search/provider_order_update',
     successToastKey: 'frontend:settings_page.search_providers.toast_order_saved',
     errorToastKey: 'frontend:settings_page.search_providers.toast_failed',
@@ -43,7 +44,7 @@ export const searchProviderOrderPutOp = createAsyncOp({
     },
 });
 
-export const searchProviderDeleteOp = createAsyncOp({
+export const searchProviderDeleteOp = createAsyncOp<SearchOkResult>({
     name: 'search/provider_reset',
     successToastKey: 'frontend:settings_page.search_providers.toast_reset',
     errorToastKey: 'frontend:settings_page.search_providers.toast_failed',

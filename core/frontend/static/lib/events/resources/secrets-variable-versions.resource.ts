@@ -5,8 +5,17 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { mapPlatformVariable } from './secrets-variables.resource.js';
+import type { OffsetPage_PlatformVariable_ } from '../wire/secrets.gen.js';
 
-export const secretsVariableVersionsLoadOp = createAsyncOp({
+/**
+ * Страница версий после `mapPlatformVariable`: каркас OffsetPage,
+ * items — view-форма, как в `secrets/variables`.
+ */
+type MappedVariablePage = Omit<OffsetPage_PlatformVariable_, 'items'> & {
+    items: ReturnType<typeof mapPlatformVariable>[];
+};
+
+export const secretsVariableVersionsLoadOp = createAsyncOp<OffsetPage_PlatformVariable_ | MappedVariablePage>({
     name: 'secrets/variable_versions_load',
     silent: true,
     transport: 'ws',
@@ -19,14 +28,26 @@ export const secretsVariableVersionsLoadOp = createAsyncOp({
         }
         const payload = event.payload;
         const page = isPlainRecord(payload) ? payload.result : undefined;
-        if (!isPlainRecord(page) || !Array.isArray(page.items)) {
+        if (
+            !isPlainRecord(page)
+            || !Array.isArray(page.items)
+            || typeof page.total !== 'number'
+            || typeof page.limit !== 'number'
+            || typeof page.offset !== 'number'
+        ) {
             throw new Error('secrets/variable_versions_load: OffsetPage result required');
         }
         const items = [];
         for (const entry of page.items) {
             items.push(mapPlatformVariable(entry));
         }
-        return { ...state, lastResult: { ...page, items } };
+        const lastResult: MappedVariablePage = {
+            total: page.total,
+            limit: page.limit,
+            offset: page.offset,
+            items,
+        };
+        return { ...state, lastResult };
     },
 });
 

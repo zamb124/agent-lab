@@ -120,26 +120,26 @@ export class PlatformPopover extends PlatformElement {
                 box-sizing: border-box;
                 overflow: auto;
                 overscroll-behavior: contain;
-                border-radius: var(--radius-lg, 12px);
-                border: 1px solid var(--glass-border-medium, rgba(120, 120, 140, 0.28));
-                background: var(--glass-solid-strong, rgba(20, 20, 28, 0.96));
-                box-shadow: var(--glass-shadow-strong, 0 16px 48px rgba(0, 0, 0, 0.32));
-                backdrop-filter: blur(var(--glass-blur-subtle, 20px));
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-strong);
+                backdrop-filter: blur(var(--glass-blur-subtle));
                 color: var(--text-primary);
-                animation: platform-popover-in var(--motion-duration-enter, 140ms)
-                    var(--motion-ease-decelerate, cubic-bezier(0.2, 0.8, 0.2, 1));
+                animation: platform-popover-in var(--motion-duration-enter)
+                    var(--motion-ease-decelerate);
             }
 
             :host([role='tooltip']) .surface {
-                padding: var(--space-2, 8px) var(--space-3, 12px);
-                font-size: var(--text-sm, 0.8125rem);
+                padding: var(--space-2) var(--space-3);
+                font-size: var(--text-sm);
                 max-width: 320px;
             }
 
             @keyframes platform-popover-in {
                 from {
                     opacity: 0;
-                    transform: translateY(calc(-1 * var(--motion-enter-offset-y, 4px)));
+                    transform: translateY(calc(-1 * var(--motion-enter-offset-y);
                 }
                 to {
                     opacity: 1;

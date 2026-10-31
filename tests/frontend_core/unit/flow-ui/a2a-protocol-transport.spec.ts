@@ -4,6 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 
 import {
     consumeA2AStream,
@@ -30,17 +31,17 @@ import {
 } from '@platform/lib/flow-ui/runtime/agent-identity-image.js';
 import { BRAND_LOGO_PATH } from '@platform/lib/flow-ui/shell/brand-logo.js';
 
-function jsonResponse(body, { status = 200, contentType = 'application/json' } = {}) {
+function jsonResponse(body: unknown, { status = 200, contentType = 'application/json' } = {}) {
     return {
         ok: status >= 200 && status < 300,
         status,
-        headers: { get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null) },
+        headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? contentType : null) },
         json: async () => body,
         text: async () => JSON.stringify(body),
     };
 }
 
-function sseResponse(chunks, { contentType = 'text/event-stream', status = 200 } = {}) {
+function sseResponse(chunks: string[], { contentType = 'text/event-stream', status = 200 } = {}) {
     const encoder = new TextEncoder();
     let index = 0;
     let cancelled = false;
@@ -57,7 +58,7 @@ function sseResponse(chunks, { contentType = 'text/event-stream', status = 200 }
         response: {
             ok: status >= 200 && status < 300,
             status,
-            headers: { get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null) },
+            headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? contentType : null) },
             text: async () => JSON.stringify({ detail: 'stream failed' }),
             body: { getReader: () => reader },
         },
@@ -69,16 +70,17 @@ describe('sendA2ARequest', () => {
     afterEach(() => vi.unstubAllGlobals());
 
     it('posts JSON-RPC with protocol headers and returns the frame', async () => {
-        const fetchMock = vi.fn(async () => jsonResponse({ id: '1', result: { task: { id: 't1' } } }));
+        const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => jsonResponse({ id: '1', result: { task: { id: 't1' } } }));
         vi.stubGlobal('fetch', fetchMock);
         const frame = await sendA2ARequest({ url: '/flows/api/v1/f', body: { method: 'ListTasks' }, headers: { Authorization: 'Bearer x' }, credentials: 'omit' });
-        expect(frame.result.task.id).toBe('t1');
-        const [, init] = fetchMock.mock.calls[0];
-        expect(init.method).toBe('POST');
-        expect(init.credentials).toBe('omit');
-        expect(init.headers).toMatchObject({ 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer x' });
-        expect(init.headers['A2A-Version']).toBeTypeOf('string');
-        expect(JSON.parse(init.body)).toEqual({ method: 'ListTasks' });
+        expect(prop(prop(frame.result, 'task'), 'id')).toBe('t1');
+        const init = fetchMock.mock.calls[0]?.[1];
+        if (typeof init !== 'object' || init === null) throw new Error('fetch init required');
+        expect(prop(init, 'method')).toBe('POST');
+        expect(prop(init, 'credentials')).toBe('omit');
+        expect(prop(init, 'headers')).toMatchObject({ 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer x' });
+        expect(prop(prop(init, 'headers'), 'A2A-Version')).toBeTypeOf('string');
+        expect(JSON.parse(String(prop(init, 'body')))).toEqual({ method: 'ListTasks' });
     });
 
     it('turns HTTP errors into Error with status and detail, and JSON-RPC errors into coded errors', async () => {
@@ -108,22 +110,22 @@ describe('consumeA2AStream', () => {
     afterEach(() => vi.unstubAllGlobals());
 
     it('reassembles SSE records across chunk boundaries and ignores comments, [DONE] and empty data', async () => {
-        const frames = [];
+        const frames: unknown[] = [];
         const { response, wasCancelled } = sseResponse([
             'data: {"result":{"statusUpdate":{"taskId":"t1","status":{"state":"TASK_STATE_WORKING"}}}}\n\n: keep-alive\n\ndata: {"result":{"artifa',
             'ctUpdate":{"taskId":"t1","artifact":{"artifactId":"a","parts":[]}}}}\r\n\r\nevent: ping\ndata:\n\ndata: [DONE]\n\n',
             'data: {"result":{"task":{"id":"t1","status":{"state":"TASK_STATE_COMPLETED"}}}}',
         ]);
         vi.stubGlobal('fetch', vi.fn(async () => response));
-        await consumeA2AStream({ url: '/u', body: {} }, (frame) => frames.push(frame));
-        expect(frames.map((frame) => unwrapA2aStreamResult(frame.result).frameKind)).toEqual(['statusUpdate', 'artifactUpdate']);
+        await consumeA2AStream({ url: '/u', body: {} }, (frame: unknown) => { frames.push(prop(frame, 'result')); });
+        expect(frames.map((result) => unwrapA2aStreamResult(result)?.frameKind)).toEqual(['statusUpdate', 'artifactUpdate']);
         // Последняя запись без завершающей пустой строки остаётся в буфере: SSE требует разделитель
         expect(frames).toHaveLength(2);
-        expect(wasCancelled()).toBe(true);
+        expect(wasCancelled?.()).toBe(true);
     });
 
     it('requires onFrame, an event-stream content type and a body', async () => {
-        await expect(consumeA2AStream({ url: '/u', body: {} }, null)).rejects.toThrow(/onFrame is required/);
+        await expect(Reflect.apply(consumeA2AStream, null, [{ url: '/u', body: {} }, null])).rejects.toThrow(/onFrame is required/);
         vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ result: {} })));
         await expect(consumeA2AStream({ url: '/u', body: {} }, () => {})).rejects.toThrow(/expected A2A text\/event-stream/);
         vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, headers: { get: () => 'text/event-stream; charset=utf-8' }, body: null })));
@@ -133,10 +135,10 @@ describe('consumeA2AStream', () => {
     });
 
     it('sends the streaming Accept header and surfaces JSON errors from a frame line', async () => {
-        const fetchMock = vi.fn(async () => sseResponse(['data: {not json}\n\n']).response);
+        const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => sseResponse(['data: {not json}\n\n']).response);
         vi.stubGlobal('fetch', fetchMock);
         await expect(consumeA2AStream({ url: '/u', body: {}, headers: { 'X-Test': '1' } }, () => {})).rejects.toBeInstanceOf(SyntaxError);
-        expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ Accept: 'text/event-stream', 'X-Test': '1' });
+        expect(prop(fetchMock.mock.calls[0]?.[1], 'headers')).toMatchObject({ Accept: 'text/event-stream', 'X-Test': '1' });
     });
 
     it('converts a read failure after abort into AbortError and rethrows other read failures', async () => {
@@ -227,7 +229,7 @@ describe('parts decoder', () => {
         expect(after).toEqual({ root: 1, again: null });
         expect(before).toEqual({ a: { 'b/c': 1, 'd~e': 2 }, keep: [1, 2] });
         expect(applyJsonPatch({ a: 1 }, [])).toEqual({ a: 1 });
-        expect(() => applyJsonPatch([], [])).toThrow(/target must be an object/);
+        expect(() => Reflect.apply(applyJsonPatch, null, [[], []])).toThrow(/target must be an object/);
         expect(() => applyJsonPatch({}, {})).toThrow(/operations must be an array/);
         expect(() => applyJsonPatch({}, [{ op: 'add', value: 1 }])).toThrow(/requires path/);
         expect(() => applyJsonPatch({}, [{ op: 'add', path: 'a', value: 1 }])).toThrow(/invalid JSON pointer/);

@@ -10,6 +10,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 const ENUM_VALUES = [
     { value: 'flows/flow/updated', label: 'flows/flow/updated — Flow updated' },
@@ -21,7 +22,7 @@ class EnumHostModal extends PlatformFormModal {
     static modalKind = 'platform.enum_host_test';
     static i18nNamespace = 'platform';
 
-    renderBody() {
+    override renderBody() {
         return html`
             <platform-field
                 type="enum"
@@ -38,14 +39,14 @@ if (!customElements.get('frontend-core-enum-host-modal')) {
     registerModalKind(EnumHostModal.modalKind, 'frontend-core-enum-host-modal');
 }
 
-function enumParts(modal) {
-    const field = modal.shadowRoot.querySelector('platform-field');
+function enumParts(modal: any) {
+    const field = qs(shadow(modal), 'platform-field');
     expect(field, 'platform-field').to.exist;
-    const pfEnum = field.shadowRoot.querySelector('platform-field-enum');
+    const pfEnum = qs(shadow(field), 'platform-field-enum');
     expect(pfEnum, 'platform-field-enum').to.exist;
-    const input = pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
-    const chevron = pfEnum.shadowRoot.querySelector('.field-pill-enum-chevron');
-    const popover = pfEnum.shadowRoot.querySelector('platform-popover');
+    const input = qs(shadow(pfEnum), 'input.field-pill-enum-input');
+    const chevron = qs(shadow(pfEnum), '.field-pill-enum-chevron');
+    const popover = qs(shadow(pfEnum), 'platform-popover');
     return { field, pfEnum, input, chevron, popover };
 }
 
@@ -56,13 +57,13 @@ describe('platform-field-enum inside glass-modal', () => {
     });
 
     async function openModal() {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, {
             kind: EnumHostModal.modalKind,
             props: {},
         });
         await elementUpdated(stack);
-        const modal = document.querySelector('frontend-core-enum-host-modal');
+        const modal = qs(document!, 'frontend-core-enum-host-modal');
         expect(modal, 'modal mounted').to.exist;
         await elementUpdated(modal);
         return modal;
@@ -81,7 +82,7 @@ describe('platform-field-enum inside glass-modal', () => {
         expect(popover.open, 'popover.open').to.equal(true);
         expect(popover.matches(':popover-open'), ':popover-open').to.equal(true);
 
-        const rows = pfEnum.shadowRoot.querySelectorAll('[data-enum-value]');
+        const rows = qsa(shadow(pfEnum), '[data-enum-value]');
         expect(rows.length, 'options visible').to.be.at.least(ENUM_VALUES.length);
         const display = getComputedStyle(popover).display;
         expect(display, 'popover display').to.not.equal('none');
@@ -95,7 +96,7 @@ describe('platform-field-enum inside glass-modal', () => {
         const { chevron, pfEnum, popover } = enumParts(modal);
 
         chevron.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        chevron.click();
+        (chevron as TestEl).click();
         await elementUpdated(pfEnum);
         await elementUpdated(popover);
         await aTimeout(50);
@@ -104,7 +105,7 @@ describe('platform-field-enum inside glass-modal', () => {
         expect(popover.matches(':popover-open'), ':popover-open after chevron').to.equal(true);
         expect(popover.anchor, 'anchor set before open').to.be.instanceOf(HTMLElement);
 
-        const values = Array.from(pfEnum.shadowRoot.querySelectorAll('[data-enum-value]'))
+        const values = Array.from(qsa(shadow(pfEnum), '[data-enum-value]'))
             .map((li) => li.getAttribute('data-enum-value'));
         expect(values).to.include('flows/flow/updated');
         expect(values).to.include('crm/entity/created');

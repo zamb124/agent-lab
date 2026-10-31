@@ -3,8 +3,9 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { VariableResolveResponse } from '../wire/secrets.gen.js';
 
-export const secretsVariablesResolveOp = createAsyncOp({
+export const secretsVariablesResolveOp = createAsyncOp<VariableResolveResponse>({
     name: 'secrets/variables_resolve',
     silent: true,
     transport: 'ws',

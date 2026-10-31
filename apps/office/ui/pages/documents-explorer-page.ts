@@ -8,6 +8,7 @@ import { html } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { OfficeDocumentItem } from '../events/documents.types.js';
+import { isOfficeDocumentItem } from '../events/resources/documents.resource.js';
 
 function documentFileId(doc: OfficeDocumentItem): string {
     const fileId = doc.file_id;
@@ -56,6 +57,7 @@ import '@platform/lib/components/platform-file-table.js';
 import '@platform/lib/components/platform-file-row.js';
 import '@platform/lib/components/platform-file-card.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/office-integration-banner.js';
 import '../components/office-file-toolbar.js';
 import '../components/office-file-details-panel.js';
@@ -82,12 +84,10 @@ function officeDocumentList(value: unknown): OfficeDocumentItem[] {
     if (!isPlainRecord(value) || !Array.isArray(value.items)) return [];
     const items: OfficeDocumentItem[] = [];
     for (const item of value.items) {
-        if (!isPlainRecord(item)) {
-            throw new Error('documents explorer: document item must be an object');
+        if (!isOfficeDocumentItem(item)) {
+            throw new Error('documents explorer: document item must be an OfficeDocumentItem');
         }
-        const row: OfficeDocumentItem = {};
-        for (const [key, field] of Object.entries(item)) row[key] = field;
-        items.push(row);
+        items.push(item);
     }
     return items;
 }
@@ -1385,7 +1385,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                             @result-open=${this._onSemanticResultOpen}
                                         ></office-catalog-semantic-search-results>
                                     ` : html`
-                                        ${docsLoading ? html`<div class="loading"><platform-spinner size="lg"></platform-spinner></div>` : ''}
+                                        ${docsLoading ? html`<platform-empty-state loading></platform-empty-state>` : ''}
                                         ${showEmpty ? (atRoot ? this._renderEmptyNamespaceRoot() : this._renderEmptyNoDocuments()) : ''}
                                         ${!docsLoading && (docs.length > 0 || childCatalogs.length > 0)
                                             ? (state.viewMode === 'grid'

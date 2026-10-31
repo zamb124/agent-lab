@@ -44,6 +44,7 @@ export { createForm } from './factories/form.js';
 export { createSlice } from './factories/slice.js';
 export { createPlatformFileCreateOp, platformFileCreateOp } from './factories/platform-file-create.js';
 export { collectFactories, resources } from './factories/register.js';
-export { upsertItem, removeItem, rerunLastRequest, reloadLastList } from './factories/merge.js';
+export { upsertItem, removeItem, rerunLastRequest, reloadLastList, opSucceededResult } from './factories/merge.js';
+export type { AsyncOpResultOf } from './factories/merge.js';
 export { registerFactory, getFactory, hasFactory, clearFactoryRegistry } from './factory-registry.js';
 export { platformWs, WsTransportError } from './effects/ws.effect.js';

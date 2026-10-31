@@ -1,7 +1,7 @@
 {
-  "name": "@humanitec/mobile-build",
+  "name": "@linnex/mobile-build",
   "private": true,
-  "description": "Оболочки магазинов для PWA Humanitec: Android Capacitor (Google Play), iOS Capacitor (App Store)",
+  "description": "Оболочки магазинов для PWA Linnex: Android Capacitor (Google Play), iOS Capacitor (App Store)",
   "scripts": {
     "pwa:lighthouse": "bash scripts/run-lighthouse-ci.sh",
     "cap:doctor": "cap doctor",

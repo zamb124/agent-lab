@@ -104,8 +104,8 @@ export class DashboardStatStrip extends PlatformElement {
         if (activeCompanyId === 'system') {
             return `${total} / ${total}`;
         }
-        const hasHumanitecModelsInternalService = items.some((item) => isPlainRecord(item) && item.name === 'provider_litserve');
-        const online = hasHumanitecModelsInternalService ? total - 1 : total;
+        const hasLinnexModelsInternalService = items.some((item) => isPlainRecord(item) && item.name === 'provider_litserve');
+        const online = hasLinnexModelsInternalService ? total - 1 : total;
         return `${online} / ${total}`;
     }
 

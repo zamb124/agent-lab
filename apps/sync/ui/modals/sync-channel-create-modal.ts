@@ -66,7 +66,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                 padding: var(--space-2);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-soft);
+                background: var(--glass-solid-subtle);
             }
             .member-row {
                 display: flex;
@@ -147,8 +147,8 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         const members = this._teamMembersSel.value;
         const q = this._membersFilter.trim().toLowerCase();
         return members
-            .filter((m: Record<string, any>) => m && m.user_id !== myId)
-            .filter((m: Record<string, any>) => {
+            .filter((m: Record<string, unknown>) => m && m.user_id !== myId)
+            .filter((m: Record<string, unknown>) => {
                 if (q.length === 0) return true;
                 const rawName = m.name as string | undefined;
                 const rawEmail = m.email as string | undefined;
@@ -221,7 +221,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                     ${!teamLoading && candidates.length === 0 ? html`
                         <platform-empty-state icon="users" title=${this.t('channel_modal.members_empty')}></platform-empty-state>
                     ` : ''}
-                    ${candidates.map((m: Record<string, any>) => html`
+                    ${candidates.map((m: Record<string, unknown>) => html`
                         <label class="member-row" @click=${(e: Event) => {
                             const target = e.target;
                             if (target instanceof HTMLInputElement) return;

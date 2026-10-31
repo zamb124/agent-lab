@@ -325,7 +325,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 background: var(--flows-lib-kind-mcp-gradient);
             }
             .lib-card-icon[data-kind='code'] {
-                background: var(--glass-solid);
+                background: var(--glass-solid-medium);
                 border: 1px solid var(--border-subtle);
                 box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 6%, transparent);
             }
@@ -464,7 +464,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 height: var(--flows-tool-picker-mcp-panel-height);
             }
             .mcp-picker-server .content-panel-body {
-                padding: var(--space-4, 1rem);
+                padding: var(--space-4);
             }
             .mcp-picker-server-head {
                 display: flex;
@@ -496,7 +496,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .mcp-picker-server-titles h3 {
                 margin: 0;
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
@@ -630,9 +630,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             .tag-group {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-xl);
-                background: var(--glass-solid);
+                background: var(--glass-solid-medium);
                 overflow: hidden;
-                box-shadow: var(--shadow-sm);
+                box-shadow: var(--glass-shadow-subtle);
             }
             .tag-group-head {
                 display: flex;
@@ -641,7 +641,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 gap: var(--space-3);
                 padding: var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
-                background: color-mix(in srgb, var(--tag-group-accent, var(--accent)) 8%, var(--glass-solid));
+                background: color-mix(in srgb, var(--tag-group-accent, var(--accent)) 8%, var(--glass-solid-medium));
             }
             .tag-group-head-main {
                 display: flex;

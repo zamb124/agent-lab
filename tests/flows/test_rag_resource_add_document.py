@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.di import FlowsDi
-from core.db.models.rag.vector_document import VectorDocument
 from apps.flows.src.resources.rag_resource import RAGResource
+from core.db.models.rag.vector_document import VectorDocument
 from core.types import JsonObject, require_json_object
 
 

@@ -42,10 +42,10 @@ describe('trace-attribute-view-model', () => {
         const vm = buildSpanAttributeViewModel(span);
 
         expect(vm.quickFacts.some((item) => item.key === 'flow' && item.value === 'crm')).to.equal(true);
-        expect(vm.llmRequest.messages).to.have.length(2);
-        expect(vm.llmRequest.messages[0].system).to.equal(true);
-        expect(vm.llmRequest.messages[0].text).to.equal('Системный промпт');
-        expect(vm.llmRequest.messages[1].text).to.equal('Daily summary: chunk');
+        expect(vm.llmRequest?.messages).to.have.length(2);
+        expect(vm.llmRequest?.messages[0]?.system).to.equal(true);
+        expect(vm.llmRequest?.messages[0]?.text).to.equal('Системный промпт');
+        expect(vm.llmRequest?.messages[1]?.text).to.equal('Daily summary: chunk');
     });
 
     it('раскрывает JSON внутри LLM response.content как structured output', () => {
@@ -67,15 +67,15 @@ describe('trace-attribute-view-model', () => {
 
         const vm = buildSpanAttributeViewModel(span);
 
-        expect(vm.llmResponse.structuredContent.summary).to.equal('Краткая сводка');
-        expect(vm.llmResponse.structuredContent.entities).to.deep.equal(['Виктор']);
-        expect(vm.llmResponse.structuredContent.statistics.notes_added).to.equal(1);
+        expect(vm.llmResponse?.structuredContent.summary).to.equal('Краткая сводка');
+        expect(vm.llmResponse?.structuredContent.entities).to.deep.equal(['Виктор']);
+        expect(vm.llmResponse?.structuredContent.statistics.notes_added).to.equal(1);
     });
 
     it('возвращает ошибку парсинга для битой JSON-строки', () => {
         const parsed = parseTraceJsonValue('{"messages": [');
 
-        expect(parsed.ok).to.equal(false);
+        if (parsed.ok) throw new Error('expected parse failure');
         expect(parsed.error).to.be.a('string');
     });
 
@@ -95,10 +95,10 @@ describe('trace-attribute-view-model', () => {
 
         const vm = buildSpanAttributeViewModel(span);
 
-        expect(vm.llmResponse.parsed.ok).to.equal(false);
-        expect(vm.llmResponse.recovered).to.equal(true);
-        expect(vm.llmResponse.structuredContent.summary).to.equal('Краткая сводка');
-        expect(vm.llmResponse.structuredContent.entities).to.deep.equal(['CRM']);
+        expect(vm.llmResponse?.parsed?.ok).to.equal(false);
+        expect(vm.llmResponse?.recovered).to.equal(true);
+        expect(vm.llmResponse?.structuredContent.summary).to.equal('Краткая сводка');
+        expect(vm.llmResponse?.structuredContent.entities).to.deep.equal(['CRM']);
     });
 
     it('prettyTraceJsonText форматирует escaped JSON даже когда внешняя оболочка битая', () => {

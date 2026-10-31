@@ -228,7 +228,7 @@ export function buildCidFileMap(attachments: unknown[], html: string): Record<st
  * @param {string} html
  * @returns {unknown[]}
  */
-export function attachmentsWithoutInlineCid(attachments: unknown[], html: string): unknown[] {
+export function attachmentsWithoutInlineCid<T>(attachments: T[], html: string): T[] {
     if (!Array.isArray(attachments)) {
         throw new Error('attachmentsWithoutInlineCid: attachments array required');
     }

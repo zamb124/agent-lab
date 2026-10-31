@@ -105,3 +105,4 @@ tests/core/files/file_writer_output/
 core/frontend/embed-dist/
 *.tsbuildinfo
 /reports/ui-kostyli.json
+/scripts/stress/.dist/

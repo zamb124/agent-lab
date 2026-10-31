@@ -11,7 +11,7 @@ image:
   pullSecrets: []
 
 # Публичный domain для Ingress + сервисных URL платформы (TURN, office callback, VAPID).
-domain: humanitec.ru
+domain: linnex.io
 
 # Primary apex для SERVER__PLATFORM_PUBLIC_BASE_URL (NotificationURL Т-Банка, short links).
 # Не подменять domain: от domain зависят CALLS__TURN_HOST / OFFICE callback / PUSH__VAPID_EMAIL.
@@ -1163,8 +1163,8 @@ ingress:
   # Аддон ingress в MicroK8s = traefik, IngressClass "public".
   className: public
   platformDomains:
-    - apexHost: humanitec.ru
-      wildcardHost: "*.humanitec.ru"
+    - apexHost: linnex.io
+      wildcardHost: "*.linnex.io"
     - apexHost: linnex.io
       wildcardHost: "*.linnex.io"
   dedicatedSubdomains:

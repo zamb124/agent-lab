@@ -1,15 +1,70 @@
 /**
- * Service Worker Humanitec
+ * Service Worker Linnex
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
+ *
+ * Realm-файл: исполняется в ServiceWorkerGlobalScope, esbuild собирает в embed-dist.
+ * Типы realm'а объявлены локально — lib.webworker несовместим с lib.dom в общем tsconfig.
  */
 
+interface SwExtendableEvent {
+    waitUntil(promise: Promise<unknown>): void;
+}
+
+interface SwFetchEvent extends SwExtendableEvent {
+    request: Request;
+    respondWith(response: Promise<Response> | Response): void;
+}
+
+interface SwPushEvent extends SwExtendableEvent {
+    data?: { json(): unknown; text(): string } | null;
+}
+
+interface SwNotificationEvent extends SwExtendableEvent {
+    notification: { close(): void; data?: { url?: string } | null };
+    action?: string;
+}
+
+interface SwMessageEvent extends SwExtendableEvent {
+    data?: unknown;
+    source?: unknown;
+}
+
+interface SwClient {
+    id: string;
+    type?: string;
+    url: string;
+    postMessage(message: unknown): void;
+    navigate?(url: string): Promise<SwClient>;
+    focus?(): Promise<SwClient>;
+}
+
+interface SwClients {
+    claim(): Promise<void>;
+    matchAll(options?: { type?: string; includeUncontrolled?: boolean }): Promise<SwClient[]>;
+    openWindow(url: string): Promise<SwClient | null>;
+}
+
+interface SwScope {
+    location: Location;
+    clients: SwClients;
+    registration: { showNotification(title: string, options?: Record<string, unknown>): Promise<void> };
+    skipWaiting(): Promise<void>;
+    addEventListener(type: 'install' | 'activate', listener: (event: SwExtendableEvent) => void): void;
+    addEventListener(type: 'fetch', listener: (event: SwFetchEvent) => void): void;
+    addEventListener(type: 'push', listener: (event: SwPushEvent) => void): void;
+    addEventListener(type: 'notificationclick' | 'notificationclose', listener: (event: SwNotificationEvent) => void): void;
+    addEventListener(type: 'message', listener: (event: SwMessageEvent) => void): void;
+}
+
+const sw = self as unknown as SwScope;
+
 const CACHE_SCHEMA_VERSION = 'v6';
-const STATIC_CACHE_NAME = `humanitec-static-${CACHE_SCHEMA_VERSION}`;
-const DYNAMIC_CACHE_NAME = `humanitec-dynamic-${CACHE_SCHEMA_VERSION}`;
-const METADATA_CACHE_NAME = 'humanitec-metadata-v1';
-const DEPLOYMENT_VERSION_CACHE_KEY = '/__humanitec_pwa/deployment-version';
+const STATIC_CACHE_NAME = `linnex-static-${CACHE_SCHEMA_VERSION}`;
+const DYNAMIC_CACHE_NAME = `linnex-dynamic-${CACHE_SCHEMA_VERSION}`;
+const METADATA_CACHE_NAME = 'linnex-metadata-v1';
+const DEPLOYMENT_VERSION_CACHE_KEY = '/__linnex_pwa/deployment-version';
 const DEPLOYMENT_CHECK_MIN_INTERVAL_MS = 30_000;
-let deploymentCheckInFlight = null;
+let deploymentCheckInFlight: Promise<boolean> | null = null;
 let lastDeploymentCheckAt = 0;
 
 // Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
@@ -18,13 +73,13 @@ const STATIC_ASSETS = [
   '/offline.html',
   '/static/core/assets/css/tokens.css',
   '/static/core/assets/css/reset.css',
-  '/static/core/assets/js/platform-brand-sync-bootstrap.js',
+  '/static/core/lib/assets/brand-sync-bootstrap.js',
   '/static/core/pwa/icons/icon-192x192.png',
   '/static/core/pwa/icons/icon-512x512.png',
 ];
 
 // Установка: кэшируем offline-минимум, но не блокируем установку при частичной сетевой ошибке.
-self.addEventListener('install', (event) => {
+sw.addEventListener('install', (event) => {
   console.log('[SW] Installing...');
 
   event.waitUntil(
@@ -34,20 +89,20 @@ self.addEventListener('install', (event) => {
       } catch (error) {
         console.warn('[SW] precache failed:', error);
       }
-      await self.skipWaiting();
+      await sw.skipWaiting();
     })()
   );
 });
 
 // Активация: очистка старых кэшей
-self.addEventListener('activate', (event) => {
+sw.addEventListener('activate', (event) => {
   console.log('[SW] Activating...');
 
   event.waitUntil(
     (async () => {
-      const deletedObsolete = await deleteObsoleteHumanitecCaches();
+      const deletedObsolete = await deleteObsoleteLinnexCaches();
       const deploymentPurged = await ensureDeploymentFresh({ force: true });
-      await self.clients.claim();
+      await sw.clients.claim();
       if (deletedObsolete || deploymentPurged) {
         await reloadWindowClients();
       }
@@ -55,23 +110,23 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-function swOrigin() {
-  return self.location.origin;
+function swOrigin(): string {
+  return sw.location.origin;
 }
 
-function sameOriginRequest(url) {
+function sameOriginRequest(url: URL): boolean {
   return url.origin === swOrigin();
 }
 
-function freshRequest(request, cacheMode = 'reload') {
+function freshRequest(request: Request, cacheMode: RequestCache = 'reload'): Request {
   return new Request(request, { cache: cacheMode });
 }
 
-async function fetchFresh(request, cacheMode = 'reload') {
+async function fetchFresh(request: Request, cacheMode: RequestCache = 'reload'): Promise<Response> {
   return fetch(freshRequest(request, cacheMode));
 }
 
-async function precacheStaticAssets() {
+async function precacheStaticAssets(): Promise<void> {
   const results = await Promise.allSettled(
     STATIC_ASSETS.map(async (assetUrl) => {
       const request = new Request(assetUrl, {
@@ -88,10 +143,10 @@ async function precacheStaticAssets() {
   }
 }
 
-async function deleteObsoleteHumanitecCaches() {
+async function deleteObsoleteLinnexCaches(): Promise<boolean> {
   const cacheNames = await caches.keys();
   const allowed = new Set([STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME, METADATA_CACHE_NAME]);
-  const toDelete = cacheNames.filter((name) => name.startsWith('humanitec-') && !allowed.has(name));
+  const toDelete = cacheNames.filter((name) => name.startsWith('linnex-') && !allowed.has(name));
   await Promise.all(
     toDelete.map((name) => {
       console.log('[SW] Deleting old cache:', name);
@@ -101,9 +156,9 @@ async function deleteObsoleteHumanitecCaches() {
   return toDelete.length > 0;
 }
 
-async function deleteHumanitecContentCaches() {
+async function deleteLinnexContentCaches(): Promise<void> {
   const cacheNames = await caches.keys();
-  const toDelete = cacheNames.filter((name) => name.startsWith('humanitec-') && name !== METADATA_CACHE_NAME);
+  const toDelete = cacheNames.filter((name) => name.startsWith('linnex-') && name !== METADATA_CACHE_NAME);
   await Promise.all(
     toDelete.map((name) => {
       console.log('[SW] Deleting content cache after deployment change:', name);
@@ -112,7 +167,7 @@ async function deleteHumanitecContentCaches() {
   );
 }
 
-async function readStoredDeploymentVersion() {
+async function readStoredDeploymentVersion(): Promise<string | null> {
   const cache = await caches.open(METADATA_CACHE_NAME);
   const response = await cache.match(DEPLOYMENT_VERSION_CACHE_KEY);
   if (!response) {
@@ -127,7 +182,7 @@ async function readStoredDeploymentVersion() {
   }
 }
 
-async function writeStoredDeploymentVersion(version) {
+async function writeStoredDeploymentVersion(version: string): Promise<void> {
   const cache = await caches.open(METADATA_CACHE_NAME);
   await cache.put(
     DEPLOYMENT_VERSION_CACHE_KEY,
@@ -140,7 +195,7 @@ async function writeStoredDeploymentVersion(version) {
   );
 }
 
-async function fetchServerDeploymentVersion() {
+async function fetchServerDeploymentVersion(): Promise<string | null> {
   const response = await fetch(new Request('/health', {
     cache: 'no-store',
     credentials: 'same-origin',
@@ -154,7 +209,7 @@ async function fetchServerDeploymentVersion() {
   return typeof version === 'string' && version.length > 0 ? version : null;
 }
 
-async function ensureDeploymentFresh({ force = false } = {}) {
+async function ensureDeploymentFresh({ force = false }: { force?: boolean } = {}): Promise<boolean> {
   const now = Date.now();
   if (!force && now - lastDeploymentCheckAt < DEPLOYMENT_CHECK_MIN_INTERVAL_MS) {
     return false;
@@ -176,10 +231,10 @@ async function ensureDeploymentFresh({ force = false } = {}) {
     }
     const storedVersion = await readStoredDeploymentVersion();
     if (storedVersion && storedVersion !== serverVersion) {
-      await deleteHumanitecContentCaches();
+      await deleteLinnexContentCaches();
       await writeStoredDeploymentVersion(serverVersion);
       await notifyWindowClients({
-        type: 'humanitec-deployment-updated',
+        type: 'linnex-deployment-updated',
         from: storedVersion,
         to: serverVersion,
       });
@@ -197,8 +252,8 @@ async function ensureDeploymentFresh({ force = false } = {}) {
   }
 }
 
-async function notifyWindowClients(message) {
-  const clientList = await self.clients.matchAll({
+async function notifyWindowClients(message: unknown): Promise<void> {
+  const clientList = await sw.clients.matchAll({
     type: 'window',
     includeUncontrolled: true,
   });
@@ -209,8 +264,8 @@ async function notifyWindowClients(message) {
   }
 }
 
-async function reloadWindowClients() {
-  const clientList = await self.clients.matchAll({
+async function reloadWindowClients(): Promise<void> {
+  const clientList = await sw.clients.matchAll({
     type: 'window',
     includeUncontrolled: true,
   });
@@ -227,7 +282,7 @@ async function reloadWindowClients() {
           console.warn('[SW] client.navigate failed:', client.url, error);
         }
       }
-      client.postMessage({ type: 'humanitec-deployment-reload-requested' });
+      client.postMessage({ type: 'linnex-deployment-reload-requested' });
     })
   );
 }
@@ -235,7 +290,7 @@ async function reloadWindowClients() {
 /**
  * Cache Storage принимает только «полные» ответы: 206 (Range) и прочие неполные ответы дают TypeError при put.
  */
-function canPutInCache(response) {
+function canPutInCache(response: Response | null | undefined): response is Response {
   if (!response || !response.ok) {
     return false;
   }
@@ -248,7 +303,7 @@ function canPutInCache(response) {
   return true;
 }
 
-async function putInDynamicCache(request, response) {
+async function putInDynamicCache(request: Request, response: Response): Promise<void> {
   if (!canPutInCache(response)) {
     return;
   }
@@ -260,7 +315,7 @@ async function putInDynamicCache(request, response) {
   }
 }
 
-async function putInStaticCache(request, response) {
+async function putInStaticCache(request: Request, response: Response): Promise<void> {
   if (!canPutInCache(response)) {
     return;
   }
@@ -273,7 +328,7 @@ async function putInStaticCache(request, response) {
 }
 
 // Fetch: стратегии кэширования
-self.addEventListener('fetch', (event) => {
+sw.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
@@ -320,7 +375,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // API запросы - сначала сеть
-  if (url.pathname.startsWith('/api/') || 
+  if (url.pathname.startsWith('/api/') ||
       url.pathname.includes('/api/')) {
     event.respondWith(networkFirst(request));
     return;
@@ -342,7 +397,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(networkFirst(request));
 });
 
-async function networkFirstStatic(request) {
+async function networkFirstStatic(request: Request): Promise<Response> {
   await ensureDeploymentFresh();
   try {
     const response = await fetchFresh(request, 'reload');
@@ -362,7 +417,7 @@ async function networkFirstStatic(request) {
  * стратегия «сначала сеть»
  * Сначала пытаемся загрузить из сети, если не получается - из кэша
  */
-async function networkFirst(request) {
+async function networkFirst(request: Request): Promise<Response> {
   try {
     const response = await fetchFresh(request, 'reload');
     await putInDynamicCache(request, response);
@@ -380,7 +435,7 @@ async function networkFirst(request) {
 /**
  * сначала сеть с offline-резервом для HTML страниц
  */
-async function networkFirstWithOffline(request) {
+async function networkFirstWithOffline(request: Request): Promise<Response> {
   await ensureDeploymentFresh({ force: true });
   try {
     const response = await fetchFresh(request, 'reload');
@@ -391,7 +446,7 @@ async function networkFirstWithOffline(request) {
     if (cached) {
       return cached;
     }
-    
+
     // Возвращаем offline страницу
     const offlinePage = await caches.match('/offline.html');
     if (offlinePage) {
@@ -404,15 +459,15 @@ async function networkFirstWithOffline(request) {
 }
 
 // Push-уведомления
-self.addEventListener('push', (event) => {
+sw.addEventListener('push', (event) => {
   console.log('[SW] Push received');
-  
+
   if (!event.data) {
     console.log('[SW] Push event but no data');
     return;
   }
 
-  let data;
+  let data: any;
   try {
     data = event.data.json();
   } catch (e) {
@@ -439,14 +494,14 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      const clientList = await self.clients.matchAll({
+      const clientList = await sw.clients.matchAll({
         type: 'window',
         includeUncontrolled: true,
       });
       for (const client of clientList) {
-        if (client.url && client.url.startsWith(self.location.origin)) {
+        if (client.url && client.url.startsWith(sw.location.origin)) {
           client.postMessage({
-            type: 'humanitec-web-push',
+            type: 'linnex-web-push',
             payload: {
               title: data.title || '__PLATFORM_NAME__',
               message: data.message || data.body || '',
@@ -458,52 +513,53 @@ self.addEventListener('push', (event) => {
           });
         }
       }
-      await self.registration.showNotification(data.title || '__PLATFORM_NAME__', options);
+      await sw.registration.showNotification(data.title || '__PLATFORM_NAME__', options);
     })()
   );
 });
 
 // Клик по уведомлению
-self.addEventListener('notificationclick', (event) => {
+sw.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked');
-  
+
   event.notification.close();
 
   const url = event.notification.data?.url || '/';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
+    sw.clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
         // Ищем открытое окно приложения
         for (const client of clientList) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.navigate(url);
-            return client.focus();
+          if (client.url.includes(sw.location.origin) && 'focus' in client) {
+            client.navigate?.(url);
+            return client.focus?.();
           }
         }
         // Открываем новое окно
-        return clients.openWindow(url);
+        return sw.clients.openWindow(url);
       })
   );
 });
 
 // Закрытие уведомления
-self.addEventListener('notificationclose', (event) => {
+sw.addEventListener('notificationclose', () => {
   console.log('[SW] Notification closed');
 });
 
 // Сообщения от клиента
-self.addEventListener('message', (event) => {
+sw.addEventListener('message', (event) => {
   console.log('[SW] Message received:', event.data);
-  
-  if (event.data === 'skipWaiting' || event.data?.type === 'skipWaiting') {
-    self.skipWaiting();
+  const message = event.data as { type?: string; urls?: string[] } | string | undefined;
+
+  if (message === 'skipWaiting' || (typeof message === 'object' && message?.type === 'skipWaiting')) {
+    void sw.skipWaiting();
   }
-  
-  if (event.data?.type === 'CACHE_URLS') {
+
+  if (typeof message === 'object' && message?.type === 'CACHE_URLS' && message.urls) {
     event.waitUntil(
       caches.open(DYNAMIC_CACHE_NAME)
-        .then((cache) => cache.addAll(event.data.urls))
+        .then((cache) => cache.addAll(message.urls!))
     );
   }
 });

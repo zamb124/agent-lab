@@ -52,7 +52,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
             }
             .int-section-title {
                 margin: 0 0 var(--space-2);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: 600;
                 color: var(--text-primary);
             }

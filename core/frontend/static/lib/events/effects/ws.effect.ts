@@ -168,7 +168,7 @@ function _newEventId(): string {
 interface WsFrame {
     type: string;
     payload?: unknown;
-    meta?: { correlation_id?: string; causation_id?: string; trace_id?: string };
+    meta?: { correlation_id?: string; causation_id?: string; trace_id?: string } | undefined;
 }
 
 function frameMeta(value: unknown): WsFrame['meta'] {

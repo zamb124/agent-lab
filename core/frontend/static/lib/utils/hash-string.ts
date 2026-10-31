@@ -9,7 +9,7 @@
  * @param {string} seed
  * @returns {number} беззнаковый 32-битный хеш
  */
-export function hashString31(seed: string): number {
+export function hashString31(seed: unknown): number {
     if (typeof seed !== 'string' || seed.length === 0) {
         return 0;
     }
@@ -34,7 +34,7 @@ export function hueFromString(seed: string): number {
  * @param {string} name
  * @returns {string}
  */
-export function initialsFromName(name: string): string {
+export function initialsFromName(name: unknown): string {
     if (typeof name !== 'string' || name.length === 0) {
         return '?';
     }

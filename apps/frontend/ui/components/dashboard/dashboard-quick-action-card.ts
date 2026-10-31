@@ -56,9 +56,9 @@ export class DashboardQuickActionCard extends PlatformElement {
                 text-align: left;
                 cursor: pointer;
                 font: inherit;
-                transition: transform var(--duration-normal) var(--easing-default),
-                            border-color var(--duration-normal) var(--easing-default),
-                            box-shadow var(--duration-normal) var(--easing-default);
+                transition: transform var(--motion-duration-layout) var(--motion-ease-standard),
+                            border-color var(--motion-duration-layout) var(--motion-ease-standard),
+                            box-shadow var(--motion-duration-layout) var(--motion-ease-standard);
             }
             button:hover {
                 transform: translateY(-3px);

@@ -150,7 +150,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 flex-direction: column;
                 min-height: 0;
                 height: 100%;
-                background: var(--bg-primary, var(--bg-elevated));
+                background: var(--bg-primary);
             }
             .head {
                 display: flex;
@@ -225,7 +225,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 --field-pill-border: 1px solid transparent;
                 --field-pill-padding-y: var(--space-1);
                 --field-pill-padding-x: var(--space-2);
-                --field-pill-input-size: var(--worktracker-detail-title-size, var(--text-2xl));
+                --field-pill-input-size: var(--worktracker-detail-title-size);
                 --field-pill-input-weight: var(--font-semibold);
                 --field-pill-input-line: 1.2;
                 border-radius: var(--radius-md);
@@ -261,7 +261,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 min-width: 0;
                 width: 100%;
                 padding-top: var(--space-2);
-                border-top: var(--worktracker-divider, 1px solid var(--glass-border-subtle));
+                border-top: var(--worktracker-divider);
             }
             .inspector-title {
                 font-size: var(--text-xs);
@@ -275,11 +275,11 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-height: var(--worktracker-inspector-row-height, 32px);
+                min-height: var(--worktracker-inspector-row-height);
                 min-width: 0;
             }
             .inspector-label {
-                flex: 0 0 var(--worktracker-inspector-label-width, 108px);
+                flex: 0 0 var(--worktracker-inspector-label-width);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 min-width: 0;

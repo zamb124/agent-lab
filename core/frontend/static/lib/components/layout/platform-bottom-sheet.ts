@@ -94,11 +94,11 @@ export class PlatformBottomSheet extends PlatformElement {
             }
 
             :host([open]:not([closing])) .scrim {
-                animation: platformBottomSheetScrimIn var(--motion-duration-enter, var(--duration-normal)) var(--motion-ease-decelerate, var(--easing-smooth)) both;
+                animation: platformBottomSheetScrimIn var(--motion-duration-enter) var(--motion-ease-decelerate) both;
             }
 
             :host([closing]) .scrim {
-                animation: platformBottomSheetScrimOut var(--motion-duration-exit, var(--duration-fast)) var(--motion-ease-accelerate, ease-in) both;
+                animation: platformBottomSheetScrimOut var(--motion-duration-exit) var(--motion-ease-accelerate) both;
                 pointer-events: none;
             }
 
@@ -119,12 +119,12 @@ export class PlatformBottomSheet extends PlatformElement {
             }
 
             :host([open]:not([closing])) .panel {
-                animation: platformBottomSheetIn var(--motion-duration-enter, var(--duration-normal)) var(--motion-ease-decelerate, var(--easing-smooth)) both;
+                animation: platformBottomSheetIn var(--motion-duration-enter) var(--motion-ease-decelerate) both;
                 will-change: transform;
             }
 
             :host([closing]) .panel {
-                animation: platformBottomSheetOut var(--motion-duration-exit, var(--duration-fast)) var(--motion-ease-accelerate, ease-in) both;
+                animation: platformBottomSheetOut var(--motion-duration-exit) var(--motion-ease-accelerate) both;
                 pointer-events: none;
                 will-change: transform;
             }
@@ -190,9 +190,9 @@ export class PlatformBottomSheet extends PlatformElement {
                 color: var(--text-secondary);
                 cursor: pointer;
                 transition:
-                    background-color var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
-                    color var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
-                    transform var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default));
+                    background-color var(--motion-duration-micro) var(--motion-ease-standard),
+                    color var(--motion-duration-micro) var(--motion-ease-standard),
+                    transform var(--motion-duration-micro) var(--motion-ease-standard);
                 flex-shrink: 0;
             }
 
@@ -372,7 +372,7 @@ export class PlatformBottomSheet extends PlatformElement {
         if (this._dragOffset >= SWIPE_CLOSE_THRESHOLD_PX) {
             this._requestClose();
         } else if (this._panelEl) {
-            this._panelEl.style.transition = 'transform var(--duration-fast) var(--easing-smooth)';
+            this._panelEl.style.transition = 'transform var(--motion-duration-micro) var(--easing-smooth)';
             this._panelEl.style.transform = 'translateY(0)';
             setTimeout(() => {
                 if (this._panelEl) this._panelEl.style.transition = '';

@@ -29,7 +29,7 @@ export class SyncForwardModal extends PlatformModal {
         _selectedIds: { state: true },
         _query: { state: true },
     };
-    declare message: Record<string, any> | null;
+    declare message: Record<string, unknown> | null;
     declare _selectedIds: string[];
     declare _query: string;
 
@@ -83,7 +83,7 @@ export class SyncForwardModal extends PlatformModal {
     _filteredChannels() {
         const exclude = this._excludeId();
         const q = this._query.trim().toLowerCase();
-        return this._channels.items.filter((c: Record<string, any>) => {
+        return this._channels.items.filter((c: Record<string, unknown>) => {
             if (c.channel_id === exclude) return false;
             if (q !== '') {
                 const title = typeof c.name === 'string' ? c.name.toLowerCase() : '';
@@ -145,7 +145,7 @@ export class SyncForwardModal extends PlatformModal {
             ${channels.length === 0
                 ? html`<platform-empty-state icon="forward" title=${this.t('chat_view.no_other_channels')}></platform-empty-state>`
                 : html`<div class="list">
-                    ${channels.map((c: Record<string, any>) => html`
+                    ${channels.map((c: Record<string, unknown>) => html`
                         <div
                             class=${this._selectedIds.includes(c.channel_id) ? 'form-item selected' : 'form-item'}
                             @click=${() => this._toggle(c.channel_id)}

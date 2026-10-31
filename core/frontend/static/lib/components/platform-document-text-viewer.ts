@@ -130,7 +130,7 @@ export class PlatformDocumentTextViewer extends PlatformElement {
                 font-size: var(--text-sm);
             }
             .state-error {
-                color: var(--danger);
+                color: var(--error);
             }
             .toolbar {
                 display: flex;

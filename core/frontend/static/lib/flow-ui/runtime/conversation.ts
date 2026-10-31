@@ -30,8 +30,8 @@ export interface FlowUiTask extends Record<string, unknown> {
 
 export interface FlowUiSettings extends Record<string, unknown> {
     show_activity?: boolean;
-    tool_calls?: string;
-    errors?: string;
+    tool_calls?: string | undefined;
+    errors?: string | undefined;
     show_skill_loads?: boolean;
     show_reasoning?: boolean;
 }

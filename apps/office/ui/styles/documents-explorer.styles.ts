@@ -34,8 +34,8 @@ export const documentsExplorerStyles = css`
     .main-toolbar {
         flex-shrink: 0;
         padding: var(--space-3) var(--space-4) 0;
-        background: var(--documents-explorer-toolbar-bg, var(--glass-solid-subtle));
-        border-bottom: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
+        background: var(--documents-explorer-toolbar-bg);
+        border-bottom: 1px solid var(--documents-explorer-divider);
     }
     .main-content {
         flex: 1;
@@ -82,14 +82,14 @@ export const documentsExplorerStyles = css`
         gap: var(--space-3);
         padding: var(--space-8);
         text-align: center;
-        border: 2px dashed var(--documents-empty-border, var(--glass-border-medium));
+        border: 2px dashed var(--documents-empty-border);
         border-radius: var(--radius-xl);
-        background: var(--documents-empty-bg, var(--glass-tint-subtle));
+        background: var(--documents-empty-bg);
         color: var(--text-secondary);
     }
     .dropzone-panel.drag-over {
         border-color: var(--accent);
-        background: var(--documents-selected-bg, var(--accent-subtle));
+        background: var(--documents-selected-bg);
     }
     .dropzone-icon {
         color: var(--text-tertiary);
@@ -114,7 +114,7 @@ export const documentsExplorerStyles = css`
     }
     .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(var(--documents-explorer-grid-min, 11.25rem), 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(var(--documents-explorer-grid-min), 1fr));
         gap: var(--space-3);
     }
     .loading {
@@ -129,12 +129,12 @@ export const documentsExplorerStyles = css`
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(0, 0, 0, 0.45);
+        background: var(--platform-bottom-sheet-scrim);
         border: 2px dashed var(--accent);
         pointer-events: none;
     }
     :host-context([data-theme="light"]) .drop-overlay {
-        background: rgba(255, 255, 255, 0.72);
+        background: var(--glass-tint-strong);
     }
     .drop-overlay-inner {
         display: flex;
@@ -160,8 +160,8 @@ export const documentsExplorerStyles = css`
         background: var(--glass-solid-medium);
         font-size: var(--text-sm);
     }
-    .upload-job.failed { color: var(--danger); }
-    .upload-job.done { color: var(--success, var(--accent)); }
+    .upload-job.failed { color: var(--error); }
+    .upload-job.done { color: var(--success); }
     .bulk-bar {
         display: flex;
         align-items: center;
@@ -169,8 +169,8 @@ export const documentsExplorerStyles = css`
         padding: var(--space-2) var(--space-3);
         margin-bottom: var(--space-3);
         border-radius: var(--radius-lg);
-        background: var(--documents-selected-bg, var(--accent-subtle));
-        border: 1px solid var(--documents-selected-stroke, var(--accent));
+        background: var(--documents-selected-bg);
+        border: 1px solid var(--documents-selected-stroke);
         font-size: var(--text-sm);
         flex-shrink: 0;
     }

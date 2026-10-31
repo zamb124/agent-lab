@@ -8,7 +8,7 @@ import pytest
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
     compute_platform_free_record_scores,
-    humanitec_llms_model_options_from_records,
+    linnex_llms_model_options_from_records,
     parse_platform_free_models,
     platform_free_model_policy_for_provider,
     platform_free_records_from_model_records,
@@ -340,8 +340,8 @@ def test_compute_platform_free_record_scores_requires_catalog() -> None:
         )
 
 
-def test_humanitec_llms_model_options_are_auto_plus_provider_prefixed_free_models() -> None:
-    options = humanitec_llms_model_options_from_records(
+def test_linnex_llms_model_options_are_auto_plus_provider_prefixed_free_models() -> None:
+    options = linnex_llms_model_options_from_records(
         [
             PlatformFreeModelRecord(
                 provider="openrouter",

@@ -24,7 +24,9 @@ export async function seedPlatformMarkdownEditorI18n() {
             if (!bundle || typeof bundle !== 'object') {
                 return false;
             }
-            return Boolean(bundle.markdown_editor || (bundle.platform && bundle.platform.markdown_editor));
+            const platformNs = bundle.platform;
+            const hasEditor = typeof bundle.markdown_editor === 'object' || (typeof platformNs === 'object' && platformNs !== null && 'markdown_editor' in platformNs);
+            return Boolean(bundle.markdown_editor || hasEditor);
         },
         'platform i18n ready',
         { timeout: 15_000 },

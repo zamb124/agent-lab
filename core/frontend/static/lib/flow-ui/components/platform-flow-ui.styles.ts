@@ -51,7 +51,7 @@ export const platformFlowUIStyles = css`
             -webkit-font-smoothing: antialiased;
             scrollbar-width: thin;
             scrollbar-color: color-mix(in srgb, var(--flow-ui-text) 22%, transparent) transparent;
-            background: var(--flow-ui-page-background, var(--bg-primary, #16213e));
+            background: var(--flow-ui-page-background, var(--bg-primary));
         }
         :host([display='drawer']) {
             --flow-ui-font-size-body: 14px;
@@ -322,12 +322,12 @@ export const platformFlowUIStyles = css`
             border-radius: var(--flow-ui-radius-2xl);
             overflow: visible;
             box-shadow: var(--flow-ui-panel-shadow);
-            background: var(--flow-ui-panel-strong, var(--flow-ui-page-background, var(--bg-surface, #1e2a47)));
+            background: var(--flow-ui-panel-strong, var(--flow-ui-page-background, var(--bg-surface)));
         }
         :host([display="inline"]) {
             border-radius: var(--flow-ui-radius-lg);
             overflow: visible;
-            background: var(--flow-ui-panel-strong, var(--flow-ui-page-background, var(--bg-surface, #1e2a47)));
+            background: var(--flow-ui-panel-strong, var(--flow-ui-page-background, var(--bg-surface)));
         }
         :host([display="panel"]) .shell,
         :host([display="drawer"]) .shell,

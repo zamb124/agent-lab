@@ -3,13 +3,14 @@ import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
+import { ensureTokensLoaded, qs, type TestEl } from '../helpers/dom.js';
 
 describe('flows filters field height canon', () => {
-    beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
+    beforeEach(async () => { resetPlatformState(); bootstrapTestBus(); await ensureTokensLoaded(); });
     afterEach(() => fixtureCleanup());
 
     it('labeled compact filter controls share the same height', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <div
                 style="
                     --field-pill-bg: rgba(15, 23, 42, 0.04);
@@ -60,9 +61,9 @@ describe('flows filters field height canon', () => {
         await nextFrame();
 
         const controls = [
-            el.querySelector('platform-searchable-combobox'),
-            el.querySelector('platform-field'),
-            el.querySelector('platform-date-picker'),
+            qs(el!, 'platform-searchable-combobox'),
+            qs(el!, 'platform-field'),
+            qs(el!, 'platform-date-picker'),
         ];
         const heights = controls.map((control) => control.getBoundingClientRect().height);
         const delta = Math.max(...heights) - Math.min(...heights);

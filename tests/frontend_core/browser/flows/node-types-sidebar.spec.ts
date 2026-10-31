@@ -10,6 +10,7 @@ import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { ty
 import { nodeTypesOp, resourceTypesOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 import { triggerRemoveOp, triggersListOp } from '../../../../apps/flows/ui/events/resources/triggers.resource.js';
 import '../../../../apps/flows/ui/components/editor/flows-node-types-sidebar.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const NODE_TYPE_ITEMS = [
     {
@@ -48,7 +49,7 @@ const NODE_TYPE_ITEMS = [
 ];
 
 describe('flows-node-types-sidebar datasource brand icons', () => {
-    let originalWsRequest;
+    let originalWsRequest: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -83,19 +84,19 @@ describe('flows-node-types-sidebar datasource brand icons', () => {
     });
 
     it('карточка PostgreSQL — platform-icon postgres colored', async () => {
-        const el = await fixture(html`<flows-node-types-sidebar></flows-node-types-sidebar>`);
+        const el = await fixture<TestEl>(html`<flows-node-types-sidebar></flows-node-types-sidebar>`);
         await waitUntil(
-            () => el.shadowRoot.querySelector('.node-item[aria-label="PostgreSQL"]') !== null,
+            () => q(shadow(el), '.node-item[aria-label="PostgreSQL"]') !== null,
             'postgres palette card',
         );
-        const icon = el.shadowRoot.querySelector('.node-item[aria-label="PostgreSQL"] platform-icon');
+        const icon = qs(shadow(el), '.node-item[aria-label="PostgreSQL"] platform-icon');
         expect(icon, 'postgres icon').to.exist;
         expect(icon.getAttribute('name')).to.equal('postgres');
         expect(icon.hasAttribute('colored')).to.equal(true);
-        const mysqlIcon = el.shadowRoot.querySelector('.node-item[aria-label="MySQL"] platform-icon');
+        const mysqlIcon = qs(shadow(el), '.node-item[aria-label="MySQL"] platform-icon');
         expect(mysqlIcon.getAttribute('name')).to.equal('mysql');
         expect(mysqlIcon.hasAttribute('colored')).to.equal(true);
-        const clickhouseIcon = el.shadowRoot.querySelector('.node-item[aria-label="ClickHouse"] platform-icon');
+        const clickhouseIcon = qs(shadow(el), '.node-item[aria-label="ClickHouse"] platform-icon');
         expect(clickhouseIcon.getAttribute('name')).to.equal('clickhouse');
         expect(clickhouseIcon.hasAttribute('colored')).to.equal(true);
     });

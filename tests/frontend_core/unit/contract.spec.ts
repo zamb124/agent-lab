@@ -13,6 +13,7 @@ import {
     CoreEvents,
     CORE_SCOPES,
 } from '@platform/lib/events/contract.js';
+import type { EventSource } from '@platform/lib/events/contract.js';
 
 describe('assertEventType', () => {
     it('пропускает валидные имена', () => {
@@ -67,11 +68,12 @@ describe('createEvent', () => {
     });
 
     it('бросает на неизвестном source', () => {
-        expect(() => createEvent('ui/toast/show', null, { source: 'cosmic' })).toThrow(/source/);
+        expect(() => Reflect.apply(createEvent, null, ['ui/toast/show', null, { source: 'cosmic' }])).toThrow(/source/);
     });
 
     it('пропускает все валидные source', () => {
-        for (const s of ['local', 'ws', 'http', 'router', 'storage', 'timer', 'system']) {
+        const sources: EventSource[] = ['local', 'ws', 'http', 'router', 'storage', 'timer', 'system'];
+        for (const s of sources) {
             const ev = createEvent('ui/toast/show', null, { source: s });
             expect(ev.meta.source).toBe(s);
         }

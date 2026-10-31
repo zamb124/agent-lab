@@ -11,8 +11,7 @@ import {
 describe('resampleMonoToPcm16ArrayBuffer', () => {
     it('даёт PCM на втором и третьем батче 48 kHz после хвоста (индекс в merged — локальный от inputBase)', () => {
         const sr = 48000;
-        /** @type {{ tail: Float32Array, nextOutSampleIndex: number, inputBase: number }} */
-        const state = {
+        const state: import('@platform/lib/voice/voice-media-session.js').ResamplerState = {
             tail: new Float32Array(0),
             nextOutSampleIndex: 0,
             inputBase: 0,
@@ -21,16 +20,17 @@ describe('resampleMonoToPcm16ArrayBuffer', () => {
 
         const out1 = resampleMonoToPcm16ArrayBuffer(mk(), sr, state);
         expect(out1).toBeInstanceOf(ArrayBuffer);
+        if (out1 === null) throw new Error('out1');
         const n1 = new Int16Array(out1).length;
         const expR = sr / VOICE_CAPTURE_SAMPLE_RATE;
         expect(Math.abs(n1 - Math.floor((4096 - 1) / expR))).toBeLessThanOrEqual(2);
 
         const out2 = resampleMonoToPcm16ArrayBuffer(mk(), sr, state);
-        expect(out2).toBeInstanceOf(ArrayBuffer);
+        if (out2 === null) throw new Error('out2');
         expect(new Int16Array(out2).length).toBeGreaterThan(500);
 
         const out3 = resampleMonoToPcm16ArrayBuffer(mk(), sr, state);
-        expect(out3).toBeInstanceOf(ArrayBuffer);
+        if (out3 === null) throw new Error('out3');
         expect(new Int16Array(out3).length).toBeGreaterThan(500);
     });
 });
@@ -46,7 +46,7 @@ describe('designFirLowpassHamming', () => {
     it('симметричный (linear phase)', () => {
         const taps = designFirLowpassHamming(31, 7500 / 48000);
         for (let i = 0; i < taps.length; i++) {
-            expect(taps[i]).toBeCloseTo(taps[taps.length - 1 - i], 6);
+            expect(taps[i]).toBeCloseTo(taps[taps.length - 1 - i] ?? NaN, 6);
         }
     });
 
@@ -73,7 +73,7 @@ describe('applyFirToFloat', () => {
         for (let i = 0; i < chunk.length; i++) chunk[i] = i % 2 === 0 ? 1.0 : -1.0;
         const out = applyFirToFloat(chunk, taps, history);
         let energy = 0;
-        for (let i = 100; i < out.length; i++) energy += out[i] * out[i];
+        for (let i = 100; i < out.length; i++) energy += (out[i] ?? 0) * (out[i] ?? 0);
         expect(energy).toBeLessThan(0.5 * (out.length - 100));
     });
 });

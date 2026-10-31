@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { notesListResource } from '../../../../apps/crm/ui/events/resources/notes.resource.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
+import { prop } from '../../helpers/prop.js';
+import { testEvent } from '../../helpers/bus-fixtures.js';
 
 beforeEach(() => {
     resetFactories();
@@ -28,13 +30,13 @@ describe('crm/notes_list push merge', () => {
                 date_to: '2026-07-31',
             },
             loading: false,
+            loadingMore: false,
             error: null,
+            terminal: null,
             nextCursor: null,
             hasMore: false,
         };
-        const next = notesListResource.reducer(state, {
-            type: 'crm/note/updated',
-            payload: {
+        const next = notesListResource.reducer(state, testEvent('crm/note/updated', {
                 note_id: 'note_1',
                 action: 'updated',
                 note: {
@@ -44,10 +46,9 @@ describe('crm/notes_list push merge', () => {
                     note_date: '2026-07-20',
                     name: 'New title',
                 },
-            },
-        });
+            }));
         expect(next.items).toHaveLength(1);
-        expect(next.items[0].name).toBe('New title');
+        expect(prop(next.items[0], 'name')).toBe('New title');
     });
 
     it('removes note on deleted action', () => {
@@ -58,18 +59,17 @@ describe('crm/notes_list push merge', () => {
             ],
             filters: { namespace: 'default' },
             loading: false,
+            loadingMore: false,
             error: null,
+            terminal: null,
             nextCursor: null,
             hasMore: false,
         };
-        const next = notesListResource.reducer(state, {
-            type: 'crm/note/updated',
-            payload: {
+        const next = notesListResource.reducer(state, testEvent('crm/note/updated', {
                 note_id: 'note_1',
                 action: 'deleted',
-            },
-        });
-        expect(next.items.map((item) => item.entity_id)).toEqual(['note_2']);
+            }));
+        expect(next.items.map((item) => prop(item, 'entity_id'))).toEqual(['note_2']);
     });
 
     it('ignores markdown started/partial without touching items', () => {
@@ -77,13 +77,13 @@ describe('crm/notes_list push merge', () => {
             items: [{ entity_id: 'note_1', namespace: 'default', note_date: '2026-07-20', name: 'A' }],
             filters: { namespace: 'default' },
             loading: false,
+            loadingMore: false,
             error: null,
+            terminal: null,
             nextCursor: null,
             hasMore: false,
         };
-        const next = notesListResource.reducer(state, {
-            type: 'crm/note/updated',
-            payload: {
+        const next = notesListResource.reducer(state, testEvent('crm/note/updated', {
                 note_id: 'note_1',
                 action: 'updated',
                 markdown_format: { phase: 'started', chunks_done: 0, chunks_total: 0 },
@@ -93,8 +93,7 @@ describe('crm/notes_list push merge', () => {
                     note_date: '2026-07-20',
                     name: 'Changed',
                 },
-            },
-        });
+            }));
         expect(next).toBe(state);
     });
 });

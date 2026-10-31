@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from apps.search.models import CrawlDomain, CrawlFetchResult
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from core.clients.rag_client import RagClient
-from apps.search.models import CrawlDomain, CrawlFetchResult
 from core.search.index_models import SearchIndexDefinition
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 

@@ -36,6 +36,7 @@ import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/platform-icon.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 const DEFAULT_NAMESPACE = 'default';
 
@@ -89,7 +90,7 @@ export class SyncChatList extends PlatformElement {
 
             :host([mode='page']) .header {
                 padding: var(--space-3) var(--space-4) var(--space-2);
-                border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+                border-bottom: 1px solid var(--border-subtle);
             }
 
             .header-actions {
@@ -107,17 +108,17 @@ export class SyncChatList extends PlatformElement {
                 width: 36px;
                 height: 36px;
                 padding: 0;
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-                border-radius: var(--radius-full, 999px);
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-full);
+                background: var(--glass-tint-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro), border-color var(--motion-duration-micro);
             }
             .header-action-btn:hover {
                 color: var(--accent);
                 border-color: var(--accent);
-                background: var(--accent-subtle, rgba(153, 166, 249, 0.16));
+                background: var(--accent-subtle);
             }
             .header-action-btn:disabled {
                 opacity: 0.5;
@@ -129,18 +130,18 @@ export class SyncChatList extends PlatformElement {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3) var(--space-4);
-                min-height: var(--button-height, 44px);
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-                border-radius: var(--radius-full, 999px);
+                min-height: var(--button-height);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-full);
                 color: var(--text-secondary);
                 box-sizing: border-box;
-                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+                transition: border-color var(--motion-duration-micro), box-shadow var(--motion-duration-micro);
             }
             .search-box:focus-within {
                 border-color: var(--accent);
                 color: var(--accent);
-                box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16));
+                box-shadow: 0 0 0 4px var(--accent-subtle);
             }
             .search-box input[data-canon='search-as-you-type'] {
                 flex: 1;
@@ -161,8 +162,8 @@ export class SyncChatList extends PlatformElement {
                 gap: 0;
                 padding: 2px;
                 margin-left: 2px;
-                border-radius: var(--radius-full, 999px);
-                background: color-mix(in srgb, var(--glass-hover) 65%, transparent);
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--glass-tint-medium) 65%, transparent);
             }
             .search-scope-btn {
                 display: inline-flex;
@@ -172,16 +173,16 @@ export class SyncChatList extends PlatformElement {
                 height: 26px;
                 padding: 0;
                 border: none;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: transparent;
                 color: var(--text-tertiary);
                 cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro);
             }
-            .search-scope-btn:hover { color: var(--text-secondary); background: var(--glass-hover); }
+            .search-scope-btn:hover { color: var(--text-secondary); background: var(--glass-tint-medium); }
             .search-scope-btn.is-active {
                 color: var(--accent);
-                background: var(--glass-solid-soft, rgba(255, 255, 255, 0.1));
+                background: var(--glass-solid-subtle);
             }
 
             .body {
@@ -214,11 +215,6 @@ export class SyncChatList extends PlatformElement {
                 padding: var(--space-2) var(--space-3) var(--space-6);
             }
 
-            .empty-row {
-                padding: var(--space-2) var(--space-3);
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-            }
 
             .section-subheader {
                 padding: var(--space-3) var(--space-3) var(--space-1);
@@ -265,14 +261,14 @@ export class SyncChatList extends PlatformElement {
         return 'all';
     }
 
-    _channelMatchesScope(channel: Record<string, any>, scope: string) {
+    _channelMatchesScope(channel: Record<string, unknown>, scope: string) {
         if (scope === 'all') return true;
         if (scope === 'groups') return channel.type !== 'direct';
         if (scope === 'direct') return channel.type === 'direct';
         return true;
     }
 
-    _channelMatchesSearch(channel: Record<string, any>, search: string) {
+    _channelMatchesSearch(channel: Record<string, unknown>, search: string) {
         if (search === '') return true;
         if (channel.type === 'direct') {
             const peerName = channel.peer && typeof channel.peer.display_name === 'string'
@@ -301,7 +297,7 @@ export class SyncChatList extends PlatformElement {
 
     _membersWithoutDm() {
         if (this._searchScope() === 'groups') return [];
-        const directs = this._channels.items.filter((c: Record<string, any>) => c.type === 'direct');
+        const directs = this._channels.items.filter((c: Record<string, unknown>) => c.type === 'direct');
         const dmUserIds = new Set<string>();
         for (const dm of directs) {
             const peer = dm.peer;
@@ -310,9 +306,9 @@ export class SyncChatList extends PlatformElement {
             if (typeof userId === 'string') dmUserIds.add(userId);
         }
         const search = this._searchQuery();
-        let members = this._members.items.filter((m: Record<string, any>) => !dmUserIds.has(m.user_id));
+        let members = this._members.items.filter((m: Record<string, unknown>) => !dmUserIds.has(m.user_id));
         if (search !== '') {
-            members = members.filter((m: Record<string, any>) => resolveDisplayName(m).toLowerCase().includes(search));
+            members = members.filter((m: Record<string, unknown>) => resolveDisplayName(m).toLowerCase().includes(search));
         }
         return members;
     }
@@ -487,7 +483,7 @@ export class SyncChatList extends PlatformElement {
                             <div class="section-subheader">${this.t('sidebar.subheader_start_dm')}</div>
                             ${members.map((m) => html`<sync-direct-member-row .member=${m}></sync-direct-member-row>`)}
                         ` : ''}
-                        ${empty ? html`<div class="empty-row">${this.t('sidebar.no_chats_yet')}</div>` : ''}
+                        ${empty ? html`<platform-empty-state icon="chat" title=${this.t('sidebar.no_chats_yet')}></platform-empty-state>` : ''}
                     </div>
                 </div>
             </div>

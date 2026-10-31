@@ -5,8 +5,8 @@ import { installDomShim } from '../../helpers/dom-shim.js';
 import { installFakeStorage } from '../../helpers/fake-storage.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
-let dom;
-let storage;
+let dom: ReturnType<typeof installDomShim>;
+let storage: ReturnType<typeof installFakeStorage>;
 
 beforeEach(() => {
     dom = installDomShim();
@@ -17,57 +17,58 @@ afterEach(() => {
     dom.uninstall();
 });
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'system' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
 
 describe('themeEffect: bootstrap', () => {
     it('из storage применяет mode и эмитит THEME_CHANGED', async () => {
         storage.localStorage.setItem('platform:core:theme', 'light');
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(dom.documentElement.getAttribute('data-theme')).toBe('light');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
-        expect(changed.payload).toEqual({ mode: 'light', source: 'storage' });
+        expect(changed?.payload).toEqual({ mode: 'light', source: 'storage' });
     });
 
     it('data-platform-theme-lock=dark: DOM тёмный, state из storage светлый', async () => {
         storage.localStorage.setItem('platform:core:theme', 'light');
         dom.documentElement.setAttribute('data-platform-theme-lock', 'dark');
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(dom.documentElement.getAttribute('data-theme')).toBe('dark');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
-        expect(changed.payload).toEqual({ mode: 'light', source: 'storage' });
+        expect(changed?.payload).toEqual({ mode: 'light', source: 'storage' });
     });
 
     it('без storage — тёмная тема (не из системы)', async () => {
         dom.uninstall();
         dom = installDomShim({ systemDark: false });
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(dom.documentElement.getAttribute('data-theme')).toBe('dark');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
-        expect(changed.payload).toEqual({ mode: 'dark', source: 'system' });
+        expect(changed?.payload).toEqual({ mode: 'dark', source: 'system' });
     });
 });
 
 describe('themeEffect: SET_REQUESTED', () => {
     it('сохраняет в storage и применяет к DOM', async () => {
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.THEME_SET_REQUESTED, { mode: 'light' }), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(storage.localStorage.getItem('platform:core:theme')).toBe('light');
         expect(dom.documentElement.getAttribute('data-theme')).toBe('light');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
-        expect(changed.payload).toEqual({ mode: 'light', source: 'user' });
+        expect(changed?.payload).toEqual({ mode: 'light', source: 'user' });
     });
 
     it('при lock dark в DOM остаётся dark', async () => {
         dom.documentElement.setAttribute('data-platform-theme-lock', 'dark');
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.THEME_SET_REQUESTED, { mode: 'light' }), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(storage.localStorage.getItem('platform:core:theme')).toBe('light');
         expect(dom.documentElement.getAttribute('data-theme')).toBe('dark');
@@ -76,7 +77,7 @@ describe('themeEffect: SET_REQUESTED', () => {
 
     it('невалидный mode → no-op', async () => {
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.THEME_SET_REQUESTED, { mode: 'cosmic' }), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
         expect(dispatched).toHaveLength(0);
     });
@@ -85,10 +86,10 @@ describe('themeEffect: SET_REQUESTED', () => {
 describe('themeEffect: TOGGLE_REQUESTED', () => {
     it('меняет на противоположный', async () => {
         const effect = createThemeEffect();
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await effect(ev(CoreEvents.THEME_TOGGLE_REQUESTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'user' } }), dispatched));
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
-        expect(changed.payload).toEqual({ mode: 'light', source: 'user' });
+        expect(changed?.payload).toEqual({ mode: 'light', source: 'user' });
     });
 });
 

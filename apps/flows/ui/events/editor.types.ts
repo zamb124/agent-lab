@@ -69,14 +69,14 @@ export type FlowEditorAction = (payload?: unknown) => void;
 import type { SliceController } from '@platform/lib/base/use-resource.js';
 
 export interface InterfaceEditorUiSlice extends Record<string, unknown> {
-    documentKey?: string;
-    history?: EditorHistory | null;
-    pageId?: string;
-    selectedBlockId?: string;
-    viewport?: string;
-    preview?: boolean;
-    sidebarTab?: string;
-    problems?: readonly DocumentProblem[];
+    documentKey?: string | undefined;
+    history?: EditorHistory | null | undefined;
+    pageId?: string | undefined;
+    selectedBlockId?: string | undefined;
+    viewport?: string | undefined;
+    preview?: boolean | undefined;
+    sidebarTab?: string | undefined;
+    problems?: readonly DocumentProblem[] | undefined;
 }
 
 

@@ -5,7 +5,7 @@
 #   REGRU_USERNAME=... REGRU_PASSWORD=... \
 #   bash deploy/scripts/setup-brand-dns.sh [public_ip]
 #
-# По умолчанию: humanitec.ru и linnex.io (@, www, *, api, cdn, livekit, onlyoffice, grafana).
+# По умолчанию: linnex.io и linnex.io (@, www, *, api, cdn, livekit, onlyoffice, grafana).
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ require_command curl || exit 1
 require_command python3 || exit 1
 regru_require_credentials
 
-DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
+DOMAINS="${PLATFORM_BRAND_DOMAINS:-linnex.io linnex.io}"
 # Нельзя `for x in $SUBDOMAINS` с literal `*` — bash glob развернёт файлы в cwd (ConfigMap mount).
 if [ -n "${PLATFORM_BRAND_DNS_SUBDOMAINS:-}" ]; then
   IFS=',' read -r -a SUBDOMAINS_LIST <<< "${PLATFORM_BRAND_DNS_SUBDOMAINS}"

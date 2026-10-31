@@ -41,7 +41,7 @@ export class PlatformPickerCard extends PlatformElement {
                 width: 100%;
                 height: 100%;
                 box-sizing: border-box;
-                padding: var(--platform-picker-card-padding, var(--space-4, 1rem));
+                padding: var(--platform-picker-card-padding, var(--space-4));
                 border-radius: var(--radius-xl);
                 text-align: left;
                 cursor: pointer;

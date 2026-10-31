@@ -19,7 +19,7 @@ export class FlowsInterfaceTemplateCard extends PlatformElement {
         selected: { type: Boolean, reflect: true },
         _visible: { type: Boolean, state: true },
     }
-    declare template: Record<string, any> | null;
+    declare template: Record<string, unknown> | null;
     declare selected: boolean;
     declare _visible: boolean;
 ;
@@ -27,9 +27,9 @@ export class FlowsInterfaceTemplateCard extends PlatformElement {
     static override styles: CSSResultGroup = [PlatformElement.styles, css`
         :host { display: block; min-width: 0; }
         .card { display: grid; grid-template-rows: 180px auto; height: 100%; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--glass-solid-subtle); overflow: hidden; cursor: pointer; transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
-        .card:hover, :host([selected]) .card { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .card:hover, :host([selected]) .card { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--glass-shadow-medium); }
         .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        .preview { position: relative; overflow: hidden; background: var(--bg-secondary, var(--glass-tint-medium)); pointer-events: none; }
+        .preview { position: relative; overflow: hidden; background: var(--bg-secondary); pointer-events: none; }
         .preview platform-flow-ui { position: absolute; top: 12px; left: 12px; width: 640px; transform: scale(0.42); transform-origin: top left; }
         .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-tertiary); }
         .meta { display: grid; gap: 4px; padding: 10px 12px 12px; }

@@ -26,14 +26,14 @@ export class OfficeIntegrationBanner extends PlatformElement {
                 display: flex; align-items: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
-                background: var(--warning-subtle, rgba(255, 200, 80, 0.12));
-                border: 1px solid var(--warning, rgba(255, 200, 80, 0.35));
+                background: var(--warning-bg);
+                border: 1px solid var(--warning);
                 border-radius: var(--radius-lg);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
                 margin-bottom: var(--space-4);
             }
-            .banner platform-icon { color: var(--warning, rgba(255, 200, 80, 0.85)); flex-shrink: 0; }
+            .banner platform-icon { color: var(--warning); flex-shrink: 0; }
         `,
     ];
 

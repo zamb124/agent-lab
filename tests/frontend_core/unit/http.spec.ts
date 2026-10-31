@@ -7,8 +7,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
 import { installFetchMock } from '../helpers/mock-fetch.js';
+import { prop } from '../helpers/prop.js';
 
-let fetchMock;
+let fetchMock: ReturnType<typeof installFetchMock>;
 
 beforeEach(() => {
     fetchMock = installFetchMock();
@@ -26,15 +27,15 @@ describe('httpRequest: success', () => {
         fetchMock.respondJson('GET', '/api/items?a=1&b=hello', { ok: true });
         const result = await httpRequest({ method: 'GET', url: '/api/items', query: { a: 1, b: 'hello', c: null, d: undefined } });
         expect(result).toEqual({ ok: true });
-        expect(fetchMock.calls[0].url).toBe('/api/items?a=1&b=hello');
+        expect(fetchMock.calls[0]?.url).toBe('/api/items?a=1&b=hello');
     });
 
     it('POST с body сериализует JSON', async () => {
         fetchMock.respondJson('POST', '/api/items', { ok: true });
         await httpRequest({ method: 'POST', url: '/api/items', body: { foo: 'bar' } });
-        const init = fetchMock.calls[0].init;
-        expect(init.body).toBe('{"foo":"bar"}');
-        expect(init.headers['Content-Type']).toBe('application/json');
+        const init = fetchMock.calls[0]?.init;
+        expect(init?.body).toBe('{"foo":"bar"}');
+        expect(prop(init?.headers, 'Content-Type')).toBe('application/json');
     });
 
     it('204 NO CONTENT → {}', async () => {
@@ -70,7 +71,7 @@ describe('httpRequest: success', () => {
 
 describe('httpRequest: errors', () => {
     it('требует url', async () => {
-        await expect(httpRequest({})).rejects.toThrow(/url/);
+        await expect(Reflect.apply(httpRequest, null, [{}])).rejects.toThrow(/url/);
     });
 
     it('4xx бросает HttpError со статусом и body', async () => {
@@ -88,9 +89,9 @@ describe('httpRequest: errors', () => {
             expect.fail('should throw');
         } catch (err) {
             expect(err).toBeInstanceOf(HttpError);
-            expect(err.message).toBe('bad input');
-            expect(err.status).toBe(400);
-            expect(err.body).toEqual({ detail: 'bad input' });
+            expect(prop(err, 'message')).toBe('bad input');
+            expect(prop(err, 'status')).toBe(400);
+            expect(prop(err, 'body')).toEqual({ detail: 'bad input' });
         }
     });
 
@@ -105,7 +106,7 @@ describe('httpRequest: errors', () => {
             await httpRequest({ method: 'GET', url: '/api/x' });
             expect.fail('should throw');
         } catch (err) {
-            expect(err.message).toBe('name: required; email: invalid');
+            expect(prop(err, 'message')).toBe('name: required; email: invalid');
         }
     });
 
@@ -115,7 +116,7 @@ describe('httpRequest: errors', () => {
             await httpRequest({ method: 'GET', url: '/api/x' });
             expect.fail('should throw');
         } catch (err) {
-            expect(err.message).toBe('HTTP 500');
+            expect(prop(err, 'message')).toBe('HTTP 500');
         }
     });
 });

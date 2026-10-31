@@ -1,4 +1,4 @@
-"""Shared helpers for strict crawl E2E (real HTTP, TaskIQ, RAG, optional Humanitec LLM)."""
+"""Shared helpers for strict crawl E2E (real HTTP, TaskIQ, RAG, optional Linnex LLM)."""
 
 from __future__ import annotations
 
@@ -27,11 +27,11 @@ if TYPE_CHECKING:
 CRAWL_STRICT_ENRICHMENT_MODEL = "auto"
 
 
-def require_crawl_humanitec_llm_live_gate() -> None:
-    if os.getenv("CRAWL__E2E_HUMANITEC_LLM") != "1":
+def require_crawl_linnex_llm_live_gate() -> None:
+    if os.getenv("CRAWL__E2E_LINNEX_LLM") != "1":
         import pytest
 
-        pytest.skip("CRAWL__E2E_HUMANITEC_LLM=1 required for crawl Humanitec LLM live E2E")
+        pytest.skip("CRAWL__E2E_LINNEX_LLM=1 required for crawl Linnex LLM live E2E")
 
 
 @dataclass(frozen=True)

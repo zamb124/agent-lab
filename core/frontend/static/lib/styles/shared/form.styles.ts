@@ -74,7 +74,7 @@ const formAuxStyles = css`
         background: var(--glass-tint-strong);
         border-radius: var(--radius-full);
         cursor: pointer;
-        transition: background var(--duration-fast) ease;
+        transition: background var(--motion-duration-micro) ease;
         flex-shrink: 0;
     }
 
@@ -91,7 +91,7 @@ const formAuxStyles = css`
         height: 24px;
         background: white;
         border-radius: var(--radius-full);
-        transition: transform var(--duration-fast) ease;
+        transition: transform var(--motion-duration-micro) ease;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     }
 

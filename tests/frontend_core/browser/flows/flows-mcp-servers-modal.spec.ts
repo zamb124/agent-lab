@@ -17,6 +17,7 @@ import {
     mcpCatalogUninstallOp,
 } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import '../../../../apps/flows/ui/modals/flows-mcp-servers-modal.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     mcpServersResource,
@@ -41,8 +42,8 @@ function bootstrap() {
     bootstrapTestBus({ slices: collected.slices, effects: collected.effects });
 }
 
-function createMcpWsStub(handlers) {
-    const calls = [];
+function createMcpWsStub(handlers: any) {
+    const calls: any[] = [];
     const original = platformWs.request;
     platformWs.request = async (opts) => {
         if (!opts || typeof opts.type !== 'string') {
@@ -63,35 +64,35 @@ function createMcpWsStub(handlers) {
     };
 }
 
-function offsetPage(items, total, limit, offset) {
+function offsetPage(items: any, total: any, limit: any, offset: any) {
     return { items, total, limit, offset };
 }
 
-function modalRoot(modal) {
-    return modal.shadowRoot;
+function modalRoot(modal: any) {
+    return shadow(modal);
 }
 
-function segmentedSegments(control) {
-    return [...control.shadowRoot.querySelectorAll('.segment')];
+function segmentedSegments(control: any) {
+    return [...qsa(shadow(control), '.segment')];
 }
 
-function clickPlatformButton(buttonEl) {
-    const inner = buttonEl.shadowRoot.querySelector('button');
-    inner.click();
+function clickPlatformButton(buttonEl: any) {
+    const inner = qs(shadow(buttonEl), 'button');
+    (inner as TestEl).click();
 }
 
-async function clickListTab(modal, tab) {
-    const tabs = modalRoot(modal).querySelector('platform-segmented-control.mcp-list-tabs');
+async function clickListTab(modal: any, tab: any) {
+    const tabs = qs(modalRoot(modal), 'platform-segmented-control.mcp-list-tabs');
     expect(tabs).to.exist;
     const segments = segmentedSegments(tabs);
     const targetIndex = tab === 'catalog' ? 1 : 0;
-    segments[targetIndex].click();
+    segments[targetIndex]!.click();
     await modal.updateComplete;
     await waitUntil(() => modal._listTab === tab, `list tab ${tab}`);
 }
 
-async function dispatchSearch(modal, value) {
-    const search = modalRoot(modal).querySelector('platform-modal-search-field');
+async function dispatchSearch(modal: any, value: any) {
+    const search = qs(modalRoot(modal), 'platform-modal-search-field');
     expect(search).to.exist;
     search.dispatchEvent(new CustomEvent('change', {
         detail: { value },
@@ -102,8 +103,8 @@ async function dispatchSearch(modal, value) {
     await modal.updateComplete;
 }
 
-async function clickLoadMore(modal) {
-    const loadMore = modalRoot(modal).querySelector('.mcp-load-more platform-button');
+async function clickLoadMore(modal: any) {
+    const loadMore = qs(modalRoot(modal), '.mcp-load-more platform-button');
     expect(loadMore).to.exist;
     clickPlatformButton(loadMore);
     await modal.updateComplete;
@@ -113,21 +114,21 @@ function switchToSystemCompany() {
     getPlatformBus().dispatch(CoreEvents.AUTH_COMPANY_SWITCHED, { company_id: 'system' });
 }
 
-async function openBrandingView(modal) {
+async function openBrandingView(modal: any) {
     switchToSystemCompany();
     await modal.requestUpdate();
     await modal.updateComplete;
     await waitUntil(
-        () => modalRoot(modal).querySelector('.mcp-list-toolbar > platform-button') !== null,
+        () => q(modalRoot(modal), '.mcp-list-toolbar > platform-button') !== null,
         'branding nav button',
     );
-    const brandingButton = modalRoot(modal).querySelector('.mcp-list-toolbar > platform-button');
+    const brandingButton = qs(modalRoot(modal), '.mcp-list-toolbar > platform-button');
     clickPlatformButton(brandingButton);
     await modal.updateComplete;
     await waitUntil(() => modal._view === 'branding', 'branding view');
 }
 
-function installedServerStub(serverId, overrides = {}) {
+function installedServerStub(serverId: any, overrides: any = {}) {
     return {
         server_id: serverId,
         name: `Server ${serverId}`,
@@ -143,7 +144,7 @@ function installedServerStub(serverId, overrides = {}) {
     };
 }
 
-function catalogItemStub(catalogId, overrides = {}) {
+function catalogItemStub(catalogId: any, overrides: any = {}) {
     return {
         catalog_id: catalogId,
         registry_name: `demo/${catalogId}`,
@@ -161,7 +162,7 @@ function catalogItemStub(catalogId, overrides = {}) {
 
 describe('flows mcp servers modal', () => {
     /** @type {ReturnType<typeof createMcpWsStub> | null} */
-    let wsStub;
+    let wsStub: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -190,7 +191,7 @@ describe('flows mcp servers modal', () => {
             ),
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
@@ -199,7 +200,7 @@ describe('flows mcp servers modal', () => {
         await clickListTab(modal, 'catalog');
         await waitUntil(() => modal._catalogItems.length === 1, 'catalog load');
 
-        expect(modalRoot(modal).querySelectorAll('.mcp-card-shell')).to.have.length(1);
+        expect(qsa(modalRoot(modal), '.mcp-card-shell')).to.have.length(1);
     });
 
     it('installs catalog entry via Install button and refreshes servers list', async () => {
@@ -223,7 +224,7 @@ describe('flows mcp servers modal', () => {
                 50,
                 0,
             ),
-            'flows/mcp_catalog/install_requested': (payload) => {
+            'flows/mcp_catalog/install_requested': (payload: any) => {
                 if (!payload || payload.catalog_id !== 'store_demo') {
                     throw new Error('mcp ws stub: catalog_id store_demo required');
                 }
@@ -244,26 +245,26 @@ describe('flows mcp servers modal', () => {
             },
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
         await clickListTab(modal, 'catalog');
-        await waitUntil(() => modalRoot(modal).querySelector('.mcp-card-actions platform-button'), 'catalog card');
+        await waitUntil(() => q(modalRoot(modal), '.mcp-card-actions platform-button'), 'catalog card');
 
-        const installButton = modalRoot(modal).querySelector('.mcp-card-actions platform-button[variant="primary"]');
+        const installButton = qs(modalRoot(modal), '.mcp-card-actions platform-button[variant="primary"]');
         clickPlatformButton(installButton);
         await waitUntil(() => state.installCalls === 1, 'install request');
         await modal.updateComplete;
 
-        expect(modalRoot(modal).querySelector('.mcp-chip')).to.exist;
+        expect(qs(modalRoot(modal), '.mcp-chip')).to.exist;
     });
 
     it('loads branding with backend search query from header search field', async () => {
         wsStub = createMcpWsStub({
             'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
             'flows/mcp_branding/slug_suggest_requested': { slugs: ['context7_catalog'] },
-            'flows/mcp_branding/list_requested': (payload) => {
+            'flows/mcp_branding/list_requested': (payload: any) => {
                 if (payload && payload.search === 'context7') {
                     return offsetPage(
                         [{
@@ -283,7 +284,7 @@ describe('flows mcp servers modal', () => {
         });
 
         switchToSystemCompany();
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
@@ -291,13 +292,13 @@ describe('flows mcp servers modal', () => {
         await dispatchSearch(modal, 'context7');
 
         expect(
-            wsStub.calls.some((call) => (
+            wsStub.calls.some((call: any) => (
                 call.type === 'flows/mcp_branding/list_requested'
                 && call.payload
                 && call.payload.search === 'context7'
             )),
         ).to.equal(true);
-        expect(modalRoot(modal).querySelectorAll('.mcp-branding-card')).to.have.length(1);
+        expect(qsa(modalRoot(modal), '.mcp-branding-card')).to.have.length(1);
     });
 
     it('catalog search debounces and sends search query param', async () => {
@@ -311,7 +312,7 @@ describe('flows mcp servers modal', () => {
             ),
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
@@ -319,7 +320,7 @@ describe('flows mcp servers modal', () => {
         await dispatchSearch(modal, 'store_demo');
 
         expect(
-            wsStub.calls.some((call) => (
+            wsStub.calls.some((call: any) => (
                 call.type === 'flows/mcp_catalog/list_requested'
                 && call.payload
                 && call.payload.search === 'store_demo'
@@ -335,7 +336,7 @@ describe('flows mcp servers modal', () => {
         ];
         const secondPage = [installedServerStub('srv_48')];
         wsStub = createMcpWsStub({
-            'flows/mcp_servers/list_requested': (payload) => {
+            'flows/mcp_servers/list_requested': (payload: any) => {
                 const offset = payload && typeof payload.offset === 'number' ? payload.offset : 0;
                 if (offset === 50) {
                     return offsetPage(secondPage, 51, 50, 50);
@@ -344,7 +345,7 @@ describe('flows mcp servers modal', () => {
             },
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
@@ -354,7 +355,7 @@ describe('flows mcp servers modal', () => {
         await waitUntil(() => modal._installedItems.length === 51, 'second page');
 
         expect(
-            wsStub.calls.some((call) => (
+            wsStub.calls.some((call: any) => (
                 call.type === 'flows/mcp_servers/list_requested'
                 && call.payload
                 && call.payload.offset === 50
@@ -373,14 +374,14 @@ describe('flows mcp servers modal', () => {
             ),
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
         await clickListTab(modal, 'catalog');
         await waitUntil(() => modal._catalogItems.length === 1, 'catalog item');
 
-        const chips = [...modalRoot(modal).querySelectorAll('.mcp-card-meta .mcp-chip')];
+        const chips = [...qsa(modalRoot(modal), '.mcp-card-meta .mcp-chip')];
         expect(chips.some((chip) => chip.textContent.toLowerCase().includes('curated'))).to.equal(true);
     });
 
@@ -392,17 +393,17 @@ describe('flows mcp servers modal', () => {
         });
 
         switchToSystemCompany();
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
         await openBrandingView(modal);
         await waitUntil(
-            () => modalRoot(modal).querySelector('.mcp-branding-form platform-field') !== null,
+            () => q(modalRoot(modal), '.mcp-branding-form platform-field') !== null,
             'branding slug field',
         );
 
-        const slugField = modalRoot(modal).querySelector('.mcp-branding-form platform-field');
+        const slugField = qs(modalRoot(modal), '.mcp-branding-form platform-field');
         slugField.dispatchEvent(new CustomEvent('change', {
             detail: { value: 'context7' },
             bubbles: true,
@@ -412,13 +413,13 @@ describe('flows mcp servers modal', () => {
         await modal.updateComplete;
 
         expect(
-            wsStub.calls.some((call) => (
+            wsStub.calls.some((call: any) => (
                 call.type === 'flows/mcp_branding/slug_suggest_requested'
                 && call.payload
                 && call.payload.search === 'context7'
             )),
         ).to.equal(true);
-        expect(modalRoot(modal).querySelector('.mcp-branding-slugs platform-button')).to.exist;
+        expect(qs(modalRoot(modal), '.mcp-branding-slugs platform-button')).to.exist;
     });
 
     it('branding gallery card selects on click', async () => {
@@ -440,16 +441,16 @@ describe('flows mcp servers modal', () => {
         });
 
         switchToSystemCompany();
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
         await openBrandingView(modal);
         await waitUntil(() => modal._brandingItems.length === 1, 'branding gallery');
 
-        const card = modalRoot(modal).querySelector('.mcp-branding-card');
+        const card = qs(modalRoot(modal), '.mcp-branding-card');
         expect(card).to.exist;
-        card.click();
+        (card as TestEl).click();
         await modal.updateComplete;
 
         expect(card.getAttribute('aria-selected')).to.equal('true');
@@ -471,14 +472,14 @@ describe('flows mcp servers modal', () => {
             ),
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
         await waitUntil(() => modal._installedItems.length === 2, 'installed load');
 
         expect(modal._listTab).to.equal('installed');
-        expect(modalRoot(modal).querySelectorAll('.mcp-card-shell')).to.have.length(2);
+        expect(qsa(modalRoot(modal), '.mcp-card-shell')).to.have.length(2);
     });
 
     it('catalog then installed roundtrip reloads and shows cards', async () => {
@@ -504,7 +505,7 @@ describe('flows mcp servers modal', () => {
             ),
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
         `);
         await modal.updateComplete;
@@ -520,6 +521,6 @@ describe('flows mcp servers modal', () => {
         await waitUntil(() => installedCalls > callsAfterOpen, 'installed reload');
         await waitUntil(() => modal._installedItems.length === 2, 'installed after roundtrip');
 
-        expect(modalRoot(modal).querySelectorAll('.mcp-card-shell')).to.have.length(2);
+        expect(qsa(modalRoot(modal), '.mcp-card-shell')).to.have.length(2);
     });
 });

@@ -76,7 +76,7 @@ export class PlatformTimezonePicker extends PlatformElement {
             }
             .opt:hover,
             .opt:focus {
-                background: var(--accent-soft, rgba(99, 102, 241, 0.12));
+                background: var(--accent-subtle);
                 outline: none;
             }
             .empty {

@@ -9,9 +9,9 @@ import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -68,7 +68,7 @@ function _optionalErrorClass(value: unknown, label: string) {
     return value;
 }
 
-export function normalizeLlmModelScoreItem(raw: Record<string, any>) {
+export function normalizeLlmModelScoreItem(raw: Record<string, unknown>) {
     if (!raw || typeof raw !== 'object') {
         throw new Error('llm_model_scores: item must be an object');
     }
@@ -114,7 +114,7 @@ export function normalizeLlmModelScoreItem(raw: Record<string, any>) {
     };
 }
 
-export function normalizeLlmProviderRuntimeStatus(raw: Record<string, any>) {
+export function normalizeLlmProviderRuntimeStatus(raw: Record<string, unknown>) {
     if (!raw || typeof raw !== 'object') {
         throw new Error('llm_model_scores: provider status must be an object');
     }
@@ -167,7 +167,7 @@ function _optionalProbeSnapshot(value: unknown, label: string) {
     };
 }
 
-export function normalizeLlmModelScoreList(raw: Record<string, any>) {
+export function normalizeLlmModelScoreList(raw: Record<string, unknown>) {
     if (!raw || typeof raw !== 'object') {
         throw new Error('llm_model_scores: response must be an object');
     }

@@ -65,28 +65,28 @@ export class PlatformTraceViewer extends PlatformElement {
                 justify-content: center;
                 padding: 0;
                 border: none;
-                border-radius: var(--radius-full, 50%);
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+                border-radius: var(--radius-full);
+                background: var(--glass-tint-medium);
                 color: var(--text-secondary);
                 cursor: pointer;
                 transition:
-                    background var(--duration-fast, 0.2s) ease,
-                    color var(--duration-fast, 0.2s) ease,
-                    transform var(--duration-fast, 0.2s) ease;
+                    background var(--motion-duration-micro) ease,
+                    color var(--motion-duration-micro) ease,
+                    transform var(--motion-duration-micro) ease;
                 flex-shrink: 0;
             }
             .mode-btn:hover:not(:disabled) {
-                background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
                 transform: scale(1.06);
             }
             .mode-btn--active {
                 background: var(--accent);
-                color: var(--platform-btn-primary-text, #fff);
+                color: var(--platform-btn-primary-text);
             }
             .mode-btn--active:hover:not(:disabled) {
-                background: var(--platform-btn-primary-hover, var(--accent));
-                color: var(--platform-btn-primary-text, #fff);
+                background: var(--platform-btn-primary-bg-hover);
+                color: var(--platform-btn-primary-text);
             }
             .mode-btn:disabled {
                 opacity: 0.45;

@@ -184,7 +184,7 @@ export class FrontendSettingsPage extends PlatformPage {
             section { margin-bottom: var(--space-4); }
             section > h3 {
                 color: var(--text-primary);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 margin: 0 0 var(--space-2) 0;
             }
@@ -196,7 +196,7 @@ export class FrontendSettingsPage extends PlatformPage {
             section > .header h3 {
                 margin: 0;
                 color: var(--text-primary);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
             }
             section .section-help {
@@ -372,12 +372,12 @@ export class FrontendSettingsPage extends PlatformPage {
                 font-weight: var(--font-semibold);
                 color: white;
                 letter-spacing: 0;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,.16);
+                box-shadow: inset 0 0 0 1px var(--glass-tint-strong);
             }
             .provider-logo[data-tone="cyan"] { background: linear-gradient(135deg, #00a6ff, #00d6a3); }
-            .provider-logo[data-tone="green"] { background: linear-gradient(135deg, #16a34a, #84cc16); }
+            .provider-logo[data-tone="green"] { background: linear-gradient(135deg, var(--success), #84cc16); }
             .provider-logo[data-tone="blue"] { background: linear-gradient(135deg, #2563eb, #60a5fa); }
-            .provider-logo[data-tone="violet"] { background: linear-gradient(135deg, #6366f1, #a855f7); }
+            .provider-logo[data-tone="violet"] { background: linear-gradient(135deg, var(--accent), var(--accent-tertiary)); }
             .provider-title {
                 min-width: 0;
                 display: flex;
@@ -393,7 +393,7 @@ export class FrontendSettingsPage extends PlatformPage {
             .provider-title-row h4 {
                 margin: 0;
                 color: var(--text-primary);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
             }
             .provider-description {
@@ -437,7 +437,7 @@ export class FrontendSettingsPage extends PlatformPage {
                 width: 7px;
                 height: 7px;
                 border-radius: var(--radius-full);
-                background: #63d58a;
+                background: var(--success);
             }
             .provider-form {
                 display: grid;
@@ -1157,7 +1157,7 @@ export class FrontendSettingsPage extends PlatformPage {
         if (provider !== displayText(cap.platform_default_provider)) {
             return '';
         }
-        if (provider !== 'humanitec_llm') {
+        if (provider !== 'linnex_llm') {
             return platformModel;
         }
         const companyModel = typeof draft.model === 'string' && draft.model.length > 0 ? draft.model : 'auto';

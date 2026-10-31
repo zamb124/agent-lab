@@ -175,8 +175,8 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 min-height: 0;
                 width: 100%;
                 height: 100%;
-                background: var(--documents-stage-host-bg, #f0f4f9);
-                border-radius: var(--documents-stage-host-radius, 0);
+                background: var(--documents-stage-host-bg);
+                border-radius: var(--documents-stage-host-radius);
                 overflow: hidden;
             }
             .editor-loading-overlay {
@@ -189,14 +189,14 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 justify-content: flex-start;
                 gap: 0.75rem;
                 padding: 2.5rem 2rem;
-                background: var(--documents-stage-host-bg, #f0f4f9);
+                background: var(--documents-stage-host-bg);
                 pointer-events: none;
                 transition: opacity 220ms ease;
             }
             .editor-loading-overlay .paper-line {
                 height: 0.75rem;
                 border-radius: 999px;
-                background: var(--documents-stage-skeleton, linear-gradient(90deg, #eee, #f5f5f5, #eee));
+                background: var(--documents-stage-skeleton);
                 background-size: 200% 100%;
                 animation: oo-paper-shimmer 1.2s ease-in-out infinite;
             }
@@ -207,8 +207,8 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 flex: 1;
                 margin-top: 0.75rem;
                 border-radius: 4px;
-                background: var(--documents-stage-paper, #fff);
-                box-shadow: var(--documents-stage-host-shadow, none);
+                background: var(--documents-stage-paper);
+                box-shadow: var(--documents-stage-host-shadow);
                 position: relative;
                 overflow: hidden;
             }
@@ -216,7 +216,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 content: '';
                 position: absolute;
                 inset: 0;
-                background: var(--documents-stage-skeleton, linear-gradient(90deg, #eee, #f5f5f5, #eee));
+                background: var(--documents-stage-skeleton);
                 background-size: 200% 100%;
                 animation: oo-paper-shimmer 1.2s ease-in-out infinite;
                 opacity: 0.55;

@@ -12,24 +12,25 @@ import {
 } from '../../../../apps/flows/ui/_helpers/flows-editor-property-panel-prefs.js';
 import '@platform/lib/components/platform-button.js';
 import '../../../../apps/flows/ui/components/editor/flows-floating-panel.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
-function panelButtonByIcon(el, iconName) {
-    const buttons = el.shadowRoot.querySelectorAll('.panel-actions platform-button');
+function panelButtonByIcon(el: any, iconName: any) {
+    const buttons = qsa(shadow(el), '.panel-actions platform-button');
     for (const btn of buttons) {
-        if (btn.querySelector(`platform-icon[name="${iconName}"]`) !== null) {
+        if (q(btn!, `platform-icon[name="${iconName}"]`) !== null) {
             return btn;
         }
     }
     return null;
 }
 
-function clickPanelButton(btn) {
-    const inner = btn.shadowRoot?.querySelector('button');
+function clickPanelButton(btn: any) {
+    const inner = qs(shadow(btn), 'button');
     if (inner instanceof HTMLButtonElement) {
-        inner.click();
+        (inner as TestEl).click();
         return;
     }
-    btn.click();
+    (btn as TestEl).click();
 }
 
 function readPrefsRoot() {
@@ -49,19 +50,19 @@ describe('flows-floating-panel', () => {
     afterEach(() => fixtureCleanup());
 
     it('рендерит header с title и icon', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel header-icon="code" header-title="My Node" color-token="var(--accent)">
                 <span>Body</span>
             </flows-floating-panel>
         `);
-        const name = el.shadowRoot.querySelector('.panel-name');
+        const name = qs(shadow(el), '.panel-name');
         expect(name.textContent).to.contain('My Node');
-        const slot = el.shadowRoot.querySelector('slot');
+        const slot = qs(shadow(el), 'slot');
         expect(slot).to.not.be.null;
     });
 
     it('collapse toggle сворачивает body', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel header-icon="code" header-title="X">
                 <span>Body</span>
             </flows-floating-panel>
@@ -75,7 +76,7 @@ describe('flows-floating-panel', () => {
     });
 
     it('backdrop click эмитит close только при show-backdrop', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel
                 panel-id="test-backdrop-panel"
                 header-icon="code"
@@ -86,21 +87,21 @@ describe('flows-floating-panel', () => {
         await elementUpdated(el);
         let closed = false;
         el.addEventListener('close', () => { closed = true; });
-        const backdrop = el.shadowRoot.querySelector('.panel-backdrop');
+        const backdrop = qs(shadow(el), '.panel-backdrop');
         expect(backdrop).to.not.be.null;
-        backdrop.click();
+        (backdrop as TestEl).click();
         expect(closed).to.equal(true);
     });
 
     it('без show-backdrop backdrop не рендерится', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel header-icon="code" header-title="X"></flows-floating-panel>
         `);
-        expect(el.shadowRoot.querySelector('.panel-backdrop')).to.be.null;
+        expect(q(shadow(el), '.panel-backdrop')).to.be.null;
     });
 
     it('close-кнопка эмитит close', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel header-icon="code" header-title="X"></flows-floating-panel>
         `);
         await elementUpdated(el);
@@ -113,7 +114,7 @@ describe('flows-floating-panel', () => {
     });
 
     it('без ai-active handle ассистента не рендерится', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel
                 panel-id="assistant-closed"
                 header-icon="code"
@@ -122,11 +123,11 @@ describe('flows-floating-panel', () => {
             ></flows-floating-panel>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.assistant-resize-handle')).to.be.null;
+        expect(q(shadow(el), '.assistant-resize-handle')).to.be.null;
     });
 
     it('при ai-active показывает handle и drag меняет ширину + localStorage', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel
                 panel-id="assistant-resize"
                 header-icon="code"
@@ -140,7 +141,7 @@ describe('flows-floating-panel', () => {
         `);
         await elementUpdated(el);
 
-        const handle = el.shadowRoot.querySelector('.assistant-resize-handle');
+        const handle = qs(shadow(el), '.assistant-resize-handle');
         expect(handle).to.not.be.null;
         expect(el.style.getPropertyValue('--panel-assistant-width')).to.equal(
             `${ASSISTANT_COL_WIDTH_DEFAULT}px`,
@@ -189,7 +190,7 @@ describe('flows-floating-panel', () => {
     });
 
     it('assistant slot ограничивает высоту slotted-контента под panel height', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-floating-panel
                 panel-id="assistant-scroll-height"
                 header-icon="code"
@@ -213,12 +214,12 @@ describe('flows-floating-panel', () => {
         });
         await elementUpdated(el);
 
-        const sheetText = [...el.shadowRoot.adoptedStyleSheets]
+        const sheetText = [...shadow(el).adoptedStyleSheets]
             .map((sheet) => [...sheet.cssRules].map((rule) => rule.cssText).join('\n'))
             .join('\n');
         expect(sheetText).to.match(/grid-template-rows:\s*minmax\(0(?:px)?, 1fr\)/);
 
-        const assistantSlot = el.shadowRoot.querySelector('.panel-assistant slot');
+        const assistantSlot = qs(shadow(el), '.panel-assistant slot');
         const assigned = assistantSlot.assignedElements({ flatten: true });
         expect(assigned.length).to.equal(1);
         const slotted = assigned[0];

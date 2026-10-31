@@ -130,8 +130,8 @@ export class CrawlReportFilterMetadataPanel extends PlatformElement {
         enrichmentSnapshot: { type: Object },
         locale: { type: String },
     }
-    declare filterMetadata: Record<string, any> | null;
-    declare enrichmentSnapshot: Record<string, any> | null;
+    declare filterMetadata: Record<string, unknown> | null;
+    declare enrichmentSnapshot: Record<string, unknown> | null;
     declare locale: string;
 
     static override styles: CSSResultGroup = CrawlReportStructuralPanel.styles;

@@ -28,6 +28,8 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/note-card-view.js';
@@ -129,13 +131,13 @@ export class CRMNotePage extends CRMNamespacePage {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke, var(--glass-border-medium));
+                border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-md);
                 background: var(--glass-tint-subtle);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
             .back-btn:hover { background: var(--glass-tint-medium); }
             .note-mobile-header-wrap {
@@ -161,7 +163,7 @@ export class CRMNotePage extends CRMNamespacePage {
             }
             .note-mobile-header-btn.active {
                 background: var(--accent);
-                color: #FFFFFF;
+                color: var(--text-primary);
             }
             @media (max-width: 767px) {
                 .note-mobile-header-wrap {
@@ -739,15 +741,11 @@ export class CRMNotePage extends CRMNamespacePage {
             return html`
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
-                    <div class="center">
-                        <platform-icon class="icon" name="info" size="48"></platform-icon>
-                        <h2>${this.t('note_page.no_id_title')}</h2>
-                        <p>${this.t('note_page.no_id_message')}</p>
-                        <button class="back-btn" type="button" @click=${this._onBackToNotes}>
-                            <platform-icon name="arrow-left" size="16"></platform-icon>
+                    <platform-empty-state icon="info" title=${this.t('note_page.no_id_title')} hint=${this.t('note_page.no_id_message')}>
+                        <platform-button variant="secondary" @click=${this._onBackToNotes}>
                             ${this.t('note_page.back_to_notes')}
-                        </button>
-                    </div>
+                        </platform-button>
+                    </platform-empty-state>
                 </div>
             `;
         }
@@ -775,15 +773,11 @@ export class CRMNotePage extends CRMNamespacePage {
             return html`
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
-                    <div class="center">
-                        <platform-icon class="icon" name="warning" size="48"></platform-icon>
-                        <h2>${this.t('note_page.not_found_title')}</h2>
-                        <p>${this._cardError}</p>
-                        <button class="back-btn" type="button" @click=${this._onBackToNotes}>
-                            <platform-icon name="arrow-left" size="16"></platform-icon>
+                    <platform-empty-state icon="warning" title=${this.t('note_page.not_found_title')} hint=${this._cardError}>
+                        <platform-button variant="secondary" @click=${this._onBackToNotes}>
                             ${this.t('note_page.back_to_notes')}
-                        </button>
-                    </div>
+                        </platform-button>
+                    </platform-empty-state>
                 </div>
             `;
         }
@@ -795,9 +789,7 @@ export class CRMNotePage extends CRMNamespacePage {
             return html`
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
-                    <div class="center">
-                        <platform-spinner size="lg"></platform-spinner>
-                    </div>
+                    <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }
@@ -825,9 +817,7 @@ export class CRMNotePage extends CRMNamespacePage {
             return html`
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
-                    <div class="center">
-                        <platform-spinner size="lg"></platform-spinner>
-                    </div>
+                    <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }

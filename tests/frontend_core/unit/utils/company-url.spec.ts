@@ -19,7 +19,7 @@ const LINNEX_BRAND = {
     supportEmail: 'support@linnex.io',
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://linnex.io/',
-    supportedDomains: ['linnex.io', 'humanitec.ru'],
+    supportedDomains: ['linnex.io', 'linnex.io'],
     modelsProductName: 'Linnex Models',
     voiceProductName: 'Linnex Voice',
     llmsDisplayLabel: 'Linnex LLMs',
@@ -29,20 +29,21 @@ const LINNEX_BRAND = {
 /**
  * @param {Partial<Location> & { __PLATFORM_BRAND__?: typeof LINNEX_BRAND }} loc
  */
-function withLocation(loc) {
+function withLocation(loc: Partial<Location> & { __PLATFORM_BRAND__?: typeof LINNEX_BRAND }) {
     const prev = globalThis.window;
-    globalThis.window = {
+    const fakeWindow = {
         location: {
             hostname: loc.hostname ?? 'localhost',
             port: loc.port ?? '',
             protocol: loc.protocol ?? 'https:',
         },
     };
+    Object.defineProperty(globalThis, 'window', { value: fakeWindow, configurable: true, writable: true });
     if (loc.__PLATFORM_BRAND__) {
         setPlatformBrandBootstrap(loc.__PLATFORM_BRAND__);
     }
     return () => {
-        globalThis.window = prev;
+        Object.defineProperty(globalThis, 'window', { value: prev, configurable: true, writable: true });
     };
 }
 
@@ -96,7 +97,7 @@ describe('getCompanyHostContext', () => {
 });
 
 describe('buildCompanySubdomainUrl', () => {
-    it('linnex.io строит system.linnex.io, не humanitec.ru', () => {
+    it('linnex.io строит system.linnex.io, не linnex.io', () => {
         const restore = withLocation({
             hostname: 'linnex.io',
             port: '',

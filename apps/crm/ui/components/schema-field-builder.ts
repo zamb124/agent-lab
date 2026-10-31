@@ -286,12 +286,12 @@ export class SchemaFieldBuilder extends PlatformElement {
 
             .btn-danger {
                 background: transparent;
-                color: var(--color-danger, #ef4444);
-                border-color: var(--color-danger, #ef4444);
+                color: var(--error);
+                border-color: var(--error);
             }
 
             .btn-danger:hover:not(:disabled) {
-                background: var(--color-danger, #ef4444);
+                background: var(--error);
                 color: white;
             }
 

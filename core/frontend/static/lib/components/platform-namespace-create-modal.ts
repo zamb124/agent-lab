@@ -56,7 +56,7 @@ export abstract class PlatformNamespaceCreateModal extends PlatformFormModal {
             }
             .form-error {
                 margin-top: var(--space-2);
-                color: var(--danger);
+                color: var(--error);
                 font-size: var(--text-xs);
             }
             .template-grid {
@@ -71,9 +71,9 @@ export abstract class PlatformNamespaceCreateModal extends PlatformFormModal {
                 padding: var(--space-3);
                 cursor: pointer;
                 text-align: left;
-                transition: border-color var(--duration-fast),
-                            background var(--duration-fast),
-                            transform var(--duration-fast);
+                transition: border-color var(--motion-duration-micro),
+                            background var(--motion-duration-micro),
+                            transform var(--motion-duration-micro);
             }
             .template-card:hover {
                 border-color: var(--accent);

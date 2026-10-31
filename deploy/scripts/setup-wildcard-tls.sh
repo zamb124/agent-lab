@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Идемпотентная настройка wildcard TLS для humanitec.ru + *.humanitec.ru через
+# Идемпотентная настройка wildcard TLS для linnex.io + *.linnex.io через
 # flant/cert-manager-webhook-regru (DNS-01) и Let's Encrypt.
 # Шаги: git clone webhook-чарта, helm upgrade --install regru-webhook, ClusterIssuer
 # letsencrypt-prod-dns01, Certificate platform-tls в namespace platform, ждём Ready.
@@ -27,10 +27,10 @@ if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
   exit 1
 fi
 
-LE_EMAIL="${LE_EMAIL:-ops@humanitec.ru}"
-APEX_HOST="${APEX_HOST:-humanitec.ru}"
-WILDCARD_HOST="${WILDCARD_HOST:-*.humanitec.ru}"
-PLATFORM_BRAND_DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
+LE_EMAIL="${LE_EMAIL:-ops@linnex.io}"
+APEX_HOST="${APEX_HOST:-linnex.io}"
+WILDCARD_HOST="${WILDCARD_HOST:-*.linnex.io}"
+PLATFORM_BRAND_DOMAINS="${PLATFORM_BRAND_DOMAINS:-linnex.io linnex.io}"
 PLATFORM_TLS_SECRET="${PLATFORM_TLS_SECRET:-platform-tls}"
 WEBHOOK_REPO_URL="${WEBHOOK_REPO_URL:-https://github.com/flant/cert-manager-webhook-regru.git}"
 WEBHOOK_CHART_DIR="${WEBHOOK_CHART_DIR:-${TMPDIR:-/tmp}/cert-manager-webhook-regru}"

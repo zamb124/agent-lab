@@ -5,38 +5,40 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 import { installFetchMock } from '../../helpers/mock-fetch.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
-let fetchMock;
+let fetchMock: ReturnType<typeof installFetchMock>;
 beforeEach(() => { fetchMock = installFetchMock(); });
 afterEach(() => fetchMock.uninstall());
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'system' } });
+import { prop } from '../../helpers/prop.js';
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
 const stateNotLoaded = { fileTypes: { loaded: false, categories: [], registry: [], error: null } };
 const stateLoaded = { fileTypes: { loaded: true, categories: ['x'], registry: [], error: null } };
 
 describe('fileTypesEffect', () => {
     it('не на bootstrap → no-op', async () => {
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createFileTypesEffect()(ev('foo/bar/baz'), buildCtx(() => stateNotLoaded, dispatched));
         expect(dispatched).toHaveLength(0);
     });
 
     it('уже loaded → no-op', async () => {
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createFileTypesEffect()(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => stateLoaded, dispatched));
         expect(dispatched).toHaveLength(0);
     });
 
     it('успех → LOADED', async () => {
         fetchMock.respondJson('GET', '/api/platform/file-types', { categories: ['image'], registry: [{ extension: '.png', mime_types: ['image/png'], category: 'image' }] });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createFileTypesEffect()(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => stateNotLoaded, dispatched));
         const loaded = dispatched.find((d) => d.type === FILE_TYPES_EVENTS.LOADED);
-        expect(loaded.payload.categories).toEqual(['image']);
+        expect(prop(loaded?.payload, 'categories')).toEqual(['image']);
     });
 
     it('ошибка → LOAD_FAILED', async () => {
         fetchMock.respondStatus('GET', '/api/platform/file-types', 500);
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createFileTypesEffect()(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => stateNotLoaded, dispatched));
         expect(dispatched.find((d) => d.type === FILE_TYPES_EVENTS.LOAD_FAILED)).toBeTruthy();
     });

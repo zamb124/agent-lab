@@ -8,9 +8,9 @@ from core.search import SearchResultInsightsRequest, SearchSuggestRequest, WebSe
 
 def _result(
     *,
-    title: str = "Humanitec Search Platform",
+    title: str = "Linnex Search Platform",
     url: str = "https://example.com/search",
-    snippet: str = "Humanitec public search platform with documents",
+    snippet: str = "Linnex public search platform with documents",
     rank: int = 1,
     provider_rank: int = 1,
 ) -> WebSearchResult:
@@ -28,7 +28,7 @@ def _result(
 
 def test_search_suggestion_service_builds_quick_suggestions_without_results() -> None:
     response = SearchSuggestionService().suggest(
-        SearchSuggestRequest(query="Humanitec поиск", mode="quick", limit=3)
+        SearchSuggestRequest(query="Linnex поиск", mode="quick", limit=3)
     )
 
     assert response.mode == "quick"
@@ -37,7 +37,7 @@ def test_search_suggestion_service_builds_quick_suggestions_without_results() ->
         "compare",
         "refine",
     ]
-    assert all("Humanitec поиск" in item.text for item in response.suggestions)
+    assert all("Linnex поиск" in item.text for item in response.suggestions)
     assert [item.kind for item in response.followups] == ["follow_up", "follow_up"]
 
 
@@ -80,7 +80,7 @@ def test_search_suggestion_service_adds_research_and_source_hints() -> None:
 def test_search_result_insight_service_scores_matches_and_actions() -> None:
     response = SearchResultInsightService().insights(
         SearchResultInsightsRequest(
-            query="Humanitec документы",
+            query="Linnex документы",
             mode="deep",
             results=[
                 _result(),
@@ -97,7 +97,7 @@ def test_search_result_insight_service_scores_matches_and_actions() -> None:
 
     first = response.insights[0]
     second = response.insights[1]
-    assert first.matched_terms == ["humanitec"]
+    assert first.matched_terms == ["linnex"]
     assert first.confidence > second.confidence
     assert first.actions == [
         "open_source",

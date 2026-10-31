@@ -84,9 +84,9 @@ export class PlatformServicesLauncher extends PlatformElement {
                 padding: var(--space-2);
                 border-radius: var(--radius-xl);
                 transition:
-                    transform var(--duration-normal) var(--easing-default),
-                    box-shadow var(--duration-normal) var(--easing-default),
-                    background var(--duration-normal) var(--easing-default);
+                    transform var(--motion-duration-layout) var(--motion-ease-standard),
+                    box-shadow var(--motion-duration-layout) var(--motion-ease-standard),
+                    background var(--motion-duration-layout) var(--motion-ease-standard);
                 border: none;
                 background: transparent;
                 font: inherit;
@@ -128,9 +128,9 @@ export class PlatformServicesLauncher extends PlatformElement {
                 justify-content: center;
                 padding: var(--space-2);
                 transition:
-                    transform var(--duration-normal) var(--easing-default),
-                    box-shadow var(--duration-normal) var(--easing-default),
-                    border-color var(--duration-normal) var(--easing-default);
+                    transform var(--motion-duration-layout) var(--motion-ease-standard),
+                    box-shadow var(--motion-duration-layout) var(--motion-ease-standard),
+                    border-color var(--motion-duration-layout) var(--motion-ease-standard);
             }
             @media (hover: hover) {
                 a.tile:not(:active):hover .icon-wrap,

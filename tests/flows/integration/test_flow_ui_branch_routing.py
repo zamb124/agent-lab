@@ -11,7 +11,12 @@ from httpx2 import AsyncClient
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.models.flow_config import BranchConfig
 from core.context import require_context
-from core.ui_document.document import FlowUIConversation, FlowUIDocument, FlowUIMarkdownText, FlowUIPage
+from core.ui_document.document import (
+    FlowUIConversation,
+    FlowUIDocument,
+    FlowUIMarkdownText,
+    FlowUIPage,
+)
 from tests.flows._flow_ui_session import (
     a2a_send,
     a2a_send_error,

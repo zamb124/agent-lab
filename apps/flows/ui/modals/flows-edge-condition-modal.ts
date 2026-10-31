@@ -111,7 +111,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             }
             .condition-header h3 {
                 margin: 0 0 var(--space-1);
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
@@ -155,7 +155,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 height: 28px;
                 padding: 0 9px;
                 box-sizing: border-box;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1;

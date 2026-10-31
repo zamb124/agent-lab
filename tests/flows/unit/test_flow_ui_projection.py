@@ -20,8 +20,8 @@ from apps.flows.src.flow_ui.projection import (
     validate_redacted_paths,
 )
 from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
-from core.ui_document.document import FlowUIBlock, FlowUIBlockModel, FlowUIDocument
 from core.types import JsonObject
+from core.ui_document.document import FlowUIBlock, FlowUIBlockModel, FlowUIDocument
 
 BLOCK_ADAPTER: TypeAdapter[FlowUIBlockModel] = TypeAdapter(FlowUIBlock)
 

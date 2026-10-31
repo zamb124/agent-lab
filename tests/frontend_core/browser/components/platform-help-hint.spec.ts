@@ -5,9 +5,10 @@
 import { fixture, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-help-hint.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
-async function mountHint(props = {}) {
-    const el = await fixture(html`
+async function mountHint(props: any = {}) {
+    const el = await fixture<TestEl>(html`
         <platform-help-hint
             text=${props.text ?? 'Пояснение к полю'}
             summary=${props.summary ?? ''}
@@ -21,15 +22,15 @@ async function mountHint(props = {}) {
     return el;
 }
 
-function rootOf(el) {
-    return el.shadowRoot.querySelector('.hint-root');
+function rootOf(el: any) {
+    return qs(shadow(el), '.hint-root');
 }
 
-function bubbleOf(el) {
-    return el.shadowRoot.querySelector('.platform-help-hint-portal-bubble');
+function bubbleOf(el: any) {
+    return q(shadow(el), '.platform-help-hint-portal-bubble');
 }
 
-async function openHint(el) {
+async function openHint(el: any) {
     rootOf(el).dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
     await elementUpdated(el);
     await aTimeout(0);
@@ -45,7 +46,7 @@ describe('platform-help-hint', () => {
     it('по умолчанию рисует кнопку и не показывает пузырёк', async () => {
         const el = await mountHint();
 
-        expect(el.shadowRoot.querySelector('.hint-btn')).to.exist;
+        expect(q(shadow(el), '.hint-btn')).to.exist;
         expect(bubbleOf(el)).to.be.null;
         expect(rootOf(el).getAttribute('aria-expanded')).to.equal('false');
     });
@@ -56,7 +57,7 @@ describe('platform-help-hint', () => {
         await openHint(el);
 
         expect(bubbleOf(el)).to.exist;
-        expect(bubbleOf(el).textContent).to.contain('Что это значит');
+        expect(bubbleOf(el)!.textContent).to.contain('Что это значит');
         expect(rootOf(el).getAttribute('aria-expanded')).to.equal('true');
     });
 
@@ -76,9 +77,9 @@ describe('platform-help-hint', () => {
 
         await openHint(el);
 
-        expect(el.shadowRoot.querySelector('.platform-help-hint-portal-summary').textContent.trim())
+        expect(qs(shadow(el), '.platform-help-hint-portal-summary').textContent.trim())
             .to.equal('Кратко');
-        expect(el.shadowRoot.querySelector('.platform-help-hint-portal-body').textContent.trim())
+        expect(qs(shadow(el), '.platform-help-hint-portal-body').textContent.trim())
             .to.equal('Подробно про поле');
     });
 
@@ -87,7 +88,7 @@ describe('platform-help-hint', () => {
 
         await openHint(el);
 
-        const link = el.shadowRoot.querySelector('.platform-help-hint-portal-link');
+        const link = qs(shadow(el), '.platform-help-hint-portal-link');
         expect(link).to.exist;
         expect(link.textContent.trim()).to.equal('Документация');
         expect(link.getAttribute('target')).to.equal('_blank');
@@ -97,12 +98,12 @@ describe('platform-help-hint', () => {
     it('со ссылкой пузырёк получает роль диалога, без неё — подсказки', async () => {
         const withLink = await mountHint({ docHref: '/guide', docLabel: 'Документация' });
         await openHint(withLink);
-        expect(withLink.shadowRoot.querySelector('platform-popover').getAttribute('role'))
+        expect(qs(shadow(withLink), 'platform-popover').getAttribute('role'))
             .to.equal('dialog');
 
         const plain = await mountHint();
         await openHint(plain);
-        expect(plain.shadowRoot.querySelector('platform-popover').getAttribute('role'))
+        expect(qs(shadow(plain), 'platform-popover').getAttribute('role'))
             .to.equal('tooltip');
     });
 
@@ -111,7 +112,7 @@ describe('platform-help-hint', () => {
 
         await openHint(el);
 
-        expect(bubbleOf(el).classList.contains('platform-help-hint-portal-bubble--wide')).to.be.true;
+        expect(bubbleOf(el)!.classList.contains('platform-help-hint-portal-bubble--wide')).to.be.true;
     });
 
     it('Escape закрывает пузырёк', async () => {
@@ -139,6 +140,6 @@ describe('platform-help-hint', () => {
         const el = await mountHint();
         await openHint(el);
 
-        expect(el.shadowRoot.querySelector('platform-popover').matches(':popover-open')).to.be.true;
+        expect(qs(shadow(el), 'platform-popover').matches(':popover-open')).to.be.true;
     });
 });

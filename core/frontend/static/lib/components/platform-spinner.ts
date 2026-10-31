@@ -29,13 +29,13 @@ export class PlatformSpinner extends PlatformElement {
             }
 
             .spinner-logo {
-                width: var(--spinner-size, 24px);
-                height: var(--spinner-size, 24px);
-                min-width: var(--spinner-size, 24px);
-                min-height: var(--spinner-size, 24px);
+                width: var(--spinner-size);
+                height: var(--spinner-size);
+                min-width: var(--spinner-size);
+                min-height: var(--spinner-size);
                 object-fit: contain;
                 display: block;
-                animation: platform-spin var(--spinner-duration, 1.2s) linear infinite;
+                animation: platform-spin var(--spinner-duration) linear infinite;
                 transform-origin: center center;
                 will-change: transform;
             }
@@ -45,7 +45,7 @@ export class PlatformSpinner extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
-                color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+                color: var(--text-secondary);
                 letter-spacing: 0.05em;
                 text-align: center;
             }
@@ -55,7 +55,7 @@ export class PlatformSpinner extends PlatformElement {
                 inset: 0;
                 z-index: 9999;
                 flex-direction: column;
-                background: var(--spinner-fullscreen-bg, #0F0F0F);
+                background: var(--spinner-fullscreen-bg);
                 transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             }
 
@@ -76,7 +76,7 @@ export class PlatformSpinner extends PlatformElement {
                 inset: 0;
                 z-index: 20;
                 flex-direction: column;
-                background: var(--spinner-overlay-bg, rgba(15, 15, 15, 0.55));
+                background: var(--spinner-overlay-bg);
                 backdrop-filter: blur(2px);
             }
 

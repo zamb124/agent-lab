@@ -22,7 +22,7 @@
       "type": "llm_node",
       "prompt": "Сгенерируй ровно 3 поисковых запроса по вопросу пользователя. Верни строго JSON без markdown: {\"queries\":[\"...\",\"...\",\"...\"]}",
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }
@@ -75,7 +75,7 @@
         }
       ],
       "llm": {
-        "provider": "humanitec_llm",
+        "provider": "linnex_llm",
         "model": "auto",
         "temperature": 0.2
       }

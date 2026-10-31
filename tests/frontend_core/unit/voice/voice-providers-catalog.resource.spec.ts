@@ -8,7 +8,9 @@ import {
     flowsVoiceProvidersCatalogLoadOp,
 } from '@platform/lib/events/resources/voice-providers-catalog.resource.js';
 import { installFetchMock } from '../../helpers/mock-fetch.js';
-import { buildCtx } from '../../helpers/bus-fixtures.js';
+import { buildCtx, testEvent } from '../../helpers/bus-fixtures.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
+import { prop } from '../../helpers/prop.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 
 function minimalCatalogPayload() {
@@ -34,7 +36,7 @@ function minimalCatalogPayload() {
     };
 }
 
-let fetchMock;
+let fetchMock: ReturnType<typeof installFetchMock>;
 
 beforeEach(() => {
     resetFactories();
@@ -70,19 +72,14 @@ describe('voice-providers-catalog resource', () => {
             '/voice/api/v1/voice-providers/catalog',
             catalog,
         );
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await companyVoiceProvidersCatalogLoadOp.effect(
-            {
-                type: companyVoiceProvidersCatalogLoadOp.events.REQUESTED,
-                payload: null,
-                id: 'r1',
-                meta: {},
-            },
+            testEvent(companyVoiceProvidersCatalogLoadOp.events.REQUESTED, null),
             buildCtx(() => ({}), dispatched),
         );
         const ok = dispatched.find((d) => d.type === companyVoiceProvidersCatalogLoadOp.events.SUCCEEDED);
         expect(ok).toBeTruthy();
-        expect(ok.payload.result).toEqual(catalog);
-        expect(fetchMock.calls[0].url).toBe('/voice/api/v1/voice-providers/catalog');
+        expect(prop(ok?.payload, 'result')).toEqual(catalog);
+        expect(fetchMock.calls[0]?.url).toBe('/voice/api/v1/voice-providers/catalog');
     });
 });

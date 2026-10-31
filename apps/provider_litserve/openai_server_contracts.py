@@ -58,11 +58,11 @@ def _openrouter_like_model_object(
             image="0",
         ),
         top_provider=TopProviderSchema(
-            name="humanitec-rag-gateway",
+            name="linnex-rag-gateway",
             is_moderated=False,
         ),
         per_request_limits=None,
-        owned_by="humanitec-rag-gateway",
+        owned_by="linnex-rag-gateway",
         capabilities=capabilities,
         native_dimension=native_dimension,
         storage_dimension=storage_dimension,

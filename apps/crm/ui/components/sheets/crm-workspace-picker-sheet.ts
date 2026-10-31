@@ -87,9 +87,9 @@ export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
         super();
         this.snap = 'half';
         this._namespaces = this.useResource(FACTORY_NAME);
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
+        this._authSel = this.select((s: Record<string, unknown>) => s.auth.user);
         this._namespaceSelectionByCompany = this.select(
-            (s: Record<string, any>) => s.ui.namespace.selectionByCompany,
+            (s: Record<string, unknown>) => s.ui.namespace.selectionByCompany,
         );
     }
 

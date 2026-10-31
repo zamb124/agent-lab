@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 import {
     getBlankReflectionNodeConfig,
     getReflectionPolicyPreset,
@@ -19,10 +20,10 @@ import {
 describe('flows reflection defaults', () => {
     it('builds blank reflection node with critic_policy and llm', () => {
         const cfg = getBlankReflectionNodeConfig();
-        expect(cfg.llm.provider).toBe('humanitec_llm');
+        expect(cfg.llm.provider).toBe('linnex_llm');
         expect(cfg.critic_policy.gate).toBe('final_answer');
         expect(cfg.critic_policy.criteria.length).toBeGreaterThanOrEqual(1);
-        expect(cfg.critic_policy.exits.map((item) => item.exit_id)).toEqual([
+        expect(cfg.critic_policy.exits.map((item: { exit_id: string }) => item.exit_id)).toEqual([
             'approved',
             'blocked',
         ]);
@@ -81,13 +82,13 @@ describe('flows reflection defaults', () => {
             { from_node: 'r1', to_node: 'n2', from_port: 'approved' },
             reflectionExitCondition('blocked'),
         );
-        expect(synced.from_port).toBe('blocked');
+        expect(prop(synced, 'from_port')).toBe('blocked');
         const cleared = syncReflectionEdgeFromPort(
             { from_node: 'r1', to_node: 'n2', from_port: 'approved' },
             { type: 'simple', variable: 'result', operator: '==', value: 1 },
         );
-        expect(cleared.from_port).toBeUndefined();
-        expect(cleared.condition.variable).toBe('result');
+        expect('from_port' in cleared ? prop(cleared, 'from_port') : undefined).toBeUndefined();
+        expect(prop(prop(cleared, 'condition'), 'variable')).toBe('result');
     });
 
     it('maps out-port Y fractions for N exits', () => {

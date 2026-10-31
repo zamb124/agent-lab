@@ -10,6 +10,12 @@ import {
 import { secretsVariableVersionsLoadOp } from '@platform/lib/events/resources/secrets-variable-versions.resource.js';
 import { secretsVariablesResolveOp } from '@platform/lib/events/resources/secrets-variables-resolve.resource.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
+import { testEvent } from '../../helpers/bus-fixtures.js';
+
+function isResultPage(v: unknown): v is { items: Array<{ variable_key: string; groups?: string[] }>; total: number } {
+    return typeof v === 'object' && v !== null && 'items' in v && 'total' in v;
+}
+import { prop } from '../../helpers/prop.js';
 
 beforeEach(() => {
     resetFactories();
@@ -55,13 +61,13 @@ describe('mapPlatformVariable', () => {
         expect(mapped.variable_key).toBe('MY_VAR');
         expect(mapped.company_id).toBe('comp1');
         expect(mapped.version).toBe(2);
-        expect(mapped.payload.base).toEqual({
+        expect(prop(mapped.payload, 'base')).toEqual({
             value_kind: 'static',
             value: 'hello',
             expression: null,
         });
-        expect(mapped.payload.scopes).toHaveLength(1);
-        expect(mapped.payload.scopes[0].match[0]).toEqual({
+        expect(prop(mapped.payload, 'scopes')).toHaveLength(1);
+        expect(prop(prop(prop(prop(mapped.payload, 'scopes'), '0'), 'match'), '0')).toEqual({
             field: 'flow_id',
             op: 'eq',
             ref_key: 'flow',
@@ -135,21 +141,12 @@ describe('secretsVariablesResource', () => {
 
     it('LIST_LOADED и CREATED мапят items через mapPlatformVariable', () => {
         const raw = minimalVariablePayload();
-        const listed = secretsVariablesResource.reducer(secretsVariablesResource.slice.initial, {
-            type: secretsVariablesResource.events.LIST_LOADED,
-            payload: { items: [raw], total: 1 },
-        });
-        expect(listed.items[0].groups).toEqual(['g1', 'g2']);
-        const created = secretsVariablesResource.reducer(listed, {
-            type: secretsVariablesResource.events.CREATED,
-            payload: { item: minimalVariablePayload({ variable_key: 'NEW_VAR' }) },
-        });
-        expect(created.byId.NEW_VAR.variable_key).toBe('NEW_VAR');
-        const removed = secretsVariablesResource.reducer(created, {
-            type: secretsVariablesResource.events.REMOVED,
-            payload: { variable_key: 'MY_VAR' },
-        });
-        expect(removed.items.map((item) => item.variable_key)).toEqual(['NEW_VAR']);
+        const listed = secretsVariablesResource.reducer(secretsVariablesResource.slice.initial, testEvent(secretsVariablesResource.events.LIST_LOADED, { items: [raw], total: 1 }));
+        expect(prop(listed.items[0], 'groups')).toEqual(['g1', 'g2']);
+        const created = secretsVariablesResource.reducer(listed, testEvent(secretsVariablesResource.events.CREATED, { item: minimalVariablePayload({ variable_key: 'NEW_VAR' }) }));
+        expect(prop(prop(created.byId, 'NEW_VAR'), 'variable_key')).toBe('NEW_VAR');
+        const removed = secretsVariablesResource.reducer(created, testEvent(secretsVariablesResource.events.REMOVED, { variable_key: 'MY_VAR' }));
+        expect(removed.items.map((item) => prop(item, 'variable_key'))).toEqual(['NEW_VAR']);
     });
 });
 
@@ -162,20 +159,16 @@ describe('secretsVariableVersionsLoadOp', () => {
             path: '/secrets/api/v1/variables/:variable_key/versions',
         });
         const raw = minimalVariablePayload({ variable_key: 'V1', version: 3 });
-        const state = secretsVariableVersionsLoadOp.reducer(secretsVariableVersionsLoadOp.slice.initial, {
-            type: secretsVariableVersionsLoadOp.events.SUCCEEDED,
-            payload: { result: { items: [raw], total: 1, limit: 50, offset: 0 }, request: { variable_key: 'V1' } },
-        });
-        expect(state.lastResult.items[0].variable_key).toBe('V1');
-        expect(state.lastResult.items[0].groups).toEqual(['g1', 'g2']);
-        expect(state.lastResult.total).toBe(1);
+        const state = secretsVariableVersionsLoadOp.reducer(secretsVariableVersionsLoadOp.slice.initial, testEvent(secretsVariableVersionsLoadOp.events.SUCCEEDED, { result: { items: [raw], total: 1, limit: 50, offset: 0 }, request: { variable_key: 'V1' } }));
+        const result = state.lastResult;
+        if (!isResultPage(result)) throw new Error('lastResult page expected');
+        expect(result.items[0]?.variable_key).toBe('V1');
+        expect(result.items[0]?.groups).toEqual(['g1', 'g2']);
+        expect(result.total).toBe(1);
     });
 
     it('невалидный result — throw', () => {
-        expect(() => secretsVariableVersionsLoadOp.reducer(secretsVariableVersionsLoadOp.slice.initial, {
-            type: secretsVariableVersionsLoadOp.events.SUCCEEDED,
-            payload: { result: { total: 0 }, request: { variable_key: 'K' } },
-        })).toThrow(/OffsetPage result required/);
+        expect(() => secretsVariableVersionsLoadOp.reducer(secretsVariableVersionsLoadOp.slice.initial, testEvent(secretsVariableVersionsLoadOp.events.SUCCEEDED, { result: { total: 0 }, request: { variable_key: 'K' } }))).toThrow(/OffsetPage result required/);
     });
 });
 

@@ -17,7 +17,7 @@ A2A API для Flows - это внешний HTTP-интерфейс, через
 https://linnex.io/flows/api/v1/{flow_id}
 ```
 
-На legacy apex `humanitec.ru` тот же путь: `https://humanitec.ru/flows/api/v1/{flow_id}`.
+На legacy apex `linnex.io` тот же путь: `https://linnex.io/flows/api/v1/{flow_id}`.
 
 Локально в dev-окружении обычно используется:
 
@@ -1864,7 +1864,7 @@ app.post("/api/flow-ui-token", async (req, res) => {
 | Атрибут | Обязателен | Что делает | Как использовать |
 | --- | --- | --- | --- |
 | `type="module"` | Да | Загружает widget как ES module. | Не меняйте. Без этого браузер не загрузит модульный скрипт корректно. |
-| `src` | Да | URL autoload-скрипта виджета. | Берите из консоли. В production: `https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js`. Исторический shim `embed-chat/humanitec-embed-autoload.js` только реэкспортит этот файл. |
+| `src` | Да | URL autoload-скрипта виджета. | Берите из консоли. В production: `https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js`. Исторический shim `embed-chat/linnex-embed-autoload.js` только реэкспортит этот файл. |
 | `data-embed-id` | Да | ID конкретного embed widget. | Не придумывайте вручную. Копируйте из консоли. |
 | `data-presentation` | Нет | `drawer` или `page`. | Консоль ставит значение из настроек виджета. |
 | `data-position` | Нет | Позиция launcher: `bottom-right` или `bottom-left`. | Для `presentation=page` в сниппете всё равно `bottom-right`. |

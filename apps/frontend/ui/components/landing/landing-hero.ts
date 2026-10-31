@@ -735,7 +735,7 @@ export class LandingHero extends PlatformElement {
         `;
     }
 
-    _renderSelectedFile(file: Record<string, any>, index: number) {
+    _renderSelectedFile(file: Record<string, unknown>, index: number) {
         return html`
             <div class="hero-file-chip" role="listitem">
                 <platform-icon file-icon name=${resolveFileIconKey(file.name, file.type)} size="18"></platform-icon>

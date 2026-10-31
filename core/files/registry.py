@@ -57,6 +57,9 @@ FILE_SOURCE_DEFAULTS: dict[FileSourceKind, FileSourceDefaults] = {
     FileSourceKind.CODE_AGENT_SOURCE: FileSourceDefaults(
         retention_kind=FileRetentionKind.FLOW_ASSET
     ),
+    FileSourceKind.SHOP_PRODUCT: FileSourceDefaults(
+        retention_kind=FileRetentionKind.SHOP_PRODUCT
+    ),
     FileSourceKind.PLATFORM_AUXILIARY: FileSourceDefaults(
         retention_kind=FileRetentionKind.PLATFORM_DEFAULT
     ),

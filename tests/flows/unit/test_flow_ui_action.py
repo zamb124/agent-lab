@@ -17,9 +17,9 @@ from apps.flows.src.flow_ui.projection import assert_fields_outside_redacted
 from apps.flows.src.state import ExecutionState
 from core.a2a.codec import value_from_json
 from core.files.file_ref import FileRef
+from core.types import JsonObject
 from core.ui_document.document import FlowUIDocument, FlowUIMarkdownText
 from core.ui_document.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIActionMessage
-from core.types import JsonObject
 
 FILE_PAYLOAD = {
     "file_id": "file_e82cc35e2182",

@@ -38,6 +38,7 @@ import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js'
 import { buildOfficeDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { nsHeader } from './_namespace-header.js';
 import { isJsonObject } from '@platform/lib/utils/json-object.js';
+import { isPlatformEventType } from '@platform/lib/events/payload.js';
 
 export type { OfficeDocumentItem, DocumentsSlice } from '../documents.types.js';
 
@@ -109,20 +110,35 @@ function officeDocuments(state: unknown): DocumentsSlice | null {
     return slice;
 }
 
+export function isOfficeDocumentItem(value: unknown): value is OfficeDocumentItem {
+    return isJsonObject(value)
+        && typeof value.file_id === 'string'
+        && typeof value.catalog_id === 'string'
+        && typeof value.title === 'string';
+}
+
+const RAG_INDEX_STATUS_VALUES = [
+    'ready',
+    'pending',
+    'failed',
+    'absent',
+] as const satisfies readonly NonNullable<OfficeDocumentItem['rag_index_status']>[];
+
+function isRagIndexStatus(value: unknown): value is NonNullable<OfficeDocumentItem['rag_index_status']> {
+    return typeof value === 'string'
+        && (RAG_INDEX_STATUS_VALUES as readonly string[]).includes(value);
+}
+
 function documentItems(value: unknown): OfficeDocumentItem[] {
     if (!Array.isArray(value)) {
         throw new Error('office/documents: SUCCEEDED.result.items required (array)');
     }
     const items: OfficeDocumentItem[] = [];
     for (const raw of value) {
-        if (!isJsonObject(raw)) {
-            throw new Error('office/documents: document item must be an object');
+        if (!isOfficeDocumentItem(raw)) {
+            throw new Error('office/documents: document item must be an OfficeDocumentItem');
         }
-        const item: OfficeDocumentItem = {};
-        for (const [key, field] of Object.entries(raw)) {
-            item[key] = field;
-        }
-        items.push(item);
+        items.push(raw);
     }
     return items;
 }
@@ -220,7 +236,27 @@ export function buildDocumentsListPayload(docState: DocumentsSlice, catalogIds: 
     };
 }
 
-export const documentsOp = createAsyncOp({
+const DOCUMENTS_ACTIONS = {
+    setActiveCatalog:  'set_active_catalog',
+    setCatalogExpanded: 'set_catalog_expanded',
+    setFilterCatalogs: 'set_filter_catalogs',
+    clearFilter:       'clear_filter',
+    setViewMode:       'set_view_mode',
+    setSearchQuery:    'set_search_query',
+    setSearchMode:     'set_search_mode',
+    setSort:           'set_sort',
+    setSelectedFile: 'set_selected_file',
+    setSelectedCatalog: 'set_selected_catalog',
+    toggleFileSelection: 'toggle_file_selection',
+    setFileSelection: 'set_file_selection',
+    clearFileSelection: 'clear_file_selection',
+    setExplorerView: 'set_explorer_view',
+    toggleStarred: 'toggle_starred',
+    recordRecentOpen: 'record_recent_open',
+    patchRagIndexStatuses: 'patch_rag_index_statuses',
+} as const;
+
+export const documentsOp = createAsyncOp<'office/documents/list_requested', DocumentsSlice, typeof DOCUMENTS_ACTIONS>({
     name: 'office/documents',
     silent: true,
     transport: 'ws',
@@ -268,25 +304,7 @@ export const documentsOp = createAsyncOp({
         RECORD_RECENT_OPEN:  'record_recent_open',
         PATCH_RAG_INDEX_STATUSES: 'patch_rag_index_statuses',
     },
-    actions: {
-        setActiveCatalog:  'set_active_catalog',
-        setCatalogExpanded: 'set_catalog_expanded',
-        setFilterCatalogs: 'set_filter_catalogs',
-        clearFilter:       'clear_filter',
-        setViewMode:       'set_view_mode',
-        setSearchQuery:    'set_search_query',
-        setSearchMode:     'set_search_mode',
-        setSort:           'set_sort',
-        setSelectedFile: 'set_selected_file',
-        setSelectedCatalog: 'set_selected_catalog',
-        toggleFileSelection: 'toggle_file_selection',
-        setFileSelection: 'set_file_selection',
-        clearFileSelection: 'clear_file_selection',
-        setExplorerView: 'set_explorer_view',
-        toggleStarred: 'toggle_starred',
-        recordRecentOpen: 'record_recent_open',
-        patchRagIndexStatuses: 'patch_rag_index_statuses',
-    },
+    actions: DOCUMENTS_ACTIONS,
     extraReducer: (state: DocumentsSlice, event, events) => {
         const docState = state;
         const payload = isJsonObject(event.payload) ? event.payload : null;
@@ -323,11 +341,7 @@ export const documentsOp = createAsyncOp({
                     return item;
                 }
                 const nextStatus = statuses[item.file_id];
-                if (nextStatus !== null
-                    && nextStatus !== 'ready'
-                    && nextStatus !== 'pending'
-                    && nextStatus !== 'failed'
-                    && nextStatus !== 'absent') {
+                if (nextStatus !== null && !isRagIndexStatus(nextStatus)) {
                     throw new Error(
                         `office/documents: invalid rag_index_status '${String(nextStatus)}'`,
                     );
@@ -340,16 +354,10 @@ export const documentsOp = createAsyncOp({
             });
             return changed ? { ...state, items } : state;
         }
-        if (event.type === 'rag/document/status_updated') {
-            if (!payload || typeof payload !== 'object') {
-                return state;
-            }
-            const documentId = typeof payload.document_id === 'string' ? payload.document_id : '';
-            if (documentId.length === 0) {
-                return state;
-            }
-            const ragStatus = typeof payload.status === 'string' ? payload.status : '';
-            let nextStatus: string | null = null;
+        if (isPlatformEventType(event, 'rag/document/status_updated')) {
+            const documentId = event.payload.document_id;
+            const ragStatus = event.payload.status;
+            let nextStatus: OfficeDocumentItem['rag_index_status'] = null;
             if (ragStatus === 'completed') {
                 nextStatus = 'ready';
             } else if (ragStatus === 'failed') {
@@ -360,9 +368,9 @@ export const documentsOp = createAsyncOp({
                 return state;
             }
             let changed = false;
-            const prevItems = Array.isArray(docState.items) ? docState.items : [];
+            const prevItems = docState.items ?? [];
             const items = prevItems.map((item) => {
-                if (!item || item.file_id !== documentId) {
+                if (item.file_id !== documentId) {
                     return item;
                 }
                 if (item.rag_index_status === nextStatus) {
@@ -373,26 +381,20 @@ export const documentsOp = createAsyncOp({
             });
             return changed ? { ...state, items } : state;
         }
-        if (event.type === 'office/document/saved') {
-            if (!payload || typeof payload !== 'object') {
-                return state;
-            }
-            const fileId = typeof payload.file_id === 'string' ? payload.file_id : '';
-            if (fileId.length === 0) {
-                return state;
-            }
-            const title = typeof payload.title === 'string' && payload.title.length > 0
-                ? payload.title
+        if (isPlatformEventType(event, 'office/document/saved')) {
+            const fileId = event.payload.file_id;
+            const title = typeof event.payload.title === 'string' && event.payload.title.length > 0
+                ? event.payload.title
                 : null;
             const savedAt = new Date().toISOString();
             let changed = false;
-            const prevItems = Array.isArray(docState.items) ? docState.items : [];
+            const prevItems = docState.items ?? [];
             const items = prevItems.map((item) => {
-                if (!item || item.file_id !== fileId) {
+                if (item.file_id !== fileId) {
                     return item;
                 }
                 changed = true;
-                const next = { ...item, updated_at: savedAt };
+                const next: OfficeDocumentItem = { ...item, updated_at: savedAt };
                 if (title !== null) {
                     next.title = title;
                 }

@@ -14,6 +14,7 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import type {
@@ -142,9 +143,9 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                 font: inherit;
                 cursor: pointer;
                 transition:
-                    background var(--duration-fast),
-                    border-color var(--duration-fast),
-                    color var(--duration-fast);
+                    background var(--motion-duration-micro),
+                    border-color var(--motion-duration-micro),
+                    color var(--motion-duration-micro);
             }
 
             .filter-chip {
@@ -881,7 +882,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                     : error !== null
                         ? this._renderError()
                         : loading && items.length === 0
-                            ? html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`
+                            ? html`<platform-empty-state loading></platform-empty-state>`
                             : items.length === 0
                                 ? this._renderEmpty()
                                 : html`<div class="list">${items.map((suggest) => this._renderSuggest(suggest))}</div>`}

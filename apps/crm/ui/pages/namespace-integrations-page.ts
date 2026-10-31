@@ -8,6 +8,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
@@ -158,7 +159,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             }
             .btn-primary {
                 background: var(--accent);
-                color: var(--text-on-accent, #fff);
+                color: var(--text-on-accent);
                 border-color: transparent;
             }
             .btn-soft {
@@ -176,7 +177,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                 font-size: var(--text-sm);
                 margin-bottom: var(--space-2);
             }
-            .status-ok { color: var(--color-success, #22c55e); }
+            .status-ok { color: var(--success); }
             .status-off { color: var(--text-tertiary); }
             .callback-row {
                 display: flex;
@@ -580,7 +581,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         }
         const ns = this._namespace();
         if (ns === null) {
-            return html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
 
         const amoRow = this._amoManifestRow();
@@ -603,7 +604,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             </div>
             <div class="scroll">
                 ${this._manifestLoading
-                    ? html`<div class="center"><platform-spinner size="md"></platform-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : html`
                 <div class="panel">
                     <div class="panel-title">

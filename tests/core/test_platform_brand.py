@@ -25,15 +25,15 @@ from core.utils.domain import (
 
 def test_supported_domains_include_linnex() -> None:
     domains = supported_domains()
-    assert "humanitec.ru" in domains
+    assert "linnex.io" in domains
     assert "linnex.io" in domains
     assert "localhost" in domains
     assert "lvh.me" in domains
 
 
-def test_resolve_brand_humanitec() -> None:
-    brand = resolve_brand("company.humanitec.ru")
-    assert brand.platform_name == "Humanitec"
+def test_resolve_brand_linnex() -> None:
+    brand = resolve_brand("company.linnex.io")
+    assert brand.platform_name == "Linnex"
 
 
 def test_resolve_brand_linnex() -> None:
@@ -93,9 +93,9 @@ def test_resolve_auth_apple_client_id_linnex() -> None:
     assert resolve_auth_apple_client_id("linnex.io") == "app.linnex.io"
 
 
-def test_resolve_auth_apple_client_id_humanitec_fallback() -> None:
-    client_id = resolve_auth_apple_client_id("humanitec.ru")
-    assert client_id == "app.humanitec.ru"
+def test_resolve_auth_apple_client_id_linnex_fallback() -> None:
+    client_id = resolve_auth_apple_client_id("linnex.io")
+    assert client_id == "app.linnex.io"
 
 
 def test_resolve_vapid_email_linnex() -> None:
@@ -123,7 +123,7 @@ def test_is_allowed_integration_return_origin_linnex() -> None:
 
 
 def test_is_allowed_integration_return_origin_foreign_host() -> None:
-    assert is_allowed_integration_return_origin("https://other.ru", "https://humanitec.ru") is False
+    assert is_allowed_integration_return_origin("https://other.ru", "https://linnex.io") is False
 
 
 def test_is_allowed_integration_return_origin_local_without_reference() -> None:

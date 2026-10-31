@@ -54,7 +54,7 @@ export class SyncNamespaceModal extends PlatformFormModal {
                 gap: var(--space-3);
                 padding: var(--space-3) 0;
             }
-            .row + .row { border-top: 1px solid var(--glass-border-subtle, var(--glass-border)); }
+            .row + .row { border-top: 1px solid var(--glass-border-subtle); }
             .row .label { font-size: var(--text-sm); color: var(--text-primary); font-weight: var(--font-medium); }
             .row .desc { font-size: var(--text-xs); color: var(--text-secondary); margin-top: 2px; }
             .name {
@@ -62,9 +62,9 @@ export class SyncNamespaceModal extends PlatformFormModal {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border-subtle, var(--glass-border));
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-tint-subtle, var(--glass-hover));
+                background: var(--glass-tint-subtle);
                 color: var(--text-primary);
                 font-family: var(--font-mono);
                 font-size: var(--text-sm);

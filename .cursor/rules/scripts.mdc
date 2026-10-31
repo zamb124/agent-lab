@@ -27,7 +27,7 @@ alwaysApply: false
 ## Исключения
 
 - Исключение: `scripts/stress/**` не Python-пакет: у каталога нет `__init__.py`, запуск — `scripts/stress/run.sh`. Гейт `scripts/gates/repo/scripts_layout.py` этот каталог не требует.
-- Исключение: shell-гейты и `scripts/build/**/*.mjs` запускаются файлом, не `python -m`. `[без гейта]`
+- Исключение: shell-гейты и `scripts/build/**/*.ts` запускаются файлом, не `python -m`. `[без гейта]`
 
 ## Гейты
 

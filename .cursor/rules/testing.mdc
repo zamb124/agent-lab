@@ -79,8 +79,8 @@ alwaysApply: false
 
 | Слой | Файлы | Раннер |
 |---|---|---|
-| Unit фундамента UI | `tests/frontend_core/unit/**/*.spec.js` | Vitest, `vitest.config.mjs` |
-| Компонентный браузерный | `tests/frontend_core/browser/**/*.spec.js`, `tests/ui/design-system/components/**/contract.spec.js`, `tests/ui/design-system/flows/**/*.spec.js` | Web Test Runner + Playwright Chromium, `web-test-runner.config.mjs` |
+| Unit фундамента UI | `tests/frontend_core/unit/**/*.spec.js` | Vitest, `vitest.config.ts` |
+| Компонентный браузерный | `tests/frontend_core/browser/**/*.spec.js`, `tests/ui/design-system/components/**/contract.spec.js`, `tests/ui/design-system/flows/**/*.spec.js` | Web Test Runner + Playwright Chromium, `web-test-runner.config.ts` |
 | Документационный UI Kit | `tests/ui/design-system/components/**/playwright.spec.py`, маркер `ui_component` | pytest + Playwright |
 | E2E | `tests/ui/e2e/**` | pytest + Playwright, `--dist=loadfile` |
 

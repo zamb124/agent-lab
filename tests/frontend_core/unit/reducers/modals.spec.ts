@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { modalsReducer, initialModalsState } from '@platform/lib/events/reducers/modals.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import type { PlatformEvent } from '../../../../core/frontend/static/lib/events/contract.js';
 
-const ev = (type, payload, ts = 1234) => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'local' } });
+const ev = (type: string, payload: unknown, ts = 1234): PlatformEvent => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'local', causation_id: null, correlation_id: null, trace_id: null } });
 
 describe('modalsReducer', () => {
     it('initial: пустой stack', () => {
@@ -12,8 +13,8 @@ describe('modalsReducer', () => {
     it('UI_MODAL_OPEN добавляет в stack', () => {
         const next = modalsReducer(initialModalsState, ev(CoreEvents.UI_MODAL_OPEN, { kind: 'frontend.api_key_create', props: { id: 'x' } }));
         expect(next.stack).toHaveLength(1);
-        expect(next.stack[0].kind).toBe('frontend.api_key_create');
-        expect(next.stack[0].props).toEqual({ id: 'x' });
+        expect(next.stack[0]?.kind).toBe('frontend.api_key_create');
+        expect(next.stack[0]?.props).toEqual({ id: 'x' });
     });
 
     it('UI_MODAL_OPEN без kind → no-op', () => {
@@ -26,8 +27,8 @@ describe('modalsReducer', () => {
         s = modalsReducer(s, ev(CoreEvents.UI_MODAL_OPEN, { id: 'm2', kind: 'a.c' }));
         const next = modalsReducer(s, ev(CoreEvents.UI_MODAL_CLOSE, { id: 'm1' }));
         expect(next.stack.map((m) => m.id)).toEqual(['m1', 'm2']);
-        expect(next.stack[0].closing).toBe(true);
-        expect(next.stack[1].closing).toBeUndefined();
+        expect(next.stack[0]?.closing).toBe(true);
+        expect(next.stack[1]?.closing).toBeUndefined();
     });
 
     it('UI_MODAL_CLOSE без id — помечает верхнюю модалку closing', () => {
@@ -35,10 +36,10 @@ describe('modalsReducer', () => {
         s = modalsReducer(s, ev(CoreEvents.UI_MODAL_OPEN, { kind: 'a.c' }));
         const next = modalsReducer(s, ev(CoreEvents.UI_MODAL_CLOSE, null));
         expect(next.stack).toHaveLength(2);
-        expect(next.stack[0].kind).toBe('a.b');
-        expect(next.stack[0].closing).toBeUndefined();
-        expect(next.stack[1].kind).toBe('a.c');
-        expect(next.stack[1].closing).toBe(true);
+        expect(next.stack[0]?.kind).toBe('a.b');
+        expect(next.stack[0]?.closing).toBeUndefined();
+        expect(next.stack[1]?.kind).toBe('a.c');
+        expect(next.stack[1]?.closing).toBe(true);
     });
 
     it('UI_MODAL_CLOSE на пустом — identity', () => {
@@ -91,6 +92,6 @@ describe('modalsReducer', () => {
             }),
         );
         expect(next.stack.map((m) => m.kind)).toEqual(['platform.calendar']);
-        expect(next.stack[0].id).toBe('cal1');
+        expect(next.stack[0]?.id).toBe('cal1');
     });
 });

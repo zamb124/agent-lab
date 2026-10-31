@@ -47,12 +47,12 @@ export class DashboardStatTile extends PlatformElement {
                 align-items: center;
                 padding: var(--space-4) var(--space-5);
                 border-radius: var(--radius-lg);
-                background: var(--glass-solid-soft);
+                background: var(--glass-solid-subtle);
                 backdrop-filter: blur(var(--glass-blur-soft));
                 -webkit-backdrop-filter: blur(var(--glass-blur-soft));
                 border: 1px solid var(--glass-border-subtle);
-                transition: transform var(--duration-normal) var(--easing-default),
-                            border-color var(--duration-normal) var(--easing-default);
+                transition: transform var(--motion-duration-layout) var(--motion-ease-standard),
+                            border-color var(--motion-duration-layout) var(--motion-ease-standard);
             }
             .tile:hover {
                 transform: translateY(-2px);

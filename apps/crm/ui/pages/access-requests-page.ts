@@ -22,6 +22,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
@@ -198,9 +199,9 @@ export class CRMAccessRequestsPage extends PlatformPage {
                 font-size: var(--text-xs);
                 border-radius: var(--radius-full);
             }
-            .status-badge.pending { background: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-            .status-badge.approved { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
-            .status-badge.rejected { background: rgba(244, 63, 94, 0.15); color: #e11d48; }
+            .status-badge.pending { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+            .status-badge.approved { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+            .status-badge.rejected { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
 
             .request-actions {
                 display: flex;
@@ -223,24 +224,24 @@ export class CRMAccessRequestsPage extends PlatformPage {
                 color: var(--text-primary);
             }
             .btn-approve {
-                background: rgba(34, 197, 94, 0.1);
-                border-color: rgba(34, 197, 94, 0.4);
-                color: #16a34a;
+                background: color-mix(in srgb, var(--success) 10%, transparent);
+                border-color: color-mix(in srgb, var(--success) 40%, transparent);
+                color: var(--success);
             }
             .btn-approve:hover:not(:disabled) {
-                background: #16a34a;
+                background: var(--success);
                 color: white;
-                border-color: #16a34a;
+                border-color: var(--success);
             }
             .btn-reject {
-                background: rgba(244, 63, 94, 0.1);
-                border-color: rgba(244, 63, 94, 0.4);
-                color: #e11d48;
+                background: color-mix(in srgb, var(--error) 10%, transparent);
+                border-color: color-mix(in srgb, var(--error) 40%, transparent);
+                color: var(--error);
             }
             .btn-reject:hover:not(:disabled) {
-                background: #e11d48;
+                background: var(--error);
                 color: white;
-                border-color: #e11d48;
+                border-color: var(--error);
             }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -292,7 +293,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
         this._status = STATUS_PENDING;
         this._requests = this.useResource(RESOURCE_NAME);
         this._updateOp = this.useOp(UPDATE_OP);
-        this._locale = this.select((s: Record<string, any>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._locale = this.select((s: Record<string, unknown>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
     }
 
     _formatDate(value: unknown): string {
@@ -369,7 +370,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
             </div>
             <div class="body">
                 ${loading && items.length === 0
-                    ? html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
                         ? html`
                             <div class="center">
@@ -386,7 +387,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
         `;
     }
 
-    _renderRequest(req: Record<string, any>, updating: boolean): TemplateResult {
+    _renderRequest(req: Record<string, unknown>, updating: boolean): TemplateResult {
         const resourceTitle = typeof req.resource_title === 'string' && req.resource_title.length > 0
             ? req.resource_title
             : req.resource_id;

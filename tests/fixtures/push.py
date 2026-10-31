@@ -27,7 +27,7 @@ def vapid_keys():
     return {
         "public_key": "BP1OB4uP0WSgQqumAOefg1PdsN9S7qA1-UK26qjSPa11ylB1HgbcrVi6peEUkhkdfrADeTa_dwypXYiucfbu3JQ",
         "private_key": "lwzkecdrLZYcyUVhYUQuAnXYk92xup132qCCk5BtUEs",
-        "email": "test@humanitec.ru"
+        "email": "test@linnex.io"
     }
 
 

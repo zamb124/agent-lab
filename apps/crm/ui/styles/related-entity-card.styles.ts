@@ -26,7 +26,7 @@ export const relatedEntityCardSharedStyles = css`
         text-align: left;
         color: var(--text-primary);
         font-family: inherit;
-        transition: filter var(--duration-fast);
+        transition: filter var(--motion-duration-micro);
     }
     .related-card:hover {
         filter: brightness(0.97);
@@ -49,7 +49,7 @@ export const relatedEntityCardSharedStyles = css`
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #ffffff;
+        color: var(--text-primary);
         flex-shrink: 0;
     }
 
@@ -143,7 +143,7 @@ export const relatedEntityCardSharedStyles = css`
         right: 48px;
     }
     .neighbor-semantic-index--pending_embedding {
-        color: color-mix(in srgb, var(--warning, #f59e0b) 90%, var(--text-primary));
+        color: color-mix(in srgb, var(--warning) 90%, var(--text-primary));
     }
     .neighbor-semantic-index--absent {
         opacity: 0.85;
@@ -168,7 +168,7 @@ export const relatedEntityCardSharedStyles = css`
     }
     .neighbor-remove:hover:not(:disabled) {
         color: var(--text-primary);
-        background: rgba(34, 34, 34, 0.06);
+        background: color-mix(in srgb, var(--text-primary) 6%, transparent);
     }
     .neighbor-remove:disabled {
         opacity: 0.45;
@@ -217,7 +217,7 @@ export const relatedEntityCardSharedStyles = css`
     .neighbor-strength-track {
         height: 8px;
         border-radius: 999px;
-        background: rgba(34, 34, 34, 0.08);
+        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
         overflow: hidden;
         width: 100%;
         max-width: 100%;
@@ -227,7 +227,7 @@ export const relatedEntityCardSharedStyles = css`
         height: 100%;
         max-width: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, #7b92ff, #a855f7);
+        background: linear-gradient(90deg, var(--accent), var(--accent-tertiary));
         opacity: 0.85;
         box-sizing: border-box;
     }
@@ -252,7 +252,7 @@ export const relatedEntityCardSharedStyles = css`
     .neighbor-confidence-track {
         height: 8px;
         border-radius: 999px;
-        background: rgba(34, 34, 34, 0.08);
+        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
         overflow: hidden;
         width: 100%;
         max-width: 100%;
@@ -262,7 +262,7 @@ export const relatedEntityCardSharedStyles = css`
         height: 100%;
         max-width: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, #22c55e, #16a34a);
+        background: linear-gradient(90deg, var(--success), var(--success));
         opacity: 0.85;
         box-sizing: border-box;
     }

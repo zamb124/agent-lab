@@ -4,7 +4,7 @@
  * @param {string} flowsBaseUrl - например https://host/flows
  * @returns {string}
  */
-export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl: string): string {
+export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl: unknown): string {
     if (typeof flowsBaseUrl !== 'string') {
         throw new TypeError('resolveVoiceHttpOriginFromFlowsBaseUrl: string required');
     }

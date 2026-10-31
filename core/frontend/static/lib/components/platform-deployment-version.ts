@@ -25,7 +25,7 @@ export class PlatformDeploymentVersion extends PlatformElement {
             :host([footer]) { width: 100%; }
             .line {
                 font-size: 10px; line-height: 1.3;
-                color: var(--text-muted);
+                color: var(--text-tertiary);
                 font-family: var(--font-mono);
                 padding: 2px 0 6px 0;
                 word-break: break-all;

@@ -100,7 +100,7 @@ def test_node_config_rejects_unknown_llm_extra_field() -> None:
                 "name": "Main",
                 "description": "",
                 "llm": {"provider": "openrouter", "model": "old-model"},
-                "unknown_llm_config": {"provider": "humanitec_llm", "model": "auto"},
+                "unknown_llm_config": {"provider": "linnex_llm", "model": "auto"},
             }
         )
 
@@ -115,7 +115,7 @@ async def test_execute_request_rejects_unknown_llm_extra_field() -> None:
                     "prompt": "test",
                     "tools": [],
                     "llm": {"provider": "openrouter", "model": "old-model"},
-                    "unknown_llm_config": {"provider": "humanitec_llm", "model": "auto"},
+                    "unknown_llm_config": {"provider": "linnex_llm", "model": "auto"},
                 },
                 state={},
             )

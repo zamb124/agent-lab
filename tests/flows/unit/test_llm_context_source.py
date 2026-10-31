@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
+from apps.flows.src.runtime.llm_context_source import RAGLLMContextSource, _clamp_score
 from core.llm_context import (
     LLMContextBudget,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
 )
-from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
-from apps.flows.src.runtime.llm_context_source import RAGLLMContextSource
 from core.rag import RAGSearchResult
-from apps.flows.src.runtime.llm_context_source import _clamp_score
 from core.rag_indexing_schema import SearchChannelsDefaults
 
 

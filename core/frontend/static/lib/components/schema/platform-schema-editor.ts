@@ -145,8 +145,8 @@ export class PlatformSchemaEditor extends PlatformElement {
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--warning-border, var(--glass-border-subtle));
-                background: var(--warning-bg, var(--glass-solid-subtle));
+                border: 1px solid var(--warning-border);
+                background: var(--warning-bg);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 line-height: 1.4;
@@ -154,7 +154,7 @@ export class PlatformSchemaEditor extends PlatformElement {
             .banner platform-icon {
                 flex-shrink: 0;
                 margin-top: 2px;
-                color: var(--warning, var(--accent));
+                color: var(--warning);
             }
             .form-body {
                 display: flex;
@@ -221,9 +221,9 @@ export class PlatformSchemaEditor extends PlatformElement {
                 align-items: center;
                 gap: 4px;
                 padding: 2px 8px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 border: 1px solid var(--glass-border-subtle);
-                background: var(--bg-elevated, var(--glass-solid-medium));
+                background: var(--bg-elevated);
                 color: var(--text-secondary);
                 font-size: var(--text-xs);
                 font-family: var(--font-mono);

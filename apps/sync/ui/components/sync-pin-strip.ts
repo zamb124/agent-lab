@@ -27,7 +27,7 @@ function pinnedIds(channel: Record<string, unknown> | undefined): string[] {
     return ids;
 }
 
-function _textPreviewFromMessage(m: Record<string, any> | null | undefined) {
+function _textPreviewFromMessage(m: Record<string, unknown> | null | undefined) {
     if (!m || typeof m !== 'object') return '';
     const contents = Array.isArray(m.contents) ? m.contents : [];
     const block = contents.find((c) => c && c.type === 'text/plain');
@@ -49,8 +49,8 @@ export class SyncPinStrip extends PlatformElement {
     static override styles: CSSResultGroup = css`
         :host {
             display: block;
-            border-bottom: 1px solid var(--glass-border);
-            background: var(--glass-hover);
+            border-bottom: 1px solid var(--glass-border-medium);
+            background: var(--glass-tint-medium);
         }
         .row {
             display: flex;
@@ -61,7 +61,7 @@ export class SyncPinStrip extends PlatformElement {
             font-size: var(--text-xs);
             color: var(--text-secondary);
         }
-        .row:hover { background: var(--glass-active, var(--glass-hover)); color: var(--text-primary); }
+        .row:hover { background: var(--glass-tint-strong); color: var(--text-primary); }
         .pin-icon {
             color: var(--accent);
             flex-shrink: 0;

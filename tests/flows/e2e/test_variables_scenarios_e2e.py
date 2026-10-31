@@ -55,7 +55,7 @@ async def test_demo_seed_resolves_company_name(di, app) -> None:
         resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user")
         )
-        assert resolved[DEMO_VARIABLE_KEYS[VariableScenario.COMPANY_STATIC]] == "Humanitec Demo"
+        assert resolved[DEMO_VARIABLE_KEYS[VariableScenario.COMPANY_STATIC]] == "Linnex Demo"
     finally:
         clear_context()
 
@@ -102,7 +102,7 @@ async def test_expression_signature_resolves(di, app) -> None:
         resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user")
         )
-        assert resolved["signature"] == "-- Humanitec Demo Support"
+        assert resolved["signature"] == "-- Linnex Demo Support"
         assert resolved["base_url"] == "https://api.demo.example.com/v1"
     finally:
         clear_context()
@@ -115,7 +115,7 @@ async def test_shared_secret_in_flow_variables(di, app) -> None:
         flow = await di.flow_factory.get_flow("example_react", branch_id="default", tool_registry=di.tool_registry)
         assert flow is not None
         assert flow.variables["support_api_key"] == "demo-shared-api-key-12345"
-        assert flow.variables["company_name"] == "Humanitec Demo"
+        assert flow.variables["company_name"] == "Linnex Demo"
     finally:
         clear_context()
 

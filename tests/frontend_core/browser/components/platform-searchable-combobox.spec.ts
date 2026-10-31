@@ -5,6 +5,7 @@
 import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 const OPTIONS = [
     { value: 'alpha', label: 'Альфа' },
@@ -12,11 +13,11 @@ const OPTIONS = [
     { value: 'gamma', label: 'Гамма' },
 ];
 
-async function mountCombobox(props = {}) {
-    const el = await fixture(html`
+async function mountCombobox(props: any = {}) {
+    const el = await fixture<TestEl>(html`
         <platform-searchable-combobox
             .options=${props.options ?? OPTIONS}
-            .value=${props.value ?? ''}
+            .value=${(props as TestEl).value ?? ''}
             createLabel=${props.createLabel ?? ''}
             placeholder="Выберите"
         ></platform-searchable-combobox>
@@ -25,12 +26,12 @@ async function mountCombobox(props = {}) {
     return el;
 }
 
-function inputOf(el) {
-    return el.shadowRoot.querySelector('input.field-pill-input');
+function inputOf(el: any) {
+    return qs(shadow(el), 'input.field-pill-input');
 }
 
-function optionsOf(el) {
-    return Array.from(el.shadowRoot.querySelectorAll('li.item'));
+function optionsOf(el: any) {
+    return Array.from(qsa(shadow(el), 'li.item'));
 }
 
 describe('platform-searchable-combobox', () => {
@@ -59,7 +60,7 @@ describe('platform-searchable-combobox', () => {
         inputOf(el).focus();
         await elementUpdated(el);
 
-        const popover = el.shadowRoot.querySelector('platform-popover');
+        const popover = qs(shadow(el), 'platform-popover');
         expect(popover.matches(':popover-open')).to.be.true;
     });
 
@@ -69,7 +70,7 @@ describe('platform-searchable-combobox', () => {
         input.focus();
         await elementUpdated(el);
 
-        input.value = 'Бет';
+        (input as TestEl).value = 'Бет';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await elementUpdated(el);
 
@@ -84,10 +85,10 @@ describe('platform-searchable-combobox', () => {
         await elementUpdated(el);
 
         const changed = oneEvent(el, 'change');
-        optionsOf(el)[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+        optionsOf(el)[1]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
         const event = await changed;
 
-        expect(event.detail.value).to.equal('beta');
+        expect((event as CustomEvent).detail.value).to.equal('beta');
     });
 
     it('строка создания появляется при заданной подписи', async () => {
@@ -95,7 +96,7 @@ describe('platform-searchable-combobox', () => {
         inputOf(el).focus();
         await elementUpdated(el);
 
-        const createRow = el.shadowRoot.querySelector('li[data-create="true"]');
+        const createRow = qs(shadow(el), 'li[data-create="true"]');
         expect(createRow).to.exist;
         expect(createRow.textContent.trim()).to.equal('Создать…');
     });
@@ -106,12 +107,11 @@ describe('platform-searchable-combobox', () => {
         await elementUpdated(el);
 
         const created = oneEvent(el, 'create');
-        el.shadowRoot
-            .querySelector('li[data-create="true"]')
+        qs(shadow(el), 'li[data-create="true"]')
             .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
         const event = await created;
 
-        expect(event.detail).to.have.property('query');
+        expect((event as CustomEvent).detail).to.have.property('query');
     });
 
     it('Escape закрывает список через попап', async () => {
@@ -130,10 +130,8 @@ describe('platform-searchable-combobox', () => {
         inputOf(el).focus();
         await elementUpdated(el);
 
-        const field = el.shadowRoot.querySelector('.field-pill');
-        const surface = el.shadowRoot
-            .querySelector('platform-popover')
-            .shadowRoot.querySelector('.surface');
+        const field = qs(shadow(el), '.field-pill');
+        const surface = qs(shadow(qs(shadow(el), 'platform-popover')), '.surface');
 
         expect(Math.round(surface.getBoundingClientRect().width)).to.equal(
             Math.round(field.getBoundingClientRect().width),

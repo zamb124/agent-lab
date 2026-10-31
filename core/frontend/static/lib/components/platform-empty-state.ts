@@ -24,14 +24,14 @@ export class PlatformEmptyState extends PlatformElement {
                 padding: var(--space-8) var(--space-6);
                 text-align: center;
                 animation: platform-empty-state-enter
-                    var(--motion-duration-enter, 180ms)
-                    var(--motion-ease-decelerate, cubic-bezier(0.22, 1, 0.36, 1))
+                    var(--motion-duration-enter)
+                    var(--motion-ease-decelerate)
                     both;
             }
             @keyframes platform-empty-state-enter {
                 from {
                     opacity: 0;
-                    transform: translateY(var(--motion-enter-offset-y, 8px));
+                    transform: translateY(var(--motion-enter-offset-y));
                 }
                 to {
                     opacity: 1;

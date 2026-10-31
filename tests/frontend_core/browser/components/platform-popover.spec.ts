@@ -8,10 +8,11 @@
 import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-popover.js';
+import { qs, shadow, type TestEl } from '../helpers/dom.js';
 
 /** Обёртка «якорь + попап» — как в реальном использовании. */
-async function mountPopover(attrs = {}) {
-    const host = await fixture(html`
+async function mountPopover(attrs: any = {}) {
+    const host = await fixture<TestEl>(html`
         <div style="padding: 200px;">
             <button id="anchor" style="width: 120px; height: 32px;">Открыть</button>
             <platform-popover
@@ -25,8 +26,8 @@ async function mountPopover(attrs = {}) {
             </platform-popover>
         </div>
     `);
-    const anchor = host.querySelector('#anchor');
-    const popover = host.querySelector('platform-popover');
+    const anchor = qs(host!, '#anchor');
+    const popover = qs(host!, 'platform-popover');
     popover.anchor = anchor;
     await elementUpdated(popover);
     return { host, anchor, popover };
@@ -88,7 +89,7 @@ describe('platform-popover', () => {
         popover.open = true;
         await elementUpdated(popover);
 
-        const surface = popover.shadowRoot.querySelector('.surface');
+        const surface = qs(shadow(popover), '.surface');
         expect(Math.round(surface.getBoundingClientRect().width)).to.equal(
             Math.round(anchor.getBoundingClientRect().width),
         );
@@ -115,7 +116,7 @@ describe('platform-popover', () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         const event = await dismissed;
 
-        expect(event.detail.reason).to.equal('escape');
+        expect((event as CustomEvent).detail.reason).to.equal('escape');
         expect(popover.open).to.be.false;
     });
 
@@ -130,7 +131,7 @@ describe('platform-popover', () => {
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
         const event = await dismissed;
 
-        expect(event.detail.reason).to.equal('outside');
+        expect((event as CustomEvent).detail.reason).to.equal('outside');
         expect(popover.open).to.be.false;
     });
 
@@ -152,7 +153,7 @@ describe('platform-popover', () => {
         popover.open = true;
         await elementUpdated(popover);
 
-        const inner = popover.querySelector('div');
+        const inner = qs(popover!, 'div');
         inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
         await elementUpdated(popover);
 
@@ -173,11 +174,11 @@ describe('platform-popover', () => {
     it('trigger="click" открывает и закрывает по клику на якорь', async () => {
         const { popover, anchor } = await mountPopover({ trigger: 'click' });
 
-        anchor.click();
+        (anchor as TestEl).click();
         await elementUpdated(popover);
         expect(popover.open).to.be.true;
 
-        anchor.click();
+        (anchor as TestEl).click();
         await elementUpdated(popover);
         expect(popover.open).to.be.false;
     });
@@ -234,7 +235,7 @@ describe('platform-popover', () => {
         window.dispatchEvent(new Event('scroll'));
         const event = await dismissed;
 
-        expect(event.detail.reason).to.equal('scroll');
+        expect((event as CustomEvent).detail.reason).to.equal('scroll');
     });
 
     it('снятие с DOM убирает узел вместе со слоем', async () => {

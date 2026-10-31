@@ -215,7 +215,7 @@ export class CRMSidebar extends PlatformElement {
                 font-size: var(--text-base);
                 font-weight: 500;
                 cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+                transition: background var(--motion-duration-micro), border-color var(--motion-duration-micro), color var(--motion-duration-micro);
                 width: 100%;
                 text-align: left;
             }
@@ -285,9 +285,9 @@ export class CRMSidebar extends PlatformElement {
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._onPopState = () => this.requestUpdate();
-        this._routeKeySel = this.select((s: Record<string, any>) => s.router.routeKey);
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
-        this._namespaceSelectionByCompany = this.select((s: Record<string, any>) => s.ui.namespace.selectionByCompany);
+        this._routeKeySel = this.select((s: Record<string, unknown>) => s.router.routeKey);
+        this._authSel = this.select((s: Record<string, unknown>) => s.auth.user);
+        this._namespaceSelectionByCompany = this.select((s: Record<string, unknown>) => s.ui.namespace.selectionByCompany);
         this._namespaces = this.useResource('crm/namespaces', { autoload: true });
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
     }
@@ -417,9 +417,9 @@ export class CRMSidebar extends PlatformElement {
      * @param {string} namespaceName
      * @returns {Array<Record<string, unknown>>}
      */
-    _sidebarTreeNodesForNamespace(namespaceName: string): Record<string, any>[] {
+    _sidebarTreeNodesForNamespace(namespaceName: string): Record<string, unknown>[] {
         const items = this._namespaces.items;
-        const nsRow = items.find((row: Record<string, any> | null) => row && row.name === namespaceName);
+        const nsRow = items.find((row: Record<string, unknown> | null) => row && row.name === namespaceName);
         const settings = nsRow && isPlainRecord(nsRow.crm_settings) ? nsRow.crm_settings : null;
         const navigation = settings === null ? undefined : settings.sidebar_navigation;
         const rawNav = Array.isArray(navigation) ? navigation : null;

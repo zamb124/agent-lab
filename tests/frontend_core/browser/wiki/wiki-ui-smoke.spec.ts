@@ -21,6 +21,7 @@ import '../../../../apps/wiki/ui/modals/wiki-move-page-modal.js';
 import '../../../../apps/wiki/ui/modals/wiki-page-access-modal.js';
 import '../../../../apps/wiki/ui/modals/wiki-import-report-modal.js';
 import { buildLineDiff } from '../../../../apps/wiki/ui/pages/wiki-history-page.js';
+import type { TestEl } from '../helpers/dom.js';
 
 describe('wiki ui', () => {
     beforeEach(() => {
@@ -111,7 +112,7 @@ describe('wiki ui', () => {
     it('модалка доступа создаётся при зарегистрированных фабриках', () => {
         resetPlatformState();
         bootstrapTestBus({ factories: WikiApp.factories });
-        const modal = document.createElement('wiki-page-access-modal');
+        const modal = (document.createElement('wiki-page-access-modal') as TestEl);
         expect(customElements.get('wiki-page-access-modal')).to.exist;
         expect(modal.useOp).to.be.a('function');
         expect(modal._companyVisible).to.exist;
@@ -133,7 +134,7 @@ describe('wiki sidebar recent collapse', () => {
     });
 
     function createSidebar() {
-        return document.createElement('wiki-sidebar');
+        return (document.createElement('wiki-sidebar') as TestEl);
     }
 
     it('без сохранённого состояния Recent развёрнут', () => {
@@ -156,11 +157,11 @@ describe('wiki sidebar recent collapse', () => {
     it('переключение пишет состояние в storage', () => {
         const sidebar = createSidebar();
         sidebar._toggleRecent();
-        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).to.deep.equal({
             collapsed: true,
         });
         sidebar._toggleRecent();
-        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).to.deep.equal({
             collapsed: false,
         });
     });
@@ -180,7 +181,7 @@ describe('wiki page panel state', () => {
     });
 
     function createPageView() {
-        return document.createElement('wiki-page-view');
+        return (document.createElement('wiki-page-view') as TestEl);
     }
 
     it('без сохранённого состояния панель закрыта на оглавлении', () => {
@@ -213,7 +214,7 @@ describe('wiki page panel state', () => {
         view._panelOpen = true;
         view._persistPanelState();
 
-        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).to.deep.equal({
+        expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).to.deep.equal({
             open: true,
             tab: 'comments',
         });

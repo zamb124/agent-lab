@@ -7,6 +7,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/agent-skills/flows-agent-skill-editor.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -62,7 +63,6 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
                 max-height: min(90vh, 1400px);
                 overflow: auto;
             }
-            .loading,
             .error {
                 display: flex;
                 justify-content: center;
@@ -195,7 +195,7 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
 
     override renderBody() {
         if (this._loadPhase === 'loading' || this._loadPhase === 'idle') {
-            return html`<div class="body-wrap"><div class="loading"><platform-spinner></platform-spinner></div></div>`;
+            return html`<div class="body-wrap"><platform-empty-state loading></platform-empty-state></div>`;
         }
         if (this._loadPhase === 'error' || !this._skill) {
             return html`<div class="body-wrap"><div class="error">${this.t('agent_skill_edit_modal.error')}</div></div>`;

@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from httpx2 import AsyncClient
 
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL
 from core.types import JsonObject, require_json_object
 from tests.flows.llm_proxy._helpers import (
     LLM_CHAT_COMPLETIONS_PATH,
@@ -43,7 +43,7 @@ async def test_e2e_llm_proxy_models_list_auto(
     body = response.json()
     assert body["object"] == "list"
     model_ids = {item["id"] for item in body["data"] if isinstance(item, dict)}
-    assert HUMANITEC_LLM_AUTO_MODEL in model_ids
+    assert LINNEX_LLM_AUTO_MODEL in model_ids
     assert all(isinstance(model_id, str) and model_id for model_id in model_ids)
 
 

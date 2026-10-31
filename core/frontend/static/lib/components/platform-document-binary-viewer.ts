@@ -66,7 +66,7 @@ export class PlatformDocumentBinaryViewer extends PlatformElement {
                 padding: var(--space-2) var(--space-4);
                 border-radius: var(--radius-md);
                 background: var(--accent);
-                color: var(--accent-contrast, #fff);
+                color: var(--text-on-accent);
                 text-decoration: none;
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);

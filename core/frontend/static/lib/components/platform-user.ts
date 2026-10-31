@@ -56,18 +56,18 @@ function hasOwnerRole(role: unknown): boolean {
 interface AuthUserRecord {
     id?: string;
     name?: string;
-    company_id?: string;
+    company_id?: string | undefined;
     raw?: Record<string, unknown>;
 }
 
 interface AuthSliceView {
     status?: string;
-    user?: AuthUserRecord;
+    user?: AuthUserRecord | undefined;
     activeCompanyId?: string | null;
 }
 
 interface CompanyRecord {
-    company_id?: string;
+    company_id?: string | undefined;
     name?: string;
     role?: unknown;
 }
@@ -642,7 +642,7 @@ export class PlatformUser extends PlatformElement {
 
             .chevron {
                 color: var(--text-tertiary);
-                transition: transform var(--duration-fast);
+                transition: transform var(--motion-duration-micro);
             }
             .chevron.open { transform: rotate(180deg); }
 
@@ -680,7 +680,7 @@ export class PlatformUser extends PlatformElement {
             .menu-item-label { flex: 1; min-width: 0; }
             .expand-icon {
                 color: var(--text-tertiary);
-                transition: transform var(--duration-fast);
+                transition: transform var(--motion-duration-micro);
             }
             .expand-icon.open { transform: rotate(90deg); }
 

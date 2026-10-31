@@ -100,6 +100,7 @@ import {
     normalizeWsTimeout,
     transportRequest,
 } from './_transport.js';
+import type { PlatformCommandMap } from '../wire/index.js';
 
 const INITIAL_SLICE = freeze({
     busy: false,
@@ -136,7 +137,7 @@ export interface AsyncOpOptions<
     silent?: boolean;
     successToastKey?: string | null;
     errorToastKey?: string | null;
-    onSuccess?: (ctx: EffectCtx, result: unknown, event: PlatformEvent) => void;
+    onSuccess?: (ctx: EffectCtx, result: TResult, event: PlatformEvent) => void;
     onFailure?: (ctx: EffectCtx, err: unknown, event: PlatformEvent) => void;
     sliceKey?: string;
     extraInitial?: Record<string, unknown>;
@@ -173,6 +174,16 @@ export interface AsyncOpFactory<
     run: (payload: unknown, ctx?: EffectCtx & { causationId?: string }) => Promise<void>;
 }
 
+export function createAsyncOp<
+    K extends keyof PlatformCommandMap,
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice<PlatformCommandMap[K]['result']>,
+    A extends ActionMap = Record<never, string>,
+>(options: AsyncOpOptions<PlatformCommandMap[K]['result'], S, A> & { commandType: K }): AsyncOpFactory<PlatformCommandMap[K]['result'], S, A>;
+export function createAsyncOp<
+    TResult = unknown,
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice<TResult>,
+    A extends ActionMap = Record<never, string>,
+>(options: AsyncOpOptions<TResult, S, A>): AsyncOpFactory<TResult, S, A>;
 export function createAsyncOp<
     TResult = unknown,
     S extends AsyncOpSlice<unknown> = AsyncOpSlice<TResult>,

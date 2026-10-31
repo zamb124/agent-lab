@@ -11,9 +11,9 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
 
 const LEVEL_COLORS = Object.freeze({
-    error: 'var(--color-error, #e53e3e)',
-    warning: 'var(--color-warning, #d69e2e)',
-    warn: 'var(--color-warning, #d69e2e)',
+    error: 'var(--error)',
+    warning: 'var(--warning)',
+    warn: 'var(--warning)',
     info: 'var(--text-primary)',
     debug: 'var(--text-tertiary)',
 });
@@ -95,16 +95,16 @@ export class PlatformLogViewer extends PlatformElement {
                 grid-template-columns: 22px 160px 52px 1fr auto minmax(0, auto);
                 gap: var(--space-2);
                 padding: 5px var(--space-4);
-                border-bottom: 1px solid var(--glass-border-secondary, rgba(255, 255, 255, 0.06));
+                border-bottom: 1px solid var(--glass-border-subtle);
                 align-items: start;
                 line-height: 1.4;
                 cursor: pointer;
             }
             .log-entry[data-expanded] {
-                background: var(--glass-solid-secondary);
+                background: var(--glass-solid-medium);
             }
             .log-entry:hover {
-                background: var(--glass-solid-secondary);
+                background: var(--glass-solid-medium);
             }
             .log-expand {
                 display: flex;
@@ -162,7 +162,7 @@ export class PlatformLogViewer extends PlatformElement {
                 grid-column: 1 / -1;
                 margin: var(--space-2) 0 0 0;
                 padding: var(--space-3);
-                background: var(--glass-solid-primary);
+                background: var(--glass-solid-strong);
                 border-radius: 6px;
                 overflow-x: auto;
             }

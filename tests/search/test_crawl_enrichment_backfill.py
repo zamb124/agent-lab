@@ -8,15 +8,6 @@ import pytest
 
 import apps.search.services.crawl.orchestrator_service as orchestrator_module
 from apps.search.config import get_search_settings
-from apps.search.services.crawl.fetch_service import CrawlFetchService
-from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
-from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
-from apps.search.services.crawl.politeness_service import CrawlPolitenessService
-from core.clients.browser_fetch_client import BrowserFetchClient
-from core.clients.rag_client import RagClient
-from core.clients.redis_client import RedisClient
-from core.clients.service_client import ServiceClient
-from core.config import get_settings
 from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -26,6 +17,15 @@ from apps.search.models import (
     CrawlUrl,
     SitemapEntry,
 )
+from apps.search.services.crawl.fetch_service import CrawlFetchService
+from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
+from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
+from apps.search.services.crawl.politeness_service import CrawlPolitenessService
+from core.clients.browser_fetch_client import BrowserFetchClient
+from core.clients.rag_client import RagClient
+from core.clients.redis_client import RedisClient
+from core.clients.service_client import ServiceClient
+from core.config import get_settings
 from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
 

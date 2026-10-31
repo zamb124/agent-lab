@@ -9,7 +9,7 @@
     "universal",
     "eval",
     "general",
-    "humanitec"
+    "linnex"
   ],
   "permission": [
     "admin",
@@ -24,7 +24,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "tools": [
         "ask_user",
@@ -62,7 +62,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": [
             "ask_user",
@@ -90,7 +90,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": [
             "ask_user",

@@ -28,7 +28,7 @@ export class FlowsAgentSkillImportModal extends PlatformFormModal {
     }
     declare onImported: any;
     declare _markdown: string;
-    declare _preview: Record<string, any> | null;
+    declare _preview: Record<string, unknown> | null;
     declare _step: string;
     declare _fileName: string;
 ;

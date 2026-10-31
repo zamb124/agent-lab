@@ -9,15 +9,15 @@ import { css } from 'lit';
 export const motionStyles = css`
     :host {
         --motion-transition-interactive:
-            background-color var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease),
-            border-color var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease),
-            color var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease),
-            box-shadow var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease),
-            opacity var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease),
-            transform var(--motion-duration-micro, 120ms) var(--motion-ease-standard, ease);
+            background-color var(--motion-duration-micro) var(--motion-ease-standard),
+            border-color var(--motion-duration-micro) var(--motion-ease-standard),
+            color var(--motion-duration-micro) var(--motion-ease-standard),
+            box-shadow var(--motion-duration-micro) var(--motion-ease-standard),
+            opacity var(--motion-duration-micro) var(--motion-ease-standard),
+            transform var(--motion-duration-micro) var(--motion-ease-standard);
         --motion-transition-surface:
-            opacity var(--motion-duration-enter, 180ms) var(--motion-ease-decelerate, ease-out),
-            transform var(--motion-duration-enter, 180ms) var(--motion-ease-decelerate, ease-out);
+            opacity var(--motion-duration-enter) var(--motion-ease-decelerate),
+            transform var(--motion-duration-enter) var(--motion-ease-decelerate);
     }
 
     @keyframes platformMotionFadeIn {
@@ -33,7 +33,7 @@ export const motionStyles = css`
     @keyframes platformMotionEnterUp {
         from {
             opacity: 0;
-            transform: translate3d(0, var(--motion-enter-offset-y, 8px), 0) scale(0.98);
+            transform: translate3d(0, var(--motion-enter-offset-y), 0) scale(0.98);
         }
         to {
             opacity: 1;
@@ -48,7 +48,7 @@ export const motionStyles = css`
         }
         to {
             opacity: 0;
-            transform: translate3d(0, var(--motion-exit-offset-y, 8px), 0) scale(0.98);
+            transform: translate3d(0, var(--motion-exit-offset-y), 0) scale(0.98);
         }
     }
 
@@ -74,35 +74,35 @@ export const motionStyles = css`
     }
 
     .motion-enter {
-        animation: platformMotionEnterUp var(--motion-duration-enter, 180ms)
-            var(--motion-ease-decelerate, ease-out) both;
+        animation: platformMotionEnterUp var(--motion-duration-enter)
+            var(--motion-ease-decelerate) both;
     }
 
     .motion-exit {
-        animation: platformMotionExitDown var(--motion-duration-exit, 160ms)
-            var(--motion-ease-accelerate, ease-in) both;
+        animation: platformMotionExitDown var(--motion-duration-exit)
+            var(--motion-ease-accelerate) both;
         pointer-events: none;
     }
 
     .motion-fade-in {
-        animation: platformMotionFadeIn var(--motion-duration-enter, 180ms)
-            var(--motion-ease-decelerate, ease-out) both;
+        animation: platformMotionFadeIn var(--motion-duration-enter)
+            var(--motion-ease-decelerate) both;
     }
 
     .motion-fade-out {
-        animation: platformMotionFadeOut var(--motion-duration-exit, 160ms)
-            var(--motion-ease-accelerate, ease-in) both;
+        animation: platformMotionFadeOut var(--motion-duration-exit)
+            var(--motion-ease-accelerate) both;
         pointer-events: none;
     }
 
     .motion-skeleton {
-        border-radius: var(--radius-md, 12px);
+        border-radius: var(--radius-md);
         background:
             linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent),
-            var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+            var(--glass-tint-medium);
         background-size: 220% 100%;
-        animation: platformSkeletonPulse var(--motion-duration-loading, 1200ms)
-            var(--motion-ease-standard, ease) infinite;
+        animation: platformSkeletonPulse var(--motion-duration-loading)
+            var(--motion-ease-standard) infinite;
     }
 
     .transition-fast,
@@ -115,7 +115,7 @@ export const motionStyles = css`
     @supports (content-visibility: auto) {
         .motion-offscreen-contained {
             content-visibility: auto;
-            contain-intrinsic-size: auto var(--motion-contain-intrinsic-block-size, 480px);
+            contain-intrinsic-size: auto var(--motion-contain-intrinsic-block-size);
         }
     }
 

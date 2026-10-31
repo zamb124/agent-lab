@@ -12,7 +12,7 @@ function _pad2(n: number): string {
  * @param {{ withHours?: 'auto' | 'always' }} [options]
  * @returns {string}
  */
-export function formatDurationSeconds(seconds: number, options: { withHours?: 'auto' | 'always' } = {}): string {
+export function formatDurationSeconds(seconds: unknown, options: { withHours?: 'auto' | 'always' } = {}): string {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
         return '00:00';
     }
@@ -33,7 +33,7 @@ export function formatDurationSeconds(seconds: number, options: { withHours?: 'a
  * @param {{ withHours?: 'auto' | 'always' }} [options]
  * @returns {string}
  */
-export function formatDurationMs(ms: number, options: { withHours?: 'auto' | 'always' } = {}): string {
+export function formatDurationMs(ms: unknown, options: { withHours?: 'auto' | 'always' } = {}): string {
     if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) {
         return '00:00';
     }

@@ -4,7 +4,7 @@
  * Динамические actions фабрик (`useSlice`/`useOp`/`useResource`) видны на
  * контроллере только через index-signature — здесь типизированные
  * интерфейсы контроллеров и shape slice'ов, чтобы компоненты не
- * размножали `Record<string, any>`-касты.
+ * размножали `Record<string, unknown>`-касты.
  */
 
 import type {

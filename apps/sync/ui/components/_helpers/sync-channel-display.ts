@@ -14,7 +14,7 @@ import { findCompanyMember } from '../../_helpers/sync-presence.js';
  * Заголовок канала. Тонкая обёртка над `resolveChannelTitle` для
  * совместимости со старым именем.
  */
-export function channelDisplayTitle(channel: Record<string, any> | null | undefined) {
+export function channelDisplayTitle(channel: Record<string, unknown> | null | undefined) {
     return resolveChannelTitle(channel);
 }
 
@@ -53,7 +53,7 @@ export function buildChatSubtitle({
     myUserId,
     members,
 }: {
-    channel: Record<string, any> | null | undefined;
+    channel: Record<string, unknown> | null | undefined;
     typingByChannel: Record<string, Record<string, { ts?: unknown; thread_id?: unknown }>> | null | undefined;
     t: (key: string, vars?: Record<string, string | number> | null) => string;
     myUserId: unknown;

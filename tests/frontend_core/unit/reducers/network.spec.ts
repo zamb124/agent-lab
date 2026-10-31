@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { networkReducer, initialNetworkState } from '@platform/lib/events/reducers/network.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('networkReducer', () => {
     it('initial: ws.status=idle, pendingHttp=0', () => {
@@ -27,7 +27,7 @@ describe('networkReducer', () => {
     });
 
     it('WS_CONNECTED обнуляет attempts и lastError', () => {
-        const seeded = { ...initialNetworkState, ws: { status: 'connecting', lastError: 'old', attempts: 3 } };
+        const seeded: typeof initialNetworkState = { ...initialNetworkState, ws: { status: 'connecting', lastError: 'old', attempts: 3 } };
         const next = networkReducer(seeded, ev(CoreEvents.WS_CONNECTED));
         expect(next.ws).toEqual({ status: 'open', lastError: null, attempts: 0 });
     });

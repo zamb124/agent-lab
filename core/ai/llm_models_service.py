@@ -4,10 +4,10 @@ import asyncio
 from datetime import datetime, timezone
 
 from core.ai.adapters import AIProviderAdapter, create_model_catalog_adapter_registry
-from core.ai.free_pool import read_humanitec_llms_model_options
+from core.ai.free_pool import read_linnex_llms_model_options
 from core.ai.models import AIModelRecord
 from core.ai.providers import (
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_PROVIDER,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
@@ -169,7 +169,7 @@ class LLMModelsService:
         capability: AICapability,
     ) -> list[str | JsonObject]:
         """Read model ids for one provider and one AI capability from storage."""
-        if provider == HUMANITEC_LLM_PROVIDER:
+        if provider == LINNEX_LLM_PROVIDER:
             if capability not in {
                 AICapability.LLM_CHAT,
                 AICapability.LLM_SUMMARIZE,
@@ -178,10 +178,10 @@ class LLMModelsService:
                 AICapability.LLM_VISION,
             }:
                 return []
-            options = await read_humanitec_llms_model_options(self._redis_client)
-            humanitec_models: list[str | JsonObject] = []
-            humanitec_models.extend(options)
-            return humanitec_models
+            options = await read_linnex_llms_model_options(self._redis_client)
+            linnex_models: list[str | JsonObject] = []
+            linnex_models.extend(options)
+            return linnex_models
         models = await AIModelRecord.list_unordered_by_provider_and_capability(provider, capability)
         provider_models: list[str | JsonObject] = []
         provider_models.extend(m.model_id for m in models)
@@ -191,7 +191,7 @@ class LLMModelsService:
     def get_configured_providers() -> list[str]:
         """Configured providers from the canonical adapter registry.
 
-        Humanitec LLMs is shown when the free-pool feature is enabled and at
+        Linnex LLMs is shown when the free-pool feature is enabled and at
         least one configured free-candidate provider is active.
         """
         settings = get_settings()
@@ -210,7 +210,7 @@ class LLMModelsService:
                 for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
             )
         ):
-            providers.append(HUMANITEC_LLM_PROVIDER)
+            providers.append(LINNEX_LLM_PROVIDER)
         providers.extend(configured_providers)
         if registry.has(PROVIDER_LITSERVE) and registry.get(PROVIDER_LITSERVE).is_configured():
             providers.append(PROVIDER_LITSERVE)
@@ -229,7 +229,7 @@ class LLMModelsService:
         providers: list[str] = []
         for spec in platform_provider_specs_for_capability(capability):
             provider = spec.provider
-            if provider == HUMANITEC_LLM_PROVIDER:
+            if provider == LINNEX_LLM_PROVIDER:
                 if (
                     capability in {
                         AICapability.LLM_CHAT,

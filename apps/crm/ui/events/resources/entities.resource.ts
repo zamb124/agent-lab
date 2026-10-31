@@ -26,9 +26,11 @@ import {
     createAsyncOp,
     createCursorList,
     createForm,
+    opSucceededResult,
     rerunLastRequest,
 } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { EntityResponse } from '@platform/lib/events/wire/crm.gen.js';
 
 const ENTITY_NAME_MAX = 256;
 const ENTITY_DESCRIPTION_MAX = 4096;
@@ -36,15 +38,6 @@ const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 function payloadRecord(payload: unknown): Record<string, unknown> | null {
     return isPlainRecord(payload) ? payload : null;
-}
-
-function resultRecord(payload: unknown): Record<string, unknown> | null {
-    const record = payloadRecord(payload);
-    if (record === null) {
-        return null;
-    }
-    const result = record.result;
-    return isPlainRecord(result) ? result : null;
 }
 
 export const entitiesResource = createResourceCollection({
@@ -144,7 +137,7 @@ export const entityUpdateOp = createAsyncOp({
     },
 });
 
-function _buildEntityQueryFilters(filters: Record<string, any>, dateField: string): Record<string, unknown> | null {
+function _buildEntityQueryFilters(filters: Record<string, unknown>, dateField: string): Record<string, unknown> | null {
     const leaves: Record<string, unknown>[] = [];
     if (typeof filters.status === 'string' && filters.status.length > 0) {
         leaves.push({ field: 'status', op: '$eq', value: filters.status });
@@ -167,7 +160,7 @@ function _buildEntityQueryFilters(filters: Record<string, any>, dateField: strin
     return rest.length === 0 ? first : { $and: leaves };
 }
 
-export const entitiesListResource = createCursorList({
+export const entitiesListResource = createCursorList<EntityResponse>({
     name: 'crm/entities_list',
     baseUrl: '/crm/api/v1/entities/query',
     pageSize: 50,
@@ -202,74 +195,35 @@ export const entitiesListResource = createCursorList({
     },
     errorToastKey: 'crm:toast.entities_list.failed',
     extraReducer: (state, event) => {
-        if (event.type === 'crm/entity_bulk_delete/succeeded') {
-            const result = resultRecord(event.payload);
-            if (result === null) {
+        const bulkDelete = opSucceededResult(event, entityBulkDeleteOp);
+        if (bulkDelete !== null) {
+            if (bulkDelete.deleted.length === 0) {
                 return state;
             }
-            const deleted = result.deleted;
-            if (!Array.isArray(deleted) || deleted.length === 0) {
-                return state;
-            }
-            const removed = new Set(deleted);
-            const items = Array.isArray(state.items)
-                ? state.items.filter((item) => item && !removed.has(item.entity_id))
-                : state.items;
+            const removed = new Set(bulkDelete.deleted);
+            const items = state.items.filter((item) => !removed.has(item.entity_id));
             return { ...state, items };
         }
-        if (event.type === 'crm/entity_bulk_update/succeeded') {
-            const result = resultRecord(event.payload);
-            if (result === null) {
+        const bulkUpdate = opSucceededResult(event, entityBulkUpdateOp);
+        if (bulkUpdate !== null) {
+            if (bulkUpdate.updated.length === 0) {
                 return state;
             }
-            const updated = result.updated;
-            if (!Array.isArray(updated) || updated.length === 0) {
-                return state;
+            const byId = new Map<string, EntityResponse>();
+            for (const entity of bulkUpdate.updated) {
+                byId.set(entity.entity_id, entity);
             }
-            const byId = new Map();
-            for (const entity of updated) {
-                if (entity && typeof entity.entity_id === 'string') {
-                    byId.set(entity.entity_id, entity);
-                }
-            }
-            if (byId.size === 0 || !Array.isArray(state.items)) {
-                return state;
-            }
-            const items = state.items.map((item) => {
-                if (!item || typeof item.entity_id !== 'string') {
-                    return item;
-                }
-                const next = byId.get(item.entity_id);
-                return next || item;
-            });
+            const items = state.items.map((item) => byId.get(item.entity_id) ?? item);
             return { ...state, items };
         }
-        if (event.type === 'crm/entity_merge/succeeded') {
-            const result = resultRecord(event.payload);
-            if (result === null) {
-                return state;
-            }
-            const survivor = result.entity;
-            const mergedFrom = result.merged_from_entity_id;
-            if (!isPlainRecord(survivor)) {
-                return state;
-            }
+        const mergeResult = opSucceededResult(event, entityMergeOp);
+        if (mergeResult !== null) {
+            const survivor = mergeResult.entity;
             const survivorId = survivor.entity_id;
-            if (typeof survivorId !== 'string') {
-                return state;
-            }
-            if (typeof mergedFrom !== 'string' || mergedFrom.length === 0) {
-                return state;
-            }
-            if (!Array.isArray(state.items)) {
-                return state;
-            }
-            const items = [];
+            const mergedFrom = mergeResult.merged_from_entity_id;
+            const items: EntityResponse[] = [];
             let survivorSeen = false;
             for (const item of state.items) {
-                if (!item || typeof item.entity_id !== 'string') {
-                    continue;
-                }
                 if (item.entity_id === mergedFrom) {
                     continue;
                 }

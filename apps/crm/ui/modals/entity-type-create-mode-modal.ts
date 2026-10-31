@@ -50,7 +50,7 @@ export class CRMEntityTypeCreateModeModal extends PlatformModal {
             }
             .choice:hover {
                 border-color: var(--accent);
-                background: rgba(99, 102, 241, 0.08);
+                background: color-mix(in srgb, var(--accent) 8%, transparent);
             }
             .choice-title {
                 display: inline-flex;
@@ -81,7 +81,7 @@ export class CRMEntityTypeCreateModeModal extends PlatformModal {
                 color: var(--text-secondary);
             }
             .btn:hover {
-                background: var(--crm-surface-muted, rgba(255, 255, 255, 0.06));
+                background: var(--crm-surface-muted);
                 color: var(--text-primary);
             }
         `,

@@ -68,7 +68,7 @@ export class FlowUIFilesPanel extends LitElement {
             padding: 0 12px;
             border: 1px solid var(--flow-ui-border, var(--glass-border-subtle));
             border-radius: 999px;
-            background: color-mix(in srgb, var(--flow-ui-panel-strong, var(--bg-primary, #fff)) 92%, transparent);
+            background: color-mix(in srgb, var(--flow-ui-panel-strong, var(--bg-primary)) 92%, transparent);
             color: var(--flow-ui-text, var(--text-primary));
             box-shadow: var(--flow-ui-panel-shadow, 0 14px 34px rgba(15, 23, 42, 0.12));
             backdrop-filter: blur(14px);
@@ -102,8 +102,8 @@ export class FlowUIFilesPanel extends LitElement {
             gap: 6px;
             padding: 8px;
             border: 1px solid var(--flow-ui-border-strong, var(--glass-border-medium));
-            border-radius: var(--radius-xl, 18px);
-            background: var(--flow-ui-panel-strong, var(--glass-solid-strong, var(--bg-primary)));
+            border-radius: var(--radius-xl);
+            background: var(--flow-ui-panel-strong, var(--glass-solid-strong));
             box-shadow: var(--flow-ui-panel-shadow, var(--glass-shadow-strong));
         }
         .file-row {

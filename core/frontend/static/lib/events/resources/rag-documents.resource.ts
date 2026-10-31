@@ -11,7 +11,12 @@ import { buildRagDocumentFileCreateSpecJson } from '@platform/lib/utils/file-cre
 import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { documentStatusResource } from './rag-document-status.resource.js';
 import type { EffectCtx } from '../contract.js';
-import { isPlainRecord } from '../payload.js';
+import { isPlatformEventType, isPlainRecord } from '../payload.js';
+import type {
+    IndexFileResponse,
+    OffsetPage_RAGDocument_,
+    RagDocumentDeleteResult,
+} from '../wire/rag.gen.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -88,7 +93,17 @@ function requireEventName(name: string | undefined, label: string): string {
     return name;
 }
 
-export const documentsResource = createAsyncOp({
+function isIndexFileResponse(value: unknown): value is IndexFileResponse {
+    return (
+        isPlainRecord(value)
+        && typeof value.document_id === 'string'
+        && typeof value.task_id === 'string'
+        && typeof value.status === 'string'
+        && typeof value.file_id === 'string'
+    );
+}
+
+export const documentsResource = createAsyncOp<OffsetPage_RAGDocument_>({
     name: 'rag/documents',
     silent: true,
     transport: 'ws',
@@ -110,11 +125,8 @@ export const documentsResource = createAsyncOp({
             }
             return { ...state, items: documentRows(result.items) };
         }
-        if (event.type === 'rag/document/status_updated') {
+        if (isPlatformEventType(event, 'rag/document/status_updated')) {
             const payload = event.payload;
-            if (!isPlainRecord(payload)) {
-                return state;
-            }
             const documentId = typeof payload.document_id === 'string' ? payload.document_id : '';
             const namespaceId = typeof payload.namespace_id === 'string' ? payload.namespace_id : '';
             const status = typeof payload.status === 'string' ? payload.status : '';
@@ -176,7 +188,7 @@ export const documentsResource = createAsyncOp({
     },
 });
 
-export const documentUploadOp = createAsyncOp({
+export const documentUploadOp = createAsyncOp<IndexFileResponse>({
     name: 'rag/document_upload',
     successToastKey: 'rag:toast.document_uploaded',
     errorToastKey: 'rag:toast.document_upload_failed',
@@ -200,7 +212,7 @@ export const documentUploadOp = createAsyncOp({
         if (!fileRecord || typeof fileRecord.file_id !== 'string') {
             throw new Error('rag/document_upload: file create response.file_id required');
         }
-        return httpRequest({
+        const result = await httpRequest({
             method: 'POST',
             url: `/rag/api/v1/namespaces/${encodeURIComponent(fields.namespaceId)}/documents/index-file`,
             body: {
@@ -209,11 +221,12 @@ export const documentUploadOp = createAsyncOp({
                 metadata: fields.metadata,
             },
         });
+        if (!isIndexFileResponse(result)) {
+            throw new Error('rag/document_upload: index-file response invalid');
+        }
+        return result;
     },
     onSuccess: (ctx, result, event) => {
-        if (!isPlainRecord(result) || typeof result.document_id !== 'string') {
-            throw new Error('rag/document_upload: response.document_id required');
-        }
         ctx.dispatch(
             requireEventName(documentStatusResource.events.REQUESTED, 'rag/document_status REQUESTED'),
             { document_id: result.document_id },
@@ -222,7 +235,7 @@ export const documentUploadOp = createAsyncOp({
     },
 });
 
-export const documentRemoveOp = createAsyncOp({
+export const documentRemoveOp = createAsyncOp<RagDocumentDeleteResult>({
     name: 'rag/document_remove',
     successToastKey: 'rag:toast.document_deleted',
     errorToastKey: 'rag:toast.document_delete_failed',

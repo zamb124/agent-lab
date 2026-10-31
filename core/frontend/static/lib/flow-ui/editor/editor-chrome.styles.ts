@@ -10,7 +10,7 @@ export const flowUIEditorChromeTokens = css`
         --flow-ui-editor-hover: color-mix(in srgb, var(--accent) 45%, transparent);
         --flow-ui-editor-insert: var(--success);
         --flow-ui-editor-insert-fill: color-mix(in srgb, var(--success) 16%, transparent);
-        --flow-ui-editor-label-fg: var(--text-on-accent, #fff);
+        --flow-ui-editor-label-fg: var(--text-on-accent);
     }
     .selection .align { display: inline-flex; align-items: center; gap: 2px; pointer-events: auto; }
     .selection .align button {

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { executionUiSlice } from '../../../../apps/flows/ui/events/resources/execution-ui.resource.js';
@@ -22,10 +23,10 @@ describe('flows/execution_ui slice', () => {
             persistContext: true,
             mockResponses: [],
         });
-        expect(executionUiSlice.actions.setInputText).toBeUndefined();
-        expect(executionUiSlice.actions.addFiles).toBeUndefined();
-        expect(executionUiSlice.actions.removeFile).toBeUndefined();
-        expect(executionUiSlice.actions.clear).toBeUndefined();
+        expect(Reflect.get(executionUiSlice.actions, 'setInputText')).toBeUndefined();
+        expect(Reflect.get(executionUiSlice.actions, 'addFiles')).toBeUndefined();
+        expect(Reflect.get(executionUiSlice.actions, 'removeFile')).toBeUndefined();
+        expect(Reflect.get(executionUiSlice.actions, 'clear')).toBeUndefined();
     });
 
     it('persistContext и mockResponses остаются единственными mutable controls', () => {
@@ -37,8 +38,8 @@ describe('flows/execution_ui slice', () => {
                 { match: 123, response: null },
             ],
         });
-        expect(getState().flowsExecutionUi.persistContext).toBe(false);
-        expect(getState().flowsExecutionUi.mockResponses).toEqual([
+        expect(prop(getState().flowsExecutionUi, 'persistContext')).toBe(false);
+        expect(prop(getState().flowsExecutionUi, 'mockResponses')).toEqual([
             { match: 'hello', response: 'world' },
             { match: '', response: '' },
         ]);

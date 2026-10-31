@@ -118,8 +118,8 @@ test-rag:
 	uv run pytest tests/rag/ -v --tb=short
 
 test-crawl-llm-live:
-	@echo "Запуск crawl Humanitec LLM live suite (CRAWL__E2E_HUMANITEC_LLM=1)..."
-	CRAWL__E2E_HUMANITEC_LLM=1 uv run pytest -q \
+	@echo "Запуск crawl Linnex LLM live suite (CRAWL__E2E_LINNEX_LLM=1)..."
+	CRAWL__E2E_LINNEX_LLM=1 uv run pytest -q \
 		tests/search/integration/test_crawl_enrichment_e2e.py \
 		tests/search/integration/test_crawl_enrichment_skip_e2e.py \
 		tests/search/integration/test_crawl_multi_site_two_layer_strict_e2e.py::test_crawl_multi_site_two_layer_parse_search_then_llm_strict

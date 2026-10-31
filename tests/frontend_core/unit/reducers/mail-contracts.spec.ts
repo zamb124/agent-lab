@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mailReducer, initialMailState, MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
+import type { PlatformEvent } from '../../../../core/frontend/static/lib/events/contract.js';
 
-const ev = (type, payload = {}) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
-const reduce = (state, type, payload) => mailReducer(state, ev(type, payload));
+const ev = (type: string, payload: unknown = {}): PlatformEvent => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local', causation_id: null, correlation_id: null, trace_id: null } });
+const reduce = (state: Parameters<typeof mailReducer>[0], type: string, payload: unknown) => mailReducer(state, ev(type, payload));
 
 describe('mailReducer: валидация записей', () => {
     it.each([
@@ -223,8 +224,8 @@ describe('mailReducer: папки', () => {
             uid: 'u1',
             flagged: true,
         });
-        expect(flagged.messages[0].flagged).toBe(true);
-        expect(flagged.folders[0].unseen_count).toBe(2);
+        expect(flagged.messages[0]?.flagged).toBe(true);
+        expect(flagged.folders[0]?.unseen_count).toBe(2);
     });
 
     it('MESSAGE_UPSERTED уменьшает счётчик не ниже нуля', () => {
@@ -238,7 +239,7 @@ describe('mailReducer: папки', () => {
             mailbox_binding_id: 'b1',
             unread_delta: -5,
         });
-        expect(next.folders[0].unseen_count).toBe(0);
+        expect(next.folders[0]?.unseen_count).toBe(0);
         expect(next.folders[1]).toEqual({ name: 'Other' });
     });
 
@@ -267,9 +268,9 @@ describe('mailReducer: письма и треды', () => {
             },
         });
         expect(next.selectedThreadId).toBe('t1');
-        expect(next.selectedMessage.uid).toBe('u1');
-        expect(next.messages[0].unread).toBe(false);
-        expect(next.folders[0].unseen_count).toBe(2);
+        expect(next.selectedMessage?.uid).toBe('u1');
+        expect(next.messages[0]?.unread).toBe(false);
+        expect(next.folders[0]?.unseen_count).toBe(2);
         expect(next.selectedThreadMessages).toHaveLength(2);
     });
 
@@ -277,7 +278,7 @@ describe('mailReducer: письма и треды', () => {
         const next = reduce({ ...seeded, selectedUid: null }, MAIL_EVENTS.THREAD_LOADED, {
             thread: { items: [{ uid: 'a' }, { uid: 'b' }] },
         });
-        expect(next.selectedMessage.uid).toBe('b');
+        expect(next.selectedMessage?.uid).toBe('b');
         expect(next.selectedThreadId).toBeNull();
     });
 
@@ -293,10 +294,10 @@ describe('mailReducer: письма и треды', () => {
 
     it('MESSAGE_LOADED отмечает письмо прочитанным и уменьшает счётчик', () => {
         const next = reduce(seeded, MAIL_EVENTS.MESSAGE_LOADED, { message: { uid: 'u1', body: 'x' } });
-        expect(next.selectedMessage.uid).toBe('u1');
-        expect(next.messages[0].unread).toBe(false);
-        expect(next.folders[0].unseen_count).toBe(2);
-        expect(next.selectedThreadMessages[0].folder).toBe('Inbox');
+        expect(next.selectedMessage?.uid).toBe('u1');
+        expect(next.messages[0]?.unread).toBe(false);
+        expect(next.folders[0]?.unseen_count).toBe(2);
+        expect(next.selectedThreadMessages[0]?.folder).toBe('Inbox');
     });
 
     it('MESSAGE_LOADED без письма очищает выбор', () => {
@@ -313,10 +314,10 @@ describe('mailReducer: письма и треды', () => {
             selectedThreadMessages: [{ uid: 'u2', unread: false }, { uid: 'u9', unread: false }],
         };
         const next = reduce(state, MAIL_EVENTS.MESSAGE_MARK_UNSEEN_COMPLETED, { uid: 'u2' });
-        expect(next.selectedMessage.unread).toBe(true);
-        expect(next.selectedThreadMessages[0].unread).toBe(true);
-        expect(next.selectedThreadMessages[1].unread).toBe(false);
-        expect(next.folders[0].unseen_count).toBe(4);
+        expect(next.selectedMessage?.unread).toBe(true);
+        expect(next.selectedThreadMessages[0]?.unread).toBe(true);
+        expect(next.selectedThreadMessages[1]?.unread).toBe(false);
+        expect(next.folders[0]?.unseen_count).toBe(4);
     });
 
     it('MESSAGE_MARK_UNSEEN_COMPLETED для уже непрочитанного не меняет счётчик', () => {
@@ -328,7 +329,7 @@ describe('mailReducer: письма и треды', () => {
     it('MESSAGE_STAR_COMPLETED обновляет выбранное письмо', () => {
         const state = { ...seeded, selectedMessage: { uid: 'u1', flagged: false } };
         const next = reduce(state, MAIL_EVENTS.MESSAGE_STAR_COMPLETED, { uid: 'u1', flagged: true });
-        expect(next.selectedMessage.flagged).toBe(true);
+        expect(next.selectedMessage?.flagged).toBe(true);
         expect(reduce(state, MAIL_EVENTS.MESSAGE_STAR_COMPLETED, { flagged: true })).toBe(state);
     });
 
@@ -337,7 +338,7 @@ describe('mailReducer: письма и треды', () => {
             uid: 'u2',
             rag_index_status: 'queued',
         });
-        expect(next.messages[1].rag_index_status).toBe('queued');
+        expect(next.messages[1]?.rag_index_status).toBe('queued');
         expect(reduce(seeded, MAIL_EVENTS.MESSAGE_RAG_INDEX_ACCEPTED, { uid: 'u2' })).toBe(seeded);
     });
 
@@ -374,8 +375,8 @@ describe('mailReducer: compose', () => {
         expect(next.compose.in_reply_to).toBe('<m1>');
         expect(next.compose.references).toBe('<m0>');
         expect(next.compose.body_html).toBe('<p>b</p>');
-        expect(next.compose.attachments[0].url).toBe('u');
-        expect(next.compose.attachments[1].url).toBeNull();
+        expect(next.compose.attachments[0]?.url).toBe('u');
+        expect(next.compose.attachments[1]?.url).toBeNull();
     });
 
     it.each([
@@ -407,7 +408,7 @@ describe('mailReducer: привязки ящиков', () => {
         };
         const next = reduce(state, MAIL_EVENTS.DEFAULT_SET, { binding: { mailbox_binding_id: 'b2' } });
         expect(next.bindings.map((item) => item.is_default)).toEqual([false, true]);
-        expect(next.companyBindings[0].is_default).toBe(false);
+        expect(next.companyBindings[0]?.is_default).toBe(false);
         expect(next.activeMailboxBindingId).toBe('b2');
     });
 
@@ -423,8 +424,8 @@ describe('mailReducer: привязки ящиков', () => {
             companyBindings: [{ mailbox_binding_id: 'b1', title: 'old' }],
         };
         const next = reduce(state, MAIL_EVENTS.BINDING_PATCHED, { binding: { mailbox_binding_id: 'b1', title: 'new' } });
-        expect(next.bindings[0].title).toBe('new');
-        expect(next.companyBindings[0].title).toBe('new');
+        expect(next.bindings[0]?.title).toBe('new');
+        expect(next.companyBindings[0]?.title).toBe('new');
     });
 
     it('BINDING_DELETED без id не меняет state', () => {

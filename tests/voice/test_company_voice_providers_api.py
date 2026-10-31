@@ -69,7 +69,7 @@ async def test_company_voice_providers_put_litserve_unknown_model_rejected_linne
     assert response.status_code == 400, response.text
     detail = response.json()["detail"]
     assert "Linnex Voice" in detail
-    assert "Humanitec" not in detail
+    assert "Linnex" not in detail
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_company_voice_providers_put_litserve_unknown_model_rejected(
     )
     assert response.status_code == 400, response.text
     detail = response.json()["detail"]
-    assert "Humanitec Voice" in detail
+    assert "Linnex Voice" in detail
     assert "litserve" not in detail.lower()
     assert "totally-not-a-real-model-id" in detail
 

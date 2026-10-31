@@ -18,6 +18,7 @@ export interface PlatformBusLike {
         callback: (value: V, prevValue: V | undefined) => void,
         opts?: { equality?: (a: V, b: V) => boolean },
     ) => () => void;
+    subscribeAny: (callback: (event: PlatformEvent) => void) => () => void;
 }
 
 const KEY = '__PLATFORM_BUS__' as const;

@@ -76,7 +76,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 opacity: 0.55;
             }
             .file-cube-wrap.failed platform-file-card {
-                outline: 2px solid var(--danger);
+                outline: 2px solid var(--error);
                 outline-offset: -1px;
                 border-radius: var(--radius-xl);
             }
@@ -94,8 +94,8 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 cursor: pointer;
             }
             .cube-remove:hover {
-                color: var(--danger);
-                border-color: var(--danger);
+                color: var(--error);
+                border-color: var(--error);
             }
             .files-summary {
                 font-size: var(--text-sm);

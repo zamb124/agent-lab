@@ -114,7 +114,7 @@ export function mapPlatformVariable(raw: unknown): PlatformVariable {
     };
 }
 
-export const secretsVariablesResource = createResourceCollection({
+export const secretsVariablesResource = createResourceCollection<ReturnType<typeof mapPlatformVariable>>({
     name: 'secrets/variables',
     baseUrl: '/secrets/api/v1/variables',
     idField: 'variable_key',

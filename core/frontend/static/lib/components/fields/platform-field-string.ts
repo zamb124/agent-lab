@@ -33,6 +33,10 @@ export class PlatformFieldString extends PlatformElement {
                 flex: 1;
             }
 
+            .field-pill-input {
+                min-height: var(--field-pill-number-spin-height);
+            }
+
             .field-pill-readonly-text,
             .field-pill-empty {
                 display: block;

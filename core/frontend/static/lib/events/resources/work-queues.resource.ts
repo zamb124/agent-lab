@@ -3,8 +3,9 @@
  */
 
 import { createResourceCollection } from '../index.js';
+import type { WorkQueue } from '../wire/worktracker.gen.js';
 
-export const workQueuesResource = createResourceCollection({
+export const workQueuesResource = createResourceCollection<WorkQueue>({
     name: 'worktracker/work_queues',
     baseUrl: '/worktracker/api/v1/work-queues',
     idField: 'work_queue_id',

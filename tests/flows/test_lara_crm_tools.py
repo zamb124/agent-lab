@@ -20,8 +20,8 @@ from apps.flows.tools.crm.crm_tools import (
     crm_create_note_and_analyze,
     crm_search_entities,
 )
-from core.ui_document.document import FlowUIActionPreview, FlowUIButton
 from core.types import JsonObject, JsonValue, require_json_object
+from core.ui_document.document import FlowUIActionPreview, FlowUIButton
 from tests.flows._flow_ui import conversation_blocks
 
 pytestmark = [

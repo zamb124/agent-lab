@@ -7,6 +7,7 @@ import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helper
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
+import { q, qs, shadow, type TestEl } from '../helpers/dom.js';
 
 const TOKENS_HREF = '/core/frontend/static/assets/css/tokens.css';
 const RESET_HREF = '/core/frontend/static/assets/css/reset.css';
@@ -20,7 +21,7 @@ const FORBIDDEN_PRIMARY_FONTS = new Set([
 ]);
 
 class ShadowButtonTypographyProbe extends PlatformElement {
-    render() {
+    override render() {
         return html`
             <button class="probe-button">
                 <span class="probe-label">Alice</span>
@@ -36,14 +37,14 @@ if (!customElements.get('shadow-button-typography-probe')) {
 /**
  * @param {string} href
  */
-function loadStylesheet(href) {
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+function loadStylesheet(href: any) {
+    return new Promise<void>((resolve, reject) => {
+        const existing = q(document, `link[rel="stylesheet"][href="${href}"]`);
         if (existing) {
             resolve();
             return;
         }
-        const link = document.createElement('link');
+        const link = (document.createElement('link') as TestEl);
         link.rel = 'stylesheet';
         link.href = href;
         link.onload = () => resolve();
@@ -55,7 +56,7 @@ function loadStylesheet(href) {
 /**
  * @param {string} fontFamily
  */
-function primaryFontName(fontFamily) {
+function primaryFontName(fontFamily: any) {
     const first = fontFamily.split(',')[0].trim();
     return first.replace(/^['"]|['"]$/g, '');
 }
@@ -64,7 +65,7 @@ function primaryFontName(fontFamily) {
  * @param {Element} element
  * @param {string} [label]
  */
-function expectPlatformSans(element, label = 'element') {
+function expectPlatformSans(element: any, label = 'element') {
     const primary = primaryFontName(getComputedStyle(element).fontFamily);
     expect(FORBIDDEN_PRIMARY_FONTS.has(primary), `${label}: forbidden UA font "${primary}"`).to.be.false;
     expect(primary, `${label}: expected Inter, got "${primary}"`).to.equal('Inter');
@@ -88,11 +89,11 @@ describe('platform typography runtime', () => {
     });
 
     it('PlatformElement shadow reset: span внутри button не рисуется Arial (как platform-user)', async () => {
-        const el = await fixture(html`<shadow-button-typography-probe></shadow-button-typography-probe>`);
+        const el = await fixture<TestEl>(html`<shadow-button-typography-probe></shadow-button-typography-probe>`);
         await elementUpdated(el);
 
-        const probeButton = el.shadowRoot.querySelector('.probe-button');
-        const probeLabel = el.shadowRoot.querySelector('.probe-label');
+        const probeButton = qs(shadow(el), '.probe-button');
+        const probeLabel = qs(shadow(el), '.probe-label');
         expect(probeButton, 'probe .probe-button').to.exist;
         expect(probeLabel, 'probe .probe-label').to.exist;
 
@@ -101,10 +102,10 @@ describe('platform typography runtime', () => {
     });
 
     it('platform-button: inner button наследует Inter из PlatformElement shadow reset', async () => {
-        const el = await fixture(html`<platform-button>Save</platform-button>`);
+        const el = await fixture<TestEl>(html`<platform-button>Save</platform-button>`);
         await elementUpdated(el);
 
-        const button = el.shadowRoot.querySelector('button');
+        const button = qs(shadow(el), 'button');
         expect(button, 'platform-button inner button').to.exist;
         expectPlatformSans(button, 'platform-button inner button');
     });

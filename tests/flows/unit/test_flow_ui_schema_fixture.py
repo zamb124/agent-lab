@@ -7,8 +7,8 @@ from pathlib import Path
 
 from apps.flows.src.flow_ui.templates import FlowUITemplate, flow_ui_templates
 from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
-from core.ui_document.document import FlowUIDocument
 from core.pagination import OffsetPage
+from core.ui_document.document import FlowUIDocument
 
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "flow_ui" / "schema.json"
 TEMPLATES_FIXTURE = FIXTURE.with_name("templates.json")

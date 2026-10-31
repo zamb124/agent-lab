@@ -20,6 +20,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     code_agent_source: 'flow_asset',
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
+    shop_product: 'shop_product',
 });
 
 function defaultRetentionKind(sourceKind: string): string | undefined {
@@ -80,7 +81,7 @@ export interface FileCreateSpecParams {
     sourceRef?: Record<string, unknown>;
     retentionKind?: string;
     postCreate?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, unknown> | undefined;
     placement?: Record<string, unknown>;
     tags?: string[];
 }
@@ -247,7 +248,7 @@ export function buildRagDocumentFileCreateSpecJson({ namespaceId, ragMetadata }:
     });
 }
 
-export function buildCrmEntityFileCreateSpecJson({ entityId, entityType, entityTitle }: { entityId: string; entityType: string; entityTitle?: string }): string {
+export function buildCrmEntityFileCreateSpecJson({ entityId, entityType, entityTitle }: { entityId: string; entityType: string; entityTitle?: string | undefined }): string {
     if (typeof entityId !== 'string' || entityId.length === 0) {
         throw new Error('buildCrmEntityFileCreateSpecJson: entityId required');
     }
@@ -274,7 +275,7 @@ export function buildCodeAgentSourceFileCreateSpecJson({
 }: {
     flowId: string;
     nodeId: string;
-    relativeDir?: string;
+    relativeDir?: string | undefined;
 }): string {
     if (typeof flowId !== 'string' || flowId.length === 0) {
         throw new Error('buildCodeAgentSourceFileCreateSpecJson: flowId required');
@@ -301,5 +302,20 @@ export function buildOfficeDocumentFileCreateSpecJson({ namespaceId }: { namespa
         sourceKind: 'office_document',
         sourceRef: { entity_id: namespaceId },
         postCreate: { is_public: false },
+    });
+}
+
+export function buildShopProductFileCreateSpecJson({ shopId, productId }: { shopId: string; productId?: string }): string {
+    if (typeof shopId !== 'string' || shopId.length === 0) {
+        throw new Error('buildShopProductFileCreateSpecJson: shopId required');
+    }
+    const sourceRef: Record<string, string> = { shop_id: shopId };
+    if (typeof productId === 'string' && productId.length > 0) {
+        sourceRef.shop_product_id = productId;
+    }
+    return buildFileCreateSpecJson({
+        sourceKind: 'shop_product',
+        sourceRef,
+        postCreate: { is_public: true },
     });
 }

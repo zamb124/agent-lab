@@ -239,15 +239,15 @@ class TestPaymentModels:
             "https://acme.linnex.io/billing?payment=success&transaction_id=co1:abc123def456"
         )
 
-    def test_return_url_follows_humanitec_host(self) -> None:
+    def test_return_url_follows_linnex_host(self) -> None:
         url = payment_browser_return_url(
-            host="acme.humanitec.ru",
+            host="acme.linnex.io",
             company_subdomain="acme",
             payment_result="fail",
             transaction_id="co1:abc123def456",
         )
         assert url == (
-            "https://acme.humanitec.ru/billing?payment=fail&transaction_id=co1:abc123def456"
+            "https://acme.linnex.io/billing?payment=fail&transaction_id=co1:abc123def456"
         )
 
     def test_return_url_localhost_keeps_port(self) -> None:

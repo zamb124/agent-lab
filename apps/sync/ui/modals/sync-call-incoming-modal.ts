@@ -51,18 +51,18 @@ export class SyncCallIncomingModal extends PlatformElement {
         }
         :host([open]) { display: block; }
         .card {
-            background: var(--glass-solid);
-            border: 1px solid var(--glass-border);
+            background: var(--glass-solid-medium);
+            border: 1px solid var(--glass-border-medium);
             border-radius: var(--radius-md);
             padding: var(--space-4);
             min-width: 320px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 24px var(--glass-shadow-medium);
         }
         .head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
         .meta { color: var(--text-secondary); font-size: var(--text-xs); margin-bottom: var(--space-3); }
         .actions { display: flex; gap: var(--space-2); }
-        .accept { background: #10b981; color: white; }
-        .decline { background: var(--color-danger, #ef4444); color: white; }
+        .accept { background: var(--success); color: var(--text-on-accent); }
+        .decline { background: var(--error); color: white; }
     `;
     private _accept: OpController;
     private _decline: OpController;

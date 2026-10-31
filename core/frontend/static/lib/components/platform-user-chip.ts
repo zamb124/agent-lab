@@ -96,7 +96,7 @@ export class PlatformUserChip extends PlatformElement {
             :host {
                 display: inline-flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
                 max-width: 100%;
                 min-width: 0;
             }
@@ -104,19 +104,19 @@ export class PlatformUserChip extends PlatformElement {
             .chip {
                 display: inline-flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
                 padding: 2px 8px 2px 2px;
                 background: transparent;
                 border: 1px solid transparent;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 color: var(--text-primary);
                 font: inherit;
                 cursor: default;
                 max-width: 100%;
                 min-width: 0;
                 text-align: left;
-                transition: background var(--duration-fast, 0.15s) ease,
-                            border-color var(--duration-fast, 0.15s) ease;
+                transition: background var(--motion-duration-micro) ease,
+                            border-color var(--motion-duration-micro) ease;
             }
 
             .chip.interactive {
@@ -125,8 +125,8 @@ export class PlatformUserChip extends PlatformElement {
 
             .chip.interactive:hover,
             .chip.interactive:focus-visible {
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.06));
-                border-color: var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
+                background: var(--glass-tint-medium);
+                border-color: var(--glass-border-subtle);
                 outline: none;
             }
 
@@ -138,10 +138,10 @@ export class PlatformUserChip extends PlatformElement {
                 width: 24px;
                 height: 24px;
                 border-radius: 50%;
-                background: var(--accent-subtle, rgba(99, 102, 241, 0.18));
-                color: var(--accent, #6366f1);
-                font-size: var(--text-xs, 12px);
-                font-weight: var(--font-semibold, 600);
+                background: var(--accent-subtle);
+                color: var(--accent);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 overflow: hidden;
             }
 
@@ -161,30 +161,30 @@ export class PlatformUserChip extends PlatformElement {
 
             .name {
                 color: var(--text-primary);
-                font-size: var(--text-sm, 14px);
-                font-weight: var(--font-medium, 500);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
 
             .email {
-                color: var(--text-tertiary, rgba(255, 255, 255, 0.55));
-                font-size: var(--text-xs, 12px);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
 
             .unknown .name {
-                color: var(--text-tertiary, rgba(255, 255, 255, 0.55));
+                color: var(--text-tertiary);
                 font-style: italic;
             }
 
             :host([size="md"]) .avatar {
                 width: 32px;
                 height: 32px;
-                font-size: var(--text-sm, 14px);
+                font-size: var(--text-sm);
             }
 
             .work-count {
@@ -195,11 +195,11 @@ export class PlatformUserChip extends PlatformElement {
                 min-width: 20px;
                 height: 20px;
                 padding: 0 6px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: var(--accent);
-                color: var(--text-on-accent, #fff);
-                font-size: var(--text-xs, 12px);
-                font-weight: var(--font-semibold, 600);
+                color: var(--text-on-accent);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 border: none;
                 cursor: pointer;
             }

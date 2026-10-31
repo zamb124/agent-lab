@@ -276,7 +276,7 @@ export class FlowsHomePage extends PlatformPage {
                 gap: var(--space-2);
                 min-height: 32px;
                 padding: 6px 14px;
-                border-radius: var(--btn-radius, 22px);
+                border-radius: var(--btn-radius);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 line-height: var(--leading-tight);
@@ -616,11 +616,11 @@ export class FlowsHomePage extends PlatformPage {
             }
             .readiness-row-link {
                 cursor: pointer;
-                transition: border-color var(--transition-fast), background var(--transition-fast);
+                transition: border-color var(--motion-transition-interactive), background var(--motion-transition-interactive);
             }
             .readiness-row-link:hover {
                 border-color: var(--border-strong);
-                background: var(--glass-solid);
+                background: var(--glass-solid-medium);
             }
             .row-main {
                 min-width: 0;

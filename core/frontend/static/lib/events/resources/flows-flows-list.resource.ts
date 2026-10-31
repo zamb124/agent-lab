@@ -4,8 +4,9 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { OffsetPage_FlowResponse_ } from '../wire/flows.gen.js';
 
-export const flowsListOp = createAsyncOp({
+export const flowsListOp = createAsyncOp<OffsetPage_FlowResponse_>({
     name: 'flows/flows_list',
     silent: true,
     transport: 'ws',

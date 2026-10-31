@@ -52,9 +52,9 @@ ALLOWED_ROOT_FILES: frozenset[str] = frozenset(
         "tsconfig.base.json",
         "tsconfig.json",
         "uv.lock",
-        "vitest.config.mjs",
-        "web-test-runner.config.mjs",
-        "web-test-runner.middleware.mjs",
+        "vitest.config.ts",
+        "web-test-runner.config.ts",
+        "web-test-runner.middleware.ts",
         "zensical.en.toml",
         "zensical.ru.toml",
     }

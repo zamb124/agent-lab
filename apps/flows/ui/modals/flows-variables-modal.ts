@@ -85,8 +85,8 @@ export class FlowsVariablesModal extends PlatformModal {
             .flows-vars-hint {
                 padding: var(--space-2) var(--space-3);
                 margin-bottom: var(--space-3);
-                background: var(--accent-subtle, var(--info-bg));
-                border: 1px dashed var(--accent, var(--info));
+                background: var(--accent-subtle);
+                border: 1px dashed var(--accent);
                 border-radius: var(--radius-sm);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);

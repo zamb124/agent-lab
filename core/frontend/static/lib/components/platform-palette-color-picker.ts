@@ -81,12 +81,12 @@ export class PlatformPaletteColorPicker extends PlatformElement {
             .swatch:focus-visible {
                 outline: none;
                 box-shadow:
-                    0 0 0 2px var(--glass-solid-strong, #fff),
-                    0 0 0 4px color-mix(in srgb, var(--accent, #3f4959) 55%, transparent);
+                    0 0 0 2px var(--glass-solid-strong),
+                    0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
             }
             .swatch.active {
                 box-shadow:
-                    0 0 0 2px var(--glass-solid-strong, #fff),
+                    0 0 0 2px var(--glass-solid-strong),
                     0 0 0 4px color-mix(in srgb, #3f4959 55%, transparent);
             }
             .clear {
@@ -94,14 +94,14 @@ export class PlatformPaletteColorPicker extends PlatformElement {
                 font-size: var(--text-xs);
                 padding: 4px var(--space-2);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle, var(--border-subtle));
-                background: var(--glass-solid-medium, var(--glass-solid-subtle));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 cursor: pointer;
                 white-space: nowrap;
             }
             .clear:hover:not(:disabled) {
-                border-color: var(--accent, #3b82f6);
+                border-color: var(--accent);
                 color: var(--text-primary);
             }
             .clear:disabled {

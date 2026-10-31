@@ -21,6 +21,7 @@ import {
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/work-item-detail-editor.js';
 import '../components/worktracker-detail-header.js';
 import '../components/sheets/worktracker-task-properties-sheet.js';
@@ -214,8 +215,7 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
 
         if (loading) {
             return html`
-                <div class="center">
-                    <platform-spinner size="lg"></platform-spinner>
+                <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }

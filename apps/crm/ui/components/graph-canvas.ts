@@ -30,6 +30,7 @@ import type {
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 const GRAPH_PRESETS = {
     dense: { charge: -60, linkWidth: 0.8, nodeRelSize: 5 },
     readable: { charge: -120, linkWidth: 1.5, nodeRelSize: 6 },
@@ -175,7 +176,7 @@ export class CRMGraphCanvas extends PlatformElement {
         this.selectedEdgeId = '';
         this.pathSourceId = '';
         this.pathTargetId = '';
-        this.nodeColorFn = () => '#bca8ff';
+        this.nodeColorFn = () => cssVar('--accent-tertiary', '#8b5cf6');
         this.edgeDirectedFn = () => true;
         this.relationshipTypeColors = new Map();
         this.incidentWeightSubtitleFn = null;
@@ -312,7 +313,7 @@ export class CRMGraphCanvas extends PlatformElement {
         if (!this._graphInstance) {
             return;
         }
-        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
+        const canvasBg = cssVar('--bg-secondary', '#1a1a2e');
         this._graphInstance.backgroundColor(canvasBg);
         this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
         this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
@@ -379,7 +380,7 @@ export class CRMGraphCanvas extends PlatformElement {
             throw new Error('Graph canvas container is not available');
         }
         this._graphContainerEl = container;
-        const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
+        const canvasBg = cssVar('--bg-secondary', '#1a1a2e');
         const graph = factory()(container)
             .backgroundColor(canvasBg)
             .cooldownTicks(120)
@@ -399,7 +400,7 @@ export class CRMGraphCanvas extends PlatformElement {
                 const selectionScale = isSelected ? 1.2 : 1;
                 const radius = baseRadius * selectionScale;
                 const geometry = new THREE.SphereGeometry(radius, 32, 24);
-                const baseColor = node.color || '#bca8ff';
+                const baseColor = node.color || cssVar('--accent-tertiary', '#8b5cf6');
                 const material = new THREE.MeshStandardMaterial({
                     color: baseColor,
                     emissive: isSelected ? 0x3d8cff : 0x000000,
@@ -421,8 +422,8 @@ export class CRMGraphCanvas extends PlatformElement {
                     ring.rotation.x = Math.PI / 2;
                     group.add(ring);
                 }
-                const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#f0f4ff';
-                const subtitleColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                const labelColor = cssVar('--text-primary', '#f0f4ff');
+                const subtitleColor = cssVar('--text-secondary', '#d4dae8');
                 const weightSum = typeof node.incident_weight_sum === 'number' && Number.isFinite(node.incident_weight_sum)
                     ? node.incident_weight_sum
                     : 0;
@@ -451,13 +452,13 @@ export class CRMGraphCanvas extends PlatformElement {
             })
             .nodeThreeObjectExtend(false)
             .linkColor((link: Record<string, unknown>) => {
-                if (link.path_kind === 'directed') return '#41d36d';
-                if (link.path_kind === 'undirected') return '#f2c94c';
-                if (link.path_kind === 'both') return '#9adf5d';
+                if (link.path_kind === 'directed') return cssVar('--success', '#10b981');
+                if (link.path_kind === 'undirected') return cssVar('--warning', '#f59e0b');
+                if (link.path_kind === 'both') return cssVar('--success', '#10b981');
                 if (link.highlighted) return '#ff6b6b';
                 const typeColor = this.relationshipTypeColors.get(graphText(link.relation_type));
                 if (typeColor) return typeColor;
-                return '#9ba3bf';
+                return cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
             })
             .linkWidth((link: Record<string, unknown>) => {
                 if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
@@ -481,7 +482,7 @@ export class CRMGraphCanvas extends PlatformElement {
             })
             .linkThreeObjectExtend(true)
             .linkThreeObject((link: Record<string, unknown>) => {
-                const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                const linkLabelColor = cssVar('--text-secondary', '#d4dae8');
                 const typeKey = typeof link.relation_type === 'string' && link.relation_type.trim().length > 0
                     ? link.relation_type.trim()
                     : 'related';
@@ -505,8 +506,8 @@ export class CRMGraphCanvas extends PlatformElement {
             })
             .linkDirectionalArrowRelPos(0.88)
             .linkDirectionalArrowColor((link: Record<string, unknown>) => {
-                if (link.path_kind === 'directed') return '#41d36d';
-                if (link.path_kind === 'both') return '#9adf5d';
+                if (link.path_kind === 'directed') return cssVar('--success', '#10b981');
+                if (link.path_kind === 'both') return cssVar('--success', '#10b981');
                 const typeColor = this.relationshipTypeColors.get(graphText(link.relation_type));
                 if (typeColor) return typeColor;
                 return null;

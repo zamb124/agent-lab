@@ -24,7 +24,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "llm_context": {
         "profile": "standard"
@@ -84,7 +84,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -109,7 +109,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -134,7 +134,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -159,7 +159,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -185,7 +185,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -211,7 +211,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -237,7 +237,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -263,7 +263,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -289,7 +289,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -315,7 +315,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -341,7 +341,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -367,7 +367,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -393,7 +393,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -419,7 +419,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -445,7 +445,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -471,7 +471,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -497,7 +497,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -523,7 +523,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -549,7 +549,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -575,7 +575,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -601,7 +601,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.15,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [
@@ -627,7 +627,7 @@
           "name": "Documentation lookup",
           "description": "Optional latency pre-search; docs-knowledge skill remains available for cross-domain.",
           "language": "python",
-          "code": "async def run(args, state):\n    content = str(state.get('content') or '').strip()\n    variables = state.get('variables') if isinstance(state.get('variables'), dict) else {}\n    query_parts = [content]\n    for key in ('page_title', 'docs_path', 'page_url'):\n        value = str(variables.get(key) or '').strip()\n        if value:\n            query_parts.append(value)\n    query = '\\n'.join(part for part in query_parts if part).strip() or 'Humanitec documentation'\n    language = variables.get('docs_language') or variables.get('interface_language_code') or variables.get('user_language') or 'ru'\n    result = await capability('tools.docs_prepare_context', query=query, limit=5, language=str(language))\n    if not isinstance(result, dict):\n        result = {'success': False, 'error': 'docs_prepare_context returned non-object'}\n    variables['docs_search_context'] = str(result.get('prompt_context') or '')\n    variables['docs_search_links'] = str(result.get('prompt_links') or '')\n    variables['docs_search_status'] = 'found' if result.get('results') else 'not_found'\n    if not result.get('success', False):\n        variables['docs_search_status'] = 'error'\n        variables['docs_search_error'] = str(result.get('error') or 'Documentation search failed')\n    state['variables'] = variables\n    state['docs_search_result'] = result\n    return {'variables': variables, 'docs_search_result': result}\n"
+          "code": "async def run(args, state):\n    content = str(state.get('content') or '').strip()\n    variables = state.get('variables') if isinstance(state.get('variables'), dict) else {}\n    query_parts = [content]\n    for key in ('page_title', 'docs_path', 'page_url'):\n        value = str(variables.get(key) or '').strip()\n        if value:\n            query_parts.append(value)\n    query = '\\n'.join(part for part in query_parts if part).strip() or 'Linnex documentation'\n    language = variables.get('docs_language') or variables.get('interface_language_code') or variables.get('user_language') or 'ru'\n    result = await capability('tools.docs_prepare_context', query=query, limit=5, language=str(language))\n    if not isinstance(result, dict):\n        result = {'success': False, 'error': 'docs_prepare_context returned non-object'}\n    variables['docs_search_context'] = str(result.get('prompt_context') or '')\n    variables['docs_search_links'] = str(result.get('prompt_links') or '')\n    variables['docs_search_status'] = 'found' if result.get('results') else 'not_found'\n    if not result.get('success', False):\n        variables['docs_search_status'] = 'error'\n        variables['docs_search_error'] = str(result.get('error') or 'Documentation search failed')\n    state['variables'] = variables\n    state['docs_search_result'] = result\n    return {'variables': variables, 'docs_search_result': result}\n"
         },
         "main": {
           "name": "Lara Documentation",
@@ -635,7 +635,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "output_key": "response",
           "tools": [

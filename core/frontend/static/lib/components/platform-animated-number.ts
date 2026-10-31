@@ -41,7 +41,7 @@ export class PlatformAnimatedNumber extends PlatformElement {
             }
             .value {
                 display: inline-block;
-                transition: opacity var(--duration-fast) var(--easing-default);
+                transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
             .value.animating {
                 opacity: 0.92;

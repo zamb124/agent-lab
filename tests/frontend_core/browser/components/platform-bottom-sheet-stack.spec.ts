@@ -9,11 +9,12 @@ import '@platform/lib/components/platform-bottom-sheet-stack.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import {q, qs, type TestEl} from '../helpers/dom.js';
 
-let releaseCloseMotion = null;
+let releaseCloseMotion: (() => void) | null = null;
 
 class TestStackSheet extends PlatformElement {
-    static properties = {
+    static override properties = {
         open: { type: Boolean, reflect: true },
         closing: { type: Boolean, reflect: true },
         _sheetId: { state: true },
@@ -21,20 +22,20 @@ class TestStackSheet extends PlatformElement {
     };
     constructor() {
         super();
-        this.open = false;
-        this.closing = false;
-        this.title = '';
-        this.closeMotionRequested = false;
+        (this as TestEl).open = false;
+        (this as TestEl).closing = false;
+        (this as TestEl).title = '';
+        (this as TestEl).closeMotionRequested = false;
     }
     requestPlatformClose() {
-        this.closeMotionRequested = true;
-        this.closing = true;
-        this.open = false;
-        return new Promise((resolve) => {
+        (this as TestEl).closeMotionRequested = true;
+        (this as TestEl).closing = true;
+        (this as TestEl).open = false;
+        return new Promise<void>((resolve) => {
             releaseCloseMotion = resolve;
         });
     }
-    render() { return litHtml`<div class="s">${this.title}</div>`; }
+    override render() { return litHtml`<div class="s">${(this as TestEl).title}</div>`; }
 }
 customElements.define('frontend-core-stack-sheet', TestStackSheet);
 registerBottomSheetKind('platform.stack_sheet_test', 'frontend-core-stack-sheet');
@@ -47,13 +48,13 @@ describe('platform-bottom-sheet-stack', () => {
     });
 
     it('создаёт sheet по kind при UI_BOTTOM_SHEET_OPEN_REQUESTED', async () => {
-        const stack = await fixture(html`<platform-bottom-sheet-stack></platform-bottom-sheet-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-bottom-sheet-stack></platform-bottom-sheet-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, {
             kind: 'platform.stack_sheet_test',
             props: { title: 'Sheet' },
         });
         await elementUpdated(stack);
-        const sheet = stack.querySelector('frontend-core-stack-sheet');
+        const sheet = qs(stack!, 'frontend-core-stack-sheet');
         expect(sheet).to.exist;
         expect(sheet.title).to.equal('Sheet');
         expect(sheet.open).to.be.true;
@@ -61,26 +62,26 @@ describe('platform-bottom-sheet-stack', () => {
     });
 
     it('close_requested держит sheet в DOM до завершения close motion', async () => {
-        const stack = await fixture(html`<platform-bottom-sheet-stack></platform-bottom-sheet-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-bottom-sheet-stack></platform-bottom-sheet-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, {
             kind: 'platform.stack_sheet_test',
             props: {},
         });
         await elementUpdated(stack);
-        const sheetId = stack.querySelector('frontend-core-stack-sheet')._sheetId;
+        const sheetId = qs(stack!, 'frontend-core-stack-sheet')._sheetId;
         getPlatformBus().dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, { id: sheetId });
         await elementUpdated(stack);
-        const closingSheet = stack.querySelector('frontend-core-stack-sheet');
+        const closingSheet = qs(stack!, 'frontend-core-stack-sheet');
         expect(closingSheet).to.exist;
         expect(closingSheet.open).to.be.false;
         expect(closingSheet.closing).to.be.true;
         expect(closingSheet.closeMotionRequested).to.be.true;
 
-        releaseCloseMotion();
+        releaseCloseMotion?.();
         await waitUntil(
-            () => stack.querySelector('frontend-core-stack-sheet') === null,
+            () => q(stack!, 'frontend-core-stack-sheet') === null,
             'sheet removed after close motion',
         );
-        expect(getPlatformBus().getState().bottomSheets.stack.find((s) => s.id === sheetId)).to.be.undefined;
+        expect((getPlatformBus().getState() as Record<string, any>).bottomSheets.stack.find((s: any) => s.id === sheetId)).to.be.undefined;
     });
 });

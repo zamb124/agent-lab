@@ -34,18 +34,18 @@ import type { SelectController } from '../../events/select-controller.js';
 interface AuthUserRecord {
     id?: string;
     name?: string;
-    company_id?: string;
+    company_id?: string | undefined;
     raw?: Record<string, unknown>;
 }
 
 interface AuthSliceView {
     status?: string;
-    user?: AuthUserRecord;
+    user?: AuthUserRecord | undefined;
     activeCompanyId?: string | null;
 }
 
 interface CompanyRecord {
-    company_id?: string;
+    company_id?: string | undefined;
     name?: string;
     role?: unknown;
 }
@@ -149,16 +149,16 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro);
             }
 
             .company-picker-toggle:hover {
-                background: var(--glass-hover);
+                background: var(--glass-tint-medium);
                 color: var(--text-primary);
             }
 
             .picker-chevron {
-                transition: transform var(--duration-fast) var(--easing-default);
+                transition: transform var(--motion-duration-micro) var(--motion-ease-standard);
             }
 
             .picker-chevron.open {
@@ -189,7 +189,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                 font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), border-color var(--motion-duration-micro);
                 box-sizing: border-box;
             }
 

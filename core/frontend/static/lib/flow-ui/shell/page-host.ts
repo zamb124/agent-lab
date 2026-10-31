@@ -38,7 +38,7 @@ export class FlowUIPageHost extends LitElement {
             display: block;
             width: 100vw;
             height: 100dvh;
-            background: var(--flow-ui-page-background, var(--bg-primary, #16213e));
+            background: var(--flow-ui-page-background, var(--bg-primary));
             font-family: system-ui;
         }
         platform-flow-ui {

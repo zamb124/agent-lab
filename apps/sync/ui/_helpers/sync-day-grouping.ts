@@ -40,9 +40,9 @@ function _isYesterday(iso: unknown) {
  */
 export type SyncRenderEntry =
     | { kind: 'day'; label: string; key: string }
-    | { kind: 'message'; message: Record<string, any>; position: string };
+    | { kind: 'message'; message: Record<string, unknown>; position: string };
 
-export function groupMessagesForRender(messages: Array<Record<string, any>>, t: (key: string) => string): SyncRenderEntry[] {
+export function groupMessagesForRender(messages: Array<Record<string, unknown>>, t: (key: string) => string): SyncRenderEntry[] {
     if (!Array.isArray(messages) || messages.length === 0) return [];
     const out: SyncRenderEntry[] = [];
     let currentDayKey = null;

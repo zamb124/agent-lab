@@ -13,6 +13,7 @@ import {
 import { mcpServersResource, mcpServerSyncOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import '../../../../apps/flows/ui/modals/flows-library-picker-modal.js';
 import '../../../../apps/flows/ui/modals/flows-tool-create-modal.js';
+import type { TestEl } from '../helpers/dom.js';
 
 const FACTORIES = [
     toolsAllOp,
@@ -36,8 +37,8 @@ function bootstrap() {
 }
 
 describe('flows library picker code templates', () => {
-    let originalFetch;
-    let originalWsRequest;
+    let originalFetch: any;
+    let originalWsRequest: any;
 
     beforeEach(() => {
         originalFetch = window.fetch;
@@ -53,13 +54,13 @@ describe('flows library picker code templates', () => {
     });
 
     it('commits catalog code template with inferred parameters_schema', async () => {
-        window.fetch = async (url) => {
+        window.fetch = async (url: RequestInfo | URL) => {
             throw new Error(`unexpected fetch: ${String(url)}`);
         };
         platformWs.request = async (opts) => {
             if (opts.type === 'flows/code/parse_signature_requested') {
-                expect(opts.payload.func_name).to.equal(undefined);
-                expect(opts.payload.code).to.include('async def run');
+                expect((opts.payload as Record<string, any>).func_name).to.equal(undefined);
+                expect((opts.payload as Record<string, any>).code).to.include('async def run');
                 return {
                     success: true,
                     func_name: 'run',
@@ -84,10 +85,10 @@ describe('flows library picker code templates', () => {
             throw new Error(`unexpected WS command ${opts.type}`);
         };
 
-        const modal = await fixture(html`<flows-library-picker-modal></flows-library-picker-modal>`);
+        const modal = await fixture<TestEl>(html`<flows-library-picker-modal></flows-library-picker-modal>`);
         modal._modalId = 'test_modal';
         let committed = null;
-        modal.onCommit = (detail) => {
+        modal.onCommit = (detail: any) => {
             committed = detail;
         };
 
@@ -99,21 +100,21 @@ describe('flows library picker code templates', () => {
         });
         await aTimeout(0);
 
-        expect(committed.config.parameters_schema.properties.url.type).to.equal('string');
-        expect(committed.config.parameters_schema.required).to.deep.equal(['url']);
-        expect(committed.config.parameters_schema.properties.data.type).to.equal('object');
-        expect(committed.config.parameters_schema.properties.data.default).to.equal(null);
+        expect(committed!.config.parameters_schema.properties.url.type).to.equal('string');
+        expect(committed!.config.parameters_schema.required).to.deep.equal(['url']);
+        expect(committed!.config.parameters_schema.properties.data.type).to.equal('object');
+        expect(committed!.config.parameters_schema.properties.data.default).to.equal(null);
     });
 
     it('commits non-python catalog template without python signature parsing', async () => {
-        window.fetch = async (url) => {
+        window.fetch = async (url: RequestInfo | URL) => {
             throw new Error(`unexpected fetch: ${String(url)}`);
         };
 
-        const modal = await fixture(html`<flows-library-picker-modal></flows-library-picker-modal>`);
+        const modal = await fixture<TestEl>(html`<flows-library-picker-modal></flows-library-picker-modal>`);
         modal._modalId = 'test_modal';
         let committed = null;
-        modal.onCommit = (detail) => {
+        modal.onCommit = (detail: any) => {
             committed = detail;
         };
 
@@ -125,16 +126,16 @@ describe('flows library picker code templates', () => {
         });
         await aTimeout(0);
 
-        expect(committed.config.language).to.equal('typescript');
-        expect(committed.config.code).to.include('async function run');
-        expect(committed.config.parameters_schema).to.deep.equal({ type: 'object', properties: {}, required: [] });
+        expect(committed!.config.language).to.equal('typescript');
+        expect(committed!.config.code).to.include('async function run');
+        expect(committed!.config.parameters_schema).to.deep.equal({ type: 'object', properties: {}, required: [] });
     });
 
     it('creates inline tool with selected language and JSON Schema parameters', async () => {
-        const modal = await fixture(html`<flows-tool-create-modal></flows-tool-create-modal>`);
+        const modal = await fixture<TestEl>(html`<flows-tool-create-modal></flows-tool-create-modal>`);
         let created = null;
         modal._tools = {
-            create: (payload) => {
+            create: (payload: any) => {
                 created = payload;
             },
         };
@@ -148,17 +149,17 @@ describe('flows library picker code templates', () => {
 
         modal._save();
 
-        expect(created.tool_id).to.equal('ts_tool');
-        expect(created.title).to.equal('TypeScript tool');
-        expect(created.language).to.equal('typescript');
-        expect(created.parameters_schema).to.deep.equal({ type: 'object', properties: {} });
+        expect(created!.tool_id).to.equal('ts_tool');
+        expect(created!.title).to.equal('TypeScript tool');
+        expect(created!.language).to.equal('typescript');
+        expect(created!.parameters_schema).to.deep.equal({ type: 'object', properties: {} });
     });
 
     it('creates generated code-node template from registry-only platform tool', async () => {
-        const modal = await fixture(html`<flows-library-picker-modal></flows-library-picker-modal>`);
+        const modal = await fixture<TestEl>(html`<flows-library-picker-modal></flows-library-picker-modal>`);
         modal._modalId = 'test_modal';
         let committed = null;
-        modal.onCommit = (detail) => {
+        modal.onCommit = (detail: any) => {
             committed = detail;
         };
         const platformTool = {
@@ -194,7 +195,7 @@ describe('flows library picker code templates', () => {
         };
 
         modal._modalKind = 'flows.tool_picker';
-        expect(modal._pickModeRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
+        expect(modal._pickModeRows().map((row: any) => row.tool_id)).to.include('browser_page_markdown');
 
         modal.pickMode = 'code_node';
         modal._modalKind = 'flows.tool_picker';
@@ -202,14 +203,14 @@ describe('flows library picker code templates', () => {
         modal._pickerItemsByCategory = new Map([
             ['code', modal._toolsAll.lastResult.items],
         ]);
-        expect(modal._codeNodePickRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
+        expect(modal._codeNodePickRows().map((row: any) => row.tool_id)).to.include('browser_page_markdown');
 
         modal._commitTool(platformTool);
         await aTimeout(0);
 
-        expect(committed.config.language).to.equal('javascript');
-        expect(committed.config.tool_id).to.equal('browser_page_markdown');
-        expect(committed.config.code).to.include('await tools.browser_page_markdown');
-        expect(committed.config.parameters_schema.required).to.include('url');
+        expect(committed!.config.language).to.equal('javascript');
+        expect(committed!.config.tool_id).to.equal('browser_page_markdown');
+        expect(committed!.config.code).to.include('await tools.browser_page_markdown');
+        expect(committed!.config.parameters_schema.required).to.include('url');
     });
 });

@@ -65,13 +65,13 @@ export class PlatformAssistantMessageActions extends PlatformElement {
             }
             :host(:not([tone='user'])) .action-btn {
                 background: transparent;
-                border: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.12));
-                color: var(--text-secondary, #9ca3af);
+                border: 1px solid var(--glass-border-subtle);
+                color: var(--text-secondary);
             }
             :host(:not([tone='user'])) .action-btn:hover:not([disabled]) {
-                background: var(--glass-solid-subtle, rgba(255, 255, 255, 0.05));
-                color: var(--text-primary, #f4f4f5);
-                border-color: var(--glass-border-medium, rgba(255, 255, 255, 0.18));
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                border-color: var(--glass-border-medium);
             }
             :host([tone='user']) .action-btn {
                 background: rgba(255, 255, 255, 0.15);
@@ -84,13 +84,13 @@ export class PlatformAssistantMessageActions extends PlatformElement {
                 color: #fff;
             }
             :host(:not([tone='user'])) .action-btn.action-btn--tts-stop {
-                color: var(--error, #f43f5e);
-                border-color: var(--error-border, rgba(244, 63, 94, 0.35));
-                background: var(--error-bg, rgba(244, 63, 94, 0.12));
+                color: var(--error);
+                border-color: var(--error-border);
+                background: var(--error-bg);
             }
             :host(:not([tone='user'])) .action-btn.action-btn--tts-stop:hover:not([disabled]) {
-                color: var(--error, #f43f5e);
-                border-color: var(--error, #f43f5e);
+                color: var(--error);
+                border-color: var(--error);
                 background: rgba(244, 63, 94, 0.18);
             }
             :host([tone='user']) .action-btn.action-btn--tts-stop {
@@ -112,7 +112,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
                 height: 30px;
                 padding: 0;
                 margin: 0;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
                 font: inherit;
                 line-height: 0;
                 cursor: pointer;

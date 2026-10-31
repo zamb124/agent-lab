@@ -5,6 +5,7 @@
 import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-command-palette.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const ITEMS = [
     { id: 'p1', label: 'Онбординг', group: 'Страницы', icon: 'file' },
@@ -12,19 +13,19 @@ const ITEMS = [
     { id: 'a1', label: 'Создать страницу', group: 'Действия', hint: 'N' },
 ];
 
-async function mountPalette(provider) {
-    const el = await fixture(html`
+async function mountPalette(provider?: any) {
+    const el = await fixture<TestEl>(html`
         <platform-command-palette .provider=${provider ?? (async () => ITEMS)}></platform-command-palette>
     `);
     await elementUpdated(el);
     return el;
 }
 
-function itemsOf(el) {
-    return Array.from(el.shadowRoot.querySelectorAll('.item'));
+function itemsOf(el: any) {
+    return Array.from(qsa(shadow(el), '.item'));
 }
 
-async function openPalette(el) {
+async function openPalette(el: any) {
     el.show();
     await elementUpdated(el);
     await aTimeout(0);
@@ -41,7 +42,7 @@ describe('platform-command-palette', () => {
         const el = await mountPalette();
 
         expect(el.open).to.be.false;
-        expect(el.shadowRoot.querySelector('.panel')).to.be.null;
+        expect(q(shadow(el), '.panel')).to.be.null;
     });
 
     it('Cmd+K открывает палитру', async () => {
@@ -85,20 +86,20 @@ describe('platform-command-palette', () => {
         const el = await mountPalette();
         await openPalette(el);
 
-        const groups = Array.from(el.shadowRoot.querySelectorAll('.group')).map((n) => n.textContent.trim());
+        const groups = Array.from(qsa(shadow(el), '.group')).map((n) => n.textContent.trim());
         expect(groups).to.deep.equal(['Страницы', 'Действия']);
     });
 
     it('ввод запускает поиск через провайдер', async () => {
-        const queries = [];
-        const el = await mountPalette(async (query) => {
+        const queries: any[] = [];
+        const el = await mountPalette(async (query: any) => {
             queries.push(query);
             return ITEMS.filter((item) => item.label.toLowerCase().includes(query.toLowerCase()));
         });
         await openPalette(el);
 
-        const input = el.shadowRoot.querySelector('input');
-        input.value = 'онб';
+        const input = qs(shadow(el), 'input');
+        (input as TestEl).value = 'онб';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await aTimeout(200);
         await elementUpdated(el);
@@ -109,7 +110,7 @@ describe('platform-command-palette', () => {
 
     it('поздний ответ на устаревший запрос не затирает актуальные результаты', async () => {
         let call = 0;
-        const el = await mountPalette(async (query) => {
+        const el = await mountPalette(async (query: any) => {
             call += 1;
             if (call === 2) {
                 // Первый набранный префикс отвечает медленно.
@@ -120,11 +121,11 @@ describe('platform-command-palette', () => {
         });
         await openPalette(el);
 
-        const input = el.shadowRoot.querySelector('input');
-        input.value = 'о';
+        const input = qs(shadow(el), 'input');
+        (input as TestEl).value = 'о';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await aTimeout(140);
-        input.value = 'он';
+        (input as TestEl).value = 'он';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await aTimeout(300);
         await elementUpdated(el);
@@ -136,19 +137,19 @@ describe('platform-command-palette', () => {
     it('стрелки двигают активный пункт по кругу', async () => {
         const el = await mountPalette();
         await openPalette(el);
-        const input = el.shadowRoot.querySelector('input');
+        const input = qs(shadow(el), 'input');
 
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.paletteItem).to.equal('p2');
+        expect(qs(shadow(el), '.item.is-active').dataset.paletteItem).to.equal('p2');
 
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.paletteItem).to.equal('p1');
+        expect(qs(shadow(el), '.item.is-active').dataset.paletteItem).to.equal('p1');
 
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.item.is-active').dataset.paletteItem).to.equal('a1');
+        expect(qs(shadow(el), '.item.is-active').dataset.paletteItem).to.equal('a1');
     });
 
     it('Enter выбирает активный пункт и закрывает палитру', async () => {
@@ -156,12 +157,12 @@ describe('platform-command-palette', () => {
         await openPalette(el);
 
         const selected = oneEvent(el, 'palette-select');
-        el.shadowRoot.querySelector('input')
+        qs(shadow(el), 'input')
             .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         const event = await selected;
         await elementUpdated(el);
 
-        expect(event.detail.id).to.equal('p1');
+        expect((event as CustomEvent).detail.id).to.equal('p1');
         expect(el.open).to.be.false;
     });
 
@@ -170,10 +171,10 @@ describe('platform-command-palette', () => {
         await openPalette(el);
 
         const selected = oneEvent(el, 'palette-select');
-        el.shadowRoot.querySelector('[data-palette-item="a1"]').click();
+        qs(shadow(el), '[data-palette-item="a1"]').click();
         const event = await selected;
 
-        expect(event.detail.item.label).to.equal('Создать страницу');
+        expect((event as CustomEvent).detail.item.label).to.equal('Создать страницу');
     });
 
     it('Escape закрывает палитру', async () => {
@@ -190,7 +191,7 @@ describe('platform-command-palette', () => {
         const el = await mountPalette();
         await openPalette(el);
 
-        el.shadowRoot.querySelector('.scrim').click();
+        qs(shadow(el), '.scrim').click();
         await elementUpdated(el);
 
         expect(el.open).to.be.false;
@@ -200,12 +201,12 @@ describe('platform-command-palette', () => {
         const el = await mountPalette(async () => []);
         await openPalette(el);
 
-        expect(el.shadowRoot.querySelector('.status')).to.exist;
+        expect(qs(shadow(el), '.status')).to.exist;
         expect(itemsOf(el).length).to.equal(0);
     });
 
     it('без провайдера падает, а не молчит', async () => {
-        const el = await fixture(html`<platform-command-palette></platform-command-palette>`);
+        const el = await fixture<TestEl>(html`<platform-command-palette></platform-command-palette>`);
         let raised = null;
         try {
             await el._runSearch('');

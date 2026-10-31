@@ -20,9 +20,9 @@ describe('markdown-html helpers', () => {
     describe('sanitizeMarkdownEditorHtml', () => {
         it('returns empty string for non-string and empty input', () => {
             expect(sanitizeMarkdownEditorHtml('')).to.equal('');
-            expect(sanitizeMarkdownEditorHtml(/** @type {string} */ (null))).to.equal('');
-            expect(sanitizeMarkdownEditorHtml(/** @type {string} */ (undefined))).to.equal('');
-            expect(sanitizeMarkdownEditorHtml(/** @type {string} */ (42))).to.equal('');
+            expect(sanitizeMarkdownEditorHtml((null as unknown as string))).to.equal('');
+            expect(sanitizeMarkdownEditorHtml((undefined as unknown as string))).to.equal('');
+            expect(sanitizeMarkdownEditorHtml((42 as unknown as string))).to.equal('');
         });
 
         it('keeps allowed tags and strips all attributes except safe A.href', () => {
@@ -77,8 +77,8 @@ describe('markdown-html helpers', () => {
     describe('htmlToMarkdown', () => {
         it('returns empty for empty / non-string', () => {
             expect(htmlToMarkdown('')).to.equal('');
-            expect(htmlToMarkdown(/** @type {string} */ (null))).to.equal('');
-            expect(htmlToMarkdown(/** @type {string} */ (1))).to.equal('');
+            expect(htmlToMarkdown((null as unknown as string))).to.equal('');
+            expect(htmlToMarkdown((1 as unknown as string))).to.equal('');
         });
 
         it('maps bold/italic/strike/br/paragraph', () => {
@@ -123,7 +123,7 @@ describe('markdown-html helpers', () => {
     describe('htmlToPlainText', () => {
         it('returns empty for empty / non-string', () => {
             expect(htmlToPlainText('')).to.equal('');
-            expect(htmlToPlainText(/** @type {string} */ (false))).to.equal('');
+            expect(htmlToPlainText((false as unknown as string))).to.equal('');
         });
 
         it('strips tags and keeps visible text', () => {

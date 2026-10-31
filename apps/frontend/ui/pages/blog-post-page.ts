@@ -16,11 +16,11 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResul
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) {
         return null;
     }
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) {
         row[key] = field;
     }
@@ -42,7 +42,7 @@ export class BlogPostPage extends PlatformPage {
         super();
         this.slug = '';
         this._postOp = this.useOp('frontend/public_blog_post');
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
     }
     private _postOp: OpController;
     private _localeSel: SelectController<any>;
@@ -100,14 +100,14 @@ export class BlogPostPage extends PlatformPage {
         });
     }
 
-    _title(post: Record<string, any>) {
+    _title(post: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return post.title_ru;
         if (locale === 'en') return post.title_en;
         throw new Error('blog-post-page: i18n.locale must be ru or en');
     }
 
-    _body(post: Record<string, any>) {
+    _body(post: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return post.body_ru;
         if (locale === 'en') return post.body_en;

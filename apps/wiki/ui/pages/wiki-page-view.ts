@@ -73,9 +73,9 @@ interface WikiSearchHit {
     [key: string]: unknown;
 }
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -208,7 +208,7 @@ export class WikiPageView extends PlatformPage {
                 display: flex;
                 gap: var(--space-2);
                 opacity: 0;
-                transition: var(--motion-transition-interactive, opacity 120ms ease);
+                transition: var(--motion-transition-interactive);
             }
 
             .cover:hover .cover-actions,

@@ -46,7 +46,7 @@ export class SyncDirectMemberRow extends PlatformElement {
             box-sizing: border-box;
         }
         .row-inner:hover {
-            background: var(--glass-hover);
+            background: var(--glass-tint-medium);
         }
         .avatar {
             width: 32px;
@@ -78,8 +78,8 @@ export class SyncDirectMemberRow extends PlatformElement {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: var(--success, #22c55e);
-            border: 2px solid var(--glass-solid);
+            background: var(--success);
+            border: 2px solid var(--glass-solid-medium);
             animation: subtle-pulse 2s ease-in-out infinite;
         }
         @keyframes subtle-pulse {

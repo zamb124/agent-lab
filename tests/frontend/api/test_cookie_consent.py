@@ -36,8 +36,8 @@ async def test_record_cookie_consent_necessary_only(frontend_client: AsyncClient
     assert payload["locale"] == "ru"
     assert isinstance(payload["cookie_consent_id"], str)
     assert payload["cookie_consent_id"]
-    assert payload["brand_host"] == "humanitec.ru"
-    assert payload["apex_domain"] == "humanitec.ru"
+    assert payload["brand_host"] == "linnex.io"
+    assert payload["apex_domain"] == "linnex.io"
     assert isinstance(payload["request_id"], str)
     assert payload["request_id"]
     assert re.fullmatch(r"[0-9a-f]{64}", payload["ip_hash"])

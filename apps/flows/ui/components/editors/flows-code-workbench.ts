@@ -57,7 +57,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
     declare variant: string;
     declare code: string;
     declare language: string;
-    declare parametersSchema: Record<string, any>;
+    declare parametersSchema: Record<string, unknown>;
     declare documentationPerspective: string;
     declare completionVariableKeys: any[];
     declare completionFlowId: string;
@@ -109,7 +109,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 height: 28px;
                 padding: 0 9px;
                 box-sizing: border-box;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 border: 1px solid var(--border-subtle);
                 background: var(--bg-elevated);
                 color: var(--text-tertiary);

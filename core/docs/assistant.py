@@ -19,8 +19,8 @@ DOCS_ASSISTANT_FLOW_ID = "lara"
 DOCS_ASSISTANT_BRANCH_ID = "docs"
 DOCS_ASSISTANT_SESSION_ISSUER = "frontend.docs_assistant"
 
-DOCS_RAG_NAMESPACE_ID = "humanitec_documentation"
-DOCS_RAG_NAMESPACE_DESCRIPTION = "Humanitec public documentation for Lara docs assistant"
+DOCS_RAG_NAMESPACE_ID = "linnex_documentation"
+DOCS_RAG_NAMESPACE_DESCRIPTION = "Linnex public documentation for Lara docs assistant"
 DOCS_COLLECTION_RU = "documentation-ru"
 DOCS_COLLECTION_EN = "documentation-en"
 

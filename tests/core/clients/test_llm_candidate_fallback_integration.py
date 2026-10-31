@@ -32,7 +32,7 @@ from a2a.types.a2a_pb2 import (
 )
 
 from core.ai.llm_config import LLMCallConfig
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL, LINNEX_LLM_PROVIDER
 from core.ai.runtime import should_use_platform_default_free_pool
 from core.clients.llm.client import LLMClient
 from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
@@ -914,7 +914,7 @@ def test_create_transport_llm_client_default_pool_can_disable_paid_fallback_for_
     assert client._static_candidates == []
 
 
-def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strategy() -> None:
+def test_linnex_llm_provider_uses_dynamic_pool_independent_of_default_strategy() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -942,8 +942,8 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
     try:
         set_settings(settings)
         assert should_use_platform_default_free_pool(
-            model=HUMANITEC_LLM_AUTO_MODEL,
-            provider=HUMANITEC_LLM_PROVIDER,
+            model=LINNEX_LLM_AUTO_MODEL,
+            provider=LINNEX_LLM_PROVIDER,
             api_key=None,
             base_url=None,
             folder_id=None,
@@ -951,8 +951,8 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
         ) is True
         with _production_llm_env():
             client = create_transport_llm_client(
-                provider=HUMANITEC_LLM_PROVIDER,
-                model_name=HUMANITEC_LLM_AUTO_MODEL,
+                provider=LINNEX_LLM_PROVIDER,
+                model_name=LINNEX_LLM_AUTO_MODEL,
                 allow_platform_paid_fallback=False,
             )
     finally:
@@ -965,14 +965,14 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
     assert client._static_candidates == []
 
 
-def test_create_transport_llm_client_uses_humanitec_default_provider_as_platform_route() -> None:
+def test_create_transport_llm_client_uses_linnex_default_provider_as_platform_route() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
         llm=LLMConfig(
-            provider=HUMANITEC_LLM_PROVIDER,
+            provider=LINNEX_LLM_PROVIDER,
             default_strategy="configured",
-            default_model=HUMANITEC_LLM_AUTO_MODEL,
+            default_model=LINNEX_LLM_AUTO_MODEL,
             temperature=0.2,
             timeout=10.0,
             openrouter=OpenRouterProviderConfig(
@@ -1004,7 +1004,7 @@ def test_create_transport_llm_client_uses_humanitec_default_provider_as_platform
     assert client._static_candidates == []
 
 
-def test_humanitec_llm_accepts_concrete_free_pool_model() -> None:
+def test_linnex_llm_accepts_concrete_free_pool_model() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -1023,7 +1023,7 @@ def test_humanitec_llm_accepts_concrete_free_pool_model() -> None:
         set_settings(settings)
         with _production_llm_env():
             client = create_transport_llm_client(
-                provider=HUMANITEC_LLM_PROVIDER,
+                provider=LINNEX_LLM_PROVIDER,
                 model_name="openrouter:qwen/qwen3-coder:free",
                 allow_platform_paid_fallback=False,
             )
@@ -1038,7 +1038,7 @@ def test_humanitec_llm_accepts_concrete_free_pool_model() -> None:
     assert client._candidate_resolver is not None
 
 
-def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
+def test_explicit_platform_provider_accepts_linnex_llms_fallback() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -1061,8 +1061,8 @@ def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
                 model_name="primary/model",
                 fallback_models=[
                     LLMCallConfig(
-                        provider=HUMANITEC_LLM_PROVIDER,
-                        model=HUMANITEC_LLM_AUTO_MODEL,
+                        provider=LINNEX_LLM_PROVIDER,
+                        model=LINNEX_LLM_AUTO_MODEL,
                     )
                 ],
             )
@@ -1082,7 +1082,7 @@ def test_platform_free_pool_provider_is_configured_with_api_keys_only() -> None:
     settings = BaseSettings(
         testing=False,
         llm=LLMConfig(
-            provider="humanitec_llm",
+            provider="linnex_llm",
             openrouter=OpenRouterProviderConfig(
                 api_keys=["sk-extra"],
                 base_url="https://openrouter.ai/api/v1",
@@ -1104,7 +1104,7 @@ def test_platform_free_pool_provider_not_configured_without_keys() -> None:
     settings = BaseSettings(
         testing=False,
         llm=LLMConfig(
-            provider="humanitec_llm",
+            provider="linnex_llm",
             openrouter=OpenRouterProviderConfig(
                 base_url="https://openrouter.ai/api/v1",
             ),

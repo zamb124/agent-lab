@@ -101,7 +101,7 @@ export class GlassModal extends PlatformElement {
                 margin: 0;
                 padding: 0;
                 border: none;
-                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
+                z-index: var(--platform-modal-layer-z, var(--z-modal));
             }
 
             :host([data-portal]) {
@@ -129,7 +129,7 @@ export class GlassModal extends PlatformElement {
             }
 
             :host([open]:not([closing])) .modal-overlay {
-                animation: glassModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--modal-enter-easing, var(--easing-smooth)) both;
+                animation: glassModalBackdropIn var(--modal-overlay-duration) var(--modal-enter-easing) both;
             }
 
             :host([open][skip-enter-motion]:not([closing])) .modal-overlay {
@@ -144,7 +144,7 @@ export class GlassModal extends PlatformElement {
             }
 
             :host([closing]) .modal-overlay {
-                animation: glassModalBackdropOut var(--modal-overlay-exit-duration, var(--motion-duration-exit, var(--duration-fast))) var(--modal-exit-easing, var(--motion-ease-accelerate, ease-in)) both;
+                animation: glassModalBackdropOut var(--modal-overlay-exit-duration) var(--modal-exit-easing) both;
                 pointer-events: none;
             }
 
@@ -171,25 +171,23 @@ export class GlassModal extends PlatformElement {
                 flex-direction: column;
                 overflow: hidden;
                 min-height: 0;
-                border-radius: var(--radius-3xl, 28px);
+                border-radius: var(--radius-3xl);
                 padding: 0;
                 box-sizing: border-box;
 
-                --modal-content-inset: var(--space-2, 8px);
-                --modal-content-radius: var(--radius-xl, 16px);
+                --modal-content-inset: var(--space-2);
+                --modal-content-radius: var(--radius-xl);
 
-                background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
-                border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
 
-                box-shadow: var(--glass-shadow-strong,
-                    0 16px 48px rgba(0, 0, 0, 0.4),
-                    0 4px 16px rgba(0, 0, 0, 0.25));
+                box-shadow: var(--glass-shadow-strong);
 
                 transform: translate(-50%, calc(-50% + 12px)) scale(0.97);
                 opacity: 0;
                 contain: layout paint style;
                 transition:
-                    border-radius var(--motion-duration-layout, var(--duration-normal, 0.3s)) var(--motion-ease-standard, var(--easing-default));
+                    border-radius var(--motion-duration-layout) var(--motion-ease-standard);
             }
 
             /*
@@ -197,7 +195,7 @@ export class GlassModal extends PlatformElement {
              * иначе при снятии .dragging анимация снова запускается с начала.
              */
             :host([open]:not([closing])) .modal.panel-enter-active {
-                animation: glassModalPanelIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-enter-easing, var(--modal-panel-easing, var(--easing-smooth))) both;
+                animation: glassModalPanelIn var(--modal-panel-duration) var(--modal-enter-easing) both;
             }
 
             :host([open]:not([closing])) .modal:not(.panel-enter-active) {
@@ -206,7 +204,7 @@ export class GlassModal extends PlatformElement {
             }
 
             :host([closing]) .modal {
-                animation: glassModalPanelOut var(--modal-panel-exit-duration, var(--motion-duration-exit, var(--duration-fast))) var(--modal-exit-easing, var(--motion-ease-accelerate, ease-in)) both;
+                animation: glassModalPanelOut var(--modal-panel-exit-duration) var(--modal-exit-easing) both;
                 pointer-events: none;
             }
 
@@ -218,8 +216,8 @@ export class GlassModal extends PlatformElement {
                     translate3d(var(--modal-flip-x, 0px), var(--modal-flip-y, 0px), 0)
                     scale(var(--modal-flip-scale-x, 1), var(--modal-flip-scale-y, 1));
                 transition:
-                    transform var(--modal-fullscreen-motion-duration, var(--motion-duration-layout, var(--duration-normal))) var(--motion-ease-emphasized, var(--easing-default)),
-                    border-radius var(--modal-fullscreen-motion-duration, var(--motion-duration-layout, var(--duration-normal))) var(--motion-ease-emphasized, var(--easing-default));
+                    transform var(--motion-duration-layout) var(--motion-ease-emphasized),
+                    border-radius var(--motion-duration-layout) var(--motion-ease-emphasized);
                 will-change: transform;
             }
 
@@ -234,7 +232,7 @@ export class GlassModal extends PlatformElement {
 
             .modal.dragging {
                 transition:
-                    border-radius var(--motion-duration-layout, var(--duration-normal, 0.3s)) var(--motion-ease-standard, var(--easing-default));
+                    border-radius var(--motion-duration-layout) var(--motion-ease-standard);
                 user-select: none;
             }
 
@@ -242,8 +240,8 @@ export class GlassModal extends PlatformElement {
                 content: '';
                 position: absolute;
                 top: 0;
-                left: var(--space-4, 16px);
-                right: var(--space-4, 16px);
+                left: var(--space-4);
+                right: var(--space-4);
                 height: 1px;
                 background: linear-gradient(
                     90deg,
@@ -259,7 +257,7 @@ export class GlassModal extends PlatformElement {
                 content: '';
                 position: absolute;
                 inset: 0;
-                border-radius: var(--radius-3xl, 28px);
+                border-radius: var(--radius-3xl);
                 background: linear-gradient(
                     135deg,
                     rgba(255, 255, 255, 0.04) 0%,
@@ -286,8 +284,8 @@ export class GlassModal extends PlatformElement {
                 max-width: min(96vw, 100vw - 1.5rem) !important;
                 height: min(94vh, 100dvh - 1.5rem) !important;
                 max-height: min(94vh, 100dvh - 1.5rem) !important;
-                border-radius: var(--radius-lg, 16px);
-                --modal-content-radius: var(--radius-lg, 16px);
+                border-radius: var(--radius-lg);
+                --modal-content-radius: var(--radius-lg);
             }
 
             .modal-header {
@@ -295,8 +293,8 @@ export class GlassModal extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: var(--space-3, 12px);
-                padding: var(--space-4, 16px) var(--space-4, 16px) 0 var(--space-4, 16px);
+                gap: var(--space-3);
+                padding: var(--space-4) var(--space-4) 0 var(--space-4);
                 z-index: 2;
                 cursor: grab;
                 user-select: none;
@@ -310,11 +308,11 @@ export class GlassModal extends PlatformElement {
 
             .modal-title {
                 flex: 1;
-                font-size: var(--text-xl, 20px);
-                font-weight: var(--font-semibold, 600);
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                font-size: var(--text-xl);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
                 margin: 0;
-                letter-spacing: var(--tracking-tight, -0.02em);
+                letter-spacing: var(--tracking-tight);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -323,7 +321,7 @@ export class GlassModal extends PlatformElement {
             .header-buttons {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
+                gap: var(--space-2);
                 flex-shrink: 0;
             }
 
@@ -333,19 +331,19 @@ export class GlassModal extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+                background: var(--glass-tint-medium);
                 border: none;
-                border-radius: var(--radius-full, 50%);
-                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
-                font-size: var(--text-sm, 14px);
+                border-radius: var(--radius-full);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
             }
 
             .header-btn:hover {
-                background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
                 transform: scale(1.08);
             }
 
@@ -359,7 +357,7 @@ export class GlassModal extends PlatformElement {
             }
 
             .header-btn.header-save-btn--primary:hover:not(:disabled) {
-                background: var(--platform-btn-primary-hover);
+                background: var(--platform-btn-primary-bg-hover);
                 color: var(--platform-btn-primary-text);
                 transform: scale(1.08);
             }
@@ -372,7 +370,7 @@ export class GlassModal extends PlatformElement {
 
             .modal-content {
                 position: relative;
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                color: var(--text-primary);
                 z-index: 2;
                 flex: 1 1 auto;
                 min-height: 0;
@@ -380,7 +378,7 @@ export class GlassModal extends PlatformElement {
                 overflow-y: auto;
                 overflow-x: hidden;
                 -webkit-overflow-scrolling: touch;
-                padding: var(--space-4, 16px);
+                padding: var(--space-4);
                 margin: 0 var(--modal-content-inset) var(--modal-content-inset);
                 border-radius: var(--modal-content-radius);
                 contain: paint style;
@@ -388,24 +386,24 @@ export class GlassModal extends PlatformElement {
             }
 
             .modal.sm .modal-content {
-                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-sm-body-min-block-size, 0px));
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-sm-body-min-block-size));
             }
 
             .modal.md .modal-content {
-                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-md-body-min-block-size, 6rem));
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-md-body-min-block-size));
             }
 
             .modal.lg .modal-content {
-                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-lg-body-min-block-size, 12rem));
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-lg-body-min-block-size));
             }
 
             .modal.xl .modal-content {
-                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-xl-body-min-block-size, 16rem));
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-xl-body-min-block-size));
             }
 
             .modal.full .modal-content,
             .modal.fullscreen .modal-content {
-                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-full-body-min-block-size, 0px));
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-full-body-min-block-size));
             }
 
             .modal.fullscreen .modal-content,
@@ -428,8 +426,8 @@ export class GlassModal extends PlatformElement {
             .modal-actions {
                 position: relative;
                 display: flex;
-                gap: var(--space-3, 12px);
-                padding: var(--space-4, 16px);
+                gap: var(--space-3);
+                padding: var(--space-4);
                 padding-top: 0;
                 z-index: 2;
                 flex-shrink: 0;
@@ -444,7 +442,7 @@ export class GlassModal extends PlatformElement {
 
             ::slotted([slot="actions"]) {
                 display: flex;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 width: 100%;
             }
 
@@ -455,7 +453,7 @@ export class GlassModal extends PlatformElement {
 
                 .modal {
                     width: 95%;
-                    border-radius: var(--radius-2xl, 24px);
+                    border-radius: var(--radius-2xl);
                 }
 
                 .modal.full {
@@ -475,51 +473,51 @@ export class GlassModal extends PlatformElement {
                 }
 
                 .modal.fullscreen .modal-header {
-                    padding: max(var(--space-3, 12px), var(--platform-safe-top))
-                        max(var(--space-3, 12px), var(--platform-safe-right)) 0
-                        max(var(--space-3, 12px), var(--platform-safe-left));
+                    padding: max(var(--space-3), var(--platform-safe-top))
+                        max(var(--space-3), var(--platform-safe-right)) 0
+                        max(var(--space-3), var(--platform-safe-left));
                 }
 
                 .modal.fullscreen .modal-content {
-                    padding: var(--space-3, 12px)
-                        max(var(--space-3, 12px), var(--platform-safe-right))
-                        var(--space-3, 12px)
-                        max(var(--space-3, 12px), var(--platform-safe-left));
+                    padding: var(--space-3)
+                        max(var(--space-3), var(--platform-safe-right))
+                        var(--space-3)
+                        max(var(--space-3), var(--platform-safe-left));
                 }
 
                 .modal.fullscreen .modal-actions {
-                    padding: 0 max(var(--space-3, 12px), var(--platform-safe-right))
-                        max(var(--space-3, 12px), var(--platform-safe-bottom))
-                        max(var(--space-3, 12px), var(--platform-safe-left));
+                    padding: 0 max(var(--space-3), var(--platform-safe-right))
+                        max(var(--space-3), var(--platform-safe-bottom))
+                        max(var(--space-3), var(--platform-safe-left));
                 }
 
                 .modal::before {
-                    left: var(--space-3, 12px);
-                    right: var(--space-3, 12px);
+                    left: var(--space-3);
+                    right: var(--space-3);
                 }
 
                 .modal.fullscreen::before {
-                    left: max(var(--space-3, 12px), var(--platform-safe-left));
-                    right: max(var(--space-3, 12px), var(--platform-safe-right));
+                    left: max(var(--space-3), var(--platform-safe-left));
+                    right: max(var(--space-3), var(--platform-safe-right));
                 }
 
                 .modal-header {
-                    padding: var(--space-3, 12px) var(--space-3, 12px) 0 var(--space-3, 12px);
+                    padding: var(--space-3) var(--space-3) 0 var(--space-3);
                 }
 
                 .modal-content {
-                    padding: var(--space-3, 12px);
+                    padding: var(--space-3);
                 }
 
                 .modal-actions {
-                    padding: var(--space-3, 12px);
+                    padding: var(--space-3);
                     padding-top: 0;
                 }
             }
 
             @media (max-width: 480px) {
                 .modal {
-                    border-radius: var(--radius-xl, 20px);
+                    border-radius: var(--radius-xl);
                 }
 
                 .modal.fullscreen {
@@ -527,40 +525,40 @@ export class GlassModal extends PlatformElement {
                 }
 
                 .modal-header {
-                    padding: var(--space-2, 8px) var(--space-2, 8px) 0 var(--space-2, 8px);
+                    padding: var(--space-2) var(--space-2) 0 var(--space-2);
                 }
 
                 .modal.fullscreen .modal-header {
-                    padding: max(var(--space-2, 8px), var(--platform-safe-top))
-                        max(var(--space-2, 8px), var(--platform-safe-right)) 0
-                        max(var(--space-2, 8px), var(--platform-safe-left));
+                    padding: max(var(--space-2), var(--platform-safe-top))
+                        max(var(--space-2), var(--platform-safe-right)) 0
+                        max(var(--space-2), var(--platform-safe-left));
                 }
 
                 .modal-content {
-                    padding: var(--space-2, 8px);
+                    padding: var(--space-2);
                 }
 
                 .modal.fullscreen .modal-content {
-                    padding: var(--space-2, 8px) max(var(--space-2, 8px), var(--platform-safe-right)) var(--space-2, 8px)
-                        max(var(--space-2, 8px), var(--platform-safe-left));
+                    padding: var(--space-2) max(var(--space-2), var(--platform-safe-right)) var(--space-2)
+                        max(var(--space-2), var(--platform-safe-left));
                 }
 
                 .modal-actions {
-                    padding: var(--space-2, 8px);
+                    padding: var(--space-2);
                     padding-top: 0;
-                    padding-bottom: max(var(--space-2, 8px), env(safe-area-inset-bottom, 0px));
+                    padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px));
                     flex-direction: column;
                 }
 
                 .modal.fullscreen .modal-actions {
-                    padding: 0 max(var(--space-2, 8px), var(--platform-safe-right))
-                        max(var(--space-2, 8px), var(--platform-safe-bottom))
-                        max(var(--space-2, 8px), var(--platform-safe-left));
+                    padding: 0 max(var(--space-2), var(--platform-safe-right))
+                        max(var(--space-2), var(--platform-safe-bottom))
+                        max(var(--space-2), var(--platform-safe-left));
                     flex-direction: column;
                 }
 
                 .modal-title {
-                    font-size: var(--text-lg, 18px);
+                    font-size: var(--text-lg);
                 }
             }
 
@@ -620,11 +618,9 @@ export class GlassModal extends PlatformElement {
             }
 
             :host([data-theme="dark"]) .modal {
-                background: var(--glass-solid-strong, rgba(40, 40, 40, 0.92));
-                border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
-                box-shadow: var(--glass-shadow-strong,
-                    0 16px 48px rgba(0, 0, 0, 0.4),
-                    0 4px 16px rgba(0, 0, 0, 0.25));
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-strong);
             }
 
             :host([data-theme="dark"]) .modal::before {
@@ -647,17 +643,17 @@ export class GlassModal extends PlatformElement {
             }
 
             :host([data-theme="dark"]) .header-btn {
-                background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
-                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+                background: var(--glass-tint-medium);
+                color: var(--text-secondary);
             }
 
             :host([data-theme="dark"]) .header-btn:hover {
-                background: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
             }
 
             :host([data-theme="dark"]) .modal-content {
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                color: var(--text-primary);
             }
 
             :host([data-theme="dark"]) .modal-content ::slotted(*) {

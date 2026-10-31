@@ -67,6 +67,7 @@ import type {
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 const CREATE_FORM = 'crm/entity_create_form';
 const EDIT_FORM = 'crm/entity_edit_form';
 const ENTITIES_NAME = 'crm/entities';
@@ -183,7 +184,7 @@ export class CRMEntityCard extends PlatformElement {
                 min-height: 0;
                 background: var(--crm-surface);
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-xl, 16px);
+                border-radius: var(--radius-xl);
                 overflow: hidden;
                 box-shadow: 0 1px 0 color-mix(in srgb, var(--text-primary) 6%, transparent);
             }
@@ -333,10 +334,10 @@ export class CRMEntityCard extends PlatformElement {
                 justify-content: center;
                 background: linear-gradient(
                     145deg,
-                    color-mix(in srgb, var(--edit-type-color, var(--accent)) 42%, #fff),
-                    color-mix(in srgb, var(--edit-type-color, var(--accent)) 18%, #fce7f3)
+                    color-mix(in srgb, var(--edit-type-color, var(--accent)) 42%, var(--text-primary)),
+                    color-mix(in srgb, var(--edit-type-color, var(--accent)) 18%, var(--bg-surface))
                 );
-                color: color-mix(in srgb, var(--edit-type-color, var(--accent)) 75%, #1e1b4b);
+                color: color-mix(in srgb, var(--edit-type-color, var(--accent)) 75%, var(--text-primary));
                 box-shadow: var(--glass-shadow-subtle);
             }
             .edit-avatar-wrap platform-icon {
@@ -547,12 +548,12 @@ export class CRMEntityCard extends PlatformElement {
                 margin-bottom: var(--space-3);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--crm-stroke);
-                background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+                background: color-mix(in srgb, var(--warning) 12%, transparent);
                 color: var(--text-primary);
             }
             .semantic-index-ribbon--pending_embedding platform-icon {
                 flex-shrink: 0;
-                color: var(--warning, #d97706);
+                color: var(--warning);
             }
             .semantic-index-ribbon--absent {
                 background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
@@ -629,7 +630,7 @@ export class CRMEntityCard extends PlatformElement {
                 left: 0;
                 top: 0;
                 height: 100%;
-                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                background: linear-gradient(90deg, var(--info), var(--accent-tertiary));
                 opacity: 0.25;
             }
             .search-score .score-label {
@@ -660,10 +661,10 @@ export class CRMEntityCard extends PlatformElement {
                 background: var(--crm-surface-tint);
                 color: var(--text-secondary);
             }
-            .status-badge.active { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
-            .status-badge.archived { background: rgba(148, 163, 184, 0.15); color: #64748b; }
-            .status-badge.draft { background: rgba(251, 191, 36, 0.2); color: #b45309; }
-            .status-badge.completed { background: rgba(59, 130, 246, 0.15); color: #1d4ed8; }
+            .status-badge.active { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+            .status-badge.archived { background: color-mix(in srgb, var(--text-tertiary) 15%, transparent); color: var(--text-tertiary); }
+            .status-badge.draft { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+            .status-badge.completed { background: color-mix(in srgb, var(--info) 15%, transparent); color: var(--info); }
 
             .form-grid { display: grid; gap: var(--space-4); }
             .form-row { display: grid; gap: var(--space-2); }
@@ -719,7 +720,7 @@ export class CRMEntityCard extends PlatformElement {
                 cursor: pointer;
                 display: grid;
                 gap: var(--space-1);
-                transition: border-color var(--duration-fast), transform var(--duration-fast);
+                transition: border-color var(--motion-duration-micro), transform var(--motion-duration-micro);
             }
             .type-card:hover {
                 border-color: var(--crm-selected-stroke);
@@ -751,16 +752,8 @@ export class CRMEntityCard extends PlatformElement {
                 border: 1px dashed var(--crm-stroke);
                 border-radius: var(--radius-md);
             }
-            .loading-block {
-                padding: var(--space-6);
-                display: flex;
-                justify-content: center;
-            }
-            .error-block {
-                padding: var(--space-4);
-                color: var(--color-danger);
-                text-align: center;
-            }
+
+
 
             .section {
                 display: grid;
@@ -864,13 +857,13 @@ export class CRMEntityCard extends PlatformElement {
                 height: 18px;
                 border-radius: 999px;
                 background: var(--accent);
-                color: #fff;
+                color: var(--text-primary);
                 font-size: 11px;
                 line-height: 18px;
                 text-align: center;
                 padding: 0 5px;
                 box-sizing: border-box;
-                border: 1px solid var(--crm-surface-elevated, var(--glass-solid-strong));
+                border: 1px solid var(--crm-surface-elevated);
                 font-weight: 600;
             }
             .attachments-popover {
@@ -881,7 +874,7 @@ export class CRMEntityCard extends PlatformElement {
                 max-height: 360px;
                 overflow: auto;
                 z-index: 40;
-                background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                background: var(--crm-surface-elevated);
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 box-shadow: var(--glass-shadow-medium);
@@ -980,7 +973,7 @@ export class CRMEntityCard extends PlatformElement {
                 border-radius: var(--radius-full);
                 color: var(--text-primary);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
                 -webkit-appearance: none;
                 appearance: none;
             }
@@ -996,7 +989,7 @@ export class CRMEntityCard extends PlatformElement {
                 padding: var(--space-1);
                 border-radius: var(--radius-md);
             }
-            .icon-btn:hover { color: var(--color-danger); background: var(--glass-tint-medium); }
+            .icon-btn:hover { color: var(--error); background: var(--glass-tint-medium); }
             .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
             .rel-add {
@@ -1071,7 +1064,7 @@ export class CRMEntityCard extends PlatformElement {
             .collapsible-content { padding-bottom: var(--space-2); }
 
             .form-error {
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-xs);
             }
         `,
@@ -1974,7 +1967,7 @@ export class CRMEntityCard extends PlatformElement {
                             @click=${() => this._onTypePick(typ.type_id)}
                         >
                             <span class="name">
-                                <span class="swatch" style=${`background: ${typeof typ.color === 'string' && typ.color.length > 0 ? typ.color : 'var(--accent)'}`}></span>
+                                <span class="swatch" style=${`background: ${typeof typ.color === 'string' && typ.color.length > 0 ? typ.color : cssVar('--accent', '#99A6F9')}`}></span>
                                 <platform-icon name=${typeof typ.icon === 'string' && typ.icon.length > 0 ? typ.icon : 'circle'} size="14"></platform-icon>
                                 ${typ.name}
                             </span>
@@ -1991,7 +1984,7 @@ export class CRMEntityCard extends PlatformElement {
         const type = this._selectedType();
         if (this.panelMode === MODE_CREATE) {
             if (!type) return nothing;
-            const swatch_color = typeof type.color === 'string' && type.color.length > 0 ? type.color : 'var(--accent)';
+            const swatch_color = typeof type.color === 'string' && type.color.length > 0 ? type.color : cssVar('--accent', '#99A6F9');
             const draft = this._createForm.draft;
             return html`
                 <div class="badge-row">
@@ -2013,7 +2006,7 @@ export class CRMEntityCard extends PlatformElement {
         const ent = this._resolveEntityForBadge();
         if (!ent) return nothing;
         const typeName = type ? type.name : ent.entity_type;
-        const typeColor = type && typeof type.color === 'string' && type.color.length > 0 ? type.color : 'var(--accent)';
+        const typeColor = type && typeof type.color === 'string' && type.color.length > 0 ? type.color : cssVar('--accent', '#99A6F9');
         const typeIcon = type && typeof type.icon === 'string' && type.icon.length > 0 ? type.icon : 'circle';
         return html`
             <div class="badge-row">
@@ -3222,13 +3215,13 @@ export class CRMEntityCard extends PlatformElement {
 
     _renderEditBody() {
         if (this._loadingCard && !this._entityData) {
-            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (this._loadError && !this._entityData) {
-            return html`<div class="error-block">${this._loadError}</div>`;
+            return html`<platform-empty-state icon="error" title=${this._loadError}></platform-empty-state>`;
         }
         if (!this._entityData) {
-            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const draft = this._editForm.draft;
         const showRelAtt = this.layoutVariant === 'full';

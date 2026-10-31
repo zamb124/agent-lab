@@ -2,11 +2,11 @@
 
 import pytest
 
-from apps.search.models import CrawlPageFilterMetadata
 from apps.search.crawl.taxonomy import (
     coerce_filter_metadata_for_taxonomy_by_tag_asc,
     validate_filter_metadata_against_taxonomy,
 )
+from apps.search.models import CrawlPageFilterMetadata
 from core.search.index_models import SearchIndexCrawlTaxonomy
 
 pytestmark = pytest.mark.unit

@@ -22,9 +22,9 @@ from core.ai.free_pool import (
 )
 from core.ai.llm_models_service import LLMModelsService
 from core.ai.providers import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
-    HUMANITEC_LLMS_DISPLAY_LABEL,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
+    LINNEX_LLMS_DISPLAY_LABEL,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     AICapability,
 )
@@ -70,22 +70,22 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
     assert _custom_provider_models(aip, "custom:corp", AICapability.LLM_CHAT) == ["chat-model"]
 
 
-def test_registry_platform_provider_options_labels_humanitec_llm():
+def test_registry_platform_provider_options_labels_linnex_llm():
     options = _platform_provider_options(
-        ["openrouter", HUMANITEC_LLM_PROVIDER],
-        llms_display_label=HUMANITEC_LLMS_DISPLAY_LABEL,
+        ["openrouter", LINNEX_LLM_PROVIDER],
+        llms_display_label=LINNEX_LLMS_DISPLAY_LABEL,
     )
     assert options[0] == "openrouter"
     assert not isinstance(options[1], str)
     assert options[1].model_dump(mode="json", exclude_none=True) == {
-        "value": HUMANITEC_LLM_PROVIDER,
-        "label": HUMANITEC_LLMS_DISPLAY_LABEL,
+        "value": LINNEX_LLM_PROVIDER,
+        "label": LINNEX_LLMS_DISPLAY_LABEL,
         "kind": "virtual",
     }
 
 
 @pytest.mark.asyncio
-async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository(
+async def test_linnex_llm_models_are_virtual_and_not_read_from_repository(
     di: FlowsDi,
 ) -> None:
     payload = serialize_platform_free_models(
@@ -107,12 +107,12 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository(
     assert written is True
     try:
         assert await di.llm_models_service.get_model_ids_by_provider_capability(
-            HUMANITEC_LLM_PROVIDER,
+            LINNEX_LLM_PROVIDER,
             AICapability.LLM_CHAT,
         ) == [
             {
-                "value": HUMANITEC_LLM_AUTO_MODEL,
-                "label": HUMANITEC_LLM_AUTO_MODEL,
+                "value": LINNEX_LLM_AUTO_MODEL,
+                "label": LINNEX_LLM_AUTO_MODEL,
                 "kind": "auto",
             },
             {
@@ -166,12 +166,12 @@ def test_configured_providers_follow_canonical_provider_order(monkeypatch):
     monkeypatch.setattr("core.ai.llm_models_service.get_settings", lambda: settings)
 
     assert LLMModelsService.get_configured_providers() == [
-        HUMANITEC_LLM_PROVIDER,
+        LINNEX_LLM_PROVIDER,
         *OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     ]
 
 
-def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
+def test_linnex_llm_available_with_account_free_tier_provider(monkeypatch):
     settings = SimpleNamespace(
         llm=LLMConfig(
             groq=GroqProviderConfig(api_key="test-key"),
@@ -181,7 +181,7 @@ def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
     monkeypatch.setattr("core.ai.llm_models_service.get_settings", lambda: settings)
 
     assert LLMModelsService.get_configured_providers() == [
-        HUMANITEC_LLM_PROVIDER,
+        LINNEX_LLM_PROVIDER,
         "groq",
     ]
 
@@ -221,9 +221,9 @@ async def test_registry_providers_values_linnex_llms_label(client) -> None:
     )
     assert response.status_code == 200
     items = response.json()["items"]
-    humanitec_llm = next(
+    linnex_llm = next(
         item for item in items
-        if isinstance(item, dict) and item.get("value") == HUMANITEC_LLM_PROVIDER
+        if isinstance(item, dict) and item.get("value") == LINNEX_LLM_PROVIDER
     )
-    assert humanitec_llm["label"] == "Linnex LLMs"
-    assert "Humanitec" not in humanitec_llm["label"]
+    assert linnex_llm["label"] == "Linnex LLMs"
+    assert "Linnex" not in linnex_llm["label"]

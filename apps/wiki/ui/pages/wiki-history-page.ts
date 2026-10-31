@@ -14,6 +14,7 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -286,7 +287,7 @@ export class WikiHistoryPage extends PlatformPage {
                         >${this.t('history.back_to_page')}</platform-button>
                     </div>
                     ${revisions.length === 0
-                        ? html`<div class="state">${this.t('history.empty')}</div>`
+                        ? html`<platform-empty-state icon="history" title=${this.t('history.empty')}></platform-empty-state>`
                         : revisions.map((revision) => html`
                               <button
                                   class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
@@ -310,10 +311,10 @@ export class WikiHistoryPage extends PlatformPage {
 
     private _renderDiff() {
         if (this._selectedRevisionId === '') {
-            return html`<div class="state">${this.t('history.current')}</div>`;
+            return html`<platform-empty-state icon="history" title=${this.t('history.current')}></platform-empty-state>`;
         }
         if (this._revisionRead.busy) {
-            return html`<div class="state"><platform-spinner size="sm"></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <platform-button variant="primary" size="sm" data-wiki-restore @click=${() => this._restore()}>

@@ -196,12 +196,6 @@ export class OfficeApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
-                --documents-title-gradient: linear-gradient(
-                    135deg,
-                    rgba(180, 140, 255, 0.95) 0%,
-                    rgba(140, 180, 255, 0.95) 50%,
-                    rgba(110, 200, 240, 0.95) 100%
-                );
             }
             .sidebar {
                 height: var(--app-vh, 100vh);

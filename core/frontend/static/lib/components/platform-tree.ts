@@ -117,25 +117,25 @@ export class PlatformTree extends PlatformElement {
                 position: relative;
                 display: flex;
                 align-items: center;
-                gap: var(--space-1, 4px);
+                gap: var(--space-1);
                 min-height: 30px;
-                padding-right: var(--space-2, 8px);
-                border-radius: var(--radius-sm, 8px);
+                padding-right: var(--space-2);
+                border-radius: var(--radius-sm);
                 color: var(--text-secondary);
                 cursor: pointer;
                 user-select: none;
-                transition: var(--motion-transition-interactive, background-color 120ms ease);
+                transition: var(--motion-transition-interactive);
             }
 
             .row:hover {
-                background: var(--glass-tint-subtle, rgba(120, 120, 140, 0.08));
+                background: var(--glass-tint-subtle);
                 color: var(--text-primary);
             }
 
             .row.is-selected {
-                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.16));
+                background: var(--glass-tint-medium);
                 color: var(--text-primary);
-                font-weight: var(--font-medium, 500);
+                font-weight: var(--font-medium);
             }
 
             .row.is-focused {
@@ -148,7 +148,7 @@ export class PlatformTree extends PlatformElement {
             }
 
             .row.drop-inside {
-                background: var(--accent-subtle, rgba(99, 102, 241, 0.18));
+                background: var(--accent-subtle);
                 box-shadow: inset 0 0 0 1px var(--accent);
             }
 
@@ -181,9 +181,9 @@ export class PlatformTree extends PlatformElement {
                 width: 22px;
                 height: 22px;
                 border: none;
-                border-radius: var(--radius-xs, 4px);
+                border-radius: 4px;
                 background: transparent;
-                color: var(--text-secondary, #5f6368);
+                color: var(--text-secondary);
                 cursor: pointer;
                 transition:
                     transform 120ms ease,
@@ -192,12 +192,12 @@ export class PlatformTree extends PlatformElement {
             }
 
             .twisty:hover {
-                background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.06));
-                color: var(--text-primary, #202124);
+                background: var(--glass-tint-subtle);
+                color: var(--text-primary);
             }
 
             .row.is-selected .twisty {
-                color: var(--text-primary, #202124);
+                color: var(--text-primary);
             }
 
             .twisty[hidden] {
@@ -223,13 +223,13 @@ export class PlatformTree extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                font-size: var(--text-sm, 0.8125rem);
+                font-size: var(--text-sm);
             }
 
             .count {
                 flex-shrink: 0;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 font-variant-numeric: tabular-nums;
             }
 
@@ -243,12 +243,12 @@ export class PlatformTree extends PlatformElement {
                 width: 20px;
                 height: 20px;
                 border: none;
-                border-radius: var(--radius-xs, 4px);
+                border-radius: 4px;
                 background: transparent;
-                color: var(--text-tertiary, #9aa0a6);
+                color: var(--text-tertiary);
                 opacity: 0.55;
                 cursor: pointer;
-                transition: var(--motion-transition-interactive, opacity 120ms ease);
+                transition: var(--motion-transition-interactive);
             }
 
             .row:hover .row-menu,
@@ -259,7 +259,7 @@ export class PlatformTree extends PlatformElement {
             }
 
             .row-menu:hover {
-                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.16));
+                background: var(--glass-tint-medium);
                 color: var(--text-primary);
             }
 
@@ -269,9 +269,9 @@ export class PlatformTree extends PlatformElement {
             }
 
             .empty {
-                padding: var(--space-3, 12px);
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-sm, 0.8125rem);
+                padding: var(--space-3);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
         `,
     ];

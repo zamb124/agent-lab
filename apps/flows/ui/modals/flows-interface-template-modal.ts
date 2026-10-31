@@ -45,7 +45,7 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
         .empty { display: grid; place-items: center; gap: var(--space-2); padding: var(--space-8); color: var(--text-tertiary); }
         .detail { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: var(--space-4); min-height: min(64vh, 560px); }
-        .detail-preview { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: auto; background: var(--bg-secondary, var(--glass-tint-medium)); padding: var(--space-4); }
+        .detail-preview { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: auto; background: var(--bg-secondary); padding: var(--space-4); }
         .detail-preview platform-flow-ui { display: block; pointer-events: none; }
         .detail-side { display: grid; gap: var(--space-3); align-content: start; }
         .detail-title { margin: 0; font-size: 18px; font-weight: 650; color: var(--text-primary); }

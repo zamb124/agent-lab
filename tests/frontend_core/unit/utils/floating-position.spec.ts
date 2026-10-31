@@ -272,10 +272,10 @@ describe('computeFloatingPosition: размеры', () => {
 describe('computeFloatingPosition: контракт', () => {
     it('без якоря или размера — ошибка', () => {
         expect(() =>
-            computeFloatingPosition({ floatingRect: SMALL_LAYER, viewport: VIEWPORT }),
+            computeFloatingPosition({ anchorRect: undefined, floatingRect: SMALL_LAYER, viewport: VIEWPORT }),
         ).toThrow();
         expect(() =>
-            computeFloatingPosition({ anchorRect: CENTER_ANCHOR, viewport: VIEWPORT }),
+            computeFloatingPosition({ anchorRect: CENTER_ANCHOR, floatingRect: undefined, viewport: VIEWPORT }),
         ).toThrow();
     });
 

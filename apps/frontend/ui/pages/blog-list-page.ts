@@ -20,7 +20,7 @@ export class BlogListPage extends PlatformPage {
     constructor() {
         super();
         this._listOp = this.useOp('frontend/public_blog_list');
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
     }
     private _listOp: OpController;
     private _localeSel: SelectController<any>;
@@ -31,14 +31,14 @@ export class BlogListPage extends PlatformPage {
         void this._listOp.run(null);
     }
 
-    _titleFor(row: Record<string, any>) {
+    _titleFor(row: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return row.title_ru;
         if (locale === 'en') return row.title_en;
         throw new Error('blog-list-page: i18n.locale must be ru or en');
     }
 
-    _summaryFor(row: Record<string, any>) {
+    _summaryFor(row: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return row.summary_ru;
         if (locale === 'en') return row.summary_en;

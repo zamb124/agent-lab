@@ -10,10 +10,10 @@ describe('flowCodeLanguageSegmentItems', () => {
         expect(items).toHaveLength(FLOW_CODE_LANGUAGES.length);
         for (const [index, item] of items.entries()) {
             const meta = FLOW_CODE_LANGUAGES[index];
-            expect(item.value).toBe(meta.value);
-            expect(item.iconSrc).toBe(`/static/core/assets/icons/${meta.icon}.svg`);
-            expect(item.iconFallback).toBe(meta.shortLabel);
-            expect(item.title).toBe(meta.label);
+            expect(item.value).toBe(meta?.value);
+            expect(item.iconSrc).toBe(`/static/core/assets/icons/${meta?.icon}.svg`);
+            expect(item.iconFallback).toBe(meta?.shortLabel);
+            expect(item.title).toBe(meta?.label);
             expect(item).not.toHaveProperty('icon');
             expect(item).not.toHaveProperty('label');
         }
@@ -21,6 +21,6 @@ describe('flowCodeLanguageSegmentItems', () => {
 
     it('includes label when iconOnly is false', () => {
         const items = flowCodeLanguageSegmentItems({ iconOnly: false });
-        expect(items[0].label).toBe(FLOW_CODE_LANGUAGES[0].label);
+        expect(items[0]?.label).toBe(FLOW_CODE_LANGUAGES[0]?.label);
     });
 });

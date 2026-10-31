@@ -14,6 +14,7 @@ import {
 import { entitiesResource } from '../../../../apps/crm/ui/events/resources/entities.resource.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '../../../../apps/crm/ui/modals/entity-delete-modal.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 function setupCrmBus() {
     registerFactory(entitiesResource);
@@ -28,15 +29,15 @@ function setupCrmBus() {
 describe('crm-entity-delete-modal', () => {
     beforeEach(() => { resetPlatformState(); setupCrmBus(); });
     afterEach(() => {
-        document.querySelectorAll('crm-entity-delete-modal').forEach((el) => el.remove());
+        qsa(document!, 'crm-entity-delete-modal').forEach((el) => el.remove());
         fixtureCleanup();
     });
 
     it('рендерит шапку и кнопку confirm; confirm диспатчит REMOVE_REQUESTED', async () => {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        const stack = await fixture<TestEl>(html`<platform-modal-stack></platform-modal-stack>`);
         const bus = getPlatformBus();
 
-        const captured = [];
+        const captured: any[] = [];
         const off = bus.subscribeType(entitiesResource.events.REMOVE_REQUESTED, (event) => {
             captured.push(event);
         });
@@ -48,14 +49,14 @@ describe('crm-entity-delete-modal', () => {
         await elementUpdated(stack);
         await aTimeout(0);
 
-        const modal = document.querySelector('crm-entity-delete-modal');
+        const modal = qs(document!, 'crm-entity-delete-modal');
         expect(modal, 'modal mounted').to.exist;
         expect(modal.entityId).to.equal('abc-123');
         expect(modal.redirectRoute).to.equal('entities');
 
-        const confirmBtn = modal.shadowRoot.querySelector('button.btn-danger');
+        const confirmBtn = qs(shadow(modal), 'button.btn-danger');
         expect(confirmBtn, 'confirm btn rendered').to.exist;
-        confirmBtn.click();
+        (confirmBtn as TestEl).click();
         await aTimeout(0);
 
         expect(captured.length, 'REMOVE_REQUESTED dispatched').to.be.greaterThan(0);

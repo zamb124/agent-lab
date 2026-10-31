@@ -27,7 +27,7 @@ def test_parse_lara_branch_model_id() -> None:
 def test_onlyoffice_ai_browser_cors_origins_cover_cdn_and_ds() -> None:
     assert "https://onlyoffice.github.io" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
     assert "https://onlyoffice.linnex.io" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
-    assert "https://onlyoffice.humanitec.ru" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
+    assert "https://onlyoffice.linnex.io" in ONLYOFFICE_AI_BROWSER_CORS_ORIGINS
 
 
 def test_build_onlyoffice_ai_settings_fills_all_actions() -> None:

@@ -6,18 +6,18 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_platform_brand_humanitec(frontend_client) -> None:
+async def test_platform_brand_linnex(frontend_client) -> None:
     response = await frontend_client.get(
         "/frontend/api/platform/brand",
-        headers={"Host": "humanitec.ru"},
+        headers={"Host": "linnex.io"},
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["base_domain"] == "humanitec.ru"
-    assert payload["platform_name"] == "Humanitec"
-    assert payload["support_email"] == "helpme@humanitec.ru"
-    assert payload["apex_origin"] == "https://humanitec.ru/"
-    assert "humanitec.ru" in payload["supported_domains"]
+    assert payload["base_domain"] == "linnex.io"
+    assert payload["platform_name"] == "Linnex"
+    assert payload["support_email"] == "helpme@linnex.io"
+    assert payload["apex_origin"] == "https://linnex.io/"
+    assert "linnex.io" in payload["supported_domains"]
     assert "linnex.io" in payload["supported_domains"]
 
 
@@ -102,19 +102,19 @@ async def test_public_legal_linnex(frontend_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_public_legal_humanitec_same_operator(frontend_client) -> None:
+async def test_public_legal_linnex_same_operator(frontend_client) -> None:
     response = await frontend_client.get(
         "/frontend/api/public/legal",
-        headers={"Host": "humanitec.ru"},
+        headers={"Host": "linnex.io"},
     )
     assert response.status_code == 200
     legal = response.json()
     assert legal["company_name_ru"] == "ООО «ЛАЙНЕКС»"
     assert legal["inn"] == "9717194941"
     assert legal["kpp"] == "771701001"
-    assert legal["contact_email"] == "legal@humanitec.ru"
-    assert legal["support_email"] == "helpme@humanitec.ru"
-    assert legal["dpo_email"] == "dpo@humanitec.ru"
+    assert legal["contact_email"] == "legal@linnex.io"
+    assert legal["support_email"] == "helpme@linnex.io"
+    assert legal["dpo_email"] == "dpo@linnex.io"
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_public_site_bundle_linnex(frontend_client) -> None:
 
 
 @pytest.mark.parametrize("host,short_name", [
-    ("humanitec.ru", "Humanitec"),
+    ("linnex.io", "Linnex"),
     ("linnex.io", "Linnex"),
 ])
 @pytest.mark.asyncio
@@ -155,12 +155,12 @@ async def test_pwa_manifest_host_aware(
     "host,product_names",
     [
         (
-            "humanitec.ru",
+            "linnex.io",
             {
-                "models_product_name": "Humanitec Models",
-                "voice_product_name": "Humanitec Voice",
-                "llms_display_label": "Humanitec LLMs",
-                "flows_product_label": "Humanitec Flows",
+                "models_product_name": "Linnex Models",
+                "voice_product_name": "Linnex Voice",
+                "llms_display_label": "Linnex LLMs",
+                "flows_product_label": "Linnex Flows",
             },
         ),
         (
@@ -193,7 +193,7 @@ async def test_platform_brand_product_names(
 @pytest.mark.parametrize(
     "host,platform_name",
     [
-        ("humanitec.ru", "Humanitec"),
+        ("linnex.io", "Linnex"),
         ("linnex.io", "Linnex"),
     ],
 )
@@ -216,7 +216,7 @@ async def test_llms_txt_host_aware(
 @pytest.mark.parametrize(
     "host,platform_name",
     [
-        ("humanitec.ru", "Humanitec"),
+        ("linnex.io", "Linnex"),
         ("linnex.io", "Linnex"),
     ],
 )

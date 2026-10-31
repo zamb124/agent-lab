@@ -4,8 +4,9 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { ListResponse_OfficeCatalogListItem_, ListResponse_OfficeDocumentItem_ } from '../wire/office.gen.js';
 
-export const catalogsListOp = createAsyncOp({
+export const catalogsListOp = createAsyncOp<ListResponse_OfficeCatalogListItem_>({
     name: 'office/catalogs_list',
     silent: true,
     transport: 'ws',
@@ -14,7 +15,7 @@ export const catalogsListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/documents/api/v1/catalogs' },
 });
 
-export const documentsListOp = createAsyncOp({
+export const documentsListOp = createAsyncOp<ListResponse_OfficeDocumentItem_>({
     name: 'office/documents_list',
     silent: true,
     transport: 'ws',
@@ -23,7 +24,7 @@ export const documentsListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/documents/api/v1/documents' },
 });
 
-export const documentsSearchOp = createAsyncOp({
+export const documentsSearchOp = createAsyncOp<ListResponse_OfficeDocumentItem_>({
     name: 'office/documents_search',
     silent: true,
     transport: 'ws',

@@ -23,8 +23,8 @@ from tests.fixtures.auth import set_test_company_member_roles
 
 pytestmark = [pytest.mark.timeout(30)]
 
-_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
-_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+_PLATFORM_ASGI_BASE_URL = "http://linnex.io"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "linnex.io"}
 
 
 async def _asgi_client(app: object) -> AsyncIterator[AsyncClient]:

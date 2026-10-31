@@ -13,6 +13,7 @@ import { secretsVariablesResource } from '@platform/lib/events/resources/secrets
 import { workItemCountsOp } from '@platform/lib/events/resources/work-items.resource.js';
 import { agentSkillsResource } from '../../../../apps/flows/ui/events/resources/agent-skills.resource.js';
 import '../../../../apps/flows/ui/pages/flows-home-page.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 const FACTORIES = [
     flowsResource,
@@ -51,8 +52,8 @@ const HOME_WS_LISTS = new Set([
 ]);
 
 describe('flows-home-page HITL / operator link to worktracker', () => {
-    let originalFetch;
-    let originalWsRequest;
+    let originalFetch: any;
+    let originalWsRequest: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -84,7 +85,7 @@ describe('flows-home-page HITL / operator link to worktracker', () => {
 
     it('quick action "operator" ведёт в worktracker inbox', async () => {
         bootstrapHomeBus();
-        const el = await fixture(html`<flows-home-page></flows-home-page>`);
+        const el = await fixture<TestEl>(html`<flows-home-page></flows-home-page>`);
         await elementUpdated(el);
 
         expect(el._worktrackerInboxHref()).to.include('/worktracker');
@@ -100,15 +101,15 @@ describe('flows-home-page HITL / operator link to worktracker', () => {
 
     it('activity row показывает суммарный счётчик открытых задач из summary', async () => {
         bootstrapHomeBus();
-        const el = await fixture(html`<flows-home-page></flows-home-page>`);
+        const el = await fixture<TestEl>(html`<flows-home-page></flows-home-page>`);
         await waitUntil(
             () => el._workItemCounts.state.total_open_count === 7,
             'work_item_counts summary should resolve to total 7',
         );
         await elementUpdated(el);
 
-        const rows = el.shadowRoot.querySelectorAll('.readiness-row-link');
+        const rows = qsa(shadow(el), '.readiness-row-link');
         expect(rows.length).to.equal(1);
-        expect(rows[0].querySelector('.metric-value').textContent.trim()).to.equal('7');
+        expect(qs(rows[0]!, '.metric-value').textContent.trim()).to.equal('7');
     });
 });

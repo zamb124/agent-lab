@@ -65,7 +65,7 @@ describe('flows viewbox helpers', () => {
     it('computeFitViewBox expands bbox for virtual START/END extent', () => {
         const nodes = [{ pos_x: 100, pos_y: 50, type: 'llm_node', tools: [] }];
         const vb = computeFitViewBox(nodes);
-        expect(vb).not.toBeNull();
+        if (vb === null) throw new Error('computeFitViewBox returned null');
         const contentMinX = 100 - FLOW_TERMINAL_EXTENT - FIT_VIEW_PADDING;
         const contentMaxX = 100 + FLOW_NODE_W + FLOW_TERMINAL_EXTENT + FIT_VIEW_PADDING;
         const contentMinY = 50 - FIT_VIEW_PADDING;

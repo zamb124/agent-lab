@@ -380,7 +380,7 @@ for dead_asset in "${DEAD_ASSET_PATHS[@]}"; do
         fail "мёртвый vendor-артефакт не должен возвращаться в репозиторий: $dead_asset"
     fi
 done
-if rg -q 'zustand-bundle\.js' core/frontend/pwa/sw.js; then
+if rg -q 'zustand-bundle\.js' core/frontend/static/lib/pwa/sw.ts; then
     fail "zustand-bundle.js запрещён в SW precache"
 fi
 

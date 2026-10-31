@@ -19,8 +19,8 @@ import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 const RESOURCE_NODE_MENU_EXCLUDE = new Set(['toggle_entry', 'advanced_incoming_policy']);
 
-function collapseContextMenuSeparators(items: readonly Record<string, any>[]) {
-    const out: Record<string, any>[] = [];
+function collapseContextMenuSeparators(items: readonly Record<string, unknown>[]) {
+    const out: Record<string, unknown>[] = [];
     for (let i = 0; i < items.length; i += 1) {
         const item = items[i];
         if (item === undefined) {
@@ -109,7 +109,7 @@ export class FlowsCanvasContextMenu extends PlatformElement {
                 padding: var(--space-2) var(--space-3);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: background var(--duration-fast);
+                transition: background var(--motion-duration-micro);
             }
             .item:hover { background: var(--glass-solid-medium); }
             .item[data-danger] { color: var(--error); }

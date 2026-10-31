@@ -535,7 +535,7 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             :host([open]) .modal.panel-enter-active {
-                animation: calendarModalIn 320ms var(--easing-smooth, cubic-bezier(0.22, 1, 0.36, 1)) both;
+                animation: calendarModalIn 320ms var(--easing-smooth) both;
             }
 
             :host([open]:not([closing])) .modal.panel-enter-active,
@@ -592,7 +592,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
             .calendar-shell {
                 display: grid;
-                grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
+                grid-template-columns: var(--mail-rail-width) minmax(0, 1fr);
                 gap: 0;
                 min-height: 0;
                 flex: 1;
@@ -804,7 +804,7 @@ export class PlatformCalendarModal extends PlatformModal {
             .date-sheet-overlay {
                 position: fixed;
                 inset: 0;
-                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 4);
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal)) + 4);
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1044,7 +1044,7 @@ export class PlatformCalendarModal extends PlatformModal {
             :host([open]) .modal .modal-header--calendar-compact .calendar-modal-title {
                 flex: 0 1 auto;
                 min-width: 0;
-                font-size: var(--text-base, 16px);
+                font-size: var(--text-base);
             }
 
             :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav {
@@ -1059,7 +1059,7 @@ export class PlatformCalendarModal extends PlatformModal {
             :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav .period-date-btn {
                 max-width: min(160px, 46vw);
                 padding: 6px 10px;
-                font-size: var(--text-xs, 12px);
+                font-size: var(--text-xs);
             }
 
             :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav .btn-icon {
@@ -1449,7 +1449,7 @@ export class PlatformCalendarModal extends PlatformModal {
             .drag-ghost {
                 position: fixed;
                 pointer-events: none;
-                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 10);
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal)) + 10);
                 opacity: 0.85;
                 border-radius: var(--radius-md);
                 padding: 6px 10px;
@@ -1509,7 +1509,7 @@ export class PlatformCalendarModal extends PlatformModal {
             .event-compose-meeting-sync-hint {
                 margin: 0;
                 font-size: var(--text-sm);
-                color: var(--text-secondary, var(--glass-text-muted));
+                color: var(--text-secondary);
                 line-height: 1.45;
             }
 
@@ -1517,7 +1517,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                color: var(--accent, #99a6f9);
+                color: var(--accent);
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 text-decoration: none;
@@ -1531,7 +1531,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
             .event-compose-join-link platform-icon {
                 flex-shrink: 0;
-                color: var(--accent, #99a6f9);
+                color: var(--accent);
             }
 
 
@@ -1673,7 +1673,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 3);
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal)) + 3);
                 padding: var(--space-4);
             }
 
@@ -1712,7 +1712,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 2);
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal)) + 2);
                 padding: var(--space-4);
             }
 
@@ -1859,8 +1859,8 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .event-compose-attachment-remove:hover {
-                color: var(--danger);
-                background: color-mix(in srgb, var(--danger) 12%, transparent);
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 12%, transparent);
             }
 
             .event-compose-title-input,
@@ -1944,8 +1944,8 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .attendee-tag-remove:hover {
-                color: var(--danger);
-                background: color-mix(in srgb, var(--danger) 12%, transparent);
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 12%, transparent);
             }
 
             .attendees-input {
@@ -2162,7 +2162,7 @@ export class PlatformCalendarModal extends PlatformModal {
             .event-compose-delete-btn {
                 border: none;
                 background: transparent;
-                color: var(--danger);
+                color: var(--error);
                 font-size: var(--text-sm);
                 cursor: pointer;
                 padding: 0;
@@ -2235,7 +2235,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
             @media (max-width: 1279px) {
                 .calendar-shell {
-                    grid-template-columns: var(--mail-rail-width, 64px) minmax(0, 1fr);
+                    grid-template-columns: var(--mail-rail-width) minmax(0, 1fr);
                 }
 
                 .calendar-sidebar {
@@ -2316,7 +2316,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     position: fixed;
                     right: max(20px, env(safe-area-inset-right));
                     bottom: max(24px, env(safe-area-inset-bottom));
-                    z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 2);
+                    z-index: calc(var(--platform-modal-layer-z, var(--z-modal)) + 2);
                     width: 52px;
                     height: 52px;
                     border-radius: 50%;

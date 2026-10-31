@@ -31756,7 +31756,7 @@
           "owned_by": {
             "type": "string",
             "title": "Owned By",
-            "default": "humanitec"
+            "default": "linnex"
           }
         },
         "additionalProperties": false,

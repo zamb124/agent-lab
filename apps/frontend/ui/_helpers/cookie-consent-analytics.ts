@@ -14,7 +14,7 @@
  * }} params
  * @returns {boolean}
  */
-export function canInjectPublicAnalytics(params: Record<string, any>) {
+export function canInjectPublicAnalytics(params: Record<string, unknown>) {
     if (!params || typeof params !== 'object') {
         throw new Error('canInjectPublicAnalytics: params required');
     }
@@ -60,7 +60,7 @@ export function canInjectPublicAnalytics(params: Record<string, any>) {
  * }} params
  * @returns {boolean}
  */
-export function cookieConsentDecisionIsCurrent(params: Record<string, any>) {
+export function cookieConsentDecisionIsCurrent(params: Record<string, unknown>) {
     if (!params || typeof params !== 'object') {
         throw new Error('cookieConsentDecisionIsCurrent: params required');
     }
@@ -101,7 +101,7 @@ export function cookieConsentDecisionIsCurrent(params: Record<string, any>) {
  * }} opState
  * @returns {boolean}
  */
-export function shouldFetchPublicSiteBundle(opState: Record<string, any>) {
+export function shouldFetchPublicSiteBundle(opState: Record<string, unknown>) {
     if (!opState || typeof opState !== 'object') {
         throw new Error('shouldFetchPublicSiteBundle: opState required');
     }

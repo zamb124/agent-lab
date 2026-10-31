@@ -26,8 +26,8 @@ export interface PropertyPanelRectPref {
     width: number;
     height: number;
     collapsed: boolean;
-    expandedWidth?: number;
-    expandedHeight?: number;
+    expandedWidth?: number | undefined;
+    expandedHeight?: number | undefined;
 }
 
 interface PendingRectPref {

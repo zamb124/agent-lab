@@ -15,7 +15,7 @@ import type {
 } from 'lit';
 
 export class CRMRelatedEntityCards extends PlatformElement {
-    declare entities: Record<string, any>[];
+    declare entities: Record<string, unknown>[];
     declare entityTypeRows: unknown[];
     declare excludeEntityIds: unknown[];
     declare excludeKinds: unknown[];

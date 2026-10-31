@@ -406,7 +406,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: виджет чата на host page отвечает покупателю.
 - Шаги: 1) создать embed-конфиг; 2) получить snippet; 3) открыть host page; 4) открыть чат; 5) получить ответ.
 - Отличие от `share-demo-link`: embed — snippet/host page; share — гостевая ссылка.
-- Фичи: frontend embed configs, humanitec-embed-autoload, platform-flow-ui на внешнем origin.
+- Фичи: frontend embed configs, linnex-embed-autoload, platform-flow-ui на внешнем origin.
 
 ### Этап 8. Публикация и управление (operations)
 

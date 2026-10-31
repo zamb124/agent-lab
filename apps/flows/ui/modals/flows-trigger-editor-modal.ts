@@ -296,8 +296,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 cursor: pointer;
-                transition: border-color var(--duration-fast) var(--easing-default),
-                            background var(--duration-fast) var(--easing-default);
+                transition: border-color var(--motion-duration-micro) var(--motion-ease-standard),
+                            background var(--motion-duration-micro) var(--motion-ease-standard);
                 text-align: center;
                 background: transparent;
             }

@@ -8,6 +8,7 @@ import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { flowsResource, branchRemoveOp } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import '../../../../apps/flows/ui/components/flows-catalog-list.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const CATALOG_FACTORIES = [flowsResource, branchRemoveOp];
 
@@ -22,20 +23,20 @@ describe('flows-catalog-list search toolbar', () => {
     });
 
     it('toolbar has search with inline help and create button only', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-catalog-list mode="sidebar"></flows-catalog-list>
         `);
         await el.updateComplete;
 
-        const toolbar = el.shadowRoot.querySelector('.flows-toolbar');
+        const toolbar = q(shadow(el), '.flows-toolbar');
         expect(toolbar).to.not.equal(null);
-        expect(toolbar.querySelector('.catalog-help')).to.equal(null);
-        expect(toolbar.querySelectorAll('platform-modal-search-field').length).to.equal(1);
-        expect(toolbar.querySelectorAll('platform-button').length).to.equal(1);
+        expect(q(toolbar!, '.catalog-help')).to.equal(null);
+        expect(qsa(toolbar!, 'platform-modal-search-field').length).to.equal(1);
+        expect(qsa(toolbar!, 'platform-button').length).to.equal(1);
 
-        const search = toolbar.querySelector('platform-modal-search-field');
-        const helpHint = toolbar.querySelector('platform-help-hint');
+        const search = q(toolbar!, 'platform-modal-search-field');
+        const helpHint = q(toolbar!, 'platform-help-hint');
         expect(helpHint).to.not.equal(null);
-        expect(search.contains(helpHint)).to.equal(true);
+        expect(search!.contains(helpHint)).to.equal(true);
     });
 });

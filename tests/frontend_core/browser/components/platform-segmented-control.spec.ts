@@ -5,6 +5,7 @@
 import { fixture, html, expect, oneEvent } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 describe('platform-segmented-control', () => {
     beforeEach(() => {
@@ -13,7 +14,7 @@ describe('platform-segmented-control', () => {
     });
 
     it('renders items and marks active segment', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="run"
                 .items=${[
@@ -24,13 +25,13 @@ describe('platform-segmented-control', () => {
                 density="dense"
             ></platform-segmented-control>
         `);
-        const active = el.shadowRoot.querySelector('.segment[data-active="true"]');
+        const active = qs(shadow(el), '.segment[data-active="true"]');
         expect(active).to.exist;
         expect(active.getAttribute('aria-pressed')).to.equal('true');
     });
 
     it('emits change with selected value', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="edit"
                 .items=${[
@@ -39,14 +40,14 @@ describe('platform-segmented-control', () => {
                 ]}
             ></platform-segmented-control>
         `);
-        const segments = el.shadowRoot.querySelectorAll('.segment');
-        setTimeout(() => segments[1].click());
+        const segments = qsa(shadow(el), '.segment');
+        setTimeout(() => segments[1]!.click());
         const ev = await oneEvent(el, 'change');
-        expect(ev.detail.value).to.equal('run');
+        expect((ev as CustomEvent).detail.value).to.equal('run');
     });
 
     it('emits segment-close for closable items', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="b1"
                 .items=${[
@@ -55,15 +56,15 @@ describe('platform-segmented-control', () => {
                 ]}
             ></platform-segmented-control>
         `);
-        const closeBtn = el.shadowRoot.querySelector('.segment-close');
+        const closeBtn = qs(shadow(el), '.segment-close');
         expect(closeBtn).to.exist;
-        setTimeout(() => closeBtn.click());
+        setTimeout(() => (closeBtn as TestEl).click());
         const ev = await oneEvent(el, 'segment-close');
-        expect(ev.detail.value).to.equal('b1');
+        expect((ev as CustomEvent).detail.value).to.equal('b1');
     });
 
     it('passes colored to brand platform-icon', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="javascript"
                 icon-only
@@ -73,14 +74,14 @@ describe('platform-segmented-control', () => {
                 ]}
             ></platform-segmented-control>
         `);
-        const icons = el.shadowRoot.querySelectorAll('platform-icon');
+        const icons = qsa(shadow(el), 'platform-icon');
         expect(icons.length).to.equal(2);
-        expect(icons[0].hasAttribute('colored')).to.equal(true);
-        expect(icons[1].hasAttribute('colored')).to.equal(true);
+        expect(icons[0]!.hasAttribute('colored')).to.equal(true);
+        expect(icons[1]!.hasAttribute('colored')).to.equal(true);
     });
 
     it('renders iconSrc as img and falls back on error', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="javascript"
                 icon-only
@@ -100,24 +101,24 @@ describe('platform-segmented-control', () => {
                 ]}
             ></platform-segmented-control>
         `);
-        expect(el.shadowRoot.querySelectorAll('platform-icon').length).to.equal(0);
-        const images = el.shadowRoot.querySelectorAll('img.segment-icon-img');
+        expect(qsa(shadow(el), 'platform-icon').length).to.equal(0);
+        const images = qsa(shadow(el), 'img.segment-icon-img');
         expect(images.length).to.be.at.least(1);
-        expect(images[0].getAttribute('src')).to.equal('/static/core/assets/icons/javascript.svg');
+        expect(images[0]!.getAttribute('src')).to.equal('/static/core/assets/icons/javascript.svg');
 
         const brokenImg = [...images].find(
             (img) => img.getAttribute('src') === '/static/core/assets/icons/__missing_language_icon__.svg',
         );
         expect(brokenImg).to.exist;
-        brokenImg.dispatchEvent(new Event('error'));
+        brokenImg!.dispatchEvent(new Event('error'))!;
         await el.updateComplete;
-        const fallback = el.shadowRoot.querySelector('.segment-icon-fallback');
+        const fallback = qs(shadow(el), '.segment-icon-fallback');
         expect(fallback).to.exist;
         expect(fallback.textContent).to.equal('XX');
     });
 
     it('uses renderIcon instead of platform-icon when provided', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <platform-segmented-control
                 value="a"
                 icon-only
@@ -125,12 +126,12 @@ describe('platform-segmented-control', () => {
                     { value: 'a', title: 'A' },
                     { value: 'b', title: 'B' },
                 ]}
-                .renderIcon=${(item) => html`<span class="custom-icon" data-value=${item.value}>${item.value}</span>`}
+                .renderIcon=${(item: any) => html`<span class="custom-icon" data-value=${(item as TestEl).value}>${(item as TestEl).value}</span>`}
             ></platform-segmented-control>
         `);
-        expect(el.shadowRoot.querySelectorAll('platform-icon').length).to.equal(0);
-        const custom = el.shadowRoot.querySelectorAll('.custom-icon');
+        expect(qsa(shadow(el), 'platform-icon').length).to.equal(0);
+        const custom = qsa(shadow(el), '.custom-icon');
         expect(custom.length).to.equal(2);
-        expect(custom[0].getAttribute('data-value')).to.equal('a');
+        expect(custom[0]!.getAttribute('data-value')).to.equal('a');
     });
 });

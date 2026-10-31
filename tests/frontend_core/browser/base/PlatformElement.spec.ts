@@ -9,20 +9,21 @@ import { fixture, html, expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import type { TestEl } from '../helpers/dom.js';
 
 class HostEl extends PlatformElement {
     static i18nNamespace = 'platform';
-    render() { return litHtml`<span>host</span>`; }
+    override render() { return litHtml`<span>host</span>`; }
 }
 customElements.define('frontend-core-host-el', HostEl);
 
 async function makeHost() {
-    return fixture(html`<frontend-core-host-el></frontend-core-host-el>`);
+    return fixture<TestEl>(html`<frontend-core-host-el></frontend-core-host-el>`);
 }
 
 function captureBusEvents() {
-    const events = [];
-    getPlatformBus().subscribeAny((e) => events.push(e));
+    const events: any[] = [];
+    getPlatformBus().subscribeAny((e: any) => events.push(e));
     return events;
 }
 
@@ -215,9 +216,9 @@ describe('PlatformElement: useEvent', () => {
     it('useEvent: handler вызывается на dispatch', async () => {
         const el = await makeHost();
         let received = null;
-        el.useEvent('test/foo/bar', (ev) => { received = ev; });
+        el.useEvent('test/foo/bar', (ev: any) => { received = ev; });
         getPlatformBus().dispatch('test/foo/bar', { x: 1 });
-        expect(received.payload).to.deep.equal({ x: 1 });
+        expect(received!.payload).to.deep.equal({ x: 1 });
     });
 });
 

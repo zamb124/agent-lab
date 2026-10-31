@@ -28,9 +28,9 @@ import {
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -98,7 +98,7 @@ function _toastOnActiveTaskConflict(ctx: EffectCtx, err: unknown, event: Platfor
  * @param {string} idField
  * @returns {object}
  */
-function _mergeTaskIntoCollectionState<S extends { items: readonly any[]; byId: Readonly<Record<string, any>> }>(state: S, task: Record<string, any>, idField: string): S {
+function _mergeTaskIntoCollectionState<S extends { items: readonly any[]; byId: Readonly<Record<string, unknown>> }>(state: S, task: Record<string, unknown>, idField: string): S {
     const id = task[idField];
     const idx = state.items.findIndex((x) => x && x[idField] === id);
     const items = idx === -1 ? [...state.items, task] : state.items.map((x, i) => (i === idx ? task : x));
@@ -151,7 +151,7 @@ export const tasksResource = createResourceCollection({
         if (!payload || typeof payload !== 'object') {
             throw new Error('tasksResource.listQuery: payload required (object)');
         }
-        const query: Record<string, any> = {};
+        const query: Record<string, unknown> = {};
         if ('limit' in payload) {
             if (typeof payload.limit !== 'number') {
                 throw new Error('tasksResource.listQuery: payload.limit must be number');

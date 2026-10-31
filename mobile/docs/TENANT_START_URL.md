@@ -4,7 +4,7 @@
 
 PWA-манифест платформы: [`core/frontend/pwa/manifest.json`](../../core/frontend/pwa/manifest.json) — `start_url` и `scope` задают область установки.
 
-Мультитенантность компаний описана в [`core/frontend/static/lib/utils/tenant-url.js`](../../core/frontend/static/lib/utils/tenant-url.js): поддомены `slug.linnex.io` (primary), `slug.humanitec.ru` (legacy) и т.д.
+Мультитенантность компаний описана в [`core/frontend/static/lib/utils/tenant-url.js`](../../core/frontend/static/lib/utils/tenant-url.js): поддомены `slug.linnex.io` (primary), `slug.linnex.io` (legacy) и т.д.
 
 ## Решение для v1 оболочек
 

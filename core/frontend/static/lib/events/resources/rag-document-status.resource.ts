@@ -6,6 +6,17 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import type { PlatformEvent, EffectCtx } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '../payload.js';
+import type { AsyncOpSlice } from '../factories/async-op.js';
+import type {
+    DocumentProcessingStatus,
+    RagDocumentStatusUpdatedEventPayload,
+} from '../wire/rag.gen.js';
+
+/**
+ * Push `rag/document/status_updated` без company_id — форма, которую
+ * reducer складывает в lastResult; полный payload — RagEventMap.
+ */
+type DocumentStatusView = Omit<RagDocumentStatusUpdatedEventPayload, 'company_id'>;
 
 const RAG_DOCUMENT_STATUS_UPDATED = 'rag/document/status_updated';
 
@@ -35,7 +46,10 @@ function _toastTerminal(ctx: EffectCtx, status: Record<string, unknown>, documen
     }
 }
 
-export const documentStatusResource = createAsyncOp({
+export const documentStatusResource = createAsyncOp<
+    DocumentProcessingStatus,
+    AsyncOpSlice<DocumentProcessingStatus | DocumentStatusView>
+>({
     name: 'rag/document_status',
     silent: true,
     transport: 'ws',
@@ -57,19 +71,24 @@ export const documentStatusResource = createAsyncOp({
         }
         const payload = event.payload;
         const documentId = payload.document_id;
+        const status = payload.status;
+        const namespaceId = payload.namespace_id;
         if (typeof documentId !== 'string' || documentId.length === 0) {
+            return state;
+        }
+        if (typeof status !== 'string' || typeof namespaceId !== 'string') {
             return state;
         }
         const documentName = payload.document_name;
         const errorMessage = payload.error_message;
         const chunksCount = payload.chunks_count;
-        const nextStatus = {
+        const nextStatus: DocumentStatusView = {
             document_id: documentId,
-            status: payload.status,
+            status,
             document_name: typeof documentName === 'string' ? documentName : documentId,
             error_message: typeof errorMessage === 'string' ? errorMessage : null,
             chunks_count: typeof chunksCount === 'number' ? chunksCount : null,
-            namespace_id: payload.namespace_id,
+            namespace_id: namespaceId,
         };
         return {
             ...state,

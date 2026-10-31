@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { notifyReducer, initialNotifyState } from '@platform/lib/events/reducers/notify.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
-const ev = (type, payload, ts = 1234) => ({ id: `id_${type}`, type, payload, meta: { ts, source: 'local' } });
+import { testEvent } from '../../helpers/bus-fixtures.js';
+
+const ev = (type: string, payload: unknown, ts = 1234) =>
+    ({ ...testEvent(type, payload), meta: { ...testEvent(type, payload).meta, ts } });
 
 describe('notifyReducer', () => {
     it('initial: пустой список', () => {
@@ -13,13 +16,13 @@ describe('notifyReducer', () => {
         const next = notifyReducer(initialNotifyState, ev(CoreEvents.UI_TOAST_SHOW, { message: 'hi', type: 'success' }, 555));
         expect(next.toasts).toHaveLength(1);
         expect(next.toasts[0]).toMatchObject({ message: 'hi', type: 'success', ts: 555, duration: 3000 });
-        expect(next.toasts[0].id).toMatch(/^toast_/);
+        expect(next.toasts[0]?.id).toMatch(/^toast_/);
     });
 
     it('UI_TOAST_SHOW c i18n_key', () => {
         const next = notifyReducer(initialNotifyState, ev(CoreEvents.UI_TOAST_SHOW, { i18n_key: 'svc:ok' }));
-        expect(next.toasts[0].i18n_key).toBe('svc:ok');
-        expect(next.toasts[0].type).toBe('info'); // default
+        expect(next.toasts[0]?.i18n_key).toBe('svc:ok');
+        expect(next.toasts[0]?.type).toBe('info'); // default
     });
 
     it('UI_TOAST_SHOW без message и без i18n_key → no-op', () => {

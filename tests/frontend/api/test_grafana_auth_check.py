@@ -11,7 +11,7 @@ class TestGrafanaAuthCheck:
         frontend_client.cookies.set("auth_token", auth_token_system)
         response = await frontend_client.get(
             "/frontend/api/auth/grafana-check",
-            headers={"Host": "grafana.humanitec.ru"},
+            headers={"Host": "grafana.linnex.io"},
         )
         assert response.status_code == 200
         assert "X-Auth-User" in response.headers
@@ -24,7 +24,7 @@ class TestGrafanaAuthCheck:
         frontend_client.cookies.set("auth_token", auth_token_company2)
         response = await frontend_client.get(
             "/frontend/api/auth/grafana-check",
-            headers={"Host": "grafana.humanitec.ru"},
+            headers={"Host": "grafana.linnex.io"},
         )
         assert response.status_code == 403
 
@@ -32,6 +32,6 @@ class TestGrafanaAuthCheck:
     async def test_grafana_check_no_token_returns_401(self, frontend_client) -> None:
         response = await frontend_client.get(
             "/frontend/api/auth/grafana-check",
-            headers={"Host": "grafana.humanitec.ru"},
+            headers={"Host": "grafana.linnex.io"},
         )
         assert response.status_code == 401

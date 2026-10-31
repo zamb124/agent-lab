@@ -15,6 +15,7 @@ from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.state_path import assign_state_path
 from apps.flows.src.streaming import InMemoryEmitter
 from core.a2a.codec import get_part_data
+from core.types import JsonObject, JsonValue
 from core.ui_document.document import FlowUIDocument
 from core.ui_document.protocol import (
     CONVERSATION_SLOT_ID,
@@ -26,7 +27,6 @@ from core.ui_document.protocol import (
     FlowUINavigate,
     FlowUIRender,
 )
-from core.types import JsonObject, JsonValue
 
 pytestmark = [pytest.mark.no_test_doubles]
 

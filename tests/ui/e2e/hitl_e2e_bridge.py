@@ -14,6 +14,7 @@ import httpx2
 from playwright.async_api import Locator, Page, expect
 
 from apps.flows.src.services.hitl_demo_queue import EXAMPLE_HITL_SLUG
+from core.types import JsonObject
 from core.ui_document.document import (
     FlowUIActionSpec,
     FlowUIButton,
@@ -22,7 +23,6 @@ from core.ui_document.document import (
     FlowUIPage,
     FlowUITextInput,
 )
-from core.types import JsonObject
 from tests.flows._a2a_v1 import A2A_HEADERS, a2a_send_message
 from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_create_flow,

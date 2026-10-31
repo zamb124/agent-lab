@@ -61,7 +61,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 gap: var(--space-2);
                 min-width: 0;
                 min-height: var(--worktracker-row-min-height);
-                padding: var(--worktracker-row-padding-y, var(--space-3))
+                padding: var(--worktracker-row-padding-y)
                     var(--worktracker-row-padding-x);
                 transition: background 120ms ease;
             }
@@ -78,9 +78,9 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 min-height: auto;
                 box-shadow: var(--glass-shadow-subtle);
                 transition:
-                    background var(--duration-fast, 120ms) ease,
-                    border-color var(--duration-fast, 120ms) ease,
-                    box-shadow var(--duration-fast, 120ms) ease;
+                    background var(--motion-duration-micro) ease,
+                    border-color var(--motion-duration-micro) ease,
+                    box-shadow var(--motion-duration-micro) ease;
             }
             :host([selected]) .shell {
                 background: transparent;
@@ -241,7 +241,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         style.textContent = `
             [data-wt-work-item-card-menu] .menu {
                 position: fixed;
-                z-index: var(--z-popover, 1100);
+                z-index: var(--platform-popover-z-index);
                 min-width: 11rem;
                 padding: var(--space-1);
                 background: var(--glass-solid-strong);
@@ -267,7 +267,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 background: var(--glass-solid-medium);
             }
             [data-wt-work-item-card-menu] .menu-item.danger {
-                color: var(--danger);
+                color: var(--error);
             }
         `;
         const content = document.createElement('div');

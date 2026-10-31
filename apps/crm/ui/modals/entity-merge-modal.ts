@@ -94,14 +94,10 @@ export class CRMEntityMergeModal extends PlatformModal {
                 gap: var(--space-5);
                 padding: var(--space-2) 0;
             }
-            .loading-block {
-                padding: var(--space-6);
-                display: flex;
-                justify-content: center;
-            }
+
             .error-block {
                 padding: var(--space-4);
-                color: var(--color-danger);
+                color: var(--error);
                 text-align: center;
                 font-size: var(--text-sm);
             }
@@ -111,9 +107,9 @@ export class CRMEntityMergeModal extends PlatformModal {
                 gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
                 border-radius: var(--radius-md);
-                background: rgba(220, 38, 38, 0.08);
-                border: 1px solid rgba(220, 38, 38, 0.25);
-                color: var(--color-danger);
+                background: color-mix(in srgb, var(--error) 8%, transparent);
+                border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
+                color: var(--error);
             }
             .warning .text { display: grid; gap: 2px; }
             .warning .title { font-weight: 600; font-size: var(--text-sm); }
@@ -149,7 +145,7 @@ export class CRMEntityMergeModal extends PlatformModal {
                 color: var(--text-tertiary);
             }
             .side.survivor .role { color: var(--accent); }
-            .side.source .role { color: var(--color-danger); }
+            .side.source .role { color: var(--error); }
             .side .name {
                 font-size: var(--text-base);
                 font-weight: 600;
@@ -213,8 +209,8 @@ export class CRMEntityMergeModal extends PlatformModal {
                 border: 1px solid var(--crm-stroke);
             }
             .field-row.conflict {
-                border-color: rgba(234, 179, 8, 0.5);
-                background: rgba(234, 179, 8, 0.06);
+                border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+                background: color-mix(in srgb, var(--warning) 6%, transparent);
             }
             .field-row .label {
                 font-size: var(--text-sm);
@@ -229,8 +225,8 @@ export class CRMEntityMergeModal extends PlatformModal {
                 margin-left: var(--space-1);
                 padding: 1px var(--space-1);
                 font-size: 10px;
-                color: rgb(180, 130, 0);
-                background: rgba(234, 179, 8, 0.18);
+                color: var(--warning);
+                background: color-mix(in srgb, var(--warning) 18%, transparent);
                 border-radius: var(--radius-sm);
             }
             .opt {
@@ -322,7 +318,7 @@ export class CRMEntityMergeModal extends PlatformModal {
             }
             .footer-actions .submit-error {
                 margin-right: auto;
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
                 align-self: center;
             }
@@ -407,7 +403,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         return this._entityById(this.entityIdA) !== null && this._entityById(this.entityIdB) !== null;
     }
 
-    _validateForSubmit(survivor: Record<string, any>, source: Record<string, any>): string | null {
+    _validateForSubmit(survivor: Record<string, unknown>, source: Record<string, unknown>): string | null {
         if (survivor.entity_id === source.entity_id) {
             return this.t('entity_merge_modal.same_id_error');
         }
@@ -502,7 +498,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         return html`<span class="value">${JSON.stringify(value)}</span>`;
     }
 
-    _renderSide(role: 'survivor' | 'source', entity: Record<string, any> | null): TemplateResult {
+    _renderSide(role: 'survivor' | 'source', entity: Record<string, unknown> | null): TemplateResult {
         if (entity === null) {
             return html`
                 <div class="side ${role}">
@@ -540,7 +536,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderScalarRow(field: { key: string; labelKey: string }, survivor: Record<string, any>, source: Record<string, any>): TemplateResult {
+    _renderScalarRow(field: { key: string; labelKey: string }, survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
         const av = survivor[field.key];
         const bv = source[field.key];
         const isConflict = _canonical(av) !== _canonical(bv);
@@ -583,7 +579,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderAttributeRow(key: string, survivor: Record<string, any>, source: Record<string, any>): TemplateResult {
+    _renderAttributeRow(key: string, survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
         const sa = survivor.attributes && typeof survivor.attributes === 'object' ? survivor.attributes : {};
         const sb = source.attributes && typeof source.attributes === 'object' ? source.attributes : {};
         const inA = key in sa;
@@ -641,7 +637,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderTags(survivor: Record<string, any>, source: Record<string, any>): TemplateResult {
+    _renderTags(survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
         const a = Array.isArray(survivor.tags) ? survivor.tags : [];
         const b = Array.isArray(source.tags) ? source.tags : [];
         const merged: string[] = [];
@@ -667,7 +663,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         const sourceEntity = this._entityById(this._sourceId());
 
         if (survivorEntity === null || sourceEntity === null) {
-            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
 
         const sameNamespace = survivorEntity.namespace === sourceEntity.namespace;

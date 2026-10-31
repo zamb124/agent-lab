@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { EventLog } from '@platform/lib/events/log.js';
 
-const sampleEvent = (type) => ({ id: type, type, payload: null, meta: { ts: 0, source: 'local', causation_id: null, correlation_id: null, trace_id: null } });
+import { testEvent as sampleEvent } from '../helpers/bus-fixtures.js';
 
 describe('EventLog', () => {
     it('size инкрементируется на каждый append', () => {
@@ -20,7 +20,7 @@ describe('EventLog', () => {
         const log = new EventLog();
         log.append(sampleEvent('a/b/c'));
         const snap = log.snapshot();
-        snap.push('mutated');
+        Reflect.apply(snap.push, snap, ['mutated']);
         expect(log.snapshot()).toHaveLength(1);
     });
 

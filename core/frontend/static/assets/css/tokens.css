@@ -732,6 +732,15 @@
     --documents-explorer-toolbar-bg: var(--glass-solid-subtle);
     --documents-empty-bg: rgba(255, 255, 255, 0.02);
     --documents-empty-border: rgba(115, 124, 233, 0.35);
+    --documents-action-primary: #6284e8;
+    --documents-action-primary-hover: #5678dc;
+    --documents-action-primary-border: rgba(98, 132, 232, 0.45);
+    --documents-title-gradient: linear-gradient(
+        135deg,
+        rgba(180, 140, 255, 0.95) 0%,
+        rgba(140, 180, 255, 0.95) 50%,
+        rgba(110, 200, 240, 0.95) 100%
+    );
     --documents-explorer-tree-width: 15rem;
     --documents-explorer-details-width: 20rem;
     --documents-explorer-table-row-height: 3.25rem;
@@ -1294,6 +1303,15 @@
 
 /* ========== Палитра сервиса Office / Documents (layout-only, theme-agnostic) ========== */
 :root {
+    --documents-action-primary: #6284e8;
+    --documents-action-primary-hover: #5678dc;
+    --documents-action-primary-border: rgba(98, 132, 232, 0.45);
+    --documents-title-gradient: linear-gradient(
+        135deg,
+        rgba(180, 140, 255, 0.95) 0%,
+        rgba(140, 180, 255, 0.95) 50%,
+        rgba(110, 200, 240, 0.95) 100%
+    );
     --documents-explorer-tree-width: 15rem;
     --documents-explorer-details-width: 20rem;
     --documents-explorer-table-row-height: 3.25rem;
@@ -1306,6 +1324,25 @@
 /* ========== Палитра Landing / Marketing (layout-only, theme-agnostic) ========== */
 :root {
     --marketing-header-height: 4.5rem;
+}
+
+/* ========== Поверхности и слои (theme-agnostic) ========== */
+:root {
+    --platform-popover-z-index: 1100;
+
+    /* Sync call — фиксированная тёмная видео-поверхность вне темы приложения */
+    --sync-call-bg: #0a0a0f;
+    --sync-call-panel: rgba(12, 12, 18, 0.92);
+    --sync-call-panel-strong: rgba(20, 20, 26, 0.96);
+    --sync-call-tile: #000000;
+    --sync-call-tile-alt: #111111;
+    --sync-call-text: #ffffff;
+    --sync-call-text-subtle: rgba(255, 255, 255, 0.65);
+    --sync-call-text-faint: rgba(255, 255, 255, 0.45);
+    --sync-call-surface: rgba(255, 255, 255, 0.08);
+    --sync-call-surface-strong: rgba(255, 255, 255, 0.14);
+    --sync-call-border: rgba(255, 255, 255, 0.12);
+    --sync-call-border-strong: rgba(255, 255, 255, 0.22);
 }
 
 /* ========== УТИЛИТЫ ========== */

@@ -58,7 +58,7 @@ function flowIdentityImageUrl(flowIdentity: Record<string, unknown> | null | und
 
 export function resolveAgentIdentityImageSrc({ document = null, flowIdentity = null, imageUrl = null, platformUiOrigin = '' }: {
     document?: { pages?: unknown } | null;
-    flowIdentity?: Record<string, unknown> | null;
+    flowIdentity?: Record<string, unknown> | null | undefined;
     imageUrl?: string | null;
     platformUiOrigin?: string;
 } = {}): string {

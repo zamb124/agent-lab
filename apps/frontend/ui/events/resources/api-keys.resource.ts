@@ -15,8 +15,42 @@
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 
-export const apiKeysResource = createResourceCollection({
+/**
+ * View-форма ключа для UI: wire `ApiKeyRecord` несёт служебные поля
+ * (company_id, key_hash, created_by) — на клиент уходит только безопасная часть.
+ */
+interface ApiKeyListItem extends ResourceItem {
+    key_id: string;
+    name: string;
+    scopes: unknown[];
+    key_prefix: string;
+    created_at: string;
+    last_used: string | null;
+}
+
+interface ApiKeysSlice extends ResourceCollectionSlice<ApiKeyListItem> {
+    lastSecret: { key_id: string; secret: string } | null;
+}
+
+function mapApiKeyItem(raw: ResourceItem): ApiKeyListItem {
+    if (typeof raw.key_id !== 'string') {
+        throw new Error('frontend/api_keys.mapItem: key_id required');
+    }
+    return {
+        key_id: raw.key_id,
+        name: typeof raw.name === 'string' ? raw.name : '',
+        scopes: Array.isArray(raw.scopes) ? raw.scopes : [],
+        key_prefix: typeof raw.key_prefix === 'string' && raw.key_prefix.length > 0
+            ? raw.key_prefix
+            : (typeof raw.secret === 'string' ? raw.secret.slice(0, 12) : ''),
+        created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString(),
+        last_used: typeof raw.last_used === 'string' ? raw.last_used : null,
+    };
+}
+
+export const apiKeysResource = createResourceCollection<ApiKeyListItem, ApiKeysSlice, { dismissSecret: 'secret_dismissed' }>({
     name: 'frontend/api_keys',
     baseUrl: '/frontend/api/api-keys',
     idField: 'key_id',
@@ -30,28 +64,14 @@ export const apiKeysResource = createResourceCollection({
         update: 'frontend:api_keys_page.toast_renamed',
         remove: 'frontend:api_keys_page.toast_revoked',
     },
-    mapItem: (raw) => {
-        if (typeof raw.key_id !== 'string') {
-            throw new Error('frontend/api_keys.mapItem: key_id required');
-        }
-        return {
-            key_id: raw.key_id,
-            name: typeof raw.name === 'string' ? raw.name : '',
-            scopes: Array.isArray(raw.scopes) ? raw.scopes : [],
-            key_prefix: typeof raw.key_prefix === 'string' && raw.key_prefix.length > 0
-                ? raw.key_prefix
-                : (typeof raw.secret === 'string' ? raw.secret.slice(0, 12) : ''),
-            created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString(),
-            last_used: typeof raw.last_used === 'string' ? raw.last_used : null,
-        };
-    },
+    mapItem: mapApiKeyItem,
     extraInitial: { lastSecret: null },
     actions: { dismissSecret: 'secret_dismissed' },
     extraReducer: (state, event, events) => {
         if (event.type === events.CREATED) {
             const payload = event.payload;
             const item = isPlainRecord(payload) ? payload.item : null;
-            if (isPlainRecord(item) && item.secret) {
+            if (isPlainRecord(item) && typeof item.key_id === 'string' && typeof item.secret === 'string') {
                 return { ...state, lastSecret: { key_id: item.key_id, secret: item.secret } };
             }
             return state;

@@ -20,8 +20,8 @@ from apps.stock.models import StockLocationUsage
 from core.di import require_di
 
 API_PREFIX = "/stock/api/v1"
-_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
-_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+_PLATFORM_ASGI_BASE_URL = "http://linnex.io"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "linnex.io"}
 
 
 @pytest_asyncio.fixture

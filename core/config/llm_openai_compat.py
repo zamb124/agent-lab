@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_PROVIDER,
     LLM_PROVIDER_DEFAULT_BASE_URLS,
     OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
@@ -113,7 +113,7 @@ def _active_llm_provider_block(
     llm: LLMConfig,
 ) -> tuple[str, _LLMProviderConfig | None]:
     p = (llm.provider or "").strip().lower()
-    if p == HUMANITEC_LLM_PROVIDER:
+    if p == LINNEX_LLM_PROVIDER:
         raise ValueError(
             f"llm.provider={p!r} is not supported for the OpenAI-compatible API."
         )

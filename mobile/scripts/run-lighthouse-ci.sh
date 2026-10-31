@@ -11,8 +11,8 @@ if [[ -z "${PWA_LIGHTHOUSE_URL:-}" ]]; then
   fi
 fi
 if [[ -z "${PWA_LIGHTHOUSE_URL:-}" ]]; then
-  echo "Задайте PWA_LIGHTHOUSE_URL (например https://humanitec.ru/) или добавьте в mobile/.env" >&2
+  echo "Задайте PWA_LIGHTHOUSE_URL (например https://linnex.io/) или добавьте в mobile/.env" >&2
   exit 1
 fi
 export PWA_LIGHTHOUSE_URL
-exec npx --no-install lhci autorun --config="$ROOT/lighthouserc.cjs"
+exec npx --no-install lhci autorun --config="$ROOT/lighthouserc.json" --collect.url="$PWA_LIGHTHOUSE_URL"

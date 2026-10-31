@@ -82,7 +82,7 @@ export class PlatformMetricCard extends PlatformElement {
                 background: var(--accent);
                 opacity: 0;
                 transform: scale(0.8);
-                transition: opacity var(--duration-fast) var(--easing-default);
+                transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
             .refresh-indicator.active {
                 opacity: 1;

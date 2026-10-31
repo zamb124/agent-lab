@@ -210,7 +210,7 @@ export class WikiSidebar extends PlatformElement {
 
             .section-toggle platform-icon {
                 flex-shrink: 0;
-                transition: transform var(--motion-duration-fast, 120ms) ease;
+                transition: transform var(--motion-duration-micro) ease;
             }
 
             .section-toggle[aria-expanded='false'] platform-icon {

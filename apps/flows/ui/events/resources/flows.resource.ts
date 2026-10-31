@@ -6,12 +6,8 @@
  */
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
-
-function flowIdOf(payload: unknown): string {
-    if (!isPlainRecord(payload) || typeof payload.flow_id !== 'string') return '';
-    return payload.flow_id;
-}
+import { isPlatformEventType } from '@platform/lib/events/payload.js';
+import type { FlowResponse } from '@platform/lib/events/wire/flows.gen.js';
 
 export const flowsResource = createResourceCollection({
     name: 'flows/flows',
@@ -27,7 +23,7 @@ export const flowsResource = createResourceCollection({
         remove_error: 'flows:toast.flow_remove_error',
     },
     listQuery: (payload) => {
-        const query: any = {};
+        const query: Record<string, unknown> = {};
         if (payload && typeof payload === 'object') {
             if (typeof payload.limit === 'number') query.limit = payload.limit;
             if (typeof payload.offset === 'number') query.offset = payload.offset;
@@ -35,64 +31,49 @@ export const flowsResource = createResourceCollection({
         return query;
     },
     extraReducer: (state, event) => {
-        if (event.type === 'flows/flow/deleted') {
-            const flowId = flowIdOf(event.payload);
-            if (flowId.length === 0) {
-                return state;
-            }
-            const items = state.items.filter((item) => item && item.flow_id !== flowId);
+        if (isPlatformEventType(event, 'flows/flow/deleted')) {
+            const flowId = event.payload.flow_id;
+            const items = state.items.filter((item) => item.flow_id !== flowId);
             const byId = { ...state.byId };
             delete byId[flowId];
             return { ...state, items, byId };
         }
-        if (event.type === 'flows/flow/updated') {
-            const payload = isPlainRecord(event.payload) ? event.payload : null;
-            if (payload === null || typeof payload.flow_id !== 'string') {
+        if (isPlatformEventType(event, 'flows/flow/updated')) {
+            const payload = event.payload;
+            const existing = state.byId[payload.flow_id];
+            if (existing === undefined) {
                 return state;
             }
-            const flowId = payload.flow_id;
-            const existing = state.byId[flowId];
-            if (!existing || typeof existing !== 'object') {
-                return state;
-            }
-            const version = typeof payload.version === 'string' ? payload.version : existing.version;
-            const patched = { ...existing, version };
-            const idx = state.items.findIndex((x) => x && x.flow_id === flowId);
+            const patched: FlowResponse = { ...existing, version: payload.version ?? existing.version };
+            const idx = state.items.findIndex((x) => x.flow_id === payload.flow_id);
             const items = idx === -1
                 ? state.items
                 : state.items.map((x, i) => (i === idx ? patched : x));
             return {
                 ...state,
                 items,
-                byId: { ...state.byId, [flowId]: patched },
+                byId: { ...state.byId, [payload.flow_id]: patched },
             };
         }
         return state;
     },
     extraEffect: async (event, ctx, events) => {
-        const refreshTypes = new Set([
-            'flows/flow/updated',
-            'flows/branch/created',
-            'flows/branch/updated',
-            'flows/branch/deleted',
-        ]);
-        if (refreshTypes.has(event.type)) {
-            const flowId = flowIdOf(event.payload);
-            if (flowId.length === 0) {
-                return true;
-            }
+        if (isPlatformEventType(event, 'flows/flow/updated')
+            || isPlatformEventType(event, 'flows/branch/created')
+            || isPlatformEventType(event, 'flows/branch/updated')
+            || isPlatformEventType(event, 'flows/branch/deleted')) {
             const itemRequested = events.ITEM_REQUESTED;
             if (itemRequested === undefined) {
                 throw new Error('flows resource: ITEM_REQUESTED event missing');
             }
             ctx.dispatch(
                 itemRequested,
-                { flow_id: flowId },
+                { flow_id: event.payload.flow_id },
                 { causation_id: event.id, source: 'ws' },
             );
             return true;
         }
-        if (event.type === 'flows/flow/deleted') {
+        if (isPlatformEventType(event, 'flows/flow/deleted')) {
             const listRequested = events.LIST_REQUESTED;
             if (listRequested === undefined) {
                 throw new Error('flows resource: LIST_REQUESTED event missing');
@@ -128,15 +109,10 @@ export const flowReloadFromBundleOp = createAsyncOp({
     wsTimeoutMs: 30_000,
     commandType: 'flows/flows/reload_from_bundle_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/flows/{flow_id}/reload-from-bundle' },
-    onSuccess: (ctx, _result, event) => {
-        const payload = isPlainRecord(event.payload) ? event.payload : null;
-        const id = payload === null ? undefined : payload.flow_id;
-        if (typeof id !== 'string' || id.length === 0) {
-            throw new Error('flowReloadFromBundleOp.onSuccess: payload.flow_id required');
-        }
+    onSuccess: (ctx, result, event) => {
         ctx.dispatch(
             flowsResource.events.ITEM_REQUESTED,
-            { flow_id: id },
+            { flow_id: result.flow_id },
             { causation_id: event.id, source: 'local' },
         );
     },

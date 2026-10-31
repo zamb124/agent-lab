@@ -28,7 +28,7 @@ export const accessRequestsResource = createResourceCollection({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     listQuery: (payload) => {
-        const query: Record<string, any> = { limit: 100, offset: 0 };
+        const query: Record<string, unknown> = { limit: 100, offset: 0 };
         if (payload && typeof payload === 'object') {
             if (typeof payload.status === 'string' && payload.status.length > 0) {
                 query.status = payload.status;

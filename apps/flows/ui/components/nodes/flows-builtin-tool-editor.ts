@@ -27,12 +27,12 @@ export class FlowsBuiltinToolEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
     declare flowNodeType: string;
-    declare flowVariables: Record<string, any> | null;
+    declare flowVariables: Record<string, unknown> | null;
     declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 

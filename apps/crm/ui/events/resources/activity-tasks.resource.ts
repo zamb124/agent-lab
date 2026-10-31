@@ -53,7 +53,7 @@ export const activityTaskCreateForm = createForm({
         if (typeof draft.priority !== 'string' || draft.priority.length === 0) {
             throw new Error('activityTaskCreateForm: priority required');
         }
-        const payload: Record<string, any> = {
+        const payload: Record<string, unknown> = {
             title: draft.title.trim(),
             namespace: draft.namespace,
             priority: draft.priority,

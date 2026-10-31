@@ -202,7 +202,7 @@ export class CRMAccessRequestModal extends PlatformModal {
             }
             .footer-actions .submit-error {
                 margin-right: auto;
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
                 align-self: center;
             }
@@ -352,7 +352,7 @@ export class CRMAccessRequestModal extends PlatformModal {
         `;
     }
 
-    _renderEntityHead(entity: Record<string, any> | null): TemplateResult {
+    _renderEntityHead(entity: Record<string, unknown> | null): TemplateResult {
         if (entity === null) {
             return html`
                 <div class="entity-head">

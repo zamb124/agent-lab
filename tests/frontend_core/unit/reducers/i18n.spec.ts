@@ -3,7 +3,7 @@ import { i18nReducer, initialI18nState, I18N_NAMESPACE_SET_REQUESTED } from '@pl
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { resolveInitialUiLocale } from '@platform/lib/utils/i18n-initial-locale.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('i18nReducer', () => {
     it('initial: locale из resolveInitialUiLocale, default ns null', () => {

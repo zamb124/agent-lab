@@ -57,8 +57,8 @@ export class FlowsPropertyPanel extends PlatformElement {
             .inherited-banner {
                 margin: var(--space-3);
                 padding: var(--space-2) var(--space-3);
-                background: var(--accent-subtle, var(--info-bg));
-                border: 1px dashed var(--accent, var(--info));
+                background: var(--accent-subtle);
+                border: 1px dashed var(--accent);
                 border-radius: var(--radius-sm);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
@@ -68,7 +68,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                 align-items: flex-start;
             }
             .inherited-banner .badge {
-                color: var(--accent, var(--info));
+                color: var(--accent);
                 font-weight: var(--font-semibold);
             }
         `,

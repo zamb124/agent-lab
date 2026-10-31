@@ -18,8 +18,8 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
         onNew: { type: Object, attribute: false },
         onChooseTemplates: { type: Object, attribute: false },
     }
-    declare onNew: Record<string, any> | null;
-    declare onChooseTemplates: Record<string, any> | null;
+    declare onNew: Record<string, unknown> | null;
+    declare onChooseTemplates: Record<string, unknown> | null;
 ;
 
     static override styles: CSSResultGroup = [

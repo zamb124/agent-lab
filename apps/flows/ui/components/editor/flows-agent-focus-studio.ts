@@ -66,7 +66,7 @@ export class FlowsAgentFocusStudio extends PlatformElement {
                     ),
                     radial-gradient(
                         90% 70% at 88% 110%,
-                        color-mix(in srgb, var(--accent-secondary, var(--info)) 10%, transparent) 0%,
+                        color-mix(in srgb, var(--accent-secondary) 10%, transparent) 0%,
                         transparent 50%
                     ),
                     var(--bg-elevated);
@@ -85,7 +85,7 @@ export class FlowsAgentFocusStudio extends PlatformElement {
                 border-bottom: 1px solid var(--border-subtle);
                 background: color-mix(in srgb, var(--glass-solid-medium) 88%, transparent);
                 backdrop-filter: blur(12px);
-                min-height: var(--flows-chrome-row-min-height, 52px);
+                min-height: var(--flows-chrome-row-min-height);
             }
 
             .studio-identity {

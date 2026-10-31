@@ -5,8 +5,9 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { OfficeCatalogItemsResponse } from '../wire/office.gen.js';
 
-export const catalogItemsOp = createAsyncOp({
+export const catalogItemsOp = createAsyncOp<OfficeCatalogItemsResponse>({
     name: 'office/catalog_items',
     silent: true,
     transport: 'ws',

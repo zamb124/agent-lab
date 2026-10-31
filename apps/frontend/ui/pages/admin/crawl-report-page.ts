@@ -32,6 +32,7 @@ import '../../components/crawl-report/crawl-report-running-banner.js';
 import '../../components/crawl-report/crawl-report-charts-panel.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
@@ -363,11 +364,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 color: var(--text-tertiary);
                 margin-bottom: var(--space-3);
             }
-            .table-loading {
-                padding: var(--space-6);
-                display: flex;
-                justify-content: center;
-            }
+
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -966,7 +963,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _renderTableLoading() {
-        return html`<div class="table-loading"><platform-spinner size="sm"></platform-spinner></div>`;
+        return html`<platform-empty-state loading></platform-empty-state>`;
     }
 
     _renderTableShell(refreshing: boolean, content: unknown) {

@@ -17,7 +17,7 @@ export class PlatformFormModal extends PlatformModal {
         css`
             .form-actions {
                 display: flex;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 justify-content: flex-end;
                 width: 100%;
             }

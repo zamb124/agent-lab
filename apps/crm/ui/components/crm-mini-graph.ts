@@ -42,6 +42,7 @@ import type {
 } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 const API_MAX_DEPTH = 5;
 const MINI_NODE_REL_SIZE = 4;
 
@@ -55,9 +56,9 @@ interface GraphSceneNode extends Record<string, unknown> {
     x?: number;
     y?: number;
     z?: number;
-    fx?: number;
-    fy?: number;
-    fz?: number;
+    fx?: number | undefined;
+    fy?: number | undefined;
+    fz?: number | undefined;
 }
 
 interface GraphSceneLink {
@@ -326,7 +327,7 @@ export class CRMMiniGraph extends PlatformElement {
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-full);
                 background: var(--glass-solid-medium);
-                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+                box-shadow: 0 2px 10px color-mix(in srgb, var(--text-primary) 10%, transparent);
                 flex-wrap: wrap;
                 max-width: 100%;
                 justify-content: flex-start;
@@ -366,7 +367,7 @@ export class CRMMiniGraph extends PlatformElement {
                 border-radius: var(--radius-full);
                 border: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-medium);
-                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+                box-shadow: 0 2px 10px color-mix(in srgb, var(--text-primary) 10%, transparent);
                 flex-shrink: 0;
             }
 
@@ -405,7 +406,7 @@ export class CRMMiniGraph extends PlatformElement {
                 padding: 4px 10px;
                 gap: 4px;
                 font-size: 10px;
-                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+                box-shadow: 0 2px 10px color-mix(in srgb, var(--text-primary) 10%, transparent);
             }
 
             .mini-open-full--embed platform-icon {
@@ -518,16 +519,16 @@ export class CRMMiniGraph extends PlatformElement {
 
     _resolveNodeColor(node: Record<string, unknown>): string {
         if (node.access === false) {
-            return '#7f7f8f';
+            return cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
         }
         const entityType = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
         if (!entityType) {
-            return '#bca8ff';
+            return cssVar('--accent-tertiary', '#8b5cf6');
         }
         const types = this._entityTypes.items;
         const match = types.find((t) => t.type_id === entityType);
         if (!match || typeof match.color !== 'string' || !match.color.trim()) {
-            return '#bca8ff';
+            return cssVar('--accent-tertiary', '#8b5cf6');
         }
         return match.color.trim();
     }
@@ -861,17 +862,14 @@ export class CRMMiniGraph extends PlatformElement {
         if (!wrap || !container) {
             throw new Error('Mini graph canvas container not found');
         }
-        const canvasBg = getComputedStyle(document.documentElement)
-            .getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
-        const labelColor = getComputedStyle(document.documentElement)
-            .getPropertyValue('--text-primary').trim() || '#f0f4ff';
-        const linkLabelColor = getComputedStyle(document.documentElement)
-            .getPropertyValue('--text-secondary').trim() || '#d4dae8';
+        const canvasBg = cssVar('--bg-secondary', '#1a1a2e');
+        const labelColor = cssVar('--text-primary', '#f0f4ff');
+        const linkLabelColor = cssVar('--text-secondary', '#d4dae8');
 
         const { nodes: sceneNodes, links: sceneLinks } = this._buildSceneData(this._displayDepth);
 
-        const linkBaseColor = '#9ba3bf';
-        const linkDirectedColor = '#41d36d';
+        const linkBaseColor = cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
+        const linkDirectedColor = cssVar('--success', '#10b981');
 
         this._graphInstance = factory()(container)
             .backgroundColor(canvasBg)
@@ -890,8 +888,7 @@ export class CRMMiniGraph extends PlatformElement {
             })
             .nodeLabel(() => '')
             .nodeThreeObject((node: GraphSceneNode) => {
-                const subtitleColor = getComputedStyle(document.documentElement)
-                    .getPropertyValue('--text-secondary').trim() || '#d4dae8';
+                const subtitleColor = cssVar('--text-secondary', '#d4dae8');
                 return createMatteSphereNodeGroup(node, {
                     nodeRelSize: MINI_NODE_REL_SIZE,
                     labelColor,
@@ -1298,7 +1295,7 @@ export class CRMMiniGraph extends PlatformElement {
                                       .entityTypeColors=${colorsPlain}
                                       .entityTypeIcons=${iconsPlain}
                                       .relationshipTypeLabels=${relLabelsPlain}
-                                      defaultAccent="#6366f1"
+                                      defaultAccent=${cssVar('--accent', '#99A6F9')}
                                       .fitNonce=${this._fitNonce}
                                       .compactZoom=${this._compactZoom}
                                       @node-dblclick=${this._onMindmapNodeDblClick}

@@ -8,6 +8,7 @@ import {
     SAMPLE_DATAFLOW_NODES,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/modals/flows-variable-mapping-modal.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 describe('flows-variable-mapping-modal', () => {
     beforeEach(() => resetPlatformState());
@@ -17,7 +18,7 @@ describe('flows-variable-mapping-modal', () => {
         const { bus } = bootstrapFlowsEditor();
         seedEditorDataflow(bus);
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-variable-mapping-modal
                 .open=${true}
                 .fromNodeId=${'code_1'}
@@ -31,17 +32,17 @@ describe('flows-variable-mapping-modal', () => {
         `);
         await elementUpdated(el);
 
-        const summary = el.shadowRoot.querySelector('.summary');
+        const summary = qs(shadow(el), '.summary');
         expect(summary.textContent).to.include('Code');
         expect(summary.textContent).to.include('topic');
         expect(summary.textContent).to.include('LLM');
-        const suggestions = el.shadowRoot.querySelectorAll('.suggestion');
+        const suggestions = qsa(shadow(el), '.suggestion');
         expect(suggestions.length).to.be.greaterThan(0);
     });
 
     it('shows edge note when pathExists is false', async () => {
         bootstrapFlowsEditor();
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-variable-mapping-modal
                 .open=${true}
                 .fromNodeId=${'code_1'}
@@ -51,7 +52,7 @@ describe('flows-variable-mapping-modal', () => {
             ></flows-variable-mapping-modal>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.edge-note')).to.not.equal(null);
+        expect(q(shadow(el), '.edge-note')).to.not.equal(null);
     });
 
     it('confirm writes input_mapping and optional edge', async () => {
@@ -70,7 +71,7 @@ describe('flows-variable-mapping-modal', () => {
             },
         });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-variable-mapping-modal
                 .open=${true}
                 .fromNodeId=${'code_1'}
@@ -86,9 +87,9 @@ describe('flows-variable-mapping-modal', () => {
         el._confirm();
         await elementUpdated(el);
 
-        const branchData = getState().flowsEditor.branchData;
+        const branchData = getState().flowsEditor.branchData as { nodes: Record<string, any>; edges: Array<{ from_node: string; to_node: string }> };
         expect(branchData.nodes.orphan.input_mapping.topic).to.equal('@state:topic');
-        expect(branchData.edges.some((e) => e.from_node === 'code_1' && e.to_node === 'orphan')).to.equal(true);
+        expect(branchData.edges.some((e: any) => e.from_node === 'code_1' && e.to_node === 'orphan')).to.equal(true);
         expect(getState().flowsEditor.isDirty).to.equal(true);
     });
 });

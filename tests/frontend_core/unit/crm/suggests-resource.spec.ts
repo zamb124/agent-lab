@@ -5,6 +5,8 @@ import {
     suggestDismissOp,
 } from '../../../../apps/crm/ui/events/resources/suggests.resource.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
+import { testEvent } from '../../helpers/bus-fixtures.js';
+import { prop } from '../../helpers/prop.js';
 
 beforeEach(() => {
     resetFactories();
@@ -14,18 +16,33 @@ afterEach(() => {
     resetFactories();
 });
 
-function listedState(items, total) {
-    return suggestsListOp.reducer(suggestsListOp.slice.initial, {
-        type: suggestsListOp.events.SUCCEEDED,
-        payload: {
-            result: {
-                items,
-                total,
-                limit: 50,
-                offset: 0,
-            },
+interface SuggestRow extends Record<string, unknown> { suggest_id: string; status: string }
+
+interface SuggestListResult {
+    items: SuggestRow[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+function isSuggestListResult(v: unknown): v is SuggestListResult {
+    return typeof v === 'object' && v !== null && 'items' in v && 'total' in v;
+}
+
+function lastResult(state: { lastResult: unknown }): SuggestListResult {
+    if (!isSuggestListResult(state.lastResult)) throw new Error('lastResult expected');
+    return state.lastResult;
+}
+
+function listedState(items: SuggestRow[], total: number) {
+    return suggestsListOp.reducer(suggestsListOp.slice.initial, testEvent(suggestsListOp.events.SUCCEEDED, {
+        result: {
+            items,
+            total,
+            limit: 50,
+            offset: 0,
         },
-    });
+    }));
 }
 
 describe('crm/suggests resource ops', () => {
@@ -60,21 +77,15 @@ describe('crm/suggests resource ops', () => {
             ],
             2,
         );
-        expect(listed.lastResult.items.map((row) => row.suggest_id)).toEqual(['sug_1', 'sug_2']);
+        expect(lastResult(listed).items.map((row) => row.suggest_id)).toEqual(['sug_1', 'sug_2']);
 
-        const afterResolve = suggestsListOp.reducer(listed, {
-            type: suggestResolveOp.events.SUCCEEDED,
-            payload: { result: { suggest_id: 'sug_1', status: 'resolved' } },
-        });
-        expect(afterResolve.lastResult.items.map((row) => row.suggest_id)).toEqual(['sug_2']);
-        expect(afterResolve.lastResult.total).toBe(1);
+        const afterResolve = suggestsListOp.reducer(listed, testEvent(suggestResolveOp.events.SUCCEEDED, { result: { suggest_id: 'sug_1', status: 'resolved' } }));
+        expect(lastResult(afterResolve).items.map((row) => row.suggest_id)).toEqual(['sug_2']);
+        expect(lastResult(afterResolve).total).toBe(1);
 
-        const afterDismiss = suggestsListOp.reducer(afterResolve, {
-            type: suggestDismissOp.events.SUCCEEDED,
-            payload: { result: { suggest_id: 'sug_2', status: 'dismissed' } },
-        });
-        expect(afterDismiss.lastResult.items).toEqual([]);
-        expect(afterDismiss.lastResult.total).toBe(0);
+        const afterDismiss = suggestsListOp.reducer(afterResolve, testEvent(suggestDismissOp.events.SUCCEEDED, { result: { suggest_id: 'sug_2', status: 'dismissed' } }));
+        expect(lastResult(afterDismiss).items).toEqual([]);
+        expect(lastResult(afterDismiss).total).toBe(0);
     });
 
     it('extraReducer не трогает lastResult без matching suggest_id', () => {
@@ -82,10 +93,7 @@ describe('crm/suggests resource ops', () => {
             [{ suggest_id: 'sug_1', status: 'pending' }],
             1,
         );
-        const next = suggestsListOp.reducer(listed, {
-            type: suggestResolveOp.events.SUCCEEDED,
-            payload: { result: { suggest_id: 'sug_missing', status: 'resolved' } },
-        });
+        const next = suggestsListOp.reducer(listed, testEvent(suggestResolveOp.events.SUCCEEDED, { result: { suggest_id: 'sug_missing', status: 'resolved' } }));
         expect(next).toBe(listed);
     });
 });

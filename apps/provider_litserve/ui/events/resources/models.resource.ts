@@ -1,5 +1,5 @@
 /**
- * Ресурс Humanitec Models: реестр моделей.
+ * Ресурс Linnex Models: реестр моделей.
  *
  * CRUD по `/litserve/api/models` + отдельная операция retry для повторного
  * скачивания весов. Модель содержит поля model_id, kind, hf_model_id,
@@ -14,10 +14,10 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function _normalizeModel(raw: ResourceItem): ResourceItem {
     if (!raw || typeof raw !== 'object') {
-        throw new Error('humanitec_models/models: model item must be object');
+        throw new Error('linnex_models/models: model item must be object');
     }
     if (typeof raw.model_id !== 'string' || raw.model_id.length === 0) {
-        throw new Error('humanitec_models/models: model_id required');
+        throw new Error('linnex_models/models: model_id required');
     }
     return {
         model_id: raw.model_id,
@@ -31,8 +31,8 @@ function _normalizeModel(raw: ResourceItem): ResourceItem {
     };
 }
 
-export const humanitecModelsResource = createResourceCollection({
-    name: 'humanitec_models/models',
+export const linnexModelsResource = createResourceCollection({
+    name: 'linnex_models/models',
     baseUrl: '/litserve/api/models',
     idField: 'model_id',
     operations: ['list', 'create', 'remove'],
@@ -45,18 +45,18 @@ export const humanitecModelsResource = createResourceCollection({
     mapItem: _normalizeModel,
 });
 
-export const humanitecModelRetryOp = createAsyncOp({
-    name: 'humanitec_models/model_retry',
+export const linnexModelRetryOp = createAsyncOp({
+    name: 'linnex_models/model_retry',
     successToastKey: 'litserve:toast.model_retry_started',
     errorToastKey: 'litserve:toast.model_retry_error',
     restMirror: { method: 'POST', path: '/litserve/api/models/:model_id/retry' },
     request: async ({ payload }) => {
         if (!isPlainRecord(payload)) {
-            throw new Error('humanitec_models/model_retry: payload.model_id required');
+            throw new Error('linnex_models/model_retry: payload.model_id required');
         }
         const modelId = payload.model_id;
         if (typeof modelId !== 'string' || modelId.length === 0) {
-            throw new Error('humanitec_models/model_retry: payload.model_id required');
+            throw new Error('linnex_models/model_retry: payload.model_id required');
         }
         return httpRequest({
             method: 'POST',
@@ -64,13 +64,13 @@ export const humanitecModelRetryOp = createAsyncOp({
         });
     },
     onSuccess: (ctx, _result, event) => {
-        ctx.dispatch(humanitecModelsResource.events.LIST_REQUESTED, null, { causation_id: event.id });
+        ctx.dispatch(linnexModelsResource.events.LIST_REQUESTED, null, { causation_id: event.id });
     },
 });
 
 declare module '@platform/lib/events/factory-registry.js' {
     interface PlatformFactoryRegistry {
-        'humanitec_models/models': typeof humanitecModelsResource;
-        'humanitec_models/model_retry': typeof humanitecModelRetryOp;
+        'linnex_models/models': typeof linnexModelsResource;
+        'linnex_models/model_retry': typeof linnexModelRetryOp;
     }
 }

@@ -63,7 +63,8 @@ import {
     SliceController,
     bindActions,
 } from '../base/use-resource.js';
-import type { OpControllerOf, ResourceControllerOf, SliceControllerOf } from '../base/use-resource.js';
+import type { CursorListItemOf, OpControllerOf, ResourceControllerOf, SliceControllerOf } from '../base/use-resource.js';
+import type { CursorListFactory } from '../events/factories/cursor-list.js';
 import { PLATFORM_MOBILE_VIEWPORT_CONTENT } from '../utils/platform-viewport-meta.js';
 import { isStandaloneOrNativeAppShell } from '../utils/native-app-shell.js';
 import type { EventMetaInput, PlatformEvent } from '../events/contract.js';
@@ -205,8 +206,9 @@ export class PlatformElement extends LitElement {
         return new FormController(this, getFactory(name, 'form'));
     }
 
-    useCursorList<N extends FactoryNameOfKind<'cursor-list'>>(name: N, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }): CursorListController {
-        return new CursorListController(this, getFactory(name, 'cursor-list'), opts);
+    useCursorList<N extends FactoryNameOfKind<'cursor-list'>>(name: N, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }): CursorListController<CursorListItemOf<PlatformFactoryRegistry[N]>> {
+        const factory = getFactory(name, 'cursor-list') as CursorListFactory<CursorListItemOf<PlatformFactoryRegistry[N]>>;
+        return new CursorListController(this, factory, opts);
     }
 
     useFacets<N extends FactoryNameOfKind<'facets'>>(name: N): FacetsController {
@@ -479,7 +481,7 @@ export class PlatformElement extends LitElement {
      * @param {string} provider — yandex | google | github | apple
      * @param {{ returnPath?: string, plan?: string } | undefined} options
      */
-    startOAuth(provider: string, options?: { returnPath?: string; plan?: string }): void {
+    startOAuth(provider: string, options?: { returnPath?: string | undefined; plan?: string | undefined }): void {
         if (typeof provider !== 'string' || provider.length === 0) {
             throw new Error('PlatformElement.startOAuth: provider required (non-empty string)');
         }

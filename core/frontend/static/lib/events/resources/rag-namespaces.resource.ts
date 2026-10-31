@@ -18,10 +18,11 @@ import {
     createResourceCollection,
     createForm,
 } from '@platform/lib/events/index.js';
+import type { Namespace } from '../wire/rag.gen.js';
 
 const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,62}[a-z0-9]$|^[a-z]$/;
 
-export const namespacesResource = createResourceCollection({
+export const namespacesResource = createResourceCollection<Namespace>({
     name: 'rag/namespaces',
     baseUrl: '/rag/api/v1/namespaces',
     idField: 'name',

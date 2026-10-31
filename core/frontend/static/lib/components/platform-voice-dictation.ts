@@ -59,11 +59,11 @@ export class PlatformVoiceDictation extends PlatformElement {
                 height: 32px;
                 padding: 0;
                 border: none;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: transparent;
-                color: var(--text-secondary, #6b7280);
+                color: var(--text-secondary);
                 cursor: pointer;
-                transition: var(--motion-transition-interactive, background 0.15s ease, color 0.15s ease);
+                transition: var(--motion-transition-interactive);
             }
 
             :host([density='dense']) button {
@@ -72,8 +72,8 @@ export class PlatformVoiceDictation extends PlatformElement {
             }
 
             button:hover:not(:disabled) {
-                background: var(--bg-hover, rgba(0, 0, 0, 0.06));
-                color: var(--text-primary, #111827);
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
             }
 
             button:disabled {
@@ -82,7 +82,7 @@ export class PlatformVoiceDictation extends PlatformElement {
             }
 
             button.recording {
-                background: var(--accent-secondary, #ef4444);
+                background: var(--accent-secondary);
                 color: #ffffff;
             }
 

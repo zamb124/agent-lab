@@ -50,12 +50,12 @@ async function _readJsonOrThrow(response: Response, context: string): Promise<Re
  * }} [opts]
  */
 export interface PlatformFileFetchOpts {
-    fetchImpl?: typeof fetch;
-    credentials?: RequestCredentials;
-    headers?: Record<string, string>;
-    filesApiBase?: string;
-    routeSegment?: string;
-    pathname?: string;
+    fetchImpl?: typeof fetch | undefined;
+    credentials?: RequestCredentials | undefined;
+    headers?: Record<string, string> | undefined;
+    filesApiBase?: string | undefined;
+    routeSegment?: string | undefined;
+    pathname?: string | undefined;
 }
 
 export async function fetchPlatformFilesUploadConfig(opts: PlatformFileFetchOpts = {}): Promise<Record<string, unknown>> {
@@ -93,7 +93,7 @@ interface UploadChunkedOpts {
     headers: Record<string, string>;
     chunkSizeBytes: number;
     filesApiBase: string;
-    onProgress?: (p: { loaded: number; total: number }) => void;
+    onProgress?: ((p: { loaded: number; total: number }) => void) | undefined;
 }
 
 async function _uploadChunked(file: File, specJson: string, opts: UploadChunkedOpts): Promise<Record<string, unknown>> {
@@ -190,9 +190,9 @@ async function _uploadChunked(file: File, specJson: string, opts: UploadChunkedO
 export interface UploadPlatformFileInput extends PlatformFileFetchOpts {
     file: File;
     spec: string;
-    onProgress?: (p: { loaded: number; total: number }) => void;
-    chunkSizeBytes?: number;
-    maxUploadBytes?: number;
+    onProgress?: ((p: { loaded: number; total: number }) => void) | undefined;
+    chunkSizeBytes?: number | undefined;
+    maxUploadBytes?: number | undefined;
 }
 
 export async function uploadPlatformFile(input: UploadPlatformFileInput): Promise<Record<string, unknown>> {

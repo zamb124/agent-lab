@@ -88,7 +88,7 @@ export class FrontendTeamPage extends PlatformPage {
                 font-weight: var(--font-medium);
                 cursor: pointer;
                 white-space: nowrap;
-                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro), border-color var(--motion-duration-micro);
             }
             .filter-tag:hover {
                 background: var(--glass-solid-medium);

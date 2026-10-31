@@ -111,16 +111,16 @@ export class CRMGraphTimeline extends PlatformElement {
                 width: 16px;
                 height: 16px;
                 border-radius: 50%;
-                background: #7fd6ff;
+                background: var(--info);
                 cursor: pointer;
-                border: 2px solid rgba(255, 255, 255, 0.6);
+                border: 2px solid var(--glass-border-strong);
                 margin-top: -6px;
-                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+                box-shadow: 0 1px 4px var(--glass-shadow-medium);
             }
 
             .slider.start { z-index: 2; }
             .slider.end { z-index: 1; }
-            .slider.end::-webkit-slider-thumb { background: #f2c94c; }
+            .slider.end::-webkit-slider-thumb { background: var(--warning); }
 
             .date-label {
                 font-size: 8px;

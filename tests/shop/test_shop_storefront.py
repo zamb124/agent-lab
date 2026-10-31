@@ -218,7 +218,7 @@ class TestStorefrontPage:
     ) -> None:
         """?tmode=/?tpreset=/?taccent= — мгновенный предпросмотр темы конструктора."""
         slug = f"prev-{unique_id[:8]}"
-        shop = await _published_shop(shop_client, slug)
+        await _published_shop(shop_client, slug)
         html = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/s/{slug}?tmode=light&taccent=%233f8cff"
         )

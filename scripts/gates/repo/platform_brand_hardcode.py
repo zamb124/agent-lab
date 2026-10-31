@@ -10,7 +10,7 @@ from pathlib import Path
 from scripts.gates.kit import REPO_ROOT
 
 APEX_PATTERN = re.compile(
-    r"https?://(?:[a-z0-9-]+\.)?(?:humanitec\.ru|agents-lab\.ru|linnex\.io)(?:[:/]|['\"])",
+    r"https?://(?:[a-z0-9-]+\.)?(?:linnex\.ru|agents-lab\.ru|linnex\.io)(?:[:/]|['\"])",
     re.IGNORECASE,
 )
 
@@ -37,7 +37,7 @@ HTML_ALLOWLIST_SUBSTRINGS = (
     "inline brand inject",
 )
 
-I18N_META_PATTERN = re.compile(r'"meta_title":\s*"[^"]*\|\s*Humanitec"')
+I18N_META_PATTERN = re.compile(r'"meta_title":\s*"[^"]*\|\s*Linnex"')
 
 ALLOWLIST_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "core" / "config" / "base.py",
@@ -54,39 +54,39 @@ ALLOWLIST_PATHS: tuple[Path, ...] = (
 )
 
 BRAND_LITERAL_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r'''["']Humanitec["']'''),
-    re.compile(r'''["']Humanitec Models["']'''),
-    re.compile(r'''["']Humanitec Voice["']'''),
-    re.compile(r'''["']Humanitec LLMs["']'''),
-    re.compile(r'''["']Humanitec Flows["']'''),
-    re.compile(r'''["']Humanitec Search["']'''),
-    re.compile(r'''["']Humanitec Docs["']'''),
-    re.compile(r'''["']Humanitec Platform["']'''),
-    re.compile(r"\bHUMANITEC\b"),
+    re.compile(r'''["']Linnex["']'''),
+    re.compile(r'''["']Linnex Models["']'''),
+    re.compile(r'''["']Linnex Voice["']'''),
+    re.compile(r'''["']Linnex LLMs["']'''),
+    re.compile(r'''["']Linnex Flows["']'''),
+    re.compile(r'''["']Linnex Search["']'''),
+    re.compile(r'''["']Linnex Docs["']'''),
+    re.compile(r'''["']Linnex Platform["']'''),
+    re.compile(r"\bLINNEX\b"),
 )
 
-I18N_BRAND_LITERAL_PATTERN = re.compile(r"Humanitec")
+I18N_BRAND_LITERAL_PATTERN = re.compile(r"Linnex")
 
 BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
-    "humanitec_llm",
-    "humanitec-static",
-    "humanitec-dynamic",
-    "humanitec-metadata",
-    "humanitec-web-push",
-    "HumanitecModels",
-    "deleteObsoleteHumanitecCaches",
-    "deleteHumanitecContentCaches",
+    "linnex_llm",
+    "linnex-static",
+    "linnex-dynamic",
+    "linnex-metadata",
+    "linnex-web-push",
+    "LinnexModels",
+    "deleteObsoleteLinnexCaches",
+    "deleteLinnexContentCaches",
     "__PLATFORM_NAME__",
     "{platformName}",
     "{modelsProductName}",
     "{voiceProductName}",
     "{llmsDisplayLabel}",
     "{flowsProductLabel}",
-    "humanitec_llms_",
-    "dashboardHumanitecModels",
-    "HumanitecModelsApp",
-    "HumanitecModelsSidebar",
-    "humanitec-embed-autoload",
+    "linnex_llms_",
+    "dashboardLinnexModels",
+    "LinnexModelsApp",
+    "LinnexModelsSidebar",
+    "linnex-embed-autoload",
     "хуманитэк",
     "agents-lab.ru",
 )
@@ -159,7 +159,7 @@ def _scan_i18n_product_meta() -> list[str]:
             continue
         if I18N_META_PATTERN.search(text):
             rel = path.relative_to(REPO_ROOT)
-            errors.append(f"{rel}: meta_title still contains hardcoded '| Humanitec'")
+            errors.append(f"{rel}: meta_title still contains hardcoded '| Linnex'")
     return errors
 
 

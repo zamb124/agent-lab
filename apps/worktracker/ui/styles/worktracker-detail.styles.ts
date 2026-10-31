@@ -187,7 +187,7 @@ export const worktrackerDetailContentStyles = css`
         background: var(--accent);
         color: var(--text-on-accent);
         cursor: pointer;
-        transition: background var(--duration-fast) ease;
+        transition: background var(--motion-duration-micro) ease;
     }
     .wt-composer-send:hover:not(:disabled) {
         background: var(--accent-hover);
@@ -200,8 +200,5 @@ export const worktrackerDetailContentStyles = css`
         font-size: var(--text-xs);
         color: var(--text-tertiary);
     }
-    .wt-loading {
-        font-size: var(--text-sm);
-        color: var(--text-tertiary);
-    }
+
 `;

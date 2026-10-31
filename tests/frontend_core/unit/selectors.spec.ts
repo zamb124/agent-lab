@@ -7,17 +7,17 @@ import { createSelector, selectorFamily, pluck } from '@platform/lib/events/sele
 
 describe('createSelector', () => {
     it('бросает на пустых inputs', () => {
-        expect(() => createSelector([], () => null)).toThrow(/inputs/);
-        expect(() => createSelector('not array', () => null)).toThrow(/inputs/);
+        expect(() => Reflect.apply(createSelector, null, [[], () => null])).toThrow(/inputs/);
+        expect(() => Reflect.apply(createSelector, null, ['not array', () => null])).toThrow(/inputs/);
     });
 
     it('бросает если projector не функция', () => {
-        expect(() => createSelector([(s) => s], 'not function')).toThrow(/projector/);
+        expect(() => Reflect.apply(createSelector, null, [[(s: unknown) => s], 'not function'])).toThrow(/projector/);
     });
 
     it('пересчитывает только при изменении входов (по reference)', () => {
-        const projector = vi.fn((a, b) => a + b);
-        const sel = createSelector([(s) => s.a, (s) => s.b], projector);
+        const projector = vi.fn((a: unknown, b: unknown) => Number(a) + Number(b));
+        const sel = createSelector([(s: { a: number; b: number }) => s.a, (s: { a: number; b: number }) => s.b], projector);
         const stateA = { a: 1, b: 2 };
         expect(sel(stateA)).toBe(3);
         expect(sel(stateA)).toBe(3);
@@ -28,8 +28,8 @@ describe('createSelector', () => {
     });
 
     it('пересчитывает при reference-изменении даже если значение «равно»', () => {
-        const projector = vi.fn((arr) => arr.length);
-        const sel = createSelector([(s) => s.list], projector);
+        const projector = vi.fn((arr: unknown) => (Array.isArray(arr) ? arr.length : -1));
+        const sel = createSelector([(s: { list: number[] }) => s.list], projector);
         sel({ list: [1, 2] });
         sel({ list: [1, 2] });
         expect(projector).toHaveBeenCalledTimes(2);
@@ -38,8 +38,8 @@ describe('createSelector', () => {
 
 describe('selectorFamily', () => {
     it('кеширует селекторы по ключу', () => {
-        const build = vi.fn((id) => (state) => state.byId[id]);
-        const family = selectorFamily({ key: (id) => id, build });
+        const build = vi.fn((id: string) => (state: { byId: Record<string, string> }) => state.byId[id]);
+        const family = selectorFamily({ key: (id: string) => id, build });
         const sel1 = family('a');
         const sel2 = family('a');
         const sel3 = family('b');
@@ -52,7 +52,7 @@ describe('selectorFamily', () => {
     });
 
     it('бросает без { key, build }', () => {
-        expect(() => selectorFamily({})).toThrow(/key, build/);
+        expect(() => Reflect.apply(selectorFamily, null, [{}])).toThrow(/key, build/);
     });
 });
 

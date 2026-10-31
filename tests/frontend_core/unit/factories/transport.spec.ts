@@ -19,14 +19,14 @@ describe('factory transport helpers', () => {
         expect(normalizeTransport(undefined, 'op')).toBe('http');
         expect(normalizeTransport(null, 'op')).toBe('http');
         expect(normalizeTransport('ws', 'op')).toBe('ws');
-        expect(() => normalizeTransport('grpc', 'op')).toThrow(/transport/);
+        expect(() => Reflect.apply(normalizeTransport, null, ['grpc', 'op'])).toThrow(/transport/);
     });
 
     it('normalizeWsTimeout', () => {
         expect(normalizeWsTimeout(undefined, 'http', 'op')).toBeNull();
         expect(normalizeWsTimeout(1500, 'ws', 'op')).toBe(1500);
-        expect(() => normalizeWsTimeout(0, 'ws', 'op')).toThrow(/wsTimeoutMs/);
-        expect(() => normalizeWsTimeout(-1, 'ws', 'op')).toThrow(/wsTimeoutMs/);
+        expect(() => Reflect.apply(normalizeWsTimeout, null, [0, 'ws', 'op'])).toThrow(/wsTimeoutMs/);
+        expect(() => Reflect.apply(normalizeWsTimeout, null, [-1, 'ws', 'op'])).toThrow(/wsTimeoutMs/);
     });
 
     it('normalizeRestMirrorSingle', () => {
@@ -34,8 +34,8 @@ describe('factory transport helpers', () => {
             method: 'GET',
             path: '/x',
         });
-        expect(() => normalizeRestMirrorSingle(null, 'op')).toThrow(/restMirror is required/);
-        expect(() => normalizeRestMirrorSingle({ method: 'GET' }, 'op')).toThrow(/path/);
+        expect(() => Reflect.apply(normalizeRestMirrorSingle, null, [null, 'op'])).toThrow(/restMirror is required/);
+        expect(() => Reflect.apply(normalizeRestMirrorSingle, null, [{ method: 'GET' }, 'op'])).toThrow(/path/);
     });
 
     it('normalizeRestMirrorCollection', () => {
@@ -45,12 +45,12 @@ describe('factory transport helpers', () => {
                 create: { method: 'POST', path: '/items' },
             },
             ['list', 'create'],
-            null,
+            undefined,
             'op',
         );
-        expect(mirror.list.method).toBe('GET');
-        expect(() => normalizeRestMirrorCollection({}, ['list'], null, 'op')).toThrow(/restMirror.list/);
-        expect(() => normalizeRestMirrorCollection(null, ['list'], null, 'op')).toThrow(/restMirror is required/);
+        expect(mirror.list?.method).toBe('GET');
+        expect(() => Reflect.apply(normalizeRestMirrorCollection, null, [{}, ['list'], null, 'op'])).toThrow(/restMirror.list/);
+        expect(() => Reflect.apply(normalizeRestMirrorCollection, null, [null, ['list'], null, 'op'])).toThrow(/restMirror is required/);
     });
 
     it('isTransportError', () => {
@@ -62,8 +62,8 @@ describe('factory transport helpers', () => {
 
 describe('transportRequest', () => {
     it('требует opts и WS-поля', async () => {
-        await expect(transportRequest(null)).rejects.toThrow(/opts object required/);
-        await expect(transportRequest({ transport: 'ws' })).rejects.toThrow(/commandType/);
+        await expect(Reflect.apply(transportRequest, null, [null])).rejects.toThrow(/opts object required/);
+        await expect(Reflect.apply(transportRequest, null, [{ transport: 'ws' }])).rejects.toThrow(/commandType/);
         await expect(transportRequest({
             transport: 'ws',
             commandType: 'svc/x/requested',
@@ -76,7 +76,7 @@ describe('transportRequest', () => {
     });
 
     it('HTTP без method/url — throw', async () => {
-        await expect(transportRequest({ transport: 'http' })).rejects.toThrow(/method and opts.url/);
+        await expect(Reflect.apply(transportRequest, null, [{ transport: 'http' }])).rejects.toThrow(/method and opts.url/);
     });
 
     it('WS делегирует в platformWs.request', async () => {

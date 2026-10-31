@@ -49,7 +49,7 @@ export class SyncChannelRow extends PlatformElement {
         pickMode: { type: Boolean, attribute: 'pick-mode' },
         _avatarImgFailed: { state: true },
     };
-    declare channel: Record<string, any> | null;
+    declare channel: Record<string, unknown> | null;
     declare pickMode: boolean;
     declare _avatarImgFailed: boolean;
 
@@ -64,24 +64,24 @@ export class SyncChannelRow extends PlatformElement {
             position: relative;
             box-sizing: border-box;
             background: var(--sync-channel-row-bg, var(--glass-solid-medium));
-            border: 1px solid var(--sync-channel-row-border, var(--glass-border-subtle, var(--glass-border)));
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-            transition: background var(--duration-fast), box-shadow var(--duration-fast), border-color var(--duration-fast);
+            border: 1px solid var(--sync-channel-row-border, var(--glass-border-subtle));
+            box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 8%, transparent);
+            transition: background var(--motion-duration-micro), box-shadow var(--motion-duration-micro), border-color var(--motion-duration-micro);
         }
         :host(:hover) {
             background: var(--sync-channel-row-bg-hover, var(--glass-solid-strong));
-            border-color: var(--sync-channel-row-border-hover, var(--accent));
-            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 2px 10px color-mix(in srgb, var(--text-primary) 10%, transparent);
         }
         :host([data-selected]) {
             background: var(--accent);
             border-color: transparent;
-            box-shadow: 0 4px 12px var(--accent-subtle, rgba(153, 166, 249, 0.18));
+            box-shadow: 0 4px 12px var(--accent-subtle);
         }
         :host([data-selected]) .title,
         :host([data-selected]) .time,
-        :host([data-selected]) .preview { color: var(--text-inverse, #fff); }
-        :host([data-selected]) .preview.typing { color: var(--text-inverse, #fff); font-weight: var(--font-medium); }
+        :host([data-selected]) .preview { color: var(--text-inverse); }
+        :host([data-selected]) .preview.typing { color: var(--text-inverse); font-weight: var(--font-medium); }
         :host([data-mention]:not([data-selected])) .title { color: var(--accent); font-weight: var(--font-semibold); }
 
         .row-body {
@@ -98,18 +98,18 @@ export class SyncChannelRow extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             font-weight: var(--font-semibold);
             font-size: var(--text-sm);
             flex-shrink: 0;
             position: relative;
             overflow: hidden;
-            background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
+            background: var(--accent-subtle);
             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 10%, transparent);
         }
         :host([data-selected]) .avatar:not(.pastel-initials) {
-            background: rgba(255, 255, 255, 0.22);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+            background: color-mix(in srgb, var(--text-on-accent) 22%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-on-accent) 28%, transparent);
         }
         .avatar.pastel-initials {
             --sync-avatar-h: 0;
@@ -118,8 +118,8 @@ export class SyncChannelRow extends PlatformElement {
             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
         }
         :host([data-selected]) .avatar.pastel-initials {
-            background: rgba(255, 255, 255, 0.28);
-            color: var(--text-inverse, #fff);
+            background: color-mix(in srgb, var(--text-on-accent) 28%, transparent);
+            color: var(--text-inverse);
         }
         .avatar img {
             width: 100%;
@@ -134,8 +134,8 @@ export class SyncChannelRow extends PlatformElement {
             width: 14px;
             height: 14px;
             border-radius: 50%;
-            background: var(--success, #22c55e);
-            border: 2px solid var(--bg-elevated, var(--glass-solid));
+            background: var(--success);
+            border: 2px solid var(--bg-elevated);
         }
         :host([data-selected]) .presence-dot { border-color: var(--accent); }
 
@@ -205,7 +205,7 @@ export class SyncChannelRow extends PlatformElement {
             color: var(--text-secondary);
         }
         :host([data-selected]) .kind-icon-wrap {
-            color: rgba(255, 255, 255, 0.92);
+            color: var(--text-on-accent);
         }
 
         .badges {
@@ -220,20 +220,20 @@ export class SyncChannelRow extends PlatformElement {
             padding: 0 6px;
             border-radius: 999px;
             background: var(--accent);
-            color: var(--text-inverse, #fff);
+            color: var(--text-inverse);
             font-size: var(--text-xs);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-weight: var(--font-bold);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 1px 3px var(--glass-shadow-subtle);
         }
         :host([data-selected]) .badge {
-            background: var(--text-inverse, #fff);
+            background: var(--text-inverse);
             color: var(--accent);
         }
-        .badge.mention { background: var(--color-error, #ef4444); }
-        :host([data-selected]) .badge.mention { background: var(--text-inverse, #fff); color: var(--color-error, #ef4444); }
+        .badge.mention { background: var(--error); }
+        :host([data-selected]) .badge.mention { background: var(--text-inverse); color: var(--error); }
 
         .call-pill {
             display: inline-flex;
@@ -242,27 +242,27 @@ export class SyncChannelRow extends PlatformElement {
             padding: 3px 10px;
             border-radius: 999px;
             border: none;
-            background: var(--accent-gradient, linear-gradient(135deg, #6366f1, #8b5cf6));
-            color: var(--text-inverse, #fff);
+            background: var(--accent-gradient);
+            color: var(--text-inverse);
             font-size: var(--text-xs);
             font-weight: var(--font-semibold);
             cursor: pointer;
-            box-shadow: 0 1px 4px rgba(99, 102, 241, 0.22);
+            box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 22%, transparent);
         }
         .call-pill:hover {
             filter: brightness(1.06);
         }
         .call-pill:focus-visible {
-            outline: 2px solid rgba(99, 102, 241, 0.75);
+            outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
             outline-offset: 2px;
         }
         :host([data-selected]) .call-pill {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 2px 8px var(--glass-shadow-medium);
         }
 
         .gear {
             opacity: 0;
-            transition: opacity var(--duration-fast);
+            transition: opacity var(--motion-duration-micro);
             background: transparent;
             border: none;
             color: var(--text-secondary);
@@ -271,8 +271,8 @@ export class SyncChannelRow extends PlatformElement {
             border-radius: var(--radius-sm);
         }
         :host(:hover) .gear { opacity: 1; }
-        .gear:hover { background: var(--glass-hover); color: var(--text-primary); }
-        :host([data-selected]) .gear { color: var(--text-inverse, #fff); }
+        .gear:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
+        :host([data-selected]) .gear { color: var(--text-inverse); }
 
         @media (min-width: 768px) {
             :host-context(platform-service-sidebar[collapsed]) {
@@ -372,7 +372,7 @@ export class SyncChannelRow extends PlatformElement {
         this._closeSidebarMobile();
     }
 
-    _onJoinCall(callInfo: Record<string, any>, e: Event) {
+    _onJoinCall(callInfo: Record<string, unknown>, e: Event) {
         e.stopPropagation();
         if (this.pickMode) return;
         if (!this.channel || !callInfo || typeof callInfo.call_id !== 'string' || callInfo.call_id === '') {

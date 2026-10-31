@@ -28,7 +28,7 @@ function bundleConsent(bundle: Record<string, unknown>): { version: string; anal
 }
 
 function analyticsAlreadyInjected(): boolean {
-    return Reflect.get(window, '__humanitecAnalyticsInjected') === true;
+    return Reflect.get(window, '__linnexAnalyticsInjected') === true;
 }
 
 const COOKIE_CONSENT_STORAGE_KEY = platformStorageKey('frontend', 'cookie_consent');
@@ -68,23 +68,23 @@ export class CookieConsentBanner extends PlatformElement {
                 margin: 0 auto;
                 max-width: 960px;
                 padding: var(--space-4);
-                background: var(--bg-elevated, var(--bg));
-                border: 1px solid var(--border);
+                background: var(--bg-elevated);
+                border: 1px solid var(--border-default);
                 border-bottom: none;
-                border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0;
-                color: var(--text);
+                border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+                color: var(--text-primary);
                 box-shadow: var(--glass-shadow-medium);
             }
             .title {
                 margin: 0 0 var(--space-2);
-                font-size: var(--text-lg, 1.125rem);
+                font-size: var(--text-lg);
                 font-weight: 600;
             }
             .body {
                 margin: 0 0 var(--space-3);
-                font-size: var(--text-sm, 0.875rem);
+                font-size: var(--text-sm);
                 line-height: 1.5;
-                color: var(--text-muted, var(--text));
+                color: var(--text-tertiary);
             }
             .links {
                 display: flex;
@@ -94,7 +94,7 @@ export class CookieConsentBanner extends PlatformElement {
             }
             .links a {
                 color: var(--accent);
-                font-size: var(--text-sm, 0.875rem);
+                font-size: var(--text-sm);
             }
             .actions {
                 display: flex;
@@ -127,9 +127,9 @@ export class CookieConsentBanner extends PlatformElement {
         this._consent = this.useSlice('frontend/cookie_consent');
         this._recordOp = this.useOp('frontend/cookie_consent_record');
         this._siteBundle = this.useOp('frontend/public_site_bundle');
-        this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
-        this._routeSel = this.select((s: Record<string, any>) => s.router.routeKey);
-        this._consentSel = this.select((s: Record<string, any>) => s.frontendCookieConsent);
+        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._routeSel = this.select((s: Record<string, unknown>) => s.router.routeKey);
+        this._consentSel = this.select((s: Record<string, unknown>) => s.frontendCookieConsent);
         this.useEvent(CoreEvents.STORAGE_LOADED, (event) => this._onStorageLoaded(event));
     }
     private _consent: ControllerFor<'frontend/cookie_consent'>;
@@ -212,7 +212,7 @@ export class CookieConsentBanner extends PlatformElement {
         throw new Error('cookie-consent-banner: i18n.locale must be ru or en');
     }
 
-    _persistSnapshot(consent: Record<string, any>) {
+    _persistSnapshot(consent: Record<string, unknown>) {
         this.dispatch(CoreEvents.STORAGE_PERSIST_REQUESTED, {
             key: COOKIE_CONSENT_STORAGE_KEY,
             value: {

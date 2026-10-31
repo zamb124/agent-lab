@@ -25,7 +25,7 @@ export class StockTransfersPage extends PlatformPage {
             }
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             tr[data-id] { cursor: pointer; }
-            tr[data-id]:hover td { background: var(--surface-hover); }
+            tr[data-id]:hover td { background: var(--glass-tint-medium); }
             platform-empty-state { margin-top: var(--space-8); }
         `,
     ];

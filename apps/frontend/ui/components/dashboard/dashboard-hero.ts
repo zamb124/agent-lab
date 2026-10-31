@@ -50,7 +50,7 @@ export class DashboardHero extends PlatformElement {
                 margin-top: var(--space-2);
                 padding: var(--space-2) var(--space-4);
                 border-radius: var(--radius-full);
-                background: var(--glass-solid-soft);
+                background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 color: var(--text-primary);
                 font-size: var(--text-sm);
@@ -69,17 +69,17 @@ export class DashboardHero extends PlatformElement {
 
     constructor() {
         super();
-        this._auth = this.select((s: Record<string, any>) => ({
+        this._auth = this.select((s: Record<string, unknown>) => ({
             user: s.auth.user,
             activeCompanyId: s.auth.activeCompanyId,
         }));
-        this._companies = this.select((s: Record<string, any>) => s.companies.list);
+        this._companies = this.select((s: Record<string, unknown>) => s.companies.list);
     }
     private _auth: SelectController<any>;
     private _companies: SelectController<any>;
 
 
-    _userName(user: Record<string, any>) {
+    _userName(user: Record<string, unknown>) {
         if (user && typeof user.name === 'string' && user.name.trim().length > 0) {
             return user.name.trim();
         }
@@ -89,7 +89,7 @@ export class DashboardHero extends PlatformElement {
         return this.t('console_home.user_fallback');
     }
 
-    _activeCompanyName(activeCompanyId: Record<string, any>, list: Record<string, any>[]) {
+    _activeCompanyName(activeCompanyId: Record<string, unknown>, list: Record<string, unknown>[]) {
         if (!activeCompanyId || !Array.isArray(list)) return null;
         const found = list.find((c) => c.company_id === activeCompanyId);
         return found ? found.name : null;

@@ -5,18 +5,19 @@
 import { fixture, html, expect, oneEvent, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-rich-editor.js';
+import {q, qs, qsa, type TestEl} from '../helpers/dom.js';
 
-function docWithText(text) {
+function docWithText(text: any) {
     return {
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
     };
 }
 
-async function mountEditor(props = {}) {
-    const el = await fixture(html`
+async function mountEditor(props: any = {}) {
+    const el = await fixture<TestEl>(html`
         <platform-rich-editor
-            .value=${props.value ?? { type: 'doc', content: [{ type: 'paragraph' }] }}
+            .value=${(props as TestEl).value ?? { type: 'doc', content: [{ type: 'paragraph' }] }}
             ?readonly=${props.readonly === true}
             .mentionProvider=${props.mentionProvider ?? null}
             .markdownParser=${props.markdownParser ?? null}
@@ -32,10 +33,10 @@ async function mountEditor(props = {}) {
 }
 
 /** Поставить курсор в первую ячейку таблицы документа. */
-function selectFirstTableCell(el) {
+function selectFirstTableCell(el: any) {
     const { state } = el._view;
     let cellPos = -1;
-    state.doc.descendants((node, pos) => {
+    state.doc.descendants((node: any, pos: any) => {
         if (cellPos !== -1) return false;
         if (node.type.name === 'table_header' || node.type.name === 'table_cell') {
             cellPos = pos;
@@ -50,7 +51,7 @@ function selectFirstTableCell(el) {
     el._view.dispatch(state.tr.setSelection(selection));
 }
 
-function countTableRows(doc) {
+function countTableRows(doc: any) {
     return JSON.stringify(doc).split('"table_row"').length - 1;
 }
 
@@ -59,12 +60,12 @@ function countTableRows(doc) {
  * `prosemirror.css` туда не достаёт, компонент подключает его сам. Токен полосы
  * кнопок в приложении приходит из `tokens.css`, здесь его задаёт host.
  */
-async function mountEditorInShadowRoot(props = {}) {
-    const host = await fixture(html`<div></div>`);
+async function mountEditorInShadowRoot(props: any = {}) {
+    const host = await fixture<TestEl>(html`<div></div>`);
     host.style.setProperty('--wiki-block-gutter', '4rem');
     const root = host.attachShadow({ mode: 'open' });
-    const el = document.createElement('platform-rich-editor');
-    el.value = props.value ?? { type: 'doc', content: [{ type: 'paragraph' }] };
+    const el = (document.createElement('platform-rich-editor') as TestEl);
+    (el as TestEl).value = (props as TestEl).value ?? { type: 'doc', content: [{ type: 'paragraph' }] };
     root.appendChild(el);
     for (let attempt = 0; attempt < 60 && el._view === null; attempt += 1) {
         await aTimeout(20);
@@ -74,7 +75,7 @@ async function mountEditorInShadowRoot(props = {}) {
 }
 
 /** Поставить курсор в конец документа и вернуть состояние. */
-function focusEnd(el) {
+function focusEnd(el: any) {
     const { state } = el._view;
     const selection = el._pm.TextSelection.create(state.doc, state.doc.content.size - 1);
     el._view.dispatch(state.tr.setSelection(selection));
@@ -90,7 +91,7 @@ describe('platform-rich-editor', () => {
         const el = await mountEditor({ value: docWithText('Привет') });
 
         expect(el._view).to.not.equal(null);
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Привет');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Привет');
     });
 
     it('правка документа эмитит change с новым содержимым', async () => {
@@ -101,16 +102,16 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.insertText('!', state.doc.content.size - 1));
         const event = await changed;
 
-        expect(JSON.stringify(event.detail.content)).to.contain('Текст!');
+        expect(JSON.stringify((event as CustomEvent).detail.content)).to.contain('Текст!');
     });
 
     it('внешнее значение заменяет содержимое', async () => {
         const el = await mountEditor({ value: docWithText('Старое') });
 
-        el.value = docWithText('Новое содержимое');
+        (el as TestEl).value = docWithText('Новое содержимое');
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Новое содержимое');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Новое содержимое');
     });
 
     it('перерисовка хозяина с тем же значением не стирает правку', async () => {
@@ -124,10 +125,10 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.insertText('!', state.doc.content.size - 1));
         const event = await changed;
 
-        el.value = event.detail.content;
+        (el as TestEl).value = (event as CustomEvent).detail.content;
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Текст!');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Текст!');
     });
 
     it('устаревшее значение хозяина всё ещё применяется как внешняя правка', async () => {
@@ -138,10 +139,10 @@ describe('platform-rich-editor', () => {
 
         // Другой объект — это осознанная замена содержимого (загрузка, импорт,
         // восстановление версии), и она должна дойти до документа.
-        el.value = docWithText('Совсем другое');
+        (el as TestEl).value = docWithText('Совсем другое');
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-editor').textContent).to.equal('Совсем другое');
+        expect(qs(el!, '.pm-editor').textContent).to.equal('Совсем другое');
     });
 
     it('в режиме чтения редактор не редактируется', async () => {
@@ -158,7 +159,7 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.setSelection(selection));
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-bubble')).to.exist;
+        expect(q(el!, '.pm-bubble')).to.exist;
         expect(el._bubbleAnchor).to.not.equal(null);
         expect(el._bubbleAnchor.width).to.be.greaterThan(0);
     });
@@ -169,10 +170,10 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.setSelection(el._pm.TextSelection.create(state.doc, 1, 7)));
         await elementUpdated(el);
 
-        el.querySelector('.pm-bubble-btn').click();
+        qs(el!, '.pm-bubble-btn').click();
         await elementUpdated(el);
 
-        expect(JSON.stringify(el.value)).to.contain('strong');
+        expect(JSON.stringify((el as TestEl).value)).to.contain('strong');
     });
 
     it('снятие выделения убирает панель', async () => {
@@ -180,14 +181,14 @@ describe('platform-rich-editor', () => {
         const { state } = el._view;
         el._view.dispatch(state.tr.setSelection(el._pm.TextSelection.create(state.doc, 1, 5)));
         await elementUpdated(el);
-        expect(el.querySelector('.pm-bubble')).to.exist;
+        expect(qs(el!, '.pm-bubble')).to.exist;
 
         el._view.dispatch(el._view.state.tr.setSelection(
             el._pm.TextSelection.create(el._view.state.doc, 1),
         ));
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-bubble')).to.be.null;
+        expect(q(el!, '.pm-bubble')).to.be.null;
     });
 
     it('меню команд открывается по слэшу и позиционируется', async () => {
@@ -198,7 +199,7 @@ describe('platform-rich-editor', () => {
         el._slashAnchor = el._selectionAnchor(el._view.state);
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-slash')).to.exist;
+        expect(q(el!, '.pm-slash')).to.exist;
         expect(el._slashAnchor).to.not.equal(null);
     });
 
@@ -208,11 +209,11 @@ describe('platform-rich-editor', () => {
         el._slashOpen = true;
         await elementUpdated(el);
 
-        el.querySelector('[data-slash-command="heading_1"]').click();
+        qs(el!, '[data-slash-command="heading_1"]').click();
         await elementUpdated(el);
 
-        expect(el.value.content[0].type).to.equal('heading');
-        expect(el.querySelector('.pm-slash')).to.be.null;
+        expect((el as TestEl).value.content[0].type).to.equal('heading');
+        expect(q(el!, '.pm-slash')).to.be.null;
     });
 
     it('меню команд фильтруется по набранному тексту', async () => {
@@ -221,8 +222,8 @@ describe('platform-rich-editor', () => {
         el._slashQuery = 'table';
         await elementUpdated(el);
 
-        const commands = Array.from(el.querySelectorAll('[data-slash-command]'))
-            .map((node) => node.dataset.slashCommand);
+        const commands = Array.from(qsa(el!, '[data-slash-command]'))
+            .map((node) => (node as TestEl).dataset.slashCommand);
         expect(commands).to.deep.equal(['table']);
     });
 
@@ -238,9 +239,9 @@ describe('platform-rich-editor', () => {
         await el._loadMentions('');
         await elementUpdated(el);
 
-        const items = Array.from(el.querySelectorAll('[data-mention-id]'));
+        const items = Array.from(qsa(el!, '[data-mention-id]'));
         expect(items.length).to.equal(2);
-        expect(items[0].textContent).to.contain('Иван Петров');
+        expect(items[0]!.textContent).to.contain('Иван Петров');
     });
 
     it('выбор упоминания вставляет узел в документ', async () => {
@@ -253,17 +254,17 @@ describe('platform-rich-editor', () => {
         await el._loadMentions('');
         await elementUpdated(el);
 
-        el.querySelector('[data-mention-id="u1"]').click();
+        qs(el!, '[data-mention-id="u1"]').click();
         await elementUpdated(el);
 
-        expect(JSON.stringify(el.value)).to.contain('mention');
+        expect(JSON.stringify((el as TestEl).value)).to.contain('mention');
         expect(el._mentionOpen).to.be.false;
     });
 
     it('поздний ответ провайдера упоминаний не затирает актуальный', async () => {
         let call = 0;
         const el = await mountEditor({
-            mentionProvider: async (query) => {
+            mentionProvider: async (query: any) => {
                 call += 1;
                 if (call === 1) {
                     await aTimeout(80);
@@ -279,21 +280,21 @@ describe('platform-rich-editor', () => {
         await Promise.all([slow, fast]);
         await elementUpdated(el);
 
-        expect(el._mentionItems.map((item) => item.id)).to.deep.equal(['fresh']);
+        expect(el._mentionItems.map((item: any) => item.id)).to.deep.equal(['fresh']);
     });
 
     it('подсказка показывается на пустом документе и уходит после ввода', async () => {
         const el = await mountEditor({ placeholder: 'Нажмите / для команд' });
 
-        const paragraph = el.querySelector('.pm-editor p');
+        const paragraph = qs(el!, '.pm-editor p');
         expect(paragraph.classList.contains('is-empty')).to.be.true;
-        expect(paragraph.dataset.placeholder).to.equal('Нажмите / для команд');
+        expect((paragraph as TestEl).dataset.placeholder).to.equal('Нажмите / для команд');
 
         const { state } = el._view;
         el._view.dispatch(state.tr.insertText('Текст', 1));
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-editor p').classList.contains('is-empty')).to.be.false;
+        expect(qs(el!, '.pm-editor p').classList.contains('is-empty')).to.be.false;
     });
 
     it('подсказка переходит на пустой абзац под курсором', async () => {
@@ -307,13 +308,13 @@ describe('platform-rich-editor', () => {
             },
             placeholder: 'Нажмите / для команд',
         });
-        const paragraphs = () => Array.from(el.querySelectorAll('.pm-editor p'));
+        const paragraphs = () => Array.from(qsa(el!, '.pm-editor p'));
         expect(paragraphs().some((node) => node.classList.contains('is-empty'))).to.be.false;
 
         focusEnd(el);
         await elementUpdated(el);
 
-        expect(paragraphs()[1].classList.contains('is-empty')).to.be.true;
+        expect(paragraphs()[1]!.classList.contains('is-empty')).to.be.true;
     });
 
     it('кнопки блока встают у строки с курсором без наведения мышью', async () => {
@@ -324,7 +325,7 @@ describe('platform-rich-editor', () => {
 
         expect(el._handleBlockPos).to.equal(0);
         expect(el._handleTop).to.be.at.least(0);
-        expect(el.querySelector('.pm-block-add-btn')).to.exist;
+        expect(qs(el!, '.pm-block-add-btn')).to.exist;
     });
 
     it('кнопки блока стоят слева от колонки текста, а не поверх строки', async () => {
@@ -333,8 +334,8 @@ describe('platform-rich-editor', () => {
         el._handleBlockPos = 0;
         await elementUpdated(el);
 
-        const handle = el.querySelector('.pm-block-handle').getBoundingClientRect();
-        const editor = el.querySelector('.pm-editor').getBoundingClientRect();
+        const handle = qs(el!, '.pm-block-handle').getBoundingClientRect();
+        const editor = qs(el!, '.pm-editor').getBoundingClientRect();
         expect(handle.width).to.be.greaterThan(0);
         expect(Math.round(handle.right)).to.be.at.most(Math.round(editor.left));
     });
@@ -348,9 +349,9 @@ describe('platform-rich-editor', () => {
                 { type: 'paragraph', content: [{ type: 'text', text: 'Абзац' }] },
             ],
         };
-        const calls = [];
+        const calls: any[] = [];
         const el = await mountEditor({
-            markdownParser: async (markdown) => {
+            markdownParser: async (markdown: any) => {
                 calls.push(markdown);
                 return parsed;
             },
@@ -360,9 +361,9 @@ describe('platform-rich-editor', () => {
         await elementUpdated(el);
 
         expect(calls).to.deep.equal(['## Раздел\n\nАбзац']);
-        const types = el.value.content.map((node) => node.type);
+        const types = (el as TestEl).value.content.map((node: any) => node.type);
         expect(types).to.include('heading');
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Раздел');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Раздел');
     });
 
     it('без разборщика вставка markdown это ошибка, а не тихий пропуск', async () => {
@@ -384,14 +385,14 @@ describe('platform-rich-editor', () => {
         transfer.items.add(file);
 
         const dropped = oneEvent(el, 'markdown-file-drop');
-        el.querySelector('.pm-editor').dispatchEvent(
+        qs(el!, '.pm-editor').dispatchEvent(
             new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }),
         );
         const event = await dropped;
 
-        expect(event.detail.file.name).to.equal('note.md');
+        expect((event as CustomEvent).detail.file.name).to.equal('note.md');
         // Документ редактор не меняет: решение доменное.
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Текст');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Текст');
     });
 
     it('внутри shadow root подключает лист стилей области правки', async () => {
@@ -411,12 +412,12 @@ describe('platform-rich-editor', () => {
         el._handleBlockPos = 0;
         await elementUpdated(el);
 
-        el.querySelector('.pm-block-add-btn').click();
+        qs(el!, '.pm-block-add-btn').click();
         await elementUpdated(el);
 
         expect(el._slashOpen).to.be.true;
-        expect(el.querySelector('.pm-slash')).to.exist;
-        expect(el.value.content.length).to.equal(2);
+        expect(qs(el!, '.pm-slash')).to.exist;
+        expect((el as TestEl).value.content.length).to.equal(2);
     });
 
     it('ручка блока появляется при наведении и открывает меню', async () => {
@@ -425,13 +426,13 @@ describe('platform-rich-editor', () => {
         el._handleTop = 10;
         el._handleBlockPos = 0;
         await elementUpdated(el);
-        const handle = el.querySelector('.pm-block-handle-btn');
+        const handle = qs(el!, '.pm-block-handle-btn');
         expect(handle).to.exist;
 
-        handle.click();
+        (handle as TestEl).click();
         await elementUpdated(el);
 
-        expect(el.querySelector('platform-menu')).to.exist;
+        expect(qs(el!, 'platform-menu')).to.exist;
     });
 
     it('ручка блока готовит ProseMirror dragging для переноса', async () => {
@@ -448,7 +449,7 @@ describe('platform-rich-editor', () => {
         el._handleBlockPos = 0;
         await elementUpdated(el);
 
-        const handle = el.querySelector('.pm-block-handle-btn');
+        const handle = qs(el!, '.pm-block-handle-btn');
         const transfer = new DataTransfer();
         handle.dispatchEvent(new DragEvent('dragstart', {
             bubbles: true,
@@ -476,7 +477,7 @@ describe('platform-rich-editor', () => {
         view.dragging = null;
         await elementUpdated(el);
 
-        const texts = el.value.content.map((block) => {
+        const texts = (el as TestEl).value.content.map((block: any) => {
             if (!block.content || block.content.length === 0) {
                 throw new Error('expected text in paragraph');
             }
@@ -493,8 +494,8 @@ describe('platform-rich-editor', () => {
         el._handleBlockPos = 0;
         await elementUpdated(el);
 
-        const add = el.querySelector('.pm-block-add-btn');
-        const grip = el.querySelector('.pm-block-handle-btn');
+        const add = qs(el!, '.pm-block-add-btn');
+        const grip = qs(el!, '.pm-block-handle-btn');
         expect(getComputedStyle(add).width).to.equal('28px');
         expect(getComputedStyle(add).height).to.equal('28px');
         expect(getComputedStyle(grip).width).to.equal('28px');
@@ -516,8 +517,8 @@ describe('platform-rich-editor', () => {
         el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'delete' } }));
         await elementUpdated(el);
 
-        expect(el.querySelector('.pm-editor').textContent).to.not.contain('Первый');
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Второй');
+        expect(qs(el!, '.pm-editor').textContent).to.not.contain('Первый');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Второй');
     });
 
     it('меню блока дублирует блок', async () => {
@@ -527,7 +528,7 @@ describe('platform-rich-editor', () => {
         el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'duplicate' } }));
         await elementUpdated(el);
 
-        expect(el.value.content.length).to.equal(2);
+        expect((el as TestEl).value.content.length).to.equal(2);
     });
 
     it('меню блока превращает абзац в заголовок', async () => {
@@ -537,8 +538,8 @@ describe('platform-rich-editor', () => {
         el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'turn_heading_2' } }));
         await elementUpdated(el);
 
-        expect(el.value.content[0].type).to.equal('heading');
-        expect(el.value.content[0].attrs.level).to.equal(2);
+        expect((el as TestEl).value.content[0].type).to.equal('heading');
+        expect((el as TestEl).value.content[0].attrs.level).to.equal(2);
     });
 
     it('неизвестное действие меню блока падает, а не молчит', async () => {
@@ -558,7 +559,7 @@ describe('platform-rich-editor', () => {
         await elementUpdated(el);
 
         expect(el._inTable).to.be.true;
-        expect(el.querySelector('[data-table-action="addRowAfter"]')).to.exist;
+        expect(qs(el!, '[data-table-action="addRowAfter"]')).to.exist;
     });
 
     it('контрол таблицы добавляет строку', async () => {
@@ -566,14 +567,14 @@ describe('platform-rich-editor', () => {
         focusEnd(el);
         el._runSlashCommand('table');
         await elementUpdated(el);
-        const rowsBefore = countTableRows(el.value);
+        const rowsBefore = countTableRows((el as TestEl).value);
 
         selectFirstTableCell(el);
         await elementUpdated(el);
         el._runTableCommand('addRowAfter');
         await elementUpdated(el);
 
-        expect(countTableRows(el.value)).to.equal(rowsBefore + 1);
+        expect(countTableRows((el as TestEl).value)).to.equal(rowsBefore + 1);
     });
 
     it('getOutline возвращает заголовки по порядку', async () => {
@@ -589,8 +590,8 @@ describe('platform-rich-editor', () => {
         });
 
         const outline = el.getOutline();
-        expect(outline.map((item) => item.text)).to.deep.equal(['Первый', 'Второй']);
-        expect(outline.map((item) => item.level)).to.deep.equal([1, 2]);
+        expect(outline.map((item: any) => item.text)).to.deep.equal(['Первый', 'Второй']);
+        expect(outline.map((item: any) => item.level)).to.deep.equal([1, 2]);
     });
 
     it('scrollToPosition крутит scroll-контейнер ко второму заголовку', async () => {
@@ -598,7 +599,7 @@ describe('platform-rich-editor', () => {
             type: 'paragraph',
             content: [{ type: 'text', text: `строка ${index + 1}` }],
         }));
-        const scroller = await fixture(html`
+        const scroller = await fixture<TestEl>(html`
             <div data-wiki-page-scroll style="height:180px;overflow:auto;">
                 <div class="topbar" style="height:32px;"></div>
                 <platform-rich-editor
@@ -613,7 +614,7 @@ describe('platform-rich-editor', () => {
                 ></platform-rich-editor>
             </div>
         `);
-        const el = scroller.querySelector('platform-rich-editor');
+        const el = qs(scroller!, 'platform-rich-editor');
         for (let attempt = 0; attempt < 60 && el._view === null; attempt += 1) {
             await aTimeout(20);
         }
@@ -664,15 +665,15 @@ describe('platform-rich-editor', () => {
             readonly: true,
         });
 
-        const toggle = el.querySelector('.pm-toggle');
+        const toggle = qs(el!, '.pm-toggle');
         expect(toggle).to.exist;
         expect(toggle.classList.contains('is-collapsed')).to.equal(false);
 
-        toggle.querySelector('.pm-toggle-chevron').click();
+        qs(toggle!, '.pm-toggle-chevron').click();
         await elementUpdated(el);
 
         expect(toggle.classList.contains('is-collapsed')).to.equal(true);
-        expect(el.querySelector('.pm-editor').textContent).to.contain('Заголовок');
+        expect(qs(el!, '.pm-editor').textContent).to.contain('Заголовок');
     });
 
     it('клик по чекбоксу task_item переключает checked', async () => {
@@ -694,15 +695,15 @@ describe('platform-rich-editor', () => {
             },
         });
 
-        const checkbox = el.querySelector('.pm-task-checkbox');
+        const checkbox = qs(el!, '.pm-task-checkbox');
         expect(checkbox).to.exist;
-        expect(checkbox.checked).to.equal(false);
+        expect((checkbox as TestEl).checked).to.equal(false);
 
         checkbox.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         await elementUpdated(el);
 
-        expect(el.value.content[0].content[0].attrs.checked).to.equal(true);
-        expect(el.querySelector('.pm-task-checkbox').checked).to.equal(true);
+        expect((el as TestEl).value.content[0].content[0].attrs.checked).to.equal(true);
+        expect(qs(el!, '.pm-task-checkbox').checked).to.equal(true);
     });
 
     it('в readonly чекбокс task_item не переключается', async () => {
@@ -725,12 +726,12 @@ describe('platform-rich-editor', () => {
             readonly: true,
         });
 
-        el.querySelector('.pm-task-checkbox').dispatchEvent(
+        qs(el!, '.pm-task-checkbox').dispatchEvent(
             new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
         );
         await elementUpdated(el);
 
-        expect(el.value.content[0].content[0].attrs.checked).to.equal(false);
+        expect((el as TestEl).value.content[0].content[0].attrs.checked).to.equal(false);
     });
 
     it('проставляет ссылку через bubble и снимает её', async () => {
@@ -740,7 +741,7 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.setSelection(selection));
         await elementUpdated(el);
 
-        el.querySelector('[data-editor-link]').click();
+        qs(el!, '[data-editor-link]').click();
         await elementUpdated(el);
         expect(el._linkOpen).to.equal(true);
 
@@ -748,7 +749,7 @@ describe('platform-rich-editor', () => {
         el._applyLink();
         await elementUpdated(el);
 
-        const linked = el.value.content[0].content[0];
+        const linked = (el as TestEl).value.content[0].content[0];
         expect(linked.marks[0].type).to.equal('link');
         expect(linked.marks[0].attrs.href).to.equal('https://example.com');
 
@@ -761,7 +762,7 @@ describe('platform-rich-editor', () => {
         el._removeLink();
         await elementUpdated(el);
 
-        expect(el.value.content[0].content[0].marks || []).to.deep.equal([]);
+        expect((el as TestEl).value.content[0].content[0].marks || []).to.deep.equal([]);
     });
 
     it('выбирает цвет highlight', async () => {
@@ -770,12 +771,12 @@ describe('platform-rich-editor', () => {
         el._view.dispatch(state.tr.setSelection(el._pm.TextSelection.create(state.doc, 1, 5)));
         await elementUpdated(el);
 
-        el.querySelector('[data-editor-highlight]').click();
+        qs(el!, '[data-editor-highlight]').click();
         await elementUpdated(el);
-        el.querySelector('[data-highlight-color="green"]').click();
+        qs(el!, '[data-highlight-color="green"]').click();
         await elementUpdated(el);
 
-        const marked = el.value.content[0].content[0];
+        const marked = (el as TestEl).value.content[0].content[0];
         expect(marked.marks[0].type).to.equal('highlight');
         expect(marked.marks[0].attrs.color).to.equal('green');
     });
@@ -794,25 +795,25 @@ describe('platform-rich-editor', () => {
             },
         });
 
-        for (let attempt = 0; attempt < 60 && el.querySelector('.cm-editor') === null; attempt += 1) {
+        for (let attempt = 0; attempt < 60 && q(el!, '.cm-editor') === null; attempt += 1) {
             await aTimeout(20);
         }
-        expect(el.querySelector('.pm-code-block')).to.exist;
-        expect(el.querySelector('.cm-editor')).to.exist;
-        expect(el.querySelector('.pm-code-block-lang').value).to.equal('python');
+        expect(qs(el!, '.pm-code-block')).to.exist;
+        expect(qs(el!, '.cm-editor')).to.exist;
+        expect(qs(el!, '.pm-code-block-lang').value).to.equal('python');
 
-        const select = el.querySelector('.pm-code-block-lang');
+        const select = qs(el!, '.pm-code-block-lang');
         let bubbledNativeChange = false;
         el.addEventListener('change', (event) => {
             if (event.target === select) {
                 bubbledNativeChange = true;
             }
         });
-        select.value = 'javascript';
+        (select as TestEl).value = 'javascript';
         select.dispatchEvent(new Event('change', { bubbles: true }));
         await elementUpdated(el);
 
-        expect(el.value.content[0].attrs.language).to.equal('javascript');
+        expect((el as TestEl).value.content[0].attrs.language).to.equal('javascript');
         expect(bubbledNativeChange).to.equal(false);
     });
 
@@ -831,21 +832,21 @@ describe('platform-rich-editor', () => {
             },
         });
 
-        for (let attempt = 0; attempt < 60 && el.querySelector('.cm-editor') === null; attempt += 1) {
+        for (let attempt = 0; attempt < 60 && q(el!, '.cm-editor') === null; attempt += 1) {
             await aTimeout(20);
         }
-        expect(el.querySelector('.cm-editor')).to.exist;
-        expect(el.querySelector('.pm-code-block-lang').value).to.equal('json');
+        expect(qs(el!, '.cm-editor')).to.exist;
+        expect(qs(el!, '.pm-code-block-lang').value).to.equal('json');
 
         // oneDark монтирует листы в ShadowRoot (adoptedStyleSheets и/или <style>).
         const adopted = root.adoptedStyleSheets.length;
-        const styleTags = root.querySelectorAll('style').length;
+        const styleTags = qsa(root!, 'style').length;
         expect(adopted + styleTags).to.be.greaterThan(0);
 
-        const token = el.querySelector('.cm-line span[class]');
+        const token = qs(el!, '.cm-line span[class]');
         expect(token).to.exist;
         const color = getComputedStyle(token).color;
-        const base = getComputedStyle(el.querySelector('.cm-content')).color;
+        const base = getComputedStyle(qs(el!, '.cm-content')).color;
         expect(color).to.not.equal(base);
     });
 
@@ -859,12 +860,12 @@ describe('platform-rich-editor', () => {
         });
         await elementUpdated(el);
 
-        const attachment = el.querySelector('.pm-file-attachment');
+        const attachment = q(el!, '.pm-file-attachment');
         expect(attachment).to.exist;
-        expect(attachment.querySelector('a.pm-file-chip')).to.not.exist;
-        expect(attachment.getAttribute('data-file-id')).to.equal('file-1');
-        expect(attachment.textContent).to.include('note.pdf');
-        expect(attachment.querySelector('platform-icon[file-icon]')).to.exist;
+        expect(q(attachment!, 'a.pm-file-chip')).to.not.exist;
+        expect(attachment!.getAttribute('data-file-id')).to.equal('file-1');
+        expect(attachment!.textContent).to.include('note.pdf');
+        expect(qs(attachment!, 'platform-icon[file-icon]')).to.exist;
     });
 
     it('slash image/file просят выбор файла снаружи', async () => {
@@ -885,8 +886,8 @@ describe('platform-rich-editor', () => {
         el._slashOpen = true;
         await elementUpdated(el);
 
-        const commands = Array.from(el.querySelectorAll('[data-slash-command]'))
-            .map((node) => node.dataset.slashCommand);
+        const commands = Array.from(qsa(el!, '[data-slash-command]'))
+            .map((node) => (node as TestEl).dataset.slashCommand);
         expect(commands).to.include('image');
         expect(commands).to.include('platform_file');
         expect(commands).to.include('callout_warning');

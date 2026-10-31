@@ -1,7 +1,7 @@
-# Production overrides для humanitec.ru.
+# Production overrides для linnex.io.
 # Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
 
-domain: humanitec.ru
+domain: linnex.io
 publicBaseHost: linnex.io
 
 image:
@@ -9,10 +9,10 @@ image:
     - ghcr-agent-lab-pull
 
 ingress:
-  apexHost: humanitec.ru
-  wildcardHost: "*.humanitec.ru"
-  livekitHost: livekit.humanitec.ru
-  grafanaHost: grafana.humanitec.ru
+  apexHost: linnex.io
+  wildcardHost: "*.linnex.io"
+  livekitHost: livekit.linnex.io
+  grafanaHost: grafana.linnex.io
 
 observability:
   loki:

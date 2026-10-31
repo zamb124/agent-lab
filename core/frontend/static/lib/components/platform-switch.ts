@@ -29,11 +29,11 @@ export class PlatformSwitch extends PlatformElement {
                 width: 44px;
                 height: 26px;
                 border: none;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 padding: 0;
-                background: var(--glass-tint-strong, rgba(255, 255, 255, 0.12));
+                background: var(--glass-tint-strong);
                 cursor: pointer;
-                transition: background var(--duration-fast, 0.2s) ease;
+                transition: background var(--motion-duration-micro) ease;
                 flex-shrink: 0;
             }
 
@@ -47,11 +47,11 @@ export class PlatformSwitch extends PlatformElement {
                 border-radius: 50%;
                 background: #fff;
                 box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-                transition: transform var(--duration-fast, 0.2s) ease;
+                transition: transform var(--motion-duration-micro) ease;
             }
 
             :host([checked]) .switch {
-                background: var(--accent-gradient, linear-gradient(135deg, #14B8A6 0%, #0EA5A4 100%));
+                background: var(--accent-gradient);
             }
 
             :host([checked]) .switch::after {
@@ -91,7 +91,7 @@ export class PlatformSwitch extends PlatformElement {
             }
 
             .switch:focus-visible {
-                outline: 2px solid var(--accent, #99a6f9);
+                outline: 2px solid var(--accent);
                 outline-offset: 2px;
             }
         `,

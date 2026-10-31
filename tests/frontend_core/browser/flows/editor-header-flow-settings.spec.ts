@@ -15,6 +15,7 @@ import {
     branchRemoveOp,
 } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import '../../../../apps/flows/ui/components/editor/flows-editor-header.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [editorResource, flowsResource, flowUpdateOp, flowReloadFromBundleOp, branchRemoveOp];
 
@@ -24,7 +25,7 @@ describe('flows-editor-header flow settings entry', () => {
     });
 
     afterEach(() => {
-        document.querySelectorAll('.flows-editor-header-menu-portal').forEach((node) => node.remove());
+        qsa(document!, '.flows-editor-header-menu-portal').forEach((node) => node.remove());
         fixtureCleanup();
     });
 
@@ -35,20 +36,20 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo"></flows-editor-header>
         `);
         await elementUpdated(el);
 
-        const btn = el.shadowRoot.querySelector('[data-action="flow-settings"]');
+        const btn = q(shadow(el), '[data-action="flow-settings"]');
         expect(btn).to.not.equal(null);
 
         let opened = null;
-        el.openModal = (kind, props) => {
+        el.openModal = (kind: any, props: any) => {
             opened = { kind, props };
         };
 
-        btn.click();
+        (btn as TestEl).click();
         await elementUpdated(el);
 
         expect(opened).to.deep.equal({ kind: 'flows.flow_edit', props: { flowId: 'flow-demo' } });
@@ -61,25 +62,25 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         await elementUpdated(el);
 
-        const actions = el.shadowRoot.querySelector('.header-actions');
+        const actions = q(shadow(el), '.header-actions');
         expect(actions).to.not.equal(null);
 
-        const overflowAnchor = el.shadowRoot.querySelector('.overflow-anchor');
+        const overflowAnchor = q(shadow(el), '.overflow-anchor');
         expect(overflowAnchor).to.not.equal(null);
 
-        const branchesSlot = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
+        const branchesSlot = q(shadow(el), '.branches-slot platform-segmented-control');
         expect(branchesSlot).to.not.equal(null);
 
-        const branchesScroll = el.shadowRoot.querySelector('.branches-slot .branches-scroll');
-        const branchesAdd = el.shadowRoot.querySelector('.branches-slot .branches-add');
+        const branchesScroll = q(shadow(el), '.branches-slot .branches-scroll');
+        const branchesAdd = q(shadow(el), '.branches-slot .branches-add');
         expect(branchesScroll).to.not.equal(null);
         expect(branchesAdd).to.not.equal(null);
-        expect(branchesScroll.contains(branchesSlot)).to.equal(true);
+        expect(branchesScroll!.contains(branchesSlot)).to.equal(true);
     });
 
     it('overflow anchor не поднимает глобальный z-index без открытого меню', async () => {
@@ -89,15 +90,15 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         await elementUpdated(el);
 
-        const overflowAnchor = el.shadowRoot.querySelector('.overflow-anchor');
+        const overflowAnchor = qs(shadow(el), '.overflow-anchor');
         expect(overflowAnchor).to.not.equal(null);
-        expect(overflowAnchor.hasAttribute('data-open')).to.equal(false);
-        expect(window.getComputedStyle(overflowAnchor).zIndex).to.equal('auto');
+        expect(overflowAnchor!.hasAttribute('data-open')).to.equal(false);
+        expect(window.getComputedStyle(overflowAnchor).zIndex).to.equal('auto')!;
     });
 
     it('overflow menu закрывается при UI_MODAL_OPEN', async () => {
@@ -107,7 +108,7 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         const bus = bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         el._overflowOpen = true;
@@ -117,7 +118,7 @@ describe('flows-editor-header flow settings entry', () => {
         await elementUpdated(el);
 
         expect(el._overflowOpen).to.equal(false);
-        expect(el.shadowRoot.querySelector('.flows-editor-header-menu-portal')).to.equal(null);
+        expect(q(shadow(el), '.flows-editor-header-menu-portal')).to.equal(null);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {
@@ -127,40 +128,40 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         el._isMobile = true;
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
+        const flyout = q(shadow(el), '.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
-        const menuButtons = flyout.querySelectorAll('platform-button[block]');
+        const menuButtons = qsa(flyout!, 'platform-button[block]');
         expect(menuButtons.length).to.be.greaterThan(1);
 
         const employeeBtn = menuButtons[0];
         const settingsBtn = menuButtons[1];
-        expect(settingsBtn.shadowRoot.querySelector('button.ghost')).to.not.equal(null);
+        expect(q(shadow(settingsBtn!), 'button.ghost')).to.not.equal(null);
 
         let opened = null;
-        el.openModal = (kind, props) => {
+        el.openModal = (kind: any, props: any) => {
             opened = { kind, props };
         };
 
-        employeeBtn.click();
+        (employeeBtn as TestEl).click();
         await elementUpdated(el);
         expect(opened).to.deep.equal({ kind: 'flows.employee_settings', props: { flowId: 'flow-demo' } });
         expect(el._overflowOpen).to.equal(false);
 
         el._overflowOpen = true;
         await elementUpdated(el);
-        const flyoutAgain = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
+        const flyoutAgain = q(shadow(el), '.flows-editor-header-menu-portal');
         expect(flyoutAgain).to.not.equal(null);
-        const settingsBtnAgain = flyoutAgain.querySelectorAll('platform-button[block]')[1];
+        const settingsBtnAgain = qsa(flyoutAgain!, 'platform-button[block]')[1];
         opened = null;
-        settingsBtnAgain.click();
+        (settingsBtnAgain as TestEl).click();
         await elementUpdated(el);
 
         expect(opened).to.deep.equal({ kind: 'flows.flow_edit', props: { flowId: 'flow-demo' } });
@@ -174,24 +175,24 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
+        const flyout = q(shadow(el), '.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         let opened = null;
-        el.openModal = (kind, props) => {
+        el.openModal = (kind: any, props: any) => {
             opened = { kind, props };
         };
 
-        const menuButtons = [...flyout.querySelectorAll('platform-button')];
+        const menuButtons = [...qsa(flyout!, 'platform-button')];
         expect(menuButtons.length).to.be.greaterThan(0);
 
-        menuButtons[0].click();
+        menuButtons[0]!.click();
         await elementUpdated(el);
 
         expect(opened).to.deep.equal({
@@ -208,24 +209,24 @@ describe('flows-editor-header flow settings entry', () => {
         const collected = collectFactories(FACTORIES);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
 
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
         `);
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = el.shadowRoot.querySelector('.flows-editor-header-menu-portal');
+        const flyout = q(shadow(el), '.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         let opened = null;
-        el.openModal = (kind, props) => {
+        el.openModal = (kind: any, props: any) => {
             opened = { kind, props };
         };
 
-        const menuButtons = [...flyout.querySelectorAll('platform-button')];
+        const menuButtons = [...qsa(flyout!, 'platform-button')];
         expect(menuButtons.length).to.be.greaterThan(2);
 
-        menuButtons[2].click();
+        menuButtons[2]!.click();
         await elementUpdated(el);
 
         expect(opened).to.deep.equal({

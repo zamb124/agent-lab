@@ -6,13 +6,13 @@ from core.docs.assistant import (
 
 
 def test_parse_llms_full_keeps_page_internal_headings():
-    text = """# Документация Humanitec
+    text = """# Документация Linnex
 
 Описание.
 
 ## Первая страница
 
-Source: https://humanitec.ru/documentation/first/
+Source: https://linnex.io/documentation/first/
 
 Вступление.
 
@@ -22,7 +22,7 @@ Source: https://humanitec.ru/documentation/first/
 
 ## Вторая страница
 
-Source: https://humanitec.ru/documentation/second/
+Source: https://linnex.io/documentation/second/
 
 Текст второй страницы.
 """
@@ -40,7 +40,7 @@ def test_docs_url_for_page_uses_current_docs_origin_and_language():
         page_path="api/flows",
         language="en",
         current_page_url="http://lvh.me:8002/documentation/en/quickstart/",
-        fallback_url="https://humanitec.ru/documentation/en/api/flows/",
+        fallback_url="https://linnex.io/documentation/en/api/flows/",
     )
 
     assert url == "http://lvh.me:8002/documentation/en/api/flows/"

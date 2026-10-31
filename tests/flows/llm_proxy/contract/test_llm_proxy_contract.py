@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 from httpx2 import AsyncClient
 
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
+from core.ai.providers import LINNEX_LLM_AUTO_MODEL
 from core.office.ai_settings import IMAGE_AUTO_MODEL_ID, LARA_DOCUMENTS_MODEL_ID
 from core.types import JsonObject, require_json_object
 from tests.flows.llm_proxy._helpers import (
@@ -93,7 +93,7 @@ async def test_contract_models_openai_list_shape(
     assert body["object"] == "list"
     assert isinstance(body["data"], list)
     model_ids = {item["id"] for item in body["data"] if isinstance(item, dict)}
-    assert HUMANITEC_LLM_AUTO_MODEL in model_ids
+    assert LINNEX_LLM_AUTO_MODEL in model_ids
     assert IMAGE_AUTO_MODEL_ID in model_ids
     assert LARA_DOCUMENTS_MODEL_ID in model_ids
     for item in body["data"]:
@@ -316,7 +316,7 @@ async def test_contract_onlyoffice_proxy_unwrap_models(
     assert body["object"] == "list"
     model_ids = {item["id"] for item in body["data"] if isinstance(item, dict)}
     assert LARA_DOCUMENTS_MODEL_ID in model_ids
-    assert HUMANITEC_LLM_AUTO_MODEL in model_ids
+    assert LINNEX_LLM_AUTO_MODEL in model_ids
 
 
 @pytest.mark.real_taskiq

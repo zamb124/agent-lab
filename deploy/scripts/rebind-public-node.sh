@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Обновляет DNS A-записи humanitec.ru на IP новой ноды и переезжает hostNetwork-сервисам.
+# Обновляет DNS A-записи linnex.io на IP новой ноды и переезжает hostNetwork-сервисам.
 # Нужен при переносе livekit/coturn на другую ноду (они слушают на real IP хоста).
 #
 # Использование:
@@ -61,7 +61,7 @@ regru_update_a() {
 PLATFORM_NS="${PLATFORM_NS:-platform}"
 HELM_CHART="${HELM_CHART:-./deploy/helm/agent-lab}"
 HELM_RELEASE="${HELM_RELEASE:-agent-lab}"
-DOMAIN="${DOMAIN:-humanitec.ru}"
+DOMAIN="${DOMAIN:-linnex.io}"
 DNS_TTL=300
 
 K="$KUBECTL"

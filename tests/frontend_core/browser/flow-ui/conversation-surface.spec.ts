@@ -5,6 +5,7 @@
 import { elementUpdated, expect, fixture, fixtureCleanup, html, waitUntil } from '../helpers/render.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import { blockElement, pageRenderRoot } from '@platform/lib/flow-ui/editor/selection.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const CHAT_DOCUMENT = {
     start_page_id: 'main',
@@ -41,7 +42,7 @@ const CHAT_DOCUMENT = {
     ],
 };
 
-function conversationEl(host) {
+function conversationEl(host: any) {
     return blockElement(host, 'conversation')?.querySelector('flow-ui-conversation') ?? null;
 }
 
@@ -49,7 +50,7 @@ describe('flow-ui conversation surface', () => {
     afterEach(() => fixtureCleanup());
 
     it('centers identity, greeting hero and composer on the editing canvas', async () => {
-        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.greeting') !== null, 'conversation did not render');
         element.store.setInterface({
             document: CHAT_DOCUMENT,
@@ -67,31 +68,31 @@ describe('flow-ui conversation surface', () => {
         }, 'identity title fallback did not render');
 
         const identity = blockElement(element, 'agent-identity');
-        expect(identity.querySelector('img').getAttribute('src')).to.contain('linnex_spinner_logo.png');
-        const identityPad = parseFloat(getComputedStyle(identity).paddingLeft);
+        expect(qs(identity!, 'img').getAttribute('src')).to.contain('linnex_spinner_logo.png');
+        const identityPad = parseFloat(getComputedStyle(identity!).paddingLeft);
         expect(identityPad).to.be.at.least(16);
 
-        const page = pageRenderRoot(element).querySelector('.page');
+        const page = qs(pageRenderRoot(element)!, '.page');
         expect(page.getAttribute('data-fill')).to.equal('true');
 
         const conversation = conversationEl(element);
-        const root = conversation.shadowRoot;
-        const greeting = root.querySelector('.greeting');
+        const root = shadow(conversation!);
+        const greeting = qs(root!, '.greeting');
         expect(getComputedStyle(greeting).justifyItems).to.equal('center');
         expect(getComputedStyle(greeting).textAlign).to.equal('center');
-        expect(root.querySelector('.greeting-mark').getAttribute('src')).to.contain('linnex_spinner_logo.png');
-        expect(root.querySelector('.greeting-title').textContent).to.equal('Lara');
-        expect(greeting.querySelector('p').textContent).to.equal('Hello! How can I help?');
-        expect(root.querySelector('.fu-prompts button').textContent).to.equal('What can you do?');
-        expect(root.querySelector('textarea[data-canon="composer"]')).to.not.equal(null);
-        expect(root.querySelector('button.icon-btn.send').getAttribute('aria-label')).to.equal('Send');
-        expect(root.querySelector('button.composer-voice-session')).to.not.equal(null);
-        expect(conversation.hasAttribute('editing')).to.equal(true);
-        expect(getComputedStyle(root.querySelector('.task-feed')).overflow).to.equal('visible');
-        expect(conversation.scrollHeight).to.be.at.most(conversation.clientHeight + 2);
-        const convBox = conversation.getBoundingClientRect();
-        const markBox = root.querySelector('.greeting-mark').getBoundingClientRect();
-        const composerBox = root.querySelector('.composer').getBoundingClientRect();
+        expect(qs(root!, '.greeting-mark').getAttribute('src')).to.contain('linnex_spinner_logo.png');
+        expect(qs(root!, '.greeting-title').textContent).to.equal('Lara');
+        expect(qs(greeting!, 'p').textContent).to.equal('Hello! How can I help?');
+        expect(qs(root!, '.fu-prompts button').textContent).to.equal('What can you do?');
+        expect(q(root!, 'textarea[data-canon="composer"]')).to.not.equal(null);
+        expect(qs(root!, 'button.icon-btn.send').getAttribute('aria-label')).to.equal('Send');
+        expect(q(root!, 'button.composer-voice-session')).to.not.equal(null);
+        expect(conversation!.hasAttribute('editing')).to.equal(true);
+        expect(getComputedStyle(qs(root!, '.task-feed')).overflow).to.equal('visible');
+        expect(conversation!.scrollHeight).to.be.at.most(conversation!.clientHeight + 2);
+        const convBox = conversation!.getBoundingClientRect();
+        const markBox = qs(root!, '.greeting-mark').getBoundingClientRect();
+        const composerBox = qs(root!, '.composer').getBoundingClientRect();
         expect(markBox.height).to.be.at.least(48);
         expect(markBox.top).to.be.at.least(convBox.top - 1);
         expect(markBox.bottom).to.be.at.most(convBox.bottom + 1);
@@ -103,72 +104,72 @@ describe('flow-ui conversation surface', () => {
         const document = {
             ...CHAT_DOCUMENT,
             pages: [{
-                ...CHAT_DOCUMENT.pages[0],
+                ...CHAT_DOCUMENT.pages[0]!,
                 blocks: [
-                    CHAT_DOCUMENT.pages[0].blocks[0],
+                    CHAT_DOCUMENT!.pages[0]!.blocks[0]!,
                     { block_id: 'intro', type: 'video', visible_when: null, url: 'https://example.com/intro.mp4' },
-                    CHAT_DOCUMENT.pages[0].blocks[1],
+                    CHAT_DOCUMENT!.pages[0]!.blocks[1]!,
                 ],
             }],
         };
-        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.composer') !== null, 'conversation did not render');
         const identity = blockElement(element, 'agent-identity');
         const video = blockElement(element, 'intro');
         const conversation = blockElement(element, 'conversation');
-        expect(identity.getBoundingClientRect().bottom).to.be.at.most(video.getBoundingClientRect().top + 1);
-        expect(video.getBoundingClientRect().bottom).to.be.at.most(conversation.getBoundingClientRect().top + 1);
-        const feed = conversationEl(element).shadowRoot.querySelector('.task-feed');
+        expect(identity!.getBoundingClientRect().bottom).to.be.at.most(video!.getBoundingClientRect().top + 1);
+        expect(video!.getBoundingClientRect().bottom).to.be.at.most(conversation!.getBoundingClientRect().top + 1);
+        const feed = qs(shadow(conversationEl(element)!), '.task-feed');
         expect(getComputedStyle(feed).overflow).to.equal('visible');
-        expect(conversation.scrollHeight).to.be.at.most(conversation.clientHeight + 2);
+        expect(conversation!.scrollHeight).to.be.at.most(conversation!.clientHeight + 2);
     });
 
     it('does not fill the viewport when a conversation page has an html sibling', async () => {
         const document = {
             ...CHAT_DOCUMENT,
             pages: [{
-                ...CHAT_DOCUMENT.pages[0],
+                ...CHAT_DOCUMENT.pages[0]!,
                 blocks: [
-                    ...CHAT_DOCUMENT.pages[0].blocks,
+                    ...CHAT_DOCUMENT!.pages[0]!.blocks,
                     { block_id: 'card', type: 'html', visible_when: null, source: '<p>hello</p>', height: 'auto', fields: [], field: 'card' },
                 ],
             }],
         };
-        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element) !== null && pageRenderRoot(element)?.querySelector('.page') !== null, 'page did not render');
-        expect(pageRenderRoot(element).querySelector('.page').getAttribute('data-fill')).to.equal('false');
+        expect(qs(pageRenderRoot(element)!, '.page').getAttribute('data-fill')).to.equal('false');
         expect(blockElement(element, 'card')).to.not.equal(null);
     });
 
     it('keeps the user bubble on the right after a local pending turn', async () => {
-        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.task-feed') !== null, 'feed did not render');
         element.store.setPending({ text: 'pending-hello', files: [] });
         const conversation = conversationEl(element);
-        await waitUntil(() => conversation.shadowRoot.querySelector('.bubble.user') !== null, 'user bubble did not appear');
-        const bubble = conversation.shadowRoot.querySelector('.bubble.user');
-        expect(bubble.textContent).to.equal('pending-hello');
-        expect(getComputedStyle(bubble).alignSelf).to.equal('flex-end');
-        expect(conversation.shadowRoot.querySelector('.greeting')).to.equal(null);
-        expect(conversation.hasAttribute('data-empty')).to.equal(false);
-        expect(conversation.shadowRoot.querySelector('.typing')).to.not.equal(null);
+        await waitUntil(() => q(shadow(conversation!), '.bubble.user') !== null, 'user bubble did not appear');
+        const bubble = qs(shadow(conversation!), '.bubble.user');
+        expect(bubble!.textContent).to.equal('pending-hello');
+        expect(getComputedStyle(bubble).alignSelf).to.equal('flex-end')!;
+        expect(q(shadow(conversation!), '.greeting')).to.equal(null);
+        expect(conversation!.hasAttribute('data-empty')).to.equal(false);
+        expect(q(shadow(conversation!), '.typing')).to.not.equal(null);
     });
 
     it('shows icon-only copy, tracing and logs actions on a settled assistant turn', async () => {
         const document = {
             ...CHAT_DOCUMENT,
             pages: [{
-                ...CHAT_DOCUMENT.pages[0],
+                ...CHAT_DOCUMENT.pages[0]!,
                 blocks: [
-                    CHAT_DOCUMENT.pages[0].blocks[0],
+                    CHAT_DOCUMENT!.pages[0]!.blocks[0]!,
                     {
-                        ...CHAT_DOCUMENT.pages[0].blocks[1],
-                        settings: { ...CHAT_DOCUMENT.pages[0].blocks[1].settings, show_trace_actions: true },
+                        ...CHAT_DOCUMENT!.pages[0]!.blocks[1]!,
+                        settings: { ...CHAT_DOCUMENT!.pages[0]!.blocks[1]!.settings, show_trace_actions: true },
                     },
                 ],
             }],
         };
-        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.task-feed') !== null, 'feed did not render');
         element.store.resetContext('c1');
         element.store.applyFrame({
@@ -183,18 +184,18 @@ describe('flow-ui conversation surface', () => {
             },
         });
         await elementUpdated(element);
-        const root = conversationEl(element).shadowRoot;
-        const copy = root.querySelector('.copy-btn');
-        const tracing = root.querySelector('.tracing-btn[data-kind="tracing"]');
-        const logs = root.querySelector('.tracing-btn[data-kind="logs"]');
+        const root = shadow(conversationEl(element)!);
+        const copy = qs(root!, '.copy-btn');
+        const tracing = qs(root!, '.tracing-btn[data-kind="tracing"]');
+        const logs = qs(root!, '.tracing-btn[data-kind="logs"]');
         expect(copy, 'copy action').to.exist;
         expect(copy.getAttribute('aria-label')).to.equal('Copy');
-        expect(copy.querySelector('svg.fu-glyph path, svg.fu-glyph rect'), 'copy stroke icon').to.exist;
+        expect(qs(copy!, 'svg.fu-glyph path, svg.fu-glyph rect'), 'copy stroke icon').to.exist;
         expect(copy.textContent.trim()).to.equal('');
         expect(tracing.getAttribute('aria-label')).to.equal('Tracing');
-        expect(tracing.querySelector('svg.fu-glyph path, svg.fu-glyph circle, svg.fu-glyph line'), 'tracing stroke icon').to.exist;
+        expect(qs(tracing!, 'svg.fu-glyph path, svg.fu-glyph circle, svg.fu-glyph line'), 'tracing stroke icon').to.exist;
         expect(logs.getAttribute('aria-label')).to.equal('Logs');
-        expect(logs.querySelector('svg.fu-glyph path'), 'logs stroke icon').to.exist;
+        expect(qs(logs!, 'svg.fu-glyph path'), 'logs stroke icon').to.exist;
         expect(getComputedStyle(copy).width).to.equal('32px');
         expect(getComputedStyle(copy).borderRadius).to.equal('8px');
     });

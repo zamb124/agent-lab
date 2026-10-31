@@ -400,7 +400,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
                 padding: 9px 10px;
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
-                background: color-mix(in srgb, var(--surface-1), transparent 8%);
+                background: color-mix(in srgb, var(--bg-surface), transparent 8%);
             }
 
             .payload-row-wide {

@@ -9,6 +9,7 @@ import {
 } from '../../helpers/flows-dataflow-fixtures.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 import '../../../../apps/flows/ui/modals/flows-node-run-result-modal.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 function seedFlowsTranslations() {
     const bus = getPlatformBus();
@@ -49,26 +50,26 @@ describe('flows-node-run-result-modal', () => {
         seedFlowsTranslations();
     });
     afterEach(() => {
-        for (const el of document.querySelectorAll('flows-node-run-result-modal')) {
+        for (const el of qsa(document!, 'flows-node-run-result-modal')) {
             el.remove();
         }
         fixtureCleanup();
     });
 
     function captureBusEvents() {
-        const events = [];
-        getPlatformBus().subscribeAny((e) => events.push(e));
+        const events: any[] = [];
+        getPlatformBus().subscribeAny((e: any) => events.push(e));
         return events;
     }
 
-    async function typeSearch(modal, text) {
-        const search = modal.shadowRoot.querySelector('platform-modal-search-field');
+    async function typeSearch(modal: any, text: any) {
+        const search = qs(shadow(modal), 'platform-modal-search-field');
         expect(search).to.not.equal(null);
-        const field = search.shadowRoot.querySelector('platform-field');
-        const inner = field.shadowRoot.querySelector('platform-field-string');
-        const input = inner.shadowRoot.querySelector('input.field-pill-input');
-        input.value = text;
-        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        const field = qs(shadow(search)!, 'platform-field');
+        const inner = qs(shadow(field)!, 'platform-field-string');
+        const input = qs(shadow(inner)!, 'input.field-pill-input');
+        (input as TestEl).value = text;
+        input!.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         await elementUpdated(modal);
     }
 
@@ -106,7 +107,7 @@ describe('flows-node-run-result-modal', () => {
             ],
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-node-run-result-modal
                 .nodeId=${'code_1'}
                 .runIndex=${1}
@@ -116,41 +117,39 @@ describe('flows-node-run-result-modal', () => {
         `);
         await elementUpdated(modal);
 
-        expect(modal.shadowRoot.querySelector('.field-row[data-path="markdown"][data-active="true"]')).to.not.equal(null);
-        const markdownView = modal.shadowRoot.querySelector('flows-node-run-value-view');
+        expect(q(shadow(modal), '.field-row[data-path="markdown"][data-active="true"]')).to.not.equal(null);
+        const markdownView = qs(shadow(modal), 'flows-node-run-value-view');
         expect(markdownView).to.not.equal(null);
-        expect(markdownView.shadowRoot.querySelector('platform-markdown-editor')).to.not.equal(null);
+        expect(q(shadow(markdownView)!, 'platform-markdown-editor')).to.not.equal(null);
 
-        const firstRun = modal.shadowRoot.querySelector('.run-row[data-run-index="0"]');
+        const firstRun = q(shadow(modal), '.run-row[data-run-index="0"]');
         expect(firstRun).to.not.equal(null);
-        firstRun.click();
+        (firstRun as TestEl).click();
         await elementUpdated(modal);
 
-        expect(modal.shadowRoot.querySelector('.field-row[data-path="result"]')).to.not.equal(null);
-        const valueView = modal.shadowRoot.querySelector('flows-node-run-value-view');
-        expect(valueView.shadowRoot.querySelector('flows-json-tree')).to.not.equal(null);
+        expect(q(shadow(modal), '.field-row[data-path="result"]')).to.not.equal(null);
+        const valueView = qs(shadow(modal), 'flows-node-run-value-view');
+        expect(q(shadow(valueView)!, 'flows-json-tree')).to.not.equal(null);
 
-        const treeRow = valueView.shadowRoot.querySelector('flows-json-tree')
-            .shadowRoot.querySelector('.row[data-path="result.nested"]');
+        const treeRow = qs(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]');
         expect(treeRow).to.not.equal(null);
-        treeRow.click();
+        (treeRow as TestEl).click();
         await elementUpdated(modal);
-        await elementUpdated(valueView);
-        const nestedChildren = valueView.shadowRoot.querySelector('flows-json-tree')
-            .shadowRoot.querySelector('.row[data-path="result.nested.b"]');
+        await elementUpdated(valueView)!;
+        const nestedChildren = qs(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested.b"]');
         expect(nestedChildren).to.not.equal(null);
 
-        const jsonToggle = valueView.shadowRoot.querySelector('platform-segmented-control');
-        const jsonSegment = jsonToggle.shadowRoot.querySelector('button.segment[aria-label="JSON"]');
+        const jsonToggle = qs(shadow(valueView)!, 'platform-segmented-control');
+        const jsonSegment = qs(shadow(jsonToggle)!, 'button.segment[aria-label="JSON"]');
         expect(jsonSegment).to.not.equal(null);
-        jsonSegment.click();
-        await elementUpdated(valueView);
-        expect(valueView.shadowRoot.querySelector('platform-json-editor')).to.not.equal(null);
+        (jsonSegment as TestEl).click();
+        await elementUpdated(valueView)!;
+        expect(q(shadow(valueView)!, 'platform-json-editor')).to.not.equal(null);
 
         const events = captureBusEvents();
-        const copyBtn = modal.shadowRoot.querySelector('platform-button[aria-label="Copy selected value"]');
+        const copyBtn = q(shadow(modal), 'platform-button[aria-label="Copy selected value"]');
         expect(copyBtn).to.not.equal(null);
-        copyBtn.click();
+        (copyBtn as TestEl).click();
         await elementUpdated(modal);
         const copied = events.find((event) => event.type === CoreEvents.UI_CLIPBOARD_COPY_REQUESTED);
         expect(copied).to.not.equal(undefined);
@@ -173,15 +172,15 @@ describe('flows-node-run-result-modal', () => {
                 change_type: 'added',
             })),
         });
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-node-run-result-modal .nodeId=${'code_1'} .runIndex=${0} .open=${true}></flows-node-run-result-modal>
         `);
         await elementUpdated(modal);
-        expect(modal.shadowRoot.querySelectorAll('.field-row').length).to.equal(12);
+        expect(qsa(shadow(modal), '.field-row').length).to.equal(12);
         await typeSearch(modal, 'field_11');
-        const visible = modal.shadowRoot.querySelectorAll('.field-row');
+        const visible = qsa(shadow(modal), '.field-row');
         expect(visible.length).to.equal(1);
-        expect(visible[0].getAttribute('data-path')).to.equal('field_11');
+        expect(visible[0]!.getAttribute('data-path')).to.equal('field_11');
     });
 
     it('changed field switches old/new through segmented control', async () => {
@@ -199,7 +198,7 @@ describe('flows-node-run-result-modal', () => {
                 change_type: 'changed',
             }],
         });
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-node-run-result-modal
                 .nodeId=${'code_1'}
                 .runIndex=${0}
@@ -208,18 +207,15 @@ describe('flows-node-run-result-modal', () => {
             ></flows-node-run-result-modal>
         `);
         await elementUpdated(modal);
-        const valueView = modal.shadowRoot.querySelector('flows-node-run-value-view');
-        expect(valueView.shadowRoot.querySelector('flows-json-tree')
-            .shadowRoot.querySelector('.row[data-path="result.nested"]')).to.not.equal(null);
-        const sideControl = modal.shadowRoot.querySelector('.viewer-toolbar platform-segmented-control');
-        const oldSegment = sideControl.shadowRoot.querySelector('button.segment[aria-label="Before"]');
-        oldSegment.click();
+        const valueView = qs(shadow(modal), 'flows-node-run-value-view');
+        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]')).to.not.equal(null);
+        const sideControl = qs(shadow(modal), '.viewer-toolbar platform-segmented-control');
+        const oldSegment = q(shadow(sideControl), 'button.segment[aria-label="Before"]');
+        (oldSegment as TestEl).click();
         await elementUpdated(modal);
-        await elementUpdated(valueView);
-        expect(valueView.shadowRoot.querySelector('flows-json-tree')
-            .shadowRoot.querySelector('.row[data-path="result.nested"]')).to.equal(null);
-        expect(valueView.shadowRoot.querySelector('flows-json-tree')
-            .shadowRoot.querySelector('.row[data-path="result.a"]')).to.not.equal(null);
+        await elementUpdated(valueView)!;
+        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]')).to.equal(null);
+        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.a"]')).to.not.equal(null);
     });
 
     it('follows latest run only when the cursor was on previous latest', async () => {
@@ -239,11 +235,11 @@ describe('flows-node-run-result-modal', () => {
             result_preview: 'second',
             diff: [{ path: 'two', old_value: null, new_value: 2, change_type: 'added' }],
         });
-        const following = await fixture(html`
+        const following = await fixture<TestEl>(html`
             <flows-node-run-result-modal .nodeId=${'code_1'} .runIndex=${1} .open=${true}></flows-node-run-result-modal>
         `);
         await elementUpdated(following);
-        expect(following.shadowRoot.querySelector('.run-row[data-run-index="1"][data-active="true"]')).to.not.equal(null);
+        expect(q(shadow(following), '.run-row[data-run-index="1"][data-active="true"]')).to.not.equal(null);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
             node_type: 'code',
@@ -252,14 +248,14 @@ describe('flows-node-run-result-modal', () => {
             diff: [{ path: 'three', old_value: null, new_value: 3, change_type: 'added' }],
         });
         await elementUpdated(following);
-        expect(following.shadowRoot.querySelector('.run-row[data-run-index="2"][data-active="true"]')).to.not.equal(null);
-        expect(following.shadowRoot.querySelector('.field-row[data-path="three"]')).to.not.equal(null);
+        expect(q(shadow(following), '.run-row[data-run-index="2"][data-active="true"]')).to.not.equal(null);
+        expect(q(shadow(following), '.field-row[data-path="three"]')).to.not.equal(null);
 
-        const pinned = await fixture(html`
+        const pinned = await fixture<TestEl>(html`
             <flows-node-run-result-modal .nodeId=${'code_1'} .runIndex=${0} .open=${true}></flows-node-run-result-modal>
         `);
         await elementUpdated(pinned);
-        expect(pinned.shadowRoot.querySelector('.run-row[data-run-index="0"][data-active="true"]')).to.not.equal(null);
+        expect(q(shadow(pinned), '.run-row[data-run-index="0"][data-active="true"]')).to.not.equal(null);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
             node_type: 'code',
@@ -268,14 +264,14 @@ describe('flows-node-run-result-modal', () => {
             diff: [{ path: 'four', old_value: null, new_value: 4, change_type: 'added' }],
         });
         await elementUpdated(pinned);
-        expect(pinned.shadowRoot.querySelector('.run-row[data-run-index="0"][data-active="true"]')).to.not.equal(null);
-        expect(pinned.shadowRoot.querySelector('.field-row[data-path="one"]')).to.not.equal(null);
-        expect(pinned.shadowRoot.querySelector('.field-row[data-path="four"]')).to.equal(null);
+        expect(q(shadow(pinned), '.run-row[data-run-index="0"][data-active="true"]')).to.not.equal(null);
+        expect(q(shadow(pinned), '.field-row[data-path="one"]')).to.not.equal(null);
+        expect(q(shadow(pinned), '.field-row[data-path="four"]')).to.equal(null);
     });
 
     it('rejects unknown nodeId without opening an empty inspector', async () => {
         loadCodeNode();
-        const modal = document.createElement('flows-node-run-result-modal');
+        const modal = (document.createElement('flows-node-run-result-modal') as TestEl);
         modal.nodeId = 'missing_node';
         modal.open = true;
         document.body.append(modal);
@@ -283,7 +279,7 @@ describe('flows-node-run-result-modal', () => {
             () => {
                 throw new Error('flows-node-run-result-modal: expected throw for missing node');
             },
-            (error) => error,
+            (error: any) => error,
         );
         const error = await failure;
         modal.remove();
@@ -301,7 +297,7 @@ describe('flows-node-run-result-modal', () => {
             duration_ms: 8,
         });
 
-        const modal = await fixture(html`
+        const modal = await fixture<TestEl>(html`
             <flows-node-run-result-modal
                 .nodeId=${'code_1'}
                 .runIndex=${0}
@@ -310,8 +306,8 @@ describe('flows-node-run-result-modal', () => {
         `);
         await elementUpdated(modal);
 
-        expect(modal.shadowRoot.querySelector('.error-text').textContent).to.include('ValueError: boom');
-        expect(modal.shadowRoot.querySelector('.fields-pane')).to.equal(null);
-        expect(modal.shadowRoot.querySelector('.viewer-toolbar')).to.equal(null);
+        expect(qs(shadow(modal), '.error-text').textContent).to.include('ValueError: boom');
+        expect(q(shadow(modal), '.fields-pane')).to.equal(null);
+        expect(q(shadow(modal), '.viewer-toolbar')).to.equal(null);
     });
 });

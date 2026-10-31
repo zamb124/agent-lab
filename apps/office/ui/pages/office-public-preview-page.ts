@@ -7,6 +7,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-document-viewer-host.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -99,7 +100,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                 background: var(--glass-solid-medium);
             }
             .title {
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: 600;
                 color: var(--text-primary);
             }
@@ -139,7 +140,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
             }
             .error {
                 padding: var(--space-4);
-                color: var(--danger);
+                color: var(--error);
             }
         `,
     ];
@@ -216,7 +217,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                 <span class="title">${title}</span>
             </div>
             <div class="body">
-                ${this._loading ? html`<div class="status"><platform-spinner size="lg"></platform-spinner></div>` : ''}
+                ${this._loading ? html`<platform-empty-state loading></platform-empty-state>` : ''}
                 ${this._errorKey ? html`<div class="error">${this.t(this._errorKey)}</div>` : ''}
                 ${!this._loading && !this._errorKey && this._resolve && this._resolve.resource_kind === 'catalog'
                     ? html`
@@ -229,7 +230,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                             `)}
                         </div>
                         ${this._catalogItems.length === 0
-                            ? html`<div class="status">${this.t('public_preview.catalogEmpty')}</div>`
+                            ? html`<platform-empty-state icon="folder" title=${this.t('public_preview.catalogEmpty')}></platform-empty-state>`
                             : ''}
                     `
                     : ''}

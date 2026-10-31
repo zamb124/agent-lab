@@ -2,6 +2,7 @@
  * Smoke: CRMEntityCard — create и edit: верстка, статусы из entities.status, score у связи.
  */
 
+import type { SliceDef } from '@platform/lib/events/reducers/index.js';
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState } from '../helpers/reset.js';
 import {
@@ -30,6 +31,7 @@ import { grantsListOp } from '../../../../apps/crm/ui/events/resources/grants.re
 import { relatedEntitiesOp } from '../../../../apps/crm/ui/events/resources/graph.resource.js';
 import crmRu from '../../../../core/i18n/translations/ru/crm.json' with { type: 'json' };
 import '../../../../apps/crm/ui/components/entity-card.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 const FACTORIES = [
     entitiesResource,
@@ -49,8 +51,8 @@ const FACTORIES = [
 ];
 
 function setupCrmBus() {
-    const slices = {};
-    const effects = [];
+    const slices: Record<string, SliceDef> = {};
+    const effects: any[] = [];
     for (const f of FACTORIES) {
         registerFactory(f);
         slices[f.sliceKey] = f.slice;
@@ -93,19 +95,19 @@ describe('crm-entity-card', () => {
         seedCrmTranslations();
     });
     afterEach(() => {
-        document.querySelectorAll('crm-entity-card').forEach((el) => el.remove());
+        qsa(document!, 'crm-entity-card').forEach((el) => el.remove());
         fixtureCleanup();
     });
 
     it('panel-mode=create рендерит область выбора типа', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <crm-entity-card panel-mode="create"></crm-entity-card>
         `);
         await elementUpdated(el);
         await aTimeout(0);
-        const root = el.shadowRoot;
+        const root = shadow(el);
         expect(root, 'shadowRoot').to.exist;
-        const scroll = root.querySelector('.scroll');
+        const scroll = qs(root!, '.scroll');
         expect(scroll, 'main scroll area').to.exist;
     });
 
@@ -126,7 +128,7 @@ describe('crm-entity-card', () => {
             related_entities: [],
             attachments: [],
         };
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <crm-entity-card
                 panel-mode="edit"
                 entity-id="e_test_1"
@@ -136,20 +138,20 @@ describe('crm-entity-card', () => {
         `);
         await elementUpdated(el);
         await aTimeout(0);
-        const root = el.shadowRoot;
+        const root = shadow(el);
         const text = (root && root.textContent) ? root.textContent : '';
         expect(text.includes('entity_modal.status_')).to.equal(false);
-        const statusRow = root.querySelector('.edit-name-status-row');
-        const sheetStatus = root.querySelector('.sheet-block platform-field[type="enum"]');
-        const statusField = (statusRow && statusRow.querySelector('platform-field[type="enum"]')) || sheetStatus;
+        const statusRow = q(root!, '.edit-name-status-row');
+        const sheetStatus = qs(root!, '.sheet-block platform-field[type="enum"]');
+        const statusField = (statusRow && qs(statusRow!, 'platform-field[type="enum"]')) || sheetStatus;
         expect(statusField, 'status platform-field').to.exist;
-        const pfEnum = statusField.shadowRoot && statusField.shadowRoot.querySelector('platform-field-enum');
+        const pfEnum = shadow(statusField) && qs(shadow(statusField), 'platform-field-enum');
         expect(pfEnum, 'platform-field-enum').to.exist;
-        const enumInp = pfEnum.shadowRoot && pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        const enumInp = shadow(pfEnum) && qs(shadow(pfEnum), 'input.field-pill-enum-input');
         expect(enumInp, 'enum combobox inside platform-field').to.exist;
         enumInp.focus();
         await elementUpdated(pfEnum);
-        const activeRow = pfEnum.shadowRoot.querySelector('[data-enum-value="active"]');
+        const activeRow = qs(shadow(pfEnum), '[data-enum-value="active"]');
         expect(activeRow, 'status enum row active').to.exist;
         expect((activeRow.textContent || '').includes('Актив')).to.equal(true);
     });
@@ -185,7 +187,7 @@ describe('crm-entity-card', () => {
             ],
             attachments: [],
         };
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <crm-entity-card
                 panel-mode="edit"
                 entity-id="e_main"
@@ -195,12 +197,12 @@ describe('crm-entity-card', () => {
         `);
         await elementUpdated(el);
         await aTimeout(0);
-        const root = el.shadowRoot;
-        const neighborRows = root.querySelector('crm-related-neighbor-rows');
+        const root = shadow(el);
+        const neighborRows = qs(root!, 'crm-related-neighbor-rows');
         expect(neighborRows, 'neighbor rows host').to.exist;
-        const nrRoot = neighborRows.shadowRoot;
+        const nrRoot = shadow(neighborRows);
         expect(nrRoot, 'neighbor rows shadow').to.exist;
-        const scoreEl = nrRoot.querySelector('.neighbor-strength-fill');
+        const scoreEl = qs(nrRoot!, '.neighbor-strength-fill');
         expect(scoreEl, 'semantic match strength bar').to.exist;
     });
 });

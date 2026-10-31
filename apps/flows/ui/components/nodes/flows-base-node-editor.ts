@@ -349,7 +349,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 min-width: 0;
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
-                animation: dataflow-chip-in 160ms var(--easing-smooth, ease-out) both;
+                animation: dataflow-chip-in 160ms var(--easing-smooth) both;
             }
             .dataflow-row .arrow {
                 color: var(--text-tertiary);
@@ -366,7 +366,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 line-height: 1.2;
-                animation: dataflow-chip-in 160ms var(--easing-smooth, ease-out) both;
+                animation: dataflow-chip-in 160ms var(--easing-smooth) both;
             }
             article.dataflow-chip {
                 appearance: none;

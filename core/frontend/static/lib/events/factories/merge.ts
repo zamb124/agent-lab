@@ -9,9 +9,10 @@
  * коллекции), ничего не угадывается. Фабрика, которая ещё не запускалась, не трогается.
  */
 
-import type { EffectCtx } from '../contract.js';
+import type { EffectCtx, PlatformEvent } from '../contract.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import { isPlainRecord } from '../payload.js';
+import type { AsyncOpFactory } from './async-op.js';
 
 interface CollectionStateLike extends Record<string, unknown> {
     items: readonly (Record<string, unknown> | null)[];
@@ -23,6 +24,24 @@ interface AsyncOpFactoryLike extends PlatformFactory {
     kind: 'async-op';
     sliceKey: string;
     events: { REQUESTED: string };
+}
+
+/** Результат `createAsyncOp` по его фабрике — с `commandType` это wire-тип из `PlatformCommandMap`. */
+export type AsyncOpResultOf<F> = F extends AsyncOpFactory<infer R, infer _S, infer _A> ? R : never;
+
+/**
+ * Типизированный `result` локального `<op>/succeeded`-события фабрики.
+ * `null` — событие другого типа или payload без `result` (сломанный контракт
+ * отсекает _baseReducer фабрики до extraReducer).
+ */
+export function opSucceededResult<F extends { events: { SUCCEEDED: string } }>(
+    event: PlatformEvent,
+    op: F,
+): AsyncOpResultOf<F> | null {
+    if (event.type !== op.events.SUCCEEDED) return null;
+    if (!isPlainRecord(event.payload)) return null;
+    const result = event.payload.result;
+    return result === undefined || result === null ? null : (result as AsyncOpResultOf<F>);
 }
 
 interface ResourceCollectionFactoryLike extends PlatformFactory {

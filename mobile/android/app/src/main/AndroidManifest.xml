@@ -51,13 +51,13 @@
                 App Links (аналог Universal Links на iOS).
                 Хосты — те же, что в mobile/ios/App/App/App.entitlements:
                 апексы + wildcard-поддомены для tenant slug'ов
-                (artflash.humanitec.ru и т.п. — каждый клиент компании).
+                (artflash.linnex.io и т.п. — каждый клиент компании).
                 Префиксы путей синхронизированы с DEEPLINK_PATH_PREFIXES в
                 core/frontend/static/lib/utils/platform-deeplink-paths.js.
 
                 autoVerify=true (требует Android 12+ / API 31+ для wildcard-хостов):
                 верификация идёт по /.well-known/assetlinks.json на апексе
-                (humanitec.ru / humanetic.ru / agents-lab.ru) с правильным
+                (linnex.io / humanetic.ru / agents-lab.ru) с правильным
                 sha256_cert_fingerprints — отдельный JSON на каждом поддомене
                 не требуется.
             -->
@@ -68,8 +68,8 @@
 
                 <data android:scheme="https" />
 
-                <data android:host="humanitec.ru" />
-                <data android:host="*.humanitec.ru" />
+                <data android:host="linnex.io" />
+                <data android:host="*.linnex.io" />
                 <data android:host="humanetic.ru" />
                 <data android:host="*.humanetic.ru" />
                 <data android:host="agents-lab.ru" />

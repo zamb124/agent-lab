@@ -10,10 +10,11 @@ import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.
 import { codeLspSessionOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
 import '../../../../apps/flows/ui/components/editors/flows-llm-config-editor.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 describe('flows-llm-config-editor', () => {
     /** @type {typeof platformWs.request | undefined} */
-    let originalWsRequest;
+    let originalWsRequest: any;
 
     beforeEach(() => {
         resetPlatformState();
@@ -30,7 +31,7 @@ describe('flows-llm-config-editor', () => {
             if (opts.type === 'flows/registry/models_list_requested') {
                 return { items: ['test-model'] };
             }
-            return originalWsRequest(opts);
+            return originalWsRequest.call(platformWs, opts);
         };
     });
     afterEach(() => {
@@ -41,54 +42,54 @@ describe('flows-llm-config-editor', () => {
     });
 
     it('базовые поля провайдер/модель/temperature/max_tokens', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-llm-config-editor .config=${{ provider: 'openai', model: 'gpt-4o' }}></flows-llm-config-editor>
         `);
         await elementUpdated(el);
-        const fields = el.shadowRoot.querySelectorAll('.grid > .field');
+        const fields = qsa(shadow(el), '.grid > .field');
         expect(fields.length).to.be.greaterThanOrEqual(4);
-        const numberFields = el.shadowRoot.querySelectorAll('platform-field[type="number"], platform-field[type="integer"]');
+        const numberFields = qsa(shadow(el), 'platform-field[type="number"], platform-field[type="integer"]');
         expect(numberFields.length).to.be.greaterThanOrEqual(2);
     });
 
     it('advanced секция содержит password+url+seed+reasoning_effort', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-llm-config-editor .config=${{ api_key: '@var:K' }}></flows-llm-config-editor>
         `);
         await elementUpdated(el);
-        const apiPf = el.shadowRoot.querySelector('platform-field[input-type="password"]');
+        const apiPf = qs(shadow(el), 'platform-field[input-type="password"]');
         expect(apiPf).to.not.be.null;
-        const apiInner = apiPf.shadowRoot.querySelector('platform-field-string');
+        const apiInner = qs(shadow(apiPf), 'platform-field-string');
         expect(apiInner).to.not.be.null;
-        expect(apiInner.shadowRoot.querySelector('input[type="password"]')).to.not.be.null;
-        expect(el.shadowRoot.querySelector('platform-json-editor')).to.not.be.null;
-        const enumFields = el.shadowRoot.querySelectorAll('platform-field[type="enum"]');
+        expect(qs(shadow(apiInner), 'input[type="password"]')).to.not.be.null;
+        expect(qs(shadow(el), 'platform-json-editor')).to.not.be.null;
+        const enumFields = qsa(shadow(el), 'platform-field[type="enum"]');
         expect(enumFields.length).to.be.greaterThanOrEqual(2);
     });
 
     it('emit change удаляет ключ при пустом значении провайдера', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <flows-llm-config-editor .config=${{ provider: 'openai' }}></flows-llm-config-editor>
         `);
         await elementUpdated(el);
         let last = null;
         el.addEventListener('change', (e) => {
-            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'config')) {
-                last = e.detail;
+            if ((e as CustomEvent).detail && Object.prototype.hasOwnProperty.call((e as CustomEvent).detail, 'config')) {
+                last = (e as CustomEvent).detail;
             }
         });
-        const providerPf = el.shadowRoot.querySelector('.grid > .field:nth-child(1) platform-field[type="enum"]');
+        const providerPf = qs(shadow(el), '.grid > .field:nth-child(1) platform-field[type="enum"]');
         expect(providerPf).to.not.be.null;
-        const providerEnum = providerPf.shadowRoot.querySelector('platform-field-enum');
+        const providerEnum = qs(shadow(providerPf), 'platform-field-enum');
         expect(providerEnum).to.not.be.null;
-        const inp = providerEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        const inp = qs(shadow(providerEnum), 'input.field-pill-enum-input');
         expect(inp).to.not.be.null;
         inp.focus();
         await elementUpdated(providerEnum);
-        const emptyOpt = providerEnum.shadowRoot.querySelector('[data-enum-value=""]');
+        const emptyOpt = qs(shadow(providerEnum), '[data-enum-value=""]');
         expect(emptyOpt).to.not.be.null;
-        emptyOpt.click();
+        (emptyOpt as TestEl).click();
         await elementUpdated(el);
-        expect(last.config).to.deep.equal({});
+        expect(last!.config).to.deep.equal({});
     });
 });

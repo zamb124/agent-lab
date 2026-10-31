@@ -21,7 +21,7 @@ from core.utils.domain import (
         ("localhost:8002", "localhost", "8002"),
         ("127.0.0.1:8002", "127.0.0.1", "8002"),
         ("192.168.0.1:9000", "192.168.0.1", "9000"),
-        ("humanitec.ru", "humanitec.ru", None),
+        ("linnex.io", "linnex.io", None),
         ("[::1]:8002", "::1", "8002"),
     ],
 )
@@ -62,8 +62,8 @@ def test_get_cookie_domain_localhost_shared_across_subdomains() -> None:
 
 
 @pytest.mark.parametrize("host,expected_domain", [
-    ("humanitec.ru", ".humanitec.ru"),
-    ("acme.humanitec.ru", ".humanitec.ru"),
+    ("linnex.io", ".linnex.io"),
+    ("acme.linnex.io", ".linnex.io"),
     ("linnex.io", ".linnex.io"),
     ("acme.linnex.io", ".linnex.io"),
 ])
@@ -76,13 +76,13 @@ def test_extract_subdomain_on_ip() -> None:
 
 
 def test_extract_company_subdomain_grafana_host_not_company() -> None:
-    assert extract_subdomain("grafana.humanitec.ru") == "grafana"
-    assert extract_company_subdomain("grafana.humanitec.ru") is None
+    assert extract_subdomain("grafana.linnex.io") == "grafana"
+    assert extract_company_subdomain("grafana.linnex.io") is None
     assert extract_company_subdomain("grafana.agents-lab.ru") is None
 
 
 def test_extract_company_subdomain_company_unchanged() -> None:
-    assert extract_company_subdomain("acme.humanitec.ru") == "acme"
+    assert extract_company_subdomain("acme.linnex.io") == "acme"
 
 
 def test_unknown_hostname_raises() -> None:
@@ -104,15 +104,15 @@ def test_is_allowed_integration_return_origin_lvh_port_mismatch_local_dev() -> N
 
 
 def test_is_allowed_integration_return_origin_prod_ports_must_match() -> None:
-    pub = "https://humanitec.ru"
-    assert is_allowed_integration_return_origin("https://acme.humanitec.ru:8443", pub) is False
+    pub = "https://linnex.io"
+    assert is_allowed_integration_return_origin("https://acme.linnex.io:8443", pub) is False
 
 
 def test_is_allowed_integration_return_origin_linnex() -> None:
-    assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://humanitec.ru") is True
+    assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://linnex.io") is True
 
 
-def test_is_allowed_integration_return_origin_humanitec() -> None:
-    pub = "https://humanitec.ru"
-    assert is_allowed_integration_return_origin("https://acme.humanitec.ru", pub) is True
+def test_is_allowed_integration_return_origin_linnex() -> None:
+    pub = "https://linnex.io"
+    assert is_allowed_integration_return_origin("https://acme.linnex.io", pub) is True
     assert is_allowed_integration_return_origin("https://other.ru", pub) is False

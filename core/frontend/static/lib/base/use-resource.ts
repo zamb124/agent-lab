@@ -41,13 +41,17 @@ export type ResourceControllerOf<F extends AnyResourceFactory> = ResourceControl
 export type OpControllerOf<F extends AnyOpFactory> = OpController<F['slice']['initial']> & ActionMethods<F['actions']>;
 export type SliceControllerOf<F extends AnySliceFactory> = SliceController<F['slice']['initial']> & ActionMethods<F['actions']>;
 
+/** Элемент курсорной ленты по типу фабрики. */
+export type CursorListItemOf<F> = F extends CursorListFactory<infer I> ? I : unknown;
+export type CursorListControllerOf<F> = CursorListController<CursorListItemOf<F>>;
+
 /** Тип контроллера, который `use*` возвращает для зарегистрированного имени фабрики. */
 export type ControllerFor<N extends PlatformFactoryName> =
     PlatformFactoryRegistry[N] extends AnyResourceFactory ? ResourceControllerOf<PlatformFactoryRegistry[N]>
     : PlatformFactoryRegistry[N] extends AnyOpFactory ? OpControllerOf<PlatformFactoryRegistry[N]>
     : PlatformFactoryRegistry[N] extends AnySliceFactory ? SliceControllerOf<PlatformFactoryRegistry[N]>
     : PlatformFactoryRegistry[N] extends FormFactory ? FormController
-    : PlatformFactoryRegistry[N] extends CursorListFactory ? CursorListController
+    : PlatformFactoryRegistry[N] extends CursorListFactory<infer I> ? CursorListController<I>
     : PlatformFactoryRegistry[N] extends FacetsFactory ? FacetsController
     : never;
 
@@ -392,14 +396,14 @@ export class FormController {
  *   ctl.filters
  *   ctl.load(filters?), ctl.loadMore(), ctl.changeFilters(patch), ctl.resetFilters()
  */
-export class CursorListController {
+export class CursorListController<TItem = unknown> {
     host: ControllerHost;
-    list: CursorListFactory;
+    list: CursorListFactory<TItem>;
     autoload: boolean;
     autoloadFilters: Record<string, unknown> | null;
-    private _slice: SelectController<CursorListSlice>;
+    private _slice: SelectController<CursorListSlice<TItem>>;
 
-    constructor(host: ControllerHost, list: CursorListFactory, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }) {
+    constructor(host: ControllerHost, list: CursorListFactory<TItem>, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }) {
         _requireFactory(list, 'cursor-list', 'CursorListController');
         this.host = host;
         this.list = list;
@@ -410,8 +414,8 @@ export class CursorListController {
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): CursorListSlice { return this._slice.value; }
-    get items(): readonly unknown[] { return this.state.items; }
+    get state(): CursorListSlice<TItem> { return this._slice.value; }
+    get items(): readonly TItem[] { return this.state.items; }
     get hasMore(): boolean { return Boolean(this.state.hasMore); }
     get loading(): boolean { return Boolean(this.state.loading); }
     get loadingMore(): boolean { return Boolean(this.state.loadingMore); }

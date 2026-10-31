@@ -34,7 +34,7 @@ export const settingsUpdateOp = createAsyncOp({
 
 // === AI providers ===
 
-function _reloadAiProviders(ctx: Record<string, any>) {
+function _reloadAiProviders(ctx: Record<string, unknown>) {
     ctx.dispatch(
         aiProvidersLoadOp.events.REQUESTED,
         { public_host: window.location.host },

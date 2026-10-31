@@ -14,6 +14,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-log-viewer.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -197,7 +198,7 @@ export class FlowsLogsModal extends PlatformModal {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-primary);
+                border-bottom: 1px solid var(--glass-border-subtle);
                 flex-wrap: wrap;
             }
             .mode-segment {
@@ -207,7 +208,7 @@ export class FlowsLogsModal extends PlatformModal {
             .count-badge {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                background: var(--glass-solid-secondary);
+                background: var(--glass-solid-medium);
                 padding: 2px 8px;
                 border-radius: var(--radius-full);
                 white-space: nowrap;
@@ -808,10 +809,7 @@ export class FlowsLogsModal extends PlatformModal {
                     <div class="logs-main">
                         ${waiting
                             ? html`
-                                  <div class="logs-loading">
-                                      <platform-spinner></platform-spinner>
-                                      <div>${this.t('logs_modal.waiting')}</div>
-                                  </div>
+                                  <platform-empty-state class="logs-loading" loading title=${this.t('logs_modal.waiting')}></platform-empty-state>
                               `
                             : html`
                                   <platform-log-viewer
@@ -869,10 +867,7 @@ export class FlowsLogsModal extends PlatformModal {
                 <div class="logs-main">
                     ${waiting
                         ? html`
-                              <div class="logs-loading">
-                                  <platform-spinner></platform-spinner>
-                                  <div>${this.t('logs_modal.waiting')}</div>
-                              </div>
+                              <platform-empty-state class="logs-loading" loading title=${this.t('logs_modal.waiting')}></platform-empty-state>
                           `
                         : html`
                               <platform-log-viewer

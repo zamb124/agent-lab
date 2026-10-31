@@ -8,9 +8,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from core.types import JsonObject
 from core.ui_document.json_patch import apply_json_patch, json_patch_operations
 from core.ui_document.protocol import JsonPatchOperation
-from core.types import JsonObject
 
 
 class TestJsonPatch:

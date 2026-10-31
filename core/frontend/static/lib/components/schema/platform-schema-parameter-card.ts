@@ -142,7 +142,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                 padding: var(--space-2);
                 border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-border-subtle));
                 border-radius: var(--radius-sm);
-                background: var(--bg-elevated, var(--glass-solid-medium));
+                background: var(--bg-elevated);
                 box-shadow: none;
                 max-width: 36rem;
             }

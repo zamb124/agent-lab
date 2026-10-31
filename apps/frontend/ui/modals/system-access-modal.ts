@@ -41,7 +41,7 @@ export class FrontendSystemAccessModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, unknown> = {};
         if (!this.company_id) {
             errors.company_id = this.t('platform_billing_page.system_access_company_required');
         }

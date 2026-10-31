@@ -315,7 +315,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
             .progress-bar > div {
                 height: 100%;
                 background: var(--accent);
-                transition: width var(--duration-fast);
+                transition: width var(--motion-duration-micro);
             }
 
             .stage {
@@ -570,7 +570,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
         `;
     }
 
-    _renderTasksPanel(tasks: readonly Record<string, any>[], loading: boolean, namespace: string | null | undefined): TemplateResult {
+    _renderTasksPanel(tasks: readonly Record<string, unknown>[], loading: boolean, namespace: string | null | undefined): TemplateResult {
         return html`
             <div class="panel">
                 <div class="toolbar">
@@ -621,7 +621,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
         `;
     }
 
-    _renderTable(tasks: readonly Record<string, any>[]): TemplateResult {
+    _renderTable(tasks: readonly Record<string, unknown>[]): TemplateResult {
         return html`
             <div class="table-shell">
                 <table>
@@ -642,7 +642,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
         `;
     }
 
-    _renderRow(task: Record<string, any>): TemplateResult {
+    _renderRow(task: Record<string, unknown>): TemplateResult {
         const variant = statusVariant(task.status);
         const showCancel = ACTIVE_STATUSES.has(task.status);
         const showRetry = task.status === 'failed' || task.status === 'cancelled';

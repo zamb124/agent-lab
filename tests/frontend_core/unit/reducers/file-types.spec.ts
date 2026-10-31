@@ -8,17 +8,18 @@ import {
     selectAcceptStringFor,
     selectIsAllowedFile,
 } from '@platform/lib/events/reducers/file-types.js';
+import type { FileTypeEntry, FileTypesState } from '@platform/lib/events/reducers/file-types.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
-const seedState = (extra = {}) => ({
+const seedState = (extra: { registry?: FileTypeEntry[] } = {}): { fileTypes: FileTypesState } => ({
     fileTypes: {
         loaded: true,
         categories: ['image', 'document'],
         registry: [
             { extension: '.png', mime_types: ['image/png'], category: 'image' },
             { extension: '.pdf', mime_types: ['application/pdf'], category: 'document' },
-            ...(extra.registry || []),
+            ...(extra.registry ?? []),
         ],
         error: null,
     },

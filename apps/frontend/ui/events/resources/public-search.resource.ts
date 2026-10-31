@@ -1,5 +1,5 @@
 /**
- * Публичный запуск Humanitec Search.
+ * Публичный запуск Linnex Search.
  *
  * Исполнение остаётся в Flows A2A/SSE:
  *   1. frontend выдаёт short-lived embed-session token;

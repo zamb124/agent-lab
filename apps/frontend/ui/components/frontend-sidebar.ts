@@ -41,7 +41,7 @@ export class FrontendSidebar extends PlatformElement {
                 background: var(--accent-subtle);
                 border-color: var(--accent); color: var(--accent);
                 font-weight: var(--font-semibold);
-                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.15);
+                box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 15%, transparent);
             }
             .nav-icon {
                 width: 32px; height: 32px;
@@ -101,8 +101,8 @@ export class FrontendSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s: Record<string, any>) => s.router && s.router.routeKey);
-        this._authSel = this.select((s: Record<string, any>) => ({
+        this._routeKeySel = this.select((s: Record<string, unknown>) => s.router && s.router.routeKey);
+        this._authSel = this.select((s: Record<string, unknown>) => ({
             activeCompanyId: s.auth.activeCompanyId,
         }));
     }

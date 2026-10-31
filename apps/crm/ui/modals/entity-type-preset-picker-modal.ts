@@ -212,7 +212,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
             .cat-btn.active {
                 color: var(--text-primary);
                 border-color: var(--accent);
-                background: rgba(99, 102, 241, 0.1);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
             }
             .main {
                 flex: 1;
@@ -252,7 +252,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
             .kind-btn.active {
                 color: var(--text-primary);
                 border-color: var(--accent);
-                background: rgba(99, 102, 241, 0.1);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
             }
             .main-scroll {
                 flex: 1;
@@ -287,7 +287,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
             }
             .card.selected {
                 border-color: var(--accent);
-                background: rgba(99, 102, 241, 0.12);
+                background: color-mix(in srgb, var(--accent) 12%, transparent);
             }
             .card-top {
                 display: flex;
@@ -304,7 +304,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                 font-size: var(--text-xs);
                 padding: 2px 8px;
                 border-radius: var(--radius-full);
-                background: rgba(255, 255, 255, 0.08);
+                background: var(--glass-tint-strong);
                 color: var(--text-tertiary);
                 white-space: nowrap;
             }
@@ -319,7 +319,6 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                 line-height: 1.4;
                 margin: 0;
             }
-            .loading,
             .empty {
                 flex: 1;
                 min-height: 0;
@@ -349,7 +348,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                 color: var(--text-secondary);
             }
             .btn:hover {
-                background: var(--crm-surface-muted, rgba(255, 255, 255, 0.06));
+                background: var(--crm-surface-muted);
                 color: var(--text-primary);
             }
             .btn-primary {
@@ -553,9 +552,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
         if (this._templates.loading && list.length === 0) {
             return html`
                 <div class="content-area">
-                    <div class="loading">
-                        <platform-spinner></platform-spinner>
-                    </div>
+                    <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }
@@ -572,9 +569,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
             return html`
                 <p class="intro">${this.t('entity_type_preset_picker_modal.intro')}</p>
                 <div class="content-area">
-                    <div class="loading">
-                        <platform-spinner></platform-spinner>
-                    </div>
+                    <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }

@@ -67,7 +67,7 @@ async def test_public_blog_post_linnex_brand_in_body(frontend_client) -> None:
     assert response.status_code == 200
     data = response.json()
     assert "Linnex" in data["body_en"]
-    assert "Humanitec" not in data["body_en"]
+    assert "Linnex" not in data["body_en"]
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,7 @@ async def test_public_startup_card_contract(frontend_client) -> None:
     response = await frontend_client.get("/frontend/api/public/startup-card")
     assert response.status_code == 200
     card = response.json()
-    assert card["name"] == "Humanitec"
+    assert card["name"] == "Linnex"
     assert isinstance(card["tagline_ru"], str)
     assert isinstance(card["products"], list)
     assert len(card["products"]) == 5

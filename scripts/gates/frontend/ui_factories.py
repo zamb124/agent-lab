@@ -61,8 +61,8 @@ FACTORY_KINDS = (
 
 PUBLIC_FACTORY_DOMAIN_BY_SERVICE = {
     # UI не должен тащить внутреннее имя сервиса provider_litserve. Внешний
-    # продуктовый домен для реестра системных моделей — Humanitec Models.
-    "provider_litserve": "humanitec_models",
+    # продуктовый домен для реестра системных моделей — Linnex Models.
+    "provider_litserve": "linnex_models",
 }
 
 # Для `createSlice` проверяется дополнительно наличие `extraInitial`

@@ -46,9 +46,9 @@ import type {
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -108,27 +108,27 @@ export class CRMKnowledgeImportModal extends PlatformModal {
             .ki-steps {
                 display: flex; flex-wrap: wrap; gap: var(--space-2);
                 padding: 0 0 var(--space-3) 0;
-                border-bottom: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                border-bottom: 1px solid var(--glass-border-subtle);
                 margin-bottom: var(--space-3);
             }
             .ki-step-pill {
                 display: inline-flex; align-items: center; gap: 6px;
                 padding: 4px 10px; font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
             }
             .ki-step-pill.active {
                 color: var(--text-primary);
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
             }
             .ki-step-pill.done { color: var(--text-secondary); }
             .ki-step-num {
                 display: inline-flex; align-items: center; justify-content: center;
                 width: 18px; height: 18px; font-weight: 700;
                 border-radius: 50%;
-                background: rgba(255,255,255,0.06);
+                background: var(--glass-tint-medium);
                 color: inherit;
             }
             .ki-step-body { display: flex; flex-direction: column; gap: var(--space-4); }
@@ -143,15 +143,15 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 display: flex; flex-direction: column; gap: 6px;
                 padding: var(--space-4);
                 border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
                 color: var(--text-primary);
                 text-align: left; cursor: pointer;
             }
-            .ki-mode-card:hover { border-color: var(--accent, #6366f1); }
+            .ki-mode-card:hover { border-color: var(--accent); }
             .ki-mode-card.active {
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
             }
             .ki-mode-title { font-weight: 600; font-size: var(--text-sm); }
             .ki-mode-desc { color: var(--text-tertiary); font-size: var(--text-xs); }
@@ -164,20 +164,20 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 display: inline-flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
                 color: var(--text-primary);
                 cursor: pointer; text-align: left;
             }
             .ki-type-card.selected {
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
             }
             .ki-type-check {
                 display: inline-flex; align-items: center; justify-content: center;
                 width: 16px; height: 16px; border-radius: 4px;
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                color: var(--accent, #6366f1);
+                border: 1px solid var(--glass-border-medium);
+                color: var(--accent);
             }
             .ki-type-name { font-size: var(--text-sm); }
 
@@ -185,13 +185,13 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 display: flex; flex-direction: column; align-items: center; gap: 6px;
                 padding: var(--space-6);
                 border-radius: var(--radius-lg);
-                border: 2px dashed var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 2px dashed var(--glass-border-medium);
+                background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 cursor: pointer; position: relative;
             }
-            .ki-dropzone.active { border-color: var(--accent, #6366f1); background: rgba(99,102,241,0.08); }
-            .ki-dropzone:hover { border-color: var(--accent, #6366f1); }
+            .ki-dropzone.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+            .ki-dropzone:hover { border-color: var(--accent); }
             .ki-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
             .ki-dropzone-label { font-weight: 600; color: var(--text-primary); }
             .ki-dropzone-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
@@ -205,8 +205,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: 6px var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
                 color: var(--text-primary);
             }
             .ki-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
@@ -214,7 +214,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 display: inline-flex; align-items: center; justify-content: center;
                 width: 24px; height: 24px;
                 background: transparent; color: var(--text-tertiary);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-sm);
                 cursor: pointer;
             }
@@ -227,8 +227,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 font: inherit;
                 padding: var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-subtle);
                 color: var(--text-primary);
                 box-sizing: border-box;
             }
@@ -236,21 +236,21 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 font: inherit;
                 padding: 6px var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-subtle);
                 color: var(--text-primary);
             }
             .ki-input--num { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
             .ki-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
-            .ki-hint--err { color: #fda4af; }
+            .ki-hint--err { color: var(--error); }
 
             .ki-row {
                 display: flex; align-items: center; justify-content: space-between;
                 gap: var(--space-3);
                 padding: var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
             }
             .ki-row-text { display: flex; flex-direction: column; gap: 2px; }
             .ki-row-title { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); }
@@ -263,8 +263,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
             .ki-summary-card {
                 padding: var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
                 display: flex; flex-direction: column; gap: 4px;
             }
             .ki-summary-card--wide { grid-column: 1 / -1; }
@@ -287,13 +287,13 @@ export class CRMKnowledgeImportModal extends PlatformModal {
             .ki-btn--ghost {
                 background: transparent;
                 color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                border: 1px solid var(--glass-border-subtle);
             }
             .ki-btn--ghost:hover:not(:disabled) { color: var(--text-primary); }
             .ki-btn--primary {
-                background: var(--accent, #6366f1);
-                color: var(--platform-btn-primary-text, #fff);
-                border: 1px solid var(--accent, #6366f1);
+                background: var(--accent);
+                color: var(--platform-btn-primary-text);
+                border: 1px solid var(--accent);
             }
             .ki-btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
         `,
@@ -361,8 +361,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         return typeof ns === 'string' && ns.length > 0;
     }
 
-    _allowedTypes(): Record<string, any>[] {
-        const items: Record<string, any>[] = [];
+    _allowedTypes(): Record<string, unknown>[] {
+        const items: Record<string, unknown>[] = [];
         for (const item of this._entityTypes.items) {
             const row = anyRecord(item);
             if (row === null) {
@@ -599,7 +599,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                     ? html`<platform-empty-state icon="database" title=${this.t('knowledge_import_modal.types_empty')}></platform-empty-state>`
                     : html`
                         <div class="ki-types-grid">
-                            ${types.map((t: Record<string, any>) => {
+                            ${types.map((t: Record<string, unknown>) => {
                                 const selected = this._selectedTypeIds.includes(t.type_id);
                                 return html`
                                     <button
@@ -740,7 +740,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         const typeLabels = this._selectedTypeIds.length === 0
             ? this.t('knowledge_import_modal.all_types')
             : this._selectedTypeIds.map((id: string) => {
-                const t = types.find((x: Record<string, any>) => x.type_id === id);
+                const t = types.find((x: Record<string, unknown>) => x.type_id === id);
                 return t ? t.name : id;
             }).join(', ');
         const modeLabel = this._mode === 'graph'

@@ -68,16 +68,11 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                 align-items: center;
                 gap: 4px;
                 padding: 2px 8px;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 background: var(--glass-solid-medium);
                 color: var(--text-tertiary);
                 font-size: 11px;
                 line-height: 1.3;
-            }
-            .loading {
-                display: flex;
-                justify-content: center;
-                padding: var(--space-6);
             }
             .empty {
                 padding: var(--space-6);
@@ -226,7 +221,7 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                     }}
                 ></platform-modal-search-field>
                 ${this._skills.loading || this._ensureSeed.busy
-                    ? html`<div class="loading"><platform-spinner></platform-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
                         ? html`<platform-empty-state icon="agent" title=${this.t(this._emptyMessageKey())}></platform-empty-state>`
                         : html`

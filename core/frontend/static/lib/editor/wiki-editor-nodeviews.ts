@@ -85,7 +85,7 @@ export interface WikiNodeViewsOptions {
     cm: CmModule | null;
     getFileUrlBase: () => string;
     isEditable: () => boolean;
-    onOpenFile?: (fileId: string) => void;
+    onOpenFile?: ((fileId: string) => void) | undefined;
 }
 
 type GetPos = () => number | undefined;
@@ -366,7 +366,7 @@ class CodeBlockNodeView {
                 }),
             ],
             parent: this.cmHost,
-            root: viewRoot,
+            ...(viewRoot !== undefined ? { root: viewRoot } : {}),
         });
         this._cmModule = cm;
         const connectedRoot = this.cmHost.getRootNode();

@@ -130,8 +130,8 @@ def generate_swagger_ui_embed(openapi_schema: dict, service_name: str) -> str:
 
     Интерактивная документация сервиса:
 
-    - [Swagger UI](https://humanitec.ru:{port}/docs)
-    - [ReDoc](https://humanitec.ru:{port}/redoc)
+    - [Swagger UI](https://linnex.io:{port}/docs)
+    - [ReDoc](https://linnex.io:{port}/redoc)
 
     Доступно полное описание всех эндпоинтов с возможностью тестирования.
 """
@@ -371,9 +371,9 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
 """
 
         if lang == "ru":
-            index_md += "Публичные API платформы Humanitec.\n\n"
+            index_md += "Публичные API платформы Linnex.\n\n"
         else:
-            index_md += "Public APIs for Humanitec platform.\n\n"
+            index_md += "Public APIs for Linnex platform.\n\n"
 
         index_md += "## Сервисы\n\n" if lang == "ru" else "## Services\n\n"
         service_cards: list[str] = []

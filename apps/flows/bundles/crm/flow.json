@@ -15,7 +15,7 @@
       "llm": {
         "model": "auto",
         "temperature": 0.2,
-        "provider": "humanitec_llm"
+        "provider": "linnex_llm"
       },
       "tools": [],
       "output_key": "response"
@@ -33,7 +33,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_context": {
             "profile": "compact",
@@ -57,7 +57,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.3,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -78,7 +78,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.3,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -99,7 +99,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -120,7 +120,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.2,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -141,7 +141,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -162,7 +162,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": [],
           "structured_output": true,
@@ -182,7 +182,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": [],
           "structured_output": true,
@@ -202,7 +202,7 @@
           "llm": {
             "model": "auto",
             "temperature": 0.1,
-            "provider": "humanitec_llm"
+            "provider": "linnex_llm"
           },
           "tools": [],
           "structured_output": true,

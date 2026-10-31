@@ -15,7 +15,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
 
 const TYPING_TTL_MS = 6_000;
 
@@ -40,9 +40,8 @@ export const presenceResource = createSlice({
         pruneTyping: 'typing_prune',
     },
     extraReducer: (state, event) => {
-        if (event.type === 'sync/channel/typing') {
+        if (isPlatformEventType(event, 'sync/channel/typing')) {
             const p = event.payload;
-            if (!isPlainRecord(p) || typeof p.channel_id !== 'string') return state;
             const channelId = p.channel_id;
             const typingByChannel = typingMap(state.typingByChannel);
             const existing = typingByChannel[channelId];
@@ -50,8 +49,7 @@ export const presenceResource = createSlice({
                 throw new Error('sync/presence: channel typing must be an object');
             }
             const cur = isPlainRecord(existing) ? existing : {};
-            const user = p.user;
-            const userId = isPlainRecord(user) ? user.user_id : undefined;
+            const userId = p.user.user_id;
             if (typeof userId !== 'string') return state;
             const next: Record<string, unknown> = { ...cur };
             if (p.typing) {

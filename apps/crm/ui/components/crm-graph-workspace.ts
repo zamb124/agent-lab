@@ -75,6 +75,7 @@ import type { GraphCanvasViewMode } from '../_helpers/graph-view-mode.js';
 import type { CrmGraphUiSlice, CrmGraphViewSlice } from '../events/crm.types.js';
 import type { RouterState } from '@platform/lib/events/reducers/router.js';
 
+import { cssVar } from '@platform/lib/utils/css-var.js';
 const VIEW_MODES = ['influence', 'related', 'path'];
 const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
 
@@ -479,7 +480,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             .graph-empty-import-cta button {
                 border: 1px solid var(--accent);
                 background: var(--accent);
-                color: var(--text-on-accent, #fff);
+                color: var(--text-on-accent);
                 border-radius: 22px;
                 padding: 8px 24px;
                 font-size: 14px;
@@ -1350,11 +1351,11 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _nodeColor(node: Record<string, unknown> | null): string {
-        if (node && node.access === false) return '#7f7f8f';
+        if (node && node.access === false) return cssVar('--text-tertiary', 'rgba(255, 255, 255, 0.45)');
         const entityType = node && typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
-        if (!entityType) return '#bca8ff';
+        if (!entityType) return cssVar('--accent-tertiary', '#8b5cf6');
         const colors = this._getEntityTypeColors();
-        return colors.get(entityType) || '#bca8ff';
+        return colors.get(entityType) || cssVar('--accent-tertiary', '#8b5cf6');
     }
 
     _isEdgeDirected(edge: Record<string, unknown>): boolean {
@@ -1882,7 +1883,7 @@ export class CRMGraphWorkspace extends PlatformElement {
                               .entityTypeColors=${colorsPlain}
                               .entityTypeIcons=${iconsPlain}
                               .relationshipTypeLabels=${relationshipLabelsPlain}
-                              defaultAccent="#6366f1"
+                              defaultAccent=${cssVar('--accent', '#99A6F9')}
                               .fitNonce=${this._fitNonce}
                               .selectedNodeId=${this._selectedNodeId}
                               .highlightNodeIds=${this._highlightNodeIds}

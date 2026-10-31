@@ -53,6 +53,7 @@ import type { EffectCtx, PlatformEvent } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
+import type { PlatformCommandMap } from '../wire/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
 
 const _REQUESTED_SUFFIX = '_requested';
@@ -114,7 +115,7 @@ function objectPayload(payload: unknown, label: string): Record<string, unknown>
     return payload;
 }
 
-function isCursorListSlice(value: unknown): value is CursorListSlice {
+function isCursorListSlice<TItem>(value: unknown): value is CursorListSlice<TItem> {
     if (!isPlainRecord(value) || !Array.isArray(value.items) || !isPlainRecord(value.filters)) {
         return false;
     }
@@ -127,8 +128,8 @@ function isCursorListSlice(value: unknown): value is CursorListSlice {
     return true;
 }
 
-export interface CursorListSlice {
-    items: readonly unknown[];
+export interface CursorListSlice<TItem = unknown> {
+    items: readonly TItem[];
     nextCursor: string | null;
     hasMore: boolean;
     loading: boolean;
@@ -139,14 +140,14 @@ export interface CursorListSlice {
     [key: string]: unknown;
 }
 
-interface _ListPayload {
-    items: unknown[];
+interface _ListPayload<TItem> {
+    items: TItem[];
     next_cursor: string | null;
     has_more: boolean;
     [key: string]: unknown;
 }
 
-export interface CursorListOptions {
+export interface CursorListOptions<TItem = unknown> {
     name: string;
     baseUrl: string;
     buildQuery: (filters: Record<string, unknown>) => Record<string, unknown>;
@@ -159,12 +160,12 @@ export interface CursorListOptions {
     statusMap?: Record<string, string>;
     initialFilters?: Record<string, unknown>;
     errorToastKey?: string | null;
-    extraReducer?: (state: CursorListSlice, event: PlatformEvent, events: Readonly<Record<string, string>>) => CursorListSlice | null | undefined;
+    extraReducer?: (state: CursorListSlice<TItem>, event: PlatformEvent, events: Readonly<Record<string, string>>) => NoInfer<CursorListSlice<TItem>> | null | undefined;
     extraEffect?: (event: PlatformEvent, ctx: EffectCtx, events: Readonly<Record<string, string>>) => boolean | void | Promise<boolean | void>;
     sliceKey?: string;
 }
 
-export interface CursorListFactory extends PlatformFactory {
+export interface CursorListFactory<TItem = unknown> extends PlatformFactory {
     kind: 'cursor-list';
     name: string;
     sliceKey: string;
@@ -174,11 +175,11 @@ export interface CursorListFactory extends PlatformFactory {
     commandType: string;
     pageSize: number;
     events: Readonly<Record<string, string>> & { LOAD_REQUESTED: string; LOADED: string; PAGE_LOADED: string; FAILED: string; FILTERS_CHANGED: string; FILTERS_RESET: string };
-    reducer: (state: CursorListSlice | undefined, event: PlatformEvent) => CursorListSlice;
-    slice: SliceDef<CursorListSlice>;
+    reducer: (state: CursorListSlice<TItem> | undefined, event: PlatformEvent) => CursorListSlice<TItem>;
+    slice: SliceDef<CursorListSlice<TItem>>;
     selectors: {
-        slice: (state: Record<string, unknown>) => CursorListSlice;
-        items: (state: Record<string, unknown>) => readonly unknown[];
+        slice: (state: Record<string, unknown>) => CursorListSlice<TItem>;
+        items: (state: Record<string, unknown>) => readonly TItem[];
         nextCursor: (state: Record<string, unknown>) => string | null;
         hasMore: (state: Record<string, unknown>) => boolean;
         loading: (state: Record<string, unknown>) => boolean;
@@ -190,7 +191,20 @@ export interface CursorListFactory extends PlatformFactory {
     effect: (event: PlatformEvent, ctx: EffectCtx) => Promise<void>;
 }
 
-export function createCursorList(options: CursorListOptions): CursorListFactory {
+/**
+ * Wire-тип элемента по `commandType`: `result.items[number]` курсорной страницы.
+ * Нет `items` в результате команды — `unknown` (как раньше).
+ */
+type WireCursorItem<K extends keyof PlatformCommandMap> =
+    PlatformCommandMap[K]['result'] extends { items: readonly (infer I)[] } ? I : unknown;
+
+export function createCursorList<K extends keyof PlatformCommandMap>(
+    options: CursorListOptions<WireCursorItem<K>> & { commandType: K },
+): CursorListFactory<WireCursorItem<K>>;
+export function createCursorList<TItem = unknown>(
+    options: CursorListOptions<TItem>,
+): CursorListFactory<TItem>;
+export function createCursorList<TItem = unknown>(options: CursorListOptions<TItem>): CursorListFactory<TItem> {
     if (!options || typeof options !== 'object') {
         throw new Error('createCursorList: options object required');
     }
@@ -249,8 +263,8 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
     }
     const events = freeze({ ...baseEvents, ...terminalEvents });
 
-    const emptyItems: unknown[] = [];
-    const initialSlice: CursorListSlice = freeze({
+    const emptyItems: TItem[] = [];
+    const initialSlice: CursorListSlice<TItem> = freeze({
         items: freeze(emptyItems),
         nextCursor: null,
         hasMore: false,
@@ -261,7 +275,7 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
         filters: freeze({ ...initialFilters }),
     });
 
-    function _baseReducer(state: CursorListSlice, event: PlatformEvent): CursorListSlice {
+    function _baseReducer(state: CursorListSlice<TItem>, event: PlatformEvent): CursorListSlice<TItem> {
         switch (event.type) {
             case events.LOAD_REQUESTED: {
                 const payload = objectPayload(event.payload, `createCursorList(${name}): LOAD_REQUESTED`);
@@ -339,7 +353,7 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
         }
     }
 
-    function reducer(state: CursorListSlice = initialSlice, event: PlatformEvent): CursorListSlice {
+    function reducer(state: CursorListSlice<TItem> = initialSlice, event: PlatformEvent): CursorListSlice<TItem> {
         const next = _baseReducer(state, event);
         if (extraReducer) {
             const extended = extraReducer(next, event, events);
@@ -350,7 +364,7 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
         return next;
     }
 
-    function _readListPayload(event: PlatformEvent, eventKey: string): _ListPayload {
+    function _readListPayload(event: PlatformEvent, eventKey: string): _ListPayload<TItem> {
         const p = event.payload;
         if (p === undefined || p === null || typeof p !== 'object' || Array.isArray(p)) {
             throw new Error(`createCursorList(${name}): ${eventKey} payload must be object`);
@@ -364,15 +378,15 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
         if (!('has_more' in p) || typeof p.has_more !== 'boolean') {
             throw new Error(`createCursorList(${name}): ${eventKey} payload.has_more required (boolean)`);
         }
-        return { items: p.items, next_cursor: p.next_cursor, has_more: p.has_more };
+        return { items: p.items as TItem[], next_cursor: p.next_cursor, has_more: p.has_more };
     }
 
-    function _readSlice(state: Record<string, unknown>): CursorListSlice {
+    function _readSlice(state: Record<string, unknown>): CursorListSlice<TItem> {
         const slice = state[sliceKey];
         if (slice === undefined) {
             throw new Error(`createCursorList(${name}): slice "${sliceKey}" not registered in bus`);
         }
-        if (!isCursorListSlice(slice)) {
+        if (!isCursorListSlice<TItem>(slice)) {
             throw new Error(`createCursorList(${name}): slice "${sliceKey}" must be a cursor list`);
         }
         return slice;

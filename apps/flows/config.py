@@ -142,7 +142,7 @@ class FlowSettings(BaseSettings):
     )
     llm_proxy_use_mock_auto: bool = Field(
         default=False,
-        description="E2E: модель auto в LLM proxy резолвится в mock, а не в humanitec_llm",
+        description="E2E: модель auto в LLM proxy резолвится в mock, а не в linnex_llm",
     )
 
     @model_validator(mode="after")

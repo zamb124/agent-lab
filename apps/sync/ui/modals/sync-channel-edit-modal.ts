@@ -99,10 +99,10 @@ export class SyncChannelEditModal extends PlatformFormModal {
             .members-list {
                 max-height: 200px;
                 overflow-y: auto;
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 padding: var(--space-2);
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
+                background: var(--glass-tint-subtle);
             }
             .member-row {
                 display: flex;
@@ -118,15 +118,15 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 width: 40px;
                 height: 40px;
                 padding: 0;
-                border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.06));
+                border-radius: var(--radius-full);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-tint-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+                transition: background var(--motion-duration-micro), color var(--motion-duration-micro), border-color var(--motion-duration-micro);
             }
             .add-members-icon-btn:hover {
-                background: var(--glass-hover);
+                background: var(--glass-tint-medium);
                 color: var(--accent);
                 border-color: color-mix(in srgb, var(--accent) 35%, transparent);
             }
@@ -140,7 +140,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 justify-content: space-between;
                 gap: var(--space-3);
                 padding: var(--space-3) 0;
-                border-bottom: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+                border-bottom: 1px solid var(--glass-border-medium);
             }
             .toggle-row:last-of-type {
                 border-bottom: none;
@@ -199,8 +199,8 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 border-radius: var(--radius-md);
                 overflow: hidden;
                 flex-shrink: 0;
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.06));
-                border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--glass-border-medium);
             }
             .avatar-preview-img {
                 width: 100%;
@@ -226,14 +226,14 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 padding: 0;
                 border: none;
                 border-radius: 4px;
-                background: rgba(15, 23, 42, 0.55);
-                color: #f8fafc;
+                background: color-mix(in srgb, var(--text-primary) 55%, transparent);
+                color: var(--text-primary);
                 cursor: pointer;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-                transition: background var(--duration-fast), transform var(--duration-fast);
+                box-shadow: 0 1px 2px var(--glass-shadow-medium);
+                transition: background var(--motion-duration-micro), transform var(--motion-duration-micro);
             }
             .avatar-overlay-btn:hover:not(:disabled) {
-                background: rgba(15, 23, 42, 0.78);
+                background: color-mix(in srgb, var(--text-primary) 78%, transparent);
             }
             .avatar-overlay-btn:focus-visible {
                 outline: 2px solid var(--accent);

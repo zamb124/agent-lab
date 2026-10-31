@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from core.ai.company_settings import (
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_PROVIDER,
     METADATA_KEY,
     CompanyAIProviders,
     CompanyLLMOverride,
@@ -56,7 +56,7 @@ def test_company_capability_override_wins_over_flow_primary_and_fallbacks() -> N
     )
     node = _node(
         NodeLLMConfig(
-            provider=HUMANITEC_LLM_PROVIDER,
+            provider=LINNEX_LLM_PROVIDER,
             model="auto",
             temperature=0.4,
         )
@@ -94,9 +94,9 @@ def test_missing_company_override_requires_explicit_provider_and_model() -> None
         resolve_effective_llm_config_for_node(node)
 
 
-def test_humanitec_company_override_accepts_configured_fallback_policy() -> None:
+def test_linnex_company_override_accepts_configured_fallback_policy() -> None:
     override = CompanyLLMOverride(
-        provider=HUMANITEC_LLM_PROVIDER,
+        provider=LINNEX_LLM_PROVIDER,
         fallback_models=[{"provider": "openrouter", "model": "fallback"}],
     )
 
@@ -129,7 +129,7 @@ def test_byok_company_primary_rejects_platform_cost_fallback() -> None:
             ).to_metadata_dict()
         }
     )
-    node = _node(NodeLLMConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"))
+    node = _node(NodeLLMConfig(provider=LINNEX_LLM_PROVIDER, model="auto"))
 
     with pytest.raises(ValueError, match="mixes company-cost and platform-cost"):
         resolve_effective_llm_config_for_node(node)

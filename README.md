@@ -1,6 +1,6 @@
 # Платформа (linnex.io)
 
-Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker) и голоса (Voice). Primary apex — **linnex.io**; также доступна на **humanitec.ru** и других доменах из `platform_brands` ([`configuration.mdc`](.cursor/rules/configuration.mdc)).
+Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker) и голоса (Voice). Primary apex — **linnex.io**; также доступна на **linnex.io** и других доменах из `platform_brands` ([`configuration.mdc`](.cursor/rules/configuration.mdc)).
 
 **Инвариант**: Database-First — конфигурация flows, tools и resources в базе данных; код задаёт только поведение.
 

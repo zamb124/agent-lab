@@ -59,12 +59,12 @@ describe('mail-threads', () => {
             },
         ]);
         expect(threads).toHaveLength(2);
-        expect(threads[0].threadId).toBe('<solo@x>');
-        expect(threads[1].threadId).toBe('<a@x>');
-        expect(threads[1].messages.map((m) => m.uid)).toEqual(['1', '2']);
-        expect(threads[1].unreadCount).toBe(1);
-        expect(threads[1].attachmentCount).toBe(1);
-        expect(threads[1].participants).toEqual(['a@x', 'b@x']);
+        expect(threads[0]?.threadId).toBe('<solo@x>');
+        expect(threads[1]?.threadId).toBe('<a@x>');
+        expect(threads[1]?.messages.map((m) => m.uid)).toEqual(['1', '2']);
+        expect(threads[1]?.unreadCount).toBe(1);
+        expect(threads[1]?.attachmentCount).toBe(1);
+        expect(threads[1]?.participants).toEqual(['a@x', 'b@x']);
         expect(findThreadByUid(threads, '2')?.threadId).toBe('<a@x>');
     });
 
@@ -84,8 +84,8 @@ describe('mail-threads', () => {
             },
         ]);
         expect(threads).toHaveLength(1);
-        expect(threads[0].threadId).toBe('subject:ping');
-        expect(threads[0].messages).toHaveLength(2);
+        expect(threads[0]?.threadId).toBe('subject:ping');
+        expect(threads[0]?.messages).toHaveLength(2);
     });
 
     it('findThreadMessageByMessageId matches normalized Message-ID', () => {

@@ -1,9 +1,23 @@
 {
     "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "types": [
+            "mocha"
+        ]
+    },
     "include": [
         "core/frontend/static/**/*.ts",
         "apps/*/ui/**/*.ts",
         "tests/frontend_core/**/*.ts",
-        "tests/ui/**/*.ts"
+        "tests/ui/**/*.ts",
+        "apps/guest_runtime/examples/**/*.ts",
+        "scripts/stress/**/*.ts",
+        "docs/**/*.ts",
+        "scripts/build/**/*.ts",
+        "vitest.config.ts",
+        "web-test-runner.config.ts",
+        "web-test-runner.middleware.ts"
     ]
 }

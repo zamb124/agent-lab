@@ -78,13 +78,13 @@ export class PlatformCommandPalette extends PlatformElement {
                 display: block;
                 position: fixed;
                 inset: 0;
-                z-index: var(--z-modal, 1000);
+                z-index: var(--z-modal);
             }
 
             .scrim {
                 position: absolute;
                 inset: 0;
-                background: var(--glass-scrim, rgba(0, 0, 0, 0.4));
+                background: var(--platform-bottom-sheet-scrim);
                 backdrop-filter: blur(2px);
             }
 
@@ -95,7 +95,7 @@ export class PlatformCommandPalette extends PlatformElement {
                 margin: 12vh auto 0;
                 display: flex;
                 flex-direction: column;
-                border-radius: var(--radius-xl, 16px);
+                border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-strong);
                 box-shadow: var(--glass-shadow-strong);
@@ -105,10 +105,10 @@ export class PlatformCommandPalette extends PlatformElement {
             .search {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2, 8px);
-                padding: var(--space-3, 12px) var(--space-4, 16px);
+                gap: var(--space-2);
+                padding: var(--space-3) var(--space-4);
                 border-bottom: 1px solid var(--glass-border-subtle);
-                color: var(--text-tertiary, #9aa0a6);
+                color: var(--text-tertiary);
             }
 
             .search input {
@@ -118,44 +118,44 @@ export class PlatformCommandPalette extends PlatformElement {
                 background: transparent;
                 color: var(--text-primary);
                 font-family: inherit;
-                font-size: var(--text-base, 1rem);
+                font-size: var(--text-base);
                 outline: none;
             }
 
             .results {
                 flex: 1;
                 overflow-y: auto;
-                padding: var(--space-1, 4px);
+                padding: var(--space-1);
             }
 
             .group {
-                padding: var(--space-2, 8px) var(--space-3, 12px) var(--space-1, 4px);
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
-                font-weight: var(--font-semibold, 600);
+                padding: var(--space-2) var(--space-3) var(--space-1);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 text-transform: uppercase;
-                letter-spacing: var(--tracking-wide, 0.04em);
+                letter-spacing: var(--tracking-wide);
             }
 
             .item {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 width: 100%;
                 box-sizing: border-box;
-                padding: var(--space-2, 8px) var(--space-3, 12px);
+                padding: var(--space-2) var(--space-3);
                 border: none;
-                border-radius: var(--radius-sm, 8px);
+                border-radius: var(--radius-sm);
                 background: transparent;
                 color: var(--text-primary);
                 font-family: inherit;
-                font-size: var(--text-sm, 0.8125rem);
+                font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
             }
 
             .item.is-active {
-                background: var(--glass-tint-medium, rgba(120, 120, 140, 0.16));
+                background: var(--glass-tint-medium);
             }
 
             .item-body {
@@ -170,8 +170,8 @@ export class PlatformCommandPalette extends PlatformElement {
             }
 
             .item-description {
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
@@ -179,15 +179,15 @@ export class PlatformCommandPalette extends PlatformElement {
 
             .item-hint {
                 flex-shrink: 0;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-xs, 0.75rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
             }
 
             .status {
-                padding: var(--space-5, 20px);
+                padding: var(--space-5);
                 text-align: center;
-                color: var(--text-tertiary, #9aa0a6);
-                font-size: var(--text-sm, 0.8125rem);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
         `,
     ];

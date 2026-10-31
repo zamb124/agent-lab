@@ -20,10 +20,10 @@ function isPlatformFileRecord(value: unknown): value is PlatformFileRecord {
 }
 
 export interface FileUploadEntry {
-    name?: string;
+    name?: string | undefined;
     status: 'pending' | 'completed' | 'failed';
-    fileId?: string;
-    error?: string;
+    fileId?: string | undefined;
+    error?: string | undefined;
 }
 
 export interface FilesState {

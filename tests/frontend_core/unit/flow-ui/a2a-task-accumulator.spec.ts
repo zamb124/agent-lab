@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { prop } from '../../helpers/prop.js';
 
 import {
     applyA2AFrame,
@@ -40,11 +41,12 @@ describe('a2a-task-accumulator', () => {
             },
         });
         const task = accumulator.tasksById['task-1'];
+        if (!task) throw new Error('task-1 required');
         expect(task.artifacts).toHaveLength(1);
-        expect(task.artifactsById.response.parts.map((part) => part.text)).toEqual([
-            'Hello',
-            ' world',
-        ]);
+        const responseParts = prop(prop(task.artifactsById.response, 'parts'), 'map');
+        expect(Array.isArray(prop(task.artifactsById.response, 'parts'))
+            ? (prop(task.artifactsById.response, 'parts') as Array<Record<string, unknown>>).map((part) => part.text)
+            : null).toEqual(['Hello', ' world']);
         expect([...task.closedArtifactIds]).toEqual(['response']);
         expect(taskBoundary(task)).toBeNull();
     });
@@ -96,7 +98,12 @@ describe('a2a-task-accumulator', () => {
         const task = accumulator.tasksById['task-2'];
         expect(taskBoundary(task)).toBe('terminal');
         const snapshot = serializableTask(task);
+        if (snapshot === null) throw new Error('snapshot required');
         expect(snapshot.closedArtifactIds).toEqual([]);
-        expect(snapshot.artifacts[0].parts[0].text).toBe('ok');
+        const artifacts = prop(snapshot, 'artifacts');
+        if (!Array.isArray(artifacts) || artifacts.length === 0) throw new Error('artifacts required');
+        const parts = prop(artifacts[0], 'parts');
+        if (!Array.isArray(parts) || parts.length === 0) throw new Error('parts required');
+        expect(prop(parts[0], 'text')).toBe('ok');
     });
 });

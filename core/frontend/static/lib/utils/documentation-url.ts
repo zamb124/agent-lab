@@ -23,7 +23,7 @@ function documentationLocalePrefix(locale: unknown): string {
 /**
  * @param {{ locale?: string }} [options]
  */
-export function getDocumentationBasePath(options: { locale?: string } = {}): string {
+export function getDocumentationBasePath(options: { locale?: string | undefined } = {}): string {
     const localePrefix = documentationLocalePrefix(options.locale);
     const p = window.location.pathname;
     if (p === '/frontend' || p.startsWith('/frontend/')) {

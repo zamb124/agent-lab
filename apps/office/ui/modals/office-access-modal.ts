@@ -157,8 +157,8 @@ export class OfficeAccessModal extends PlatformFormModal {
                 cursor: pointer;
             }
             .member-row .remove-btn:hover {
-                color: var(--danger);
-                border-color: var(--danger);
+                color: var(--error);
+                border-color: var(--error);
             }
             .candidate-list {
                 display: flex;

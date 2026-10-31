@@ -286,9 +286,9 @@ export class CRMTemplatesPage extends PlatformPage {
                 padding: var(--space-3);
                 cursor: pointer;
                 transition:
-                    border-color var(--duration-fast),
-                    background var(--duration-fast),
-                    transform var(--duration-fast);
+                    border-color var(--motion-duration-micro),
+                    background var(--motion-duration-micro),
+                    transform var(--motion-duration-micro);
                 font: inherit;
                 color: inherit;
                 text-align: left;
@@ -301,7 +301,7 @@ export class CRMTemplatesPage extends PlatformPage {
 
             .tpl-card.active {
                 border-color: var(--accent);
-                background: rgba(59, 130, 246, 0.12);
+                background: color-mix(in srgb, var(--info) 12%, transparent);
             }
 
             .tpl-leading {
@@ -439,7 +439,7 @@ export class CRMTemplatesPage extends PlatformPage {
 
             .btn-primary {
                 background: var(--accent);
-                color: var(--platform-btn-primary-text, white);
+                color: var(--platform-btn-primary-text);
                 border-color: var(--accent);
             }
 
@@ -459,12 +459,12 @@ export class CRMTemplatesPage extends PlatformPage {
 
             .btn-danger {
                 background: transparent;
-                color: var(--color-danger, #ef4444);
-                border-color: var(--color-danger, #ef4444);
+                color: var(--error);
+                border-color: var(--error);
             }
 
             .btn-danger:hover:not(:disabled) {
-                background: var(--color-danger, #ef4444);
+                background: var(--error);
                 color: white;
             }
 

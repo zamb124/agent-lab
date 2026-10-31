@@ -14,8 +14,8 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 
 const BASE = '/frontend/api/platform-tracing';
 
-function _buildSpansQuery(filters: Record<string, any>) {
-    const q: Record<string, any> = {};
+function _buildSpansQuery(filters: Record<string, unknown>) {
+    const q: Record<string, unknown> = {};
     if (filters.company_id)     q.company_id_query = filters.company_id;
     if (filters.user_id)        q.user_id_query = filters.user_id;
     if (filters.service_name)   q.service_name_query = filters.service_name;

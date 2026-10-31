@@ -10,8 +10,8 @@ import { A2A_PROTOCOL_VERSION, FLOW_UI_ACTION_MEDIA_TYPE } from './constants.js'
 
 export interface A2aEndpointTarget {
     baseUrl?: string;
-    flowId?: string;
-    embedId?: string;
+    flowId?: string | undefined;
+    embedId?: string | undefined;
     branchId?: string;
 }
 

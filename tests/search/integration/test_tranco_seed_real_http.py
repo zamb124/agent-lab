@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.config import get_search_settings
-from apps.search.services.crawl.seed_loader import import_tranco_domains
 from apps.search.models import CrawlDomain, CrawlProfileCreateRequest
+from apps.search.services.crawl.seed_loader import import_tranco_domains
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 

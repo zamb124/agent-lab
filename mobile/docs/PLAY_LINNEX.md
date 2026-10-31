@@ -18,7 +18,7 @@
 
 | Поле | Значение |
 |------|----------|
-| **applicationId** (package name) | `ru.humanitec.app` (тот же, что iOS bundle id; не менять после первого релиза). |
+| **applicationId** (package name) | `io.linnex.app` (тот же, что iOS bundle id; не менять после первого релиза). |
 | **App name** | `Linnex` (≤30 символов). |
 | **Default language** | Russian (ru-RU). Дополнительно — English (en-US). |
 | **Category** | Productivity (основная) или Business. |
@@ -130,7 +130,7 @@ Learn more: https://linnex.io
 
 ```
 Первая публичная сборка Linnex для Android: чаты Sync с голосом и видеозвонками, AI-агенты, CRM, база знаний.
-Поддержка push-уведомлений (FCM) и App Links на linnex.io, humanitec.ru, humanetic.ru и agents-lab.ru.
+Поддержка push-уведомлений (FCM) и App Links на linnex.io, linnex.io, humanetic.ru и agents-lab.ru.
 ```
 
 ---
@@ -149,6 +149,6 @@ Learn more: https://linnex.io
 
 ---
 
-## Legacy brand (humanitec.ru)
+## Legacy brand (linnex.io)
 
-Для legacy apex используйте имя **Humanitec** на витрине, `https://humanitec.ru` и `support@humanitec.ru`. Package name `ru.humanitec.app` остаётся без изменений.
+Для legacy apex используйте имя **Linnex** на витрине, `https://linnex.io` и `support@linnex.io`. Package name `io.linnex.app` остаётся без изменений.

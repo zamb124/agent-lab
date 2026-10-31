@@ -2,6 +2,7 @@ import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helper
 import { resetPlatformState } from '../helpers/reset.js';
 import { bootstrapFlowsEditor } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/editor/flows-bottom-toolbar.js';
+import { qs, qsa, shadow, type TestEl } from '../helpers/dom.js';
 
 describe('flows-bottom-toolbar data wires toggle', () => {
     beforeEach(() => resetPlatformState());
@@ -9,18 +10,18 @@ describe('flows-bottom-toolbar data wires toggle', () => {
 
     it('toggles showDataWires in editor slice', async () => {
         const { bus, getState } = bootstrapFlowsEditor();
-        const el = await fixture(html`<flows-bottom-toolbar></flows-bottom-toolbar>`);
+        const el = await fixture<TestEl>(html`<flows-bottom-toolbar></flows-bottom-toolbar>`);
         await elementUpdated(el);
 
-        const buttons = el.shadowRoot.querySelectorAll('platform-button');
+        const buttons = qsa(shadow(el), 'platform-button');
         const wiresBtn = [...buttons].find((btn) => {
-            const icon = btn.querySelector('platform-icon');
+            const icon = qs(btn!, 'platform-icon');
             return icon && icon.getAttribute('name') === 'link';
         });
         expect(wiresBtn).to.not.equal(undefined);
         expect(getState().flowsEditor.showDataWires).to.equal(false);
 
-        wiresBtn.click();
+        (wiresBtn as TestEl).click();
         await elementUpdated(el);
         expect(getState().flowsEditor.showDataWires).to.equal(true);
     });

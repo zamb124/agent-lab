@@ -11,6 +11,7 @@ import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { ty
 import '@platform/lib/components/platform-modal-stack.js';
 import '../../../../apps/flows/ui/components/flow-canvas/flows-flow-canvas.js';
 import '../../../../apps/flows/ui/modals/flows-node-run-result-modal.js';
+import {q, qs, qsa, shadow, type TestEl} from '../helpers/dom.js';
 
 function seedFlowsTranslations() {
     const bus = getPlatformBus();
@@ -36,7 +37,7 @@ describe('flows-flow-canvas node run result pill', () => {
         seedFlowsTranslations();
     });
     afterEach(() => {
-        for (const el of document.querySelectorAll('flows-node-run-result-modal')) {
+        for (const el of qsa(document!, 'flows-node-run-result-modal')) {
             el.remove();
         }
         fixtureCleanup();
@@ -57,7 +58,7 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/flow_started', { task_id: 't1' });
@@ -72,12 +73,12 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        const node = el.shadowRoot.querySelector('g.node[data-node-id="code_1"][data-state="completed"]');
+        const node = q(shadow(el), 'g.node[data-node-id="code_1"][data-state="completed"]');
         expect(node).to.not.equal(null);
 
-        const pill = node.querySelector('.node-run-result-pill[data-tone="ok"]');
+        const pill = q(node!, '.node-run-result-pill[data-tone="ok"]');
         expect(pill).to.not.equal(null);
-        expect(pill.textContent).to.include('Mock result');
+        expect(pill!.textContent).to.include('Mock result');
     });
 
     it('renders running pill while node executes', async () => {
@@ -95,13 +96,13 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_started', { node_id: 'code_1', task_id: 't1' });
         await elementUpdated(el);
 
-        const pill = el.shadowRoot.querySelector('.node-run-result-pill[data-tone="running"]');
+        const pill = q(shadow(el), '.node-run-result-pill[data-tone="running"]');
         expect(pill).to.not.equal(null);
     });
 
@@ -121,7 +122,7 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         bus.dispatch('flows/editor/canvas_run_results_toggled', { value: false });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_completed', {
@@ -131,7 +132,7 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        expect(el.shadowRoot.querySelector('.node-run-result-pill')).to.equal(null);
+        expect(q(shadow(el), '.node-run-result-pill')).to.equal(null);
     });
 
     it('renders expanded change badges with dynamic pill height', async () => {
@@ -155,7 +156,7 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_completed', {
@@ -200,38 +201,38 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        const node = el.shadowRoot.querySelector('g.node[data-node-id="mcp_1"]');
+        const node = q(shadow(el), 'g.node[data-node-id="mcp_1"]');
         expect(node).to.not.equal(null);
 
-        const foreignObject = node.querySelector('foreignObject.node-run-result');
+        const foreignObject = q(node!, 'foreignObject.node-run-result');
         expect(foreignObject).to.not.equal(null);
-        const collapsedHeight = Number.parseFloat(foreignObject.getAttribute('height'));
+        const collapsedHeight = Number.parseFloat(foreignObject!.getAttribute('height')!);
         expect(collapsedHeight).to.be.greaterThan(44);
 
-        const pill = node.querySelector('.node-run-result-pill[data-tone="ok"]');
+        const pill = q(node!, '.node-run-result-pill[data-tone="ok"]');
         expect(pill).to.not.equal(null);
-        expect(pill.textContent).to.include('index: ok');
-        expect(pill.textContent).not.to.include('{');
-        expect(pill.hasAttribute('data-expanded')).to.equal(false);
+        expect(pill!.textContent).to.include('index: ok');
+        expect(pill!.textContent).not.to.include('{');
+        expect(pill!.hasAttribute('data-expanded')).to.equal(false);
 
-        pill.click();
+        (pill as TestEl).click();
         await elementUpdated(el);
 
-        const pillExpanded = node.querySelector('.node-run-result-pill[data-tone="ok"]');
+        const pillExpanded = qs(node!, '.node-run-result-pill[data-tone="ok"]');
         expect(pillExpanded.hasAttribute('data-expanded')).to.equal(true);
 
-        const expandedForeignObject = node.querySelector('foreignObject.node-run-result');
-        const expandedHeight = Number.parseFloat(expandedForeignObject.getAttribute('height'));
+        const expandedForeignObject = qs(node!, 'foreignObject.node-run-result');
+        const expandedHeight = Number.parseFloat(expandedForeignObject!.getAttribute('height')!);
         expect(expandedHeight).to.be.greaterThan(collapsedHeight);
 
-        const addedBadge = node.querySelector('.node-run-result-change[data-change-type="added"] .node-run-result-change-badge');
+        const addedBadge = q(node!, '.node-run-result-change[data-change-type="added"] .node-run-result-change-badge');
         expect(addedBadge).to.not.equal(null);
-        expect(addedBadge.textContent).to.include('+');
+        expect(addedBadge!.textContent).to.include('+');
 
-        const typeChip = node.querySelector('.node-run-result-type-chip');
+        const typeChip = q(node!, '.node-run-result-type-chip');
         expect(typeChip).to.not.equal(null);
 
-        const changeRows = node.querySelectorAll('.node-run-result-change');
+        const changeRows = qsa(node!, '.node-run-result-change');
         expect(changeRows.length).to.equal(5);
         expect(expandedHeight).to.be.greaterThan(180);
         expect(pillExpanded.textContent).not.to.include('{');
@@ -253,7 +254,7 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_completed', {
@@ -268,16 +269,16 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        const maximize = el.shadowRoot.querySelector('.node-run-result-maximize');
+        const maximize = q(shadow(el), '.node-run-result-maximize');
         expect(maximize).to.not.equal(null);
-        maximize.click();
+        (maximize as TestEl).click();
         await elementUpdated(el);
 
         const stack = bus.getState().modals.stack;
         expect(stack.length).to.be.greaterThan(0);
-        expect(stack[stack.length - 1].kind).to.equal('flows.node_run_result');
-        expect(stack[stack.length - 1].props.nodeId).to.equal('code_1');
-        expect(stack[stack.length - 1].props.runIndex).to.equal(0);
+        expect(stack[stack.length - 1]!.kind).to.equal('flows.node_run_result');
+        expect(stack[stack.length - 1]!.props.nodeId).to.equal('code_1');
+        expect(stack[stack.length - 1]!.props.runIndex).to.equal(0);
     });
 
     it('row click opens inspector with selectedPath', async () => {
@@ -295,7 +296,7 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_completed', {
@@ -308,18 +309,18 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        const pill = el.shadowRoot.querySelector('.node-run-result-pill');
-        pill.click();
+        const pill = qs(shadow(el), '.node-run-result-pill');
+        (pill as TestEl).click();
         await elementUpdated(el);
 
-        const row = el.shadowRoot.querySelector('.node-run-result-change[data-path="result"]');
+        const row = q(shadow(el), '.node-run-result-change[data-path="result"]');
         expect(row).to.not.equal(null);
-        row.click();
+        (row as TestEl).click();
         await elementUpdated(el);
 
         const stack = bus.getState().modals.stack;
-        expect(stack[stack.length - 1].kind).to.equal('flows.node_run_result');
-        expect(stack[stack.length - 1].props.selectedPath).to.equal('result');
+        expect(stack[stack.length - 1]!.kind).to.equal('flows.node_run_result');
+        expect(stack[stack.length - 1]!.props.selectedPath).to.equal('result');
     });
 
     it('two node_completed show latest pill and run count badge', async () => {
@@ -337,7 +338,7 @@ describe('flows-flow-canvas node run result pill', () => {
             },
         });
 
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
 
         bus.dispatch('flows/run/node_completed', {
@@ -356,14 +357,14 @@ describe('flows-flow-canvas node run result pill', () => {
         });
         await elementUpdated(el);
 
-        const pills = el.shadowRoot.querySelectorAll('.node-run-result-pill[data-tone="ok"]');
+        const pills = qsa(shadow(el), '.node-run-result-pill[data-tone="ok"]');
         expect(pills.length).to.equal(1);
-        expect(pills[0].textContent).to.include('second run');
-        expect(pills[0].textContent).not.to.include('first run');
-        const badge = el.shadowRoot.querySelector('.node-run-result-run-badge');
+        expect(pills[0]!.textContent).to.include('second run');
+        expect(pills[0]!.textContent).not.to.include('first run');
+        const badge = q(shadow(el), '.node-run-result-run-badge');
         expect(badge).to.not.equal(null);
-        expect(badge.getAttribute('data-run-count')).to.equal('2');
-        expect(badge.textContent).to.include('2');
+        expect(badge!.getAttribute('data-run-count')).to.equal('2');
+        expect(badge!.textContent).to.include('2');
     });
 
     it('expanded index shows 8 rows and more line, more click opens inspector', async () => {
@@ -380,7 +381,7 @@ describe('flows-flow-canvas node run result pill', () => {
                 edges: [],
             },
         });
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
@@ -395,18 +396,18 @@ describe('flows-flow-canvas node run result pill', () => {
             })),
         });
         await elementUpdated(el);
-        const pill = el.shadowRoot.querySelector('.node-run-result-pill');
-        pill.click();
+        const pill = qs(shadow(el), '.node-run-result-pill');
+        (pill as TestEl).click();
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelectorAll('.node-run-result-change').length).to.equal(8);
-        const more = el.shadowRoot.querySelector('.node-run-result-more');
+        expect(qsa(shadow(el), '.node-run-result-change').length).to.equal(8);
+        const more = q(shadow(el), '.node-run-result-more');
         expect(more).to.not.equal(null);
-        expect(more.textContent).to.include('4');
-        more.click();
+        expect(more!.textContent).to.include('4');
+        (more as TestEl).click();
         await elementUpdated(el);
         const stack = bus.getState().modals.stack;
-        expect(stack[stack.length - 1].kind).to.equal('flows.node_run_result');
-        expect(stack[stack.length - 1].props.nodeId).to.equal('code_1');
+        expect(stack[stack.length - 1]!.kind).to.equal('flows.node_run_result');
+        expect(stack[stack.length - 1]!.props.nodeId).to.equal('code_1');
     });
 
     it('maximize does not expand pill and run badge opens inspector', async () => {
@@ -423,7 +424,7 @@ describe('flows-flow-canvas node run result pill', () => {
                 edges: [],
             },
         });
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
@@ -440,18 +441,18 @@ describe('flows-flow-canvas node run result pill', () => {
             diff: [],
         });
         await elementUpdated(el);
-        const pill = el.shadowRoot.querySelector('.node-run-result-pill');
-        const maximize = el.shadowRoot.querySelector('.node-run-result-maximize');
-        maximize.click();
+        const pill = qs(shadow(el), '.node-run-result-pill');
+        const maximize = qs(shadow(el), '.node-run-result-maximize');
+        (maximize as TestEl).click();
         await elementUpdated(el);
         expect(pill.hasAttribute('data-expanded')).to.equal(false);
-        expect(bus.getState().modals.stack[bus.getState().modals.stack.length - 1].kind).to.equal('flows.node_run_result');
-        const badge = el.shadowRoot.querySelector('.node-run-result-run-badge');
-        badge.click();
+        expect(bus!.getState().modals.stack[bus.getState().modals.stack.length - 1]!.kind).to.equal('flows.node_run_result');
+        const badge = qs(shadow(el), '.node-run-result-run-badge');
+        (badge as TestEl).click();
         await elementUpdated(el);
         const opened = bus.getState().modals.stack[bus.getState().modals.stack.length - 1];
-        expect(opened.props.nodeId).to.equal('code_1');
-        expect(opened.props.runIndex).to.equal(1);
+        expect(opened!.props.nodeId).to.equal('code_1');
+        expect(opened!.props.runIndex).to.equal(1);
     });
 
     it('expanded height stays compact for huge JSON payload', async () => {
@@ -468,7 +469,7 @@ describe('flows-flow-canvas node run result pill', () => {
                 edges: [],
             },
         });
-        const el = await fixture(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
+        const el = await fixture<TestEl>(html`<flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>`);
         await elementUpdated(el);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
@@ -485,13 +486,13 @@ describe('flows-flow-canvas node run result pill', () => {
             }],
         });
         await elementUpdated(el);
-        const pill = el.shadowRoot.querySelector('.node-run-result-pill');
-        pill.click();
+        const pill = qs(shadow(el), '.node-run-result-pill');
+        (pill as TestEl).click();
         await elementUpdated(el);
         const height = Number.parseFloat(
-            el.shadowRoot.querySelector('foreignObject.node-run-result').getAttribute('height'),
+            qs(shadow(el), 'foreignObject.node-run-result')!.getAttribute('height')!,
         );
-        expect(el.shadowRoot.querySelectorAll('.node-run-result-change').length).to.equal(1);
+        expect(qsa(shadow(el), '.node-run-result-change').length).to.equal(1);
         expect(pill.textContent).to.include('80');
         expect(pill.textContent).not.to.include('{');
         expect(height).to.be.lessThan(160);
@@ -511,13 +512,13 @@ describe('flows-flow-canvas node run result pill', () => {
                 edges: [],
             },
         });
-        const host = await fixture(html`
+        const host = await fixture<TestEl>(html`
             <div>
                 <flows-flow-canvas flow-id="flow_test" branch-id="default"></flows-flow-canvas>
                 <platform-modal-stack></platform-modal-stack>
             </div>
         `);
-        const canvas = host.querySelector('flows-flow-canvas');
+        const canvas = qs(host!, 'flows-flow-canvas');
         await elementUpdated(canvas);
         bus.dispatch('flows/run/node_completed', {
             node_id: 'code_1',
@@ -531,17 +532,17 @@ describe('flows-flow-canvas node run result pill', () => {
             ],
         });
         await elementUpdated(canvas);
-        canvas.shadowRoot.querySelector('.node-run-result-maximize').click();
+        qs(shadow(canvas), '.node-run-result-maximize').click();
         await waitUntil(
-            () => document.querySelector('flows-node-run-result-modal'),
+            () => q(document!, 'flows-node-run-result-modal'),
             'node run inspector mounted',
         );
-        const modal = document.querySelector('flows-node-run-result-modal');
-        await elementUpdated(modal);
-        expect(modal.shadowRoot.querySelector('.field-row[data-path="result"]')).to.not.equal(null);
-        expect(modal.shadowRoot.querySelector('.field-row[data-path="field_extra"]')).to.not.equal(null);
-        const valueView = modal.shadowRoot.querySelector('flows-node-run-value-view');
+        const modal = qs(document!, 'flows-node-run-result-modal');
+        await elementUpdated(modal)!;
+        expect(q(shadow(modal)!, '.field-row[data-path="result"]')).to.not.equal(null);
+        expect(q(shadow(modal)!, '.field-row[data-path="field_extra"]')).to.not.equal(null);
+        const valueView = qs(shadow(modal)!, 'flows-node-run-value-view');
         expect(valueView).to.not.equal(null);
-        expect(valueView.shadowRoot.querySelector('flows-json-tree')).to.not.equal(null);
+        expect(q(shadow(valueView)!, 'flows-json-tree')).to.not.equal(null);
     });
 });

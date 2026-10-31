@@ -24,26 +24,26 @@ export class PlatformShellPage extends PlatformElement {
                 justify-content: center;
                 min-height: var(--app-vh, 100vh);
                 width: 100%;
-                padding: max(var(--space-6, 24px), env(safe-area-inset-top, 0px))
-                    max(var(--space-6, 24px), env(safe-area-inset-right, 0px))
-                    max(var(--space-6, 24px), env(safe-area-inset-bottom, 0px))
-                    max(var(--space-6, 24px), env(safe-area-inset-left, 0px));
+                padding: max(var(--space-6), env(safe-area-inset-top, 0px))
+                    max(var(--space-6), env(safe-area-inset-right, 0px))
+                    max(var(--space-6), env(safe-area-inset-bottom, 0px))
+                    max(var(--space-6), env(safe-area-inset-left, 0px));
                 box-sizing: border-box;
-                background: var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%));
+                background: var(--bg-gradient);
             }
 
             .panel {
                 position: relative;
                 width: 100%;
                 max-width: 440px;
-                padding: var(--space-8, 32px);
-                border-radius: var(--radius-2xl, 24px);
-                background: var(--glass-solid-medium, rgba(255, 255, 255, 0.06));
-                border: 1px solid var(--glass-border-medium, rgba(255, 255, 255, 0.12));
-                backdrop-filter: blur(var(--glass-blur-strong, 20px));
-                -webkit-backdrop-filter: blur(var(--glass-blur-strong, 20px));
-                box-shadow: var(--glass-shadow-medium, 0 8px 32px rgba(0, 0, 0, 0.35)),
-                    var(--glass-inner-glow-subtle, inset 0 1px 0 rgba(255, 255, 255, 0.06));
+                padding: var(--space-8);
+                border-radius: var(--radius-2xl);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-medium);
+                backdrop-filter: blur(var(--glass-blur-strong));
+                -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+                box-shadow: var(--glass-shadow-medium),
+                    var(--glass-inner-glow-subtle);
                 text-align: center;
             }
 
@@ -53,29 +53,29 @@ export class PlatformShellPage extends PlatformElement {
                 font-size: 4rem;
                 font-weight: 700;
                 line-height: 1;
-                margin: 0 0 var(--space-4, 16px);
+                margin: 0 0 var(--space-4);
                 color: var(--accent);
                 text-shadow: 0 0 40px rgba(153, 166, 249, 0.35);
             }
 
             h1 {
-                margin: 0 0 var(--space-3, 12px);
-                font-size: var(--text-xl, 1.25rem);
-                font-weight: var(--font-semibold, 600);
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
+                margin: 0 0 var(--space-3);
+                font-size: var(--text-xl);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
             }
 
             p {
-                margin: 0 0 var(--space-6, 24px);
-                font-size: var(--text-sm, 0.875rem);
+                margin: 0 0 var(--space-6);
+                font-size: var(--text-sm);
                 line-height: 1.55;
-                color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+                color: var(--text-secondary);
             }
 
             .actions {
                 display: flex;
                 flex-wrap: wrap;
-                gap: var(--space-3, 12px);
+                gap: var(--space-3);
                 justify-content: center;
             }
         `,

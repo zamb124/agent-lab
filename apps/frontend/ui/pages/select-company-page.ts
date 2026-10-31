@@ -55,7 +55,7 @@ export class SelectCompanyPage extends PlatformPage {
                 max-width: 40rem;
                 text-align: center;
                 color: var(--text-primary);
-                font-size: var(--text-2xl, 1.5rem);
+                font-size: var(--text-2xl);
                 font-weight: 600;
                 letter-spacing: -0.02em;
             }
@@ -139,7 +139,7 @@ export class SelectCompanyPage extends PlatformPage {
                 background: color-mix(in srgb, var(--accent) 18%, transparent);
             }
             .company-card-name {
-                font-size: var(--text-base, 1rem);
+                font-size: var(--text-base);
                 font-weight: 500;
                 line-height: 1.35;
                 word-break: break-word;

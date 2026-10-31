@@ -19,6 +19,7 @@ import {
 import { callAcceptOp } from '../../../../apps/sync/ui/events/resources/calls.resource.js';
 import syncEn from '../../../../core/i18n/translations/en/sync.json' with { type: 'json' };
 import '../../../../apps/sync/ui/components/sync-message-bubble.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const TOKENS_HREF = '/core/frontend/static/assets/css/tokens.css';
 
@@ -34,13 +35,13 @@ const FACTORIES = [
 ];
 
 function loadTokens() {
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector(`link[rel="stylesheet"][href="${TOKENS_HREF}"]`);
+    return new Promise<void>((resolve, reject) => {
+        const existing = q(document, `link[rel="stylesheet"][href="${TOKENS_HREF}"]`);
         if (existing) {
             resolve();
             return;
         }
-        const link = document.createElement('link');
+        const link = (document.createElement('link') as TestEl);
         link.rel = 'stylesheet';
         link.href = TOKENS_HREF;
         link.onload = () => resolve();
@@ -77,7 +78,7 @@ function guestSpeechMessage() {
         contents: [
             {
                 type: 'text/plain',
-                data: { body: 'привееет!!!', origin: 'speech' },
+                data: { body: 'привееет!', origin: 'speech' },
             },
         ],
         reactions: [],
@@ -123,7 +124,7 @@ describe('sync-message-bubble guest / speech / compact text', () => {
     afterEach(() => fixtureCleanup());
 
     it('гость: иконка user + имя, сырой id не показывается', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <sync-message-bubble
                 .message=${guestSpeechMessage()}
                 my-user-id="user-me"
@@ -131,28 +132,28 @@ describe('sync-message-bubble guest / speech / compact text', () => {
             ></sync-message-bubble>
         `);
         await elementUpdated(el);
-        const root = el.shadowRoot;
-        const sender = root.querySelector('.sender');
+        const root = shadow(el);
+        const sender = q(root!, '.sender');
         expect(sender).to.not.equal(null);
-        expect(sender.textContent).to.equal('артем');
-        expect(sender.textContent.includes('guest:')).to.equal(false);
-        expect(sender.classList.contains('guest')).to.equal(true);
+        expect(sender!.textContent).to.equal('артем');
+        expect(sender!.textContent.includes('guest:')).to.equal(false);
+        expect(sender!.classList.contains('guest')).to.equal(true);
 
-        const avatar = root.querySelector('.avatar.guest');
+        const avatar = q(root!, '.avatar.guest');
         expect(avatar).to.not.equal(null);
-        const icon = avatar.querySelector('platform-icon');
+        const icon = q(avatar!, 'platform-icon');
         expect(icon).to.not.equal(null);
-        expect(icon.getAttribute('name')).to.equal('user');
+        expect(icon!.getAttribute('name')).to.equal('user');
 
-        const events = [];
-        getPlatformBus().subscribeAny((e) => events.push(e));
-        sender.click();
+        const events: any[] = [];
+        getPlatformBus().subscribeAny((e: any) => events.push(e));
+        (sender as TestEl).click();
         const modal = events.find((e) => e.type === CoreEvents.UI_MODAL_OPEN);
         expect(modal).to.equal(undefined);
     });
 
     it('From audio: mic и подпись на одной вертикали, без whitespace-flex', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <sync-message-bubble
                 .message=${guestSpeechMessage()}
                 my-user-id="user-me"
@@ -160,35 +161,35 @@ describe('sync-message-bubble guest / speech / compact text', () => {
             ></sync-message-bubble>
         `);
         await elementUpdated(el);
-        const origin = el.shadowRoot.querySelector('.speech-origin');
+        const origin = qs(shadow(el), '.speech-origin');
         expect(origin).to.not.equal(null);
-        const textNodes = [...origin.childNodes].filter(
-            (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== '',
+        const textNodes = [...origin!.childNodes].filter(
+            (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
         );
         expect(textNodes.length).to.equal(0);
-        expect(origin.children.length).to.equal(2);
+        expect(origin!.children.length).to.equal(2);
 
-        const icon = origin.querySelector('platform-icon');
-        const label = origin.querySelector('span');
+        const icon = q(origin!, 'platform-icon');
+        const label = q(origin!, 'span');
         expect(icon).to.not.equal(null);
         expect(label).to.not.equal(null);
-        expect(label.textContent).to.equal('From audio');
+        expect(label!.textContent).to.equal('From audio');
 
-        const originStyle = getComputedStyle(origin);
+        const originStyle = getComputedStyle(origin)!;
         // Flex-item внутри .body--speech: computed display блочится в flex.
         expect(originStyle.display === 'flex' || originStyle.display === 'inline-flex').to.equal(true);
         expect(originStyle.alignItems).to.equal('center');
         expect(originStyle.whiteSpace).to.equal('nowrap');
 
-        const iconBox = icon.getBoundingClientRect();
-        const labelBox = label.getBoundingClientRect();
+        const iconBox = icon!.getBoundingClientRect();
+        const labelBox = label!.getBoundingClientRect();
         const iconMid = (iconBox.top + iconBox.bottom) / 2;
         const labelMid = (labelBox.top + labelBox.bottom) / 2;
         expect(Math.abs(iconMid - labelMid)).to.be.lessThan(2);
     });
 
     it('короткий свой текст: pre-wrap только на body-text, пузырь без индента шаблона', async () => {
-        const el = await fixture(html`
+        const el = await fixture<TestEl>(html`
             <div style="width: 420px;">
                 <sync-message-bubble
                     .message=${ownShortDmMessage()}
@@ -197,22 +198,22 @@ describe('sync-message-bubble guest / speech / compact text', () => {
                 ></sync-message-bubble>
             </div>
         `);
-        const bubbleEl = el.querySelector('sync-message-bubble');
+        const bubbleEl = qs(el!, 'sync-message-bubble');
         await elementUpdated(bubbleEl);
-        const root = bubbleEl.shadowRoot;
-        const body = root.querySelector('.body');
-        const bodyText = root.querySelector('.body-text');
-        const bubble = root.querySelector('.bubble');
+        const root = shadow(bubbleEl);
+        const body = qs(root!, '.body');
+        const bodyText = qs(root!, '.body-text');
+        const bubble = q(root!, '.bubble');
         expect(body).to.not.equal(null);
         expect(bodyText).to.not.equal(null);
         expect(bubble).to.not.equal(null);
 
-        expect(getComputedStyle(body).whiteSpace).to.equal('normal');
-        expect(getComputedStyle(bodyText).whiteSpace).to.equal('pre-wrap');
-        expect(bodyText.textContent).to.equal('Хехе');
+        expect(getComputedStyle(body).whiteSpace).to.equal('normal')!;
+        expect(getComputedStyle(bodyText).whiteSpace).to.equal('pre-wrap')!;
+        expect(bodyText!.textContent).to.equal('Хехе');
 
-        const bubbleBox = bubble.getBoundingClientRect();
-        const textBox = bodyText.getBoundingClientRect();
+        const bubbleBox = bubble!.getBoundingClientRect();
+        const textBox = bodyText!.getBoundingClientRect();
         expect(bubbleBox.height).to.be.lessThan(textBox.height + 48);
         expect(bubbleBox.width).to.be.lessThan(220);
     });

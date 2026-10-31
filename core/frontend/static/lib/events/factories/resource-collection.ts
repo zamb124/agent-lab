@@ -50,6 +50,7 @@ import {
 import type { EffectCtx, PlatformEvent } from '../contract.js';
 import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
+import type { PlatformCommandMap } from '../wire/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
 
 const MUTATING_OPERATIONS = new Set(['create', 'update', 'remove']);
@@ -225,6 +226,29 @@ export interface ResourceCollectionFactory<
     effect: (event: PlatformEvent, ctx: EffectCtx) => Promise<void>;
 }
 
+/**
+ * Wire-тип элемента коллекции по `name`: `<name>/list_requested` →
+ * `result.items[number]`. Нет в `PlatformCommandMap` — `ResourceItem` (как раньше).
+ */
+type WireListItem<N extends string> =
+    `${N}/list_requested` extends keyof PlatformCommandMap
+        ? NonNullable<PlatformCommandMap[`${N}/list_requested`]['result']> extends { items?: infer Items }
+            ? NonNullable<Items> extends readonly (infer I)[]
+                ? I extends ResourceItem ? I : ResourceItem
+                : ResourceItem
+            : ResourceItem
+        : ResourceItem;
+
+export function createResourceCollection<
+    N extends string,
+    S extends ResourceCollectionSlice<WireListItem<N>> = ResourceCollectionSlice<WireListItem<N>>,
+    A extends ActionMap = Record<never, string>,
+>(options: ResourceCollectionOptions<WireListItem<N>, S, A> & { name: N }): ResourceCollectionFactory<S, A>;
+export function createResourceCollection<
+    TItem extends ResourceItem = ResourceItem,
+    S extends ResourceCollectionSlice<TItem> = ResourceCollectionSlice<TItem>,
+    A extends ActionMap = Record<never, string>,
+>(options: ResourceCollectionOptions<TItem, S, A>): ResourceCollectionFactory<S, A>;
 export function createResourceCollection<
     TItem extends ResourceItem = ResourceItem,
     S extends ResourceCollectionSlice<TItem> = ResourceCollectionSlice<TItem>,

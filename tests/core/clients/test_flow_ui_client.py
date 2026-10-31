@@ -27,6 +27,7 @@ from core.clients.flow_ui_client import (
     task_text,
     task_ui_events,
 )
+from core.types import JsonObject, require_json_array, require_json_object
 from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
     STATE_ARTIFACT_ID,
@@ -35,7 +36,6 @@ from core.ui_document.protocol import (
     FlowUINavigate,
     FlowUIRender,
 )
-from core.types import JsonObject, require_json_array, require_json_object
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "flow_ui"
 

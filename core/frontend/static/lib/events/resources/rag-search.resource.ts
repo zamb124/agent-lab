@@ -5,8 +5,9 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { RAGSearchOptions, SearchResponse } from '../wire/rag.gen.js';
 
-export const searchOp = createAsyncOp({
+export const searchOp = createAsyncOp<SearchResponse>({
     name: 'rag/search',
     silent: true,
     transport: 'ws',
@@ -15,7 +16,7 @@ export const searchOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/rag/api/v1/namespaces/:namespace_id/search' },
 });
 
-export const searchDefaultsOp = createAsyncOp({
+export const searchDefaultsOp = createAsyncOp<RAGSearchOptions>({
     name: 'rag/search_defaults',
     silent: true,
     transport: 'ws',

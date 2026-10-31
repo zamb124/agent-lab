@@ -15,7 +15,7 @@ const LINNEX_BRAND = {
     supportEmail: 'support@linnex.io',
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://linnex.io/',
-    supportedDomains: ['linnex.io', 'humanitec.ru'],
+    supportedDomains: ['linnex.io', 'linnex.io'],
     modelsProductName: 'Linnex Models',
     voiceProductName: 'Linnex Voice',
     llmsDisplayLabel: 'Linnex LLMs',
@@ -65,7 +65,7 @@ describe('platform brand UI vars (linnex.io)', () => {
         ).toBe('Linnex system models for embeddings and rerank');
     });
 
-    it('does not leak Humanitec in platform service labels', () => {
+    it('does not leak legacy brand in platform service labels', () => {
         const i18nState = {
             locale: 'en',
             defaultNamespace: 'platform',

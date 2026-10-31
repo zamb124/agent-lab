@@ -13,6 +13,7 @@ from typing import cast
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from core.types import JsonObject
 from core.ui_document.document import (
     ACTION_NAME_PATTERN,
     BLOCK_ID_PATTERN,
@@ -34,7 +35,6 @@ from core.ui_document.document import (
     input_field_type_name,
     iter_blocks,
 )
-from core.types import JsonObject
 
 BLOCK_ADAPTER: TypeAdapter[FlowUIBlockModel] = TypeAdapter(FlowUIBlock)
 

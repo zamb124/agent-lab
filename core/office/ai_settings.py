@@ -21,7 +21,7 @@ ONLYOFFICE_AI_BROWSER_CORS_ORIGINS: Final[tuple[str, ...]] = (
     "https://onlyoffice.github.io",
     "https://onlyoffice-plugins.github.io",
     "https://onlyoffice.linnex.io",
-    "https://onlyoffice.humanitec.ru",
+    "https://onlyoffice.linnex.io",
 )
 
 ONLYOFFICE_AI_CAPABILITY_CHAT: Final[int] = 0x01

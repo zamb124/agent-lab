@@ -85,7 +85,7 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
                 }}
             ></platform-field>
             <div class="members">
-                ${filtered.map((m: Record<string, any>) => html`
+                ${filtered.map((m: Record<string, unknown>) => html`
                     <div
                         class=${this._selected.has(m.user_id) ? 'form-item selected' : 'form-item'}
                         @click=${() => this._toggleMember(m.user_id)}

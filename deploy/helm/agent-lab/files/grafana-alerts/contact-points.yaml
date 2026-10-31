@@ -12,5 +12,5 @@ contactPoints:
       - uid: default-email
         type: email
         settings:
-          addresses: "ops@humanitec.ru"
+          addresses: "ops@linnex.io"
         disableResolveMessage: false

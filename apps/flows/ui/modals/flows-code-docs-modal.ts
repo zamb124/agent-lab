@@ -172,7 +172,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 font-size: var(--text-lg);
             }
             .docs-md h3 {
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
             }
             .docs-md p {
                 margin: 0 0 var(--space-3) 0;

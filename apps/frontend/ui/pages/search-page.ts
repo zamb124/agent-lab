@@ -1030,7 +1030,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-text code,
             .source-ai-markdown code {
-                border-radius: var(--radius-sm, 8px);
+                border-radius: var(--radius-sm);
                 padding: 2px 6px;
                 background: var(--glass-tint-strong);
                 font-family: var(--font-mono);
@@ -1270,7 +1270,7 @@ export class PublicSearchPage extends PlatformPage {
                 flex-shrink: 0;
                 min-height: 30px;
                 border: 0;
-                border-radius: var(--radius-full, 999px);
+                border-radius: var(--radius-full);
                 display: inline-flex;
                 align-items: center;
                 gap: 7px;
@@ -1480,7 +1480,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .skeleton {
                 height: 86px;
-                border-radius: var(--radius-xl, 20px);
+                border-radius: var(--radius-xl);
                 background: linear-gradient(
                     90deg,
                     var(--glass-border-subtle),
@@ -1580,7 +1580,7 @@ export class PublicSearchPage extends PlatformPage {
 
             :host-context([data-theme="light"]) .search-shell {
                 background: var(--bg-surface);
-                border-color: color-mix(in srgb, var(--text-inverse) 12%, transparent);
+                border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
                 box-shadow: 0 24px 70px color-mix(in srgb, var(--accent) 14%, transparent);
             }
 
@@ -1590,7 +1590,7 @@ export class PublicSearchPage extends PlatformPage {
 
             :host-context([data-theme="light"]) .search-icon,
             :host-context([data-theme="light"]) .icon-tool {
-                color: color-mix(in srgb, var(--text-inverse) 56%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 56%, transparent);
             }
 
             :host-context([data-theme="light"]) input[type='search'] {
@@ -1598,7 +1598,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) input[type='search']::placeholder {
-                color: color-mix(in srgb, var(--text-inverse) 46%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 46%, transparent);
             }
 
             :host-context([data-theme="light"]) .mode-chip,
@@ -1608,9 +1608,9 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .provider-badge,
             :host-context([data-theme="light"]) .panel-count,
             :host-context([data-theme="light"]) .file-chip {
-                color: color-mix(in srgb, var(--text-inverse) 72%, transparent);
-                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
-                border-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 72%, transparent);
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+                border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
             }
 
             :host-context([data-theme="light"]) .mode-chip:hover,
@@ -1629,7 +1629,7 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .suggest-panel,
             :host-context([data-theme="light"]) .provider-panel {
                 background: var(--bg-surface);
-                border-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+                border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
             }
 
             :host-context([data-theme="light"]) .sources-panel {
@@ -1642,9 +1642,9 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .source-list > .skeleton {
                 background: linear-gradient(
                     90deg,
-                    color-mix(in srgb, var(--text-inverse) 5%, transparent),
-                    color-mix(in srgb, var(--text-inverse) 10%, transparent),
-                    color-mix(in srgb, var(--text-inverse) 5%, transparent)
+                    color-mix(in srgb, var(--text-primary) 5%, transparent),
+                    color-mix(in srgb, var(--text-primary) 10%, transparent),
+                    color-mix(in srgb, var(--text-primary) 5%, transparent)
                 );
                 background-size: 220% 100%;
             }
@@ -1663,11 +1663,11 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .answer-error-title {
-                color: color-mix(in srgb, var(--text-inverse) 94%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 94%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-text {
-                color: color-mix(in srgb, var(--text-inverse) 66%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 66%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-action {
@@ -1682,7 +1682,7 @@ export class PublicSearchPage extends PlatformPage {
 
             :host-context([data-theme="light"]) .answer-error-details,
             :host-context([data-theme="light"]) .answer-error-code {
-                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-card {
@@ -1691,8 +1691,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .source-card:hover {
-                background: color-mix(in srgb, var(--text-inverse) 4%, transparent);
-                border-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
+                background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+                border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-card.is-cited {
@@ -1712,8 +1712,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .answer-toggle {
-                color: color-mix(in srgb, var(--text-inverse) 90%, transparent);
-                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 90%, transparent);
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-collapse.is-collapsed::after {
@@ -1723,22 +1723,22 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .panel-label,
             :host-context([data-theme="light"]) .answer-placeholder,
             :host-context([data-theme="light"]) .provider-count {
-                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .sources-panel .panel-label {
-                color: color-mix(in srgb, var(--text-inverse) 44%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 44%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-text,
             :host-context([data-theme="light"]) .source-title,
             :host-context([data-theme="light"]) .source-ai-markdown {
-                color: color-mix(in srgb, var(--text-inverse) 92%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 92%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-snippet,
             :host-context([data-theme="light"]) .source-insight {
-                color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 70%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-url,
@@ -1772,17 +1772,17 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .source-ai-panel {
-                color: color-mix(in srgb, var(--text-inverse) 84%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 84%, transparent);
                 background: color-mix(in srgb, var(--marketing-product-accent) 8%, transparent);
                 border-color: color-mix(in srgb, var(--marketing-product-accent) 22%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-site-row {
-                color: color-mix(in srgb, var(--text-inverse) 62%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 62%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-site-name {
-                color: color-mix(in srgb, var(--text-inverse) 88%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 88%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-display-url {
@@ -1790,13 +1790,13 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .source-results-meta {
-                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
+                color: color-mix(in srgb, var(--text-primary) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-favicon,
             :host-context([data-theme="light"]) .source-thumb {
-                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
-                border-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+                border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
             }
 
             @media (min-width: 768px) {
@@ -1845,7 +1845,7 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 0;
                     margin: 0;
                     width: 100%;
-                    background: var(--marketing-header-bg, var(--glass-bg-strong));
+                    background: var(--marketing-header-bg);
                 }
 
                 .search-head.is-active .search-shell {
@@ -1896,7 +1896,7 @@ export class PublicSearchPage extends PlatformPage {
                     box-shadow: none;
                     border: 0;
                     border-bottom: 1px solid var(--glass-border-medium);
-                    background: var(--marketing-header-bg, var(--glass-bg-strong));
+                    background: var(--marketing-header-bg);
                 }
 
                 .search-head.is-active {
@@ -2032,7 +2032,7 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .source-list > .skeleton {
-                    border-radius: var(--radius-lg, 16px);
+                    border-radius: var(--radius-lg);
                 }
 
                 .source-card {
@@ -2073,7 +2073,7 @@ export class PublicSearchPage extends PlatformPage {
 
                 :host-context(html[data-theme="light"]) .search-shell,
                 :host-context(html[data-theme="light"]) .search-head.is-active .search-shell {
-                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+                    border-bottom-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
                     box-shadow: none;
                 }
 
@@ -2081,7 +2081,7 @@ export class PublicSearchPage extends PlatformPage {
                 :host-context(html[data-theme="light"]) .sources-panel,
                 :host-context(html[data-theme="light"]) .suggest-panel,
                 :host-context(html[data-theme="light"]) .provider-panel {
-                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+                    border-bottom-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
                 }
 
                 :host-context(html[data-theme="light"]) .answer-panel[data-state='error'] {
@@ -2090,7 +2090,7 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 :host-context(html[data-theme="light"]) .source-card {
-                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
+                    border-bottom-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
                     background: transparent;
                 }
 
@@ -2100,7 +2100,7 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 :host-context(html[data-theme="light"]) .source-card:hover {
-                    background: color-mix(in srgb, var(--text-inverse) 3%, transparent);
+                    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
                 }
             }
 

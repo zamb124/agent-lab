@@ -10,7 +10,7 @@
     "main": {
       "type": "llm_node",
       "prompt": "Ты родительский агент демо handoff.\n\nЕсли запрос про заказы, доставку или курьеров — вызывай handoff_to_flow.\n\nОБЯЗАТЕЛЬНО:\n- target_flow_id всегда ровно handoff_demo_child (другие id запрещены, не выдумывай имена вроде order_handler).\n- reason — кратко, зачем передаёшь управление.\n- variables — только известные order_id и customer_name (если нет — пустой объект или только то, что сказал пользователь).\n\nНа общие вопросы отвечай сам или через finish.",
-      "llm": { "provider": "humanitec_llm", "model": "auto", "temperature": 0.2 },
+      "llm": { "provider": "linnex_llm", "model": "auto", "temperature": 0.2 },
       "tools": [
         { "tool_id": "handoff_to_flow", "description": "Handoff в дочерний flow. target_flow_id=handoff_demo_child (строго этот id). Для заказов и курьеров." },
         { "tool_id": "calculator", "description": "Калькулятор для простых вычислений", "code": "async def run(args, state):\n    try:\n        return {'result': str(eval(args.get('expression', '0')))}\n    except Exception as e:\n        return {'result': 'error: ' + str(e)}\n", "parameters_schema": { "type": "object", "properties": { "expression": { "type": "string", "description": "Математическое выражение" } }, "required": ["expression"] } },

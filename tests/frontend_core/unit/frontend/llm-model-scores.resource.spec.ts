@@ -58,8 +58,8 @@ describe('normalizeLlmModelScoreList', () => {
         });
         expect(normalized.items).toHaveLength(1);
         expect(normalized.providers).toHaveLength(1);
-        expect(normalized.items[0].availability).toBe('available');
-        expect(normalized.providers[0].provider).toBe('openrouter');
+        expect(normalized.items[0]?.availability).toBe('available');
+        expect(normalized.providers[0]?.provider).toBe('openrouter');
     });
 
     it('бросает без providers', () => {
@@ -75,7 +75,7 @@ describe('normalizeLlmModelScoreList', () => {
     });
 
     it('бросает без availability на item', () => {
-        const item = validItem();
+        const item: { availability?: string } & Omit<ReturnType<typeof validItem>, 'availability'> = validItem();
         delete item.availability;
         expect(() => normalizeLlmModelScoreList({
             items: [item],

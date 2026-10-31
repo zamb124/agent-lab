@@ -23,6 +23,8 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -478,11 +480,11 @@ export class CRMEntityDetailPage extends PlatformPage {
             }
             .btn-primary:hover:not(:disabled) { filter: brightness(1.05); }
             .btn-danger {
-                color: var(--color-danger);
-                border-color: var(--color-danger);
+                color: var(--error);
+                border-color: var(--error);
             }
             .btn-danger:hover:not(:disabled) {
-                background: var(--color-danger);
+                background: var(--error);
                 color: white;
             }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -515,7 +517,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 display: inline-flex;
                 padding: 2px 8px;
                 border-radius: var(--radius-full);
-                background: var(--crm-selected-bg, var(--glass-tint-medium));
+                background: var(--crm-selected-bg);
                 color: var(--text-secondary);
                 font-size: var(--text-xs);
             }
@@ -929,13 +931,11 @@ export class CRMEntityDetailPage extends PlatformPage {
             }
             return html`
                 <div class="body">
-                    <div class="center">
-                        <platform-icon class="icon" name="info" size="48"></platform-icon>
-                        <h2>${this.t('entity_detail_page.no_id_title')}</h2>
-                        <button class="btn" type="button" @click=${() => this.navigate('entities')}>
+                    <platform-empty-state icon="info" title=${this.t('entity_detail_page.no_id_title')}>
+                        <platform-button variant="secondary" @click=${() => this.navigate('entities')}>
                             ${this.t('entity_detail_page.back_to_entities')}
-                        </button>
-                    </div>
+                        </platform-button>
+                    </platform-empty-state>
                 </div>
             `;
         }
@@ -943,18 +943,15 @@ export class CRMEntityDetailPage extends PlatformPage {
         if (this._cardError) {
             return html`
                 <div class="body">
-                    <div class="center">
-                        <platform-icon class="icon" name="warning" size="48"></platform-icon>
-                        <h2>${this.t('entity_detail_page.not_found_title')}</h2>
-                        <p>${this._cardError}</p>
+                    <platform-empty-state icon="warning" title=${this.t('entity_detail_page.not_found_title')} hint=${this._cardError}>
                         ${this.embedded
                             ? nothing
                             : html`
-                                <button class="btn" type="button" @click=${() => this.navigate('entities')}>
+                                <platform-button variant="secondary" @click=${() => this.navigate('entities')}>
                                     ${this.t('entity_detail_page.back_to_entities')}
-                                </button>
+                                </platform-button>
                             `}
-                    </div>
+                    </platform-empty-state>
                 </div>
             `;
         }
@@ -963,8 +960,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         if (entity === null || this._entities.loading) {
             return html`
                 <div class="body">
-                    <div class="center">
-                        <platform-spinner size="lg"></platform-spinner>
+                    <platform-empty-state loading></platform-empty-state>
                     </div>
                 </div>
             `;

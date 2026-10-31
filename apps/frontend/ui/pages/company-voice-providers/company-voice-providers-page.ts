@@ -324,9 +324,9 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 min-width: 76px;
             }
 
-            .kind-alias  { background: #dbeafe; color: #1e40af; }
-            .kind-regex  { background: #fef3c7; color: #92400e; }
-            .kind-stress { background: #d1fae5; color: #065f46; }
+            .kind-alias  { background: var(--info-bg); color: var(--info); }
+            .kind-regex  { background: var(--warning-bg); color: var(--warning); }
+            .kind-stress { background: var(--success-bg); color: var(--success); }
 
             .rule-mono {
                 font-family: var(--font-mono);
@@ -376,7 +376,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 background: var(--glass-solid-medium);
             }
 
-            .test-result.result-changed { border-color: #22c55e; background: #f0fdf4; }
+            .test-result.result-changed { border-color: var(--success); background: var(--success-bg); }
 
             .result-block { margin-bottom: var(--space-3); }
             .result-block:last-child { margin-bottom: 0; }

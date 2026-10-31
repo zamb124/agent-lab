@@ -14,9 +14,9 @@ from typing import Literal
 from core.ai.providers.specs import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     GITHUB_MODELS_API_VERSION,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
-    HUMANITEC_LLMS_DISPLAY_LABEL,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
+    LINNEX_LLMS_DISPLAY_LABEL,
     LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER,
     LLM_PROVIDER_DEFAULT_BASE_URLS,
     LLM_PROVIDER_DEFAULT_MODELS_URLS,
@@ -30,8 +30,8 @@ from core.ai.providers.specs import (
     PLATFORM_LLM_PROVIDER_ORDER,
     PLATFORM_LLM_PROVIDER_SLUGS,
     ZERO_PRICE_LLM_PROVIDER_SLUGS,
-    humanitec_llms_model_ref,
-    split_humanitec_llms_model_ref,
+    linnex_llms_model_ref,
+    split_linnex_llms_model_ref,
     split_provider_prefixed_model,
 )
 
@@ -56,8 +56,8 @@ AIProviderKind = Literal["virtual", "platform"]
 
 PROVIDER_LITSERVE = "provider_litserve"
 VOICE_PROVIDER_LITSERVE = "litserve"
-HUMANITEC_MODELS_DISPLAY_LABEL = "Humanitec"
-HUMANITEC_VOICE_DISPLAY_LABEL = "Humanitec Voice"
+LINNEX_MODELS_DISPLAY_LABEL = "Linnex"
+LINNEX_VOICE_DISPLAY_LABEL = "Linnex Voice"
 
 LLM_CAPABILITIES: tuple[AICapability, ...] = (
     AICapability.LLM_CHAT,
@@ -115,8 +115,8 @@ def _openai_compatible_provider_capabilities(provider: str) -> frozenset[AICapab
 
 PLATFORM_PROVIDER_SPECS: tuple[PlatformProviderSpec, ...] = (
     PlatformProviderSpec(
-        provider=HUMANITEC_LLM_PROVIDER,
-        label=HUMANITEC_LLMS_DISPLAY_LABEL,
+        provider=LINNEX_LLM_PROVIDER,
+        label=LINNEX_LLMS_DISPLAY_LABEL,
         kind="virtual",
         capabilities=frozenset(LLM_CAPABILITIES),
         byok_allowed=False,
@@ -132,14 +132,14 @@ PLATFORM_PROVIDER_SPECS: tuple[PlatformProviderSpec, ...] = (
     ),
     PlatformProviderSpec(
         provider=PROVIDER_LITSERVE,
-        label=HUMANITEC_MODELS_DISPLAY_LABEL,
+        label=LINNEX_MODELS_DISPLAY_LABEL,
         kind="platform",
         capabilities=frozenset({AICapability.EMBEDDING, AICapability.RERANK}),
         byok_allowed=False,
     ),
     PlatformProviderSpec(
         provider=VOICE_PROVIDER_LITSERVE,
-        label=HUMANITEC_VOICE_DISPLAY_LABEL,
+        label=LINNEX_VOICE_DISPLAY_LABEL,
         kind="platform",
         capabilities=frozenset(VOICE_CAPABILITIES),
         byok_allowed=False,
@@ -214,11 +214,11 @@ __all__ = [
     "EMBEDDING_PROVIDER_ORDER",
     "EMBEDDING_PROVIDER_SLUGS",
     "GITHUB_MODELS_API_VERSION",
-    "HUMANITEC_LLM_AUTO_MODEL",
-    "HUMANITEC_LLM_PROVIDER",
-    "HUMANITEC_LLMS_DISPLAY_LABEL",
-    "HUMANITEC_MODELS_DISPLAY_LABEL",
-    "HUMANITEC_VOICE_DISPLAY_LABEL",
+    "LINNEX_LLM_AUTO_MODEL",
+    "LINNEX_LLM_PROVIDER",
+    "LINNEX_LLMS_DISPLAY_LABEL",
+    "LINNEX_MODELS_DISPLAY_LABEL",
+    "LINNEX_VOICE_DISPLAY_LABEL",
     "LLM_CAPABILITIES",
     "LLM_CAPABILITY_VALUES",
     "LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER",
@@ -244,12 +244,12 @@ __all__ = [
     "VOICE_CAPABILITY_VALUES",
     "VOICE_PROVIDER_LITSERVE",
     "ZERO_PRICE_LLM_PROVIDER_SLUGS",
-    "humanitec_llms_model_ref",
+    "linnex_llms_model_ref",
     "normalize_capability",
     "platform_provider_spec",
     "platform_provider_specs_for_capability",
     "provider_supports_capability",
-    "split_humanitec_llms_model_ref",
+    "split_linnex_llms_model_ref",
     "split_provider_prefixed_model",
     "validate_platform_provider_for_capability",
 ]

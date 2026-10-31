@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -43,7 +44,21 @@ def example_main_py_bytes() -> bytes:
 
 
 def example_cli_node_bytes() -> bytes:
-    return example_bytes("cli_node", "main.js")
+    # Payload контейнера — main.js, но источник — main.ts: транспиляция esbuild
+    # тем же toolchain, что и UI-сборка, в момент чтения примера.
+    src = EXAMPLES_ROOT / "cli_node" / "main.ts"
+    esbuild = Path(__file__).resolve().parents[2] / "node_modules" / ".bin" / "esbuild"
+    if not esbuild.exists():
+        raise FileNotFoundError(f"esbuild not found: {esbuild}; run npm install")
+    result = subprocess.run(
+        [str(esbuild), str(src), "--format=cjs", "--platform=node"],
+        check=True,
+        capture_output=True,
+    )
+    payload = result.stdout
+    if len(payload) == 0:
+        raise ValueError(f"{src} transpiled to empty output")
+    return payload
 
 
 def example_a2a_python_bytes() -> bytes:

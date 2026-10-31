@@ -32,7 +32,7 @@ interface FileAttachmentRef {
     original_name: string;
     content_type: string;
     file_size: number;
-    url?: string;
+    url?: string | undefined;
     [key: string]: unknown;
 }
 
@@ -103,7 +103,7 @@ export class PlatformFileAttachments extends PlatformElement {
     static override styles: CSSResultGroup = css`
         :host {
             display: block;
-            --file-attachment-tile-width: var(--mail-attachment-tile, 200px);
+            --file-attachment-tile-width: var(--mail-attachment-tile);
         }
         .list {
             display: flex;

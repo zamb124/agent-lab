@@ -116,17 +116,17 @@ export class PlatformFieldEnum extends PlatformElement {
 
             .enum-list {
                 margin: 0;
-                padding: var(--space-1, 4px) 0;
+                padding: var(--space-1) 0;
                 list-style: none;
             }
 
             .enum-option {
                 margin: 0;
-                padding: var(--space-2, 8px) var(--space-3, 12px);
+                padding: var(--space-2) var(--space-3);
                 cursor: pointer;
-                font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
-                font-weight: var(--font-medium, 500);
-                line-height: var(--leading-tight, 1.25);
+                font-size: var(--field-pill-readonly-muted-size);
+                font-weight: var(--font-medium);
+                line-height: var(--leading-tight);
                 color: var(--text-primary);
             }
 
@@ -138,7 +138,7 @@ export class PlatformFieldEnum extends PlatformElement {
 
             .enum-option--selected {
                 background: var(--glass-solid-subtle);
-                font-weight: var(--font-semibold, 600);
+                font-weight: var(--font-semibold);
             }
 
             .enum-option--selected:hover {
@@ -147,8 +147,8 @@ export class PlatformFieldEnum extends PlatformElement {
 
             .enum-empty {
                 margin: 0;
-                padding: var(--space-2, 8px) var(--space-3, 12px);
-                font-size: var(--field-pill-readonly-muted-size, var(--text-sm, 14px));
+                padding: var(--space-2) var(--space-3);
+                font-size: var(--field-pill-readonly-muted-size);
                 color: var(--text-tertiary);
                 list-style: none;
             }

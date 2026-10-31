@@ -5,19 +5,19 @@ import {
 } from '@platform/lib/utils/build-service-entry-url.js';
 
 describe('buildFrontendPublicPath', () => {
-    const withWindow = (loc, fn) => {
+    const withWindow = (loc: Partial<Location>, fn: () => void) => {
         const prev = globalThis.window;
-        globalThis.window = { location: loc };
+        Object.defineProperty(globalThis, 'window', { value: { location: loc }, configurable: true, writable: true });
         try {
             fn();
         } finally {
-            globalThis.window = prev;
+            Object.defineProperty(globalThis, 'window', { value: prev, configurable: true, writable: true });
         }
     };
 
     it('throws when path is invalid', () => {
         withWindow(
-            { hostname: 'humanitec.ru', port: '', protocol: 'https:' },
+            { hostname: 'linnex.io', port: '', protocol: 'https:' },
             () => {
                 expect(() => buildFrontendPublicPath('')).toThrow(
                     'buildFrontendPublicPath: path must be a non-empty string starting with /',
@@ -31,7 +31,7 @@ describe('buildFrontendPublicPath', () => {
 
     it('returns path as-is on production host', () => {
         withWindow(
-            { hostname: 'humanitec.ru', port: '', protocol: 'https:' },
+            { hostname: 'linnex.io', port: '', protocol: 'https:' },
             () => {
                 expect(buildFrontendPublicPath('/agent')).toBe('/agent');
             },
@@ -67,13 +67,13 @@ describe('buildFrontendPublicPath', () => {
 });
 
 describe('buildDocumentsCatalogEntryUrl', () => {
-    const withWindow = (loc, fn) => {
+    const withWindow = (loc: Partial<Location>, fn: () => void) => {
         const prev = globalThis.window;
-        globalThis.window = { location: loc };
+        Object.defineProperty(globalThis, 'window', { value: { location: loc }, configurable: true, writable: true });
         try {
             fn();
         } finally {
-            globalThis.window = prev;
+            Object.defineProperty(globalThis, 'window', { value: prev, configurable: true, writable: true });
         }
     };
 

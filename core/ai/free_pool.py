@@ -12,11 +12,11 @@ from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
 from core.ai.models import AIModelRecord, ArtificialAnalysisIndices, LLMModelScore
 from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
-    HUMANITEC_LLM_AUTO_MODEL,
+    LINNEX_LLM_AUTO_MODEL,
     LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
     AICapability,
-    humanitec_llms_model_ref,
+    linnex_llms_model_ref,
 )
 from core.ai.scoring import (
     PlatformModelScoreOverlay,
@@ -444,19 +444,19 @@ async def read_platform_free_model_records(
     return parse_platform_free_models(raw_cache_payload)
 
 
-def humanitec_llms_model_options_from_records(
+def linnex_llms_model_options_from_records(
     records: Iterable[PlatformFreeModelRecord],
 ) -> list[JsonObject]:
     items: list[JsonObject] = [
         {
-            "value": HUMANITEC_LLM_AUTO_MODEL,
-            "label": HUMANITEC_LLM_AUTO_MODEL,
+            "value": LINNEX_LLM_AUTO_MODEL,
+            "label": LINNEX_LLM_AUTO_MODEL,
             "kind": "auto",
         }
     ]
-    seen: set[str] = {HUMANITEC_LLM_AUTO_MODEL}
+    seen: set[str] = {LINNEX_LLM_AUTO_MODEL}
     for record in sort_platform_free_records(list(records), max_candidates=0):
-        value = humanitec_llms_model_ref(record.provider, record.id)
+        value = linnex_llms_model_ref(record.provider, record.id)
         if value in seen:
             continue
         seen.add(value)
@@ -479,10 +479,10 @@ def humanitec_llms_model_options_from_records(
     return items
 
 
-async def read_humanitec_llms_model_options(
+async def read_linnex_llms_model_options(
     redis_client: RedisClient,
 ) -> list[JsonObject]:
-    return humanitec_llms_model_options_from_records(
+    return linnex_llms_model_options_from_records(
         await read_platform_free_model_records(redis_client)
     )
 
@@ -589,8 +589,8 @@ __all__ = [
     "platform_free_model_policy_for_provider",
     "platform_free_record_from_model_record",
     "platform_free_records_from_model_records",
-    "humanitec_llms_model_options_from_records",
-    "read_humanitec_llms_model_options",
+    "linnex_llms_model_options_from_records",
+    "read_linnex_llms_model_options",
     "read_platform_free_model_records",
     "rescore_cached_platform_free_models",
     "refresh_platform_free_models_cache",

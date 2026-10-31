@@ -7,9 +7,6 @@ export const documentsControlHostStyles = css`
     :host {
         --documents-explorer-control-height: 2.25rem;
         --documents-explorer-btn-radius: var(--radius-md);
-        --documents-action-primary: #6284e8;
-        --documents-action-primary-hover: #5678dc;
-        --documents-action-primary-border: rgba(98, 132, 232, 0.45);
     }
 `;
 
@@ -28,7 +25,7 @@ export const documentsToolbarControlStyles = css`
     .toolbar .btn-primary {
         background: var(--documents-action-primary);
         border: 1px solid var(--documents-action-primary-border);
-        color: #ffffff;
+        color: var(--text-primary);
     }
 
     .toolbar .btn-primary:hover:not(:disabled) {
@@ -135,8 +132,8 @@ export const documentsToolbarControlStyles = css`
     }
 
     .view-btn.active {
-        background: var(--documents-selected-bg, var(--accent-subtle));
-        color: var(--documents-selected-text, var(--accent));
+        background: var(--documents-selected-bg);
+        color: var(--documents-selected-text);
     }
 `;
 
@@ -146,7 +143,7 @@ export const documentsPanelActionStyles = css`
         flex-direction: column;
         gap: var(--space-2);
         padding: var(--space-3) 0;
-        border-bottom: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
+        border-bottom: 1px solid var(--documents-explorer-divider);
     }
 
     .actions .btn {
@@ -164,7 +161,7 @@ export const documentsPanelActionStyles = css`
     .actions .btn-primary {
         background: var(--documents-action-primary);
         border: 1px solid var(--documents-action-primary-border);
-        color: #ffffff;
+        color: var(--text-primary);
     }
 
     .actions .btn-primary:hover:not(:disabled) {
@@ -187,13 +184,13 @@ export const documentsPanelActionStyles = css`
     .actions .btn-danger {
         background: transparent;
         color: var(--error);
-        border: 1px solid rgba(244, 63, 94, 0.35);
+        border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
         box-shadow: none;
     }
 
     .actions .btn-danger:hover:not(:disabled) {
-        background: rgba(244, 63, 94, 0.08);
-        border-color: rgba(244, 63, 94, 0.5);
+        background: color-mix(in srgb, var(--error) 8%, transparent);
+        border-color: color-mix(in srgb, var(--error) 50%, transparent);
         box-shadow: none;
     }
 

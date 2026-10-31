@@ -40,13 +40,13 @@ export const crmNotePageMobileToolbarHostStyles = css`
         height: 18px;
         border-radius: 999px;
         background: var(--accent);
-        color: #fff;
+        color: var(--text-primary);
         font-size: 11px;
         line-height: 18px;
         text-align: center;
         padding: 0 5px;
         box-sizing: border-box;
-        border: 1px solid var(--crm-surface-elevated, var(--glass-solid-strong));
+        border: 1px solid var(--crm-surface-elevated);
         font-weight: 600;
     }
 
@@ -58,7 +58,7 @@ export const crmNotePageMobileToolbarHostStyles = css`
         max-height: 360px;
         overflow: auto;
         z-index: 40;
-        background: var(--crm-surface-elevated, var(--glass-solid-strong));
+        background: var(--crm-surface-elevated);
         border: 1px solid var(--crm-stroke);
         border-radius: var(--radius-lg);
         box-shadow: var(--glass-shadow-medium);
@@ -150,7 +150,7 @@ export const crmNotePageMobileToolbarHostStyles = css`
         border-radius: var(--radius-full);
         color: var(--text-primary);
         cursor: pointer;
-        transition: background var(--duration-fast);
+        transition: background var(--motion-duration-micro);
     }
 
     .crm-note-page-card-toolbar-host .round-btn:hover:not(:disabled) {
@@ -181,14 +181,14 @@ export const crmNotePageMobileToolbarHostStyles = css`
         height: auto;
         box-sizing: border-box;
         background: var(--accent);
-        color: #ffffff;
+        color: var(--text-primary);
         border: none;
         border-radius: var(--radius-full);
         font-size: var(--text-sm);
         line-height: 1.2;
         font-weight: 500;
         cursor: pointer;
-        transition: filter var(--duration-fast), background var(--duration-fast);
+        transition: filter var(--motion-duration-micro), background var(--motion-duration-micro);
         white-space: nowrap;
         max-width: 46vw;
         overflow: hidden;

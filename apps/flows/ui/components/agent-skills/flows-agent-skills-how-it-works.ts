@@ -65,8 +65,8 @@ export class FlowsAgentSkillsHowItWorks extends PlatformElement {
                 justify-content: center;
                 width: 28px;
                 height: 28px;
-                border-radius: var(--radius-full, 999px);
-                background: var(--accent-muted, var(--bg-surface));
+                border-radius: var(--radius-full);
+                background: var(--accent-subtle);
                 color: var(--accent);
                 font-size: var(--text-xs);
                 font-weight: 700;

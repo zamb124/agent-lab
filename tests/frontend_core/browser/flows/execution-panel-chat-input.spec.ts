@@ -9,18 +9,20 @@ import { executionUiSlice } from '../../../../apps/flows/ui/events/resources/exe
 import {
     FLOW_CANVAS_FACTORIES,
     SAMPLE_BRANCH_NODES,
+    flowsEditorBus,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/editor/flows-execution-panel.js';
 import '../../../../apps/flows/ui/components/flow-canvas/flows-flow-canvas.js';
+import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
 
 const CONTEXT_ID = 'context:65b4c118-763f-4080-bf46-ee4dc5b01cd6';
 const TASK_ID = 'c44ce807-e69c-5d1d-bbcf-b557e00f1c39';
 
-function rpcFrame(result) {
+function rpcFrame(result: any) {
     return { jsonrpc: '2.0', id: 'rpc:test', result };
 }
 
-function nodeStartFrame(nodeId, nodeType) {
+function nodeStartFrame(nodeId: any, nodeType: any) {
     return rpcFrame({
         artifactUpdate: {
             taskId: TASK_ID,
@@ -112,30 +114,30 @@ const FAILED_STATUS_FRAME = rpcFrame({
     },
 });
 
-function dispatchHostFrame(host, frame) {
+function dispatchHostFrame(host: any, frame: any) {
     host.dispatchEvent(new CustomEvent('flow-ui-a2a-frame', {
         detail: { frame, contextId: CONTEXT_ID, taskId: TASK_ID },
     }));
 }
 
-async function mountRunWorkspace(flow) {
-    const bus = getPlatformBus();
+async function mountRunWorkspace(flow: any) {
+    const bus = flowsEditorBus();
     bus.dispatch('flows/editor/flow_loaded', {
         branchId: 'base',
         flow,
     });
-    const wrap = await fixture(html`
+    const wrap = await fixture<TestEl>(html`
         <div>
             <flows-flow-canvas flow-id=${flow.flow_id} branch-id="base"></flows-flow-canvas>
             <flows-execution-panel flow-id=${flow.flow_id} branch-id="base"></flows-execution-panel>
         </div>
     `);
-    const panel = wrap.querySelector('flows-execution-panel');
-    const canvas = wrap.querySelector('flows-flow-canvas');
+    const panel = qs(wrap!, 'flows-execution-panel');
+    const canvas = qs(wrap!, 'flows-flow-canvas');
     panel._editor.setExecutionPanelOpen({ open: true });
     await elementUpdated(panel);
     await elementUpdated(canvas);
-    const host = panel.renderRoot.querySelector('platform-flow-ui');
+    const host = q(panel.renderRoot, 'platform-flow-ui');
     expect(host).to.not.equal(null);
     return { wrap, panel, canvas, host, bus };
 }
@@ -153,7 +155,7 @@ describe('flows-execution-panel Flow UI host', () => {
     it('execution panel module exposes platform-flow-ui host contract', async () => {
         const defined = customElements.get('flows-execution-panel');
         expect(defined).to.not.equal(undefined);
-        const el = await fixture(html`<flows-execution-panel></flows-execution-panel>`);
+        const el = await fixture<TestEl>(html`<flows-execution-panel></flows-execution-panel>`);
         await elementUpdated(el);
         expect(el.tagName.toLowerCase()).to.equal('flows-execution-panel');
     });
@@ -169,25 +171,25 @@ describe('flows-execution-panel Flow UI host', () => {
             edges: [],
         });
 
-        host.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
+        host!.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
             detail: { contextId: CONTEXT_ID, surfaceId: 'main', componentId: 'submit' },
         }));
         await elementUpdated(panel);
         expect(bus.getState().flowsEditor.agentExecutionRunning).to.equal(true);
-        const badge = panel.renderRoot.querySelector('.status-badge');
+        const badge = q(panel.renderRoot, '.status-badge');
         expect(badge).to.not.equal(null);
-        expect(badge.getAttribute('data-status')).to.equal('running');
+        expect(badge!.getAttribute('data-status')).to.equal('running');
 
         dispatchHostFrame(host, NODE_START_FRAME);
         await elementUpdated(panel);
         await elementUpdated(canvas);
 
         expect(bus.getState().flowsEditor.runningNodeIds).to.deep.equal(['main']);
-        const runningNode = canvas.shadowRoot.querySelector('g.node[data-node-id="main"][data-state="running"]');
+        const runningNode = q(shadow(canvas), 'g.node[data-node-id="main"][data-state="running"]');
         expect(runningNode).to.not.equal(null);
-        expect(runningNode.querySelector('.node-run-orbit')).to.not.equal(null);
-        expect(runningNode.querySelector('.node-run-result-pill[data-tone="running"]')).to.not.equal(null);
-        const startWire = canvas.shadowRoot.querySelector('g.terminal-marker--start path.edge[data-run-state="running"]');
+        expect(q(runningNode!, '.node-run-orbit')).to.not.equal(null);
+        expect(q(runningNode!, '.node-run-result-pill[data-tone="running"]')).to.not.equal(null);
+        const startWire = q(shadow(canvas), 'g.terminal-marker--start path.edge[data-run-state="running"]');
         expect(startWire).to.not.equal(null);
     });
 
@@ -202,7 +204,7 @@ describe('flows-execution-panel Flow UI host', () => {
             edges: [],
         });
 
-        host.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
+        host!.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
             detail: { contextId: CONTEXT_ID, surfaceId: 'main', componentId: 'submit' },
         }));
         dispatchHostFrame(host, NODE_START_FRAME);
@@ -212,20 +214,20 @@ describe('flows-execution-panel Flow UI host', () => {
         await elementUpdated(canvas);
 
         const editor = bus.getState().flowsEditor;
-        expect(editor.runningNodeIds).to.deep.equal([]);
-        expect(editor.erroredNodes.main).to.equal(
+        expect(editor!.runningNodeIds).to.deep.equal([]);
+        expect(editor!.erroredNodes!.main).to.equal(
             "LLM node 'main' returned empty final response after 1 iteration(s)",
         );
-        expect(editor.nodeRunResults.main[0].kind).to.equal('error');
-        expect(editor.agentExecutionRunning).to.equal(false);
+        expect((editor!.nodeRunResults!.main![0] as Record<string, unknown>).kind).to.equal('error');
+        expect(editor!.agentExecutionRunning).to.equal(false);
 
-        const errorNode = canvas.shadowRoot.querySelector('g.node[data-node-id="main"][data-state="error"]');
+        const errorNode = q(shadow(canvas), 'g.node[data-node-id="main"][data-state="error"]');
         expect(errorNode).to.not.equal(null);
-        const errorPill = errorNode.querySelector('.node-run-result-pill[data-tone="error"]');
+        const errorPill = q(errorNode!, '.node-run-result-pill[data-tone="error"]');
         expect(errorPill).to.not.equal(null);
-        expect(errorPill.textContent).to.include("empty final response");
-        expect(canvas.shadowRoot.querySelector('g.terminal-marker--start path.edge[data-run-state="failed"]')).to.not.equal(null);
-        expect(panel.renderRoot.querySelector('.status-badge').getAttribute('data-status')).to.equal('failed');
+        expect(errorPill!.textContent).to.include("empty final response");
+        expect(q(shadow(canvas), 'g.terminal-marker--start path.edge[data-run-state="failed"]')).to.not.equal(null);
+        expect(qs(panel.renderRoot, '.status-badge').getAttribute('data-status')).to.equal('failed');
     });
 
     it('keeps platform-flow-ui mounted while collapsed and still applies frames', async () => {
@@ -239,27 +241,27 @@ describe('flows-execution-panel Flow UI host', () => {
             edges: [],
         });
 
-        host.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
+        host!.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
             detail: { contextId: CONTEXT_ID, surfaceId: 'main', componentId: 'submit' },
         }));
         dispatchHostFrame(host, NODE_START_FRAME);
         await elementUpdated(panel);
 
-        const minimizeIcon = panel.renderRoot.querySelector('platform-icon[name="minimize"]');
+        const minimizeIcon = q(panel.renderRoot, 'platform-icon[name="minimize"]');
         expect(minimizeIcon).to.not.equal(null);
-        minimizeIcon.closest('platform-button').click();
+        (minimizeIcon!.closest('platform-button') as HTMLElement)!.click();
         await elementUpdated(panel);
 
-        const hostAfterCollapse = panel.renderRoot.querySelector('platform-flow-ui');
+        const hostAfterCollapse = qs(panel.renderRoot, 'platform-flow-ui');
         expect(hostAfterCollapse).to.equal(host);
 
         dispatchHostFrame(hostAfterCollapse, NODE_ERROR_FRAME);
         await elementUpdated(panel);
         await elementUpdated(canvas);
-        expect(bus.getState().flowsEditor.erroredNodes.main).to.equal(
+        expect(bus.getState().flowsEditor.erroredNodes!.main).to.equal(
             "LLM node 'main' returned empty final response after 1 iteration(s)",
         );
-        expect(canvas.shadowRoot.querySelector('g.node[data-node-id="main"][data-state="error"]')).to.not.equal(null);
+        expect(q(shadow(canvas), 'g.node[data-node-id="main"][data-state="error"]')).to.not.equal(null);
     });
 
     it('node_complete shows completed state and ok pill with preview', async () => {
@@ -273,7 +275,7 @@ describe('flows-execution-panel Flow UI host', () => {
             edges: [],
         });
 
-        host.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
+        host!.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
             detail: { contextId: CONTEXT_ID, surfaceId: 'main', componentId: 'submit' },
         }));
         dispatchHostFrame(host, NODE_START_FRAME);
@@ -282,13 +284,13 @@ describe('flows-execution-panel Flow UI host', () => {
         await elementUpdated(canvas);
 
         expect(bus.getState().flowsEditor.completedNodeIds).to.deep.equal(['main']);
-        const done = canvas.shadowRoot.querySelector('g.node[data-node-id="main"][data-state="completed"]');
+        const done = q(shadow(canvas), 'g.node[data-node-id="main"][data-state="completed"]');
         expect(done).to.not.equal(null);
-        const pill = done.querySelector('.node-run-result-pill[data-tone="ok"]');
+        const pill = q(done!, '.node-run-result-pill[data-tone="ok"]');
         expect(pill).to.not.equal(null);
-        expect(pill.textContent).to.include('hello from node');
-        expect(canvas.shadowRoot.querySelector('g.terminal-marker--start path.edge[data-run-state="completed"]')).to.not.equal(null);
-        expect(canvas.shadowRoot.querySelector('g.terminal-marker--end path.edge[data-run-state="completed"]')).to.not.equal(null);
+        expect(pill!.textContent).to.include('hello from node');
+        expect(q(shadow(canvas), 'g.terminal-marker--start path.edge[data-run-state="completed"]')).to.not.equal(null);
+        expect(q(shadow(canvas), 'g.terminal-marker--end path.edge[data-run-state="completed"]')).to.not.equal(null);
     });
 
     it('edge_executed then next node_started marks real edge running then completed', async () => {
@@ -303,7 +305,7 @@ describe('flows-execution-panel Flow UI host', () => {
             edges: [{ from_node: 'code_1', to_node: 'llm_1' }],
         });
 
-        host.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
+        host!.dispatchEvent(new CustomEvent('flow-ui-submit-start', {
             detail: { contextId: CONTEXT_ID, surfaceId: 'main', componentId: 'submit' },
         }));
         dispatchHostFrame(host, nodeStartFrame('code_1', 'code'));
@@ -330,13 +332,13 @@ describe('flows-execution-panel Flow UI host', () => {
         await elementUpdated(panel);
         await elementUpdated(canvas);
         expect(bus.getState().flowsEditor.runningEdgeIndices).to.deep.equal([0]);
-        expect(canvas.shadowRoot.querySelector('path.edge[data-run-state="running"]')).to.not.equal(null);
+        expect(q(shadow(canvas), 'path.edge[data-run-state="running"]')).to.not.equal(null);
 
         dispatchHostFrame(host, nodeStartFrame('llm_1', 'llm_node'));
         await elementUpdated(panel);
         await elementUpdated(canvas);
         expect(bus.getState().flowsEditor.completedEdgeIndices).to.deep.equal([0]);
-        expect(canvas.shadowRoot.querySelector('g.edge-group:not(.terminal-marker) path.edge[data-run-state="completed"]')).to.not.equal(null);
-        expect(canvas.shadowRoot.querySelector('g.node[data-node-id="llm_1"][data-state="running"]')).to.not.equal(null);
+        expect(q(shadow(canvas), 'g.edge-group:not(.terminal-marker) path.edge[data-run-state="completed"]')).to.not.equal(null);
+        expect(q(shadow(canvas), 'g.node[data-node-id="llm_1"][data-state="running"]')).to.not.equal(null);
     });
 });

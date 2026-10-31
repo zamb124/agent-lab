@@ -23,7 +23,7 @@ export class GlassToast extends PlatformElement {
             }
             
             :host([closing]) {
-                animation: slideOut 0.2s var(--easing-default);
+                animation: slideOut 0.2s var(--motion-ease-standard);
             }
             
             .toast {
@@ -85,7 +85,7 @@ export class GlassToast extends PlatformElement {
                 border: none;
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: color var(--duration-fast);
+                transition: color var(--motion-duration-micro);
             }
             
             .close:hover {
@@ -94,7 +94,7 @@ export class GlassToast extends PlatformElement {
             
             @keyframes slideIn {
                 from {
-                    transform: translateX(calc(100% + var(--space-6)));
+                    transform: translateX(calc(100% + var(--space-6);
                     opacity: 0;
                 }
                 to {
@@ -109,7 +109,7 @@ export class GlassToast extends PlatformElement {
                     opacity: 1;
                 }
                 to {
-                    transform: translateX(calc(100% + var(--space-6)));
+                    transform: translateX(calc(100% + var(--space-6);
                     opacity: 0;
                 }
             }

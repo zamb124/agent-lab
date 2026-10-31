@@ -135,7 +135,7 @@ describe('flows tool ref helpers', () => {
             input_mapping: { question: 'hello' },
         });
         expect(typeof node.code).toBe('string');
-        expect(node.code.length).toBeGreaterThan(0);
+        expect(String(node.code).length).toBeGreaterThan(0);
         expect(node.tags).toBeUndefined();
         expect(node.title).toBeUndefined();
         expect(node.params).toBeUndefined();

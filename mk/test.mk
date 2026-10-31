@@ -158,7 +158,7 @@ test-frontend-core-unit: runtime-bootstrap
 	@if [ "$(TEST_COVERAGE)" = "1" ]; then \
 		test -n "$(COV_RUN_ID)"; \
 		mkdir -p reports/coverage/$(COV_RUN_ID)/js; \
-		npx vitest run --config vitest.config.mjs --coverage \
+		npx vitest run --config vitest.config.ts --coverage \
 			--coverage.reportsDirectory=reports/coverage/$(COV_RUN_ID)/js \
 			--coverage.reporter=text --coverage.reporter=lcov --coverage.reporter=html; \
 	else \
@@ -175,6 +175,10 @@ ui-build: runtime-bootstrap
 	@echo "ui-build: esbuild bundles → ui-dist/"
 	@npm ci --silent
 	@npm run build:ui
+
+# Регенерация wire-типов из OpenAPI-моделей сервисов → lib/events/wire/*.gen.ts
+wire-types:
+	@uv run python -m scripts.build.wire_types
 
 # Typecheck всех .ts (strict). Конверсия идёт инкрементально — см. ratchet ui_js_files.
 ui-typecheck: runtime-bootstrap

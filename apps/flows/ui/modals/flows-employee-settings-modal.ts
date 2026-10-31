@@ -92,7 +92,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
 
             .hero-title {
                 margin: 0;
-                font-size: var(--text-md);
+                font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }

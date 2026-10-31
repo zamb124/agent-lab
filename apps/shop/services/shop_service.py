@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from apps.shop.config import ShopSettings
-from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
 from apps.shop.models import (
     ModifierGroupKind,
     ModifierPriceMode,
@@ -34,6 +33,7 @@ from apps.shop.models.api import (
     ShopPromoUpdateRequest,
     ShopUpdateRequest,
 )
+from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
 from apps.shop.models.common import DOMAIN_PATTERN, SLUG_PATTERN, new_id
 from apps.shop.models.enums import PromoStacking
 from core.errors.boundary import (

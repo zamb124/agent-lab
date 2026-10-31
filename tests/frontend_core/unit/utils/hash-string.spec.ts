@@ -24,7 +24,7 @@ describe('hashString31', () => {
 
 describe('hueFromString', () => {
     it('диапазон 0..359', () => {
-        for (const seed of ['', 'a', 'abcdef', 'user_id_42', 'humanitec']) {
+        for (const seed of ['', 'a', 'abcdef', 'user_id_42', 'linnex']) {
             const h = hueFromString(seed);
             expect(h).toBeGreaterThanOrEqual(0);
             expect(h).toBeLessThan(360);

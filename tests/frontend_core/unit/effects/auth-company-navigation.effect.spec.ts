@@ -4,28 +4,30 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 import { setPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'http' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
+import { prop } from '../../helpers/prop.js';
+import type { DispatchedRecord } from '../../helpers/bus-fixtures.js';
 
 /** @type {import('@platform/lib/utils/platform-brand.js').PlatformBrandBootstrap} */
-const HUMANITEC_BRAND = {
-    baseDomain: 'humanitec.ru',
+const LINNEX_BRAND = {
+    baseDomain: 'linnex.io',
     isProduction: true,
     portSuffix: '',
     protocol: 'https',
-    platformName: 'Humanitec',
-    supportEmail: 'support@humanitec.ru',
+    platformName: 'Linnex',
+    supportEmail: 'support@linnex.io',
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
-    apexOrigin: 'https://humanitec.ru/',
-    supportedDomains: ['humanitec.ru', 'linnex.io'],
-    modelsProductName: 'Humanitec Models',
-    voiceProductName: 'Humanitec Voice',
-    llmsDisplayLabel: 'Humanitec LLMs',
-    flowsProductLabel: 'Humanitec Flows',
+    apexOrigin: 'https://linnex.io/',
+    supportedDomains: ['linnex.io', 'linnex.io'],
+    modelsProductName: 'Linnex Models',
+    voiceProductName: 'Linnex Voice',
+    llmsDisplayLabel: 'Linnex LLMs',
+    flowsProductLabel: 'Linnex Flows',
 };
 
 describe('authCompanyNavigationEffect', () => {
     beforeEach(() => {
-        setPlatformBrandBootstrap(HUMANITEC_BRAND);
+        setPlatformBrandBootstrap(LINNEX_BRAND);
     });
 
     afterEach(() => {
@@ -33,9 +35,9 @@ describe('authCompanyNavigationEffect', () => {
     });
 
     it('с /select-company переходит на /dashboard того же subdomain', async () => {
-        let href = 'https://system.humanitec.ru/select-company';
+        let href = 'https://system.linnex.io/select-company';
         const loc = {
-            hostname: 'system.humanitec.ru',
+            hostname: 'system.linnex.io',
             port: '',
             protocol: 'https:',
             pathname: '/select-company',
@@ -60,13 +62,13 @@ describe('authCompanyNavigationEffect', () => {
                 list: [{ company_id: 'system', subdomain: 'system', name: 'System' }],
             },
         });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createAuthCompanyNavigationEffect()(
             ev(CoreEvents.AUTH_COMPANY_SWITCHED, { company_id: 'system' }),
             buildCtx(getState, dispatched),
         );
 
-        expect(href).toBe('https://system.humanitec.ru/dashboard');
+        expect(href).toBe('https://system.linnex.io/dashboard');
         expect(setItem).toHaveBeenCalled();
     });
 
@@ -98,7 +100,7 @@ describe('authCompanyNavigationEffect', () => {
                 list: [{ company_id: 'c2', subdomain: 'b', name: 'B' }],
             },
         });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createAuthCompanyNavigationEffect()(
             ev(CoreEvents.AUTH_COMPANY_SWITCHED, { company_id: 'c2' }),
             buildCtx(getState, dispatched),
@@ -107,7 +109,7 @@ describe('authCompanyNavigationEffect', () => {
         expect(href).toBe('http://b.localhost:8002/crm/tasks');
         expect(setItem).toHaveBeenCalled();
         const successToast = dispatched.find(
-            (d) => d.type === CoreEvents.UI_TOAST_SHOW && d.payload.type === 'success',
+            (d) => d.type === CoreEvents.UI_TOAST_SHOW && prop(d.payload, 'type') === 'success',
         );
         expect(successToast).toBeTruthy();
     });
@@ -135,13 +137,13 @@ describe('authCompanyNavigationEffect', () => {
         vi.stubGlobal('localStorage', { setItem: vi.fn() });
 
         const getState = () => ({ companies: { list: [{ company_id: 'c2', name: 'B' }] } });
-        const dispatched = [];
+        const dispatched: DispatchedRecord[] = [];
         await createAuthCompanyNavigationEffect()(
             ev(CoreEvents.AUTH_COMPANY_SWITCHED, { company_id: 'c2' }),
             buildCtx(getState, dispatched),
         );
         const toast = dispatched.find((d) => d.type === CoreEvents.UI_TOAST_SHOW);
-        expect(toast.payload.type).toBe('error');
-        expect(toast.payload.i18n_key).toBe('platform:company.subdomain_missing');
+        expect(prop(toast?.payload, 'type')).toBe('error');
+        expect(prop(toast?.payload, 'i18n_key')).toBe('platform:company.subdomain_missing');
     });
 });

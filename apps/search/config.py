@@ -69,7 +69,7 @@ class SearchIndexProviderConfig(BaseModel):
 class SearchCrawlEnrichmentConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: str = Field(default="humanitec_llm", min_length=1)
+    provider: str = Field(default="linnex_llm", min_length=1)
     model: str = Field(default="auto", min_length=1)
     timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
     prompt_version: str = Field(default="structured", min_length=1, max_length=32)

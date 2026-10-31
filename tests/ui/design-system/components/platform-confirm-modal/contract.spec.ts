@@ -9,6 +9,8 @@ import {
 } from '../../../../frontend_core/browser/helpers/reset.js';
 import '@platform/lib/components/platform-confirm-modal.js';
 import { platformPrompt } from '@platform/lib/components/platform-confirm-modal.js';
+import { shadowQuery, shadowQueryAll } from '../../helpers/shadow-dom.js';
+import type { TestEl } from '../../../../frontend_core/browser/helpers/dom.js';
 
 describe('platform-confirm-modal', () => {
     beforeEach(() => bootstrapTestBus());
@@ -23,22 +25,22 @@ describe('platform-confirm-modal', () => {
 
     it('prompt mode renders platform-field and resolves input value', async () => {
         const promise = platformPrompt('Введите URL', { inputLabel: 'URL' });
-        const modal = document.querySelector('platform-confirm-modal');
+        const modal = document.querySelector('platform-confirm-modal') as TestEl | null;
         expect(modal).to.exist;
-        await modal.updateComplete;
-        const field = modal.shadowRoot.querySelector('platform-field');
+        await modal!.updateComplete;
+        const field = shadowQuery(modal!, 'platform-field');
         expect(field, 'inputLabel включает platform-field').to.exist;
-        modal.inputValue = 'https://example.com';
-        modal._onConfirm();
+        modal!.inputValue = 'https://example.com';
+        modal!._onConfirm();
         const result = await promise;
         expect(result).to.equal('https://example.com');
-        modal.close();
+        modal!.close();
     });
 
     it('prompt cancel resolves undefined', async () => {
         const promise = platformPrompt('Введите URL', { inputLabel: 'URL' });
-        const modal = document.querySelector('platform-confirm-modal');
-        modal._onCancel();
+        const modal = document.querySelector('platform-confirm-modal') as TestEl | null;
+        modal!._onCancel();
         expect(await promise).to.equal(undefined);
     });
 });

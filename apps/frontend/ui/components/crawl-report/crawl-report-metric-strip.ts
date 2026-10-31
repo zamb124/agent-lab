@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-metric-card.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -15,7 +16,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
         errorKind: { type: String },
         countFromSummary: { attribute: false },
     }
-    declare summary: Record<string, any> | null;
+    declare summary: Record<string, unknown> | null;
     declare locale: string;
     declare busy: boolean;
     declare refreshing: boolean;
@@ -44,11 +45,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
             }
-            .initial-loading {
-                padding: var(--space-4) 0;
-                display: flex;
-                justify-content: center;
-            }
+
             .state {
                 padding: var(--space-6);
                 text-align: center;
@@ -87,7 +84,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
             `;
         }
         if (!this.summary && this.busy) {
-            return html`<div class="initial-loading"><platform-spinner size="sm"></platform-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (!this.summary) {
             return null;

@@ -15,6 +15,7 @@ import {
     redoHistory,
     undoHistory,
 } from '../../_helpers/interface-editor-domain.js';
+import type { EditorHistory } from '../../_helpers/interface-editor-domain.js';
 import type { InterfaceEditorUiSlice } from '../editor.types.js';
 
 function requirePayload(event: PlatformEvent): Record<string, unknown> {
@@ -41,12 +42,25 @@ function requireDocument(payload: Record<string, unknown>, eventType: string): {
     return { record: document, pages, startPageId };
 }
 
-function requireHistory(state: any, eventType: any) {
-    if (state.history === null) throw new Error(`flows/interface_editor: no document opened for ${eventType}`);
+function requireHistory(state: InterfaceEditorUiSlice, eventType: string): EditorHistory {
+    if (state.history == null) throw new Error(`flows/interface_editor: no document opened for ${eventType}`);
     return state.history;
 }
 
-export const interfaceEditorSlice = createSlice({
+const INTERFACE_EDITOR_ACTIONS = {
+    openDocument: 'document_opened',
+    commitDocument: 'document_committed',
+    undo: 'history_undone',
+    redo: 'history_redone',
+    selectPage: 'page_selected',
+    selectBlock: 'block_selected',
+    setViewport: 'viewport_set',
+    setPreview: 'preview_set',
+    setSidebarTab: 'sidebar_tab_set',
+    setProblems: 'problems_set',
+} as const;
+
+export const interfaceEditorSlice = createSlice<InterfaceEditorUiSlice, typeof INTERFACE_EDITOR_ACTIONS>({
     name: 'flows/interface_editor',
     extraInitial: {
         /** ``flow_id:branch_id`` открытого документа. */
@@ -71,18 +85,7 @@ export const interfaceEditorSlice = createSlice({
         SIDEBAR_TAB_SET: 'sidebar_tab_set',
         PROBLEMS_SET: 'problems_set',
     },
-    actions: {
-        openDocument: 'document_opened',
-        commitDocument: 'document_committed',
-        undo: 'history_undone',
-        redo: 'history_redone',
-        selectPage: 'page_selected',
-        selectBlock: 'block_selected',
-        setViewport: 'viewport_set',
-        setPreview: 'preview_set',
-        setSidebarTab: 'sidebar_tab_set',
-        setProblems: 'problems_set',
-    },
+    actions: INTERFACE_EDITOR_ACTIONS,
     extraReducer: (state: InterfaceEditorUiSlice, event) => {
         const type = event.type;
         if (type === 'flows/interface_editor/document_opened') {

@@ -9,9 +9,9 @@
 | Android Capacitor, AndroidManifest, App Links, FCM, сборка AAB | [`android/README.md`](../android/README.md) |
 | iOS Capacitor, WKWebView, Xcode | [`IOS_CAPACITOR.md`](IOS_CAPACITOR.md) |
 | App Store (что заполнять в Apple вручную) | [`APPLE_MANUAL.md`](APPLE_MANUAL.md) |
-| App Store: тексты витрины Linnex | [`APP_STORE_HUMANITEC.md`](APP_STORE_HUMANITEC.md) |
+| App Store: тексты витрины Linnex | [`APP_STORE_LINNEX.md`](APP_STORE_LINNEX.md) |
 | Google Play (что заполнять в Console вручную) | [`PLAY_MANUAL.md`](PLAY_MANUAL.md) |
-| Google Play: тексты витрины Linnex | [`PLAY_HUMANITEC.md`](PLAY_HUMANITEC.md) |
+| Google Play: тексты витрины Linnex | [`PLAY_LINNEX.md`](PLAY_LINNEX.md) |
 | Push-паритет: Web Push, APNs (iOS), FCM (Android) | [`PUSH_PARITY.md`](PUSH_PARITY.md) |
 | Матрица ручных тестов перед релизом | [`QA_MATRIX_TEMPLATE.md`](QA_MATRIX_TEMPLATE.md) |
 

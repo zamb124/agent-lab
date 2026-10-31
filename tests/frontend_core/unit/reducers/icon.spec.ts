@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { iconReducer, initialIconState, ICON_EVENTS, iconSlice } from '@platform/lib/events/reducers/icon.js';
 
-const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
+import { testEvent as ev } from '../../helpers/bus-fixtures.js';
 
 describe('iconReducer', () => {
     it('initial: пустые caches', () => {

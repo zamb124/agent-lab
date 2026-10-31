@@ -57,7 +57,7 @@ export class SyncCallsScheduledPage extends PlatformPage {
             border-radius: var(--radius-sm);
             cursor: pointer;
         }
-        .item:hover { background: var(--glass-hover); }
+        .item:hover { background: var(--glass-tint-medium); }
         .item .meta { color: var(--text-secondary); font-size: var(--text-xs); margin-left: auto; }
     `;
 

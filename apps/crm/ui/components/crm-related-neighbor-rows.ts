@@ -49,13 +49,13 @@ export class CRMRelatedNeighborRows extends PlatformElement {
         this.showRemove = false;
     }
 
-    _thumbEntity(row: { otherEntity?: unknown; otherId?: unknown }): Record<string, any> {
+    _thumbEntity(row: { otherEntity?: unknown; otherId?: unknown }): Record<string, unknown> {
         const other = row.otherEntity;
         if (other != null && typeof other === 'object') {
             if (!isPlainRecord(other)) {
                 throw new Error('crm-related-neighbor-rows: otherEntity must be an object');
             }
-            const entity: Record<string, any> = {};
+            const entity: Record<string, unknown> = {};
             for (const [key, field] of Object.entries(other)) entity[key] = field;
             return entity;
         }
@@ -78,7 +78,7 @@ export class CRMRelatedNeighborRows extends PlatformElement {
         this.emit('relationship-remove', { relationshipId });
     }
 
-    _semanticIndexNeighborIndicator(thumb: Record<string, any> | null) {
+    _semanticIndexNeighborIndicator(thumb: Record<string, unknown> | null) {
         const st = thumb?.semantic_text_index_status;
         if (st !== 'pending_embedding' && st !== 'absent') return nothing;
         const shortKey = st === 'pending_embedding'
