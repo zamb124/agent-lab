@@ -25,6 +25,7 @@ _HEARTBEAT_DIR = Path("/tmp")
 _HUNG_WORKER_DUMP = Path("/tmp/pytest-hung-worker.txt")
 _KILLS_LOG = Path("/tmp/platform_test_hang_guard_kills.jsonl")
 _EVENTS_LOG = Path("/tmp/platform_test_hang_guard_events.jsonl")
+_COLLECTED_NODEIDS_GLOB = "platform_test_collected_nodeids_*.json"
 _SETUP_TEARDOWN_FLOOR_SECONDS = 60.0
 _SLACK_SECONDS = 15.0
 _MONITOR_PERIOD_SECONDS = 2.0
@@ -106,7 +107,12 @@ def _cleanup_stale_run_files() -> None:
             path.unlink()
         except OSError:
             continue
-    for log_path in (_KILLS_LOG, _EVENTS_LOG):
+    for path in _HEARTBEAT_DIR.glob(_COLLECTED_NODEIDS_GLOB):
+        try:
+            path.unlink()
+        except OSError:
+            continue
+    for log_path in (_KILLS_LOG, _EVENTS_LOG, _HUNG_WORKER_DUMP):
         try:
             log_path.unlink()
         except OSError:

@@ -275,7 +275,18 @@ test:
 	fi; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
-		echo "=== 2/4 Перезапуск упавших тестов (без параллелизации) ==="; \
+		echo "=== 2/4 Догон не сыгранных тестов (параллельно) ==="; \
+		uv run python -m scripts.testing.pytest_notrun --junit reports/pytest_workers_profile/$$PROFILE_RUN_ID/junit.xml \
+			--timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+			$(_PYTEST_IGNORE_UI) \
+			$(_COV_ARGS_APPEND) \
+			-m "not integration and not network"; \
+		notrun_rc=$$?; \
+		if [ $$notrun_rc -eq 130 ]; then \
+			exit 130; \
+		fi; \
+		echo ""; \
+		echo "=== 3/4 Перезапуск упавших тестов (без параллелизации) ==="; \
 			uv run python -m scripts.testing.pytest_lastfailed --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) \
 				$(_COV_ARGS_APPEND) \
@@ -283,6 +294,9 @@ test:
 		phase2_rc=$$?; \
 		if [ $$phase2_rc -eq 130 ]; then \
 			exit 130; \
+		fi; \
+		if [ $$notrun_rc -ne 0 ]; then \
+			phase2_rc=$$notrun_rc; \
 		fi; \
 		if [ $$phase2_rc -eq 0 ]; then \
 			phase1_rc=0; \

@@ -409,6 +409,42 @@ def _is_sync_client_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/core/clients/test_sync_client.py")
 
 
+_COLLECTED_NODEIDS_GLOB = "platform_test_collected_nodeids"
+
+
+def _collected_nodeids_path() -> Path:
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    return Path(f"/tmp/{_COLLECTED_NODEIDS_GLOB}_{worker}.json")
+
+
+def _dump_collected_nodeids(items: list[pytest.Item]) -> None:
+    """Полный список собранных nodeids для учёта усечения фазы 1.
+
+    INTERNALERROR/краш воркера обрывает сессию досрочно: junit < collected,
+    не сыгранные тесты теряются молча. Под xdist коллекцию делает каждый
+    воркер (список идентичен) — пишет каждый процесс в свой файл.
+    """
+    if not items:
+        return
+    config = items[0].config
+    if any(
+        arg in {"--collect-only", "--co"}
+        for arg in config.invocation_params.args
+    ):
+        return
+    import json
+    import time
+
+    payload = {
+        "collected_at": time.time(),
+        "nodeids": sorted(item.nodeid for item in items),
+    }
+    _ = _collected_nodeids_path().write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Timeout-политика по типам тестов. Никаких xdist_group: все тесты параллельны,
@@ -491,6 +527,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_sync_client_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
+    _dump_collected_nodeids(items)
+
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:

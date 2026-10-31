@@ -31,6 +31,7 @@ _HANG_GUARD_DIR = Path("/tmp")
 _HANG_GUARD_EVENTS = _HANG_GUARD_DIR / "platform_test_hang_guard_events.jsonl"
 _HANG_GUARD_KILLS = _HANG_GUARD_DIR / "platform_test_hang_guard_kills.jsonl"
 _HANG_GUARD_HEARTBEAT_GLOB = "platform_test_hang_guard_*.json"
+_COLLECTED_NODEIDS_GLOB = "platform_test_collected_nodeids_*.json"
 
 _BASELINE_PYTEST_WORKERS = 10
 
@@ -127,6 +128,10 @@ class CollectPayload(TypedDict):
     stack_manifest: dict[str, object] | None
     xdist_counts: dict[str, int]
     hang_guard: HangGuardSnapshot | None
+    tests_collected: int | None
+    tests_executed: int
+    tests_missing: int
+    missing_nodeids: list[str]
 
 
 def _require_int(value: object) -> int:
@@ -230,17 +235,33 @@ def _classify_failure_message(message: str) -> tuple[bool, str | None]:
     return False, None
 
 
-def _parse_junit(path: Path) -> tuple[float | None, float | None, list[FailureRow]]:
+def _junit_nodeid(classname: str, name: str) -> str:
+    parts = classname.split(".")
+    idx = len(parts)
+    while idx > 0 and parts[idx - 1][:1].isupper():
+        idx -= 1
+    nodeid = "/".join(parts[:idx]) + ".py"
+    class_chain = "::".join(parts[idx:])
+    if class_chain:
+        return f"{nodeid}::{class_chain}::{name}"
+    return f"{nodeid}::{name}"
+
+
+def _parse_junit(
+    path: Path,
+) -> tuple[float | None, float | None, list[FailureRow], set[str]]:
     if not path.is_file():
-        return None, None, []
+        return None, None, [], set()
     root = ET.parse(path).getroot()
     wall_time_raw = root.attrib.get("time")
     wall_time = float(wall_time_raw) if wall_time_raw else None
     time_sum = 0.0
+    executed: set[str] = set()
     failures: list[FailureRow] = []
     for testcase in root.iter("testcase"):
         classname = testcase.attrib.get("classname", "")
         name = testcase.attrib.get("name", "")
+        executed.add(_junit_nodeid(classname, name))
         time_raw = testcase.attrib.get("time")
         if time_raw:
             time_sum += float(time_raw)
@@ -258,7 +279,41 @@ def _parse_junit(path: Path) -> tuple[float | None, float | None, list[FailureRo
                     suspect_pattern=pattern,
                 )
             )
-    return wall_time, time_sum, failures
+    return wall_time, time_sum, failures, executed
+
+
+def junit_executed_nodeids(path: Path) -> set[str]:
+    """Nodeid всех testcase из junit — вместе с упавшими и пропущенными."""
+    return _parse_junit(path)[3]
+
+
+def load_collected_nodeids(*, junit_mtime: float) -> list[str] | None:
+    """Nodeid, собранные фазой 1; ``None``, если снимок устарел или отсутствует.
+
+    Под xdist коллекцию делает каждый воркер — файл ``*_gwN.json`` берётся
+    самый свежий по ``collected_at`` (списки идентичны). ``collected_at``
+    новее mtime junit означает, что файл перезаписала более поздняя сессия.
+    """
+    best: list[str] | None = None
+    best_at = 0.0
+    for path in _HANG_GUARD_DIR.glob(_COLLECTED_NODEIDS_GLOB):
+        try:
+            payload = parse_json_object(
+                path.read_text(encoding="utf-8"),
+                path.name,
+            )
+        except (OSError, ValueError):
+            continue
+        collected_at = payload.get("collected_at")
+        nodeids_raw = payload.get("nodeids")
+        if not isinstance(collected_at, int | float) or collected_at > junit_mtime:
+            continue
+        if not isinstance(nodeids_raw, list):
+            continue
+        if collected_at > best_at:
+            best_at = float(collected_at)
+            best = [nodeid for nodeid in nodeids_raw if isinstance(nodeid, str)]
+    return best
 
 
 def _read_jsonl(path: Path) -> list[JsonObject]:
@@ -373,7 +428,17 @@ def cmd_collect(
     raw_dir.mkdir(parents=True, exist_ok=True)
     workers_label, workers_numeric = _parse_pytest_workers(workers)
     junit_path = run_dir / "junit.xml"
-    junit_wall_time, junit_time_sum, junit_failures = _parse_junit(junit_path)
+    junit_wall_time, junit_time_sum, junit_failures, executed_nodeids = _parse_junit(junit_path)
+    collected_nodeids = (
+        load_collected_nodeids(junit_mtime=junit_path.stat().st_mtime)
+        if junit_path.is_file()
+        else None
+    )
+    missing_nodeids = (
+        sorted(set(collected_nodeids) - executed_nodeids)
+        if collected_nodeids is not None
+        else []
+    )
     hang_guard = _collect_hang_guard()
     wall_time = (
         hang_guard["wall_time_seconds"]
@@ -394,6 +459,12 @@ def cmd_collect(
         "stack_manifest": _load_stack_manifest(),
         "xdist_counts": _count_xdist_groups(),
         "hang_guard": hang_guard,
+        "tests_collected": (
+            len(collected_nodeids) if collected_nodeids is not None else None
+        ),
+        "tests_executed": len(executed_nodeids),
+        "tests_missing": len(missing_nodeids),
+        "missing_nodeids": missing_nodeids,
     }
     raw_path = raw_dir / "phase1.json"
     _ = raw_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -497,6 +568,21 @@ def _build_issues(payload: CollectPayload) -> list[IssueRow]:
                 message=(
                     f"utilization={utilization:.0%}: суммарное время тестов / (workers × wall) "
                     "< 50% — воркеры простаивают (краши, session setup, shared-ресурсы)"
+                ),
+                nodeid=None,
+                pattern=None,
+            )
+        )
+    tests_missing = payload.get("tests_missing")
+    if isinstance(tests_missing, int) and tests_missing > 0:
+        issues.append(
+            IssueRow(
+                severity="error",
+                code="phase1_truncated",
+                message=(
+                    f"сессия оборвалась досрочно: {tests_missing} из "
+                    f"{payload.get('tests_collected')} собранных тестов не сыграны "
+                    "(INTERNALERROR/краш воркера — lastfailed их не догоняет)"
                 ),
                 nodeid=None,
                 pattern=None,
@@ -629,6 +715,9 @@ def _build_summary(payload: CollectPayload) -> dict[str, object]:
         "junit_time_sum_seconds": payload.get("junit_time_sum_seconds"),
         "worker_utilization": _worker_utilization(payload),
         "hang_guard": payload.get("hang_guard"),
+        "tests_collected": payload.get("tests_collected"),
+        "tests_executed": payload.get("tests_executed"),
+        "tests_missing": payload.get("tests_missing"),
         "failed_nodeids": payload["failed_nodeids"],
         "issues": issues,
         "recommendations": _build_recommendations(payload, issues),
@@ -708,6 +797,18 @@ def _render_terminal(summary: dict[str, object]) -> str:
     utilization = summary.get("worker_utilization")
     if isinstance(utilization, (int, float)):
         lines.append(_box_line(f"worker_utilization={float(utilization):.0%}", width, unicode_box=unicode_box))
+    tests_collected = summary.get("tests_collected")
+    tests_executed = summary.get("tests_executed")
+    tests_missing = summary.get("tests_missing")
+    if isinstance(tests_collected, int) and isinstance(tests_executed, int):
+        lines.append(
+            _box_line(
+                f"tests: {tests_executed}/{tests_collected} executed"
+                + (f"  missing={tests_missing}" if tests_missing else ""),
+                width,
+                unicode_box=unicode_box,
+            )
+        )
     hang_guard = summary.get("hang_guard")
     if isinstance(hang_guard, dict):
         kills = hang_guard.get("kills")
@@ -771,6 +872,9 @@ def _render_html(summary: dict[str, object], run_id: str) -> str:
         f"<li>stack_scale_factor: {esc(summary.get('stack_scale_factor'))}</li>",
         f"<li>junit_time_sum_seconds: {esc(summary.get('junit_time_sum_seconds'))}</li>",
         f"<li>worker_utilization: {esc(summary.get('worker_utilization'))}</li>",
+        f"<li>tests_collected: {esc(summary.get('tests_collected'))}</li>",
+        f"<li>tests_executed: {esc(summary.get('tests_executed'))}</li>",
+        f"<li>tests_missing: {esc(summary.get('tests_missing'))}</li>",
         "</ul>",
     ]
     hang_guard = summary.get("hang_guard")
