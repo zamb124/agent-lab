@@ -228,6 +228,7 @@ export class PlatformRichEditor extends PlatformElement {
     _mentionQuery = '';
     _mentionSeq = 0;
     _suppressBlockMenuClick = false;
+    _dragGhost: HTMLElement | null = null;
     _view: PmViewLike | null = null;
     _pm: PmBundleLike | null = null;
     _schema: PmSchemaLike | null = null;
@@ -309,6 +310,8 @@ export class PlatformRichEditor extends PlatformElement {
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
+        this._dragGhost?.remove();
+        this._dragGhost = null;
         if (this._view) {
             this._view.destroy();
             this._view = null;
@@ -995,14 +998,48 @@ export class PlatformRichEditor extends PlatformElement {
         const blockDom = this._view.nodeDOM(this._handleBlockPos);
         if (blockDom instanceof HTMLElement) {
             blockDom.classList.add('ProseMirror-selectednode');
-            event.dataTransfer.setDragImage(blockDom, 0, 0);
+            this._setBlockDragImage(event, blockDom);
         }
+    }
+
+    /**
+     * Живой DOM редактора в setDragImage ненадёжен: при неудачном снапшоте
+     * браузер рисует дефолтное превью источника drag (кнопку-ручку), а
+     * macOS для данных с URL подменяет его generic-иконкой ссылки.
+     * Клонируем блок в detached-ghost под .pm-editor — стили документа
+     * применяются и превью всегда показывает сам перетаскиваемый блок.
+     */
+    private _setBlockDragImage(event: DragEvent, blockDom: HTMLElement): void {
+        const dataTransfer = event.dataTransfer;
+        if (dataTransfer === null) return;
+        const rect = blockDom.getBoundingClientRect();
+        const ghost = document.createElement('div');
+        ghost.className = 'pm-editor';
+        ghost.style.position = 'fixed';
+        ghost.style.top = '0';
+        ghost.style.left = `-${Math.ceil(rect.width) + 200}px`;
+        ghost.style.width = `${Math.ceil(rect.width)}px`;
+        ghost.style.pointerEvents = 'none';
+        const clone = blockDom.cloneNode(true);
+        if (clone instanceof HTMLElement) {
+            clone.classList.remove('ProseMirror-selectednode');
+            clone.removeAttribute('contenteditable');
+        }
+        ghost.appendChild(clone);
+        document.body.appendChild(ghost);
+        this._dragGhost?.remove();
+        this._dragGhost = ghost;
+        const anchorX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+        const anchorY = Math.min(Math.max(event.clientY - rect.top, 0), rect.height);
+        dataTransfer.setDragImage(ghost, anchorX, anchorY);
     }
 
     _onHandleDragEnd(): void {
         // После drag браузер иногда шлёт click на ту же кнопку — меню глушим
         // только на этот тик; иначе следующий осознанный клик тоже пропадёт.
         this._suppressBlockMenuClick = true;
+        this._dragGhost?.remove();
+        this._dragGhost = null;
         const view = this._view;
         const dragging = view === null ? null : view.dragging;
         const from = dragBlockFrom(dragging);

@@ -486,6 +486,51 @@ describe('platform-rich-editor', () => {
         expect(texts).to.deep.equal(['Второй', 'Первый']);
     });
 
+    it('drag image — detached-клон блока под .pm-editor, не живой DOM', async () => {
+        const el = await mountEditor({
+            value: {
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Первый' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Второй' }] },
+                ],
+            },
+        });
+        el._handleTop = 0;
+        el._handleBlockPos = 0;
+        await elementUpdated(el);
+
+        const handle = qs(el!, '.pm-block-handle-btn');
+        const transfer = new DataTransfer();
+        let captured: Element | null = null;
+        let anchorX = -1;
+        let anchorY = -1;
+        transfer.setDragImage = (image: Element, x: number, y: number) => {
+            captured = image;
+            anchorX = x;
+            anchorY = y;
+        };
+        handle.dispatchEvent(new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+            clientX: 200,
+            clientY: 30,
+        }));
+
+        expect(captured).to.exist;
+        expect(captured!.classList.contains('pm-editor')).to.be.true;
+        expect(captured!.parentElement).to.equal(document.body);
+        expect(captured!.textContent).to.contain('Первый');
+        expect(captured!.textContent).to.not.contain('Второй');
+        expect(anchorX).to.be.at.least(0);
+        expect(anchorY).to.be.at.least(0);
+
+        handle.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+        expect(captured!.isConnected).to.be.false;
+        expect(el._dragGhost).to.be.null;
+    });
+
     it('кнопки блока достаточно крупные для захвата', async () => {
         // Стили ручек в prosemirror.css — в light DOM теста их нет, как на странице
         // сервиса лист живёт в shadow root.
