@@ -3,11 +3,12 @@
 {{- $shop := index .Values.applications "shop" }}
 {{- if and $shop $shop.enabled }}
 {{- /*
-  Витрины shop на wildcard-субдоменах: <slug>.<apex> и агрегатор shop.<apex>.
-  priority=5 — между platform-services (10, сервис-пути на субдоменах) и
-  platform-frontend (-100, catch-all). Точные host-ингрессы инфра-поддоменов
-  (grafana/livekit/onlyoffice, priority=1000) всегда выигрывают у wildcard.
-  Apex сюда не входит: его «голые» пути остаются за frontend SPA.
+  Публичная поверхность shop — точный хост агрегатора shop.<apex> на каждом
+  platform-домене: / — агрегатор, /s/{slug} — витрина (HostMiddleware внутри
+  сервиса переписывает на API-пути). Wildcard *.<apex> на shop невозможен:
+  slug-пространство неотличимо от компанийских поддоменов (Company.subdomain
+  динамический), а wildcard-vs-wildcard в Traefik отдаёт все компанийские
+  поддомены в shop — сломанный /dashboard и логины.
 */}}
 ---
 apiVersion: networking.k8s.io/v1
@@ -23,12 +24,12 @@ spec:
   tls:
     - hosts:
         {{- range $platformDomains }}
-        - {{ .wildcardHost | quote }}
+        - {{ printf "shop.%s" .apexHost | quote }}
         {{- end }}
       secretName: platform-tls
   rules:
     {{- range $platformDomains }}
-    - host: {{ .wildcardHost | quote }}
+    - host: {{ printf "shop.%s" .apexHost | quote }}
       http:
         paths:
           - path: /

@@ -392,6 +392,7 @@ class ServerConfig(BaseModel):
         "guest_runtime": 8024,
         "realtime": 8025,
         "stock": 8026,
+        "shop": 8027,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -441,6 +442,8 @@ class ServerConfig(BaseModel):
                 return self.wiki_service_url
             case "stock":
                 return self.stock_service_url
+            case "shop":
+                return self.shop_service_url
             case "guest_runtime":
                 return self.guest_runtime_service_url
             case "realtime":

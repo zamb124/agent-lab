@@ -79,6 +79,7 @@ from core.config.models import PlatformBrandConfig
 from core.config.testing import is_testing
 from core.db.storage import SharedStorage
 from core.di import recipe
+from core.http.client import get_httpx_client
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
     consume_flow_preview_handoff,
@@ -93,6 +94,7 @@ from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.models import PlatformShortLink
 from core.short_links.payloads import FlowPreviewEmbedPayload
 from core.types import JsonObject, parse_json_object
+from core.utils.domain import extract_company_subdomain
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
@@ -658,10 +660,40 @@ async def get_pwa_offline_page(request: Request, di: Di) -> Response:
     return Response(content=body, media_type="text/html; charset=utf-8")
 
 
+async def _shop_public_page(request: Request, upstream_path: str) -> Response | None:
+    """HTML публичной страницы shop (витрина/агрегатор) по Host запроса.
+
+    200 → тело + кэш-заголовки shop; 304 → пустой ответ; другой статус →
+    None (вызывающий решает: SPA или auth-wall). Сетевые ошибки shop
+    пробрасываются — инфраструктура не маскируется фолбеком.
+    """
+    host = request.headers.get("host", "")
+    shop_base = get_frontend_settings().server.get_service_url("shop").rstrip("/")
+    forward_headers = {"host": host, "x-forwarded-host": host}
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match:
+        forward_headers["if-none-match"] = if_none_match
+    url = f"{shop_base}{upstream_path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    async with get_httpx_client(timeout=10.0) as client:
+        upstream = await client.request(request.method, url, headers=forward_headers)
+    relay: dict[str, str] = {}
+    for key in ("content-type", "etag", "cache-control"):
+        value = upstream.headers.get(key)
+        if value:
+            relay[key] = value
+    if upstream.status_code == 304:
+        return Response(status_code=304, headers=relay)
+    if upstream.status_code != 200:
+        return None
+    return Response(content=upstream.content, status_code=200, headers=relay)
+
+
 # SPA-резерв (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
-async def serve_spa(di: Di, full_path: str = ""):
+async def serve_spa(request: Request, di: Di, full_path: str = ""):
     _ = di
     # Исключаем API, статику, WebSocket и PWA файлы
     # full_path может начинаться с frontend/ из-за префикса сервиса
@@ -677,6 +709,25 @@ async def serve_spa(di: Di, full_path: str = ""):
     )
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
         raise WsCommandError("not_found", "Not found", error_code="not_found")
+
+    # /market — публичный агрегатор витрин для всех пользователей (в проде
+    # ingress отдаёт его прямо в shop; в dev и как резерв — прокси сюда).
+    if full_path == "market":
+        market = await _shop_public_page(request, "/shop/api/v1/public/market")
+        if market is not None:
+            return market
+        raise WsCommandError("not_found", "Not found", error_code="not_found")
+
+    # Аноним на корне поддомена компании → её published-витрина; магазин не
+    # активирован или поддомен не компании — обычный SPA с экраном авторизации.
+    if (
+        full_path == ""
+        and request.cookies.get("auth_token") is None
+        and extract_company_subdomain(request.headers.get("host", "")) is not None
+    ):
+        storefront = await _shop_public_page(request, "/shop/api/v1/public/host")
+        if storefront is not None:
+            return storefront
 
     index_path = _UI_STATIC_PATH / "index.html"
     if index_path.exists():

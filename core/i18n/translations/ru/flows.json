@@ -676,6 +676,8 @@
         "humanitec_llms_auto_tooltip": "auto — стратегия отбора бесплатной модели по параметрам запроса: tools, structured output, файлы/картинки, контекст и скоринг моделей.",
         "provider_hint": "Выберите endpoint семейства моделей. Для production лучше закреплять провайдера через LLM resource, а в ноде оставлять только осознанные override.",
         "model_hint": "Модель определяет качество, скорость, цену и поддержку tools/structured output. Если сомневаетесь, используйте ресурс или авто-выбор провайдера.",
+        "linnex_llms_provider_tooltip": "Пул моделей {llmsDisplayLabel} на инфраструктуре платформы: маршрутизация, квоты и биллинг уже настроены, отдельный endpoint не нужен.",
+        "linnex_llms_auto_tooltip": "Автоматический выбор модели из пула {llmsDisplayLabel}: платформа подбирает доступную модель под задачу и бюджет.",
         "fallback_models": "Fallback-модели",
         "fallback_models_hint": "Fallback запускается по порядку, когда основной вызов недоступен или не подходит. Держите список коротким и совместимым по tools/JSON schema.",
         "fallback_add": "Добавить fallback",

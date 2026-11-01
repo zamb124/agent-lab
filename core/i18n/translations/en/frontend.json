@@ -944,6 +944,8 @@
             "model_optional_label": "Model (optional)",
             "model_override_label": "Model",
             "model_override_help": "Leave empty to use the platform model; set a value to make it the company default for this capability.",
+            "linnex_llms_provider_tooltip": "The {llmsDisplayLabel} platform model pool: routing, quotas and billing are preconfigured, no separate endpoint is required.",
+            "linnex_llms_auto_tooltip": "Automatic model selection from the {llmsDisplayLabel} pool: the platform picks an available model for the task and budget.",
             "model_required_help": "A model is required for the selected provider. Use {llmsDisplayLabel} / auto for automatic free-model routing.",
             "voice_model_help": "Leave empty to use the platform speech model; pick a model to make it the company default for this capability.",
             "embedding_dimension_label": "Vector dimension",

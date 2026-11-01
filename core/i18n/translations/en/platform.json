@@ -126,6 +126,11 @@
             "menu_description": "Warehouse management: stock, transfers, valuation",
             "description": "Warehouse management: move ledger between locations, reservations, inventory adjustments and an append-only valuation journal"
         },
+        "shop": {
+            "name": "Shop",
+            "menu_description": "Storefronts and the store aggregator",
+            "description": "Company online store: catalog, storefront and public aggregator — direct orders without marketplace fees"
+        },
         "litserve": {
             "name": "{modelsProductName}",
             "menu_description": "Local embeddings and rerank",

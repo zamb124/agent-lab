@@ -25,6 +25,7 @@ from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.redis_client import RedisClient
+from core.models.identity_models import Company
 from core.types import JsonObject, parse_json_object
 
 _SNAPSHOT_KEY_PREFIX = "shop:sf:"
@@ -262,6 +263,10 @@ class StorefrontService:
         if suffix and hostname.endswith(f".{suffix}"):
             candidate = hostname[: -(len(suffix) + 1)]
             if candidate and "." not in candidate:
+                company = await Company.by_subdomain(candidate)
+                if company is not None:
+                    shop = await Shop.get_published_by_company(company.company_id)
+                    return None if shop is None else shop.slug
                 shop = await Shop.get_by_slug(candidate)
                 if shop is not None:
                     return candidate

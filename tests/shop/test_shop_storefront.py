@@ -161,6 +161,68 @@ class TestHostMiddleware:
                 "content-type", ""
             ) or "snapshot" not in resp.text[:5000]
 
+    async def test_company_subdomain_root_shows_company_shop(
+        self, shop_client_company2: AsyncClient, unique_id: str
+    ) -> None:
+        """GET / на <company>.linnex.io — published-витрина этой компании.
+
+        Резолв по ``Company.subdomain`` → ``Shop.company_id``, а не по
+        совпадению slug с именем поддомена.
+        """
+        slug = f"co2-{unique_id[:8]}"
+        await _published_shop(shop_client_company2, slug)
+        from httpx2 import ASGITransport
+
+        from apps.shop.main import app
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://company2.linnex.io",
+            headers={"Host": "company2.linnex.io"},
+        ) as client:
+            resp = await client.get("/")
+            assert resp.status_code == 200, resp.text[:200]
+            assert "text/html" in resp.headers.get("content-type", "")
+            assert f"Store {slug}" in resp.text
+
+    async def test_unknown_subdomain_root_404(
+        self, unique_id: str
+    ) -> None:
+        """GET / на поддомене без компании и магазина — 404 (frontend покажет auth-wall)."""
+        from httpx2 import ASGITransport
+
+        from apps.shop.main import app
+
+        host = f"noshop-{unique_id[:8]}.linnex.io"
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url=f"http://{host}",
+            headers={"Host": host},
+        ) as client:
+            resp = await client.get("/")
+            assert resp.status_code == 404, resp.text[:200]
+
+    async def test_market_path_on_any_platform_host(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """GET /market — страница агрегатора на apex и поддоменах компаний."""
+        slug = f"mkt-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        from httpx2 import ASGITransport
+
+        from apps.shop.main import app
+
+        for host in ("linnex.io", "company2.linnex.io"):
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url=f"http://{host}",
+                headers={"Host": host},
+            ) as client:
+                resp = await client.get("/market")
+                assert resp.status_code == 200, host
+                assert "text/html" in resp.headers.get("content-type", "")
+                assert "aggregate/search" in resp.text
+
 
 class TestStorefrontPage:
     async def test_storefront_page_renders_menu(

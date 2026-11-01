@@ -67,5 +67,8 @@ async def test_require_with_index_returns_pair_or_not_found(unique_id: str) -> N
     _ = await CrawlProfile.objects.create(
         instance=_orphan_profile(orphan_id, f"gone-{unique_id}"[:64], now)
     )
-    with pytest.raises(PlatformNotFoundError, match="search index not found"):
-        _ = await CrawlProfile.require_with_index(orphan_id)
+    try:
+        with pytest.raises(PlatformNotFoundError, match="search index not found"):
+            _ = await CrawlProfile.require_with_index(orphan_id)
+    finally:
+        _ = await CrawlProfile.objects.filter(crawl_profile_id=orphan_id).delete()

@@ -98,6 +98,16 @@ export const PLATFORM_SERVICES: readonly PlatformServiceEntry[] = Object.freeze(
         metricKey: null,
     }),
     Object.freeze({
+        id: 'shop',
+        nameKey: 'apps.shop.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/shop_logo.svg`,
+        brandFrom: '#eab308',
+        brandTo: '#f97316',
+        healthName: 'shop',
+        metricField: null,
+        metricKey: null,
+    }),
+    Object.freeze({
         id: 'frontend',
         nameKey: 'apps.frontend.name',
         logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,

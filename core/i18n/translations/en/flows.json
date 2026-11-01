@@ -676,6 +676,8 @@
         "humanitec_llms_auto_tooltip": "auto selects a free model from request requirements: tools, structured output, files/images, context, and model scoring.",
         "provider_hint": "Select the model endpoint family. For production, prefer pinning the provider through an LLM resource and keep node-level values as intentional overrides.",
         "model_hint": "The model affects quality, latency, cost, and support for tools or structured output. When unsure, use a resource or the provider auto-selection.",
+        "linnex_llms_provider_tooltip": "The {llmsDisplayLabel} platform model pool: routing, quotas and billing are preconfigured, no separate endpoint is required.",
+        "linnex_llms_auto_tooltip": "Automatic model selection from the {llmsDisplayLabel} pool: the platform picks an available model for the task and budget.",
         "fallback_models": "Fallback models",
         "fallback_models_hint": "Fallbacks are tried in order when the primary model call is unavailable or unsuitable. Keep the list short and compatible with tools/JSON schema.",
         "fallback_add": "Add fallback",

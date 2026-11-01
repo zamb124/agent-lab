@@ -27,6 +27,7 @@ import apps.provider_litserve.reranker.engines as reranker_engines
 from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
+    placeholder_embedding_vector,
 )
 from apps.provider_litserve.provider_litserve_asgi import create_provider_litserve_asgi_app
 from apps.provider_litserve.provider_litserve_http_schemas import (
@@ -61,6 +62,7 @@ def fake_sentence_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
 def provider_litserve_infra(unique_id: str) -> ProviderLitserveInfraConfig:
     return ProviderLitserveInfraConfig(
         backend="placeholder",
+        embedding_dimension=EMBEDDING_DIM,
         embedding_openai_model_id=f"baai/bge-m3-{unique_id}",
         embedding_model_id=f"BAAI/bge-m3-{unique_id}",
         rerank_openai_model_id=f"baai/rerank-{unique_id}",
@@ -149,7 +151,9 @@ async def test_post_v1_embeddings_contract_single_string(
     assert len(parsed.data) == 1
     assert parsed.data[0].index == 0
     assert len(parsed.data[0].embedding) == EMBEDDING_DIM
-    assert all(abs(x - 0.25) < 1e-9 for x in parsed.data[0].embedding)
+    assert parsed.data[0].embedding == pytest.approx(
+        placeholder_embedding_vector("one text", dimension=EMBEDDING_DIM)
+    )
 
 
 @pytest.mark.asyncio

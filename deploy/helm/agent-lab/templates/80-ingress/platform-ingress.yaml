@@ -176,6 +176,16 @@ spec:
                 name: {{ $shop.serviceName }}
                 port:
                   number: {{ $shop.port }}
+          # /market — публичный агрегатор витрин на любом platform-хосте
+          # (apex и поддомены компаний): HostMiddleware внутри shop
+          # переписывает его на /shop/api/v1/public/market.
+          - path: /market
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $shop.serviceName }}
+                port:
+                  number: {{ $shop.port }}
           {{- end }}
 
           {{- $sched := index $.Values.applications "scheduler-api" }}

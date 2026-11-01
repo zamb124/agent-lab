@@ -67,7 +67,7 @@ async def test_public_blog_post_linnex_brand_in_body(frontend_client) -> None:
     assert response.status_code == 200
     data = response.json()
     assert "Linnex" in data["body_en"]
-    assert "Linnex" not in data["body_en"]
+    assert "Humanitec" not in data["body_en"]
 
 
 @pytest.mark.asyncio

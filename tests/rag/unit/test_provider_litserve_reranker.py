@@ -2,6 +2,7 @@
 
 import pytest
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import placeholder_rerank_scores
 from apps.provider_litserve.reranker.engines import LocalRerankerEngine, parse_rerank_body
 from core.config.models import ProviderLitserveInfraConfig
@@ -12,19 +13,24 @@ def _cfg(**kwargs: object) -> ProviderLitserveInfraConfig:
     return ProviderLitserveInfraConfig(**kwargs)
 
 
+def _engine(**kwargs: object) -> LocalRerankerEngine:
+    cfg = _cfg(**kwargs)
+    return LocalRerankerEngine(cfg, ModelCatalog.from_seed(cfg))
+
+
 def test_placeholder_scores_length_matches_passages() -> None:
     scores = placeholder_rerank_scores("a b", ["a", "b c", "x"])
     assert {"scores": scores, "len": len(scores)} == {"scores": [1.0, 1.0, 0.0], "len": 3}
 
 
 def test_engine_rerank_empty_passages() -> None:
-    eng = LocalRerankerEngine(_cfg(backend="placeholder"))
+    eng = _engine(backend="placeholder")
     eng.setup(None)
     assert eng.rerank("q", []).model_dump() == {"scores": []}
 
 
 def test_engine_rerank_too_many_passages_422() -> None:
-    eng = LocalRerankerEngine(_cfg(backend="placeholder", max_passages=2))
+    eng = _engine(backend="placeholder", max_passages=2)
     eng.setup(None)
     with pytest.raises(WsCommandError) as ei:
         eng.rerank("q", ["a", "b", "c"])
@@ -35,7 +41,7 @@ def test_engine_rerank_too_many_passages_422() -> None:
 
 
 def test_engine_rerank_matches_client_contract() -> None:
-    eng = LocalRerankerEngine(_cfg(backend="placeholder"))
+    eng = _engine(backend="placeholder")
     eng.setup(None)
     out = eng.rerank("hello world", ["hello", "bye"])
     assert out.model_dump() == {"scores": [1.0, 0.0]}

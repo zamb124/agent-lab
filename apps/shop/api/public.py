@@ -297,3 +297,17 @@ async def resolve_host(request: Request, di: Di) -> dict[str, object]:
     if shop is None:
         raise WsCommandError("not_found", "Storefront not found", error_code="storefront_not_found")
     return {"slug": shop.slug, "name": shop.name}
+
+
+@router.get("/host", response_model=None)
+async def get_host_storefront_page(request: Request, di: Di) -> HTMLResponse:
+    """Витрина по Host запроса: slug-поддомен, кастомный домен или поддомен компании.
+
+    Единая точка резолва для HostMiddleware и прокси frontend — вся логика
+    «какой магазин показать на этом хосте» живёт в ``resolve_shop_by_host``.
+    """
+    host = request.headers.get("host", "")
+    shop = await di.storefront_service.resolve_shop_by_host(host)
+    if shop is None:
+        raise WsCommandError("not_found", "Storefront not found", error_code="storefront_not_found")
+    return await get_storefront_page(shop.slug, request, di)
