@@ -12,6 +12,16 @@ metadata:
     app.kubernetes.io/part-of: agent-lab
 spec:
   replicas: {{ $app.replicas }}
+  {{- if eq (int $app.replicas) 1 }}
+  # replicas=1 при дефолтном RollingUpdate (surge=1, unavailable=0) — дедлок
+  # на заполненной ноде: старый pod держит requests, новый не помещается.
+  # surge=0 → замена на месте: краткий blip старта вместо зависшего апдейта.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  {{- end }}
   selector:
     matchLabels:
       app: {{ $app.serviceName }}
