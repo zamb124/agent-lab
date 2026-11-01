@@ -39,11 +39,11 @@ postgres:
   storage: 50Gi
   resources:
     requests:
-      cpu: 500m
-      memory: 2Gi
+      cpu: 300m
+      memory: 1Gi
     limits:
       cpu: "2"
-      memory: 8Gi
+      memory: 4Gi
   maxConnections: 1000
   sharedBuffers: 2GB
 
@@ -168,7 +168,7 @@ applications:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 2Gi
   frontend:
     nodeName: master
     enabled: true
@@ -242,7 +242,7 @@ applications:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 2Gi
   rag:
     nodeName: master
     enabled: true
@@ -279,7 +279,7 @@ applications:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 2Gi
   sync:
     nodeName: master
     enabled: true
@@ -316,7 +316,7 @@ applications:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 2Gi
   worktracker:
     nodeName: master
     enabled: true
@@ -432,7 +432,7 @@ applications:
     nodeName: master
     enabled: true
     port: 8027
-    replicas: 2
+    replicas: 1
     serviceName: shop
     command:
       - granian
@@ -840,7 +840,7 @@ workers:
         memory: 1Gi
       limits:
         cpu: "3"
-        memory: 6Gi
+        memory: 4Gi
   scheduler:
     nodeName: master
     enabled: true
@@ -872,7 +872,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 3Gi
   sync-worker:
     nodeName: master
     enabled: true
@@ -892,7 +892,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 3Gi
   crm-worker:
     nodeName: master
     enabled: true
@@ -911,7 +911,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 3Gi
   crm-summary-worker:
     nodeName: master
     enabled: true
@@ -930,7 +930,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 3Gi
   idle-worker:
     nodeName: master
     enabled: true
@@ -946,10 +946,10 @@ workers:
     resources:
       requests:
         cpu: 100m
-        memory: 1Gi
+        memory: 512Mi
       limits:
         cpu: "1"
-        memory: 6Gi
+        memory: 3Gi
   a2a-push-worker:
     nodeName: master
     enabled: true
@@ -988,7 +988,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 6Gi
+        memory: 3Gi
   shop-worker:
     nodeName: master
     enabled: true
@@ -1055,7 +1055,7 @@ centrifugo:
   nodeName: master
   image: centrifugo/centrifugo:v6.10.2
   imagePullPolicy: IfNotPresent
-  replicas: 2
+  replicas: 1
   resources:
     requests:
       cpu: 100m
@@ -1101,7 +1101,7 @@ livekitEgress:
       cpu: 200m
       memory: 512Mi
     limits:
-      cpu: "2"
+      cpu: "4"
       memory: 4Gi
 
 coturn:
@@ -1132,11 +1132,11 @@ onlyoffice:
     providerDisplayName: Linnex LLMs
   resources:
     requests:
-      cpu: 500m
+      cpu: 250m
       memory: 1Gi
     limits:
       cpu: "2"
-      memory: 4Gi
+      memory: 3Gi
 
 observability:
   loki:
