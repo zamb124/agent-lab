@@ -457,7 +457,7 @@ class SmartProxyClient:
         return self._strategy
 
     def _create_client(self, proxy_url: str | None = None) -> httpx2.AsyncClient:
-        if self.use_proxy:
+        if proxy_url is not None:
             settings = self._get_settings()
             connect_timeout = settings.proxy.connect_timeout
         else:
@@ -595,9 +595,35 @@ class SmartProxyClient:
                 return response
             return response
 
+        if strategy == ProxyStrategy.DIRECT_FIRST:
+            try:
+                async with self._create_client() as client:
+                    return await _send_request(client, http_method, url, kwargs)
+            except _CONNECT_RETRY_EXCEPTIONS:
+                if not _platform_proxy_active():
+                    raise
+                try:
+                    response = await self._request_via_proxy_rotation(
+                        http_method, url, **kwargs
+                    )
+                except _CONNECT_RETRY_EXCEPTIONS:
+                    await egress_prefer_proxy_delete(origin)
+                    async with self._create_client() as client:
+                        return await _send_request(client, http_method, url, kwargs)
+                if response.is_success:
+                    await egress_prefer_proxy_set(origin)
+                return response
+
         if not self.use_proxy:
             async with self._create_client() as client:
                 return await _send_request(client, http_method, url, kwargs)
+
+        if strategy == ProxyStrategy.PROXY_FIRST:
+            try:
+                return await self._request_via_proxy_rotation(http_method, url, **kwargs)
+            except _CONNECT_RETRY_EXCEPTIONS:
+                async with self._create_client() as client:
+                    return await _send_request(client, http_method, url, kwargs)
 
         return await self._request_via_proxy_rotation(http_method, url, **kwargs)
 

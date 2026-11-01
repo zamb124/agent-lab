@@ -599,3 +599,51 @@ class TestProxyStrategy:
 
                 assert response.status_code == 200
                 mock_direct.assert_called_once()
+
+
+class TestSmartProxyClientStrategyParity:
+    """SmartProxyClient._request_with_retry повторяет семантику request_with_strategy."""
+
+    @pytest.mark.asyncio
+    async def test_direct_first_falls_back_to_proxy(self, monkeypatch: pytest.MonkeyPatch):
+        """DIRECT_FIRST через client.get: прямой connect падает, уходит в прокси и учится."""
+        url = f"http://{_NON_LOCAL_HOST}:1/x"
+        origin = normalized_http_origin(url)
+        async with _serve_http(200, b"via-proxy") as proxy_port:
+            _force_proxy(monkeypatch, f"http://127.0.0.1:{proxy_port}")
+            try:
+                async with get_httpx_client(
+                    timeout=1.0, strategy=ProxyStrategy.DIRECT_FIRST
+                ) as client:
+                    response = await client.get(url)
+                assert response.status_code == 200
+                assert response.text == "via-proxy"
+                await response.aclose()
+                assert await egress_prefer_proxy_get(origin) is True
+            finally:
+                await egress_prefer_proxy_delete(origin)
+
+    @pytest.mark.asyncio
+    async def test_direct_first_raises_when_direct_and_proxy_fail(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """DIRECT_FIRST: прямой и прокси недоступны — ConnectError наружу после финального прямого."""
+        _force_proxy(monkeypatch, "http://127.0.0.1:9", connect_timeout=0.2)
+        async with get_httpx_client(
+            timeout=1.0, strategy=ProxyStrategy.DIRECT_FIRST
+        ) as client:
+            with pytest.raises(httpx2.ConnectError):
+                _ = await client.get(f"http://{_NON_LOCAL_HOST}:1/x")
+
+    @pytest.mark.asyncio
+    async def test_proxy_first_falls_back_to_direct(self, monkeypatch: pytest.MonkeyPatch):
+        """PROXY_FIRST: прокси недоступен — fallback на прямое подключение."""
+        async with _serve_http(200, b"direct") as port:
+            _force_proxy(monkeypatch, "http://127.0.0.1:9", connect_timeout=0.2)
+            async with get_httpx_client(
+                timeout=1.0, strategy=ProxyStrategy.PROXY_FIRST
+            ) as client:
+                response = await client.get(f"http://{_NON_LOCAL_HOST}:{port}/x")
+            assert response.status_code == 200
+            assert response.text == "direct"
+            await response.aclose()
