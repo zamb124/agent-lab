@@ -94,7 +94,7 @@ export const shopPublishOp = createAsyncOp({
 
 export const shopBadgeIconsListOp = createAsyncOp({
     name: 'shop/badge_icons_list',
-    errorToastKey: 'shop:toast.badge_icons_load_failed',
+    silent: true,
     commandType: 'shop/badge_icons/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -113,7 +113,7 @@ export const shopSuspendOp = createAsyncOp({
 
 export const shopCategoriesListOp = createAsyncOp({
     name: 'shop/categories_list',
-    errorToastKey: 'shop:toast.categories_load_failed',
+    silent: true,
     commandType: 'shop/categories/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -132,6 +132,7 @@ export const shopCategoryCreateOp = createAsyncOp({
 
 export const shopCategoryUpdateOp = createAsyncOp({
     name: 'shop/category_update',
+    successToastKey: 'shop:toast.category_updated',
     errorToastKey: 'shop:toast.category_update_failed',
     commandType: 'shop/categories/update_requested',
     transport: 'ws',
@@ -141,6 +142,7 @@ export const shopCategoryUpdateOp = createAsyncOp({
 
 export const shopCategoryRemoveOp = createAsyncOp({
     name: 'shop/category_remove',
+    successToastKey: 'shop:toast.category_removed',
     errorToastKey: 'shop:toast.category_remove_failed',
     commandType: 'shop/categories/remove_requested',
     transport: 'ws',
@@ -150,6 +152,7 @@ export const shopCategoryRemoveOp = createAsyncOp({
 
 export const shopCategoriesReorderOp = createAsyncOp({
     name: 'shop/categories_reorder',
+    successToastKey: 'shop:toast.categories_reordered',
     errorToastKey: 'shop:toast.category_reorder_failed',
     commandType: 'shop/categories/reorder_requested',
     transport: 'ws',
@@ -159,7 +162,7 @@ export const shopCategoriesReorderOp = createAsyncOp({
 
 export const shopProductsListOp = createAsyncOp({
     name: 'shop/products_list',
-    errorToastKey: 'shop:toast.products_load_failed',
+    silent: true,
     commandType: 'shop/products/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -189,6 +192,7 @@ export const shopProductCreateOp = createAsyncOp({
 
 export const shopProductUpdateOp = createAsyncOp({
     name: 'shop/product_update',
+    successToastKey: 'shop:toast.product_updated',
     errorToastKey: 'shop:toast.product_update_failed',
     commandType: 'shop/products/update_requested',
     transport: 'ws',
@@ -208,6 +212,7 @@ export const shopProductsImportOp = createAsyncOp({
 
 export const shopProductsReorderOp = createAsyncOp({
     name: 'shop/products_reorder',
+    successToastKey: 'shop:toast.products_reordered',
     errorToastKey: 'shop:toast.product_reorder_failed',
     commandType: 'shop/products/reorder_requested',
     transport: 'ws',
@@ -217,6 +222,7 @@ export const shopProductsReorderOp = createAsyncOp({
 
 export const shopProductRemoveOp = createAsyncOp({
     name: 'shop/product_remove',
+    successToastKey: 'shop:toast.product_removed',
     errorToastKey: 'shop:toast.product_remove_failed',
     commandType: 'shop/products/remove_requested',
     transport: 'ws',
@@ -246,6 +252,7 @@ export const shopOrdersListOp: AsyncOpFactory = createAsyncOp({
 
 export const shopOrderSetStatusOp = createAsyncOp({
     name: 'shop/order_set_status',
+    successToastKey: 'shop:toast.order_status_updated',
     errorToastKey: 'shop:toast.order_status_failed',
     commandType: 'shop/orders/set_status_requested',
     transport: 'ws',
@@ -265,6 +272,7 @@ export const shopDomainAddOp = createAsyncOp({
 
 export const shopDomainProvisionOp = createAsyncOp({
     name: 'shop/domain_provision',
+    successToastKey: 'shop:toast.domain_provisioned',
     errorToastKey: 'shop:toast.domain_provision_failed',
     commandType: 'shop/domains/provision_requested',
     transport: 'ws',
@@ -274,6 +282,7 @@ export const shopDomainProvisionOp = createAsyncOp({
 
 export const shopAiDescribeOp = createAsyncOp({
     name: 'shop/ai_describe',
+    successToastKey: 'shop:toast.ai_describe_done',
     errorToastKey: 'shop:toast.ai_describe_failed',
     commandType: 'shop/ai/describe_requested',
     transport: 'ws',
@@ -283,6 +292,7 @@ export const shopAiDescribeOp = createAsyncOp({
 
 export const shopAiEnhancePhotoOp = createAsyncOp({
     name: 'shop/ai_enhance_photo',
+    successToastKey: 'shop:toast.ai_photo_enhanced',
     errorToastKey: 'shop:toast.ai_enhance_failed',
     commandType: 'shop/ai/enhance_photo_requested',
     transport: 'ws',
@@ -292,6 +302,7 @@ export const shopAiEnhancePhotoOp = createAsyncOp({
 
 export const shopAiGeneratePhotoOp = createAsyncOp({
     name: 'shop/ai_generate_photo',
+    successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
     commandType: 'shop/ai/generate_photo_requested',
     transport: 'ws',
@@ -301,6 +312,7 @@ export const shopAiGeneratePhotoOp = createAsyncOp({
 
 export const shopAiDescribeShopOp = createAsyncOp({
     name: 'shop/ai_describe_shop',
+    successToastKey: 'shop:toast.ai_describe_done',
     errorToastKey: 'shop:toast.ai_describe_failed',
     commandType: 'shop/ai/describe_shop_requested',
     transport: 'ws',
@@ -310,6 +322,7 @@ export const shopAiDescribeShopOp = createAsyncOp({
 
 export const shopAiGenerateCoverOp = createAsyncOp({
     name: 'shop/ai_generate_cover',
+    successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
     commandType: 'shop/ai/generate_cover_requested',
     transport: 'ws',
@@ -319,6 +332,7 @@ export const shopAiGenerateCoverOp = createAsyncOp({
 
 export const shopAiGenerateLogoOp = createAsyncOp({
     name: 'shop/ai_generate_logo',
+    successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
     commandType: 'shop/ai/generate_logo_requested',
     transport: 'ws',
@@ -338,6 +352,7 @@ export const shopAiAutofillOp = createAsyncOp({
 
 export const shopAiParseMenuOp = createAsyncOp({
     name: 'shop/ai_parse_menu',
+    successToastKey: 'shop:toast.ai_parse_done',
     errorToastKey: 'shop:toast.ai_parse_failed',
     commandType: 'shop/ai/parse_menu_requested',
     transport: 'ws',
@@ -387,6 +402,7 @@ export const shopModifierGroupCreateOp = createAsyncOp({
 
 export const shopModifierGroupUpdateOp = createAsyncOp({
     name: 'shop/modifier_group_update',
+    successToastKey: 'shop:toast.modifier_group_updated',
     errorToastKey: 'shop:toast.modifier_group_failed',
     commandType: 'shop/modifiers/groups/update_requested',
     transport: 'ws',
@@ -396,6 +412,7 @@ export const shopModifierGroupUpdateOp = createAsyncOp({
 
 export const shopModifierGroupRemoveOp = createAsyncOp({
     name: 'shop/modifier_group_remove',
+    successToastKey: 'shop:toast.modifier_group_removed',
     errorToastKey: 'shop:toast.modifier_group_failed',
     commandType: 'shop/modifiers/groups/remove_requested',
     transport: 'ws',
@@ -405,6 +422,7 @@ export const shopModifierGroupRemoveOp = createAsyncOp({
 
 export const shopModifierOptionCreateOp = createAsyncOp({
     name: 'shop/modifier_option_create',
+    successToastKey: 'shop:toast.modifier_option_created',
     errorToastKey: 'shop:toast.modifier_option_failed',
     commandType: 'shop/modifiers/options/create_requested',
     transport: 'ws',
@@ -414,6 +432,7 @@ export const shopModifierOptionCreateOp = createAsyncOp({
 
 export const shopModifierOptionUpdateOp = createAsyncOp({
     name: 'shop/modifier_option_update',
+    successToastKey: 'shop:toast.modifier_option_updated',
     errorToastKey: 'shop:toast.modifier_option_failed',
     commandType: 'shop/modifiers/options/update_requested',
     transport: 'ws',
@@ -423,6 +442,7 @@ export const shopModifierOptionUpdateOp = createAsyncOp({
 
 export const shopModifierOptionRemoveOp = createAsyncOp({
     name: 'shop/modifier_option_remove',
+    successToastKey: 'shop:toast.modifier_option_removed',
     errorToastKey: 'shop:toast.modifier_option_failed',
     commandType: 'shop/modifiers/options/remove_requested',
     transport: 'ws',
@@ -432,6 +452,7 @@ export const shopModifierOptionRemoveOp = createAsyncOp({
 
 export const shopProductModifierAttachOp = createAsyncOp({
     name: 'shop/product_modifier_attach',
+    successToastKey: 'shop:toast.modifier_attached',
     errorToastKey: 'shop:toast.modifier_attach_failed',
     commandType: 'shop/products/modifiers/attach_requested',
     transport: 'ws',
@@ -441,6 +462,7 @@ export const shopProductModifierAttachOp = createAsyncOp({
 
 export const shopProductModifierDetachOp = createAsyncOp({
     name: 'shop/product_modifier_detach',
+    successToastKey: 'shop:toast.modifier_detached',
     errorToastKey: 'shop:toast.modifier_attach_failed',
     commandType: 'shop/products/modifiers/detach_requested',
     transport: 'ws',
@@ -450,6 +472,7 @@ export const shopProductModifierDetachOp = createAsyncOp({
 
 export const shopAiSuggestOptionsOp = createAsyncOp({
     name: 'shop/ai_suggest_options',
+    successToastKey: 'shop:toast.ai_suggest_done',
     errorToastKey: 'shop:toast.ai_suggest_failed',
     commandType: 'shop/ai/suggest_options_requested',
     transport: 'ws',
@@ -489,6 +512,7 @@ export const shopPromoCreateOp = createAsyncOp({
 
 export const shopPromoUpdateOp = createAsyncOp({
     name: 'shop/promo_update',
+    successToastKey: 'shop:toast.promo_updated',
     errorToastKey: 'shop:toast.promo_failed',
     commandType: 'shop/promos/update_requested',
     transport: 'ws',
@@ -498,6 +522,7 @@ export const shopPromoUpdateOp = createAsyncOp({
 
 export const shopPromoRemoveOp = createAsyncOp({
     name: 'shop/promo_remove',
+    successToastKey: 'shop:toast.promo_removed',
     errorToastKey: 'shop:toast.promo_failed',
     commandType: 'shop/promos/remove_requested',
     transport: 'ws',
@@ -507,6 +532,7 @@ export const shopPromoRemoveOp = createAsyncOp({
 
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
+    successToastKey: 'shop:toast.telegram_connected',
     errorToastKey: 'shop:toast.telegram_connect_failed',
     commandType: 'shop/telegram/connect_requested',
     transport: 'ws',
@@ -516,6 +542,7 @@ export const shopTelegramConnectOp = createAsyncOp({
 
 export const shopTelegramDisconnectOp = createAsyncOp({
     name: 'shop/telegram_disconnect',
+    successToastKey: 'shop:toast.telegram_disconnected',
     errorToastKey: 'shop:toast.telegram_disconnect_failed',
     commandType: 'shop/telegram/disconnect_requested',
     transport: 'ws',
