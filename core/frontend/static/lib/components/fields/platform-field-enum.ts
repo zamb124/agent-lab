@@ -77,7 +77,6 @@ export class PlatformFieldEnum extends PlatformElement {
         placeholder: { type: String },
         _filterQuery: { type: String, state: true },
         _listOpen: { type: Boolean, state: true },
-        _anchor: { state: true },
     };
 
     declare value: string | null;
@@ -87,8 +86,11 @@ export class PlatformFieldEnum extends PlatformElement {
     declare placeholder: string;
     declare _filterQuery: string;
     declare _listOpen: boolean;
-    declare _anchor: HTMLElement | null;
 
+    // Не реактивное поле: anchor нужен popover'у только в момент `?open`,
+    // а `_listOpen` и так вызывает ререндер — state-поле давало лишний
+    // update-цикл и варнинг "scheduled an update after an update completed".
+    _anchor: HTMLElement | null;
     _skipBlurSync: boolean;
     _deferOptionFilter: boolean;
     _listDomId: string;
@@ -177,7 +179,6 @@ export class PlatformFieldEnum extends PlatformElement {
 
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
-        this._ensureAnchor();
         if (this._listOpen && !this.disabled) {
             // Список меняет высоту при фильтрации, поэтому попап пересчитывается
             // после каждого обновления содержимого.
@@ -189,6 +190,12 @@ export class PlatformFieldEnum extends PlatformElement {
         super.willUpdate(changed);
         if (this.mode !== 'edit') {
             return;
+        }
+        // Якорь до рендера, в котором popover открывается, — `.anchor` уже
+        // связан к моменту `?open` (DOM существует: `_listOpen` поднимается
+        // только пользовательским жестом после первого рендера).
+        if (this._listOpen) {
+            this._ensureAnchor();
         }
         // Пока список открыт — не затирать поисковый ввод при смене reference
         // `.config` у родителя (новый object на каждый render).
