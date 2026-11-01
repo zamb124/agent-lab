@@ -35,8 +35,13 @@ const tsSiblingMiddleware: Middleware = async (ctx, next) => {
 // переписывает specifier `./x.js` → `./x.ts` — см. tsSiblingMiddleware.
 // `delete` на инстансе не срабатывает — метод объявлен на прототипе класса;
 // own-property undefined перекрывает вызов хука.
-const tsEsbuildPlugin = esbuildPlugin({ ts: true });
+// Явный es2022: 'auto' резолвится в browserslist-дефолты (chrome64/safari11.1),
+// а esbuild не даункомпилирует destructuring под них — трансформ .ts падает 500.
+const tsEsbuildPlugin = esbuildPlugin({ ts: true, target: 'es2022' });
 (tsEsbuildPlugin as { resolveImport?: unknown }).resolveImport = undefined;
+
+const platformLibSpecifier = '@platform/lib/';
+const platformLibUrl = '/core/frontend/static/lib/';
 
 // node-resolve с .ts в extensions тоже переписывает specifier `./x.js` → `./x.ts`
 // для отсутствующего на диске .js — оборачиваем и возвращаем исходный specifier.
@@ -47,6 +52,13 @@ if (resolveImportOriginal === undefined) {
 }
 const resolveImport = resolveImportOriginal;
 tsNodeResolvePlugin.resolveImport = async (args) => {
+    // `import-map` параметр живёт только на script-src тестовой страницы:
+    // spec-файл WTR тянет по `?wtr-session-id` без него, import-maps плагин
+    // молчит, а node-resolve не знает префикс — резолвим сами под
+    // tsSiblingMiddleware (`.js` URL обслуживает `.ts`-содержимое).
+    if (args.source.startsWith(platformLibSpecifier)) {
+        return `${platformLibUrl}${args.source.slice(platformLibSpecifier.length)}`;
+    }
     const resolved = await resolveImport(args);
     if (
         typeof resolved === 'string'
@@ -84,7 +96,7 @@ export default {
             inject: {
                 importMap: {
                     imports: {
-                        '@platform/lib/': '/core/frontend/static/lib/',
+                        [platformLibSpecifier]: platformLibUrl,
                     },
                 },
             },
