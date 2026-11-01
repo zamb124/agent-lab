@@ -69,7 +69,7 @@ async def test_company_voice_providers_put_litserve_unknown_model_rejected_linne
     assert response.status_code == 400, response.text
     detail = response.json()["detail"]
     assert "Linnex Voice" in detail
-    assert "Linnex" not in detail
+    assert "Humanitec" not in detail
 
 
 @pytest.mark.asyncio

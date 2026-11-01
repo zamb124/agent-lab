@@ -74,7 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     for offset in range(0, len(missing), _CHUNK_NODEIDS):
         chunk = missing[offset : offset + _CHUNK_NODEIDS]
         result = _run_pytest(chunk, pytest_args, args.timeout)
-        if result != 0:
+        # 5 = NO_TESTS_COLLECTED: «missing» оказались deselected тем же -m-фильтром
+        # догона — реально пропущенного нет, это не отказ.
+        if result not in (0, 5):
             exit_code = result
     return exit_code
 

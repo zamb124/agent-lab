@@ -186,9 +186,10 @@ class TestHostMiddleware:
             assert f"Store {slug}" in resp.text
 
     async def test_unknown_subdomain_root_404(
-        self, unique_id: str
+        self, shop_di, unique_id: str
     ) -> None:
         """GET / на поддомене без компании и магазина — 404 (frontend покажет auth-wall)."""
+        _ = shop_di
         from httpx2 import ASGITransport
 
         from apps.shop.main import app

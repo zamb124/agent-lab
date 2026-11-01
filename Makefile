@@ -50,6 +50,7 @@ dev: dev-up
 dev-up: runtime-bootstrap
 	@echo "Запуск Development окружения (БД/Redis/SeaweedFS/OpenFGA в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
+	@uv run python -m scripts.db.migrate upgrade
 	@echo "Bootstrap OpenFGA store + model → reports/openfga-dev.env..."
 	@uv run python -m scripts.dev.openfga_env_bootstrap --api-url http://127.0.0.1:9090 --env-path reports/openfga-dev.env
 	@$(MAKE) openfga-backfill

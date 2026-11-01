@@ -356,6 +356,57 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: shop",
+            "consoleTitle": "run.py: shop",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "shop"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: stock",
+            "consoleTitle": "run.py: stock",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "stock"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: realtime",
+            "consoleTitle": "run.py: realtime",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "realtime"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: flows_worker",
             "consoleTitle": "run.py: flows_worker ⚙️",
             "type": "debugpy",
@@ -424,6 +475,57 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: shop_worker",
+            "consoleTitle": "run.py: shop_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "shop_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: stock_worker",
+            "consoleTitle": "run.py: stock_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "stock_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: crm_summary_worker",
+            "consoleTitle": "run.py: crm_summary_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "crm_summary_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: idle_worker",
             "consoleTitle": "run.py: idle_worker ☁️",
             "type": "debugpy",
@@ -431,6 +533,40 @@
             "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "idle_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: a2a_push_worker",
+            "consoleTitle": "run.py: a2a_push_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "a2a_push_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: ui_watch",
+            "consoleTitle": "run.py: ui_watch",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
+            "args": [
+                "ui_watch"
             ],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
@@ -683,11 +819,19 @@
                 "Run: code_runner_node",
                 "Run: code_runner_go",
                 "Run: code_runner_csharp",
+                "Run: shop",
+                "Run: stock",
+                "Run: realtime",
                 "Run: flows_worker",
                 "Run: rag_worker",
                 "Run: sync_worker",
                 "Run: crm_worker",
+                "Run: shop_worker",
+                "Run: stock_worker",
+                "Run: crm_summary_worker",
                 "Run: idle_worker",
+                "Run: a2a_push_worker",
+                "Run: ui_watch",
                 "Run: scheduler"
             ],
             "stopAll": true

@@ -237,7 +237,7 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
         wiki_page_id=page_id,
     ).get_or_none()
     assert marked is not None
-    assert marked.deleted_at == later
+    assert marked.deleted_at == later.replace(tzinfo=None)
     assert await WikiPage.list_unordered_alive(company_id, [page_id]) == []
     assert await WikiPage.next_position(company_id, namespace, None) == 0
     deleted = await WikiPage.list_deleted_by_deleted_at_desc(company_id, namespace)

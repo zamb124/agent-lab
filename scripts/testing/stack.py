@@ -178,14 +178,17 @@ def _bootstrap_parent_test_env() -> None:
 
 
 def default_pytest_workers() -> int:
-    """xdist-воркеров по ресурсам машины: min(BASELINE, cpu//2, ram_gb//4), минимум 2.
+    """xdist-воркеров по ресурсам машины: min(BASELINE, cpu-бюджет, ram_gb//4), минимум 2.
 
-    cpu//2 — половина ядер остаётся стеку granian/TaskIQ/Docker; ram_gb//4 — пик RSS
-    воркера ~1GB (импорт платформы), иначе swap. Больше BASELINE машина тоже не получает:
-    таймаут-политика набрана под -n10.
+    cpu//2 — половина ядер остаётся стеку granian/TaskIQ/Docker/IDE. Под coverage
+    (TEST_COVERAGE=1) воркер жрёт ~1.5-2 ядра — cpu//3, иначе connect() к сервисам
+    и docker-портам вылетает за клиентский таймаут от CPU starvation. ram_gb//4 —
+    пик RSS воркера ~1GB (импорт платформы), иначе swap. Больше BASELINE машина
+    тоже не получает: таймаут-политика набрана под -n10.
     """
     cpu = os.process_cpu_count() or os.cpu_count() or 4
-    bounds = [cpu // 2]
+    cpu_budget = 3 if os.environ.get("TEST_COVERAGE") == "1" else 2
+    bounds = [cpu // cpu_budget]
     try:
         ram_gb = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / (1 << 30)
     except (ValueError, OSError, AttributeError):
@@ -217,7 +220,10 @@ def scale_stack_workers(baseline: int, pytest_workers: int | None = None) -> int
 
 
 def _scaled_code_runner_python_workers(pytest_workers: int | None = None) -> int:
-    return scale_stack_workers(12, pytest_workers)
+    # Каждый granian worker — отдельный процесс со своими пулами и event loop.
+    # Параллельных code-exec вызовов не больше pytest-воркеров; baseline 12×4=48
+    # процессов на 14 ядрах — чистая перепровизия: CPU starvation и swap.
+    return scale_stack_workers(6, pytest_workers)
 
 
 def _test_flows_worker_concurrency(pytest_workers: int | None = None) -> int:
@@ -240,14 +246,14 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         app_path="apps.secrets.main:app",
         port=9022,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
-        workers=scale_stack_workers(4, pytest_workers),
+        workers=scale_stack_workers(3, pytest_workers),
     ),
     GranianService(
         name="flows",
         app_path="apps.flows.main:app",
         port=9001,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
-        workers=scale_stack_workers(14, pytest_workers),
+        workers=scale_stack_workers(10, pytest_workers),
         env={"LLM_PROXY_USE_MOCK_AUTO": "1"},
     ),
     GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
@@ -256,7 +262,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         app_path="apps.crm.main:app",
         port=9003,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
-        workers=scale_stack_workers(8, pytest_workers),
+        workers=scale_stack_workers(6, pytest_workers),
     ),
     GranianService(
         name="frontend",
@@ -306,7 +312,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         app_path="apps.capability_gateway.main:app",
         port=9016,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
-        workers=scale_stack_workers(6, pytest_workers),
+        workers=scale_stack_workers(4, pytest_workers),
     ),
     GranianService(
         name="code_runner_python",
@@ -436,7 +442,7 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         name="crm_worker",
         worker_module="apps.crm.worker:worker_app",
         stream_name="crm",
-        workers=scale_stack_workers(16, pytest_workers),
+        workers=scale_stack_workers(8, pytest_workers),
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(

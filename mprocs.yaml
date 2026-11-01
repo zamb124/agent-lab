@@ -75,5 +75,7 @@ procs:
     shell: "uv run python -m scripts.dev.run crm_summary_worker"
   idle_worker:
     shell: "uv run python -m scripts.dev.run idle_worker"
+  a2a_push_worker:
+    shell: "uv run python -m scripts.dev.run a2a_push_worker"
   scheduler:
     shell: "uv run python -m scripts.dev.run scheduler"

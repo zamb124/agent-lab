@@ -527,7 +527,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_sync_client_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
-    _dump_collected_nodeids(items)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    # После deselect-хуков (-m/-k): снимок только реально идущих тестов, иначе
+    # deselected nodeids фантомно числятся «не сыгранными» для pytest_notrun.
+    _dump_collected_nodeids(list(session.items))
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)

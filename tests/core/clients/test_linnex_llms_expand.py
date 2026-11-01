@@ -298,6 +298,7 @@ async def test_empty_models_snapshot_uses_authored_fallback(
     assert [(row.provider, row.model) for row in candidates] == [("openai", "gpt-4o-mini")]
 
 
+@pytest.mark.usefixtures("llm_billing_service")
 @pytest.mark.asyncio
 async def test_empty_redis_authored_fallback_http_only_openai(
     platform_free_cache_key: str,

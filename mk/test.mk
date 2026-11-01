@@ -1,9 +1,10 @@
 .PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness test-observability
 
 # Дефолт — по ресурсам машины: scripts.testing.stack.default_pytest_workers
-# (min(10, cpu//2, ram_gb//4), минимум 2). Явный WORKERS=N / env переопределяет;
+# (min(10, cpu//3 под coverage иначе cpu//2, ram_gb//4), минимум 2).
+# Явный WORKERS=N / env переопределяет;
 # WORKERS=auto резолвится в то же число, что и в stack.resolve_pytest_workers.
-_WORKERS_RESOURCE_DEFAULT = $(shell uv run python -c "from scripts.testing.stack import default_pytest_workers; print(default_pytest_workers())")
+_WORKERS_RESOURCE_DEFAULT = $(shell TEST_COVERAGE=$(TEST_COVERAGE) uv run python -c "from scripts.testing.stack import default_pytest_workers; print(default_pytest_workers())")
 ifeq ($(WORKERS),auto)
 override WORKERS := $(_WORKERS_RESOURCE_DEFAULT)
 else
@@ -14,6 +15,10 @@ PYTEST_WORKERS_PROFILE ?= 1
 TEST_COVERAGE ?= 1
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
 PYTEST_MAX_WORKER_RESTART ?= 4
+# Инерционные connect-RST/timeout под CPU-всплесками dev-машины гасятся одним
+# немедленным повтором в том же воркере; детерминированные баги падают дважды.
+PYTEST_RERUNS ?= 1
+PYTEST_RERUNS_DELAY ?= 1
 RUN_UI_IN_TEST ?= 0
 DOCKER_COMPOSE_PULL ?= missing
 DOCKER_COMPOSE_ENV_FILE ?= .env.test-compose-images
@@ -25,7 +30,7 @@ BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 _PYTEST_IGNORE_UI := --ignore=tests/ui
 
 # Все тесты параллельны: xdist_group/сериализация запрещены (testing.mdc § Параллельный прогон).
-_PYTEST_XDIST = -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
+_PYTEST_XDIST = -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) --reruns $(PYTEST_RERUNS) --reruns-delay $(PYTEST_RERUNS_DELAY)
 
 # Coverage (default-on): TEST_COVERAGE=0 make test
 COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)
@@ -278,6 +283,7 @@ test:
 		echo "=== 2/4 Догон не сыгранных тестов (параллельно) ==="; \
 		uv run python -m scripts.testing.pytest_notrun --junit reports/pytest_workers_profile/$$PROFILE_RUN_ID/junit.xml \
 			--timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+			--reruns $(PYTEST_RERUNS) --reruns-delay $(PYTEST_RERUNS_DELAY) \
 			$(_PYTEST_IGNORE_UI) \
 			$(_COV_ARGS_APPEND) \
 			-m "not integration and not network"; \
