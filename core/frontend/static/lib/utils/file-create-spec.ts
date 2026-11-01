@@ -59,6 +59,8 @@ function defaultRetentionKind(sourceKind: string): string | undefined {
             return DEFAULT_RETENTION_BY_SOURCE.platform_auxiliary;
         case 'generated_ephemeral':
             return DEFAULT_RETENTION_BY_SOURCE.generated_ephemeral;
+        case 'shop_product':
+            return DEFAULT_RETENTION_BY_SOURCE.shop_product;
         default:
             return undefined;
     }

@@ -90,7 +90,13 @@
         "modifiers": "Modifiers",
         "import_ai": "AI parse",
         "import_ai_hint": "AI will extract items from free-form menu text — sections, prices, descriptions",
-        "import_ai_ready": "parsed by AI"
+        "import_ai_ready": "parsed by AI",
+        "categories_title": "Categories",
+        "all_products": "All items",
+        "category_remove": "Remove category",
+        "remove": "Remove",
+        "product_new": "New item",
+        "product_edit": "Item"
     },
     "builder": {
         "title": "Storefront appearance",

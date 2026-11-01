@@ -90,7 +90,13 @@
         "modifiers": "Опции",
         "import_ai": "AI-разбор",
         "import_ai_hint": "AI извлечёт позиции из произвольного текста меню — разделы, цены, описания",
-        "import_ai_ready": "разобрано AI"
+        "import_ai_ready": "разобрано AI",
+        "categories_title": "Категории",
+        "all_products": "Все позиции",
+        "category_remove": "Удалить категорию",
+        "remove": "Удалить",
+        "product_new": "Новая позиция",
+        "product_edit": "Позиция"
     },
     "builder": {
         "title": "Внешний вид витрины",

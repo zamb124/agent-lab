@@ -1,16 +1,17 @@
 /**
- * Конструктор меню: категории чипсами + товары таблицей с inline-добавлением.
- * Директор ресторана: выбрал категорию → имя, цена, описание → готово.
- * Кнопка «AI» генерирует описание (оп добавляется backend'ом).
+ * Конструктор меню: рейка категорий слева + карточки позиций.
+ * Создание и редактирование позиции — ShopProductModal; метки и импорт —
+ * раскрывающиеся панели над списком.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
+import type { ProductDraft } from '../modals/shop-product-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
@@ -62,13 +63,11 @@ export class ShopMenuPage extends PlatformPage {
     private _categoryCreateOp: OpController;
     private _categoryRemoveOp: OpController;
     private _categoryReorderOp: OpController;
-    private _productCreateOp: OpController;
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
     private _productReorderOp: OpController;
     private _importOp: OpController;
     private _aiParseOp: OpController;
-    private _aiDescribeOp: OpController;
     private _aiDescribeBatchOp: OpController;
     private _aiEnhanceOp: OpController;
     private _aiGenerateOp: OpController;
@@ -83,19 +82,6 @@ export class ShopMenuPage extends PlatformPage {
     private _newBadgeIcon = '';
     private _activeCategory: string | null = null;
     private _newCategory = '';
-    private _newName = '';
-    private _newPrice = '';
-    private _newPortion = '';
-    private _newBadges: string[] = [];
-    private _newDescription = '';
-    private _newPhotoFileId = '';
-    private _newPhotoPreview = '';
-    private _editingId = '';
-    private _editName = '';
-    private _editPrice = '';
-    private _editPortion = '';
-    private _editBadges: string[] = [];
-    private _editDescription = '';
     private _importOpen = false;
     private _importText = '';
     private _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null = null;
@@ -110,19 +96,6 @@ export class ShopMenuPage extends PlatformPage {
         _newBadgeIcon: { state: true },
         _activeCategory: { state: true },
         _newCategory: { state: true },
-        _newName: { state: true },
-        _newPrice: { state: true },
-        _newPortion: { state: true },
-        _newBadges: { state: true },
-        _newDescription: { state: true },
-        _newPhotoFileId: { state: true },
-        _newPhotoPreview: { state: true },
-        _editingId: { state: true },
-        _editName: { state: true },
-        _editPrice: { state: true },
-        _editPortion: { state: true },
-        _editBadges: { state: true },
-        _editDescription: { state: true },
         _importOpen: { state: true },
         _importText: { state: true },
         _aiItems: { state: true },
@@ -132,67 +105,112 @@ export class ShopMenuPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 960px; margin: 0 auto; padding: var(--space-6); }
-            h1 { margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary); }
-            .chips { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); align-items: center; }
-            .chip {
+            .wrap { max-width: 1180px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-10); }
+
+            .page-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); flex-wrap: wrap; }
+            .page-head h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); flex: 1; }
+            .head-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+
+            .layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+
+            .rail {
                 border: 1px solid var(--glass-border-subtle);
-                border-radius: 999px;
-                padding: var(--space-1) var(--space-3);
-                background: transparent;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-            }
-            .chip.active {
-                background: var(--accent);
-                border-color: var(--accent);
-                color: var(--text-inverse);
-            }
-            .chip .x { margin-left: var(--space-1); opacity: 0.6; }
-            .chip .mv { margin: 0 var(--space-1); opacity: 0.55; display: inline-flex; }
-            .chip-add {
-                display: flex;
-                gap: var(--space-2);
-                align-items: center;
-                min-width: 220px;
-            }
-            .add-row {
-                display: grid;
-                grid-template-columns: 64px 2fr 110px 3fr auto;
-                gap: var(--space-2);
-                align-items: end;
-                border: 1px dashed var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
+                background: var(--bg-surface);
+                padding: var(--space-2);
+                position: sticky;
+                top: var(--space-4);
+            }
+            .rail-title {
+                font-size: var(--text-xs); font-weight: var(--font-semibold);
+                color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;
+                padding: var(--space-2) var(--space-2) var(--space-1);
+            }
+            .cat {
+                width: 100%;
+                display: flex; align-items: center; gap: var(--space-2);
+                border: 0; border-radius: var(--radius-md);
+                padding: var(--space-2) var(--space-2);
+                background: transparent; color: var(--text-secondary);
+                font-size: var(--text-sm); cursor: pointer; text-align: left;
+            }
+            .cat:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); color: var(--text-primary); }
+            .cat.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: var(--font-semibold); }
+            .cat .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .cat .count { font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+            .cat.active .count { color: var(--accent); }
+            .cat .cat-ops { display: none; align-items: center; }
+            .cat:hover .cat-ops, .cat.active .cat-ops { display: inline-flex; }
+            .cat:hover .count, .cat.active:hover .count { display: none; }
+            .cat-ops platform-button { --platform-button-padding: 2px; }
+            .cat-add { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-1) var(--space-1); align-items: end; }
+            .cat-add platform-field { flex: 1; min-width: 0; }
+
+            .list { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+            .card {
+                display: flex; align-items: center; gap: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-surface);
                 padding: var(--space-3);
-                margin-bottom: var(--space-4);
             }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td {
-                padding: var(--space-2) var(--space-3);
-                text-align: left;
-                border-bottom: 1px solid var(--glass-border-subtle);
-                color: var(--text-primary);
-                vertical-align: top;
+            .card:hover { border-color: color-mix(in srgb, var(--text-primary) 18%, transparent); }
+            .card.off { opacity: 0.55; }
+            .thumb {
+                width: 56px; height: 56px; border-radius: var(--radius-md);
+                object-fit: cover; display: block; flex-shrink: 0;
             }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-            .desc { color: var(--text-tertiary); font-size: var(--text-xs); max-width: 320px; }
-            .portion { color: var(--text-tertiary); font-size: var(--text-xs); margin-left: var(--space-1); white-space: nowrap; }
+            .thumb-empty {
+                width: 56px; height: 56px; border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+                display: flex; align-items: center; justify-content: center;
+                color: var(--text-tertiary); flex-shrink: 0;
+            }
+            .pinfo { flex: 1; min-width: 0; }
+            .pname {
+                display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap;
+                font-weight: var(--font-semibold); color: var(--text-primary);
+                font-size: var(--text-sm); line-height: 1.3;
+            }
+            .portion { color: var(--text-tertiary); font-size: var(--text-xs); font-weight: var(--font-normal); }
+            .pdesc {
+                color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.45;
+                margin-top: 2px;
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+            }
+            .ptag {
+                display: inline-flex; align-items: center; padding: 1px var(--space-2);
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--accent) 12%, transparent);
+                color: var(--accent); font-size: 10px; font-weight: var(--font-bold);
+            }
+            .ptag svg { width: 11px; height: 11px; fill: currentColor; }
+            .price { font-variant-numeric: tabular-nums; font-weight: var(--font-semibold); color: var(--text-primary); white-space: nowrap; }
+            .price::after { content: ' ₽'; font-weight: var(--font-normal); color: var(--text-tertiary); }
+            .ops { display: flex; gap: 2px; align-items: center; opacity: 0; transition: opacity 0.15s; }
+            .card:hover .ops, .card:focus-within .ops { opacity: 1; }
+
             .badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
             .bchip {
+                display: inline-flex; align-items: center; gap: var(--space-1);
                 padding: var(--space-1) var(--space-2); border-radius: var(--radius-full);
                 border: 1px solid var(--border-default); background: var(--surface-secondary);
-                color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600;
-                cursor: pointer; user-select: none; white-space: nowrap;
+                color: var(--text-secondary); font-size: var(--text-xs); font-weight: var(--font-medium);
             }
-            .bchip.on { border-color: var(--accent-primary); background: var(--accent-primary-subtle); color: var(--accent-primary); }
-            .bchip svg, .ptag svg, .icon-pick svg { width: 13px; height: 13px; fill: currentColor; }
-            .badge-panel {
-                border: 1px solid var(--border-default); border-radius: var(--radius-lg);
-                padding: var(--space-4); margin-bottom: var(--space-4);
-                background: var(--surface-secondary); display: flex; flex-direction: column; gap: var(--space-3);
+            .bchip svg { width: 13px; height: 13px; fill: currentColor; }
+            .bchip .x { cursor: pointer; display: inline-flex; opacity: 0.6; }
+            .bchip .x:hover { opacity: 1; }
+
+            .panel {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-surface);
+                padding: var(--space-4);
+                margin-bottom: var(--space-4);
+                display: flex; flex-direction: column; gap: var(--space-3);
             }
+            .panel-title { font-weight: var(--font-semibold); color: var(--text-primary); }
+            .panel-hint { font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.5; }
             .badge-add { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
             .badge-add platform-field { min-width: 200px; }
             .icon-grid { display: flex; flex-wrap: wrap; gap: var(--space-1); max-width: 340px; }
@@ -202,73 +220,26 @@ export class ShopMenuPage extends PlatformPage {
                 color: var(--text-secondary); cursor: pointer; display: inline-flex;
                 align-items: center; justify-content: center;
             }
-            .icon-pick.on { border-color: var(--accent-primary); color: var(--accent-primary); background: var(--accent-primary-subtle); }
-            .bchip .x { cursor: pointer; margin-left: var(--space-1); display: inline-flex; }
-            .ptag {
-                display: inline-block; margin-left: var(--space-1); padding: 1px var(--space-2);
-                border-radius: var(--radius-full); background: var(--accent-primary-subtle);
-                color: var(--accent-primary); font-size: 10px; font-weight: 700; vertical-align: middle;
-            }
-            .desc-cell { display: flex; gap: var(--space-2); align-items: end; }
-            .desc-cell > platform-field { flex: 1; }
-            .photo-pick {
-                width: 56px;
-                height: 56px;
-                border-radius: var(--radius-md);
-                border: 1px dashed var(--glass-border-subtle);
-                background: transparent;
-                cursor: pointer;
-                overflow: hidden;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                font-size: 20px;
-            }
-            .photo-pick img { width: 100%; height: 100%; object-fit: cover; }
-            .photo-stack { display: flex; flex-direction: column; gap: var(--space-2); align-items: center; }
-            .photo-stack platform-button { width: 56px; }
-            .thumb { width: 44px; height: 44px; border-radius: var(--radius-sm); object-fit: cover; display: block; }
-            .thumb-empty { width: 44px; height: 44px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text-primary) 6%, transparent); display: block; }
-            .edit-row {
-                display: grid;
-                grid-template-columns: 2fr 110px 3fr auto;
-                gap: var(--space-2);
-                align-items: end;
-                padding: var(--space-2) var(--space-3);
-                background: color-mix(in srgb, var(--accent) 6%, transparent);
-                border-bottom: 1px solid var(--glass-border-subtle);
-            }
-            @media (max-width: 767px) {
-                .edit-row { grid-template-columns: 1fr; }
-            }
-            .row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
-            platform-empty-state { margin-top: var(--space-8); }
-            @media (max-width: 767px) {
-                .add-row { grid-template-columns: 1fr; }
-            }
-            .page-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
-            .page-head h1 { margin: 0; flex: 1; }
-            .import-panel {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--bg-surface);
-                padding: var(--space-4);
-                margin-bottom: var(--space-4);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-            .import-title { font-weight: var(--font-semibold); color: var(--text-primary); }
-            .import-hint { font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.5; }
-            .import-panel platform-field::part(field-pill-textarea),
-            .import-panel platform-field {
-                min-height: 150px;
-            }
+            .icon-pick.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+            .icon-pick svg { width: 14px; height: 14px; fill: currentColor; }
             .import-stats { display: flex; gap: var(--space-4); font-size: var(--text-sm); }
             .import-stats .ok { color: var(--success); }
             .import-stats .bad { color: var(--warning); }
-            .import-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+            .panel-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+
+            platform-empty-state { margin-top: var(--space-8); }
+
+            @media (max-width: 900px) {
+                .layout { grid-template-columns: 1fr; }
+                .rail { position: static; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+                .rail-title { width: 100%; }
+                .cat { width: auto; }
+                .cat-add { width: 100%; }
+            }
+            @media (max-width: 640px) {
+                .card { flex-wrap: wrap; }
+                .ops { opacity: 1; }
+            }
         `,
     ];
 
@@ -282,13 +253,11 @@ export class ShopMenuPage extends PlatformPage {
         this._categoryCreateOp = this.useOp('shop/category_create');
         this._categoryRemoveOp = this.useOp('shop/category_remove');
         this._categoryReorderOp = this.useOp('shop/categories_reorder');
-        this._productCreateOp = this.useOp('shop/product_create');
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
         this._productReorderOp = this.useOp('shop/products_reorder');
         this._importOp = this.useOp('shop/products_import');
         this._aiParseOp = this.useOp('shop/ai_parse_menu');
-        this._aiDescribeOp = this.useOp('shop/ai_describe');
         this._aiDescribeBatchOp = this.useOp('shop/ai_describe_batch');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
         this._aiGenerateOp = this.useOp('shop/ai_generate_photo');
@@ -401,71 +370,25 @@ export class ShopMenuPage extends PlatformPage {
         await this._reload();
     }
 
-    private async _pickPhoto() {
-        const input = this.renderRoot?.querySelector<HTMLInputElement>('#new-photo-input');
-        input?.click();
-    }
-
-    private async _uploadPhoto(event: Event) {
-        const input = event.target as HTMLInputElement;
-        const file = input.files && input.files[0];
-        if (!file) return;
-        const result = await this._uploadOp.run({
-            file,
-            spec: buildShopProductFileCreateSpecJson({ shopId: this.shopId }),
+    private _openProductModal(product?: ProductRow) {
+        const draft: ProductDraft | null = product === undefined
+            ? null
+            : {
+                shop_product_id: product.shop_product_id,
+                name: product.name,
+                description: product.description,
+                price_minor: product.price_minor,
+                portion: product.portion,
+                badges: [...product.badges],
+                photo_file_id: product.photo_file_id,
+            };
+        this.openModal('shop.product', {
+            shopId: this.shopId,
+            categoryId: product === undefined ? this._activeCategory : product.category_id,
+            product: draft,
+            badgeDefs: this._shopBadges(),
+            onSaved: () => void this._reload(),
         });
-        if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
-            const fileId = (result as { file_id?: unknown }).file_id;
-            if (typeof fileId === 'string') {
-                this._newPhotoFileId = fileId;
-                this._newPhotoPreview = `/shop/api/v1/files/download/${fileId}`;
-            }
-        }
-        input.value = '';
-    }
-
-    private _badgeChips(selected: string[], onToggle: (badge: string) => void) {
-        return html`<span class="badges">${this._shopBadges().map(
-            (b) => html`<button type="button" class="bchip ${selected.includes(b.key) ? 'on' : ''}"
-                @click=${() => onToggle(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`,
-        )}</span>`;
-    }
-
-    private _toggleBadge(list: string[], badge: string): string[] {
-        return list.includes(badge) ? list.filter((b) => b !== badge) : [...list, badge];
-    }
-
-    private _startEdit(p: ProductRow) {
-        const known = new Set(this._shopBadges().map((b) => b.key));
-        this._editingId = p.shop_product_id;
-        this._editName = p.name;
-        this._editPrice = (p.price_minor / 100).toString();
-        this._editPortion = p.portion;
-        this._editBadges = p.badges.filter((b) => known.has(b));
-        this._editDescription = p.description;
-    }
-
-    private _cancelEdit() {
-        this._editingId = '';
-    }
-
-    private async _saveEdit(p: ProductRow) {
-        const price = Math.round(parseFloat(this._editPrice.replace(',', '.')) * 100);
-        const payload: Record<string, unknown> = {
-            shop_id: this.shopId,
-            shop_product_id: p.shop_product_id,
-        };
-        const name = this._editName.trim();
-        if (name !== '' && name !== p.name) payload.name = name;
-        if (Number.isFinite(price) && price >= 0 && price !== p.price_minor) payload.price_minor = price;
-        if (this._editPortion !== p.portion) payload.portion = this._editPortion;
-        if (JSON.stringify(this._editBadges) !== JSON.stringify(p.badges)) payload.badges = this._editBadges;
-        if (this._editDescription !== p.description) payload.description = this._editDescription;
-        if (Object.keys(payload).length > 2) {
-            await this._productUpdateOp.run(payload);
-        }
-        this._editingId = '';
-        await this._reload();
     }
 
     private async _uploadProductPhoto(p: ProductRow, event: Event) {
@@ -492,10 +415,7 @@ export class ShopMenuPage extends PlatformPage {
 
     private async _enhancePhoto(product: ProductRow) {
         if (!product.photo_file_id) return;
-        const result = await this._aiEnhanceOp.run({
-            shop_id: this.shopId,
-            file_id: product.photo_file_id,
-        });
+        const result = await this._aiEnhanceOp.run({ shop_id: this.shopId, file_id: product.photo_file_id });
         if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
             const fileId = (result as { file_id?: unknown }).file_id;
             if (typeof fileId === 'string') {
@@ -509,69 +429,18 @@ export class ShopMenuPage extends PlatformPage {
         }
     }
 
-    private async _applyGeneratedPhoto(fileId: string, product?: ProductRow) {
-        if (product === undefined) {
-            this._newPhotoFileId = fileId;
-            this._newPhotoPreview = `/shop/api/v1/files/download/${fileId}`;
-            return;
-        }
-        await this._productUpdateOp.run({
-            shop_id: this.shopId,
-            shop_product_id: product.shop_product_id,
-            photo_file_id: fileId,
-        });
-        await this._reload();
-    }
-
-    private async _generatePhoto(product?: ProductRow) {
-        const name = product !== undefined ? product.name : this._newName.trim();
-        if (name === '') return;
-        const description = product !== undefined ? product.description : this._newDescription.trim();
-        const result = await this._aiGenerateOp.run({ shop_id: this.shopId, name, description });
+    private async _generatePhoto(product: ProductRow) {
+        const result = await this._aiGenerateOp.run({ shop_id: this.shopId, name: product.name, description: product.description });
         if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
             const fileId = (result as { file_id?: unknown }).file_id;
-            if (typeof fileId === 'string') await this._applyGeneratedPhoto(fileId, product);
-        }
-    }
-
-    private async _describeWithAi() {
-        const name = this._newName.trim();
-        if (name === '') return;
-        const category = this._categories.find((c) => c.shop_category_id === this._activeCategory);
-        const result = await this._aiDescribeOp.run({
-            shop_id: this.shopId,
-            name,
-            category_name: category !== undefined ? category.name : null,
-        });
-        if (result !== null && typeof result === 'object' && 'text' in (result as Record<string, unknown>)) {
-            const text = (result as { text?: unknown }).text;
-            if (typeof text === 'string') this._newDescription = text;
-        }
-    }
-
-    private async _addProduct() {
-        const name = this._newName.trim();
-        const price = Math.round(parseFloat(this._newPrice.replace(',', '.')) * 100);
-        if (name === '' || !Number.isFinite(price) || price < 0) return;
-        const result = await this._productCreateOp.run({
-            shop_id: this.shopId,
-            category_id: this._activeCategory,
-            name,
-            description: this._newDescription.trim(),
-            portion: this._newPortion.trim(),
-            badges: this._newBadges,
-            price_minor: price,
-            photo_file_id: this._newPhotoFileId === '' ? null : this._newPhotoFileId,
-        });
-        if (result !== null) {
-            this._newName = '';
-            this._newPrice = '';
-            this._newPortion = '';
-            this._newBadges = [];
-            this._newDescription = '';
-            this._newPhotoFileId = '';
-            this._newPhotoPreview = '';
-            await this._reload();
+            if (typeof fileId === 'string') {
+                await this._productUpdateOp.run({
+                    shop_id: this.shopId,
+                    shop_product_id: product.shop_product_id,
+                    photo_file_id: fileId,
+                });
+                await this._reload();
+            }
         }
     }
 
@@ -678,6 +547,88 @@ export class ShopMenuPage extends PlatformPage {
         await this._reload();
     }
 
+    private _renderCategory(cat: CategoryRow, index: number) {
+        const count = this._products.filter((p) => p.category_id === cat.shop_category_id).length;
+        const active = this._activeCategory === cat.shop_category_id;
+        return html`
+            <button class="cat ${active ? 'active' : ''}" @click=${() => { this._activeCategory = cat.shop_category_id; }}>
+                <span class="name">${cat.name}</span>
+                <span class="count">${count}</span>
+                <span class="cat-ops">
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_up')}
+                        ?disabled=${index === 0}
+                        @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, -1); }}
+                    ><platform-icon name="chevron-up" size="12"></platform-icon></platform-button>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_down')}
+                        ?disabled=${index === this._categories.length - 1}
+                        @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}
+                    ><platform-icon name="chevron-down" size="12"></platform-icon></platform-button>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.category_remove')}
+                        @click=${(e: Event) => { e.stopPropagation(); void this._removeCategory(cat.shop_category_id); }}
+                    ><platform-icon name="close" size="12"></platform-icon></platform-button>
+                </span>
+            </button>`;
+    }
+
+    private _renderProduct(p: ProductRow, index: number, total: number) {
+        const badgeDefs = this._shopBadges();
+        return html`
+            <div class="card ${p.is_available ? '' : 'off'}">
+                ${p.photo_file_id
+                    ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
+                    : html`<span class="thumb-empty"><platform-icon name="image" size="18"></platform-icon></span>`}
+                <div class="pinfo">
+                    <div class="pname">
+                        ${p.name}
+                        ${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : nothing}
+                        ${p.badges.map((b) => {
+                            const d = badgeDefs.find((x) => x.key === b);
+                            return d !== undefined ? html`<span class="ptag" title=${d.label}>${this._iconSvg(d.icon_path)}</span>` : nothing;
+                        })}
+                    </div>
+                    ${p.description.trim() !== '' ? html`<div class="pdesc">${p.description}</div>` : nothing}
+                </div>
+                <span class="price">${this._money(p.price_minor)}</span>
+                <platform-switch
+                    title=${this.t('menu.col_available')}
+                    ?checked=${p.is_available}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => this._toggleAvailable(p, Boolean(event.detail.value))}
+                ></platform-switch>
+                <div class="ops">
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_up')}
+                        ?busy=${this._productReorderOp.busy} ?disabled=${index === 0}
+                        @click=${() => this._move(p, -1)}
+                    ><platform-icon name="chevron-up" size="14"></platform-icon></platform-button>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_down')}
+                        ?busy=${this._productReorderOp.busy} ?disabled=${index === total - 1}
+                        @click=${() => this._move(p, 1)}
+                    ><platform-icon name="chevron-down" size="14"></platform-icon></platform-button>
+                    <input type="file" accept="image/*" style="display:none"
+                        @change=${(e: Event) => this._uploadProductPhoto(p, e)}>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.photo_pick')}
+                        ?busy=${this._uploadOp.busy}
+                        @click=${(e: Event) => ((e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement | null)?.click()}
+                    ><platform-icon name="image" size="14"></platform-icon></platform-button>
+                    ${p.photo_file_id
+                        ? html`<platform-button size="sm" variant="ghost" title=${this.t('menu.ai_enhance')}
+                            ?busy=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto(p)}
+                        ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`
+                        : html`<platform-button size="sm" variant="ghost" title=${this.t('menu.ai_generate')}
+                            ?busy=${this._aiGenerateOp.busy} @click=${() => this._generatePhoto(p)}
+                        ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`}
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
+                        <platform-icon name="list-check" size="14"></platform-icon>
+                    </platform-button>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.edit')} @click=${() => this._openProductModal(p)}>
+                        <platform-icon name="edit" size="14"></platform-icon>
+                    </platform-button>
+                    <platform-button size="sm" variant="ghost" title=${this.t('menu.remove')} @click=${() => this._removeProduct(p)}>
+                        <platform-icon name="trash" size="14"></platform-icon>
+                    </platform-button>
+                </div>
+            </div>`;
+    }
+
     override render() {
         const filtered = this._activeCategory === null
             ? this._products
@@ -685,32 +636,33 @@ export class ShopMenuPage extends PlatformPage {
         const busy = this._categoriesOp.busy || this._productsOp.busy;
         const parsed = this._importOpen ? this._parseImport() : { items: [], invalid: 0 };
         const importItems = this._aiItems ?? parsed.items;
+        const missingDesc = this._products.filter((p) => !p.description?.trim()).length;
         return html`
             <div class="wrap">
                 <div class="page-head">
                     <h1>${this.t('menu.title')}</h1>
                     <div class="head-actions">
-                        ${(() => {
-                            const missing = this._products.filter((p) => !p.description?.trim()).length;
-                            return missing > 0 ? html`
-                                <platform-button size="sm" variant="primary" ?busy=${this._aiDescribeBatchOp.busy}
-                                    @click=${() => this._runAiBatch()}>
-                                    <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missing}
-                                </platform-button>
-                            ` : html``;
-                        })()}
+                        ${missingDesc > 0 ? html`
+                            <platform-button size="sm" ?busy=${this._aiDescribeBatchOp.busy}
+                                @click=${() => this._runAiBatch()}>
+                                <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missingDesc}
+                            </platform-button>
+                        ` : nothing}
                         <platform-button size="sm" @click=${() => this._openBadgeEditor()}>
                             <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
                         </platform-button>
                         <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
                             <platform-icon name="import" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
+                        <platform-button size="sm" variant="primary" @click=${() => this._openProductModal()}>
+                            <platform-icon name="plus" size="14"></platform-icon> ${this.t('menu.add_product')}
+                        </platform-button>
                     </div>
                 </div>
                 ${this._importOpen ? html`
-                    <div class="import-panel">
-                        <div class="import-title">${this.t('menu.import_title')}</div>
-                        <div class="import-hint">${this.t('menu.import_hint')}</div>
+                    <div class="panel">
+                        <div class="panel-title">${this.t('menu.import_title')}</div>
+                        <div class="panel-hint">${this.t('menu.import_hint')}</div>
                         <platform-field
                             type="text"
                             mode="edit"
@@ -722,66 +674,30 @@ export class ShopMenuPage extends PlatformPage {
                             }}
                         ></platform-field>
                         <div class="import-stats">
-                            <span class="ok">${this.t('menu.import_preview')} ${importItems.length}${this._aiItems !== null ? html` · ${this.t('menu.import_ai_ready')}` : ''}</span>
-                            ${parsed.invalid > 0 && this._aiItems === null ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : html``}
+                            <span class="ok">${this.t('menu.import_preview')} ${importItems.length}${this._aiItems !== null ? html` · ${this.t('menu.import_ai_ready')}` : nothing}</span>
+                            ${parsed.invalid > 0 && this._aiItems === null ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : nothing}
                         </div>
-                        <div class="import-actions">
-                            <platform-button
-                                size="sm"
-                                ?busy=${this._aiParseOp.busy}
+                        <div class="panel-actions">
+                            <platform-button size="sm" ?busy=${this._aiParseOp.busy}
                                 ?disabled=${this._importText.trim().length < 3}
                                 title=${this.t('menu.import_ai_hint')}
                                 @click=${() => this._runAiParse()}
                             ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
                             <platform-button size="sm" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
-                            <platform-button
-                                size="sm"
-                                variant="primary"
-                                ?busy=${this._importOp.busy}
+                            <platform-button size="sm" variant="primary" ?busy=${this._importOp.busy}
                                 ?disabled=${importItems.length === 0}
                                 @click=${() => this._runImport()}
                             >${this.t('menu.import_run')} · ${importItems.length}</platform-button>
                         </div>
                     </div>
-                ` : html``}
-                <div class="chips">
-                    ${this._categories.map((cat, i) => html`
-                        <button
-                            class="chip ${this._activeCategory === cat.shop_category_id ? 'active' : ''}"
-                            @click=${() => { this._activeCategory = cat.shop_category_id; }}
-                        >
-                            ${this._categories.length > 1 && i > 0
-                                ? html`<span class="mv" title=${this.t('menu.move_left')} @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, -1); }}><platform-icon name="chevron-left" size="12"></platform-icon></span>`
-                                : html``}
-                            ${cat.name}
-                            ${this._categories.length > 1 && i < this._categories.length - 1
-                                ? html`<span class="mv" title=${this.t('menu.move_right')} @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}><platform-icon name="chevron-right" size="12"></platform-icon></span>`
-                                : html``}
-                            <span class="x" @click=${(e: Event) => { e.stopPropagation(); this._removeCategory(cat.shop_category_id); }}><platform-icon name="close" size="12"></platform-icon></span>
-                        </button>
-                    `)}
-                    <span class="chip-add">
-                        <platform-field
-                            type="string"
-                            mode="edit"
-                            label=${this.t('menu.new_category')}
-                            .value=${this._newCategory}
-                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                                this._newCategory = typeof event.detail.value === 'string' ? event.detail.value : '';
-                            }}
-                        ></platform-field>
-                        <platform-button size="sm" ?disabled=${this._newCategory.trim() === ''} @click=${() => this._addCategory()}>
-                            <platform-icon name="plus" size="16"></platform-icon>
-                        </platform-button>
-                    </span>
-                </div>
+                ` : nothing}
                 ${this._badgeEditorOpen ? html`
-                    <div class="badge-panel">
-                        <div class="import-title">${this.t('menu.badges_title')}</div>
-                        <div class="import-hint">${this.t('menu.badges_hint')}</div>
+                    <div class="panel">
+                        <div class="panel-title">${this.t('menu.badges_title')}</div>
+                        <div class="panel-hint">${this.t('menu.badges_hint')}</div>
                         <div class="badges">
                             ${this._shopBadges().map((b) => html`
-                                <span class="bchip on">${this._iconSvg(b.icon_path)} ${b.label}
+                                <span class="bchip">${this._iconSvg(b.icon_path)} ${b.label}
                                     <span class="x" title=${this.t('menu.badge_remove')} @click=${() => this._removeBadgeDef(b.key)}><platform-icon name="close" size="11"></platform-icon></span>
                                 </span>`)}
                         </div>
@@ -801,188 +717,45 @@ export class ShopMenuPage extends PlatformPage {
                                         title=${name} @click=${() => { this._newBadgeIcon = name; }}
                                     >${this._iconSvg(path)}</button>`)}
                             </span>
-                            <platform-button
-                                size="sm"
-                                variant="primary"
-                                ?busy=${this._shopUpdateOp.busy}
+                            <platform-button size="sm" variant="primary" ?busy=${this._shopUpdateOp.busy}
                                 ?disabled=${this._newBadgeLabel.trim() === '' || this._newBadgeIcon === ''}
                                 @click=${() => this._addBadgeDef()}
                             >${this.t('menu.badge_add')}</platform-button>
                         </div>
                     </div>
-                ` : html``}
-                <div class="add-row">
-                    <input id="new-photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
-                    <span class="photo-stack">
-                        <button class="photo-pick" title=${this.t('menu.photo_pick')} ?disabled=${this._uploadOp.busy} @click=${() => this._pickPhoto()}>
-                            ${this._newPhotoPreview === ''
-                                ? html`<platform-icon name="image" size="20"></platform-icon>`
-                                : html`<img src=${this._newPhotoPreview} alt="">`}
+                ` : nothing}
+                <div class="layout">
+                    <div class="rail">
+                        <div class="rail-title">${this.t('menu.categories_title')}</div>
+                        <button class="cat ${this._activeCategory === null ? 'active' : ''}"
+                            @click=${() => { this._activeCategory = null; }}>
+                            <span class="name">${this.t('menu.all_products')}</span>
+                            <span class="count">${this._products.length}</span>
                         </button>
-                        <platform-button
-                            size="sm"
-                            title=${this.t('menu.ai_generate_hint')}
-                            ?busy=${this._aiGenerateOp.busy}
-                            ?disabled=${this._newName.trim() === ''}
-                            @click=${() => this._generatePhoto()}
-                        ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>
-                    </span>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        label=${this.t('menu.field_name')}
-                        .value=${this._newName}
-                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                            this._newName = typeof event.detail.value === 'string' ? event.detail.value : '';
-                        }}
-                    ></platform-field>
-                    <platform-field
-                        type="number"
-                        mode="edit"
-                        label=${this.t('menu.field_price')}
-                        .value=${this._newPrice}
-                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                            this._newPrice = typeof event.detail.value === 'string' ? String(event.detail.value) : '';
-                        }}
-                    ></platform-field>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        label=${this.t('menu.field_portion')}
-                        .value=${this._newPortion}
-                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                            this._newPortion = typeof event.detail.value === 'string' ? event.detail.value : '';
-                        }}
-                    ></platform-field>
-                    <span class="desc-cell">
-                        <platform-field
-                            type="text"
-                            mode="edit"
-                            label=${this.t('menu.field_description')}
-                            .value=${this._newDescription}
-                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                                this._newDescription = typeof event.detail.value === 'string' ? event.detail.value : '';
-                            }}
-                        ></platform-field>
-                        <platform-button
-                            size="sm"
-                            title=${this.t('menu.ai_describe')}
-                            ?busy=${this._aiDescribeOp.busy}
-                            ?disabled=${this._newName.trim() === ''}
-                            @click=${() => this._describeWithAi()}
-                        ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}</platform-button>
-                    </span>
-                    ${this._badgeChips(this._newBadges, (b) => { this._newBadges = this._toggleBadge(this._newBadges, b); })}
-                    <platform-button
-                        variant="primary"
-                        ?busy=${this._productCreateOp.busy}
-                        ?disabled=${this._newName.trim() === '' || this._newPrice.trim() === ''}
-                        @click=${() => this._addProduct()}
-                    >${this.t('menu.add_product')}</platform-button>
+                        ${this._categories.map((cat, i) => this._renderCategory(cat, i))}
+                        <div class="cat-add">
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=${this.t('menu.new_category')}
+                                .value=${this._newCategory}
+                                @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                    this._newCategory = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                }}
+                            ></platform-field>
+                            <platform-button size="sm" ?disabled=${this._newCategory.trim() === ''} @click=${() => this._addCategory()}>
+                                <platform-icon name="plus" size="16"></platform-icon>
+                            </platform-button>
+                        </div>
+                    </div>
+                    <div class="list">
+                        ${busy && filtered.length === 0
+                            ? html`<platform-empty-state loading></platform-empty-state>`
+                            : filtered.length === 0
+                            ? html`<platform-empty-state icon="tag" title=${this.t('menu.empty')}></platform-empty-state>`
+                            : filtered.map((p, i) => this._renderProduct(p, i, filtered.length))}
+                    </div>
                 </div>
-                ${busy && filtered.length === 0
-                    ? html`<platform-empty-state loading></platform-empty-state>`
-                    : filtered.length === 0
-                    ? html`<platform-empty-state icon="tag" title=${this.t('menu.empty')}></platform-empty-state>`
-                    : html`
-                        <table>
-                            <thead><tr>
-                                <th></th>
-                                <th>${this.t('menu.col_name')}</th>
-                                <th>${this.t('menu.col_description')}</th>
-                                <th class="num">${this.t('menu.col_price')}</th>
-                                <th class="num">${this.t('menu.col_available')}</th>
-                                <th></th>
-                            </tr></thead>
-                            <tbody>
-                                ${filtered.map((p) => this._editingId === p.shop_product_id
-                                    ? html`
-                                    <tr>
-                                        <td colspan="6">
-                                            <div class="edit-row">
-                                                <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._editName}
-                                                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editName = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
-                                                ></platform-field>
-                                                <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._editPrice}
-                                                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPrice = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
-                                                ></platform-field>
-                                                <platform-field type="string" mode="edit" label=${this.t('menu.field_portion')} .value=${this._editPortion}
-                                                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPortion = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
-                                                ></platform-field>
-                                                <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._editDescription}
-                                                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editDescription = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
-                                                ></platform-field>
-                                                ${this._badgeChips(this._editBadges, (b) => { this._editBadges = this._toggleBadge(this._editBadges, b); })}
-                                                <span class="row-actions">
-                                                    <platform-button size="sm" variant="primary" ?busy=${this._productUpdateOp.busy} @click=${() => this._saveEdit(p)}>${this.t('menu.save')}</platform-button>
-                                                    <platform-button size="sm" @click=${() => this._cancelEdit()}>${this.t('menu.cancel')}</platform-button>
-                                                </span>
-                                            </div>
-                                        </td>
-                                    </tr>`
-                                    : html`
-                                    <tr>
-                                        <td>
-                                            ${p.photo_file_id
-                                                ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
-                                                : html`<span class="thumb-empty"></span>`}
-                                        </td>
-                                        <td>${p.name}${p.badges.map((b) => { const d = this._shopBadges().find((x) => x.key === b); return d !== undefined ? html`<span class="ptag" title=${d.label}>${this._iconSvg(d.icon_path)}</span>` : html``; })}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
-                                        <td class="desc">${p.description}</td>
-                                        <td class="num">${this._money(p.price_minor)}</td>
-                                        <td class="num">
-                                            <platform-switch
-                                                ?checked=${p.is_available}
-                                                @change=${(event: CustomEvent<{ value?: unknown }>) => this._toggleAvailable(p, Boolean(event.detail.value))}
-                                            ></platform-switch>
-                                        </td>
-                                        <td>
-                                            <div class="row-actions">
-                                                <platform-button size="sm" title=${this.t('menu.move_up')}
-                                                    ?busy=${this._productReorderOp.busy}
-                                                    @click=${() => this._move(p, -1)}
-                                                ><platform-icon name="chevron-up" size="14"></platform-icon></platform-button>
-                                                <platform-button size="sm" title=${this.t('menu.move_down')}
-                                                    ?busy=${this._productReorderOp.busy}
-                                                    @click=${() => this._move(p, 1)}
-                                                ><platform-icon name="chevron-down" size="14"></platform-icon></platform-button>
-                                                <input type="file" accept="image/*" style="display:none" data-photo-input=${p.shop_product_id}
-                                                    @change=${(e: Event) => this._uploadProductPhoto(p, e)}>
-                                                <platform-button
-                                                    size="sm"
-                                                    title=${this.t('menu.photo_pick')}
-                                                    ?busy=${this._uploadOp.busy}
-                                                    @click=${(e: Event) => (e.currentTarget as HTMLElement).parentElement?.querySelector<HTMLInputElement>('input[type=file]')?.click()}
-                                                ><platform-icon name="image" size="14"></platform-icon></platform-button>
-                                                ${p.photo_file_id
-                                                    ? html`<platform-button
-                                                        size="sm"
-                                                        title=${this.t('menu.ai_enhance')}
-                                                        ?busy=${this._aiEnhanceOp.busy}
-                                                        @click=${() => this._enhancePhoto(p)}
-                                                    ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`
-                                                    : html`<platform-button
-                                                        size="sm"
-                                                        title=${this.t('menu.ai_generate')}
-                                                        ?busy=${this._aiGenerateOp.busy}
-                                                        @click=${() => this._generatePhoto(p)}
-                                                    ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`}
-                                                <platform-button size="sm" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
-                                                    <platform-icon name="list-check" size="14"></platform-icon>
-                                                </platform-button>
-                                                <platform-button size="sm" title=${this.t('menu.edit')} @click=${() => this._startEdit(p)}>
-                                                    <platform-icon name="edit" size="14"></platform-icon>
-                                                </platform-button>
-                                                <platform-button size="sm" @click=${() => this._removeProduct(p)}>
-                                                    <platform-icon name="trash" size="14"></platform-icon>
-                                                </platform-button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    `}
             </div>
         `;
     }
