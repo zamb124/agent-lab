@@ -377,12 +377,12 @@ export class ShopSettingsPage extends PlatformPage {
                     <div class="brand">
                         <button class="brand-tile" ?disabled=${this._uploadOp.busy} @click=${() => this._pickBrandImage('logo')}>
                             ${this._logoFileId === ''
-                                ? html`<platform-icon name="photo" size="18"></platform-icon><span>${this.t('settings.logo')}</span>`
+                                ? html`<platform-icon name="image" size="18"></platform-icon><span>${this.t('settings.logo')}</span>`
                                 : html`<img src="/shop/api/v1/files/download/${this._logoFileId}" alt=""><span class="veil">${this.t('settings.replace_photo')}</span>`}
                         </button>
                         <button class="brand-tile cover" ?disabled=${this._uploadOp.busy} @click=${() => this._pickBrandImage('cover')}>
                             ${this._coverFileId === ''
-                                ? html`<platform-icon name="photo" size="18"></platform-icon><span>${this.t('settings.cover')}</span>`
+                                ? html`<platform-icon name="image" size="18"></platform-icon><span>${this.t('settings.cover')}</span>`
                                 : html`<img src="/shop/api/v1/files/download/${this._coverFileId}" alt=""><span class="veil">${this.t('settings.replace_photo')}</span>`}
                         </button>
                     </div>
@@ -391,11 +391,11 @@ export class ShopSettingsPage extends PlatformPage {
                         <platform-button size="sm" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_cover_hint')}
                             @click=${() => this._aiGenerateCover()}
-                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
+                        ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
                         <platform-button size="sm" ?busy=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_logo_hint')}
                             @click=${() => this._aiGenerateLogo()}
-                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
+                        ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
                     </div>
                     <platform-field type="string" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
@@ -407,7 +407,7 @@ export class ShopSettingsPage extends PlatformPage {
                         <platform-button size="sm" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_describe_hint')}
                             @click=${() => this._aiDescribeShop()}
-                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
+                        ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
                     </div>
                     <div class="row">
                         <platform-field type="string" mode="edit" label=${this.t('settings.field_phone')} .value=${this._phone}

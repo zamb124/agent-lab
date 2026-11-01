@@ -201,7 +201,7 @@ export class ShopOrdersPage extends PlatformPage {
                 ${this._listOp.busy && orders.length === 0
                     ? html`<platform-empty-state loading></platform-empty-state>`
                     : orders.length === 0
-                    ? html`<platform-empty-state icon="receipt" title=${this.t('orders.empty')}></platform-empty-state>`
+                    ? html`<platform-empty-state icon="scroll-text" title=${this.t('orders.empty')}></platform-empty-state>`
                     : html`
                         <div class="board">
                             ${COLUMNS.map((col) => {

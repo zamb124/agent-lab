@@ -427,7 +427,7 @@ export class ShopPromosPage extends PlatformPage {
                                 }}></platform-field>
                             <platform-button size="sm" variant="default"
                                 @click=${() => this._patchDraft({ bundle: d.bundle.filter((_, i) => i !== idx) })}>
-                                <platform-icon name="x" size="14"></platform-icon></platform-button>
+                                <platform-icon name="close" size="14"></platform-icon></platform-button>
                         </div>`)}
                     <platform-button size="sm" variant="default"
                         @click=${() => this._patchDraft({ bundle: [...d.bundle, { product_id: '', qty: 1 }] })}>

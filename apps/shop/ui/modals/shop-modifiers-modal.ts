@@ -436,7 +436,7 @@ export class ShopModifiersModal extends PlatformModal {
                 </div>
                 <div class="group-actions">
                     <platform-button size="sm" variant="ghost" ?disabled=${this._suggestBusyFor !== ''} @click=${() => void this._suggest(g)}>
-                        <platform-icon name="sparkles" size="14"></platform-icon>
+                        <platform-icon name="sparkle" size="14"></platform-icon>
                         ${this._suggestBusyFor === g.shop_modifier_group_id ? this.t('modifiers.ai_busy') : this.t('modifiers.ai_suggest')}
                     </platform-button>
                     <platform-button size="sm" variant="ghost" @click=${() => void this._removeGroup(g)}>

@@ -695,7 +695,7 @@ export class ShopMenuPage extends PlatformPage {
                             return missing > 0 ? html`
                                 <platform-button size="sm" variant="primary" ?busy=${this._aiDescribeBatchOp.busy}
                                     @click=${() => this._runAiBatch()}>
-                                    <platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missing}
+                                    <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missing}
                                 </platform-button>
                             ` : html``;
                         })()}
@@ -703,7 +703,7 @@ export class ShopMenuPage extends PlatformPage {
                             <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
                         </platform-button>
                         <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
-                            <platform-icon name="upload" size="14"></platform-icon> ${this.t('menu.import_button')}
+                            <platform-icon name="import" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
                     </div>
                 </div>
@@ -732,7 +732,7 @@ export class ShopMenuPage extends PlatformPage {
                                 ?disabled=${this._importText.trim().length < 3}
                                 title=${this.t('menu.import_ai_hint')}
                                 @click=${() => this._runAiParse()}
-                            ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
+                            ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
                             <platform-button size="sm" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
                             <platform-button
                                 size="sm"
@@ -757,7 +757,7 @@ export class ShopMenuPage extends PlatformPage {
                             ${this._categories.length > 1 && i < this._categories.length - 1
                                 ? html`<span class="mv" title=${this.t('menu.move_right')} @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}><platform-icon name="chevron-right" size="12"></platform-icon></span>`
                                 : html``}
-                            <span class="x" @click=${(e: Event) => { e.stopPropagation(); this._removeCategory(cat.shop_category_id); }}><platform-icon name="x" size="12"></platform-icon></span>
+                            <span class="x" @click=${(e: Event) => { e.stopPropagation(); this._removeCategory(cat.shop_category_id); }}><platform-icon name="close" size="12"></platform-icon></span>
                         </button>
                     `)}
                     <span class="chip-add">
@@ -782,7 +782,7 @@ export class ShopMenuPage extends PlatformPage {
                         <div class="badges">
                             ${this._shopBadges().map((b) => html`
                                 <span class="bchip on">${this._iconSvg(b.icon_path)} ${b.label}
-                                    <span class="x" title=${this.t('menu.badge_remove')} @click=${() => this._removeBadgeDef(b.key)}><platform-icon name="x" size="11"></platform-icon></span>
+                                    <span class="x" title=${this.t('menu.badge_remove')} @click=${() => this._removeBadgeDef(b.key)}><platform-icon name="close" size="11"></platform-icon></span>
                                 </span>`)}
                         </div>
                         <div class="badge-add">
@@ -816,7 +816,7 @@ export class ShopMenuPage extends PlatformPage {
                     <span class="photo-stack">
                         <button class="photo-pick" title=${this.t('menu.photo_pick')} ?disabled=${this._uploadOp.busy} @click=${() => this._pickPhoto()}>
                             ${this._newPhotoPreview === ''
-                                ? html`<platform-icon name="photo" size="20"></platform-icon>`
+                                ? html`<platform-icon name="image" size="20"></platform-icon>`
                                 : html`<img src=${this._newPhotoPreview} alt="">`}
                         </button>
                         <platform-button
@@ -825,7 +825,7 @@ export class ShopMenuPage extends PlatformPage {
                             ?busy=${this._aiGenerateOp.busy}
                             ?disabled=${this._newName.trim() === ''}
                             @click=${() => this._generatePhoto()}
-                        ><platform-icon name="sparkles" size="14"></platform-icon></platform-button>
+                        ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>
                     </span>
                     <platform-field
                         type="string"
@@ -870,7 +870,7 @@ export class ShopMenuPage extends PlatformPage {
                             ?busy=${this._aiDescribeOp.busy}
                             ?disabled=${this._newName.trim() === ''}
                             @click=${() => this._describeWithAi()}
-                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.ai_describe')}</platform-button>
+                        ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}</platform-button>
                     </span>
                     ${this._badgeChips(this._newBadges, (b) => { this._newBadges = this._toggleBadge(this._newBadges, b); })}
                     <platform-button
@@ -953,22 +953,22 @@ export class ShopMenuPage extends PlatformPage {
                                                     title=${this.t('menu.photo_pick')}
                                                     ?busy=${this._uploadOp.busy}
                                                     @click=${(e: Event) => (e.currentTarget as HTMLElement).parentElement?.querySelector<HTMLInputElement>('input[type=file]')?.click()}
-                                                ><platform-icon name="photo" size="14"></platform-icon></platform-button>
+                                                ><platform-icon name="image" size="14"></platform-icon></platform-button>
                                                 ${p.photo_file_id
                                                     ? html`<platform-button
                                                         size="sm"
                                                         title=${this.t('menu.ai_enhance')}
                                                         ?busy=${this._aiEnhanceOp.busy}
                                                         @click=${() => this._enhancePhoto(p)}
-                                                    ><platform-icon name="sparkles" size="14"></platform-icon></platform-button>`
+                                                    ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`
                                                     : html`<platform-button
                                                         size="sm"
                                                         title=${this.t('menu.ai_generate')}
                                                         ?busy=${this._aiGenerateOp.busy}
                                                         @click=${() => this._generatePhoto(p)}
-                                                    ><platform-icon name="sparkles" size="14"></platform-icon></platform-button>`}
+                                                    ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`}
                                                 <platform-button size="sm" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
-                                                    <platform-icon name="list-checks" size="14"></platform-icon>
+                                                    <platform-icon name="list-check" size="14"></platform-icon>
                                                 </platform-button>
                                                 <platform-button size="sm" title=${this.t('menu.edit')} @click=${() => this._startEdit(p)}>
                                                     <platform-icon name="edit" size="14"></platform-icon>

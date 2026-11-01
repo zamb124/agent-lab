@@ -174,7 +174,7 @@ export class ShopHomePage extends PlatformPage {
                                         <span class="slug">${shop.slug}.linnex.io</span>
                                         <div class="checklist">
                                             <span class="check-item ${productsCount > 0 ? 'done' : ''}">
-                                                <platform-icon name=${productsCount > 0 ? 'check' : 'circle-dot'} size="13"></platform-icon>
+                                                <platform-icon name=${productsCount > 0 ? 'check' : 'circle'} size="13"></platform-icon>
                                                 ${productsCount > 0 ? `${productsCount} ${this.t('home.menu_count')}` : this.t('home.menu_empty')}
                                             </span>
                                         </div>
