@@ -265,7 +265,7 @@ class StorefrontService:
             if candidate and "." not in candidate:
                 company = await Company.by_subdomain(candidate)
                 if company is not None:
-                    shop = await Shop.get_published_by_company(company.company_id)
+                    shop = await Shop.get_published_by_company_by_updated_desc(company.company_id)
                     return None if shop is None else shop.slug
                 shop = await Shop.get_by_slug(candidate)
                 if shop is not None:

@@ -58,6 +58,7 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         # анонимная витрина и агрегатор: HTML/JSON снапшоты без сессии
         "apps/shop/api/public.py::get_storefront",
         "apps/shop/api/public.py::get_storefront_page",
+        "apps/shop/api/public.py::get_host_storefront_page",
         "apps/shop/api/public.py::get_market_page",
         "apps/shop/api/public.py::list_aggregate_shops",
         "apps/shop/api/public.py::search_aggregate",

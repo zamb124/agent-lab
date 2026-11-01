@@ -95,7 +95,7 @@ class Shop(PlatformModel):
         )
 
     @classmethod
-    async def get_published_by_company(cls, company_id: str) -> Self | None:
+    async def get_published_by_company_by_updated_desc(cls, company_id: str) -> Self | None:
         """Опубликованная витрина компании для её поддомена — свежая по updated_at."""
         return (
             await cls.objects.filter(
