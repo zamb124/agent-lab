@@ -662,7 +662,7 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 {{- define "agentlab.appEnv" -}}
 - name: PYTHON_GIL
   value: "0"
-{{- include "agentlab.appEnvShared" . -}}
+{{ include "agentlab.appEnvShared" . -}}
 {{- end -}}
 
 {{/*
@@ -671,7 +671,7 @@ provider-litserve: GPU image на Python 3.14 GIL build (Dockerfile.gpu). PYTHON
 {{- define "agentlab.appEnvGilBuild" -}}
 - name: PYTHON_GIL
   value: "1"
-{{- include "agentlab.appEnvShared" . -}}
+{{ include "agentlab.appEnvShared" . -}}
 {{- end -}}
 
 {{/*
