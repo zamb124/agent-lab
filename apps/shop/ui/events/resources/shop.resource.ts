@@ -232,7 +232,7 @@ export const shopProductRemoveOp = createAsyncOp({
 
 export const shopOrdersListOp: AsyncOpFactory = createAsyncOp({
     name: 'shop/orders_list',
-    errorToastKey: 'shop:toast.orders_load_failed',
+    silent: true,
     commandType: 'shop/orders/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -372,7 +372,7 @@ export const shopAiDescribeBatchOp = createAsyncOp({
 
 export const shopModifierGroupsListOp: AsyncOpFactory = createAsyncOp({
     name: 'shop/modifier_groups_list',
-    errorToastKey: 'shop:toast.modifiers_load_failed',
+    silent: true,
     commandType: 'shop/modifiers/groups/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -482,7 +482,7 @@ export const shopAiSuggestOptionsOp = createAsyncOp({
 
 export const shopPromosListOp: AsyncOpFactory = createAsyncOp({
     name: 'shop/promos_list',
-    errorToastKey: 'shop:toast.promos_load_failed',
+    silent: true,
     commandType: 'shop/promos/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
