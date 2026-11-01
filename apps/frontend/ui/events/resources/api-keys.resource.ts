@@ -16,19 +16,7 @@
 import { createResourceCollection } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
-
-/**
- * View-форма ключа для UI: wire `ApiKeyRecord` несёт служебные поля
- * (company_id, key_hash, created_by) — на клиент уходит только безопасная часть.
- */
-export interface ApiKeyListItem extends ResourceItem {
-    key_id: string;
-    name: string;
-    scopes: string[];
-    key_prefix: string;
-    created_at: string;
-    last_used: string | null;
-}
+import type { ApiKeyListItem } from '../api-keys.types.js';
 
 interface ApiKeysSlice extends ResourceCollectionSlice<ApiKeyListItem> {
     lastSecret: { key_id: string; secret: string } | null;

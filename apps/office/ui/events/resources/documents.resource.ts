@@ -20,6 +20,7 @@
 import { createAsyncOp, createForm } from '@platform/lib/events/index.js';
 import type { PlatformEvent, EffectCtx } from '@platform/lib/events/contract.js';
 import type { DocumentsSlice, OfficeDocumentItem } from '../documents.types.js';
+import { isOfficeDocumentItem } from '../documents.types.js';
 
 type EventPayload = Record<string, unknown>;
 
@@ -108,13 +109,6 @@ function officeDocuments(state: unknown): DocumentsSlice | null {
         throw new Error('documents: officeDocuments must be an object');
     }
     return slice;
-}
-
-export function isOfficeDocumentItem(value: unknown): value is OfficeDocumentItem {
-    return isJsonObject(value)
-        && typeof value.file_id === 'string'
-        && typeof value.catalog_id === 'string'
-        && typeof value.title === 'string';
 }
 
 const RAG_INDEX_STATUS_VALUES = [
@@ -367,8 +361,11 @@ export const documentsOp = createAsyncOp<'office/documents/list_requested', Docu
             } else {
                 return state;
             }
+            const prevItems = docState.items;
+            if (!Array.isArray(prevItems)) {
+                return state;
+            }
             let changed = false;
-            const prevItems = docState.items ?? [];
             const items = prevItems.map((item) => {
                 if (item.file_id !== documentId) {
                     return item;
@@ -387,8 +384,11 @@ export const documentsOp = createAsyncOp<'office/documents/list_requested', Docu
                 ? event.payload.title
                 : null;
             const savedAt = new Date().toISOString();
+            const prevItems = docState.items;
+            if (!Array.isArray(prevItems)) {
+                return state;
+            }
             let changed = false;
-            const prevItems = docState.items ?? [];
             const items = prevItems.map((item) => {
                 if (item.file_id !== fileId) {
                     return item;

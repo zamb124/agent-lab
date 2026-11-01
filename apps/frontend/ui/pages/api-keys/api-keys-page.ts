@@ -17,7 +17,7 @@ import { FrontendCreateApiKeyModal } from '../../modals/create-api-key-modal.js'
 import { FrontendEditApiKeyModal } from '../../modals/edit-api-key-modal.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
-import type { ApiKeyListItem } from '../../events/resources/api-keys.resource.js';
+import type { ApiKeyListItem } from '../../events/api-keys.types.js';
 
 export class FrontendApiKeysPage extends PlatformPage {
     static override styles: CSSResultGroup = [

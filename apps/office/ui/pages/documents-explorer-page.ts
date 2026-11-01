@@ -8,7 +8,7 @@ import { html } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { OfficeDocumentItem } from '../events/documents.types.js';
-import { isOfficeDocumentItem } from '../events/resources/documents.resource.js';
+import { isOfficeDocumentItem } from '../events/documents.types.js';
 
 function documentFileId(doc: OfficeDocumentItem): string {
     const fileId = doc.file_id;

@@ -1,14 +1,22 @@
 /**
- * Общие типы Documents explorer — wire-модель и slice `office/documents`.
- * Type-only leaf: resources и pages/components импортируют отсюда,
+ * Общие типы и wire-гарды Documents explorer — wire-модель и slice
+ * `office/documents`. Leaf: resources и pages/components импортируют отсюда,
  * чтобы pages/modals не зависели от `events/resources/*` напрямую.
  */
 
+import { isJsonObject } from '@platform/lib/utils/json-object.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { OfficeDocumentItem } from '@platform/lib/events/wire/office.gen.js';
 
 export type { OfficeDocumentItem };
+
+export function isOfficeDocumentItem(value: unknown): value is OfficeDocumentItem {
+    return isJsonObject(value)
+        && typeof value.file_id === 'string'
+        && typeof value.catalog_id === 'string'
+        && typeof value.title === 'string';
+}
 
 export interface DocumentsSlice extends AsyncOpSlice {
     items?: OfficeDocumentItem[] | undefined;
