@@ -32,6 +32,7 @@
       "tools": [
         "ask_user"
       ],
+      "exception_as_response": true,
       "agent_skills": [
         "console-platform",
         "networkle",

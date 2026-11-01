@@ -7,6 +7,10 @@ import { PLATFORM_FILES_DOWNLOAD_PATH_RE } from '../../utils/platform-files-url.
 import { brandLogoSrc, platformStaticSrc } from '../shell/brand-logo.js';
 import { iterBlocks } from './flow-ui-store.js';
 
+/** Подписанный screenshot живой browser-сессии flows (``FlowUIBrowserPreview.screenshot_url``). */
+const BROWSER_PREVIEW_SCREENSHOT_PATH_RE =
+    /^\/flows\/api\/v1\/browser-preview\/sessions\/[^/?#]+\/screenshot(?:[?#]|$)/;
+
 function nonemptyString(value: unknown): string | null {
     if (value === null || value === undefined) return null;
     if (typeof value !== 'string') throw new Error('flow-ui: image_url must be a string');
@@ -46,7 +50,9 @@ export function flowUIMediaSrc(platformUiOrigin: unknown, raw: unknown): string 
         throw new Error(`flowUIMediaSrc: expected absolute path or http(s) URL, got ${JSON.stringify(value)}`);
     }
     if (value.startsWith('/static/core/')) return platformStaticSrc(typeof platformUiOrigin === 'string' ? platformUiOrigin : '', value);
-    if (!PLATFORM_FILES_DOWNLOAD_PATH_RE.test(value)) throw new Error(`flowUIMediaSrc: unsupported path ${JSON.stringify(value)}`);
+    if (!PLATFORM_FILES_DOWNLOAD_PATH_RE.test(value) && !BROWSER_PREVIEW_SCREENSHOT_PATH_RE.test(value)) {
+        throw new Error(`flowUIMediaSrc: unsupported path ${JSON.stringify(value)}`);
+    }
     if (typeof platformUiOrigin !== 'string' || platformUiOrigin.trim() === '') return value;
     return `${platformUiOrigin.trim().replace(/\/+$/, '')}${value}`;
 }

@@ -250,6 +250,11 @@ describe('agent identity image', () => {
         expect(flowUIMediaSrc('https://ui//', files)).toBe(`https://ui${files}`);
         expect(flowUIMediaSrc('', files)).toBe(files);
         expect(flowUIMediaSrc('   ', files)).toBe(files);
+        const shot = '/flows/api/v1/browser-preview/sessions/sess-1/screenshot?token=tok.en';
+        expect(flowUIMediaSrc('', shot)).toBe(shot);
+        expect(flowUIMediaSrc('https://ui', shot)).toBe(`https://ui${shot}`);
+        expect(() => flowUIMediaSrc('', '/flows/api/v1/browser-preview/sessions/sess-1/viewer?token=tok.en')).toThrow(/unsupported path/);
+        expect(() => flowUIMediaSrc('', '/flows/api/v1/browser-preview/sessions/sess-1/status?token=tok.en')).toThrow(/unsupported path/);
         expect(() => flowUIMediaSrc('', '')).toThrow(/raw URL required/);
         expect(() => flowUIMediaSrc('', 5)).toThrow(/raw URL required/);
         expect(() => flowUIMediaSrc('', 'javascript:alert(1)')).toThrow(/blocked scheme javascript/);

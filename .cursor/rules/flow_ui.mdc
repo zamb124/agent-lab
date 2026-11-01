@@ -82,7 +82,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 ### Безопасность
 
 1. `html` — только iframe `sandbox="allow-scripts"` без `allow-same-origin`, `srcdoc` с фиксированным `FLOW_UI_HTML_CSP`, мост `postMessage` и API `window.flowUi`; константы совпадают с фикстурой `html_sandbox.json`; ошибка скрипта автора показывается в блоке.
-2. Markdown санитизируется (`utils/markdown.ts`); URL и файлы — только platform download URL (`flowUIMediaSrc`); `eval` данных state запрещён.
+2. Markdown санитизируется (`utils/markdown.ts`); media-URL — whitelist `flowUIMediaSrc`: http(s), `/static/core/`, platform files download `/{segment}/api/v1/files/download/{id}` и подписанный `/flows/api/v1/browser-preview/sessions/{sid}/screenshot`; `eval` данных state запрещён.
 3. `ui-action` принимает только поля input/html-блоков документа и `ui_slots`; лимиты — `FlowUILimits` в настройках flows; auth, company, origin и grant проверяются до чтения документа; embed CORS — `EmbedDynamicCorsMiddleware`.
 
 ## Запреты
