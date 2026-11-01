@@ -257,7 +257,7 @@ export class FlowUIClient {
     applyFrame(frame: FlowUiRecord): ApplyFrameResult | null {
         if (this.disposed) return null;
         const applied = this.store.applyFrame(frame);
-        this._emit('frame', { frame, ...applied });
+        this._emit('frame', frame);
         if (applied.frameKind === 'artifactUpdate' && frameArtifactId(frame) === STATE_ARTIFACT_ID) {
             this._emit('state', this.store.state);
         }

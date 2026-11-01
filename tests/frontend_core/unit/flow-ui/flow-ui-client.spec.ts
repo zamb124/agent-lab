@@ -325,7 +325,8 @@ describe('FlowUIClient.send', () => {
         ], init.signal);
         const client = await openClient(server, { branchId: 'sales', getVariables: () => ({ lang: 'ru' }) });
         const events: { frame: number; state: unknown[]; ui: unknown[]; task: unknown[]; error: unknown[] } = { frame: 0, state: [], ui: [], task: [], error: [] };
-        client.on('frame', () => { events.frame += 1; });
+        const frames: unknown[] = [];
+        client.on('frame', (frame: unknown) => { events.frame += 1; frames.push(frame); });
         client.on('state', (state: unknown) => events.state.push(state));
         client.on('ui', (event: unknown) => events.ui.push(prop(event, 'kind')));
         client.on('task', (task: unknown) => events.task.push(dig(task, 'status', 'state')));
@@ -348,6 +349,9 @@ describe('FlowUIClient.send', () => {
         expect(dig(sent, 'params', 'metadata')).toEqual({ branch: 'sales', variables: { lang: 'ru' } });
         expect(dig(server.rpcCalls('SendStreamingMessage')[0], 'headers', 'Accept')).toBe('text/event-stream');
         expect(events).toMatchObject({ frame: 6, state: [{ greeting: 'hi' }], ui: ['render'], task: ['TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_WORKING', 'TASK_STATE_WORKING', 'TASK_STATE_WORKING', 'TASK_STATE_COMPLETED'], error: [] });
+        for (const frame of frames) {
+            expect(prop(frame, 'result')).toBeTypeOf('object');
+        }
         expect(client.store.state).toEqual({ greeting: 'hi' });
         const summaryBlocks = prop(client.store.slots, 'summary');
         if (!Array.isArray(summaryBlocks)) {

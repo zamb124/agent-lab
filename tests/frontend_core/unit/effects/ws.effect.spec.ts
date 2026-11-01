@@ -360,6 +360,33 @@ describe('ws.effect: push frames', () => {
     });
 });
 
+describe('ws.effect: centrifuge url', () => {
+    it('*.lvh.me dev-хост идёт напрямую на Centrifugo :8000, не через Granian', async () => {
+        window.location.hostname = 'system.lvh.me';
+        window.location.host = 'system.lvh.me:8003';
+        await _connect();
+        const client = MockCentrifuge.latest();
+        expect(client.endpoint).toBe('ws://system.lvh.me:8000/connection/websocket');
+    });
+
+    it('*.localhost dev-хост идёт напрямую на Centrifugo :8000', async () => {
+        window.location.hostname = 'company.localhost';
+        window.location.host = 'company.localhost:8003';
+        await _connect();
+        const client = MockCentrifuge.latest();
+        expect(client.endpoint).toBe('ws://company.localhost:8000/connection/websocket');
+    });
+
+    it('prod-хост идёт через ingress /realtime/connection/websocket', async () => {
+        window.location.hostname = 'system.linnex.io';
+        window.location.host = 'system.linnex.io';
+        window.location.protocol = 'https:';
+        await _connect();
+        const client = MockCentrifuge.latest();
+        expect(client.endpoint).toBe('wss://system.linnex.io/realtime/connection/websocket');
+    });
+});
+
 describe('ws.effect: lifecycle', () => {
     it('AUTH_LOGGED_OUT закрывает клиент', async () => {
         const dispatched: DispatchedRecord[] = [];

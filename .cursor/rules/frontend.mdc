@@ -56,6 +56,7 @@ _helpers/           чистые функции сервиса, резолвер
 - Ключ localStorage — только `platformStorageKey(scope, key)` (`platform:<scope>:<key>`); свободный префикс запрещён. `[без гейта]`
 - Байты файла — только `platform/file_create` (`createPlatformFileCreateOp`, `core/frontend/static/lib/events/factories/platform-file-create.ts`) → chunked `uploadPlatformFile`; свой `FormData`-upload запрещён → `files.mdc`.
 - Команды и push идут только через user-сокет `core/frontend/static/lib/events/effects/ws.effect.ts` (npm `centrifuge`); отдельный `WebSocket` — только долгая сессия со своим протоколом (voice, LSP) → `architecture.mdc` § Транспорт. `[без гейта]`
+- URL сокета: dev-хосты (localhost, *.localhost, lvh.me, *.lvh.me, 127.0.0.1) — прямой `ws://<host>:8000/connection/websocket` в Centrifugo, Granian не проксирует user-WS; прод — `wss://<host>/realtime/connection/websocket` через ingress strip. `[без гейта]`
 
 ### Дизайн
 

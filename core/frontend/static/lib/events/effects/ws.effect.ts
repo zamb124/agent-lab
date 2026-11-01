@@ -12,8 +12,9 @@
  * входящим событием клиента.
  *
  * `getToken` читает cookie `auth_token` (SESSION JWT = connection JWT).
- * На localhost SDK ходит на `:8000/connection/websocket` (Centrifugo),
- * не через Granian.
+ * На dev-хостах (localhost, *.localhost, lvh.me, *.lvh.me, 127.0.0.1) SDK
+ * ходит на `:8000/connection/websocket` напрямую в Centrifugo, не через
+ * Granian; в проде `/realtime/connection/websocket` снимает префикс ingress.
  */
 
 import { CoreEvents, assertEventType } from '../contract.js';
@@ -94,10 +95,20 @@ function _hostname(): string {
     return hostname;
 }
 
+function _isLocalDevHostname(hostname: string): boolean {
+    return (
+        hostname === 'localhost'
+        || hostname === '127.0.0.1'
+        || hostname === 'lvh.me'
+        || hostname.endsWith('.localhost')
+        || hostname.endsWith('.lvh.me')
+    );
+}
+
 function _centrifugeUrl(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = _hostname();
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    if (_isLocalDevHostname(hostname)) {
         return `${proto}//${hostname}:8000/connection/websocket`;
     }
     return `${proto}//${location.host}/realtime/connection/websocket`;

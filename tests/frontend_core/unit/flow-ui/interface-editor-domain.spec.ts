@@ -325,4 +325,30 @@ describe('interface editor state path catalog', () => {
         expect(paths.find((entry) => entry.path === 'email')).toEqual({ path: 'email', type: 'string', source: 'preview_state', protected: false });
         expect(paths.find((entry) => entry.path === 'task_id')?.protected).toBe(true);
     });
+
+    it('нормализует source как список источников (DataflowSource str | list[str])', () => {
+        const paths = statePathCatalog({
+            dataflow: {
+                nodes: { llm_1: { output_state: [{ path: 'content', type: 'string', source: ['node', 'interface'], protected: false }], incoming_state: [] } },
+            },
+            sampleState: null,
+            document: documentWith([]),
+        });
+        expect(paths.find((entry) => entry.path === 'content')?.source).toBe('node, interface');
+    });
+
+    it('бросает на дескрипторе с нестроковым type или source', () => {
+        for (const descriptor of [
+            { path: 'a', type: 1, source: 'node' },
+            { path: 'b', type: 'string', source: 1 },
+            { path: 'c', type: 'string', source: [] },
+            { path: 'd', type: 'string', source: ['node', 1] },
+        ]) {
+            expect(() => statePathCatalog({
+                dataflow: { nodes: { n: { output_state: [descriptor], incoming_state: [] } } },
+                sampleState: null,
+                document: documentWith([]),
+            })).toThrow(/state path descriptor required/);
+        }
+    });
 });

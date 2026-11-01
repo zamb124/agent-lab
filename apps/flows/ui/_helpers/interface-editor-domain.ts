@@ -796,8 +796,14 @@ export function statePathCatalog(input: { dataflow: unknown; sampleState: unknow
     const byPath = new Map<string, StatePathEntry>();
     const add = (path: unknown, type: unknown, source: unknown, isProtected: boolean) => {
         if (typeof path !== 'string' || path === '' || byPath.has(path)) return;
-        if (typeof type !== 'string' || typeof source !== 'string') throw new Error('interface editor: state path descriptor required');
-        byPath.set(path, { path, type, source, protected: isProtected });
+        // DataflowSource — str | list[str]: inspector склеивает источники одного пути в список.
+        const sourceLabel = typeof source === 'string'
+            ? source
+            : Array.isArray(source) && source.length > 0 && source.every((item) => typeof item === 'string')
+                ? source.join(', ')
+                : null;
+        if (typeof type !== 'string' || sourceLabel === null) throw new Error('interface editor: state path descriptor required');
+        byPath.set(path, { path, type, source: sourceLabel, protected: isProtected });
     };
     if (isRecord(dataflow)) {
         const variables = dataflow.variables;

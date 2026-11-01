@@ -3373,7 +3373,9 @@ export class CRMNoteCardView extends PlatformElement {
                 ?disabled=${busy || uploading}
                 @click=${() => this._onSaveEdit()}
             >
-                <platform-icon name=${busy ? 'loader' : 'save'} size="16"></platform-icon>
+                ${busy
+                    ? html`<platform-spinner size="16"></platform-spinner>`
+                    : html`<platform-icon name="save" size="16"></platform-icon>`}
                 ${busy
                     ? this.t('note_edit.action_saving')
                     : isCreate
