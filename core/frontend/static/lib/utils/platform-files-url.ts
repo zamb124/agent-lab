@@ -20,6 +20,7 @@ export const PLATFORM_FILES_ROUTE_SEGMENTS = Object.freeze(
         'litserve',
         'stock',
         'search',
+        'shop',
         'voice',
         'browser',
         'scheduler',
