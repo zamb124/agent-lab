@@ -7,14 +7,12 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-empty-state.js';
-import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-user-chip.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
-import type { ResourceController, FormController} from '@platform/lib/base/use-resource.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 
 const FACTORY = 'frontend/namespaces';
-const FORM = 'frontend/namespace_create_form';
 
 export class FrontendNamespacesPage extends PlatformPage {
     static i18nNamespace = 'frontend';
@@ -80,20 +78,6 @@ export class FrontendNamespacesPage extends PlatformPage {
                 letter-spacing: 0.04em;
                 color: var(--text-tertiary);
             }
-            .create-panel {
-                margin-bottom: var(--space-4);
-                padding: var(--space-4);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                display: grid;
-                gap: var(--space-3);
-                max-width: 32rem;
-            }
-            .actions {
-                display: flex;
-                gap: var(--space-2);
-            }
             .crm-link {
                 color: var(--accent);
                 text-decoration: none;
@@ -108,28 +92,20 @@ export class FrontendNamespacesPage extends PlatformPage {
 
     static override properties: PropertyDeclarations = {
         _kindFilter: { state: true },
-        _showCreate: { state: true },
     }
     declare _kindFilter: string;
-    declare _showCreate: boolean;
 ;
 
     constructor() {
         super();
         this._kindFilter = 'all';
-        this._showCreate = false;
     }
     private _namespaces!: ResourceController;
-    private _form!: FormController;
 
 
     override connectedCallback(): void {
         super.connectedCallback();
         this._namespaces = this.useResource(FACTORY, { autoload: true });
-        this._form = this.useForm(FORM);
-        this.useEvent(this._namespaces.resource.events.CREATED, () => {
-            this._showCreate = false;
-        });
     }
 
     _setFilter(kind: string) {
@@ -145,16 +121,10 @@ export class FrontendNamespacesPage extends PlatformPage {
         return items.filter((item) => item.kind === this._kindFilter);
     }
 
-    _submitCreate(event: Event) {
-        event.preventDefault();
-        this._form.submit();
-    }
-
     override render(): TemplateResult {
         const t = (key: string) => this.t(key);
         const loading = Boolean(this._namespaces?.loading);
         const items = this._items();
-        const draft = this._form?.draft ?? { name: '', description: '' };
 
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
@@ -166,7 +136,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                     slot="actions"
                     class="btn btn-primary"
                     type="button"
-                    @click=${() => { this._showCreate = !this._showCreate; }}
+                    @click=${() => this.openModal('frontend.namespace_create')}
                 >
                     <platform-icon name="plus" size="16"></platform-icon>
                     ${t('namespaces_page.create')}
@@ -183,35 +153,6 @@ export class FrontendNamespacesPage extends PlatformPage {
                     >${t(`namespaces_page.filter_${kind}`)}</button>
                 `)}
             </div>
-
-            ${this._showCreate ? html`
-                <form class="create-panel" @submit=${this._submitCreate}>
-                    <platform-field
-                        type="string"
-                        mode="edit"
-                        name="name"
-                        label=${t('namespaces_page.field_name')}
-                        .value=${draft.name}
-                        @change=${(e: CustomEvent) => this._form.setField('name', e.detail.value)}
-                    ></platform-field>
-                    <platform-field
-                        type="text"
-                        mode="edit"
-                        name="description"
-                        label=${t('namespaces_page.field_description')}
-                        .value=${draft.description}
-                        @change=${(e: CustomEvent) => this._form.setField('description', e.detail.value)}
-                    ></platform-field>
-                    <div class="actions">
-                        <button class="btn btn-primary" type="submit" ?disabled=${this._form?.submitting}>
-                            ${t('namespaces_page.save')}
-                        </button>
-                        <button class="btn" type="button" @click=${() => { this._showCreate = false; }}>
-                            ${t('namespaces_page.cancel')}
-                        </button>
-                    </div>
-                </form>
-            ` : nothing}
 
             ${loading
                 ? html`<platform-empty-state loading></platform-empty-state>`
