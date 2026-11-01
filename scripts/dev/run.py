@@ -26,10 +26,10 @@
     python -m scripts.dev.run crm_summary_worker  # Запуск CRM daily/period summary worker
     python -m scripts.dev.run idle_worker # Запуск Idle worker
     python -m scripts.dev.run all         # Все сервисы через mprocs (раздельные логи)
-    python -m scripts.dev.run all --kill  # то же, после SIGKILL процессов на портах HTTP-сервисов
+    python -m scripts.dev.run all --kill  # устаревший флаг: сироты стека зачищаются всегда
     python -m scripts.dev.run all -e flows_worker  # all без перечисленных сервисов (см. --exclude)
     python -m scripts.dev.run from-make app --ex flows_worker  # вызывается из make app --ex ... (см. mk/app.mk)
-    python -m scripts.dev.run kill-ports  # только освободить порты HTTP-сервисов
+    python -m scripts.dev.run kill-ports  # зачистка сирот: порты HTTP-сервисов + процессы прошлых запусков
 
 Исключение из all: --exclude / -e / --ex, либо ex|x (следом имя), либо APP_EXCLUDE=… .
     make: «make app ex flows_worker»; с «--ex» на macOS см. «make -- app --ex …» в mk/app.mk.
@@ -373,6 +373,11 @@ def _append_granian_reload_args(cmd: list[str], *, service: str) -> None:
 
 
 def _python_m_prefix() -> list[str]:
+    # venv-python напрямую: промежуточный `uv run` — лишнее звено между mprocs и
+    # сервисом; mprocs убивает только верхний процесс цепочки, всё ниже сиротеет.
+    venv_python = project_root / ".venv/bin/python"
+    if venv_python.is_file():
+        return [str(venv_python), "-u", "-m"]
     uv_bin = shutil.which("uv")
     if uv_bin is not None:
         return [uv_bin, "run", "python", "-u", "-m"]
@@ -453,6 +458,15 @@ def build_command(service: str) -> list[str]:
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
 
+_PROXY_BYPASS_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def _merge_no_proxy(existing: str) -> str:
+    hosts = [h.strip() for h in existing.split(",") if h.strip()]
+    hosts.extend(h for h in _PROXY_BYPASS_HOSTS if h not in hosts)
+    return ",".join(hosts)
+
+
 def build_env(service: str) -> dict[str, str]:
     cfg = SERVICES.get(service) or {}
     extra = cfg.get("env") or {}
@@ -460,9 +474,10 @@ def build_env(service: str) -> dict[str, str]:
         raise ValueError(f"SERVICES[{service!r}].env must be dict[str,str]")
     out = dict(os.environ)
     for k, v in extra.items():
-        if v is None:
-            continue
         out[str(k)] = str(v)
+    no_proxy = _merge_no_proxy(out.get("NO_PROXY") or out.get("no_proxy") or "")
+    out["NO_PROXY"] = no_proxy
+    out["no_proxy"] = no_proxy
     if cfg.get("type") == "centrifugo-compose":
         from core.config import get_settings
 
@@ -482,29 +497,83 @@ def _http_ports() -> list[str]:
     return [str(cfg["port"]) for cfg in SERVICES.values() if cfg["type"] == "granian"]
 
 
-def kill_ports() -> None:
-    """Завершает процессы, слушающие порты HTTP-сервисов (granian)."""
-    ports = _http_ports()
-    killed: list[tuple[str, int]] = []
-    for port in ports:
+def _own_tree_pids() -> set[int]:
+    """Свой pid и цепочка предков: pgrep-паттерны совпадают и с нашей командой."""
+    out = {os.getpid()}
+    pid = os.getppid()
+    while pid > 1 and pid not in out:
+        out.add(pid)
         listed = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
+            ["ps", "-o", "ppid=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        raw = listed.stdout.strip()
+        pid = int(raw) if raw.isdigit() else 0
+    return out
+
+
+def _kill_pids(pids: list[int], *, exclude: set[int]) -> list[int]:
+    killed: list[int] = []
+    for pid in pids:
+        if pid in exclude:
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            continue
+        killed.append(pid)
+    return killed
+
+
+def kill_port(port: str) -> None:
+    listed = subprocess.run(
+        ["lsof", "-ti", f":{port}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if listed.returncode != 0 or not listed.stdout.strip():
+        return
+    pids = [int(p) for p in listed.stdout.strip().split()]
+    for pid in _kill_pids(pids, exclude=_own_tree_pids()):
+        print(f"Освобождён порт {port}: завершён PID {pid}", flush=True)
+
+
+# Командные сигнатуры процессов стека: mprocs рестартует/останавливает только
+# верхний процесс, поэтому сироты старых поколений добиваем при старте.
+_ORPHAN_CMD_PATTERNS = (
+    # NB: паттерн не должен начинаться с '-': pgrep примет его за опцию.
+    r"granian --interface asgi apps\.",
+    r"taskiq (worker|scheduler) apps\.",
+    r"scripts\.dev\.run ",
+    r"scripts/build/ui\.ts --dev --watch",
+    r"litserve",
+    r"deploy/centrifugo/docker-compose\.yml up",
+)
+
+
+def kill_orphans() -> None:
+    """SIGKILL всем сиротам стека: держатели портов + процессы прошлых запусков."""
+    exclude = _own_tree_pids()
+    killed: list[int] = []
+    for pattern in _ORPHAN_CMD_PATTERNS:
+        listed = subprocess.run(
+            ["pgrep", "-f", pattern],
             capture_output=True,
             text=True,
             check=False,
         )
         if listed.returncode != 0 or not listed.stdout.strip():
             continue
-        for pid_str in listed.stdout.strip().split():
-            pid = int(pid_str)
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                continue
-            killed.append((port, pid))
+        pids = [int(p) for p in listed.stdout.strip().split()]
+        for pid in _kill_pids(pids, exclude=exclude):
+            killed.append(pid)
     if killed:
-        for port, pid in killed:
-            print(f"Освобождён порт {port}: завершён PID {pid}", flush=True)
+        print(f"Завершены процессы прошлых запусков: {sorted(set(killed))}", flush=True)
+    for port in _http_ports():
+        kill_port(port)
 
 
 def _parse_exclude_from_argv(argv: list[str]) -> set[str]:
@@ -548,8 +617,7 @@ def _validate_exclude(exclude: set[str]) -> None:
     for name in exclude:
         if name not in SERVICES:
             print(
-                f"Неизвестный сервис для исключения: {name}. "
-                f"Доступно: {', '.join(SERVICES.keys())}",
+                f"Неизвестный сервис для исключения: {name}. Доступно: {', '.join(SERVICES.keys())}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -566,16 +634,13 @@ def _run_from_make() -> None:
         )
         sys.exit(1)
     rest: list[str] = list(goals[1:])
+    # --from-make-kill/--kill/APP_KILL: флаги оставлены для совместимости,
+    # зачистка сирот выполняется при каждом старте стека.
     if rest and rest[-1] == "--from-make-kill":
-        from_make_kill = True
         rest = rest[:-1]
-    else:
-        from_make_kill = False
     if "--kill" in rest:
-        from_make_kill = True
         rest = [t for t in rest if t != "--kill"]
-    if from_make_kill or os.environ.get("APP_KILL") == "1":
-        kill_ports()
+    kill_orphans()
     exclude = _parse_exclude_from_argv(rest) | _exclude_from_env()
     _validate_exclude(exclude)
     run_all(exclude=exclude)
@@ -606,7 +671,9 @@ def _render_mprocs_yaml(names: list[str]) -> str:
     ]
     for name in names:
         lines.append(f"  {_mprocs_proc_key(name)}:")
-        lines.append(f'    shell: "uv run python -m scripts.dev.run {name}"')
+        lines.append(
+            f'    shell: "exec .venv/bin/python -m scripts.dev.run {name}"'
+        )
     lines.append("")
     return "\n".join(lines)
 
@@ -669,7 +736,7 @@ def main() -> None:
     service = sys.argv[1]
 
     if service == "kill-ports":
-        kill_ports()
+        kill_orphans()
         return
 
     # OpenFGA обязателен для локальных app-процессов (как Postgres).
@@ -684,8 +751,7 @@ def main() -> None:
 
     if service == "all":
         rest = sys.argv[2:]
-        if "--kill" in rest or os.environ.get("APP_KILL") == "1":
-            kill_ports()
+        kill_orphans()
         exclude = _parse_exclude_from_argv(rest) | _exclude_from_env()
         _validate_exclude(exclude)
         run_all(exclude=exclude)
@@ -696,16 +762,19 @@ def main() -> None:
         print(f"Доступные: {', '.join(SERVICES.keys())}, all, from-make, kill-ports")
         sys.exit(1)
 
+    port = str(SERVICES[service].get("port") or "")
+    if port:
+        kill_port(port)
     cmd = build_command(service)
     print(f"Запуск {service}: {' '.join(cmd)}", flush=True)
-    result = subprocess.run(
-        cmd,
-        cwd=str(project_root),
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-        env=build_env(service),
-    )
-    sys.exit(result.returncode)
+    env = build_env(service)
+    if "debugpy" in sys.modules or "pydevd" in sys.modules:
+        # Под дебагером exec уничтожит обёртку debugpy/pydevd — запускаем child.
+        result = subprocess.run(cmd, cwd=str(project_root), env=env)
+        sys.exit(result.returncode)
+    # exec: dev-процесс становится сервисом — mprocs убивает именно его,
+    # и сервисный мастер сам репит своих worker'ов (иначе остаются сироты).
+    os.execvpe(cmd[0], cmd, env)
 
 
 if __name__ == "__main__":

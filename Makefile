@@ -452,7 +452,7 @@ help:
 	@echo "  make dev-seaweedfs-restart - Перезапуск SeaweedFS (фикс RequestTimeTooSkewed на macOS)"
 	@echo ""
 	@echo "  make app             - все Python-сервисы через mprocs (нужен make dev-up / openfga-dev.env)"
-	@echo "  make app APP_KILL=1  - то же, освободив порты HTTP-сервисов перед запуском"
+	@echo "  make app APP_KILL=1  - устаревший флаг: сироты стека зачищаются при каждом запуске"
 	@echo ""
 	@echo "============================================================================"
 	@echo "Линтеры:"

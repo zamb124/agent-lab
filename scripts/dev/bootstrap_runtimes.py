@@ -144,6 +144,10 @@ def _cargo_ready() -> bool:
     return _command_output(["cargo", "--version"]) is not None
 
 
+def _mprocs_ready() -> bool:
+    return shutil.which("mprocs", path=_runtime_path_env()["PATH"]) is not None
+
+
 def _rust_host_triple() -> str:
     system = _runtime_os()
     arch = _runtime_arch()
@@ -276,6 +280,14 @@ def _install_rust() -> None:
     _symlink(cargo_home / "bin" / "rustc", "rustc")
 
 
+def _install_mprocs() -> None:
+    brew = shutil.which("brew")
+    if brew is None:
+        raise RuntimeError("mprocs не найден. Установи: brew install mprocs")
+    _run([brew, "install", "mprocs"])
+    _symlink_existing_command("mprocs")
+
+
 def _print_versions() -> None:
     env = _runtime_path_env()
     for command in (
@@ -320,6 +332,11 @@ def main() -> None:
         _symlink_existing_command("rustc")
     else:
         _install_rust()
+    if _mprocs_ready():
+        print("runtime-bootstrap: mprocs is ready", flush=True)
+        _symlink_existing_command("mprocs")
+    else:
+        _install_mprocs()
     _print_versions()
 
 

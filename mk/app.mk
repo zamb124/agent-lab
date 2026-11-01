@@ -4,7 +4,9 @@
 # один TUI, логи смотришь по выбранному процессу (j/k).
 # Требует: brew install mprocs. Конфиг: mprocs.yaml.
 # Granian: --reload для HTTP (кроме provider_litserve/browser). APP_RELOAD=0 — без reload.
-# Остановка: q в mprocs (или Ctrl+C). APP_KILL=1 — освободить порты перед стартом.
+# Остановка: q в mprocs (или Ctrl+C) — дочерний процесс mprocs = сам сервис
+# (exec-цепочка без sh/uv): stop/restart добивает сервис вместе с его worker'ами.
+# Сироты прошлых запусков (порты + taskiq/granian-процессы) зачищаются при каждом старте.
 # Исключение: make app ex flows_worker  (ex | x, затем имя; либо APP_EXCLUDE=…; либо make -- app --ex …).
 APP_MAK_EX_FLAGS := ex x --ex --exclude -e --kill
 APP_MAK_SVC := ui_watch flows frontend crm rag sync worktracker office scheduler-api secrets wiki stock guest_runtime browser search \
@@ -27,6 +29,6 @@ app: runtime-bootstrap ui-build
 	@command -v mprocs >/dev/null 2>&1 || { echo "mprocs не найден. Установи: brew install mprocs"; exit 1; }
 	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python -m scripts.dev.run from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
 
-# Только освободить порты HTTP-сервисов (без запуска).
+# Только зачистка сирот: порты HTTP-сервисов + процессы прошлых запусков (без запуска).
 kill-ports:
 	uv run python -m scripts.dev.run kill-ports
