@@ -30,7 +30,7 @@ alwaysApply: false
 8. Порядок fetch — `claim_pending_batch` по `sitemap_lastmod DESC NULLS LAST, created_at DESC`; изменившийся lastmod возвращает URL в `pending`; интервал домена — adaptive refresh (`crawl.adaptive_refresh_*`); 404/410 — удаление из индекса и `CrawlUrl.mark_gone`.
 9. Politeness — `CrawlPolitenessService`: robots `Disallow` → skip, `Crawl-delay` + `fetch_min_interval_seconds` → rate limit через Redis, user agent `crawl.robots_user_agent`.
 10. Контекст воркера — `load_system_admin_membership` (только чтение); `ensure_rag_namespace` — один create на namespace за жизнь процесса; Tranco seed — append-only.
-11. Bootstrap воркера — `CrawlBootstrapService.ensure_crawl_pipeline_ready()` (закрыть зависшие jobs, импорт Tranco при пустом профиле и `bootstrap_tranco_on_empty`, иначе тик при pending).
+11. Bootstrap воркера — `CrawlBootstrapService.ensure_crawl_pipeline_ready()` (закрыть зависшие jobs, идемпотентный сид индекса `runet` и профиля `runet_platform` через `ensure_runet_platform_seeded`, импорт Tranco при пустом профиле и `bootstrap_tranco_on_empty`, иначе тик при pending).
 
 ## Контракты
 

@@ -225,6 +225,8 @@ class AuthzService:
         resolved_company_id = company_id
         if resolved_company_id is None:
             resolved_company_id = require_active_company().company_id
+        if not resolved_company_id:
+            return False
         return await self.can_admin(
             AuthzObject.company(resolved_company_id), user_id=user_id
         )
@@ -238,6 +240,8 @@ class AuthzService:
         resolved_company_id = company_id
         if resolved_company_id is None:
             resolved_company_id = require_active_company().company_id
+        if not resolved_company_id:
+            raise AuthzDenied("denied: no company in scope")
         await self.require_can_admin(
             AuthzObject.company(resolved_company_id), user_id=user_id
         )

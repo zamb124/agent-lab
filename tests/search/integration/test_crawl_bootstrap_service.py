@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.config import SearchCrawlConfig
-from apps.search.models import CrawlDomain, CrawlDomainSeed, CrawlProfileCreateRequest
+from apps.search.models import (
+    CrawlDomain,
+    CrawlDomainSeed,
+    CrawlProfile,
+    CrawlProfileCreateRequest,
+)
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
 from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.logging import clear_log_context, get_log_context
@@ -130,6 +135,37 @@ async def test_bootstrap_disabled_does_not_queue_seed(
     assert result.action == "bootstrap_disabled"
     assert result.domain_count == 0
     assert await CrawlDomain.count_for_profile(crawl_profile_id) == 0
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_seeds_platform_profile_when_missing(
+    search_di,
+    search_system_context,
+    monkeypatch,
+):
+    _ = search_di, search_system_context
+    queued: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    async def _capture_enqueue(task: TaskSpec | str, *args: object, **kwargs: object) -> None:
+        queued.append((taskiq_task_name(task), args, kwargs))
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.bootstrap_service.enqueue",
+        _capture_enqueue,
+    )
+
+    bootstrap = CrawlBootstrapService(
+        crawl_config=SearchCrawlConfig(
+            default_crawl_profile_id="runet_platform",
+            bootstrap_tranco_on_empty=True,
+            tranco_seed_limit=5,
+        ),
+    )
+    result = await bootstrap.ensure_crawl_pipeline_ready()
+
+    assert result.crawl_profile_id == "runet_platform"
+    bundle = await CrawlProfile.require_with_index("runet_platform")
+    assert bundle.search_index.search_index_id == "runet"
 
 
 @pytest.mark.asyncio
