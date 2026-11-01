@@ -610,6 +610,32 @@
         }
       }
     },
+    "shop": {
+      "name": "Shop",
+      "description": "Lara entry: company storefront focus; full platform skills attached",
+      "tags": [
+        "shop",
+        "storefront",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Shop Assistant",
+          "prompt": "prompts/shop.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "linnex_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
     "docs": {
       "name": "Documentation Assistant",
       "description": "Lara entry: docs focus with optional pre-lookup; full platform skills attached",

@@ -217,7 +217,7 @@ export class ShopHomePage extends PlatformPage {
                             <div class="create">
                                 <div class="create-title">${this.t('home.create_title')}</div>
                                 <platform-field
-                                    type="text"
+                                    type="string"
                                     mode="edit"
                                     label=${this.t('home.field_name')}
                                     .value=${this._newName}
@@ -227,7 +227,7 @@ export class ShopHomePage extends PlatformPage {
                                     }}
                                 ></platform-field>
                                 <platform-field
-                                    type="text"
+                                    type="string"
                                     mode="edit"
                                     label=${this.t('home.field_slug')}
                                     .value=${this._newSlug}

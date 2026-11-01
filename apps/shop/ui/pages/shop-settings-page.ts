@@ -397,7 +397,7 @@ export class ShopSettingsPage extends PlatformPage {
                             @click=${() => this._aiGenerateLogo()}
                         ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
                     </div>
-                    <platform-field type="text" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
+                    <platform-field type="string" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
                     <platform-field type="text" mode="edit" label=${this.t('settings.field_description')} .value=${this._description}
@@ -410,14 +410,14 @@ export class ShopSettingsPage extends PlatformPage {
                         ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
                     </div>
                     <div class="row">
-                        <platform-field type="text" mode="edit" label=${this.t('settings.field_phone')} .value=${this._phone}
+                        <platform-field type="string" mode="edit" label=${this.t('settings.field_phone')} .value=${this._phone}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._phone = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
-                        <platform-field type="text" mode="edit" label=${this.t('settings.field_city')} .value=${this._city}
+                        <platform-field type="string" mode="edit" label=${this.t('settings.field_city')} .value=${this._city}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._city = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
                     </div>
-                    <platform-field type="text" mode="edit" label=${this.t('settings.field_address')} .value=${this._address}
+                    <platform-field type="string" mode="edit" label=${this.t('settings.field_address')} .value=${this._address}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._address = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
                 </div>
@@ -472,7 +472,7 @@ export class ShopSettingsPage extends PlatformPage {
                     <div class="hint">${String(shop.slug)}.linnex.io</div>
                     ${domains.map((d) => html`<div class="row"><span>${d.domain}</span><span class="hint">${d.status}</span></div>`)}
                     <div class="row">
-                        <platform-field type="text" mode="edit" label=${this.t('settings.field_domain')} .value=${this._newDomain}
+                        <platform-field type="string" mode="edit" label=${this.t('settings.field_domain')} .value=${this._newDomain}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newDomain = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
                         <platform-button size="sm" ?busy=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
@@ -498,7 +498,7 @@ export class ShopSettingsPage extends PlatformPage {
                         `
                         : html`
                             <div class="row">
-                                <platform-field type="text" mode="edit" label=${this.t('settings.field_bot_token')} .value=${this._botToken}
+                                <platform-field type="string" mode="edit" label=${this.t('settings.field_bot_token')} .value=${this._botToken}
                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._botToken = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                 ></platform-field>
                                 <platform-button size="sm" variant="primary" ?busy=${this._telegramConnectOp.busy} ?disabled=${this._botToken.trim().length < 20} @click=${() => this._connectTelegram()}>

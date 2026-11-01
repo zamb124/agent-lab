@@ -321,7 +321,7 @@ export class ShopModifiersModal extends PlatformModal {
             <div class="group-body">
                 <div class="settings">
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         label=${this.t('modifiers.field_name')}
                         .value=${g.name}
@@ -384,7 +384,7 @@ export class ShopModifiersModal extends PlatformModal {
                 ${g.options.map((o) => html`
                     <div class="opt-row">
                         <platform-field
-                            type="text"
+                            type="string"
                             mode="edit"
                             .value=${o.name}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -417,7 +417,7 @@ export class ShopModifiersModal extends PlatformModal {
                     </div>`)}
                 <div class="opt-add">
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         label=${this.t('modifiers.option_name')}
                         .value=${this._newOptionName}
@@ -459,7 +459,7 @@ export class ShopModifiersModal extends PlatformModal {
                 <div class="hint">${this.t('modifiers.hint')} ${this.productName}</div>
                 <div class="create-row">
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         label=${this.t('modifiers.new_group')}
                         .value=${this._newGroupName}

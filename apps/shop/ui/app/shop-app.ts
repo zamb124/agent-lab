@@ -78,8 +78,8 @@ const SHOP_ROUTES = [
 
 const SHOP_BOTTOM_NAV_ITEMS = [
     { key: 'home',      routeKey: 'shop_home',   icon: 'store',    labelKey: 'bottom_nav.home' },
-    { key: 'menu',      routeKey: 'shop_menu',   icon: 'tag',      labelKey: 'bottom_nav.menu' },
-    { key: 'orders',    routeKey: 'shop_orders', icon: 'receipt',  labelKey: 'bottom_nav.orders' },
+    { key: 'menu',      routeKey: 'shop_menu',   icon: 'book-open', labelKey: 'bottom_nav.menu' },
+    { key: 'orders',    routeKey: 'shop_orders', icon: 'scroll-text', labelKey: 'bottom_nav.orders' },
     { key: 'profile',   sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 

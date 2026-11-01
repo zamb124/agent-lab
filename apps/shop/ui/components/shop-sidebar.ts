@@ -18,10 +18,10 @@ import '@platform/lib/components/platform-notification-manager.js';
 
 const NAV_ITEMS = [
     { route: 'shop_home',     icon: 'store',   label_key: 'sidebar.nav.shop_home' },
-    { route: 'shop_menu',     icon: 'tag',     label_key: 'sidebar.nav.shop_menu' },
-    { route: 'shop_builder',  icon: 'brush',   label_key: 'sidebar.nav.shop_builder' },
-    { route: 'shop_orders',   icon: 'receipt', label_key: 'sidebar.nav.shop_orders' },
-    { route: 'shop_promos',   icon: 'gift',    label_key: 'sidebar.nav.shop_promos' },
+    { route: 'shop_menu',     icon: 'book-open', label_key: 'sidebar.nav.shop_menu' },
+    { route: 'shop_builder',  icon: 'edit',    label_key: 'sidebar.nav.shop_builder' },
+    { route: 'shop_orders',   icon: 'scroll-text', label_key: 'sidebar.nav.shop_orders' },
+    { route: 'shop_promos',   icon: 'tag',     label_key: 'sidebar.nav.shop_promos' },
     { route: 'shop_settings', icon: 'settings', label_key: 'sidebar.nav.shop_settings' },
 ];
 
@@ -98,24 +98,35 @@ export class ShopSidebar extends PlatformElement {
         const shopId = this._shopId();
         return html`
             <platform-service-sidebar
-                title=${this.t('sidebar.title')}
-                service-id="shop"
+                logo-src="/static/core/assets/service_logos/shop_logo.svg"
+                logo-text=${this.t('sidebar.title')}
+                ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
+                @collapse-change=${(e: CustomEvent<{ collapsed?: boolean }>) => { this.collapsed = e.detail.collapsed === true; }}
+                @mobile-change=${(e: CustomEvent<{ open?: boolean }>) => { this.mobileOpen = e.detail.open === true; }}
             >
-                ${NAV_ITEMS.map((item) => {
-                    const needsShop = item.route !== 'shop_home';
-                    const disabled = needsShop && shopId === '';
-                    return html`
-                        <button
-                            class="nav-item ${this._isActive(item.route) ? 'active' : ''} ${disabled ? 'disabled' : ''}"
-                            @click=${() => this._navigate(item.route, needsShop ? { shopId } : {})}
-                        >
-                            <platform-icon name=${item.icon}></platform-icon>
-                            <span class="nav-label">${this.t(item.label_key)}</span>
-                        </button>
-                    `;
-                })}
+                <nav>
+                    ${NAV_ITEMS.map((item) => {
+                        const needsShop = item.route !== 'shop_home';
+                        const disabled = needsShop && shopId === '';
+                        return html`
+                            <button
+                                class="nav-item ${this._isActive(item.route) ? 'active' : ''} ${disabled ? 'disabled' : ''}"
+                                @click=${() => this._navigate(item.route, needsShop ? { shopId } : {})}
+                            >
+                                <platform-icon name=${item.icon}></platform-icon>
+                                <span class="nav-label">${this.t(item.label_key)}</span>
+                            </button>
+                        `;
+                    })}
+                </nav>
+                <div slot="footer">
+                    <platform-user block>
+                        <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                    </platform-user>
+                    <platform-deployment-version base-url="/shop" footer></platform-deployment-version>
+                </div>
             </platform-service-sidebar>
         `;
     }

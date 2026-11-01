@@ -762,7 +762,7 @@ export class ShopMenuPage extends PlatformPage {
                     `)}
                     <span class="chip-add">
                         <platform-field
-                            type="text"
+                            type="string"
                             mode="edit"
                             label=${this.t('menu.new_category')}
                             .value=${this._newCategory}
@@ -787,7 +787,7 @@ export class ShopMenuPage extends PlatformPage {
                         </div>
                         <div class="badge-add">
                             <platform-field
-                                type="text"
+                                type="string"
                                 mode="edit"
                                 label=${this.t('menu.badge_label')}
                                 .value=${this._newBadgeLabel}
@@ -828,7 +828,7 @@ export class ShopMenuPage extends PlatformPage {
                         ><platform-icon name="sparkles" size="14"></platform-icon></platform-button>
                     </span>
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         label=${this.t('menu.field_name')}
                         .value=${this._newName}
@@ -846,7 +846,7 @@ export class ShopMenuPage extends PlatformPage {
                         }}
                     ></platform-field>
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         label=${this.t('menu.field_portion')}
                         .value=${this._newPortion}
@@ -900,13 +900,13 @@ export class ShopMenuPage extends PlatformPage {
                                     <tr>
                                         <td colspan="6">
                                             <div class="edit-row">
-                                                <platform-field type="text" mode="edit" label=${this.t('menu.field_name')} .value=${this._editName}
+                                                <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._editName}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editName = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                                 ></platform-field>
                                                 <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._editPrice}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPrice = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
                                                 ></platform-field>
-                                                <platform-field type="text" mode="edit" label=${this.t('menu.field_portion')} .value=${this._editPortion}
+                                                <platform-field type="string" mode="edit" label=${this.t('menu.field_portion')} .value=${this._editPortion}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPortion = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                                 ></platform-field>
                                                 <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._editDescription}

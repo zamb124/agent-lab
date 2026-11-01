@@ -387,7 +387,7 @@ export class ShopPromosPage extends PlatformPage {
             <div class="card">
                 <div class="sec-title">${d.id === null ? this.t('promos.new') : this.t('promos.edit_title')}</div>
                 <div class="row">
-                    <platform-field type="text" mode="edit" label=${this.t('promos.field_name')} .value=${d.name}
+                    <platform-field type="string" mode="edit" label=${this.t('promos.field_name')} .value=${d.name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ name: _str(e) })}></platform-field>
                     <platform-field type="enum" mode="edit" label=${this.t('promos.template')} .value=${d.template}
                         .config=${{ values: TEMPLATES.map((tp) => ({ value: tp, label: this.t(`promos.tpl.${tp}`) })) }}
