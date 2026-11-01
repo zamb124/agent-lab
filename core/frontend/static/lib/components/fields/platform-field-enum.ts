@@ -3,6 +3,7 @@ import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResu
 import { PlatformElement } from '../../platform-element/index.js';
 import { isPlainRecord } from '../../events/payload.js';
 import '../platform-popover.js';
+import '../platform-icon.js';
 import type { PlatformPopover } from '../platform-popover.js';
 
 function enumText(value: string | null | undefined): string {
@@ -130,6 +131,22 @@ export class PlatformFieldEnum extends PlatformElement {
                 font-weight: var(--font-medium);
                 line-height: var(--leading-tight);
                 color: var(--text-primary);
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .enum-option-label {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .enum-option-check {
+                flex: none;
+                color: var(--accent);
             }
 
             .enum-option:hover,
@@ -283,18 +300,22 @@ export class PlatformFieldEnum extends PlatformElement {
         const list = this._filteredDisplayOptions;
         const listBody = list.length === 0
             ? html`<li class="enum-empty" role="option" aria-disabled="true">${this.t('platform_field.enum_no_matches') ?? 'platform_field.enum_no_matches'}</li>`
-            : list.map((opt) => html`
+            : list.map((opt) => {
+                  const selected = enumText(this.value) === opt.value;
+                  return html`
                   <li
-                      class=${`enum-option${enumText(this.value) === opt.value ? ' enum-option--selected' : ''}`}
+                      class=${`enum-option${selected ? ' enum-option--selected' : ''}`}
                       role="option"
-                      aria-selected=${enumText(this.value) === opt.value ? 'true' : 'false'}
+                      aria-selected=${selected ? 'true' : 'false'}
                       data-enum-value=${opt.value}
                       @mousedown=${this._onOptionMouseDown}
                       @click=${() => this._pickOption(opt)}
                   >
-                      ${opt.label}
+                      <span class="enum-option-label">${opt.label}</span>
+                      ${selected ? html`<platform-icon class="enum-option-check" name="check" size="14"></platform-icon>` : nothing}
                   </li>
-              `);
+              `;
+              });
 
         return html`
             <ul
@@ -334,16 +355,34 @@ export class PlatformFieldEnum extends PlatformElement {
         this.requestUpdate();
     }
 
-    _openList(): void {
+    _openList(selectText = false): void {
         if (this.disabled) return;
         this._ensureAnchor();
         this._listOpen = true;
         this._deferOptionFilter = true;
+        if (selectText) {
+            void this.updateComplete.then(() => {
+                if (!this._listOpen) {
+                    return;
+                }
+                // Текущее значение превращается в выделенный запрос: ввод
+                // заменяет его одной клавишей, а в списке текущий выбор
+                // помечен галочкой — «значение» и «запрос» не сосуществуют
+                // как два одинаковых текста на экране.
+                const input = this.renderRoot?.querySelector('input.field-pill-enum-input');
+                if (input instanceof HTMLInputElement) {
+                    input.select();
+                }
+                this.renderRoot
+                    ?.querySelector('.enum-option--selected')
+                    ?.scrollIntoView({ block: 'nearest' });
+            });
+        }
     }
 
     _onFocus(): void {
         if (this.disabled) return;
-        this._openList();
+        this._openList(true);
     }
 
     _onChevronMouseDown(e: MouseEvent): void {
@@ -354,7 +393,7 @@ export class PlatformFieldEnum extends PlatformElement {
         e.preventDefault();
         e.stopPropagation();
         if (this.disabled) return;
-        this._openList();
+        this._openList(true);
         const input = this.renderRoot?.querySelector('input.field-pill-enum-input');
         if (input instanceof HTMLInputElement) {
             input.focus();

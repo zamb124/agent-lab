@@ -344,6 +344,25 @@ describe('platform-field-enum', () => {
         expect(rowY.textContent.trim()).to.equal('Y-Label');
     });
 
+    it('edit: при открытии списка значение выделяется целиком, выбранная опция с галочкой', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field-enum
+                mode="edit"
+                value="a"
+                .config=${{ values: [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }] }}
+            ></platform-field-enum>
+        `);
+        const inp = qs(shadow(el), 'input.field-pill-enum-input') as HTMLInputElement;
+        inp.focus();
+        await elementUpdated(el);
+        await new Promise((resolve) => { window.setTimeout(resolve, 0); });
+        expect(inp.selectionStart).to.equal(0);
+        expect(inp.selectionEnd).to.equal(inp.value.length);
+        const selected = qs(shadow(el), '.enum-option--selected');
+        expect(selected).to.exist;
+        expect(qs(selected, 'platform-icon.enum-option-check')).to.exist;
+    });
+
     it('edit с массивом строк: data-enum-value совпадает с value опции', async () => {
         const el = await fixture<TestEl>(html`
             <platform-field-enum mode="edit" value="a" .config=${{ values: ['a', 'b'] }}></platform-field-enum>
