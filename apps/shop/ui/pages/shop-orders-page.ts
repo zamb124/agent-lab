@@ -183,7 +183,7 @@ export class ShopOrdersPage extends PlatformPage {
                     ${(NEXT[order.status] ?? []).map((next) => html`
                         <platform-button
                             size="sm"
-                            variant=${next === 'cancelled' ? 'default' : 'primary'}
+                            variant=${next === 'cancelled' ? 'secondary' : 'primary'}
                             ?busy=${this._statusOp.busy}
                             @click=${() => this._setStatus(order, next)}
                         >${this.t(`orders.action.${next}`)}</platform-button>

@@ -425,11 +425,11 @@ export class ShopPromosPage extends PlatformPage {
                                     const bundle = d.bundle.map((x, i) => i === idx ? { ...x, qty } : x);
                                     this._patchDraft({ bundle });
                                 }}></platform-field>
-                            <platform-button size="sm" variant="default"
+                            <platform-button size="sm" variant="secondary"
                                 @click=${() => this._patchDraft({ bundle: d.bundle.filter((_, i) => i !== idx) })}>
                                 <platform-icon name="close" size="14"></platform-icon></platform-button>
                         </div>`)}
-                    <platform-button size="sm" variant="default"
+                    <platform-button size="sm" variant="secondary"
                         @click=${() => this._patchDraft({ bundle: [...d.bundle, { product_id: '', qty: 1 }] })}>
                         ${this.t('promos.bundle_add')}</platform-button>` : nothing}
                 ${needsScope ? html`
@@ -479,7 +479,7 @@ export class ShopPromosPage extends PlatformPage {
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ isActive: Boolean(e.detail.value) })}></platform-switch>
                 </div>
                 <div class="actions">
-                    <platform-button variant="default" @click=${() => { this._draft = null; }}>${this.t('promos.cancel')}</platform-button>
+                    <platform-button variant="secondary" @click=${() => { this._draft = null; }}>${this.t('promos.cancel')}</platform-button>
                     <platform-button variant="primary" ?busy=${this._createOp.busy || this._updateOp.busy}
                         @click=${() => void this._save()}>${this.t('promos.save')}</platform-button>
                 </div>
@@ -504,9 +504,9 @@ export class ShopPromosPage extends PlatformPage {
                 </div>
                 <platform-switch ?checked=${p.is_active} ?busy=${this._updateOp.busy}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => void this._toggle(p, Boolean(e.detail.value))}></platform-switch>
-                <platform-button size="sm" variant="default"
+                <platform-button size="sm" variant="secondary"
                     @click=${() => { this._draft = this._draftFrom(p); }}>${this.t('promos.edit')}</platform-button>
-                <platform-button size="sm" variant="default" ?busy=${this._removeOp.busy}
+                <platform-button size="sm" variant="secondary" ?busy=${this._removeOp.busy}
                     @click=${() => void this._removeOp.run({ shop_id: this.shopId, shop_promo_id: p.shop_promo_id })}>
                     <platform-icon name="trash" size="14"></platform-icon></platform-button>
             </div>
