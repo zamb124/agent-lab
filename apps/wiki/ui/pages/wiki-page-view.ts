@@ -299,13 +299,13 @@ export class WikiPageView extends PlatformPage {
                 align-items: center;
                 justify-content: center;
                 flex-shrink: 0;
-                width: 104px;
-                height: 104px;
+                width: 76px;
+                height: 76px;
                 margin: 0;
                 border: none;
                 border-radius: var(--radius-md);
                 background: transparent;
-                font-size: 80px;
+                font-size: 60px;
                 line-height: 1;
                 cursor: pointer;
             }
@@ -377,9 +377,9 @@ export class WikiPageView extends PlatformPage {
                     font-size: 32px;
                 }
                 .icon-btn {
-                    width: 80px;
-                    height: 80px;
-                    font-size: 56px;
+                    width: 56px;
+                    height: 56px;
+                    font-size: 42px;
                 }
             }
         `,
@@ -1193,7 +1193,7 @@ export class WikiPageView extends PlatformPage {
                 @click=${(event: Event) => { this._iconAnchor = clickElement(event); }}
             >
                 ${this._requirePage().icon === ''
-                    ? html`<platform-icon name="smile" size="48"></platform-icon>`
+                    ? html`<platform-icon name="smile" size="40"></platform-icon>`
                     : this._requirePage().icon}
             </button>
         `;
