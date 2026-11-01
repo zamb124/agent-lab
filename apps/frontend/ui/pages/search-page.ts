@@ -2215,6 +2215,10 @@ export class PublicSearchPage extends PlatformPage {
         this._serpRects = new Map();
         /** @type {string | undefined} */
         this._serpOrderSignature = undefined;
+        /** @type {string | undefined} */
+        this._serpDataSignature = undefined;
+        /** @type {string | undefined} */
+        this._measuredAnswer = undefined;
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
         /** @type {(() => void) | null} */
         this._releaseSearchInputViewport = null;
@@ -2236,6 +2240,8 @@ export class PublicSearchPage extends PlatformPage {
     private _lastSerpCacheKey: string;
     private _serpRects: Map<string, DOMRect>;
     private _serpOrderSignature: string | undefined;
+    private _serpDataSignature: string | undefined;
+    private _measuredAnswer: string | undefined;
     private _releaseSearchInputViewport: (() => void) | null;
 
 
@@ -2304,8 +2310,18 @@ export class PublicSearchPage extends PlatformPage {
             this._serpLoadBlocked = false;
         }
         this._ensureSerpSentinelObserver();
-        this._animateSerpReorder();
-        this._measureAnswerOverflow();
+        // Layout-чтения (FLIP-rects, scrollHeight) — только при смене данных:
+        // иначе каждый стрим-токен гоняет forced reflow, и sticky topbar
+        // с backdrop-filter перерисовывается десятки раз в секунду.
+        const resultsSig = `${stream.rank_stage}|${stream.results.map((item) => item.url).join('|')}`;
+        if (resultsSig !== this._serpDataSignature) {
+            this._serpDataSignature = resultsSig;
+            this._animateSerpReorder();
+        }
+        if (stream.answer !== this._measuredAnswer) {
+            this._measuredAnswer = stream.answer;
+            this._measureAnswerOverflow();
+        }
     }
 
     /**
@@ -3222,7 +3238,24 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _renderSuggestions(stream: PublicSearchStream) {
-        const suggestions = [...stream.followups, ...stream.suggestions];
+        const query = stream.query.trim().toLowerCase();
+        const seen = new Set<string>();
+        const suggestions: string[] = [];
+        for (const item of [...stream.followups, ...stream.suggestions]) {
+            const text = item.text.trim();
+            const key = text.toLowerCase();
+            if (text.length === 0 || seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            // Самоссылки пайплайна («…по запросу "query"», повтор самого
+            // запроса) — не уточнения, а шум генерации.
+            if (query.length > 0
+                && (key === query || key.includes(`"${query}"`) || key.includes(`«${query}»`))) {
+                continue;
+            }
+            suggestions.push(text);
+        }
         if (suggestions.length === 0) {
             return html``;
         }
@@ -3230,9 +3263,9 @@ export class PublicSearchPage extends PlatformPage {
             <section class="suggest-panel">
                 <p class="panel-label"><platform-icon name="search" size="14"></platform-icon><span>${this.t('search_page.related_label')}</span></p>
                 <div class="suggest-list">
-                    ${suggestions.map((item) => html`
-                        <button class="suggest-chip" type="button" ?disabled=${this._preparingFiles} @click=${() => this._suggest(item.text)}>
-                            ${item.text}
+                    ${suggestions.map((text) => html`
+                        <button class="suggest-chip" type="button" ?disabled=${this._preparingFiles} @click=${() => this._suggest(text)}>
+                            ${text}
                         </button>
                     `)}
                 </div>

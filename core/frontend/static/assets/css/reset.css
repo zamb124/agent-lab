@@ -40,6 +40,12 @@ html {
     min-height: 100%;
     min-height: -webkit-fill-available;
     background: var(--bg-gradient);
+    /*
+     * Резервируем место под вертикальный скроллбар: без gutter появление
+     * скроллбара при росте контента за фолд сужает viewport и дёргает
+     * весь центрированный layout (лендинги, search, docs).
+     */
+    scrollbar-gutter: stable;
 }
 
 body {
@@ -66,6 +72,8 @@ html:has(body.platform-shell) {
      * и визуально «тянет» экран вниз после скачка клавиатуры.
      */
     scroll-behavior: auto;
+    /* overflow:hidden резервировал бы gutter — мёртвая полоса справа в каждом SPA. */
+    scrollbar-gutter: auto;
 }
 
 body.platform-shell {
