@@ -1179,10 +1179,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 user-select: none;
             }
             .port[data-port-kind="pass"] {
-                fill: color-mix(in oklab, var(--success) 72%, var(--node-accent, var(--accent));
+                fill: color-mix(in oklab, var(--success) 72%, var(--node-accent, var(--accent)));
             }
             .port[data-port-kind="fail"] {
-                fill: color-mix(in oklab, var(--error) 72%, var(--node-accent, var(--accent));
+                fill: color-mix(in oklab, var(--error) 72%, var(--node-accent, var(--accent)));
             }
 
             /* Связи по данным (data-flow), отличаются от control-рёбер */

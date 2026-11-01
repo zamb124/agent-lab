@@ -94,7 +94,7 @@ export class GlassToast extends PlatformElement {
             
             @keyframes slideIn {
                 from {
-                    transform: translateX(calc(100% + var(--space-6);
+                    transform: translateX(calc(100% + var(--space-6)));
                     opacity: 0;
                 }
                 to {
@@ -109,7 +109,7 @@ export class GlassToast extends PlatformElement {
                     opacity: 1;
                 }
                 to {
-                    transform: translateX(calc(100% + var(--space-6);
+                    transform: translateX(calc(100% + var(--space-6)));
                     opacity: 0;
                 }
             }

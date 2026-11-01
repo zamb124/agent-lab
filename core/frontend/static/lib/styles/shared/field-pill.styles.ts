@@ -156,7 +156,7 @@ export const fieldPillStyles = css`
     fieldset.field-pill:focus-within .field-pill-float {
         top: calc(-1 * (var(--field-pill-padding-y) + var(--field-pill-legend-h) / 2));
         transform: translateY(-50%)
-            scale(calc(var(--field-pill-float-size) / var(--field-pill-input-size);
+            scale(calc(var(--field-pill-float-size) / var(--field-pill-input-size)));
         font-weight: var(--field-pill-float-weight);
         text-transform: uppercase;
         letter-spacing: var(--field-pill-label-letter);

@@ -459,7 +459,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 top: var(--space-4);
                 right: var(--space-4);
                 bottom: var(--space-4);
-                width: min(360px, calc(100vw - var(--space-8);
+                width: min(360px, calc(100vw - var(--space-8)));
                 background: var(--sync-call-panel-strong);
                 border: 1px solid var(--sync-call-border);
                 border-radius: var(--radius-2xl);

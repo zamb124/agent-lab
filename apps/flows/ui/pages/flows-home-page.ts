@@ -434,7 +434,7 @@ export class FlowsHomePage extends PlatformPage {
                 border: 1px solid var(--border-subtle);
                 box-sizing: border-box;
             }
-            .action-card,
+            .section-head {
                 display: flex;
                 align-items: flex-end;
                 justify-content: space-between;

@@ -16,7 +16,7 @@ export const chromeIconButtonStyles = css`
         }
         .chrome-icon-btn:hover:not(:disabled) {
             border-color: color-mix(in srgb, var(--flow-ui-text) 22%, var(--flow-ui-border));
-            background: color-mix(in srgb, var(--flow-ui-surface-hover) 70%, var(--flow-ui-panel-strong, var(--flow-ui-panel));
+            background: color-mix(in srgb, var(--flow-ui-surface-hover) 70%, var(--flow-ui-panel-strong, var(--flow-ui-panel)));
         }
         .chrome-icon-btn:focus-visible { outline: none; box-shadow: var(--flow-ui-focus-ring); }
         .chrome-icon-btn:disabled { opacity: .72; cursor: default; }

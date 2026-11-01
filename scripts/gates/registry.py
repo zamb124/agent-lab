@@ -83,6 +83,7 @@ GATES: tuple[Gate, ...] = (
     Gate("frontend.ui_kit_docs", _py("scripts.gates.frontend.ui_kit_docs"), _TS),
     Gate("frontend.core_frontend_canon", _py("scripts.gates.frontend.core_frontend_canon"), _TS_EVENTS),
     Gate("frontend.embed_esm_closure", _py("scripts.gates.frontend.embed_esm_closure"), _TS_EVENTS),
+    Gate("frontend.css_template_balance", _py("scripts.gates.frontend.css_template_balance"), _TS),
     Gate("frontend.platform_typography", _py("scripts.gates.frontend.platform_typography"), frozenset()),
     Gate("frontend.i18n", _sh("scripts/gates/frontend/i18n.sh"), _TS_EVENTS),
     Gate(

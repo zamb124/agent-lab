@@ -307,6 +307,23 @@ describe('platform-field-enum', () => {
         expect(qs(shadow(el), '.enum-chip').textContent).to.equal('Активно');
     });
 
+    it('edit: input получает pill-стили (transparent, наследованный шрифт)', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field-enum
+                mode="edit"
+                value="x"
+                .config=${{ values: [{ value: 'x', label: 'X' }] }}
+            ></platform-field-enum>
+        `);
+        const inp = qs(shadow(el), 'input.field-pill-enum-input');
+        expect(inp).to.exist;
+        const cs = getComputedStyle(inp);
+        expect(cs.backgroundColor).to.equal('rgba(0, 0, 0, 0)');
+        expect(cs.borderTopWidth).to.equal('0px');
+        const chevron = qs(shadow(el), '.field-pill-enum-chevron');
+        expect(getComputedStyle(chevron).position).to.equal('absolute');
+    });
+
     it('edit: combobox и список label при фокусе', async () => {
         const el = await fixture<TestEl>(html`
             <platform-field-enum

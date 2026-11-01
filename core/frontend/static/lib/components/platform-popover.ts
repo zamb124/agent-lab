@@ -139,7 +139,7 @@ export class PlatformPopover extends PlatformElement {
             @keyframes platform-popover-in {
                 from {
                     opacity: 0;
-                    transform: translateY(calc(-1 * var(--motion-enter-offset-y);
+                    transform: translateY(calc(-1 * var(--motion-enter-offset-y)));
                 }
                 to {
                     opacity: 1;
