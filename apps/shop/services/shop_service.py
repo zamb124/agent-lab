@@ -20,6 +20,7 @@ from apps.shop.models import (
 from apps.shop.models.api import (
     ShopBadge,
     ShopCategoryCreateRequest,
+    ShopCategoryReorderItem,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
     ShopModifierGroupCreateRequest,
@@ -170,12 +171,19 @@ class ShopService:
         self, company_id: str, shop_id: str, payload: ShopCategoryCreateRequest
     ) -> ShopCategory:
         _ = await self.get_shop(company_id, shop_id)
+        if payload.parent_id is not None:
+            parent = await ShopCategory.get_by_id(payload.parent_id)
+            if parent is None or parent.shop_id != shop_id:
+                raise PlatformNotFoundError(
+                    "Category not found", error_code="category_not_found"
+                )
         now = utcnow()
         category = ShopCategory(
             shop_category_id=new_id("shopcat"),
             shop_id=shop_id,
+            parent_id=payload.parent_id,
             name=payload.name,
-            sort=await ShopCategory.next_sort_by_sort_desc(shop_id),
+            sort=await ShopCategory.next_sort_by_sort_desc(shop_id, payload.parent_id),
             created_at=now,
             updated_at=now,
         )
@@ -198,28 +206,80 @@ class ShopService:
         return category
 
     async def reorder_categories(
-        self, company_id: str, shop_id: str, category_ids: list[str]
+        self, company_id: str, shop_id: str, items: list[ShopCategoryReorderItem]
     ) -> None:
-        """Перестановка категорий меню: ids получают отсортированные
-        sort-значения в новом порядке."""
+        """Заменяет дерево категорий целиком: parent_id каждого узла и
+        sort — позиция среди siblings в порядке обхода ``items``.
+
+        ``items`` обязан содержать все категории магазина ровно по разу,
+        каждый ``parent_id`` — либо ``None``, либо id из ``items`` без циклов.
+        """
         _ = await self.get_shop(company_id, shop_id)
         categories = await ShopCategory.list_by_shop_by_sort_asc(shop_id)
         by_id = {c.shop_category_id: c for c in categories}
-        if any(cid not in by_id for cid in category_ids):
+        item_ids = [i.category_id for i in items]
+        if len(set(item_ids)) != len(item_ids) or set(item_ids) != set(by_id):
+            raise PlatformConflictError(
+                "Reorder must include every category exactly once",
+                error_code="categories_reorder_incomplete",
+            )
+        parent_of = {i.category_id: i.parent_id for i in items}
+        if any(pid is not None and pid not in by_id for pid in parent_of.values()):
             raise PlatformNotFoundError("Category not found", error_code="category_not_found")
-        ordered = [by_id[cid] for cid in category_ids]
-        sorts = sorted(c.sort for c in ordered)
-        for category, sort in zip(ordered, sorts, strict=True):
-            if category.sort != sort:
-                category.sort = sort
-                category.updated_at = utcnow()
-                _ = await category.save()
+        for start in item_ids:
+            seen: set[str] = set()
+            node: str | None = start
+            while node is not None:
+                if node in seen:
+                    raise PlatformConflictError(
+                        "Category tree contains a cycle", error_code="category_cycle"
+                    )
+                seen.add(node)
+                node = parent_of[node]
+        groups: dict[str | None, list[str]] = {}
+        for item in items:
+            groups.setdefault(item.parent_id, []).append(item.category_id)
+        now = utcnow()
+        for parent_id, sibling_ids in groups.items():
+            for sort, category_id in enumerate(sibling_ids):
+                category = by_id[category_id]
+                if category.parent_id != parent_id or category.sort != sort:
+                    category.parent_id = parent_id
+                    category.sort = sort
+                    category.updated_at = now
+                    _ = await category.save()
 
     async def delete_category(self, company_id: str, shop_id: str, category_id: str) -> None:
+        """Удаляет категорию, поднимая детей и товары на уровень её родителя."""
         _ = await self.get_shop(company_id, shop_id)
         category = await ShopCategory.get_by_id(category_id)
         if category is None or category.shop_id != shop_id:
             raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+        now = utcnow()
+        children = await ShopCategory.list_children_by_parent_by_sort_asc(
+            shop_id, category_id
+        )
+        if children:
+            next_sort = await ShopCategory.next_sort_by_sort_desc(
+                shop_id, category.parent_id
+            )
+            for child in children:
+                child.parent_id = category.parent_id
+                child.sort = next_sort
+                next_sort += 1
+                child.updated_at = now
+                _ = await child.save()
+        products = await ShopProduct.list_by_category_by_sort_asc(shop_id, category_id)
+        if products:
+            next_sort = await ShopProduct.next_sort_by_sort_desc(
+                shop_id, category.parent_id
+            )
+            for product in products:
+                product.category_id = category.parent_id
+                product.sort = next_sort
+                next_sort += 1
+                product.updated_at = now
+                _ = await product.save()
         _ = await category.delete()
 
     async def list_products(self, company_id: str, shop_id: str) -> list[ShopProduct]:
@@ -293,15 +353,17 @@ class ShopService:
         _ = patch.pop("shop_product_id", None)
         if "badges" in patch:
             patch["badges"] = self._validate_product_badges(shop, payload.badges or [])
-        category_patch = patch.get("category_id")
-        if category_patch is not None:
-            if not isinstance(category_patch, str):
-                raise PlatformBoundaryError(
-                    "category_id must be a string", error_code="product_invalid"
-                )
-            category = await ShopCategory.get_by_id(category_patch)
-            if category is None or category.shop_id != shop_id:
-                raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+        if "category_id" in patch and patch["category_id"] != product.category_id:
+            category_patch = patch["category_id"]
+            if category_patch is not None:
+                if not isinstance(category_patch, str):
+                    raise PlatformBoundaryError(
+                        "category_id must be a string", error_code="product_invalid"
+                    )
+                category = await ShopCategory.get_by_id(category_patch)
+                if category is None or category.shop_id != shop_id:
+                    raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+            patch["sort"] = await ShopProduct.next_sort_by_sort_desc(shop_id, category_patch)
         for field, value in patch.items():
             setattr(product, field, value)
         product.updated_at = utcnow()

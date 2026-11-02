@@ -118,6 +118,17 @@ export const shopCategoriesListOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/categories' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
+            return false;
+        }
+        const pushedShopId = event.payload.shop_id;
+        return rerunLastRequest(ctx, shopCategoriesListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && payload.shop_id === pushedShopId,
+        });
+    },
 });
 
 export const shopCategoryCreateOp = createAsyncOp({

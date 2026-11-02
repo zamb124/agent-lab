@@ -97,7 +97,14 @@
         "category_remove": "Remove category",
         "remove": "Remove",
         "product_new": "New item",
-        "product_edit": "Item"
+        "product_edit": "Item",
+        "cat_expand": "Expand",
+        "cat_collapse": "Collapse",
+        "cat_add_child": "Subcategory",
+        "cat_rename": "Rename",
+        "cat_indent": "Nest under previous sibling",
+        "cat_outdent": "Move level up",
+        "cat_empty_hint": "Create the first category with the button above — drag categories to reorder and nest"
     },
     "builder": {
         "title": "Storefront appearance",

@@ -57,6 +57,7 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .tabs button{{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}}
 .tabs button.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
 .cat{{font-size:21px;margin:28px 0 6px;letter-spacing:-.01em}}
+.cat.sub{{font-size:17px;margin:18px 0 4px;color:var(--muted);font-weight:600}}
 .mchunk{{animation:fade .3s ease}}
 .msk{{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}}
 @keyframes shimmer{{from{{background-position:120% 0}}to{{background-position:-80% 0}}}}
@@ -231,8 +232,6 @@ function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" 
 function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}" ${{STOP}}>${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
-  const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
-  const other=S.products.filter(p=>!p.category_id);
   const hb=hoursBadge();
   let h=`<div class="hero">${{photo(S.cover_file_id,'bg')}}<div class="veil"></div><div class="head">${{photo(S.logo_file_id,'logo')}}<div><h1 class="serif">${{esc(S.name)}}</h1>${{S.description?`<div class="desc">${{esc(S.description)}}</div>`:''}}</div></div></div>
   <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
@@ -244,14 +243,15 @@ function render(){{
 }}
 let queue=[],spyIO=null,moreIO=null;
 function spy(root){{if(!spyIO)return;
-  root.querySelectorAll('h2.cat[id]:not([data-spy])').forEach(h=>{{h.dataset.spy='1';spyIO.observe(h);}});}}
+  root.querySelectorAll('.cat[id]:not([data-spy])').forEach(h=>{{h.dataset.spy='1';spyIO.observe(h);}});}}
 function activate(id){{document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.cat===id));
   const t=document.querySelector(`.tabs button[data-cat="${{CSS.escape(id)}}"]`);
   t?.scrollIntoView({{inline:'center',block:'nearest'}});}}
+function chunkHtml(b){{const t=b.depth?3:2;
+  return `<div class="mchunk">${{b.name?`<h${{t}} class="cat serif${{b.depth?' sub':''}}"${{b.id?` id="${{b.id}}" data-root="${{b.root}}"`:""}}${{b.depth?` style="margin-left:${{Math.min(b.depth,4)*16}}px"`:''}}>${{esc(b.name)}}</h${{t}}>`:''}}${{ITEMS(b.items)}}</div>`;}}
 function renderMenu(){{
   const menu=document.getElementById('menu');if(!menu)return;
   spyIO?.disconnect();moreIO?.disconnect();queue=[];
-  const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
   const other=S.products.filter(p=>!p.category_id);
   if(query){{
     const hits=S.products.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
@@ -260,21 +260,32 @@ function renderMenu(){{
   }}
   // Прогрессивный рендер: табы сразу, тело дорисовывается чанками по мере скролла —
   // все данные уже в снапшоте, поэтому подгрузка мгновенная и бесшовная.
-  const CH=12,blocks=[];
-  const push=(id,name,items)=>{{for(let i=0;i<items.length;i+=CH)
-    blocks.push({{id:i===0?id:'',name:i===0?name:'',items:items.slice(i,i+CH)}});}};
-  for(const c of cats)push('c-'+c.id,c.name,S.products.filter(p=>p.category_id===c.id));
-  if(other.length)push('c-other','Ещё',other);
-  menu.innerHTML=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
+  // Дерево категорий: секции в depth-first порядке; категория видна, когда в её
+  // поддереве есть товары; узел с родителем вне снапшота считается корнем.
+  const CH=12,blocks=[],byId={{}};
+  for(const c of S.categories)byId[c.id]=c;
+  const prods=cid=>S.products.filter(p=>p.category_id===cid);
+  const kids=p=>S.categories.filter(c=>((c.parent_id&&byId[c.parent_id])?c.parent_id:null)===p).sort((a,b)=>a.sort-b.sort);
+  const subHas=c=>prods(c.id).length>0||kids(c.id).some(subHas);
+  const roots=kids(null).filter(subHas);
+  const push=(id,name,depth,root,items)=>{{
+    if(!items.length){{blocks.push({{id:'c-'+id,name,depth,root,items:[]}});return;}}
+    for(let i=0;i<items.length;i+=CH)
+      blocks.push({{id:i===0?'c-'+id:'',name:i===0?name:'',depth,root,items:items.slice(i,i+CH)}});}};
+  for(const r of roots){{const walk=(c,depth)=>{{push(c.id,c.name,depth,r.id,prods(c.id));
+    for(const k of kids(c.id))if(subHas(k))walk(k,depth+1);}};walk(r,0);}}
+  if(other.length)push('other','Ещё',0,'other',other);
+  menu.innerHTML=`<div class="tabs">${{roots.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
   const body=menu.querySelector('#mbody'),sent=menu.querySelector('#msent');
   queue=blocks;
   const flush=()=>{{const b=queue.shift();
     if(!b){{sent.remove();moreIO?.disconnect();return;}}
-    body.insertAdjacentHTML('beforeend',`<div class="mchunk">${{b.name?`<h2 class="cat serif"${{b.id?` id="${{b.id}}"`:""}}>${{esc(b.name)}}</h2>`:''}}${{ITEMS(b.items)}}</div>`);
+    body.insertAdjacentHTML('beforeend',chunkHtml(b));
     spy(body);}};
-  const first=cats[0];if(first)activate(first.id);
+  const first=roots[0]?.id||(other.length?'other':'');
+  if(first)activate(first);
   for(let i=0;i<3&&queue.length;i++)flush();
-  spyIO=new IntersectionObserver(es=>{{for(const e of es)if(e.isIntersecting)activate(e.target.id.slice(2));}},{{rootMargin:'-30% 0px -60% 0px'}});
+  spyIO=new IntersectionObserver(es=>{{for(const e of es)if(e.isIntersecting)activate(e.target.dataset.root);}},{{rootMargin:'-30% 0px -60% 0px'}});
   spy(body);
   moreIO=new IntersectionObserver(es=>{{if(es[0].isIntersecting)for(let i=0;i<2&&queue.length;i++)flush();}},{{rootMargin:'1000px 0px'}});
   if(queue.length)moreIO.observe(sent);else sent.remove();
@@ -284,7 +295,7 @@ window.jump=id=>{{
   const m=document.getElementById('mbody'),sent=document.getElementById('msent');
   while(!el&&queue.length&&m&&sent){{
     const b=queue.shift();
-    m.insertAdjacentHTML('beforeend',`<div class="mchunk">${{b.name?`<h2 class="cat serif"${{b.id?` id="${{b.id}}"`:""}}>${{esc(b.name)}}</h2>`:''}}${{ITEMS(b.items)}}</div>`);
+    m.insertAdjacentHTML('beforeend',chunkHtml(b));
     spy(m);
     if(!queue.length)sent.remove();
     el=document.getElementById('c-'+id);

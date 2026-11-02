@@ -98,6 +98,11 @@ def test_every_source_kind_is_placed_or_exempt() -> None:
             ["Wiki", "knowledge", "page-1"],
         ),
         (
+            FileSourceKind.SHOP_PRODUCT,
+            FileSourceRef(shop_id="shop_1"),
+            ["Shop", "shop_1"],
+        ),
+        (
             FileSourceKind.CODE_AGENT_SOURCE,
             FileSourceRef(flow_id="my_flow", node_id="n1"),
             ["Flows", "my-flow", "code_agent", "n1"],

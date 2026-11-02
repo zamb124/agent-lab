@@ -226,7 +226,9 @@ async def create_category(
     shop_id: str, payload: ShopCategoryCreateRequest, di: Di
 ) -> ShopCategoryResponse:
     return await op_categories_create(
-        ShopCategoryCreatePayload(shop_id=shop_id, name=payload.name),
+        ShopCategoryCreatePayload(
+            shop_id=shop_id, name=payload.name, parent_id=payload.parent_id
+        ),
         user=require_context().user,
         di=di,
     )

@@ -62,6 +62,17 @@ class ShopProduct(PlatformModel):
         )
 
     @classmethod
+    async def list_by_category_by_sort_asc(
+        cls, shop_id: str, category_id: str | None
+    ) -> list[Self]:
+        """Товары одной категории по sort ASC."""
+        return (
+            await cls.objects.filter(shop_id=shop_id, category_id=category_id)
+            .order_by("sort")
+            .all()
+        )
+
+    @classmethod
     async def list_many_by_ids(cls, product_ids: list[str]) -> list[Self]:
         return await cls.objects.filter(shop_product_id__in=product_ids).all()
 

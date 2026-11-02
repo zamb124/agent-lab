@@ -36,7 +36,7 @@ alwaysApply: false
 ### Documents bind
 
 1. Каждый durable `FilesService.create`/`register_s3` кладётся в дерево `DocumentTreeService.place` (`core/documents/tree_service.py`) либо exempt; сбой размещения — компенсация `FilesService.delete` и `raise`.
-2. Путь источника — `source_catalog_path` (`core/documents/paths.py`): `Mail/…`, `Sync/…`, `Flows/…`, `Flows/{flow}/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`. Явный путь — `DocumentPlacement.catalog_path`. Namespace — `resolve_namespace_or_raise()`.
+2. Путь источника — `source_catalog_path` (`core/documents/paths.py`): `Mail/…`, `Sync/…`, `Flows/…`, `Flows/{flow}/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`, `Shop/{shop_id}`. Явный путь — `DocumentPlacement.catalog_path`. Namespace — `resolve_namespace_or_raise()`.
 3. `office_document` не получает автоматический путь источника: каталог задаёт `DocumentPlacement`, и `place` кладёт файл в дерево. Без каталога остаются `generated_ephemeral` и `platform_auxiliary`.
 4. Новый источник — `FileSourceKind` + строка registry + placement или exempt, не новый HTTP endpoint. Источники со своим контрактом: `MAIL_MESSAGE` (идемпотентность — `MailAttachmentFileIndex`), `CODE_AGENT_SOURCE` (`node_id` обязателен → `guest_runtime.mdc`), `WIKI_PAGE` (`wiki_page_id` + `namespace_id`, retention permanent).
 

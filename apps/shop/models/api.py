@@ -114,6 +114,7 @@ class ShopUpdateRequest(StrictBaseModel):
 class ShopCategoryResponse(StrictBaseModel):
     shop_category_id: str
     shop_id: str
+    parent_id: str | None
     name: str
     sort: int
     is_active: bool
@@ -121,11 +122,11 @@ class ShopCategoryResponse(StrictBaseModel):
 
 class ShopCategoryCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=200)
+    parent_id: str | None = None
 
 
 class ShopCategoryUpdateRequest(StrictBaseModel):
     name: str | None = Field(default=None, max_length=200)
-    sort: int | None = None
     is_active: bool | None = None
 
 
@@ -187,10 +188,21 @@ class ShopProductsReorderRequest(StrictBaseModel):
     product_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
-class ShopCategoriesReorderRequest(StrictBaseModel):
-    """Новый порядок категорий меню: ids в желаемой последовательности."""
+class ShopCategoryReorderItem(StrictBaseModel):
+    """Узел дерева категорий: категория и её родитель после перестановки."""
 
-    category_ids: list[str] = Field(min_length=1, max_length=200)
+    category_id: str = Field(min_length=1)
+    parent_id: str | None = None
+
+
+class ShopCategoriesReorderRequest(StrictBaseModel):
+    """Полное дерево категорий меню: все узлы в depth-first порядке.
+
+    ``sort`` каждой категории вычисляется сервером — позиция среди siblings
+    в порядке обхода ``items``. Все категории магазина обязаны присутствовать.
+    """
+
+    items: list[ShopCategoryReorderItem] = Field(min_length=1, max_length=200)
 
 
 class ShopAiDescribeRequest(StrictBaseModel):

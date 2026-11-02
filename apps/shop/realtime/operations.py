@@ -337,6 +337,7 @@ def _category_response(category: ShopCategory) -> ShopCategoryResponse:
     return ShopCategoryResponse(
         shop_category_id=category.shop_category_id,
         shop_id=category.shop_id,
+        parent_id=category.parent_id,
         name=category.name,
         sort=category.sort,
         is_active=category.is_active,
@@ -536,15 +537,17 @@ async def op_categories_remove(
 async def op_categories_reorder(
     payload: ShopCategoriesReorderPayload, *, user: User, di: Di
 ) -> EmptyPayload:
-    """Перестановка категорий меню — порядок табов на витрине."""
+    """Замена дерева категорий меню — ``items`` в depth-first порядке."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
         await di.shop_service.reorder_categories(
-            scope.company_id, payload.shop_id, payload.category_ids
+            scope.company_id, payload.shop_id, payload.items
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return EmptyPayload()

@@ -163,6 +163,7 @@ class StorefrontService:
             "categories": [
                 {
                     "id": c.shop_category_id,
+                    "parent_id": c.parent_id,
                     "name": c.name,
                     "sort": c.sort,
                 }

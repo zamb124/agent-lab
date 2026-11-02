@@ -1034,6 +1034,8 @@
         "ai_empty_result": "AI returned an empty result",
         "ai_upstream": "AI operation is unavailable, try again later",
         "below_min_order": "Order total is below the minimum",
+        "categories_reorder_incomplete": "Category order must include every shop category",
+        "category_cycle": "A category cannot be nested inside itself",
         "category_not_found": "Category not found",
         "delivery_disabled": "Delivery is disabled by the shop",
         "domain_invalid": "Invalid domain",

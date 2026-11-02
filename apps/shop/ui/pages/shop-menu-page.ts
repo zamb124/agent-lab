@@ -18,12 +18,17 @@ import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/shop-category-tree.js';
+import type { ShopTreeReorderItem } from '../components/shop-category-tree.js';
 import '../components/shop-page-head.js';
 import { shopHeadRow } from '../components/shop-page-head.js';
 import type { ShopHeadRow } from '../components/shop-page-head.js';
 
+const PRODUCT_MIME = 'application/x-shop-product-id';
+
 interface CategoryRow {
     shop_category_id: string;
+    parent_id: string | null;
     name: string;
     sort: number;
     is_active: boolean;
@@ -64,6 +69,7 @@ export class ShopMenuPage extends PlatformPage {
     private _categoriesOp: OpController;
     private _productsOp: OpController;
     private _categoryCreateOp: OpController;
+    private _categoryUpdateOp: OpController;
     private _categoryRemoveOp: OpController;
     private _categoryReorderOp: OpController;
     private _productUpdateOp: OpController;
@@ -77,28 +83,24 @@ export class ShopMenuPage extends PlatformPage {
     private _uploadOp: OpController;
     private _locale: SelectController<string>;
 
-    declare _categories: CategoryRow[];
-    declare _products: ProductRow[];
     declare _badgeIcons: Record<string, string>;
     declare _badgeEditorOpen: boolean;
     declare _newBadgeLabel: string;
     declare _newBadgeIcon: string;
     declare _activeCategory: string | null;
-    declare _newCategory: string;
+    declare _expandedIds: string[];
     declare _importOpen: boolean;
     declare _importText: string;
     declare _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
-        _categories: { state: true },
-        _products: { state: true },
         _badgeIcons: { state: true },
         _badgeEditorOpen: { state: true },
         _newBadgeLabel: { state: true },
         _newBadgeIcon: { state: true },
         _activeCategory: { state: true },
-        _newCategory: { state: true },
+        _expandedIds: { state: true },
         _importOpen: { state: true },
         _importText: { state: true },
         _aiItems: { state: true },
@@ -121,31 +123,11 @@ export class ShopMenuPage extends PlatformPage {
                 padding: var(--space-2);
                 position: sticky;
                 top: var(--space-4);
+                min-width: 0;
             }
-            .rail-title {
-                font-size: var(--text-xs); font-weight: var(--font-semibold);
-                color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;
-                padding: var(--space-2) var(--space-2) var(--space-1);
-            }
-            .cat {
-                width: 100%;
-                display: flex; align-items: center; gap: var(--space-2);
-                border: 0; border-radius: var(--radius-md);
-                padding: var(--space-2) var(--space-2);
-                background: transparent; color: var(--text-secondary);
-                font-size: var(--text-sm); cursor: pointer; text-align: left;
-            }
-            .cat:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); color: var(--text-primary); }
-            .cat.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: var(--font-semibold); }
-            .cat .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .cat .count { font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-            .cat.active .count { color: var(--accent); }
-            .cat .cat-ops { display: none; align-items: center; }
-            .cat:hover .cat-ops, .cat.active .cat-ops { display: inline-flex; }
-            .cat:hover .count, .cat.active:hover .count { display: none; }
-            .cat-ops platform-button { --platform-button-padding: 2px; }
-            .cat-add { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-1) var(--space-1); align-items: end; }
-            .cat-add platform-field { flex: 1; min-width: 0; }
+            .rail shop-category-tree { display: block; }
+            .card[draggable="true"] { cursor: grab; }
+            .card.dragging { opacity: 0.4; }
 
             .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: var(--space-3); min-width: 0; }
             .card {
@@ -233,10 +215,7 @@ export class ShopMenuPage extends PlatformPage {
 
             @media (max-width: 900px) {
                 .layout { grid-template-columns: 1fr; }
-                .rail { position: static; display: flex; flex-wrap: wrap; gap: var(--space-1); }
-                .rail-title { width: 100%; }
-                .cat { width: auto; }
-                .cat-add { width: 100%; }
+                .rail { position: static; }
             }
             @media (max-width: 640px) {
                 .card { flex-wrap: wrap; }
@@ -247,14 +226,12 @@ export class ShopMenuPage extends PlatformPage {
 
     constructor() {
         super();
-        this._categories = [];
-        this._products = [];
         this._badgeIcons = {};
         this._badgeEditorOpen = false;
         this._newBadgeLabel = '';
         this._newBadgeIcon = '';
         this._activeCategory = null;
-        this._newCategory = '';
+        this._expandedIds = [];
         this._importOpen = false;
         this._importText = '';
         this._aiItems = null;
@@ -264,6 +241,7 @@ export class ShopMenuPage extends PlatformPage {
         this._categoriesOp = this.useOp('shop/categories_list');
         this._productsOp = this.useOp('shop/products_list');
         this._categoryCreateOp = this.useOp('shop/category_create');
+        this._categoryUpdateOp = this.useOp('shop/category_update');
         this._categoryRemoveOp = this.useOp('shop/category_remove');
         this._categoryReorderOp = this.useOp('shop/categories_reorder');
         this._productUpdateOp = this.useOp('shop/product_update');
@@ -288,22 +266,36 @@ export class ShopMenuPage extends PlatformPage {
         const prevShopId = changed.get('shopId');
         if (typeof prevShopId === 'string' && prevShopId !== this.shopId) {
             this._activeCategory = null;
+            this._expandedIds = [];
             void this._reload();
         }
     }
 
+    /** Списки читаются из lastResult опов — push-перезапуски обновляют
+     * страницу реактивно, без локальных копий. */
+    private get _categories(): CategoryRow[] {
+        return this._rows<CategoryRow>(this._categoriesOp.lastResult);
+    }
+
+    private get _products(): ProductRow[] {
+        return this._rows<ProductRow>(this._productsOp.lastResult);
+    }
+
     private async _reload() {
         if (this.shopId === '') return;
-        const [cats, products] = await Promise.all([
+        await Promise.all([
             this._categoriesOp.run({ shop_id: this.shopId }),
             this._productsOp.run({ shop_id: this.shopId }),
             this._shops.load(),
         ]);
-        this._categories = this._rows<CategoryRow>(cats);
-        this._products = this._rows<ProductRow>(products);
-        const first = this._categories[0];
+        const first = this._categories.find((c) => c.parent_id === null);
         if (this._activeCategory === null && first !== undefined) {
             this._activeCategory = first.shop_category_id;
+        }
+        const ids = this._categories.map((c) => c.shop_category_id);
+        const expanded = new Set(this._expandedIds);
+        if (ids.some((id) => !expanded.has(id))) {
+            this._expandedIds = [...expanded, ...ids];
         }
     }
 
@@ -367,33 +359,79 @@ export class ShopMenuPage extends PlatformPage {
         return formatPlatformNumber(minor / 100, this._locale.value, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     }
 
-    private async _addCategory() {
-        const name = this._newCategory.trim();
-        if (name === '') return;
-        const result = await this._categoryCreateOp.run({ shop_id: this.shopId, name });
+    /** id узла и всех потомков — фильтр списка товаров по поддереву. */
+    private _subtreeIds(id: string): Set<string> {
+        const out = new Set<string>([id]);
+        const queue = [id];
+        while (queue.length > 0) {
+            const parent = queue.shift();
+            for (const c of this._categories) {
+                if (c.parent_id === parent && !out.has(c.shop_category_id)) {
+                    out.add(c.shop_category_id);
+                    queue.push(c.shop_category_id);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Товары в поддереве каждой категории — счётчики строк дерева. */
+    private _subtreeCounts(): Record<string, number> {
+        const counts: Record<string, number> = {};
+        for (const c of this._categories) {
+            counts[c.shop_category_id] = this._products.filter(
+                (p) => p.category_id !== null && this._subtreeIds(c.shop_category_id).has(p.category_id),
+            ).length;
+        }
+        return counts;
+    }
+
+    private async _createCategory(parentId: string | null, name: string) {
+        const result = await this._categoryCreateOp.run({ shop_id: this.shopId, name, parent_id: parentId });
         if (result !== null) {
-            this._newCategory = '';
             await this._reload();
         }
     }
 
-    private async _moveCategory(categoryId: string, dir: -1 | 1) {
-        const idx = this._categories.findIndex((c) => c.shop_category_id === categoryId);
-        const swap = this._categories[idx + dir];
-        if (idx < 0 || swap === undefined) return;
-        const ids = this._categories.map((c) => c.shop_category_id);
-        const cur = ids[idx], nxt = ids[idx + dir];
-        if (cur === undefined || nxt === undefined) return;
-        ids[idx] = nxt;
-        ids[idx + dir] = cur;
-        await this._categoryReorderOp.run({ shop_id: this.shopId, category_ids: ids });
+    private async _renameCategory(categoryId: string, name: string) {
+        await this._categoryUpdateOp.run({
+            shop_id: this.shopId,
+            shop_category_id: categoryId,
+            name,
+        });
+        await this._reload();
+    }
+
+    private async _reorderTree(items: ShopTreeReorderItem[]) {
+        await this._categoryReorderOp.run({ shop_id: this.shopId, items });
+        await this._reload();
+    }
+
+    private async _dropProduct(productId: string, categoryId: string | null) {
+        await this._productUpdateOp.run({
+            shop_id: this.shopId,
+            shop_product_id: productId,
+            category_id: categoryId,
+        });
         await this._reload();
     }
 
     private async _removeCategory(categoryId: string) {
         await this._categoryRemoveOp.run({ shop_id: this.shopId, shop_category_id: categoryId });
-        if (this._activeCategory === categoryId) this._activeCategory = null;
+        if (this._activeCategory !== null && this._subtreeIds(categoryId).has(this._activeCategory)) {
+            this._activeCategory = null;
+        }
         await this._reload();
+    }
+
+    private _onProductDragStart(e: DragEvent, productId: string): void {
+        e.dataTransfer?.setData(PRODUCT_MIME, productId);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        (e.currentTarget as HTMLElement).classList.add('dragging');
+    }
+
+    private _onProductDragEnd(e: DragEvent): void {
+        (e.currentTarget as HTMLElement).classList.remove('dragging');
     }
 
     private _openProductModal(product?: ProductRow) {
@@ -573,33 +611,13 @@ export class ShopMenuPage extends PlatformPage {
         await this._reload();
     }
 
-    private _renderCategory(cat: CategoryRow, index: number) {
-        const count = this._products.filter((p) => p.category_id === cat.shop_category_id).length;
-        const active = this._activeCategory === cat.shop_category_id;
-        return html`
-            <button class="cat ${active ? 'active' : ''}" @click=${() => { this._activeCategory = cat.shop_category_id; }}>
-                <span class="name">${cat.name}</span>
-                <span class="count">${count}</span>
-                <span class="cat-ops">
-                    <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_up')}
-                        ?disabled=${index === 0}
-                        @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, -1); }}
-                    ><platform-icon name="chevron-up" size="12"></platform-icon></platform-button>
-                    <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_down')}
-                        ?disabled=${index === this._categories.length - 1}
-                        @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}
-                    ><platform-icon name="chevron-down" size="12"></platform-icon></platform-button>
-                    <platform-button icon-only density="dense" variant="ghost-danger" title=${this.t('menu.category_remove')}
-                        @click=${(e: Event) => { e.stopPropagation(); void this._removeCategory(cat.shop_category_id); }}
-                    ><platform-icon name="close" size="12"></platform-icon></platform-button>
-                </span>
-            </button>`;
-    }
-
     private _renderProduct(p: ProductRow, index: number, total: number) {
         const badgeDefs = this._shopBadges();
         return html`
-            <div class="card ${p.is_available ? '' : 'off'}">
+            <div class="card ${p.is_available ? '' : 'off'}"
+                draggable="true"
+                @dragstart=${(e: DragEvent) => this._onProductDragStart(e, p.shop_product_id)}
+                @dragend=${(e: DragEvent) => this._onProductDragEnd(e)}>
                 ${p.photo_file_id
                     ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
                     : html`<span class="thumb-empty"><platform-icon name="image" size="18"></platform-icon></span>`}
@@ -656,9 +674,10 @@ export class ShopMenuPage extends PlatformPage {
     }
 
     override render() {
-        const filtered = this._activeCategory === null
+        const subtree = this._activeCategory === null ? null : this._subtreeIds(this._activeCategory);
+        const filtered = subtree === null
             ? this._products
-            : this._products.filter((p) => p.category_id === this._activeCategory);
+            : this._products.filter((p) => p.category_id !== null && subtree.has(p.category_id));
         const busy = this._categoriesOp.busy || this._productsOp.busy;
         const parsed = this._importOpen ? this._parseImport() : { items: [], invalid: 0 };
         const importItems = this._aiItems ?? parsed.items;
@@ -755,27 +774,35 @@ export class ShopMenuPage extends PlatformPage {
                 ` : nothing}
                 <div class="layout">
                     <div class="rail">
-                        <div class="rail-title">${this.t('menu.categories_title')}</div>
-                        <button class="cat ${this._activeCategory === null ? 'active' : ''}"
-                            @click=${() => { this._activeCategory = null; }}>
-                            <span class="name">${this.t('menu.all_products')}</span>
-                            <span class="count">${this._products.length}</span>
-                        </button>
-                        ${this._categories.map((cat, i) => this._renderCategory(cat, i))}
-                        <div class="cat-add">
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                label=${this.t('menu.new_category')}
-                                .value=${this._newCategory}
-                                @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                                    this._newCategory = typeof event.detail.value === 'string' ? event.detail.value : '';
-                                }}
-                            ></platform-field>
-                            <platform-button icon-only density="compact" variant="primary" ?disabled=${this._newCategory.trim() === ''} @click=${() => this._addCategory()}>
-                                <platform-icon name="plus" size="16"></platform-icon>
-                            </platform-button>
-                        </div>
+                        <shop-category-tree
+                            .categories=${this._categories}
+                            .counts=${this._subtreeCounts()}
+                            .allCount=${this._products.length}
+                            .activeId=${this._activeCategory}
+                            .expandedIds=${this._expandedIds}
+                            @tree-select=${(e: CustomEvent<{ id: string | null }>) => { this._activeCategory = e.detail.id; }}
+                            @tree-toggle=${(e: CustomEvent<{ id: string; expanded: boolean }>) => {
+                                const { id, expanded } = e.detail;
+                                this._expandedIds = expanded
+                                    ? [...new Set([...this._expandedIds, id])]
+                                    : this._expandedIds.filter((x) => x !== id);
+                            }}
+                            @tree-create=${(e: CustomEvent<{ parentId: string | null; name: string }>) => {
+                                void this._createCategory(e.detail.parentId, e.detail.name);
+                            }}
+                            @tree-rename=${(e: CustomEvent<{ id: string; name: string }>) => {
+                                void this._renameCategory(e.detail.id, e.detail.name);
+                            }}
+                            @tree-remove=${(e: CustomEvent<{ id: string }>) => {
+                                void this._removeCategory(e.detail.id);
+                            }}
+                            @tree-change=${(e: CustomEvent<{ items: ShopTreeReorderItem[] }>) => {
+                                void this._reorderTree(e.detail.items);
+                            }}
+                            @product-drop=${(e: CustomEvent<{ productId: string; categoryId: string | null }>) => {
+                                void this._dropProduct(e.detail.productId, e.detail.categoryId);
+                            }}
+                        ></shop-category-tree>
                     </div>
                     <div class="list">
                         ${busy && filtered.length === 0

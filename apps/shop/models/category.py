@@ -21,11 +21,12 @@ class ShopCategory(PlatformModel):
         is_table: bool = True
         table_name: str = "shop_categories"
         indexes: list[Index] = [
-            Index(["shop_id", "sort"]),
+            Index(["shop_id", "parent_id", "sort"]),
         ]
 
     shop_category_id: str = DbField(db_pk=True, max_length=64)
     shop_id: str = DbField(max_length=64)
+    parent_id: str | None = DbField(default=None, max_length=64)
     name: str = DbField(max_length=200)
     sort: int = DbField(default=0)
     is_active: bool = DbField(default=True)
@@ -46,7 +47,22 @@ class ShopCategory(PlatformModel):
         return await cls.objects.create(instance=category)
 
     @classmethod
-    async def next_sort_by_sort_desc(cls, shop_id: str) -> int:
-        """Позиция для новой категории — за максимальной текущей."""
-        row = await cls.objects.filter(shop_id=shop_id).order_by("-sort").first()
+    async def list_children_by_parent_by_sort_asc(
+        cls, shop_id: str, parent_id: str | None
+    ) -> list[Self]:
+        """Дети узла по sort ASC — siblings одного уровня дерева."""
+        return (
+            await cls.objects.filter(shop_id=shop_id, parent_id=parent_id)
+            .order_by("sort")
+            .all()
+        )
+
+    @classmethod
+    async def next_sort_by_sort_desc(cls, shop_id: str, parent_id: str | None) -> int:
+        """Позиция для новой категории — за максимальной среди siblings."""
+        row = (
+            await cls.objects.filter(shop_id=shop_id, parent_id=parent_id)
+            .order_by("-sort")
+            .first()
+        )
         return row.sort + 1 if row is not None else 0
