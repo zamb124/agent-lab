@@ -10,7 +10,8 @@
 - flows 9001, rag 9002, crm 9003, frontend 9004, sync 9005, office 9008,
   search 9010, provider_litserve 9014, voice 9015, capability_gateway 9016,
   code_runner_{python,node,go,csharp} 9017-9020, worktracker 9021, secrets 9022,
-  wiki 9023, guest_runtime 9024, realtime 9025, centrifugo 19000.
+  wiki 9023, guest_runtime 9024, realtime 9025, stock 9026, shop 9027,
+  centrifugo 19000.
 """
 
 import time
@@ -209,6 +210,13 @@ def office_service():
 def search_service():
     """Search MCP на 9010."""
     require_http_service("search", 9010)
+
+
+@pytest.fixture(scope="session")
+def shop_service(setup_database_before_tests):
+    """Shop на 9027 (витрины и агрегатор; slug-хосты — *.lvh.me)."""
+    _ = setup_database_before_tests
+    require_http_service("shop", 9027)
 
 
 @pytest.fixture(scope="session")

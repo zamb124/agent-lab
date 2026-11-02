@@ -33,7 +33,9 @@ async def add_auth_token_cookie(context: BrowserContext, token: str) -> None:
                 "value": token,
                 "domain": host,
                 "path": "/",
-                "httpOnly": True,
+                # Как в проде (core/api/auth.py): auth_token читается JS
+                # для подключения Centrifugo — httponly=False.
+                "httpOnly": False,
                 "sameSite": "Lax",
             }
             for host in _cookie_hosts()

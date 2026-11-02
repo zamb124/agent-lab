@@ -166,6 +166,13 @@ def crm_worker():
     require_taskiq_worker("crm_summary_worker", "crm_summary")
 
 
+@pytest.fixture(scope="session")
+def shop_worker(shop_service):
+    """shop_worker стека: пересборка снапшотов витрин, домены, уведомления."""
+    _ = shop_service
+    require_taskiq_worker("shop_worker", "shop")
+
+
 @pytest.fixture
 def taskiq_broker(rag_worker):
     """

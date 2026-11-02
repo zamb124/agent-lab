@@ -405,6 +405,73 @@ class TestStorefrontPage:
         assert "modifier_groups" in html.text
 
 
+class TestStorefrontDesktopLayout:
+    """Десктопный контракт витрины (>=1024px): сайдбар, сетка, drawer, модалка.
+
+    CSS-инварианты проверяются по HTML — вычисленная геометрия (ширины,
+    колонки, позиции) покрыта браузерным слоем tests/ui/e2e.
+    """
+
+    async def test_desktop_breakpoint_and_container_rules(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Desktop-слой: брейкпоинт 1024px, wrap 1240px, сайдбар 230px, full-bleed hero."""
+        slug = f"desk-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        text = html.text
+        assert "@media(min-width:1024px)" in text
+        assert "max-width:1240px" in text
+        assert "grid-template-columns:230px minmax(0,1fr)" in text
+        assert "margin:0 calc(50% - 50vw)" in text
+        assert "overflow-x:clip" in text
+
+    async def test_desktop_preset_gating_and_data_attribute(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """body[data-preset] гейтит раскладку: menu/compact в 2 колонки, grid — auto-fill."""
+        slug = f"dpre-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        assert 'data-preset="menu"' in html.text
+        assert "body[data-preset=menu] .mchunk,body[data-preset=compact] .mchunk" in html.text
+        assert "body[data-preset=grid] .grid" in html.text
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"theme": {"preset": "grid"}}
+        )
+        assert resp.status_code == 200, resp.text
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert 'data-preset="grid"' in html.text
+
+    async def test_desktop_drawer_modal_and_sidebar_rules(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Корзина — правый drawer с прижатой кнопкой, товар — центр-модалка, flat без сайдбара."""
+        slug = f"dux-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        text = html.text
+        assert "#sheet .panel{" in text and "right:0" in text
+        assert "#sheet .panel .big{margin-top:auto}" in text
+        assert "#csheet.show{display:grid;place-items:center}" in text
+        assert "#app.flat .tabs{display:none}" in text
+        assert "matchMedia('(min-width:1024px)')" in text
+
+    async def test_mobile_rules_preserved(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Мобильная база осталась: wrap 720px до брейкпоинта и мелкий брейкпоинт 520px."""
+        slug = f"mob-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        assert ".wrap{max-width:720px" in html.text
+        assert "@media(max-width:520px)" in html.text
+
+
 class TestMarketPage:
     async def test_market_page_lists_only_published(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

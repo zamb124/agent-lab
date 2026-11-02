@@ -591,6 +591,17 @@ async def crm_client_http(crm_service):
 
 
 @pytest_asyncio.fixture
+async def shop_client_http(shop_service):
+    """HTTP клиент Shop API (реальный Granian :9027)."""
+    _ = shop_service
+    async with AsyncClient(
+        base_url="http://127.0.0.1:9027",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def realtime_client_http(realtime_service):
     """HTTP клиент bus `realtime` (реальный Granian :9025)."""
     async with AsyncClient(

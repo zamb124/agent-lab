@@ -14,6 +14,7 @@ from tests.ui.auth_worker_fixtures import (
     create_ui_e2e_owner_token,
 )
 from tests.ui.browser_auth import add_auth_token_cookie
+from tests.ui.centrifugo_ws_bridge import install_centrifugo_ws_bridge
 from tests.ui.click_highlight import install_click_highlight_on_context
 from tests.ui.e2e_worker import publish_ui_e2e_worker_env, ui_e2e_scope_headers
 from tests.ui.harness import AppUI
@@ -181,6 +182,7 @@ async def _new_browser_context(
         # X-Test-Scope: иначе CORS preflight на embed API падает до Allow-Headers.
         context_kwargs["extra_http_headers"] = ui_e2e_scope_headers()
     context = await browser.new_context(**context_kwargs)
+    await install_centrifugo_ws_bridge(context)
     await context.add_init_script(_FORCE_LIGHT_THEME_INIT_SCRIPT)
     # Office share / copy link; без grant headless clipboard.writeText падает.
     await context.grant_permissions(["clipboard-read", "clipboard-write"])
@@ -347,6 +349,12 @@ async def wiki_ui(
 async def litserve_ui(provider_litserve_service) -> AppUI:
     _ = provider_litserve_service
     return AppUI(SERVICE_UI_REGISTRY["litserve"])
+
+
+@pytest_asyncio.fixture
+async def shop_ui(shop_service, shop_worker, _ui_subdomain_mappings) -> AppUI:
+    _ = shop_service, shop_worker, _ui_subdomain_mappings
+    return AppUI(SERVICE_UI_REGISTRY["shop"])
 
 
 @pytest_asyncio.fixture

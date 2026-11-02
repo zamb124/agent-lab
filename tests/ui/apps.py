@@ -86,4 +86,11 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         shell_selector="litserve-app",
         title=None,
     ),
+    "shop": ServiceUiSpec(
+        key="shop",
+        port=9027,
+        spa_path="/shop/",
+        shell_selector="shop-app",
+        title="Магазин",
+    ),
 }

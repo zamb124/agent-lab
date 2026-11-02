@@ -35,8 +35,8 @@ if len(TEST_LIVEKIT_API_SECRET) < 32:
 # что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
 _TEST_SERVICE_ENV: dict[str, str] = {
     # Локальные сервисы тест-стека не должны идти через внешний HTTP_PROXY.
-    "NO_PROXY": "localhost,127.0.0.1,::1",
-    "no_proxy": "localhost,127.0.0.1,::1",
+    "NO_PROXY": "localhost,127.0.0.1,::1,lvh.me",
+    "no_proxy": "localhost,127.0.0.1,::1,lvh.me",
     # HF-метаданные не нужны ни в одном тесте: иначе ленивый hf_hub_download
     # (chonkie/transformers и т.п.) уходит в http_backoff через мёртвый прокси
     # и воркер виснет до SIGKILL. Offline → кэш или мгновенный fallback.
@@ -103,11 +103,12 @@ def ensure_local_no_proxy() -> None:
     urllib (readiness-пробы) и httpx2 (клиенты фикстур) честно ходят через
     HTTP(S)_PROXY шелла: без bypass локальные адреса уезжают на внешний прокси,
     который не видит localhost пользователя. Внешний egress при этом продолжает
-    идти через прокси — NO_PROXY только расширяет список обхода.
+    идти через прокси — NO_PROXY только расширяет список обхода. `lvh.me`
+    резолвится в 127.0.0.1 и тоже должен обходить прокси.
     """
     for key in ("NO_PROXY", "no_proxy"):
         bypass = [part.strip() for part in os.environ.get(key, "").split(",") if part.strip()]
-        for host in ("localhost", "127.0.0.1", "::1"):
+        for host in ("localhost", "127.0.0.1", "::1", "lvh.me"):
             if host not in bypass:
                 bypass.append(host)
         os.environ[key] = ",".join(bypass)

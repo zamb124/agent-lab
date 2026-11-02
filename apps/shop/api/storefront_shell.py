@@ -33,7 +33,7 @@ _PAGE = """<!DOCTYPE html>
 img{{background:var(--card2);transition:opacity .35s ease}}
 img:not(.ld){{opacity:0}}
 body.lock{{overflow:hidden}}
-body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation}}
+body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation;overflow-x:hidden;overflow-x:clip}}
 .serif{{font-family:ui-serif,Georgia,'Times New Roman',serif}}
 .wrap{{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}}
 .hero{{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:linear-gradient(165deg,var(--accent) 0%,#221a12 75%)}}
@@ -144,10 +144,55 @@ button.big:disabled{{opacity:.45;cursor:default}}
 .empty{{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}}
 body.light{{--bg:#f7f4ee;--card:#ffffff;--card2:#efe9de;--text:#29221a;--muted:#7d7264;--line:#e4dbcc;color-scheme:light}}
 body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,rgba(16,14,12,.88) 100%)}}
+@media(min-width:1024px){{
+.wrap{{max-width:1240px;padding:0 24px calc(140px + env(safe-area-inset-bottom))}}
+.hero{{margin:0 calc(50% - 50vw);height:340px}}
+.hero .head{{left:50%;right:auto;transform:translateX(-50%);width:min(1240px,100%);bottom:28px;padding:0 24px}}
+.hero .logo{{width:84px;height:84px;border-radius:22px}}
+.hero h1{{font-size:38px}}
+.hero .desc{{font-size:15.5px;-webkit-line-clamp:3;max-width:680px}}
+.meta{{padding:16px 2px 8px;font-size:14px;gap:18px}}
+.msearch{{margin:14px 0 4px;max-width:460px}}
+#msw{{margin-left:262px}}
+#app.flat #msw{{margin-left:0}}
+#menu{{display:grid;grid-template-columns:230px minmax(0,1fr);gap:0 32px;align-items:start;margin-top:10px}}
+#menu>:not(.tabs){{grid-column:2}}
+#app.flat #menu{{display:block}}
+.tabs{{grid-column:1;grid-row:1;position:sticky;top:24px;z-index:5;flex-direction:column;align-items:stretch;gap:4px;padding:0;background:none;overflow-x:visible;overflow-y:auto;max-height:calc(100vh - 40px);scrollbar-width:thin}}
+#app.flat .tabs{{display:none}}
+.tabs button{{text-align:left;border:0;border-radius:12px;background:transparent;padding:11px 14px}}
+.tabs button:hover{{color:var(--text);background:color-mix(in srgb,var(--text) 6%,transparent)}}
+.tabs button.on{{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);font-weight:650}}
+.cat{{font-size:24px;margin:34px 0 10px}}
+.cat.sub{{font-size:18px}}
+#mbody>.mchunk:first-child>.cat{{margin-top:0}}
+body[data-preset=menu] .mchunk,body[data-preset=compact] .mchunk{{display:grid;grid-template-columns:1fr 1fr;column-gap:40px}}
+body[data-preset=menu] .mchunk>.cat,body[data-preset=compact] .mchunk>.cat{{grid-column:1/-1}}
+body[data-preset=grid] .grid{{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}}
+.gcard{{transition:transform .15s ease,border-color .15s ease}}
+.gcard:hover{{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}}
+.item{{border-radius:12px;padding-left:12px;padding-right:12px;margin-left:-12px;margin-right:-12px;transition:background .15s ease}}
+body[data-preset=compact] .item{{padding-left:12px;padding-right:12px}}
+.item:hover{{background:color-mix(in srgb,var(--text) 4%,transparent)}}
+.cart{{left:auto;right:32px;transform:none;width:min(360px,30vw);bottom:28px}}
+.cart.show{{animation:cartIn .25s ease}}
+.cart.pop{{animation:cartPop .28s ease}}
+@keyframes cartIn{{from{{transform:translateY(16px);opacity:0}}}}
+@keyframes cartPop{{0%{{transform:scale(1)}}40%{{transform:scale(1.05)}}100%{{transform:scale(1)}}}}
+.grab{{display:none}}
+#sheet .panel{{left:auto;right:0;top:0;bottom:0;transform:none;width:min(470px,94vw);height:100%;max-height:none;border-radius:0;padding:18px 24px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;animation:drawerIn .24s ease}}
+#sheet .panel #panel{{display:flex;flex-direction:column;flex:1}}
+#sheet .panel .big{{margin-top:auto}}
+@keyframes drawerIn{{from{{transform:translateX(56px);opacity:.5}}}}
+#csheet.show{{display:grid;place-items:center}}
+#csheet .panel{{position:relative;inset:auto;transform:none;width:min(620px,94vw);max-height:88vh;border-radius:26px;padding:18px 24px 30px;animation:zoomIn .2s ease}}
+@keyframes zoomIn{{from{{transform:scale(.95) translateY(14px);opacity:0}}}}
+.toast{{bottom:44px}}
+}}
 @media(max-width:520px){{.hero{{height:210px}}.hero h1{{font-size:26px}}.grid{{grid-template-columns:1fr 1fr;gap:10px}}}}
 </style>
 </head>
-<body class="{body_class}">
+<body class="{body_class}" data-preset="{preset}">
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel"><div class="grab"></div><div id="panel"></div></div></div>
@@ -254,6 +299,7 @@ function renderMenu(){{
   spyIO?.disconnect();moreIO?.disconnect();queue=[];
   const other=S.products.filter(p=>!p.category_id);
   if(query){{
+    app.classList.add('flat');
     const hits=S.products.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
     menu.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${{esc(query)}}» ничего не нашлось</div>`;
     return;
@@ -268,6 +314,7 @@ function renderMenu(){{
   const kids=p=>S.categories.filter(c=>((c.parent_id&&byId[c.parent_id])?c.parent_id:null)===p).sort((a,b)=>a.sort-b.sort);
   const subHas=c=>prods(c.id).length>0||kids(c.id).some(subHas);
   const roots=kids(null).filter(subHas);
+  app.classList.toggle('flat',roots.length+(other.length?1:0)<=1);
   const push=(id,name,depth,root,items)=>{{
     if(!items.length){{blocks.push({{id:'c-'+id,name,depth,root,items:[]}});return;}}
     for(let i=0;i<items.length;i+=CH)
@@ -426,6 +473,7 @@ window.addEventListener('popstate',()=>{{if(popGuard>0){{popGuard--;return;}}
   if(s){{s.classList.remove('show');sheetDepth=Math.max(0,sheetDepth-1);syncLock();}}}});
 let dragY=null,dragEl=null;
 document.addEventListener('touchstart',e=>{{const p=e.target.closest('.panel');if(!p)return;
+  if(matchMedia('(min-width:1024px)').matches)return;
   if(e.touches[0].clientY-p.getBoundingClientRect().top>46)return;
   dragY=e.touches[0].clientY;dragEl=p;p.classList.add('drag');}},{{passive:true}});
 document.addEventListener('touchmove',e=>{{if(dragY==null)return;
@@ -651,5 +699,6 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
         ),
         accent=escape(accent),
         body_class=escape(body_class),
+        preset=escape(preset),
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),
     )

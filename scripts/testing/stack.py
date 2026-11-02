@@ -98,6 +98,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
     "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
     "SERVER__SECRETS_SERVICE_URL": "http://localhost:9022",
+    "SERVER__SHOP_SERVICE_URL": "http://localhost:9027",
     "SERVER__SCHEDULER_SERVICE_URL": "http://localhost:9006",
     "SERVER__OFFICE_SERVICE_URL": "http://localhost:9008",
     "OFFICE__JWT_SECRET": TEST_OFFICE_JWT_SECRET,
@@ -395,6 +396,18 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         port=9026,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
+    GranianService(
+        name="shop",
+        app_path="apps.shop.main:app",
+        port=9027,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+        env={
+            # Витрины резолвятся по <slug>.lvh.me — публичный wildcard DNS на 127.0.0.1,
+            # зеркало продового <slug>.linnex.io без правки /etc/hosts.
+            "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
+            "AGGREGATOR_HOST": "shop.lvh.me",
+        },
+    ),
 )
 
 
@@ -458,6 +471,17 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         stream_name="idle",
         workers=2,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    TaskiqWorkerService(
+        name="shop_worker",
+        worker_module="apps.shop.worker:worker_app",
+        stream_name="shop",
+        workers=1,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+        env={
+            "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
+            "AGGREGATOR_HOST": "shop.lvh.me",
+        },
     ),
     TaskiqWorkerService(
         name="a2a_push_worker",
