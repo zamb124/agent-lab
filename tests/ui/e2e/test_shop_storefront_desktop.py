@@ -383,7 +383,7 @@ async def test_slug_host_serves_desktop_storefront(
 async def test_builder_web_preview_shows_desktop_layout(
     ui_page_system: Page, storefront: Storefront, shop_ui: AppUI
 ) -> None:
-    """Конструктор витрины в web-режиме: zoom-iframe показывает настоящий desktop.
+    """Конструктор витрины в web-режиме: scale-iframe показывает настоящий desktop.
 
     Регрессия, которую ловит тест: раньше внутренний viewport iframe
     оставался мобильным — «web»-превью рисовало узкую колонку 720px.
@@ -406,9 +406,4 @@ async def test_builder_web_preview_shows_desktop_layout(
     assert "tpreset=" in src and "tmode=" in src
     tabs = ui_page_system.frame_locator("iframe.desktop").locator(".tabs")
     await expect(tabs).to_be_visible(timeout=30_000)
-    direction: object = await tabs.evaluate(
-        "el => getComputedStyle(el).flexDirection"
-    )
-    if not isinstance(direction, str):
-        raise AssertionError(f"flexDirection: ожидали строку, got {direction!r}")
-    assert direction == "column"
+    await expect(tabs).to_have_css("flex-direction", "column", timeout=15_000)

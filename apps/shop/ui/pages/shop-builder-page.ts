@@ -141,20 +141,27 @@ export class ShopBuilderPage extends PlatformPage {
                 transition: width 0.2s ease;
             }
             .preview iframe.desktop {
+                position: absolute;
+                top: 0;
+                left: 0;
                 width: 100%;
                 height: 100%;
                 margin: 0;
                 border: 0;
                 border-radius: 0;
                 box-shadow: none;
+                transition: none;
             }
-            /* Зум уменьшает внутренний viewport iframe (~1400px): срабатывает
-               десктопный брейкпоинт витрины и виден настоящий web-layout. */
-            @supports (zoom: 0.72) {
+            /* transform: scale (не zoom): внутренний viewport iframe равен
+               layout-ширине 1400px — десктопный брейкпоинт витрины срабатывает
+               при любой ширине панели превью. */
+            @supports (width: 1cqw) {
+                .preview { container-type: size; }
                 .preview iframe.desktop {
-                    width: calc(100% / 0.72);
-                    height: calc(100% / 0.72);
-                    zoom: 0.72;
+                    width: 1400px;
+                    height: calc(100cqh / (100cqw / 1400px));
+                    transform: scale(calc(100cqw / 1400px));
+                    transform-origin: top left;
                 }
             }
             .preview-bar {
