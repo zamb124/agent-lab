@@ -99,7 +99,7 @@ export class ShopHomePage extends PlatformPage {
         await this._shops.load();
     }
 
-    private _slugify(name: string): string {
+    private _transliterate(text: string): string {
         const map: Record<string, string> = {
             'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
             'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
@@ -107,13 +107,25 @@ export class ShopHomePage extends PlatformPage {
             'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
             'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
         };
-        return name
+        return text
             .toLowerCase()
             .split('')
             .map((ch) => map[ch] ?? ch)
-            .join('')
+            .join('');
+    }
+
+    private _slugify(name: string): string {
+        return this._transliterate(name)
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '')
+            .slice(0, 40);
+    }
+
+    private _slugInput(raw: string): string {
+        return this._transliterate(raw)
+            .replace(/[^a-z0-9-]/g, '')
+            .replace(/-{2,}/g, '-')
+            .replace(/^-+/, '')
             .slice(0, 40);
     }
 
@@ -230,10 +242,12 @@ export class ShopHomePage extends PlatformPage {
                                     type="string"
                                     mode="edit"
                                     label=${this.t('home.field_slug')}
+                                    hint=${this.t('home.field_slug_hint')}
                                     .value=${this._newSlug}
                                     @change=${(event: CustomEvent<{ value?: unknown }>) => {
                                         this._slugTouched = true;
-                                        this._newSlug = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                        const raw = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                        this._newSlug = this._slugInput(raw);
                                     }}
                                 ></platform-field>
                                 <div class="hint">${this._newSlug || this._slugify(this._newName) || 'my-shop'}.linnex.io</div>

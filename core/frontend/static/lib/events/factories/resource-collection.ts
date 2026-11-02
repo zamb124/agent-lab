@@ -803,7 +803,7 @@ export function createResourceCollection<
                     if (toastKeys.create_error) {
                         ctx.dispatch(
                             CoreEvents.UI_TOAST_SHOW,
-                            { type: 'error', i18n_key: toastKeys.create_error },
+                            { type: 'error', i18n_key: toastKeys.create_error, i18n_vars: { detail: err.message } },
                             { causation_id: event.id },
                         );
                     }

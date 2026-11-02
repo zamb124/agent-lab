@@ -479,7 +479,7 @@ async function _runEffect(event: PlatformEvent, ctx: EffectCtx, opts: _OpCtx): P
         if (!opts.silent && !toastSuppressed(payload, 'suppressErrorToast')) {
             ctx.dispatch(
                 CoreEvents.UI_TOAST_SHOW,
-                { type: 'error', i18n_key: opts.errorToastKey },
+                { type: 'error', i18n_key: opts.errorToastKey, i18n_vars: { detail: message } },
                 { causation_id: event.id },
             );
         }

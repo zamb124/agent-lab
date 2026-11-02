@@ -478,7 +478,7 @@ export function createCursorList<TItem = unknown>(options: CursorListOptions<TIt
             if (errorToastKey) {
                 ctx.dispatch(
                     CoreEvents.UI_TOAST_SHOW,
-                    { type: 'error', i18n_key: errorToastKey },
+                    { type: 'error', i18n_key: errorToastKey, i18n_vars: { detail: err.message } },
                     { causation_id: event.id },
                 );
             }
