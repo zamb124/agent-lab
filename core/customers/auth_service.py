@@ -11,6 +11,7 @@ OAuth callback → `confirmed` → выпуск customer-сессии.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import secrets
 import time
@@ -85,17 +86,19 @@ class CustomerAuthService:
         self,
         *,
         cfg: CustomerAuthConfig,
+        env: str,
         redis: RedisClient,
         customers: CustomerService,
         sessions: CustomerSessionService,
     ) -> None:
         self._cfg: CustomerAuthConfig = cfg
+        self._env: str = env
         self._redis: RedisClient = redis
         self._customers: CustomerService = customers
         self._sessions: CustomerSessionService = sessions
 
     def _registry(self, apex: str) -> PhoneVerificationRegistry:
-        return PhoneVerificationRegistry.build(self._cfg, apex)
+        return PhoneVerificationRegistry.build(self._cfg, apex, env=self._env)
 
     def registry_for(self, apex: str) -> PhoneVerificationRegistry:
         """Реестр провайдеров для бренда — для protocol handlers (webhook)."""
@@ -305,11 +308,19 @@ class CustomerAuthService:
             if not oauth.available():
                 raise CustomerAuthError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
             state = secrets.token_urlsafe(24)
+            # PKCE (RFC 7636): VK ID требует code_verifier при обмене кода.
+            verifier = secrets.token_urlsafe(48)
+            code_challenge = (
+                base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+                .decode()
+                .rstrip("=")
+            )
             challenge.kind = PhoneChallengeKind.DIRECT
             challenge.method = method
             challenge.direct_kind = DirectAuthorizationKind.OAUTH
             challenge.oauth_state = state
             challenge.provider_data["callback_base"] = callback_base
+            challenge.provider_data["pkce_verifier"] = verifier
             if return_url:
                 challenge.provider_data["return_url"] = return_url
             await challenge.save(self._redis, ttl=self._cfg.challenge_ttl_seconds)
@@ -327,6 +338,7 @@ class CustomerAuthService:
                 oauth_url=oauth.authorization_url(
                     state=state,
                     redirect_uri=self.oauth_redirect_uri(apex, method, callback_base),
+                    code_challenge=code_challenge,
                 ),
             )
 
@@ -353,7 +365,7 @@ class CustomerAuthService:
         self, apex: str, method: PhoneVerificationMethod, callback_base: str
     ) -> str:
         """Публичный callback OAuth: `callback_base` — mount-префикс роутера."""
-        provider = method.value.removesuffix("_id")
+        provider = PhoneVerificationMethod(method).value.removesuffix("_id")
         return f"https://{apex}{callback_base}/oauth/{provider}/callback"
 
     # -- verify / confirm ---------------------------------------------------
@@ -518,7 +530,13 @@ class CustomerAuthService:
         )
 
     async def complete_oauth(
-        self, *, method: PhoneVerificationMethod, code: str, state: str, apex: str
+        self,
+        *,
+        method: PhoneVerificationMethod,
+        code: str,
+        state: str,
+        apex: str,
+        device_id: str = "",
     ) -> tuple[Customer, str, str | None]:
         """OAuth callback: state → challenge, code → phones, confirm → token + return_url."""
         registry = self._registry(apex)
@@ -535,6 +553,8 @@ class CustomerAuthService:
             provider=verifier.provider,
             oauth_code=code,
             oauth_state=state,
+            oauth_code_verifier=challenge.provider_data.get("pkce_verifier"),
+            oauth_device_id=device_id or None,
             redirect_uri=self.oauth_redirect_uri(apex, method, callback_base),
         )
         phones = await verifier.fetch_phones(proof)

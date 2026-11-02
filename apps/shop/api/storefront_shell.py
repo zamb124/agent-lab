@@ -26,7 +26,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="/static/core/lib/customer-auth/autoload.js" defer></script>
+<script type="module" src="/static/core/lib/customer-auth/autoload.js"></script>
 {seo_head}
 <style>
 :root{{--accent:{accent};--on-accent:{on_accent};--afg:{afg_dark};--bg:#131110;--card:#1e1a17;--card2:#2a241f;--text:#f7f3ec;--muted:#a39a8d;--line:#2e2823;--radius:18px;--overlay:rgba(10,9,8,.62);--on-hero:#fff;--success:#4ade80;--warn:#f0b45c;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-lg:0 14px 44px rgba(0,0,0,.55);color-scheme:dark}}

@@ -10,7 +10,8 @@ webhook'и ботов контактов и OAuth callbacks. Это проток
 они анонимны: выдача customer-сессии — сам вход.
 
 UI — общий web-компонент ``<platform-customer-auth>``
-(`core/frontend/static/lib/customer-auth/`), продукт встраивает его
+(`core/frontend/static/lib/components/platform-customer-auth.ts`), продукт
+встраивает его
 с ``api-base`` + ``company-id``.
 """
 
@@ -226,7 +227,12 @@ def _oauth_method(provider_slug: str) -> PhoneVerificationMethod | None:
 
 @customer_auth_router.get("/oauth/{provider}/callback", response_model=None)
 async def customer_auth_oauth_callback(
-    provider: str, request: Request, di: Di, code: str = "", state: str = ""
+    provider: str,
+    request: Request,
+    di: Di,
+    code: str = "",
+    state: str = "",
+    device_id: str = "",
 ) -> Response:
     """OAuth-redirect: `code`+`state` → подтверждение → Set-Cookie → return_url."""
     method = _oauth_method(provider)
@@ -235,7 +241,11 @@ async def customer_auth_oauth_callback(
     apex = _apex(request)
     try:
         _customer, token, return_url = await di.customer_auth_service.complete_oauth(
-            method=method, code=code, state=state, apex=apex
+            method=method,
+            code=code,
+            state=state,
+            apex=apex,
+            device_id=device_id,
         )
     except CustomerAuthError as exc:
         raise _http(exc) from exc

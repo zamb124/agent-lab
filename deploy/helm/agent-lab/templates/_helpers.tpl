@@ -653,6 +653,96 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: mail-system-ispmanager-authinfo-password
       optional: true
+{{- /*
+  Customer-auth (авторизация покупателей по телефону): креды провайдеров
+  платформенные, per-apex через CUSTOMER_AUTH__BRANDS__<APEX>__<PROVIDER>__<FIELD>.
+  Плейсхолдер YOUR_* в conf.json = провайдер недоступен; задать реальные
+  значения — провайдер включается сам (credential_configured).
+*/}}
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__TELEGRAM__BOT_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-tg-bot-token
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__TELEGRAM__BOT_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-tg-bot-username
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__TELEGRAM__WEBHOOK_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-tg-webhook-secret
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__MAX__ACCESS_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-max-access-token
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__MAX__BOT_NAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-max-bot-name
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__MAX__WEBHOOK_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-max-webhook-secret
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__YANDEX__CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-yandex-client-id
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__YANDEX__CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-yandex-client-secret
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__VK__CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-vk-client-id
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__VK__CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-vk-client-secret
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__SBER__CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-sber-client-id
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__SBER__CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-sber-client-secret
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__SMSRU__API_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-smsru-api-id
+      optional: true
+- name: CUSTOMER_AUTH__BRANDS__LINNEX.IO__SMSRU__SENDER
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: customer-auth-smsru-sender
+      optional: true
 - name: TRACING__OTLP_ENDPOINT
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL

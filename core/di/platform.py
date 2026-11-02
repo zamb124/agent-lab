@@ -23,6 +23,7 @@ from core.config.models import (
     MailConfig,
     MailSyncConfig,
     OpenFGAConfig,
+    ServerConfig,
 )
 from core.context import get_context
 from core.customers.auth_service import CustomerAuthService
@@ -92,12 +93,14 @@ def customer_session_service() -> CustomerSessionService:
 @recipe
 def customer_auth_service(
     customer_auth: CustomerAuthConfig,
+    server: ServerConfig,
     redis_client: RedisClient,
     customer_service: CustomerService,
     customer_session_service: CustomerSessionService,
 ) -> CustomerAuthService:
     return CustomerAuthService(
         cfg=customer_auth,
+        env=server.env,
         redis=redis_client,
         customers=customer_service,
         sessions=customer_session_service,

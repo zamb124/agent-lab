@@ -159,6 +159,12 @@ kubectl delete secret platform-secrets -n platform
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |
 | `TINKOFF_TERMINAL_KEY` / `TINKOFF_TERMINAL_PASSWORD` | (опционально) интернет-эквайринг Т-Банка |
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси (`settings.proxy`): `PROXY__PROXIES` — JSON-массив строк URL, одной строкой в секрете, например `["http://user:pass@host:3128"]` |
+| `CUSTOMER_AUTH_TG_BOT_TOKEN` / `CUSTOMER_AUTH_TG_BOT_USERNAME` / `CUSTOMER_AUTH_TG_WEBHOOK_SECRET` | (опционально) Telegram-бот customer-auth «Поделиться номером» (apex `linnex.io`) |
+| `CUSTOMER_AUTH_MAX_ACCESS_TOKEN` / `CUSTOMER_AUTH_MAX_BOT_NAME` / `CUSTOMER_AUTH_MAX_WEBHOOK_SECRET` | (опционально) MAX-бот customer-auth request_contact |
+| `CUSTOMER_AUTH_YANDEX_CLIENT_ID` / `CUSTOMER_AUTH_YANDEX_CLIENT_SECRET` | (опционально) Yandex ID для customer-auth |
+| `CUSTOMER_AUTH_VK_CLIENT_ID` / `CUSTOMER_AUTH_VK_CLIENT_SECRET` | (опционально) VK ID для customer-auth |
+| `CUSTOMER_AUTH_SBER_CLIENT_ID` / `CUSTOMER_AUTH_SBER_CLIENT_SECRET` | (опционально) Sber ID для customer-auth (token/userinfo требуют mTLS партнёра) |
+| `CUSTOMER_AUTH_SMSRU_API_ID` / `CUSTOMER_AUTH_SMSRU_SENDER` | (опционально) SMS.RU SMS-фолбек customer-auth, расходы платформы |
 
 Эти переменные задаются в GitHub Actions как env и передаются в Helm одним `--set-json platformSecrets=...` через `deploy/scripts/helm_platform_secrets_json.sh` (jq экранирует многострочные секреты).
 

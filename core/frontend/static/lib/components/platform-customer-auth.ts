@@ -16,7 +16,9 @@
  * Все провайдеры, fallback и коды — на стороне core-роутера; компонент
  * ничего не знает о конкретных провайдерах, кроме подписей кнопок.
  */
-import { css, html, LitElement, nothing } from 'lit';
+import { css, html, nothing } from 'lit';
+
+import { PlatformElement } from '../platform-element/index.js';
 
 type Step =
     | 'phone'
@@ -98,7 +100,7 @@ const ERROR_KEYS: Record<string, string> = {
     challenge_expired: 'error_generic',
 };
 
-export class PlatformCustomerAuth extends LitElement {
+export class PlatformCustomerAuth extends PlatformElement {
     static override properties = {
         apiBase: { type: String, attribute: 'api-base' },
         companyId: { type: String, attribute: 'company-id' },
@@ -116,22 +118,40 @@ export class PlatformCustomerAuth extends LitElement {
         _resendIn: { state: true },
     };
 
-    apiBase = '';
-    companyId = '';
-    locale = 'ru';
-    private _opened = false;
-    private _step: Step = 'phone';
-    private _phone = '';
-    private _methods: MethodOption[] = [];
-    private _challenge: ChallengeView | null = null;
-    private _challengeId = '';
-    private _code = '';
-    private _error = '';
-    private _busy = false;
-    private _deepLink: string | null = null;
-    private _resendIn = 0;
+    declare apiBase: string;
+    declare companyId: string;
+    declare locale: string;
+    private declare _opened: boolean;
+    private declare _step: Step;
+    private declare _phone: string;
+    private declare _methods: MethodOption[];
+    private declare _challenge: ChallengeView | null;
+    private declare _challengeId: string;
+    private declare _code: string;
+    private declare _error: string;
+    private declare _busy: boolean;
+    private declare _deepLink: string | null;
+    private declare _resendIn: number;
     private _pollTimer: number | undefined;
     private _resendTimer: number | undefined;
+
+    constructor() {
+        super();
+        this.apiBase = '';
+        this.companyId = '';
+        this.locale = 'ru';
+        this._opened = false;
+        this._step = 'phone';
+        this._phone = '';
+        this._methods = [];
+        this._challenge = null;
+        this._challengeId = '';
+        this._code = '';
+        this._error = '';
+        this._busy = false;
+        this._deepLink = null;
+        this._resendIn = 0;
+    }
 
     static override styles = css`
         :host { display: contents; }
@@ -190,17 +210,16 @@ export class PlatformCustomerAuth extends LitElement {
         return this.locale.startsWith('en') ? pair.en : pair.ru;
     }
 
-    private _emit(type: string, detail?: unknown): void {
-        this.dispatchEvent(
-            new CustomEvent(type, { detail, bubbles: true, composed: true }),
-        );
+    private _emit(type: string, detail: unknown = null): void {
+        this.emit(type, detail);
     }
 
     /** Открыть лист: если сессия уже есть — сразу `customer-authenticated`. */
     async open(): Promise<void> {
         this._opened = true;
         this._error = '';
-        const me = await this._fetch<CustomerMe>('me', undefined, 'GET');
+        // 401 /me для анонима — штатный путь, не ошибка для показа.
+        const me = await this._fetch<CustomerMe>('me', undefined, 'GET', false);
         if (me) {
             this._confirm(me);
             return;
@@ -218,6 +237,7 @@ export class PlatformCustomerAuth extends LitElement {
         path: string,
         body?: unknown,
         method = 'POST',
+        showError = true,
     ): Promise<T | null> {
         const url = `${this.apiBase}/${path}`;
         const init: RequestInit = { method, credentials: 'same-origin' };
@@ -228,8 +248,10 @@ export class PlatformCustomerAuth extends LitElement {
         try {
             const resp = await fetch(url, init);
             if (!resp.ok) {
-                const detail = (await resp.json().catch(() => null))?.detail;
-                this._error = this._t(ERROR_KEYS[detail] ?? 'error_generic');
+                if (showError) {
+                    const detail = (await resp.json().catch(() => null))?.detail;
+                    this._error = this._t(ERROR_KEYS[detail] ?? 'error_generic');
+                }
                 return null;
             }
             this._error = '';
@@ -277,6 +299,11 @@ export class PlatformCustomerAuth extends LitElement {
         this._challenge = view;
         this._code = '';
         this._deepLink = view.deep_link ?? null;
+        if (method.ui === 'auto' && method.provider) {
+            // Авто-подтверждение (dev-эмулятор): direct-proof из введённого номера.
+            await this._verifyDirect(method.provider);
+            return;
+        }
         if (view.status === 'challenge_sent') {
             this._step = 'code';
             this._startResendCountdown(view.resend_after);
@@ -287,6 +314,29 @@ export class PlatformCustomerAuth extends LitElement {
                 return;
             }
             this._pollStatus();
+        }
+    }
+
+    private async _verifyDirect(provider: string): Promise<void> {
+        this._step = 'awaiting_contact';
+        this._busy = true;
+        const view = await this._fetch<{ status: string; customer?: CustomerMe }>(
+            'verify',
+            {
+                challenge_id: this._challengeId,
+                company_id: this.companyId,
+                direct: {
+                    kind: 'contact_share',
+                    provider,
+                    contact_phone: this._phone.trim() || null,
+                },
+            },
+        );
+        this._busy = false;
+        if (view?.status === 'confirmed' && view.customer) {
+            this._confirm(view.customer);
+        } else {
+            this._step = 'methods';
         }
     }
 

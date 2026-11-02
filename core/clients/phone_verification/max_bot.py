@@ -8,8 +8,10 @@ webhook update с `contact` и `vcf_info`/hash, связывающим номе�
 
 from __future__ import annotations
 
+import re
 from typing import ClassVar
 
+from core.clients.phone_verification.base import credential_configured
 from core.config.models import CustomerAuthMaxBotConfig
 from core.customers.contracts import DirectVerificationRequest, ProviderPhone
 from core.customers.enums import (
@@ -23,6 +25,18 @@ from core.customers.phone import normalize_phone_e164
 from core.http.client import request_public_oauth
 from core.types import JsonObject, require_json_object
 
+_VCF_TEL = re.compile(r"TEL[^:\r\n]*:([+\d][\d\s\-()]{5,20})")
+
+
+def _phone_from_vcf(vcf_info: str) -> str | None:
+    """`vcf_info` контакта — VCF-текст, номер в строке `TEL;TYPE=...:<num>`."""
+    if not vcf_info:
+        return None
+    match = _VCF_TEL.search(vcf_info)
+    if match is None:
+        return None
+    return normalize_phone_e164(match.group(1))
+
 
 class MaxContactProvider:
     provider: ClassVar[CustomerIdentityProvider] = CustomerIdentityProvider.MAX
@@ -34,7 +48,12 @@ class MaxContactProvider:
 
     def available(self) -> bool:
         c = self._cfg
-        return bool(c is not None and c.enabled and c.access_token and c.bot_name)
+        return bool(
+            c is not None
+            and c.enabled
+            and credential_configured(c.access_token)
+            and credential_configured(c.bot_name)
+        )
 
     def contact_link(self, token: str) -> str:
         if not self.available():
@@ -135,25 +154,24 @@ class MaxContactProvider:
             if not isinstance(payload_obj, dict):
                 continue
             contact = require_json_object(payload_obj, "max.contact")
-            contact_user_id = (
-                str(contact["vcf_info"])
-                if contact.get("vcf_info") is not None
-                else str(contact.get("max_info") or "")
-            )
-            phone = str(contact.get("phone") or "")
-            if not sender_id or not contact_user_id:
+            # Официальный контракт request_contact: `hash` в payload подтверждает,
+            # что номер привязан к аккаунту MAX; контакт «из телефонной книги»
+            # приходит без hash и отклоняется.
+            contact_hash = str(contact.get("hash") or "")
+            if not sender_id or not contact_hash:
                 raise ProviderError(
                     PhoneVerificationErrorCode.PROVIDER_MISMATCH,
-                    "max contact has no owner binding",
+                    "max contact has no hash binding",
                 )
-            if normalize_phone_e164(phone) is None:
+            phone = _phone_from_vcf(str(contact.get("vcf_info") or ""))
+            if phone is None:
                 raise ProviderError(PhoneVerificationErrorCode.INVALID_PHONE)
             return DirectVerificationRequest(
                 kind=DirectAuthorizationKind.CONTACT_SHARE,
                 provider=self.provider,
                 contact_phone=phone,
                 provider_user_id=sender_id,
-                contact_user_id=contact_user_id,
+                contact_user_id=sender_id,
             )
         return None
 

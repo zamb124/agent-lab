@@ -80,6 +80,8 @@ class DirectVerificationRequest(StrictBaseModel):
     contact_user_id: str | None = None  # owner id контакта (Telegram/MAX)
     oauth_code: str | None = None
     oauth_state: str | None = None
+    oauth_code_verifier: str | None = None  # PKCE verifier (VK ID требует)
+    oauth_device_id: str | None = None  # device_id из redirect (VK ID требует)
     redirect_uri: str | None = None
     meta: dict[str, str] | None = None
 

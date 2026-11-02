@@ -76,6 +76,10 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-customer-auth
+  doc_slug: platform-customer-auth
+  status: production
+  tier: T1
 - component: platform-data-table-host
   doc_slug: platform-data-table-host
   status: backlog

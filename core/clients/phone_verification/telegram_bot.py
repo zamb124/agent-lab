@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from core.clients.phone_verification.base import credential_configured
 from core.config.models import CustomerAuthTelegramBotConfig
 from core.customers.contracts import DirectVerificationRequest, ProviderPhone
 from core.customers.enums import (
@@ -39,7 +40,10 @@ class TelegramContactProvider:
     def available(self) -> bool:
         c = self._cfg
         return bool(
-            c is not None and c.enabled and c.bot_token and c.bot_username
+            c is not None
+            and c.enabled
+            and credential_configured(c.bot_token)
+            and credential_configured(c.bot_username)
         )
 
     def contact_link(self, token: str) -> str:
@@ -82,7 +86,7 @@ class TelegramContactProvider:
         assert self._cfg is not None
         if not self._cfg.bot_token:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
-        url = f"https://api.telegram.org/bot{self._cfg.bot_token}/sendMessage"
+        url = f"{self._cfg.api_base_url}/bot{self._cfg.bot_token}/sendMessage"
         body = {
             "chat_id": chat_id,
             "text": "Нажмите кнопку, чтобы поделиться номером телефона",

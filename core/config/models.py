@@ -2485,6 +2485,7 @@ class CustomerAuthTelegramBotConfig(BaseModel):
     bot_token: str = ""
     bot_username: str = ""
     webhook_secret: str = ""
+    api_base_url: str = "https://api.telegram.org"
 
 
 class CustomerAuthMaxBotConfig(BaseModel):
@@ -2496,7 +2497,7 @@ class CustomerAuthMaxBotConfig(BaseModel):
     access_token: str = ""
     bot_name: str = ""
     webhook_secret: str = ""
-    api_base_url: str = "https://botapi.max.ru"
+    api_base_url: str = "https://platform-api2.max.ru"
 
 
 class CustomerAuthOAuthClientConfig(BaseModel):
@@ -2507,6 +2508,10 @@ class CustomerAuthOAuthClientConfig(BaseModel):
     enabled: bool = False
     client_id: str = ""
     client_secret: str = ""
+    # Оверрайды endpoint'ов (пусто — официальные URL провайдера).
+    authorize_url: str = ""
+    token_url: str = ""
+    userinfo_url: str = ""
 
 
 class CustomerAuthSmsruConfig(BaseModel):
@@ -2519,6 +2524,7 @@ class CustomerAuthSmsruConfig(BaseModel):
     sender: str = ""
     test_mode: bool = False
     code_channel: str = "sms"  # sms | call
+    api_base_url: str = "https://sms.ru"
 
 
 class CustomerAuthBrandConfig(BaseModel):

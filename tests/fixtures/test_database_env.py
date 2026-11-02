@@ -35,8 +35,15 @@ if len(TEST_LIVEKIT_API_SECRET) < 32:
 # что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
 _TEST_SERVICE_ENV: dict[str, str] = {
     # Локальные сервисы тест-стека не должны идти через внешний HTTP_PROXY.
-    "NO_PROXY": "localhost,127.0.0.1,::1,lvh.me",
-    "no_proxy": "localhost,127.0.0.1,::1,lvh.me",
+    # `.invalid` — зарезервированный TLD фейковых доменов тестов: через прокси
+    # он даёт 502/ProxyError вместо детерминированного ConnectError.
+    "NO_PROXY": "localhost,127.0.0.1,::1,lvh.me,.invalid",
+    "no_proxy": "localhost,127.0.0.1,::1,lvh.me,.invalid",
+    # Платформенный egress-прокси из conf.local.json разработчика не должен
+    # делать тесты недетерминированными: несуществующий домен через живой
+    # прокси даёт 502/ProxyError вместо ConnectError. Тесты стратегий прокси
+    # патчат _platform_proxy_active явно и от этого флага не зависят.
+    "PROXY__ENABLED": "false",
     # HF-метаданные не нужны ни в одном тесте: иначе ленивый hf_hub_download
     # (chonkie/transformers и т.п.) уходит в http_backoff через мёртвый прокси
     # и воркер виснет до SIGKILL. Offline → кэш или мгновенный fallback.
@@ -104,11 +111,13 @@ def ensure_local_no_proxy() -> None:
     HTTP(S)_PROXY шелла: без bypass локальные адреса уезжают на внешний прокси,
     который не видит localhost пользователя. Внешний egress при этом продолжает
     идти через прокси — NO_PROXY только расширяет список обхода. `lvh.me`
-    резолвится в 127.0.0.1 и тоже должен обходить прокси.
+    резолвится в 127.0.0.1 и тоже должен обходить прокси. `.invalid` —
+    TLD несуществующих доменов тестов: прокси отвечает на него 502/ProxyError,
+    а тестам нужен детерминированный ConnectError напрямую.
     """
     for key in ("NO_PROXY", "no_proxy"):
         bypass = [part.strip() for part in os.environ.get(key, "").split(",") if part.strip()]
-        for host in ("localhost", "127.0.0.1", "::1", "lvh.me"):
+        for host in ("localhost", "127.0.0.1", "::1", "lvh.me", ".invalid"):
             if host not in bypass:
                 bypass.append(host)
         os.environ[key] = ",".join(bypass)

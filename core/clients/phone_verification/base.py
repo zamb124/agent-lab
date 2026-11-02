@@ -25,6 +25,15 @@ from core.customers.enums import (
 )
 from core.types import JsonObject
 
+# Плейсхолдеры conf.json (gate scripts/gates/repo/conf_secrets.py) —
+# значение задано формально, креденшла нет: провайдер unavailable.
+_PLACEHOLDER_PREFIXES: tuple[str, ...] = ("YOUR_", "ВСТАВИТЬ_", "@var:")
+
+
+def credential_configured(value: str) -> bool:
+    """Креденшл задан реальным значением, а не плейсхолдером conf.json."""
+    return bool(value) and not value.startswith(_PLACEHOLDER_PREFIXES)
+
 
 class CodeSender(Protocol):
     """Канал отправки короткого кода."""
@@ -78,4 +87,10 @@ class ContactShareVerifier(DirectVerifier, Protocol):
 class OAuthVerifier(DirectVerifier, Protocol):
     """Direct-метод через OAuth2/OIDC (Yandex/VK/Sber ID)."""
 
-    def authorization_url(self, *, state: str, redirect_uri: str) -> str: ...
+    def authorization_url(
+        self,
+        *,
+        state: str,
+        redirect_uri: str,
+        code_challenge: str | None = None,
+    ) -> str: ...

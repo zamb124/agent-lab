@@ -594,29 +594,29 @@
           "webhook_secret": "YOUR_CUSTOMER_TG_WEBHOOK_SECRET"
         },
         "max": {
-          "enabled": false,
+          "enabled": true,
           "access_token": "YOUR_MAX_BOT_TOKEN",
           "bot_name": "YOUR_MAX_BOT_NAME",
           "webhook_secret": "YOUR_MAX_WEBHOOK_SECRET",
-          "api_base_url": "https://botapi.max.ru"
+          "api_base_url": "https://platform-api2.max.ru"
         },
         "yandex": {
-          "enabled": false,
+          "enabled": true,
           "client_id": "YOUR_YANDEX_CLIENT_ID",
           "client_secret": "YOUR_YANDEX_CLIENT_SECRET"
         },
         "vk": {
-          "enabled": false,
+          "enabled": true,
           "client_id": "YOUR_VK_CLIENT_ID",
           "client_secret": "YOUR_VK_CLIENT_SECRET"
         },
         "sber": {
-          "enabled": false,
+          "enabled": true,
           "client_id": "YOUR_SBER_CLIENT_ID",
           "client_secret": "YOUR_SBER_CLIENT_SECRET"
         },
         "smsru": {
-          "enabled": false,
+          "enabled": true,
           "api_id": "YOUR_SMSRU_API_ID",
           "sender": "YOUR_SMSRU_SENDER",
           "test_mode": false,

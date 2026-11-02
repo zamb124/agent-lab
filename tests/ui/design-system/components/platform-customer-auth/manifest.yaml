@@ -1,0 +1,15 @@
+component: platform-customer-auth
+doc_slug: platform-customer-auth
+tier: T1
+title_ru: Авторизация покупателя по телефону
+title_en: Customer phone auth
+import: "@platform/lib/components/platform-customer-auth.js"
+variants:
+  - id: default
+    props:
+      api-base: /customer-auth-emu
+      company-id: cmp_emu
+    scenarios: [render, interaction]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -41,6 +41,7 @@ pytest_plugins = [
     "tests.fixtures.embed_e2e",
     "tests.fixtures.flows_chat_e2e",
     "tests.fixtures.google_api_emulator.handle",
+    "tests.fixtures.phone_verification_emulator.handle",
     "tests.fixtures.wiki",
     "tests.fixtures.stock",
     "tests.fixtures.shop",
@@ -54,6 +55,7 @@ pytest_plugins = [
 ]
 
 os.environ["TESTING"] = "true"
+os.environ.setdefault("SERVER__ENV", "test")
 if sys.platform == "darwin":
     _brew_path = "/opt/homebrew/bin"
     if _brew_path not in os.environ.get("PATH", ""):

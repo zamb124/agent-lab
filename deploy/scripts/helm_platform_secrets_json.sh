@@ -93,6 +93,20 @@ jq -n \
   --arg searchSerperApiKey "${SEARCH__SERPER__API_KEY:-}" \
   --arg searchTavilyApiKey "${SEARCH__TAVILY__API_KEY:-}" \
   --arg mailSystemIspmanagerAuthinfoPassword "${MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD:-}" \
+  --arg customerAuthTgBotToken "${CUSTOMER_AUTH_TG_BOT_TOKEN:-}" \
+  --arg customerAuthTgBotUsername "${CUSTOMER_AUTH_TG_BOT_USERNAME:-}" \
+  --arg customerAuthTgWebhookSecret "${CUSTOMER_AUTH_TG_WEBHOOK_SECRET:-}" \
+  --arg customerAuthMaxAccessToken "${CUSTOMER_AUTH_MAX_ACCESS_TOKEN:-}" \
+  --arg customerAuthMaxBotName "${CUSTOMER_AUTH_MAX_BOT_NAME:-}" \
+  --arg customerAuthMaxWebhookSecret "${CUSTOMER_AUTH_MAX_WEBHOOK_SECRET:-}" \
+  --arg customerAuthYandexClientId "${CUSTOMER_AUTH_YANDEX_CLIENT_ID:-}" \
+  --arg customerAuthYandexClientSecret "${CUSTOMER_AUTH_YANDEX_CLIENT_SECRET:-}" \
+  --arg customerAuthVkClientId "${CUSTOMER_AUTH_VK_CLIENT_ID:-}" \
+  --arg customerAuthVkClientSecret "${CUSTOMER_AUTH_VK_CLIENT_SECRET:-}" \
+  --arg customerAuthSberClientId "${CUSTOMER_AUTH_SBER_CLIENT_ID:-}" \
+  --arg customerAuthSberClientSecret "${CUSTOMER_AUTH_SBER_CLIENT_SECRET:-}" \
+  --arg customerAuthSmsruApiId "${CUSTOMER_AUTH_SMSRU_API_ID:-}" \
+  --arg customerAuthSmsruSender "${CUSTOMER_AUTH_SMSRU_SENDER:-}" \
   '{
     create: true,
     postgresPassword: $postgresPassword,
@@ -171,5 +185,19 @@ jq -n \
     searchLinkupApiKey: $searchLinkupApiKey,
     searchSerperApiKey: $searchSerperApiKey,
     searchTavilyApiKey: $searchTavilyApiKey,
-    mailSystemIspmanagerAuthinfoPassword: $mailSystemIspmanagerAuthinfoPassword
+    mailSystemIspmanagerAuthinfoPassword: $mailSystemIspmanagerAuthinfoPassword,
+    customerAuthTgBotToken: $customerAuthTgBotToken,
+    customerAuthTgBotUsername: $customerAuthTgBotUsername,
+    customerAuthTgWebhookSecret: $customerAuthTgWebhookSecret,
+    customerAuthMaxAccessToken: $customerAuthMaxAccessToken,
+    customerAuthMaxBotName: $customerAuthMaxBotName,
+    customerAuthMaxWebhookSecret: $customerAuthMaxWebhookSecret,
+    customerAuthYandexClientId: $customerAuthYandexClientId,
+    customerAuthYandexClientSecret: $customerAuthYandexClientSecret,
+    customerAuthVkClientId: $customerAuthVkClientId,
+    customerAuthVkClientSecret: $customerAuthVkClientSecret,
+    customerAuthSberClientId: $customerAuthSberClientId,
+    customerAuthSberClientSecret: $customerAuthSberClientSecret,
+    customerAuthSmsruApiId: $customerAuthSmsruApiId,
+    customerAuthSmsruSender: $customerAuthSmsruSender
   }'

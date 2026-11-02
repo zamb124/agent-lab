@@ -35,9 +35,12 @@ const tsSiblingMiddleware: Middleware = async (ctx, next) => {
 // переписывает specifier `./x.js` → `./x.ts` — см. tsSiblingMiddleware.
 // `delete` на инстансе не срабатывает — метод объявлен на прототипе класса;
 // own-property undefined перекрывает вызов хука.
-// Явный es2022: 'auto' резолвится в browserslist-дефолты (chrome64/safari11.1),
+// Явный esnext: 'auto' резолвится в browserslist-дефолты (chrome64/safari11.1),
 // а esbuild не даункомпилирует destructuring под них — трансформ .ts падает 500.
-const tsEsbuildPlugin = esbuildPlugin({ ts: true, target: 'es2022' });
+// Даункомпиляция не нужна — тесты идут только в свежем Playwright Chromium.
+// Под es2022 esbuild срезает `with { type: 'json' }` — браузер тянет .json
+// как JS-модуль и весь spec-файл падает на импорте.
+const tsEsbuildPlugin = esbuildPlugin({ ts: true, target: 'esnext' });
 (tsEsbuildPlugin as { resolveImport?: unknown }).resolveImport = undefined;
 
 const platformLibSpecifier = '@platform/lib/';

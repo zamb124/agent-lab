@@ -47,7 +47,9 @@ class PhoneVerificationRegistry:
         self.oauth: dict[PhoneVerificationMethod, OAuthVerifier] = oauth
 
     @classmethod
-    def build(cls, cfg: CustomerAuthConfig, apex: str) -> "PhoneVerificationRegistry":
+    def build(
+        cls, cfg: CustomerAuthConfig, apex: str, *, env: str = "production"
+    ) -> "PhoneVerificationRegistry":
         brand = cfg.brand(apex)
         telegram = TelegramContactProvider(brand.telegram if brand else None)
         max_bot = MaxContactProvider(brand.max if brand else None)
@@ -55,8 +57,10 @@ class PhoneVerificationRegistry:
         vk = VkIdProvider(brand.vk if brand else None)
         sber = SberIdProvider(brand.sber if brand else None)
         smsru = SmsruCodeSender(brand.smsru if brand else None)
-        emulator_code = EmulatorCodeSender(enabled=cfg.emulator_enabled)
-        emulator_direct = EmulatorDirectVerifier(enabled=cfg.emulator_enabled)
+        # Эмулятор авто-подтверждает любой номер — только dev/test контур.
+        emulator_on = cfg.emulator_enabled and env in ("development", "test")
+        emulator_code = EmulatorCodeSender(enabled=emulator_on)
+        emulator_direct = EmulatorDirectVerifier(enabled=emulator_on)
 
         code_senders: list[CodeSender] = [smsru, emulator_code]
         direct: list[DirectVerifier] = [telegram, max_bot, yandex, vk, sber, emulator_direct]

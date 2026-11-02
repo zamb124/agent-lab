@@ -15,9 +15,11 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import ClassVar, override
 from urllib.parse import urlencode
 
+from core.clients.phone_verification.base import credential_configured
 from core.config.models import CustomerAuthOAuthClientConfig
 from core.customers.contracts import DirectVerificationRequest, ProviderPhone
 from core.customers.enums import (
@@ -51,34 +53,74 @@ class _OAuthIdProvider:
 
     def available(self) -> bool:
         c = self._cfg
-        return bool(c is not None and c.enabled and c.client_id and c.client_secret)
-
-    def authorization_url(self, *, state: str, redirect_uri: str) -> str:
-        assert self._cfg is not None
-        query = urlencode(
-            {
-                "response_type": "code",
-                "client_id": self._cfg.client_id,
-                "redirect_uri": redirect_uri,
-                "scope": self._scope,
-                "state": state,
-            }
+        return bool(
+            c is not None
+            and c.enabled
+            and credential_configured(c.client_id)
+            and credential_configured(c.client_secret)
         )
-        return f"{self._authorize_url}?{query}"
+
+    def _endpoint(self, override: str, default: str) -> str:
+        return override or default
+
+    def authorization_url(
+        self,
+        *,
+        state: str,
+        redirect_uri: str,
+        code_challenge: str | None = None,
+    ) -> str:
+        assert self._cfg is not None
+        params: dict[str, str] = {
+            "response_type": "code",
+            "client_id": self._cfg.client_id,
+            "redirect_uri": redirect_uri,
+            "scope": self._scope,
+            "state": state,
+        }
+        if code_challenge:
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = "S256"
+        params.update(self._authorize_extra_params(state))
+        query = urlencode(params)
+        return f"{self._endpoint(self._cfg.authorize_url, self._authorize_url)}?{query}"
+
+    def _authorize_extra_params(self, _state: str) -> dict[str, str]:
+        return {}
 
     def _token_params(
         self, proof: DirectVerificationRequest, client_id: str, client_secret: str
     ) -> dict[str, str]:
-        return {
+        params = {
             "grant_type": "authorization_code",
             "code": proof.oauth_code or "",
             "client_id": client_id,
             "client_secret": client_secret,
             "redirect_uri": proof.redirect_uri or "",
         }
+        if proof.oauth_code_verifier:
+            params["code_verifier"] = proof.oauth_code_verifier
+        return params
+
+    def _token_headers(self) -> dict[str, str]:
+        return {}
 
     def _userinfo_headers(self, access_token: str) -> dict[str, str]:
         return {"Authorization": f"OAuth {access_token}"}
+
+    def _userinfo_params(self) -> dict[str, str]:
+        return {}
+
+    async def _request_userinfo(self, url: str, access_token: str) -> JsonObject:
+        assert self._cfg is not None
+        resp = await request_public_oauth(
+            "GET",
+            url,
+            headers=self._userinfo_headers(access_token),
+            params=self._userinfo_params(),
+            timeout=20.0,
+        )
+        return parse_json_object(resp.text, f"{self.provider}.userinfo")
 
     def _extract_phones(self, _data: JsonObject) -> list[str]:  # pragma: no cover - abstract
         raise NotImplementedError
@@ -96,8 +138,9 @@ class _OAuthIdProvider:
         try:
             token_resp = await request_public_oauth(
                 "POST",
-                self._token_url,
+                self._endpoint(c.token_url, self._token_url),
                 data=self._token_params(proof, c.client_id, c.client_secret),
+                headers=self._token_headers(),
                 timeout=20.0,
             )
             token_body = parse_json_object(token_resp.text, f"{self.provider}.token")
@@ -107,13 +150,9 @@ class _OAuthIdProvider:
                     PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
                     f"{self.provider}: no access_token",
                 )
-            info_resp = await request_public_oauth(
-                "GET",
-                self._userinfo_url,
-                headers=self._userinfo_headers(access_token),
-                timeout=20.0,
+            info = await self._request_userinfo(
+                self._endpoint(c.userinfo_url, self._userinfo_url), access_token
             )
-            info = parse_json_object(info_resp.text, f"{self.provider}.userinfo")
         except ProviderError:
             raise
         except Exception as exc:
@@ -145,6 +184,11 @@ class YandexIdProvider(_OAuthIdProvider):
     _scope: ClassVar[str] = "login:info"
 
     @override
+    def _userinfo_params(self) -> dict[str, str]:
+        # login.yandex.ru/info отдаёт JSON только с явным format=json.
+        return {"format": "json"}
+
+    @override
     def _extract_phones(self, data: JsonObject) -> list[str]:
         default_phone = data.get("default_phone")
         if isinstance(default_phone, dict):
@@ -170,6 +214,32 @@ class VkIdProvider(_OAuthIdProvider):
     _scope: ClassVar[str] = "phone"
 
     @override
+    def _token_params(
+        self, proof: DirectVerificationRequest, client_id: str, client_secret: str
+    ) -> dict[str, str]:
+        # VK ID требует device_id и state из authorize-redirect при обмене кода.
+        params = super()._token_params(proof, client_id, client_secret)
+        if not proof.oauth_device_id:
+            raise ProviderError(
+                PhoneVerificationErrorCode.CODE_INVALID, "vk: device_id is required"
+            )
+        params["device_id"] = proof.oauth_device_id
+        params["state"] = proof.oauth_state or ""
+        return params
+
+    @override
+    async def _request_userinfo(self, url: str, access_token: str) -> JsonObject:
+        """`POST /oauth2/user_info` — access_token в теле формы (док. VK ID)."""
+        assert self._cfg is not None
+        resp = await request_public_oauth(
+            "POST",
+            url,
+            data={"client_id": self._cfg.client_id, "access_token": access_token},
+            timeout=20.0,
+        )
+        return parse_json_object(resp.text, f"{self.provider}.userinfo")
+
+    @override
     def _extract_phones(self, data: JsonObject) -> list[str]:
         user = data.get("user")
         if isinstance(user, dict):
@@ -179,16 +249,35 @@ class VkIdProvider(_OAuthIdProvider):
 
 
 class SberIdProvider(_OAuthIdProvider):
+    """Sber ID OIDC (developers.sber.ru/docs/ru/sberid):
+    authorize — `id.sber.ru/CSAFront/oidc/authorize.do` (nonce и state
+    обязательны), back-channel — `oauth.sber.ru/ru/prod/…` с обязательными
+    заголовками `rquid` / `x-introspect-rquid` (32-символьный id сообщения).
+    Token/userinfo дополнительно требуют клиентский сертификат партнёра (mTLS)
+    — настраивается инфраструктурой, см. customers.mdc."""
+
     provider: ClassVar[CustomerIdentityProvider] = CustomerIdentityProvider.SBER
     method: ClassVar[PhoneVerificationMethod] = PhoneVerificationMethod.SBER_ID
-    _authorize_url: ClassVar[str] = "https://id.sber.ru/oidc/authorize"
-    _token_url: ClassVar[str] = "https://id.sber.ru/oidc/token"
-    _userinfo_url: ClassVar[str] = "https://id.sber.ru/oidc/userinfo"
+    _authorize_url: ClassVar[str] = "https://id.sber.ru/CSAFront/oidc/authorize.do"
+    _token_url: ClassVar[str] = "https://oauth.sber.ru/ru/prod/tokens/v2/oidc"
+    _userinfo_url: ClassVar[str] = "https://oauth.sber.ru/ru/prod/sberbankid/v2.1/userinfo"
     _scope: ClassVar[str] = "openid phone"
 
     @override
+    def _authorize_extra_params(self, state: str) -> dict[str, str]:
+        # `nonce` и `client_type` обязательны по контракту Сбер ID.
+        return {"nonce": state, "client_type": "PRIVATE"}
+
+    @override
+    def _token_headers(self) -> dict[str, str]:
+        return {"accept": "application/json", "rquid": uuid.uuid4().hex}
+
+    @override
     def _userinfo_headers(self, access_token: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {access_token}"}
+        return {
+            "Authorization": f"Bearer {access_token}",
+            "x-introspect-rquid": uuid.uuid4().hex,
+        }
 
     @override
     def _extract_phones(self, data: JsonObject) -> list[str]:
