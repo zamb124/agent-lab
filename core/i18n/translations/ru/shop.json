@@ -365,6 +365,10 @@
             "min_total": "от {sum} ₽",
             "min_qty": "от {n} позиций",
             "items_present": "при наличии позиций"
-        }
+        },
+        "remove": "Удалить"
+    },
+    "context": {
+        "open_storefront": "Открыть витрину"
     }
 }

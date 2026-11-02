@@ -167,7 +167,7 @@ export class ShopApp extends PlatformApp {
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
-                padding: var(--space-4);
+                padding: var(--space-3);
                 box-sizing: border-box;
             }
             platform-island {

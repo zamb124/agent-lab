@@ -37,12 +37,12 @@ export class ShopHomePage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
+            .wrap { padding: var(--space-5) var(--space-6); }
             h1 { margin: 0 0 var(--space-1); font-size: var(--text-2xl); color: var(--text-primary); }
             .sub { color: var(--text-tertiary); font-size: var(--text-sm); margin-bottom: var(--space-5); }
             .grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
                 gap: var(--space-4);
             }
             .card {
@@ -58,7 +58,9 @@ export class ShopHomePage extends PlatformPage {
             .card-name { font-weight: var(--font-semibold); color: var(--text-primary); flex: 1; }
             .status { font-size: var(--text-xs); font-weight: var(--font-medium); }
             .slug { color: var(--text-tertiary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-            .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: auto; }
+            .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: auto; align-items: center; }
+            .actions .primary { flex: 1; min-width: 140px; }
+            .nav-ops { display: flex; gap: var(--space-1); }
             .create {
                 border: 1px dashed var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
@@ -207,23 +209,28 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`<a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
                                             : nothing}
                                         <div class="actions">
+                                            <platform-button class="primary" block size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
+                                                <platform-icon name="book-open" size="14"></platform-icon> ${this.t('home.open_menu')}
+                                            </platform-button>
                                             ${(!shop.description || !shop.cover_file_id)
-                                                ? html`<platform-button size="sm" ?busy=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
-                                                      ${this.t('home.ai_autofill')}
+                                                ? html`<platform-button size="sm" variant="accent" ?busy=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
+                                                      <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('home.ai_autofill')}
                                                   </platform-button>`
                                                 : nothing}
-                                            <platform-button size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
-                                                ${this.t('home.open_menu')}
-                                            </platform-button>
-                                            <platform-button size="sm" @click=${() => this.navigate('shop_builder', { shopId })}>
-                                                ${this.t('home.open_builder')}
-                                            </platform-button>
-                                            <platform-button size="sm" @click=${() => this.navigate('shop_orders', { shopId })}>
-                                                ${this.t('home.open_orders')}
-                                            </platform-button>
-                                            <platform-button size="sm" @click=${() => this.navigate('shop_settings', { shopId })}>
-                                                ${this.t('home.open_settings')}
-                                            </platform-button>
+                                            <span class="nav-ops">
+                                                <platform-button icon-only density="compact" variant="secondary"
+                                                    title=${this.t('home.open_builder')}
+                                                    @click=${() => this.navigate('shop_builder', { shopId })}
+                                                ><platform-icon name="edit" size="14"></platform-icon></platform-button>
+                                                <platform-button icon-only density="compact" variant="secondary"
+                                                    title=${this.t('home.open_orders')}
+                                                    @click=${() => this.navigate('shop_orders', { shopId })}
+                                                ><platform-icon name="scroll-text" size="14"></platform-icon></platform-button>
+                                                <platform-button icon-only density="compact" variant="secondary"
+                                                    title=${this.t('home.open_settings')}
+                                                    @click=${() => this.navigate('shop_settings', { shopId })}
+                                                ><platform-icon name="settings" size="14"></platform-icon></platform-button>
+                                            </span>
                                         </div>
                                     </div>
                                 `;

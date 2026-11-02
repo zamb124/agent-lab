@@ -5,6 +5,8 @@
 
 import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { getPlatformBus } from '@platform/lib/events/index.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import {
     shopShopsResource,
     shopUpdateOp,
@@ -84,6 +86,66 @@ describe('shop-menu-page: добавление категории', () => {
         await elementUpdated(el);
         expect((el as unknown as { _newCategory: string })._newCategory).to.equal('Суши');
         expect(addBtn.disabled).to.equal(false);
+    });
+});
+
+const SHOP_ROW = {
+    shop_id: 'shop_test',
+    name: 'МОЙ МАГАЗ',
+    slug: 'moy-magaz',
+    status: 'published',
+    badges: [],
+};
+
+const SHOP_ROUTES = [
+    { key: 'shop_home', path: '', titleKey: 'routes.shop_home' },
+    { key: 'shop_menu', path: ':shopId/menu', parent: 'shop_home', titleKey: 'routes.shop_menu' },
+];
+
+function seedShopAndRoute() {
+    const bus = getPlatformBus();
+    bus.dispatch(CoreEvents.ROUTER_ROUTE_CHANGED, { routeKey: 'shop_menu', params: { shopId: 'shop_test' } });
+    bus.dispatch('shop/shops/list_loaded', { items: [SHOP_ROW], total: 1 });
+}
+
+describe('shop-menu-page: контекст магазина', () => {
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: FACTORIES, routes: SHOP_ROUTES });
+    });
+
+    it('shop-page-head показывает имя магазина, раздел и крошки', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedShopAndRoute();
+        await elementUpdated(el);
+        const head = el.shadowRoot!.querySelector('shop-page-head') as HTMLElement & { shadowRoot: ShadowRoot };
+        expect(head, 'shop-page-head').to.exist;
+        await elementUpdated(head);
+        const h1 = head.shadowRoot.querySelector('h1');
+        expect(h1?.textContent?.trim()).to.equal('МОЙ МАГАЗ');
+        expect(head.shadowRoot.textContent).to.contain('moy-magaz');
+        const breadcrumbs = head.shadowRoot.querySelector('platform-breadcrumbs') as HTMLElement & { shadowRoot: ShadowRoot };
+        expect(breadcrumbs, 'platform-breadcrumbs').to.exist;
+        await elementUpdated(breadcrumbs);
+        const crumbsText = breadcrumbs.shadowRoot.textContent ?? '';
+        expect(crumbsText).to.contain('МОЙ МАГАЗ');
+        const storefront = head.shadowRoot.querySelector('a.storefront') as HTMLAnchorElement | null;
+        expect(storefront, 'storefront link для published').to.exist;
+        expect(storefront!.href).to.contain('/public/s/moy-magaz');
+    });
+
+    it('add_product — единственная primary-кнопка в шапке', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        await elementUpdated(el);
+        const actions = Array.from(el.shadowRoot!.querySelectorAll('.head-actions platform-button')) as Array<HTMLElement & { variant: string }>;
+        const primaries = actions.filter((b) => b.variant === 'primary');
+        expect(primaries.length).to.equal(1);
+        const variants = new Set(actions.map((b) => b.variant));
+        expect(variants.has('secondary')).to.equal(true);
     });
 });
 

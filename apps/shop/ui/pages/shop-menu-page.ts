@@ -17,6 +17,9 @@ import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/shop-page-head.js';
+import { shopHeadRow } from '../components/shop-page-head.js';
+import type { ShopHeadRow } from '../components/shop-page-head.js';
 
 interface CategoryRow {
     shop_category_id: string;
@@ -45,8 +48,7 @@ interface ShopBadgeDef {
     icon_path: string;
 }
 
-interface ShopRow {
-    shop_id: string;
+interface ShopRow extends ShopHeadRow {
     badges: ShopBadgeDef[];
 }
 
@@ -105,10 +107,8 @@ export class ShopMenuPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1180px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-10); }
+            .wrap { padding: var(--space-5) var(--space-6) var(--space-10); }
 
-            .page-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); flex-wrap: wrap; }
-            .page-head h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); flex: 1; }
             .head-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 
             .layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
@@ -146,13 +146,14 @@ export class ShopMenuPage extends PlatformPage {
             .cat-add { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-1) var(--space-1); align-items: end; }
             .cat-add platform-field { flex: 1; min-width: 0; }
 
-            .list { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+            .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: var(--space-3); min-width: 0; }
             .card {
                 display: flex; align-items: center; gap: var(--space-3);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 background: var(--bg-surface);
                 padding: var(--space-3);
+                flex-wrap: wrap;
             }
             .card:hover { border-color: color-mix(in srgb, var(--text-primary) 18%, transparent); }
             .card.off { opacity: 0.55; }
@@ -187,7 +188,7 @@ export class ShopMenuPage extends PlatformPage {
             .ptag svg { width: 11px; height: 11px; fill: currentColor; }
             .price { font-variant-numeric: tabular-nums; font-weight: var(--font-semibold); color: var(--text-primary); white-space: nowrap; }
             .price::after { content: ' ₽'; font-weight: var(--font-normal); color: var(--text-tertiary); }
-            .ops { display: flex; gap: 2px; align-items: center; opacity: 0; transition: opacity 0.15s; }
+            .ops { display: flex; gap: 2px; align-items: center; opacity: 0; transition: opacity 0.15s; margin-left: auto; }
             .card:hover .ops, .card:focus-within .ops { opacity: 1; }
 
             .badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
@@ -296,8 +297,11 @@ export class ShopMenuPage extends PlatformPage {
     }
 
     private _shop(): ShopRow | null {
-        const row = this._shops.items.find((s) => (s as { shop_id?: string }).shop_id === this.shopId);
-        return row === undefined ? null : (row as unknown as ShopRow);
+        const raw = this._shops.items.find((s) => (s as { shop_id?: string }).shop_id === this.shopId);
+        const head = shopHeadRow(raw);
+        if (head === null) return null;
+        const badges = (raw as { badges?: unknown }).badges;
+        return { ...head, badges: Array.isArray(badges) ? (badges as ShopBadgeDef[]) : [] };
     }
 
     private _shopBadges(): ShopBadgeDef[] {
@@ -566,15 +570,15 @@ export class ShopMenuPage extends PlatformPage {
                 <span class="name">${cat.name}</span>
                 <span class="count">${count}</span>
                 <span class="cat-ops">
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_up')}
+                    <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_up')}
                         ?disabled=${index === 0}
                         @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, -1); }}
                     ><platform-icon name="chevron-up" size="12"></platform-icon></platform-button>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_down')}
+                    <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_down')}
                         ?disabled=${index === this._categories.length - 1}
                         @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}
                     ><platform-icon name="chevron-down" size="12"></platform-icon></platform-button>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.category_remove')}
+                    <platform-button icon-only density="dense" variant="ghost-danger" title=${this.t('menu.category_remove')}
                         @click=${(e: Event) => { e.stopPropagation(); void this._removeCategory(cat.shop_category_id); }}
                     ><platform-icon name="close" size="12"></platform-icon></platform-button>
                 </span>
@@ -606,34 +610,34 @@ export class ShopMenuPage extends PlatformPage {
                     @change=${(event: CustomEvent<{ value?: unknown }>) => this._toggleAvailable(p, Boolean(event.detail.value))}
                 ></platform-switch>
                 <div class="ops">
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_up')}
+                    <platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.move_up')}
                         ?busy=${this._productReorderOp.busy} ?disabled=${index === 0}
                         @click=${() => this._move(p, -1)}
                     ><platform-icon name="chevron-up" size="14"></platform-icon></platform-button>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.move_down')}
+                    <platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.move_down')}
                         ?busy=${this._productReorderOp.busy} ?disabled=${index === total - 1}
                         @click=${() => this._move(p, 1)}
                     ><platform-icon name="chevron-down" size="14"></platform-icon></platform-button>
                     <input type="file" accept="image/*" style="display:none"
                         @change=${(e: Event) => this._uploadProductPhoto(p, e)}>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.photo_pick')}
+                    <platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.photo_pick')}
                         ?busy=${this._uploadOp.busy}
                         @click=${(e: Event) => ((e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement | null)?.click()}
                     ><platform-icon name="image" size="14"></platform-icon></platform-button>
                     ${p.photo_file_id
-                        ? html`<platform-button size="sm" variant="ghost" title=${this.t('menu.ai_enhance')}
+                        ? html`<platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.ai_enhance')}
                             ?busy=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto(p)}
                         ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`
-                        : html`<platform-button size="sm" variant="ghost" title=${this.t('menu.ai_generate')}
+                        : html`<platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.ai_generate')}
                             ?busy=${this._aiGenerateOp.busy} @click=${() => this._generatePhoto(p)}
                         ><platform-icon name="sparkle" size="14"></platform-icon></platform-button>`}
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
+                    <platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
                         <platform-icon name="list-check" size="14"></platform-icon>
                     </platform-button>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.edit')} @click=${() => this._openProductModal(p)}>
+                    <platform-button icon-only density="compact" variant="ghost" title=${this.t('menu.edit')} @click=${() => this._openProductModal(p)}>
                         <platform-icon name="edit" size="14"></platform-icon>
                     </platform-button>
-                    <platform-button size="sm" variant="ghost" title=${this.t('menu.remove')} @click=${() => this._removeProduct(p)}>
+                    <platform-button icon-only density="compact" variant="ghost-danger" title=${this.t('menu.remove')} @click=${() => this._removeProduct(p)}>
                         <platform-icon name="trash" size="14"></platform-icon>
                     </platform-button>
                 </div>
@@ -650,26 +654,29 @@ export class ShopMenuPage extends PlatformPage {
         const missingDesc = this._products.filter((p) => !p.description?.trim()).length;
         return html`
             <div class="wrap">
-                <div class="page-head">
-                    <h1>${this.t('menu.title')}</h1>
-                    <div class="head-actions">
+                <shop-page-head
+                    .shop=${this._shop()}
+                    shop-id=${this.shopId}
+                    section=${this.t('routes.shop_menu')}
+                >
+                    <div slot="actions" class="head-actions">
                         ${missingDesc > 0 ? html`
-                            <platform-button size="sm" ?busy=${this._aiDescribeBatchOp.busy}
+                            <platform-button size="sm" variant="accent" ?busy=${this._aiDescribeBatchOp.busy}
                                 @click=${() => this._runAiBatch()}>
                                 <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missingDesc}
                             </platform-button>
                         ` : nothing}
-                        <platform-button size="sm" @click=${() => this._openBadgeEditor()}>
+                        <platform-button size="sm" variant="secondary" @click=${() => this._openBadgeEditor()}>
                             <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
                         </platform-button>
-                        <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
+                        <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = !this._importOpen; }}>
                             <platform-icon name="import" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
                         <platform-button size="sm" variant="primary" @click=${() => this._openProductModal()}>
                             <platform-icon name="plus" size="14"></platform-icon> ${this.t('menu.add_product')}
                         </platform-button>
                     </div>
-                </div>
+                </shop-page-head>
                 ${this._importOpen ? html`
                     <div class="panel">
                         <div class="panel-title">${this.t('menu.import_title')}</div>
@@ -689,12 +696,12 @@ export class ShopMenuPage extends PlatformPage {
                             ${parsed.invalid > 0 && this._aiItems === null ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : nothing}
                         </div>
                         <div class="panel-actions">
-                            <platform-button size="sm" ?busy=${this._aiParseOp.busy}
+                            <platform-button size="sm" variant="accent" ?busy=${this._aiParseOp.busy}
                                 ?disabled=${this._importText.trim().length < 3}
                                 title=${this.t('menu.import_ai_hint')}
                                 @click=${() => this._runAiParse()}
                             ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
-                            <platform-button size="sm" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
+                            <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
                             <platform-button size="sm" variant="primary" ?busy=${this._importOp.busy}
                                 ?disabled=${importItems.length === 0}
                                 @click=${() => this._runImport()}
@@ -754,7 +761,7 @@ export class ShopMenuPage extends PlatformPage {
                                     this._newCategory = typeof event.detail.value === 'string' ? event.detail.value : '';
                                 }}
                             ></platform-field>
-                            <platform-button size="sm" ?disabled=${this._newCategory.trim() === ''} @click=${() => this._addCategory()}>
+                            <platform-button icon-only density="compact" variant="primary" ?disabled=${this._newCategory.trim() === ''} @click=${() => this._addCategory()}>
                                 <platform-icon name="plus" size="16"></platform-icon>
                             </platform-button>
                         </div>

@@ -6,12 +6,15 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
+import '../components/shop-page-head.js';
+import { shopHeadRow } from '../components/shop-page-head.js';
+import type { ShopHeadRow } from '../components/shop-page-head.js';
 
 const COLUMNS = ['new', 'accepted', 'preparing', 'delivering', 'done', 'cancelled'] as const;
 const NEXT: Record<string, string[]> = {
@@ -54,6 +57,7 @@ export class ShopOrdersPage extends PlatformPage {
 
     declare shopId: string;
 
+    private _shops: ResourceController;
     private _listOp: OpController;
     private _statusOp: OpController;
     private _locale: SelectController<string>;
@@ -66,8 +70,7 @@ export class ShopOrdersPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow: hidden; }
-            .wrap { height: 100%; display: flex; flex-direction: column; padding: var(--space-6) var(--space-6) 0; }
-            h1 { margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary); }
+            .wrap { height: 100%; display: flex; flex-direction: column; padding: var(--space-5) var(--space-6) 0; }
             .board {
                 flex: 1;
                 min-height: 0;
@@ -124,6 +127,7 @@ export class ShopOrdersPage extends PlatformPage {
 
     constructor() {
         super();
+        this._shops = this.useResource('shop/shops');
         this._listOp = this.useOp('shop/orders_list');
         this._statusOp = this.useOp('shop/order_set_status');
         this._locale = this.select((state) => (state.i18n.locale === '' ? 'en' : state.i18n.locale));
@@ -131,7 +135,15 @@ export class ShopOrdersPage extends PlatformPage {
 
     async onRouteActive(): Promise<void> {
         if (this.shopId === '') return;
-        await this._listOp.run({ shop_id: this.shopId, limit: 200 });
+        await Promise.all([
+            this._listOp.run({ shop_id: this.shopId, limit: 200 }),
+            this._shops.load(),
+        ]);
+    }
+
+    private _shop(): ShopHeadRow | null {
+        const row = this._shops.items.find((s) => (s as { shop_id?: string }).shop_id === this.shopId);
+        return shopHeadRow(row);
     }
 
     private _orders(): OrderRow[] {
@@ -183,7 +195,7 @@ export class ShopOrdersPage extends PlatformPage {
                     ${(NEXT[order.status] ?? []).map((next) => html`
                         <platform-button
                             size="sm"
-                            variant=${next === 'cancelled' ? 'secondary' : 'primary'}
+                            variant=${next === 'cancelled' ? 'ghost-danger' : 'primary'}
                             ?busy=${this._statusOp.busy}
                             @click=${() => this._setStatus(order, next)}
                         >${this.t(`orders.action.${next}`)}</platform-button>
@@ -197,7 +209,11 @@ export class ShopOrdersPage extends PlatformPage {
         const orders = this._orders();
         return html`
             <div class="wrap">
-                <h1>${this.t('orders.title')}</h1>
+                <shop-page-head
+                    .shop=${this._shop()}
+                    shop-id=${this.shopId}
+                    section=${this.t('routes.shop_orders')}
+                ></shop-page-head>
                 ${this._listOp.busy && orders.length === 0
                     ? html`<platform-empty-state loading></platform-empty-state>`
                     : orders.length === 0

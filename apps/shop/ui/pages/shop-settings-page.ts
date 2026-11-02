@@ -11,6 +11,8 @@ import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/shop-page-head.js';
+import { shopHeadRow } from '../components/shop-page-head.js';
 
 export class ShopSettingsPage extends PlatformPage {
     static i18nNamespace = 'shop';
@@ -43,7 +45,7 @@ export class ShopSettingsPage extends PlatformPage {
     private _aiGenerateLogoOp: OpController;
     declare _logoFileId: string;
     declare _coverFileId: string;
-    private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
+    declare _hours: Array<{ open: string; close: string; closed: boolean }>;
     declare _loadAttempted: boolean;
 
     static override properties = {
@@ -69,14 +71,13 @@ export class ShopSettingsPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 720px; margin: 0 auto; padding: var(--space-6); }
-            h1 { margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary); }
+            .wrap { padding: var(--space-5) var(--space-6); }
+            .sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: var(--space-4); align-items: start; }
             .card {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 background: var(--bg-surface);
                 padding: var(--space-4);
-                margin-bottom: var(--space-4);
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
@@ -145,6 +146,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._botToken = '';
         this._logoFileId = '';
         this._coverFileId = '';
+        this._hours = [];
         this._shops = this.useResource('shop/shops');
         this._updateOp = this.useOp('shop/shop_update');
         this._publishOp = this.useOp('shop/shop_publish');
@@ -356,7 +358,7 @@ export class ShopSettingsPage extends PlatformPage {
                 ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     <platform-empty-state icon="store" title=${this.t('settings.shop_not_found')}>
-                        <platform-button size="sm" @click=${() => { this._shops.load(); }}>${this.t('settings.retry')}</platform-button>
+                        <platform-button size="sm" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('settings.retry')}</platform-button>
                     </platform-empty-state>`;
         }
         const status = String(shop.status);
@@ -364,8 +366,13 @@ export class ShopSettingsPage extends PlatformPage {
         const domains = Array.isArray(shop.domains) ? (shop.domains as Array<Record<string, unknown>>) : [];
         return html`
             <div class="wrap">
-                <h1>${this.t('settings.title')}</h1>
+                <shop-page-head
+                    .shop=${shopHeadRow(shop)}
+                    shop-id=${this.shopId}
+                    section=${this.t('routes.shop_settings')}
+                ></shop-page-head>
 
+                <div class="sections">
                 <div class="card">
                     <div class="card-title">${this.t('settings.publish_title')}</div>
                     <div class="status-line">
@@ -373,7 +380,7 @@ export class ShopSettingsPage extends PlatformPage {
                         ${status !== 'published'
                             ? html`<platform-button variant="primary" size="sm" ?busy=${this._publishOp.busy} @click=${() => this._publish()}>${this.t('settings.publish_button')}</platform-button>`
                             : html`
-                                <platform-button size="sm" ?busy=${this._suspendOp.busy} @click=${() => this._suspend()}>${this.t('settings.suspend_button')}</platform-button>
+                                <platform-button size="sm" variant="secondary" ?busy=${this._suspendOp.busy} @click=${() => this._suspend()}>${this.t('settings.suspend_button')}</platform-button>
                                 <a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${storefrontUrl}</a>
                             `}
                     </div>
@@ -410,11 +417,11 @@ export class ShopSettingsPage extends PlatformPage {
                     </div>
                     <div class="hint">${this.t('settings.brand_hint')}</div>
                     <div class="ai-row">
-                        <platform-button size="sm" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_cover_hint')}
                             @click=${() => this._aiGenerateCover()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
-                        <platform-button size="sm" ?busy=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_logo_hint')}
                             @click=${() => this._aiGenerateLogo()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
@@ -426,7 +433,7 @@ export class ShopSettingsPage extends PlatformPage {
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
                     <div class="ai-row">
-                        <platform-button size="sm" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_describe_hint')}
                             @click=${() => this._aiDescribeShop()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
@@ -497,7 +504,7 @@ export class ShopSettingsPage extends PlatformPage {
                         <platform-field type="string" mode="edit" label=${this.t('settings.field_domain')} .value=${this._newDomain}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newDomain = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
-                        <platform-button size="sm" ?busy=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
+                        <platform-button size="sm" variant="secondary" ?busy=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
                             ${this.t('settings.domain_add')}
                         </platform-button>
                     </div>
@@ -512,7 +519,7 @@ export class ShopSettingsPage extends PlatformPage {
                                 <span>${shop.telegram_chat_id
                                     ? this.t('settings.telegram_bound')
                                     : this.t('settings.telegram_connected')}</span>
-                                <platform-button size="sm" ?busy=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
+                                <platform-button size="sm" variant="secondary" ?busy=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
                                     ${this.t('settings.telegram_disconnect')}
                                 </platform-button>
                             </div>
@@ -529,6 +536,8 @@ export class ShopSettingsPage extends PlatformPage {
                             </div>
                             <div class="hint">${this.t('settings.telegram_hint')}</div>
                         `}
+                </div>
+
                 </div>
 
                 <platform-button variant="primary" ?busy=${this._updateOp.busy} @click=${() => this._save()}>

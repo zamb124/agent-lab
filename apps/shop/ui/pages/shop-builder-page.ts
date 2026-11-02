@@ -9,6 +9,8 @@ import type { OpController, ResourceController } from '@platform/lib/base/use-re
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
+import '../components/shop-page-head.js';
+import { shopHeadRow } from '../components/shop-page-head.js';
 
 const PRESETS = ['menu', 'grid', 'compact'] as const;
 
@@ -51,11 +53,10 @@ export class ShopBuilderPage extends PlatformPage {
                 height: 100%;
             }
             .panel {
-                padding: var(--space-6);
+                padding: var(--space-5) var(--space-6);
                 overflow-y: auto;
                 border-right: 1px solid var(--glass-border-subtle);
             }
-            h1 { margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary); }
             .section { margin-bottom: var(--space-5); }
             .label { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-secondary); margin-bottom: var(--space-2); }
             .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
@@ -248,7 +249,7 @@ export class ShopBuilderPage extends PlatformPage {
                 ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     <platform-empty-state icon="store" title=${this.t('builder.shop_not_found')}>
-                        <platform-button size="sm" @click=${() => { this._shops.load(); }}>${this.t('builder.retry')}</platform-button>
+                        <platform-button size="sm" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('builder.retry')}</platform-button>
                     </platform-empty-state>`;
         }
         const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
@@ -259,7 +260,11 @@ export class ShopBuilderPage extends PlatformPage {
         return html`
             <div class="layout">
                 <div class="panel">
-                    <h1>${this.t('builder.title')}</h1>
+                    <shop-page-head
+                        .shop=${shopHeadRow(shop)}
+                        shop-id=${this.shopId}
+                        section=${this.t('routes.shop_builder')}
+                    ></shop-page-head>
                     <div class="section">
                         <div class="label">${this.t('builder.preset_label')}</div>
                         <div class="presets">
@@ -304,7 +309,7 @@ export class ShopBuilderPage extends PlatformPage {
                             ?disabled=${!this._dirty}
                             @click=${() => this._save()}
                         >${this.t('builder.save')}</platform-button>
-                        <platform-button ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; this._mode = this._savedMode; }}>
+                        <platform-button variant="secondary" ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; this._mode = this._savedMode; }}>
                             ${this.t('builder.reset')}
                         </platform-button>
                     </div>

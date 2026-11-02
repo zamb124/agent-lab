@@ -10,13 +10,16 @@
 import { html, css, nothing } from 'lit';
 import type { PropertyDeclarations } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/shop-page-head.js';
+import { shopHeadRow } from '../components/shop-page-head.js';
+import type { ShopHeadRow } from '../components/shop-page-head.js';
 
 const TEMPLATES = [
     'percent_order',
@@ -101,6 +104,7 @@ export class ShopPromosPage extends PlatformPage {
 
     declare shopId: string;
 
+    private _shops: ResourceController;
     private _promosOp: OpController;
     private _productsOp: OpController;
     private _createOp: OpController;
@@ -119,9 +123,7 @@ export class ShopPromosPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow: hidden; }
-            .wrap { height: 100%; overflow-y: auto; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); max-width: 860px; }
-            .head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-            h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); }
+            .wrap { height: 100%; overflow-y: auto; padding: var(--space-5) var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
             .card {
                 background: var(--bg-surface);
                 border: 1px solid var(--glass-border-subtle);
@@ -162,6 +164,7 @@ export class ShopPromosPage extends PlatformPage {
     constructor() {
         super();
         this._draft = null;
+        this._shops = this.useResource('shop/shops');
         this._promosOp = this.useOp('shop/promos_list');
         this._productsOp = this.useOp('shop/products_list');
         this._createOp = this.useOp('shop/promo_create');
@@ -175,7 +178,13 @@ export class ShopPromosPage extends PlatformPage {
         await Promise.all([
             this._promosOp.run({ shop_id: this.shopId }),
             this._productsOp.run({ shop_id: this.shopId, limit: 500 }),
+            this._shops.load(),
         ]);
+    }
+
+    private _shop(): ShopHeadRow | null {
+        const row = this._shops.items.find((s) => (s as { shop_id?: string }).shop_id === this.shopId);
+        return shopHeadRow(row);
     }
 
     private _promos(): PromoRow[] {
@@ -508,7 +517,8 @@ export class ShopPromosPage extends PlatformPage {
                     @change=${(e: CustomEvent<{ value?: unknown }>) => void this._toggle(p, Boolean(e.detail.value))}></platform-switch>
                 <platform-button size="sm" variant="secondary"
                     @click=${() => { this._draft = this._draftFrom(p); }}>${this.t('promos.edit')}</platform-button>
-                <platform-button size="sm" variant="secondary" ?busy=${this._removeOp.busy}
+                <platform-button icon-only density="compact" variant="ghost-danger" ?busy=${this._removeOp.busy}
+                    title=${this.t('promos.remove')}
                     @click=${() => void this._removeOp.run({ shop_id: this.shopId, shop_promo_id: p.shop_promo_id })}>
                     <platform-icon name="trash" size="14"></platform-icon></platform-button>
             </div>
@@ -519,12 +529,15 @@ export class ShopPromosPage extends PlatformPage {
         const promos = this._promos();
         return html`
             <div class="wrap">
-                <div class="head">
-                    <h1>${this.t('promos.title')}</h1>
+                <shop-page-head
+                    .shop=${this._shop()}
+                    shop-id=${this.shopId}
+                    section=${this.t('routes.shop_promos')}
+                >
                     ${this._draft === null ? html`
-                        <platform-button variant="primary" @click=${() => { this._draft = this._newDraft(); }}>
+                        <platform-button slot="actions" size="sm" variant="primary" @click=${() => { this._draft = this._newDraft(); }}>
                             ${this.t('promos.new')}</platform-button>` : nothing}
-                </div>
+                </shop-page-head>
                 <div class="hint">${this.t('promos.hint')}</div>
                 ${this._editor()}
                 ${promos.length === 0 && this._draft === null

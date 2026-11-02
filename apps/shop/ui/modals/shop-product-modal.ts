@@ -285,11 +285,11 @@ export class ShopProductModal extends PlatformModal {
                         <div class="photo-actions">
                             <input id="photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
                             ${this._photoFileId !== ''
-                                ? html`<platform-button size="sm" ?busy=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
+                                ? html`<platform-button size="sm" variant="accent" ?busy=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
                                       <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_enhance')}
                                   </platform-button>`
                                 : nothing}
-                            <platform-button size="sm" ?busy=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
+                            <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
                                 title=${this.t('menu.ai_generate_hint')} @click=${() => this._generatePhoto()}>
                                 <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_generate')}
                             </platform-button>
@@ -309,7 +309,7 @@ export class ShopProductModal extends PlatformModal {
                 <div class="desc-row">
                     <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
-                    <platform-button size="sm" class="desc-ai" ?busy=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
+                    <platform-button size="sm" variant="accent" class="desc-ai" ?busy=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
                         @click=${() => this._describeWithAi()}>
                         <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}
                     </platform-button>
@@ -320,7 +320,7 @@ export class ShopProductModal extends PlatformModal {
                               @click=${() => this._toggleBadge(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`)}</div>`
                     : nothing}
                 <div class="actions">
-                    <platform-button @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>
+                    <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>
                     <platform-button variant="primary" ?busy=${this._saving}
                         ?disabled=${this._name.trim() === '' || this._price.trim() === ''}
                         @click=${() => this._save()}>${this.t('menu.save')}</platform-button>

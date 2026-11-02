@@ -316,7 +316,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <span class="badges">${this._badges(g)}</span>
                     ${attached
                         ? html`<platform-button size="sm" variant="ghost" @click=${(e: Event) => { e.stopPropagation(); void this._detach(g); }}>${this.t('modifiers.detach')}</platform-button>`
-                        : html`<platform-button size="sm" @click=${(e: Event) => { e.stopPropagation(); void this._attach(g); }}>${this.t('modifiers.attach')}</platform-button>`}
+                        : html`<platform-button size="sm" variant="secondary" @click=${(e: Event) => { e.stopPropagation(); void this._attach(g); }}>${this.t('modifiers.attach')}</platform-button>`}
                 </div>
                 ${open ? this._renderGroupBody(g, attached) : ''}
             </div>`;
@@ -437,16 +437,16 @@ export class ShopModifiersModal extends PlatformModal {
                         .value=${this._newOptionPrice}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newOptionPrice = _str(e); }}
                     ></platform-field>
-                    <platform-button size="sm" ?disabled=${this._optionCreateOp.busy} @click=${() => void this._addOption(g)}>
+                    <platform-button size="sm" variant="secondary" ?disabled=${this._optionCreateOp.busy} @click=${() => void this._addOption(g)}>
                         ${this.t('modifiers.option_add')}
                     </platform-button>
                 </div>
                 <div class="group-actions">
-                    <platform-button size="sm" variant="ghost" ?disabled=${this._suggestBusyFor !== ''} @click=${() => void this._suggest(g)}>
+                    <platform-button size="sm" variant="accent" ?disabled=${this._suggestBusyFor !== ''} @click=${() => void this._suggest(g)}>
                         <platform-icon name="sparkle" size="14"></platform-icon>
                         ${this._suggestBusyFor === g.shop_modifier_group_id ? this.t('modifiers.ai_busy') : this.t('modifiers.ai_suggest')}
                     </platform-button>
-                    <platform-button size="sm" variant="ghost" @click=${() => void this._removeGroup(g)}>
+                    <platform-button size="sm" variant="ghost-danger" @click=${() => void this._removeGroup(g)}>
                         <platform-icon name="trash" size="14"></platform-icon> ${this.t('modifiers.group_remove')}
                     </platform-button>
                 </div>
@@ -472,7 +472,7 @@ export class ShopModifiersModal extends PlatformModal {
                         .value=${this._newGroupName}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newGroupName = _str(e); }}
                     ></platform-field>
-                    <platform-button size="sm" ?disabled=${this._groupCreateOp.busy} @click=${() => void this._createGroup()}>
+                    <platform-button size="sm" variant="secondary" ?disabled=${this._groupCreateOp.busy} @click=${() => void this._createGroup()}>
                         ${this.t('modifiers.group_create')}
                     </platform-button>
                 </div>

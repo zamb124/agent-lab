@@ -365,6 +365,10 @@
             "min_total": "from {sum} ₽",
             "min_qty": "from {n} items",
             "items_present": "with specific items"
-        }
+        },
+        "remove": "Remove"
+    },
+    "context": {
+        "open_storefront": "Open storefront"
     }
 }
