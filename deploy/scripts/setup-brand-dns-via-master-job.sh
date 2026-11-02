@@ -170,11 +170,13 @@ EOF
   trap cleanup_job EXIT
 
   # Ждём появления Pod — иначе Complete никогда не наступит (kubelet Pending).
+  # На перегруженной однонодовой инсталляции scheduler+apiserver отвечают
+  # десятками секунд — 120s мало, держим запас как у стадии Running.
   if ! wait_for \
     "Job ${JOB_NAME} has Pod" \
     "[ -n \"\$($K get pods -n ${PLATFORM_NS} -l job-name=${JOB_NAME} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)\" ]" \
-    120 5; then
-    log_error "Job ${JOB_NAME}: Pod не создался за 120s (kubelet/master?)"
+    "${BRAND_DNS_JOB_POD_TIMEOUT:-300}" 5; then
+    log_error "Job ${JOB_NAME}: Pod не создался за ${BRAND_DNS_JOB_POD_TIMEOUT:-300}s (kubelet/master?)"
     $K describe job "$JOB_NAME" -n "$PLATFORM_NS" || true
     $K get pods -n "$PLATFORM_NS" -l "job-name=${JOB_NAME}" -o wide || true
     exit 1

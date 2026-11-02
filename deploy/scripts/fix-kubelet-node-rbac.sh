@@ -23,7 +23,17 @@ K="$KUBECTL"
 
 log_section "Kubelet Node RBAC (system:node → system:nodes)"
 
-if ! $K get clusterrolebinding system:node >/dev/null 2>&1; then
+# apiserver на перегруженной ноде может отвечать таймаутами — одиночный
+# get нельзя трактовать как отсутствие ресурса, даём несколько попыток.
+crb_found=""
+for _attempt in 1 2 3 4 5; do
+  if $K get clusterrolebinding system:node >/dev/null 2>&1; then
+    crb_found="yes"
+    break
+  fi
+  sleep 5
+done
+if [ -z "$crb_found" ]; then
   log_error "ClusterRoleBinding system:node отсутствует"
   exit 1
 fi
