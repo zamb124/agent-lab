@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from typing import Literal, Protocol
+from typing import Protocol
 
 class SentenceEmbeddingVector(Protocol):
     def __iter__(self) -> Iterator[float]: ...
@@ -17,7 +17,7 @@ class SentenceTransformer:
         model_name_or_path: str,
         *,
         device: str | None = ...,
-        model_kwargs: dict[str, Literal["bfloat16"]] | None = ...,
+        model_kwargs: dict[str, str | bool] | None = ...,
         trust_remote_code: bool = ...,
         local_files_only: bool = ...,
         token: bool | str | None = ...,

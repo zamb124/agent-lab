@@ -104,7 +104,9 @@ class LocalEmbeddingEngine:
             and self._device.startswith("cuda")
             and torch.cuda.is_bf16_supported()
         )
-        model_kwargs: dict[str, Literal["bfloat16"]] | None = {"torch_dtype": "bfloat16"} if use_bf16 else None
+        model_kwargs: dict[str, str | bool] = {"low_cpu_mem_usage": True}
+        if use_bf16:
+            model_kwargs["torch_dtype"] = "bfloat16"
         logger.info(
             "provider_litserve.loading.sentencetransformer.model.bf16",
             hf_model_id=hf_model_id,

@@ -162,6 +162,7 @@ class GigaAMModelLoader(Protocol):
         revision: str | None,
         trust_remote_code: bool,
         token: str | None,
+        low_cpu_mem_usage: bool,
     ) -> GigaAMModel: ...
 
 
@@ -182,6 +183,7 @@ class CTCModelLoader(Protocol):
         revision: str | None,
         token: str | None,
         dtype: STTModelDTypeName,
+        low_cpu_mem_usage: bool,
     ) -> CTCModel: ...
 
 
@@ -193,6 +195,7 @@ class WhisperModelLoader(Protocol):
         revision: str | None,
         token: str | None,
         dtype: STTModelDTypeName,
+        low_cpu_mem_usage: bool,
     ) -> WhisperModel: ...
 
 
@@ -402,6 +405,7 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
             revision=revision,
             trust_remote_code=True,
             token=self._cfg.hf_token,
+            low_cpu_mem_usage=True,
         )
         try:
             _ = model.to(self._device)
@@ -457,6 +461,7 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
             revision=revision,
             token=self._cfg.hf_token,
             dtype=_stt_model_dtype_name(self._device),
+            low_cpu_mem_usage=True,
         )
         _ = model.to(self._device)
         _ = model.eval()
@@ -505,6 +510,7 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
             revision=revision,
             token=self._cfg.hf_token,
             dtype=_stt_model_dtype_name(self._device),
+            low_cpu_mem_usage=True,
         )
         _ = model.to(self._device)
         pipe = pipeline_factory(
