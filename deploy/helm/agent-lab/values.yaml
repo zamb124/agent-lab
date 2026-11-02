@@ -619,7 +619,7 @@ applications:
           cpu: 250m
           memory: 768Mi
         limits:
-          cpu: "2"
+          cpu: "1"
           memory: 2Gi
     command:
       - granian
@@ -638,7 +638,7 @@ applications:
         cpu: 200m
         memory: 768Mi
       limits:
-        cpu: "2"
+        cpu: "1"
         memory: 3Gi
   search:
     nodeName: master
@@ -987,7 +987,7 @@ workers:
         cpu: 200m
         memory: 512Mi
       limits:
-        cpu: "2"
+        cpu: "500m"
         memory: 3Gi
   shop-worker:
     nodeName: master
