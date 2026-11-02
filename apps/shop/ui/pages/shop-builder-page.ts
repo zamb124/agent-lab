@@ -30,6 +30,7 @@ export class ShopBuilderPage extends PlatformPage {
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
     private _savedMode = 'dark';
+    private _loadAttempted = false;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -37,6 +38,7 @@ export class ShopBuilderPage extends PlatformPage {
         _accent: { state: true },
         _mode: { state: true },
         _device: { state: true },
+        _loadAttempted: { state: true },
     };
 
     static override styles = [
@@ -175,7 +177,8 @@ export class ShopBuilderPage extends PlatformPage {
     }
 
     async onRouteActive(): Promise<void> {
-        await this._shops.load();
+        this._loadAttempted = true;
+        this._shops.load();
         this._hydrate();
     }
 
@@ -236,7 +239,12 @@ export class ShopBuilderPage extends PlatformPage {
     override render() {
         const shop = this._shop();
         if (shop === null) {
-            return html`<platform-empty-state loading></platform-empty-state>`;
+            return this._shops.loading || !this._loadAttempted
+                ? html`<platform-empty-state loading></platform-empty-state>`
+                : html`
+                    <platform-empty-state icon="store" title=${this.t('builder.shop_not_found')}>
+                        <platform-button size="sm" @click=${() => { this._shops.load(); }}>${this.t('builder.retry')}</platform-button>
+                    </platform-empty-state>`;
         }
         const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
         return html`

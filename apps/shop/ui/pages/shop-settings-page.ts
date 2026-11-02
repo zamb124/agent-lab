@@ -44,9 +44,11 @@ export class ShopSettingsPage extends PlatformPage {
     private _logoFileId = '';
     private _coverFileId = '';
     private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
+    private _loadAttempted = false;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
+        _loadAttempted: { state: true },
         _name: { state: true },
         _description: { state: true },
         _phone: { state: true },
@@ -144,7 +146,8 @@ export class ShopSettingsPage extends PlatformPage {
     }
 
     async onRouteActive(): Promise<void> {
-        await this._shops.load();
+        this._loadAttempted = true;
+        this._shops.load();
         this._hydrate();
     }
 
@@ -335,7 +338,12 @@ export class ShopSettingsPage extends PlatformPage {
     override render() {
         const shop = this._shop();
         if (shop === null) {
-            return html`<platform-empty-state loading></platform-empty-state>`;
+            return this._shops.loading || !this._loadAttempted
+                ? html`<platform-empty-state loading></platform-empty-state>`
+                : html`
+                    <platform-empty-state icon="store" title=${this.t('settings.shop_not_found')}>
+                        <platform-button size="sm" @click=${() => { this._shops.load(); }}>${this.t('settings.retry')}</platform-button>
+                    </platform-empty-state>`;
         }
         const status = String(shop.status);
         const storefrontUrl = String(shop.storefront_url ?? '');

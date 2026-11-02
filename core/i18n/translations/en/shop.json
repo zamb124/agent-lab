@@ -112,7 +112,9 @@
         "mode_dark": "Dark",
         "mode_light": "Light",
         "device_phone": "Phone",
-        "device_desktop": "Desktop"
+        "device_desktop": "Desktop",
+        "shop_not_found": "Shop not found or unavailable",
+        "retry": "Retry"
     },
     "orders": {
         "title": "Orders",
@@ -194,7 +196,9 @@
         "ai_generate_cover": "Generate cover",
         "ai_cover_hint": "AI will create a storefront cover from the shop name and description",
         "ai_generate_logo": "Generate logo",
-        "ai_logo_hint": "AI will create a shop logo from the name and description"
+        "ai_logo_hint": "AI will create a shop logo from the name and description",
+        "shop_not_found": "Shop not found or unavailable",
+        "retry": "Retry"
     },
     "toast": {
         "shop_created": "Shop created",
