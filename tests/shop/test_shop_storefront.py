@@ -102,6 +102,27 @@ class TestStorefrontSnapshot:
         names = [p["name"] for p in snap.json()["products"]]
         assert "Скрытый" not in names
 
+    async def test_categories_hierarchy_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Снапшот несёт parent_id категорий — витрина строит дерево разделов."""
+        slug = f"hier-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories", json={"name": "Пицца"}
+        )
+        parent = resp.json()
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "Классика", "parent_id": parent["shop_category_id"]},
+        )
+        child = resp.json()
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200, snap.text
+        cats = {c["id"]: c for c in snap.json()["categories"]}
+        assert cats[parent["shop_category_id"]]["parent_id"] is None
+        assert cats[child["shop_category_id"]]["parent_id"] == parent["shop_category_id"]
+
     async def test_badges_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:

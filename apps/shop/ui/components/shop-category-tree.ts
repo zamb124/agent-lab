@@ -12,7 +12,6 @@ import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/fields/platform-field.js';
 
 export interface ShopTreeCategory {
     shop_category_id: string;
@@ -31,6 +30,7 @@ const CATEGORY_MIME = 'application/x-shop-category-id';
 const PRODUCT_MIME = 'application/x-shop-product-id';
 const ALL_ROW = '__all__';
 const ROOT_CREATE = '__root__';
+const AUTO_EXPAND_MS = 550;
 
 type DropZone = 'before' | 'after' | 'nest';
 
@@ -88,32 +88,37 @@ export class ShopCategoryTree extends PlatformElement {
 
             .head {
                 display: flex; align-items: center; justify-content: space-between;
-                padding: var(--space-2) var(--space-2) var(--space-1);
+                padding: var(--space-1) var(--space-2) var(--space-1);
             }
             .head-title {
                 font-size: var(--text-xs); font-weight: var(--font-semibold);
-                color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;
+                color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em;
             }
 
+            .list { display: flex; flex-direction: column; gap: 1px; padding: 0 var(--space-1) var(--space-1); }
+
             .row {
-                display: flex; align-items: center; gap: 2px;
+                display: flex; align-items: center; position: relative;
             }
             .toggle {
                 display: inline-flex; align-items: center; justify-content: center;
-                width: 18px; height: 26px; border: 0; background: transparent;
+                width: 20px; height: 32px; border: 0; background: transparent;
                 color: var(--text-tertiary); cursor: pointer; flex-shrink: 0; padding: 0;
+                border-radius: var(--radius-sm);
             }
+            .toggle:hover { color: var(--text-primary); }
             .toggle:disabled { visibility: hidden; }
-            .toggle platform-icon { transition: transform 0.15s ease; }
+            .toggle platform-icon { transition: transform 0.18s ease; }
             .toggle.expanded platform-icon { transform: rotate(90deg); }
 
             .treeitem {
-                display: flex; align-items: center; gap: var(--space-1);
-                flex: 1; min-width: 0; height: 34px;
-                padding: 0 var(--space-2) 0 var(--space-1);
+                display: flex; align-items: center; gap: 2px;
+                flex: 1; min-width: 0; height: 32px;
+                padding: 0 var(--space-1) 0 0;
                 border: 1px solid transparent; border-radius: var(--radius-md);
                 background: transparent; color: var(--text-secondary);
-                font-size: var(--text-sm); transition: background 0.12s ease, border-color 0.12s ease;
+                font-size: var(--text-sm);
+                transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
             }
             .treeitem:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
             .treeitem.off { opacity: 0.5; }
@@ -121,19 +126,42 @@ export class ShopCategoryTree extends PlatformElement {
                 background: color-mix(in srgb, var(--accent) 12%, transparent);
                 color: var(--accent);
             }
-            .treeitem.dragging { opacity: 0.4; }
-            .treeitem.drop-nest { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
-            .treeitem.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
-            .treeitem.drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
+            .treeitem.dragging { opacity: 0.35; }
+            :host([data-dragging]) .treeitem { cursor: grabbing; }
+
+            .treeitem.drop-nest {
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 14%, transparent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+            }
+            .treeitem.drop-before::before, .treeitem.drop-after::after {
+                content: ''; position: absolute; left: 2px; right: 4px; height: 2px;
+                border-radius: 2px; background: var(--accent);
+                box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);
+                pointer-events: none; z-index: 1;
+            }
+            .treeitem.drop-before::before { top: -2px; }
+            .treeitem.drop-after::after { bottom: -2px; }
+            .treeitem.drop-before::after, .treeitem.drop-after::before {
+                content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%;
+                background: var(--accent); pointer-events: none; z-index: 1;
+            }
+            .treeitem.drop-before::after { top: -4px; left: -1px; }
+            .treeitem.drop-after::before { bottom: -4px; left: -1px; }
 
             .item-main {
-                display: flex; align-items: center; gap: var(--space-1);
+                display: flex; align-items: center; gap: 6px;
                 flex: 1; min-width: 0; height: 100%;
                 border: 0; background: transparent; padding: 0;
                 color: inherit; font: inherit; text-align: left; cursor: pointer;
             }
-            .grip { color: var(--text-tertiary); opacity: 0; flex-shrink: 0; cursor: grab; }
-            .treeitem:hover .grip, .treeitem.dragging .grip { opacity: 1; }
+            .item-main .lead { color: var(--text-tertiary); flex-shrink: 0; display: inline-flex; }
+            .treeitem.active .item-main .lead { color: var(--accent); }
+            .grip {
+                color: var(--text-tertiary); opacity: 0; flex-shrink: 0; cursor: grab;
+                display: inline-flex; transition: opacity 0.12s ease;
+            }
+            .treeitem:hover .grip, .treeitem.dragging .grip { opacity: 0.7; }
             .item-label {
                 flex: 1; min-width: 0; overflow: hidden;
                 text-overflow: ellipsis; white-space: nowrap;
@@ -142,27 +170,63 @@ export class ShopCategoryTree extends PlatformElement {
             .count {
                 font-size: var(--text-xs); color: var(--text-tertiary);
                 font-variant-numeric: tabular-nums; flex-shrink: 0;
+                padding: 0 var(--space-1);
             }
             .treeitem.active .count { color: var(--accent); }
-            .row:hover .count, .row:focus-within .count { display: none; }
+            .row:hover .count, .row:focus-within .count { opacity: 0; }
+
             .ops {
-                display: none; align-items: center; flex-shrink: 0;
+                display: none; align-items: center; flex-shrink: 0; padding-right: 2px;
             }
             .treeitem:hover .ops, .treeitem:focus-within .ops { display: inline-flex; }
-            .ops platform-button { --platform-button-padding: 3px; }
+            @media (hover: none) { .ops { display: inline-flex; } }
+
+            .add-row {
+                display: flex; align-items: center; gap: 6px;
+                height: 32px; margin: 2px 0 0; padding: 0 var(--space-2) 0 26px;
+                border: 1px dashed color-mix(in srgb, var(--text-tertiary) 35%, transparent);
+                border-radius: var(--radius-md); background: transparent;
+                color: var(--text-tertiary); font: inherit; font-size: var(--text-sm);
+                cursor: pointer; width: 100%; text-align: left;
+                transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+            }
+            .add-row:hover {
+                border-color: var(--accent); color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 6%, transparent);
+            }
+
+            .children { position: relative; animation: treeSlide 0.16s ease; }
+            .children .guide {
+                position: absolute; top: 0; bottom: 0; width: 1px;
+                background: color-mix(in srgb, var(--text-tertiary) 18%, transparent);
+                pointer-events: none;
+            }
+            @keyframes treeSlide {
+                from { opacity: 0; transform: translateY(-4px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
 
             .movebar {
-                display: flex; align-items: center; gap: 2px;
-                padding: 2px var(--space-2) 4px 22px;
+                display: inline-flex; align-items: center; margin: 2px 0 4px 26px;
+                border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-md);
+                background: var(--bg-surface); overflow: hidden;
             }
-            .movebar platform-button { --platform-button-padding: 3px; }
+            .movebar platform-button { --platform-button-padding: 4px 7px; border-radius: 0; }
+            .movebar platform-button + platform-button { margin-left: 1px; }
 
             .edit-row {
-                display: flex; align-items: end; gap: 2px;
-                padding: 2px var(--space-2) 4px;
+                display: flex; align-items: center; height: 32px; gap: 6px;
+                padding-right: var(--space-1);
             }
-            .edit-row platform-field { flex: 1; min-width: 0; }
-            .edit-row platform-button { margin-bottom: 3px; }
+            .edit-row .toggle-space { width: 20px; flex-shrink: 0; }
+            .edit-input {
+                flex: 1; min-width: 0; height: 26px; padding: 0 var(--space-2);
+                border: 1px solid var(--accent); border-radius: var(--radius-md);
+                background: var(--bg-surface); color: var(--text-primary);
+                font: inherit; font-size: var(--text-sm); outline: none;
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+            }
+            .edit-input::placeholder { color: var(--text-tertiary); }
 
             .empty {
                 padding: var(--space-3) var(--space-2); color: var(--text-tertiary);
@@ -298,16 +362,47 @@ export class ShopCategoryTree extends PlatformElement {
 
     // --- DnD ---
 
-    private _onDragStart(e: DragEvent, id: string): void {
+    private _dragGhost: HTMLElement | null = null;
+    private _autoExpandTimer: number | undefined;
+    private _autoExpandId = '';
+
+    private _onDragStart(e: DragEvent, cat: ShopTreeCategory): void {
         e.stopPropagation();
-        e.dataTransfer?.setData(CATEGORY_MIME, id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-        this._draggingId = id;
+        e.dataTransfer?.setData(CATEGORY_MIME, cat.shop_category_id);
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            this._setDragImage(e.dataTransfer, cat);
+        }
+        this._draggingId = cat.shop_category_id;
+        this.setAttribute('data-dragging', '');
+    }
+
+    private _setDragImage(dt: DataTransfer, cat: ShopTreeCategory): void {
+        const ghost = document.createElement('div');
+        const accent = getComputedStyle(this).getPropertyValue('--accent').trim();
+        Object.assign(ghost.style, {
+            position: 'fixed', top: '-1000px', left: '-1000px',
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '5px 12px', borderRadius: '8px',
+            background: 'rgba(24, 24, 28, 0.92)', color: '#fff',
+            border: `1px solid ${accent !== '' ? accent : '#7c6cf8'}`,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            font: '500 13px/1.2 system-ui, sans-serif',
+            pointerEvents: 'none', zIndex: '2147483647',
+        });
+        ghost.textContent = cat.name;
+        document.body.append(ghost);
+        this._dragGhost = ghost;
+        dt.setDragImage(ghost, -8, 14);
     }
 
     private _onDragEnd(): void {
         this._draggingId = '';
         this._dropHint = null;
+        this.removeAttribute('data-dragging');
+        this._dragGhost?.remove();
+        this._dragGhost = null;
+        this._clearAutoExpand();
     }
 
     private _zoneFromOffset(e: DragEvent, el: HTMLElement): DropZone {
@@ -318,17 +413,16 @@ export class ShopCategoryTree extends PlatformElement {
         return 'nest';
     }
 
-    /** Допустимый родитель для drop-зоны; null — дроп запрещён. */
+    /** Допустимый родитель для drop-зоны; 'forbidden' — дроп запрещён. */
     private _dropCandidate(targetId: string, zone: DropZone): string | null | 'forbidden' {
         const byId = new Map(this.categories.map((c) => [c.shop_category_id, c]));
         const target = byId.get(targetId);
         const dragged = byId.get(this._draggingId);
         if (target === undefined || dragged === undefined) return 'forbidden';
+        if (targetId === this._draggingId) return 'forbidden';
         if (zone === 'nest') {
-            if (targetId === this._draggingId) return 'forbidden';
             return targetId;
         }
-        if (targetId === this._draggingId) return 'forbidden';
         const parent = target.parent_id !== null && byId.has(target.parent_id)
             ? target.parent_id
             : null;
@@ -339,6 +433,7 @@ export class ShopCategoryTree extends PlatformElement {
         if (!e.dataTransfer) return;
         if (e.dataTransfer.types.includes(PRODUCT_MIME)) {
             e.preventDefault();
+            e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
             this._setHint({ id: cat.shop_category_id, zone: 'nest' });
             return;
@@ -349,12 +444,38 @@ export class ShopCategoryTree extends PlatformElement {
         if (candidate === 'forbidden'
             || (candidate !== null && this._descendantIds(this._draggingId).has(candidate))) {
             if (this._dropHint !== null) this._dropHint = null;
+            this._clearAutoExpand();
             return;
         }
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
         this._setHint({ id: cat.shop_category_id, zone });
+        if (zone === 'nest') this._scheduleAutoExpand(cat);
+        else this._clearAutoExpand();
+    }
+
+    /** При удержании курсора над свёрнутой категорией раскрывает её. */
+    private _scheduleAutoExpand(cat: ShopTreeCategory): void {
+        if (this.expandedIds.includes(cat.shop_category_id)) return;
+        if (this._autoExpandId === cat.shop_category_id && this._autoExpandTimer !== undefined) return;
+        this._clearAutoExpand();
+        this._autoExpandId = cat.shop_category_id;
+        this._autoExpandTimer = window.setTimeout(() => {
+            this._autoExpandTimer = undefined;
+            const children = this._idChildrenMap().get(cat.shop_category_id) ?? [];
+            if (children.length > 0 && !this.expandedIds.includes(cat.shop_category_id)) {
+                this.emit('tree-toggle', { id: cat.shop_category_id, expanded: true });
+            }
+        }, AUTO_EXPAND_MS);
+    }
+
+    private _clearAutoExpand(): void {
+        if (this._autoExpandTimer !== undefined) {
+            window.clearTimeout(this._autoExpandTimer);
+            this._autoExpandTimer = undefined;
+        }
+        this._autoExpandId = '';
     }
 
     private _setHint(hint: DropHint | null): void {
@@ -369,12 +490,14 @@ export class ShopCategoryTree extends PlatformElement {
         const row = e.currentTarget;
         if (row instanceof HTMLElement && related instanceof Node && row.contains(related)) return;
         if (this._dropHint?.id === cat.shop_category_id) this._dropHint = null;
+        this._clearAutoExpand();
     }
 
     private _onRowDrop(e: DragEvent, cat: ShopTreeCategory, el: HTMLElement): void {
         e.preventDefault();
         e.stopPropagation();
         this._dropHint = null;
+        this._clearAutoExpand();
         const productId = e.dataTransfer?.getData(PRODUCT_MIME);
         if (typeof productId === 'string' && productId !== '') {
             this.emit('product-drop', { productId, categoryId: cat.shop_category_id });
@@ -459,22 +582,27 @@ export class ShopCategoryTree extends PlatformElement {
 
     private _commitEdit(): void {
         const name = this._editValue.trim();
-        if (name === '') return;
         if (this._creatingUnder !== '') {
-            this.emit('tree-create', {
-                parentId: this._creatingUnder === ROOT_CREATE ? null : this._creatingUnder,
-                name,
-            });
+            const parentId = this._creatingUnder;
             this._creatingUnder = '';
-        } else if (this._editingId !== '') {
+            this._editValue = '';
+            if (name !== '') {
+                this.emit('tree-create', {
+                    parentId: parentId === ROOT_CREATE ? null : parentId,
+                    name,
+                });
+            }
+            return;
+        }
+        if (this._editingId !== '') {
             const id = this._editingId;
             const cat = this.categories.find((c) => c.shop_category_id === id);
-            if (cat !== undefined && cat.name !== name) {
+            this._editingId = '';
+            this._editValue = '';
+            if (name !== '' && cat !== undefined && cat.name !== name) {
                 this.emit('tree-rename', { id, name });
             }
-            this._editingId = '';
         }
-        this._editValue = '';
     }
 
     private _cancelEdit(): void {
@@ -486,34 +614,26 @@ export class ShopCategoryTree extends PlatformElement {
     override updated(): void {
         if (!this._focusPending) return;
         this._focusPending = false;
-        const field = this.renderRoot.querySelector<HTMLElement>('.edit-row platform-field');
-        field?.focus();
+        const input = this.renderRoot.querySelector<HTMLInputElement>('.edit-input');
+        input?.focus();
+        input?.select();
     }
 
     private _renderEditRow(depth: number): TemplateResult {
         return html`
-            <div class="edit-row" style="padding-left: ${depth * 14 + 22}px">
-                <platform-field
-                    type="string"
-                    mode="edit"
-                    label=${this.t('menu.new_category')}
+            <div class="edit-row" style="padding-left: ${depth * 14}px">
+                <span class="toggle-space"></span>
+                <input class="edit-input" data-canon="inline-edit"
+                    type="text"
+                    placeholder=${this.t('menu.new_category')}
                     .value=${this._editValue}
-                    @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                        this._editValue = typeof event.detail.value === 'string' ? event.detail.value : '';
+                    @input=${(e: Event) => { this._editValue = (e.target as HTMLInputElement).value; }}
+                    @keydown=${(e: KeyboardEvent) => {
+                        if (e.key === 'Enter') { e.preventDefault(); this._commitEdit(); }
+                        if (e.key === 'Escape') { e.preventDefault(); this._cancelEdit(); }
                     }}
-                    @keydown=${(event: KeyboardEvent) => {
-                        if (event.key === 'Enter') { event.preventDefault(); this._commitEdit(); }
-                        if (event.key === 'Escape') { event.preventDefault(); this._cancelEdit(); }
-                    }}
-                ></platform-field>
-                <platform-button icon-only density="compact" variant="primary"
-                    title=${this.t('menu.save')} ?disabled=${this._editValue.trim() === ''}
-                    @click=${() => this._commitEdit()}
-                ><platform-icon name="check" size="12"></platform-icon></platform-button>
-                <platform-button icon-only density="compact" variant="ghost"
-                    title=${this.t('menu.cancel')}
-                    @click=${() => this._cancelEdit()}
-                ><platform-icon name="close" size="12"></platform-icon></platform-button>
+                    @blur=${() => this._commitEdit()}
+                >
             </div>`;
     }
 
@@ -532,58 +652,73 @@ export class ShopCategoryTree extends PlatformElement {
                     ?disabled=${!hasChildren}
                     title=${expanded ? this.t('menu.cat_collapse') : this.t('menu.cat_expand')}
                     @click=${(e: Event) => { e.stopPropagation(); this.emit('tree-toggle', { id: cat.shop_category_id, expanded: !expanded }); }}
-                ><platform-icon name="chevron-right" size="12"></platform-icon></button>
+                ><platform-icon name="chevron-right" size="13"></platform-icon></button>
                 ${this._editingId === cat.shop_category_id
-                    ? this._renderEditRow(depth)
+                    ? html`
+                        <input class="edit-input" data-canon="inline-edit"
+                            type="text"
+                            placeholder=${this.t('menu.new_category')}
+                            .value=${this._editValue}
+                            @input=${(e: Event) => { this._editValue = (e.target as HTMLInputElement).value; }}
+                            @keydown=${(e: KeyboardEvent) => {
+                                if (e.key === 'Enter') { e.preventDefault(); this._commitEdit(); }
+                                if (e.key === 'Escape') { e.preventDefault(); this._cancelEdit(); }
+                            }}
+                            @blur=${() => this._commitEdit()}
+                        >`
                     : html`
                 <div class="treeitem ${active ? 'active' : ''} ${cat.is_active ? '' : 'off'} ${this._draggingId === cat.shop_category_id ? 'dragging' : ''} ${hint !== '' ? `drop-${hint}` : ''}"
                     role="treeitem"
+                    aria-expanded=${hasChildren ? String(expanded) : nothing}
+                    aria-selected=${String(active)}
+                    aria-level=${String(depth + 1)}
                     draggable="true"
-                    @dragstart=${(e: DragEvent) => this._onDragStart(e, cat.shop_category_id)}
+                    @dragstart=${(e: DragEvent) => this._onDragStart(e, cat)}
                     @dragend=${() => this._onDragEnd()}
                     @dragover=${(e: DragEvent) => this._onRowDragOver(e, cat, e.currentTarget as HTMLElement)}
                     @dragleave=${(e: DragEvent) => this._onRowDragLeave(e, cat)}
                     @drop=${(e: DragEvent) => this._onRowDrop(e, cat, e.currentTarget as HTMLElement)}
                 >
                     <button class="item-main" type="button" @click=${() => this.emit('tree-select', { id: cat.shop_category_id })}>
-                        <platform-icon class="grip" name="drag-handle" size="12"></platform-icon>
+                        <platform-icon class="grip" name="drag-handle" size="13"></platform-icon>
                         <span class="item-label" title=${cat.name}>${cat.name}</span>
                         <span class="count">${count}</span>
                     </button>
                     <span class="ops">
                         <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.cat_add_child')}
                             @click=${(e: Event) => { e.stopPropagation(); this._beginCreate(cat.shop_category_id); }}
-                        ><platform-icon name="plus" size="12"></platform-icon></platform-button>
+                        ><platform-icon name="plus" size="13"></platform-icon></platform-button>
                         <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.cat_rename')}
                             @click=${(e: Event) => { e.stopPropagation(); this._beginRename(cat); }}
-                        ><platform-icon name="edit" size="12"></platform-icon></platform-button>
+                        ><platform-icon name="edit" size="13"></platform-icon></platform-button>
                         <platform-button icon-only density="dense" variant="ghost-danger" title=${this.t('menu.category_remove')}
                             @click=${(e: Event) => { e.stopPropagation(); this.emit('tree-remove', { id: cat.shop_category_id }); }}
-                        ><platform-icon name="trash" size="12"></platform-icon></platform-button>
+                        ><platform-icon name="trash" size="13"></platform-icon></platform-button>
                     </span>
                 </div>`}
             </div>
             ${active && this._editingId === '' ? html`
-                <div class="movebar" style="padding-left: ${depth * 14 + 22}px">
+                <div class="movebar" style="margin-left: ${depth * 14 + 26}px">
                     <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_up')}
                         ?disabled=${index <= 0}
                         @click=${() => this._moveSibling(cat.shop_category_id, -1)}
-                    ><platform-icon name="chevron-up" size="12"></platform-icon></platform-button>
+                    ><platform-icon name="chevron-up" size="13"></platform-icon></platform-button>
                     <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.move_down')}
                         ?disabled=${index === -1 || index >= siblings.length - 1}
                         @click=${() => this._moveSibling(cat.shop_category_id, 1)}
-                    ><platform-icon name="chevron-down" size="12"></platform-icon></platform-button>
+                    ><platform-icon name="chevron-down" size="13"></platform-icon></platform-button>
                     <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.cat_indent')}
                         ?disabled=${index <= 0}
                         @click=${() => this._indent(cat.shop_category_id)}
-                    ><platform-icon name="chevron-right" size="12"></platform-icon></platform-button>
+                    ><platform-icon name="chevron-right" size="13"></platform-icon></platform-button>
                     <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.cat_outdent')}
                         ?disabled=${isRoot}
                         @click=${() => this._outdent(cat.shop_category_id)}
-                    ><platform-icon name="chevron-left" size="12"></platform-icon></platform-button>
+                    ><platform-icon name="chevron-left" size="13"></platform-icon></platform-button>
                 </div>` : nothing}
             ${hasChildren && expanded ? html`
                 <div class="children">
+                    <div class="guide" style="left: ${depth * 14 + 9}px"></div>
                     ${this._creatingUnder === cat.shop_category_id ? this._renderEditRow(depth + 1) : nothing}
                     ${children.map((child) => this._renderNode(child, childrenMap, depth + 1))}
                 </div>` : nothing}
@@ -602,7 +737,7 @@ export class ShopCategoryTree extends PlatformElement {
                 <span class="head-title">${this.t('menu.categories_title')}</span>
                 <platform-button icon-only density="dense" variant="ghost" title=${this.t('menu.new_category')}
                     @click=${() => this._beginCreate(ROOT_CREATE)}
-                ><platform-icon name="plus" size="12"></platform-icon></platform-button>
+                ><platform-icon name="plus" size="13"></platform-icon></platform-button>
             </div>
             <div class="list" role="tree"
                 @dragover=${(e: DragEvent) => this._onListDragOver(e)}
@@ -614,15 +749,18 @@ export class ShopCategoryTree extends PlatformElement {
                     @drop=${(e: DragEvent) => this._onAllDrop(e)}
                 >
                     <button class="item-main" type="button" @click=${() => this.emit('tree-select', { id: null })}>
-                        <platform-icon name="list" size="13"></platform-icon>
+                        <span class="lead"><platform-icon name="list" size="14"></platform-icon></span>
                         <span class="item-label">${this.t('menu.all_products')}</span>
                         <span class="count">${this.allCount}</span>
                     </button>
                 </div>
                 ${this._creatingUnder === ROOT_CREATE ? this._renderEditRow(0) : nothing}
-                ${roots.length === 0 && this._creatingUnder === ''
-                    ? html`<div class="empty">${this.t('menu.cat_empty_hint')}</div>`
-                    : roots.map((cat) => this._renderNode(cat, childrenMap, 0))}
+                ${roots.map((cat) => this._renderNode(cat, childrenMap, 0))}
+                ${roots.length === 0 && this._creatingUnder === '' ? html`
+                    <div class="empty">${this.t('menu.cat_empty_hint')}</div>` : nothing}
+                <button class="add-row" type="button"
+                    @click=${() => this._beginCreate(ROOT_CREATE)}
+                ><platform-icon name="plus" size="13"></platform-icon>${this.t('menu.new_category')}</button>
             </div>
         `;
     }

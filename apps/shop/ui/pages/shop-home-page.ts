@@ -194,7 +194,7 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`
                                                 <div class="publish-cta">
                                                     <span class="hint">${this.t('home.ready_hint')}</span>
-                                                    <platform-button size="sm" variant="primary" ?busy=${this._publishOp.busy} @click=${() => this._publish(shopId)}>
+                                                    <platform-button size="sm" variant="primary" ?loading=${this._publishOp.busy} @click=${() => this._publish(shopId)}>
                                                         ${this.t('home.publish')}
                                                     </platform-button>
                                                 </div>`
@@ -209,7 +209,7 @@ export class ShopHomePage extends PlatformPage {
                                                 <platform-icon name="book-open" size="14"></platform-icon> ${this.t('home.open_menu')}
                                             </platform-button>
                                             ${(!shop.description || !shop.cover_file_id)
-                                                ? html`<platform-button size="sm" variant="accent" ?busy=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
+                                                ? html`<platform-button size="sm" variant="accent" ?loading=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
                                                       <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('home.ai_autofill')}
                                                   </platform-button>`
                                                 : nothing}
@@ -258,7 +258,7 @@ export class ShopHomePage extends PlatformPage {
                                 <div class="hint">${this._newSlug || this._slugify(this._newName) || 'my-shop'}.linnex.io</div>
                                 <platform-button
                                     variant="primary"
-                                    ?busy=${this._createOp.busy}
+                                    ?loading=${this._createOp.busy}
                                     ?disabled=${this._newName.trim() === ''}
                                     @click=${() => this._create()}
                                 >${this.t('home.create_button')}</platform-button>

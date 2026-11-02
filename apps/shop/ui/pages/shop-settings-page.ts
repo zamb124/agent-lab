@@ -386,9 +386,9 @@ export class ShopSettingsPage extends PlatformPage {
                     <div class="status-line">
                         <span>${this.t(`status.${status}`)}</span>
                         ${status !== 'published'
-                            ? html`<platform-button variant="primary" size="sm" ?busy=${this._publishOp.busy} @click=${() => this._publish()}>${this.t('settings.publish_button')}</platform-button>`
+                            ? html`<platform-button variant="primary" size="sm" ?loading=${this._publishOp.busy} @click=${() => this._publish()}>${this.t('settings.publish_button')}</platform-button>`
                             : html`
-                                <platform-button size="sm" variant="secondary" ?busy=${this._suspendOp.busy} @click=${() => this._suspend()}>${this.t('settings.suspend_button')}</platform-button>
+                                <platform-button size="sm" variant="secondary" ?loading=${this._suspendOp.busy} @click=${() => this._suspend()}>${this.t('settings.suspend_button')}</platform-button>
                                 <a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${storefrontUrl}</a>
                             `}
                     </div>
@@ -425,11 +425,11 @@ export class ShopSettingsPage extends PlatformPage {
                     </div>
                     <div class="hint">${this.t('settings.brand_hint')}</div>
                     <div class="ai-row">
-                        <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?loading=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_cover_hint')}
                             @click=${() => this._aiGenerateCover()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
-                        <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?loading=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_logo_hint')}
                             @click=${() => this._aiGenerateLogo()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
@@ -441,7 +441,7 @@ export class ShopSettingsPage extends PlatformPage {
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
                     <div class="ai-row">
-                        <platform-button size="sm" variant="accent" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button size="sm" variant="accent" ?loading=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('settings.ai_describe_hint')}
                             @click=${() => this._aiDescribeShop()}
                         ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
@@ -512,7 +512,7 @@ export class ShopSettingsPage extends PlatformPage {
                         <platform-field type="string" mode="edit" label=${this.t('settings.field_domain')} .value=${this._newDomain}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newDomain = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
-                        <platform-button size="sm" variant="secondary" ?busy=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
+                        <platform-button size="sm" variant="secondary" ?loading=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
                             ${this.t('settings.domain_add')}
                         </platform-button>
                     </div>
@@ -527,7 +527,7 @@ export class ShopSettingsPage extends PlatformPage {
                                 <span>${shop.telegram_chat_id
                                     ? this.t('settings.telegram_bound')
                                     : this.t('settings.telegram_connected')}</span>
-                                <platform-button size="sm" variant="secondary" ?busy=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
+                                <platform-button size="sm" variant="secondary" ?loading=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
                                     ${this.t('settings.telegram_disconnect')}
                                 </platform-button>
                             </div>
@@ -538,7 +538,7 @@ export class ShopSettingsPage extends PlatformPage {
                                 <platform-field type="string" mode="edit" label=${this.t('settings.field_bot_token')} .value=${this._botToken}
                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._botToken = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                 ></platform-field>
-                                <platform-button size="sm" variant="primary" ?busy=${this._telegramConnectOp.busy} ?disabled=${this._botToken.trim().length < 20} @click=${() => this._connectTelegram()}>
+                                <platform-button size="sm" variant="primary" ?loading=${this._telegramConnectOp.busy} ?disabled=${this._botToken.trim().length < 20} @click=${() => this._connectTelegram()}>
                                     ${this.t('settings.telegram_connect')}
                                 </platform-button>
                             </div>
@@ -548,7 +548,7 @@ export class ShopSettingsPage extends PlatformPage {
 
                 </div>
 
-                <platform-button variant="primary" ?busy=${this._updateOp.busy} @click=${() => this._save()}>
+                <platform-button variant="primary" ?loading=${this._updateOp.busy} @click=${() => this._save()}>
                     ${this.t('settings.save')}
                 </platform-button>
             </div>

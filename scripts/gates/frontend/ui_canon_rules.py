@@ -27,7 +27,7 @@ UI_SCOPES: dict[str, tuple[str, ...]] = {
     "tests": ("tests/frontend_core", "tests/ui"),
 }
 
-_SKIP_PARTS = frozenset({"vendor", "node_modules", "ui-dist", "desktop", "__pycache__", "dist"})
+_SKIP_PARTS = frozenset({"vendor", "node_modules", "ui-dist", "embed-dist", "desktop", "__pycache__", "dist"})
 
 
 @dataclass(frozen=True)

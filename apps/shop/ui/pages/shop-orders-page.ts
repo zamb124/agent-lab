@@ -208,7 +208,7 @@ export class ShopOrdersPage extends PlatformPage {
                         <platform-button
                             size="sm"
                             variant=${next === 'cancelled' ? 'ghost-danger' : 'primary'}
-                            ?busy=${this._statusOp.busy}
+                            ?loading=${this._statusOp.busy}
                             @click=${() => this._setStatus(order, next)}
                         >${this.t(`orders.action.${next}`)}</platform-button>
                     `)}

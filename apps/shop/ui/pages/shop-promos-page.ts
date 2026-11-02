@@ -502,7 +502,7 @@ export class ShopPromosPage extends PlatformPage {
                 </div>
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => { this._draft = null; }}>${this.t('promos.cancel')}</platform-button>
-                    <platform-button variant="primary" ?busy=${this._createOp.busy || this._updateOp.busy}
+                    <platform-button variant="primary" ?loading=${this._createOp.busy || this._updateOp.busy}
                         @click=${() => void this._save()}>${this.t('promos.save')}</platform-button>
                 </div>
             </div>
@@ -524,11 +524,11 @@ export class ShopPromosPage extends PlatformPage {
                     ${p.stacking === 'exclusive' ? html`<span class="badge excl">${this.t('promos.stacking_exclusive')}</span>` : nothing}
                     ${scheduled ? html`<span class="badge">${this.t('promos.scheduled')}</span>` : nothing}
                 </div>
-                <platform-switch ?checked=${p.is_active} ?busy=${this._updateOp.busy}
+                <platform-switch ?checked=${p.is_active} ?disabled=${this._updateOp.busy}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => void this._toggle(p, Boolean(e.detail.value))}></platform-switch>
                 <platform-button size="sm" variant="secondary"
                     @click=${() => { this._draft = this._draftFrom(p); }}>${this.t('promos.edit')}</platform-button>
-                <platform-button icon-only density="compact" variant="ghost-danger" ?busy=${this._removeOp.busy}
+                <platform-button icon-only density="compact" variant="ghost-danger" ?loading=${this._removeOp.busy}
                     title=${this.t('promos.remove')}
                     @click=${() => void this._removeOp.run({ shop_id: this.shopId, shop_promo_id: p.shop_promo_id })}>
                     <platform-icon name="trash" size="14"></platform-icon></platform-button>

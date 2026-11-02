@@ -146,7 +146,7 @@ def _iter_files() -> list[Path]:
         ROOT / "scripts",
     ]
     files: list[Path] = []
-    skip = {"node_modules", ".venv", "dist", "ui-dist", "vendor", "__pycache__"}
+    skip = {"node_modules", ".venv", "dist", "ui-dist", "embed-dist", "vendor", "__pycache__"}
     for root in roots:
         if not root.exists():
             continue

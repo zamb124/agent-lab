@@ -124,6 +124,7 @@ export class ShopBuilderPage extends PlatformPage {
             .actions { display: flex; gap: var(--space-2); }
             .preview {
                 position: relative;
+                overflow: hidden;
                 background: color-mix(in srgb, var(--text-primary) 3%, transparent);
                 display: flex;
                 align-items: center;
@@ -136,17 +137,38 @@ export class ShopBuilderPage extends PlatformPage {
                 border-radius: var(--radius-lg);
                 background: #0f1218;
                 margin: var(--space-8) 0 var(--space-4);
+                box-shadow: 0 24px 60px rgba(0,0,0,.35);
                 transition: width 0.2s ease;
             }
             .preview iframe.desktop {
-                width: min(960px, calc(100% - var(--space-8)));
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                border: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            /* Зум уменьшает внутренний viewport iframe (~1400px): срабатывает
+               десктопный брейкпоинт витрины и виден настоящий web-layout. */
+            @supports (zoom: 0.72) {
+                .preview iframe.desktop {
+                    width: calc(100% / 0.72);
+                    height: calc(100% / 0.72);
+                    zoom: 0.72;
+                }
             }
             .preview-bar {
                 position: absolute;
-                top: var(--space-2);
+                top: var(--space-3);
+                z-index: 2;
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
+                padding: 4px 12px 4px 4px;
+                border-radius: 99px;
+                border: 1px solid var(--glass-border-subtle);
+                background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+                backdrop-filter: blur(10px);
             }
             .preview-url {
                 font-size: var(--text-xs);
@@ -313,7 +335,7 @@ export class ShopBuilderPage extends PlatformPage {
                     <div class="actions">
                         <platform-button
                             variant="primary"
-                            ?busy=${this._updateOp.busy}
+                            ?loading=${this._updateOp.busy}
                             ?disabled=${!this._dirty}
                             @click=${() => this._save()}
                         >${this.t('builder.save')}</platform-button>

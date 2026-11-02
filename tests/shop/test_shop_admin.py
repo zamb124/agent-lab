@@ -277,27 +277,177 @@ class TestCatalog:
     async def test_categories_reorder(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        """categories/reorder переставляет категории — порядок табов витрины."""
+        """categories/reorder принимает полное дерево items — parent_id и
+        per-sibling sort назначаются сервером."""
         shop = await _make_shop(shop_client, f"creo-{unique_id[:8]}")
         a = await _make_category(shop_client, shop["shop_id"], "A")
         b = await _make_category(shop_client, shop["shop_id"], "B")
         c = await _make_category(shop_client, shop["shop_id"], "C")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
-            json={"category_ids": [c["shop_category_id"], a["shop_category_id"], b["shop_category_id"]]},
-        )
-        assert resp.status_code == 200, resp.text
-        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")).json()["items"]
-        assert [x["shop_category_id"] for x in listed] == [
-            c["shop_category_id"],
-            a["shop_category_id"],
-            b["shop_category_id"],
+        items = [
+            {"category_id": c["shop_category_id"], "parent_id": None},
+            {"category_id": b["shop_category_id"], "parent_id": c["shop_category_id"]},
+            {"category_id": a["shop_category_id"], "parent_id": None},
         ]
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
-            json={"category_ids": [a["shop_category_id"], "nonexistent"]},
+            json={"items": items},
+        )
+        assert resp.status_code == 200, resp.text
+        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")).json()["items"]
+        by_id = {x["shop_category_id"]: x for x in listed}
+        assert by_id[c["shop_category_id"]]["parent_id"] is None
+        assert by_id[c["shop_category_id"]]["sort"] == 0
+        assert by_id[a["shop_category_id"]]["parent_id"] is None
+        assert by_id[a["shop_category_id"]]["sort"] == 1
+        assert by_id[b["shop_category_id"]]["parent_id"] == c["shop_category_id"]
+        assert by_id[b["shop_category_id"]]["sort"] == 0
+
+    async def test_categories_reorder_rejects_invalid_tree(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Reorder отклоняет неполный набор, чужие parent_id и циклы."""
+        shop = await _make_shop(shop_client, f"crv-{unique_id[:8]}")
+        a = await _make_category(shop_client, shop["shop_id"], "A")
+        b = await _make_category(shop_client, shop["shop_id"], "B")
+
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"items": [{"category_id": a["shop_category_id"], "parent_id": None}]},
+        )
+        assert resp.status_code == 409
+        assert "categories_reorder_incomplete" in resp.text
+
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"items": [
+                {"category_id": a["shop_category_id"], "parent_id": "nonexistent"},
+                {"category_id": b["shop_category_id"], "parent_id": None},
+            ]},
         )
         assert resp.status_code == 404
+
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"items": [
+                {"category_id": a["shop_category_id"], "parent_id": b["shop_category_id"]},
+                {"category_id": b["shop_category_id"], "parent_id": a["shop_category_id"]},
+            ]},
+        )
+        assert resp.status_code == 409
+        assert "category_cycle" in resp.text
+
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"items": [
+                {"category_id": a["shop_category_id"], "parent_id": a["shop_category_id"]},
+                {"category_id": b["shop_category_id"], "parent_id": None},
+            ]},
+        )
+        assert resp.status_code == 409
+
+    async def test_categories_reorder_foreign_category_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop_a = await _make_shop(shop_client, f"ra-{unique_id[:8]}")
+        shop_b = await _make_shop(shop_client, f"rb-{unique_id[:8]}")
+        own = await _make_category(shop_client, shop_a["shop_id"], "Своя")
+        foreign = await _make_category(shop_client, shop_b["shop_id"], "Чужая")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_a['shop_id']}/categories/reorder",
+            json={"items": [
+                {"category_id": own["shop_category_id"], "parent_id": foreign["shop_category_id"]},
+            ]},
+        )
+        assert resp.status_code == 404
+
+    async def test_category_create_with_parent(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Подкатегория создаётся с parent_id; чужой родитель отклоняется."""
+        shop = await _make_shop(shop_client, f"cp-{unique_id[:8]}")
+        other = await _make_shop(shop_client, f"co-{unique_id[:8]}")
+        parent = await _make_category(shop_client, shop["shop_id"], "Пицца")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "Классика", "parent_id": parent["shop_category_id"]},
+        )
+        assert resp.status_code == 200, resp.text
+        child = resp.json()
+        assert child["parent_id"] == parent["shop_category_id"]
+        second = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "Авторская", "parent_id": parent["shop_category_id"]},
+        )
+        assert second.json()["sort"] == child["sort"] + 1
+        foreign_parent = await _make_category(shop_client, other["shop_id"], "Чужая")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "X", "parent_id": foreign_parent["shop_category_id"]},
+        )
+        assert resp.status_code == 404
+
+    async def test_category_delete_lifts_children_and_products(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Удаление категории поднимает детей и товары на уровень её родителя."""
+        shop = await _make_shop(shop_client, f"cd-{unique_id[:8]}")
+        root = await _make_category(shop_client, shop["shop_id"], "Root")
+        mid_resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "Mid", "parent_id": root["shop_category_id"]},
+        )
+        mid = mid_resp.json()
+        leaf_resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            json={"name": "Leaf", "parent_id": mid["shop_category_id"]},
+        )
+        leaf = leaf_resp.json()
+        product = await _make_product(
+            shop_client, shop["shop_id"], "P", 100, category_id=mid["shop_category_id"]
+        )
+        resp = await shop_client.delete(
+            f"{_SHOPS}/{shop['shop_id']}/categories/{mid['shop_category_id']}"
+        )
+        assert resp.status_code == 200, resp.text
+        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")).json()["items"]
+        by_id = {x["shop_category_id"]: x for x in listed}
+        assert mid["shop_category_id"] not in by_id
+        assert by_id[leaf["shop_category_id"]]["parent_id"] == root["shop_category_id"]
+        products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
+        lifted = next(p for p in products if p["shop_product_id"] == product["shop_product_id"])
+        assert lifted["category_id"] == root["shop_category_id"]
+
+        resp = await shop_client.delete(
+            f"{_SHOPS}/{shop['shop_id']}/categories/{root['shop_category_id']}"
+        )
+        assert resp.status_code == 200, resp.text
+        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")).json()["items"]
+        leaf_row = next(x for x in listed if x["shop_category_id"] == leaf["shop_category_id"])
+        assert leaf_row["parent_id"] is None
+        products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
+        lifted = next(p for p in products if p["shop_product_id"] == product["shop_product_id"])
+        assert lifted["category_id"] is None
+
+    async def test_product_move_to_category_appends_sort(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Перенос товара в другую категорию ставит его в конец целевой группы."""
+        shop = await _make_shop(shop_client, f"pm-{unique_id[:8]}")
+        cat_a = await _make_category(shop_client, shop["shop_id"], "A")
+        cat_b = await _make_category(shop_client, shop["shop_id"], "B")
+        existing = await _make_product(
+            shop_client, shop["shop_id"], "X", 100, category_id=cat_b["shop_category_id"]
+        )
+        moved = await _make_product(
+            shop_client, shop["shop_id"], "Y", 100, category_id=cat_a["shop_category_id"]
+        )
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/products/{moved['shop_product_id']}",
+            json={"category_id": cat_b["shop_category_id"]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["category_id"] == cat_b["shop_category_id"]
+        assert resp.json()["sort"] > existing["sort"]
 
     async def test_product_foreign_category_rejected(
         self, shop_client: AsyncClient, unique_id: str

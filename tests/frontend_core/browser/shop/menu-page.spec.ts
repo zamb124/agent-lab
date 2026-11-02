@@ -1,6 +1,7 @@
 /**
- * ShopMenuPage — рейка категорий: ввод имени в cat-add включает кнопку
- * и _addCategory дергает shop/category_create с тем же payload.
+ * ShopMenuPage — рейка категорий (shop-category-tree): события дерева
+ * превращаются в shop/* команды, выбор категории фильтрует товары
+ * по всему поддереву.
  */
 
 import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
@@ -14,6 +15,7 @@ import {
     shopCategoriesListOp,
     shopProductsListOp,
     shopCategoryCreateOp,
+    shopCategoryUpdateOp,
     shopCategoryRemoveOp,
     shopCategoriesReorderOp,
     shopProductUpdateOp,
@@ -41,6 +43,7 @@ const FACTORIES = [
     shopCategoriesListOp,
     shopProductsListOp,
     shopCategoryCreateOp,
+    shopCategoryUpdateOp,
     shopCategoryRemoveOp,
     shopCategoriesReorderOp,
     shopProductUpdateOp,
@@ -57,35 +60,171 @@ const FACTORIES = [
     platformFileCreateOp,
 ];
 
-function typeIntoField(host: HTMLElement, selector: string, text: string): void {
-    const field = host.shadowRoot!.querySelector(selector) as HTMLElement & { shadowRoot: ShadowRoot };
-    expect(field, `field ${selector}`).to.exist;
-    const inner = field.shadowRoot.querySelector('platform-field-string') as HTMLElement & { shadowRoot: ShadowRoot };
-    expect(inner, `${selector} platform-field-string`).to.exist;
-    const input = inner.shadowRoot.querySelector('input') as HTMLInputElement;
-    expect(input, `${selector} input`).to.exist;
-    input.value = text;
-    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+const CATS = {
+    result: {
+        items: [
+            { shop_category_id: 'cat_a', parent_id: null, name: 'Пицца', sort: 0, is_active: true },
+            { shop_category_id: 'cat_a1', parent_id: 'cat_a', name: 'Классика', sort: 0, is_active: true },
+            { shop_category_id: 'cat_b', parent_id: null, name: 'Роллы', sort: 1, is_active: true },
+        ],
+    },
+};
+
+const PRODUCTS = {
+    result: {
+        items: [
+            { shop_product_id: 'p_root', category_id: 'cat_a', name: 'Маргарита', description: '', price_minor: 100, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { shop_product_id: 'p_kid', category_id: 'cat_a1', name: 'Капричоза', description: '', price_minor: 200, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { shop_product_id: 'p_b', category_id: 'cat_b', name: 'Филадельфия', description: '', price_minor: 300, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { shop_product_id: 'p_none', category_id: null, name: 'Соевый соус', description: '', price_minor: 50, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+        ],
+    },
+};
+
+function seedCatalog() {
+    const bus = getPlatformBus();
+    bus.dispatch(shopCategoriesListOp.events.SUCCEEDED, CATS);
+    bus.dispatch(shopProductsListOp.events.SUCCEEDED, PRODUCTS);
 }
 
-describe('shop-menu-page: добавление категории', () => {
+function categoryTree(page: HTMLElement): HTMLElement & { shadowRoot: ShadowRoot } {
+    const tree = page.shadowRoot!.querySelector('shop-category-tree') as HTMLElement & { shadowRoot: ShadowRoot };
+    expect(tree, 'shop-category-tree в рейке').to.exist;
+    return tree;
+}
+
+function emitOnTree(tree: HTMLElement, name: string, detail: unknown): void {
+    tree.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+}
+
+describe('shop-menu-page: дерево категорий → команды', () => {
     beforeEach(() => {
         resetPlatformState();
         bootstrapTestBus({ factories: FACTORIES });
     });
 
-    it('ввод имени включает кнопку "+" (disabled=false)', async () => {
+    it('tree-change диспетчит categories/reorder_requested с items', async () => {
+        const bus = getPlatformBus();
+        const payloads: unknown[] = [];
+        bus.subscribeType(shopCategoriesReorderOp.events.REQUESTED, (e) => { payloads.push(e.payload); });
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedCatalog();
+        await elementUpdated(el);
+        const tree = categoryTree(el);
+        const items = [
+            { category_id: 'cat_b', parent_id: null },
+            { category_id: 'cat_a', parent_id: null },
+            { category_id: 'cat_a1', parent_id: 'cat_a' },
+        ];
+        emitOnTree(tree, 'tree-change', { items });
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', items }]);
+    });
+
+    it('tree-create диспетчит categories/create_requested с parent_id', async () => {
+        const bus = getPlatformBus();
+        const payloads: unknown[] = [];
+        bus.subscribeType(shopCategoryCreateOp.events.REQUESTED, (e) => { payloads.push(e.payload); });
         const el = await fixture<HTMLElement>(html`
             <shop-menu-page shop-id="shop_test"></shop-menu-page>
         `);
         await elementUpdated(el);
-        const addBtn = el.shadowRoot!.querySelector('.cat-add platform-button') as HTMLElement & { disabled: boolean };
-        expect(addBtn, 'cat-add platform-button').to.exist;
-        expect(addBtn.disabled).to.equal(true);
-        typeIntoField(el, '.cat-add platform-field', 'Суши');
+        emitOnTree(categoryTree(el), 'tree-create', { parentId: 'cat_a', name: 'Десерты' });
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', name: 'Десерты', parent_id: 'cat_a' }]);
+    });
+
+    it('tree-rename диспетчит categories/update_requested', async () => {
+        const bus = getPlatformBus();
+        const payloads: unknown[] = [];
+        bus.subscribeType(shopCategoryUpdateOp.events.REQUESTED, (e) => { payloads.push(e.payload); });
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
         await elementUpdated(el);
-        expect((el as unknown as { _newCategory: string })._newCategory).to.equal('Суши');
-        expect(addBtn.disabled).to.equal(false);
+        emitOnTree(categoryTree(el), 'tree-rename', { id: 'cat_a', name: 'Пицца NEW' });
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', shop_category_id: 'cat_a', name: 'Пицца NEW' }]);
+    });
+
+    it('tree-remove диспетчит categories/remove_requested', async () => {
+        const bus = getPlatformBus();
+        const payloads: unknown[] = [];
+        bus.subscribeType(shopCategoryRemoveOp.events.REQUESTED, (e) => { payloads.push(e.payload); });
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        await elementUpdated(el);
+        emitOnTree(categoryTree(el), 'tree-remove', { id: 'cat_a' });
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', shop_category_id: 'cat_a' }]);
+    });
+
+    it('product-drop диспетчит product/update_requested с новой category_id', async () => {
+        const bus = getPlatformBus();
+        const payloads: unknown[] = [];
+        bus.subscribeType(shopProductUpdateOp.events.REQUESTED, (e) => { payloads.push(e.payload); });
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        await elementUpdated(el);
+        emitOnTree(categoryTree(el), 'product-drop', { productId: 'p_root', categoryId: 'cat_b' });
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', shop_product_id: 'p_root', category_id: 'cat_b' }]);
+    });
+});
+
+describe('shop-menu-page: фильтрация товаров по поддереву', () => {
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: FACTORIES });
+    });
+
+    function productNames(el: HTMLElement): string[] {
+        return Array.from(el.shadowRoot!.querySelectorAll('.list .card .pname'))
+            .map((n) => n.textContent?.trim() ?? '');
+    }
+
+    it('выбор родителя показывает товары всего поддерева', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedCatalog();
+        await elementUpdated(el);
+        emitOnTree(categoryTree(el), 'tree-select', { id: 'cat_a' });
+        await elementUpdated(el);
+        expect(productNames(el)).to.have.members(['Маргарита', 'Капричоза']);
+    });
+
+    it('выбор листа показывает только его товары', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedCatalog();
+        await elementUpdated(el);
+        emitOnTree(categoryTree(el), 'tree-select', { id: 'cat_a1' });
+        await elementUpdated(el);
+        expect(productNames(el)).to.have.members(['Капричоза']);
+    });
+
+    it('выбор "все товары" показывает полный список включая без категории', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedCatalog();
+        await elementUpdated(el);
+        emitOnTree(categoryTree(el), 'tree-select', { id: null });
+        await elementUpdated(el);
+        expect(productNames(el)).to.have.members(['Маргарита', 'Капричоза', 'Филадельфия', 'Соевый соус']);
+    });
+
+    it('дерево получает счётчики по поддереву и expandedIds', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        seedCatalog();
+        await elementUpdated(el);
+        const tree = categoryTree(el) as HTMLElement & { counts: Record<string, number>; categories: unknown[] };
+        expect(tree.categories.length).to.equal(3);
+        expect(tree.counts.cat_a).to.equal(2);
+        expect(tree.counts.cat_b).to.equal(1);
     });
 });
 

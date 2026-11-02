@@ -62,7 +62,6 @@ export class ShopProductModal extends PlatformModal {
     declare _badges: string[];
     declare _photoFileId: string;
     declare _photoPreview: string;
-    declare _saving: boolean;
 
     static override properties = {
         ...PlatformModal.properties,
@@ -78,7 +77,6 @@ export class ShopProductModal extends PlatformModal {
         _badges: { state: true },
         _photoFileId: { state: true },
         _photoPreview: { state: true },
-        _saving: { state: true },
     };
 
     static override styles = [
@@ -96,9 +94,9 @@ export class ShopProductModal extends PlatformModal {
             }
             .photo-box:hover { border-color: var(--accent); color: var(--accent); }
             .photo-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-            .photo-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+            .photo-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2); }
             .fields { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-            .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+            .row2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-3); }
             .desc-row { display: flex; flex-direction: column; gap: var(--space-2); }
             .desc-ai { align-self: flex-end; }
             .badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
@@ -128,7 +126,6 @@ export class ShopProductModal extends PlatformModal {
         this._badges = [];
         this._photoFileId = '';
         this._photoPreview = '';
-        this._saving = false;
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
@@ -170,42 +167,43 @@ export class ShopProductModal extends PlatformModal {
             : [...this._badges, key];
     }
 
+    private get _saving(): boolean {
+        return this._createOp.busy || this._updateOp.busy;
+    }
+
     private async _save() {
         const name = this._name.trim();
         const price = Math.round(parseFloat(this._price.replace(',', '.')) * 100);
         if (name === '' || !Number.isFinite(price) || price < 0 || this._saving) return;
-        this._saving = true;
-        try {
-            if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
-                const p = this.product;
-                const payload: Record<string, unknown> = {
-                    shop_id: this.shopId,
-                    shop_product_id: p.shop_product_id,
-                };
-                if (name !== p.name) payload.name = name;
-                if (price !== p.price_minor) payload.price_minor = price;
-                if (this._portion !== p.portion) payload.portion = this._portion;
-                if (JSON.stringify(this._badges) !== JSON.stringify(p.badges)) payload.badges = this._badges;
-                if (this._description !== p.description) payload.description = this._description;
-                if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId === '' ? null : this._photoFileId;
-                if (Object.keys(payload).length > 2) await this._updateOp.run(payload);
-            } else {
-                await this._createOp.run({
-                    shop_id: this.shopId,
-                    category_id: this.categoryId,
-                    name,
-                    description: this._description.trim(),
-                    portion: this._portion.trim(),
-                    badges: this._badges,
-                    price_minor: price,
-                    photo_file_id: this._photoFileId === '' ? null : this._photoFileId,
-                });
-            }
-            this.onSaved?.();
-            this.close();
-        } finally {
-            this._saving = false;
+        let ok = true;
+        if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
+            const p = this.product;
+            const payload: Record<string, unknown> = {
+                shop_id: this.shopId,
+                shop_product_id: p.shop_product_id,
+            };
+            if (name !== p.name) payload.name = name;
+            if (price !== p.price_minor) payload.price_minor = price;
+            if (this._portion !== p.portion) payload.portion = this._portion;
+            if (JSON.stringify(this._badges) !== JSON.stringify(p.badges)) payload.badges = this._badges;
+            if (this._description !== p.description) payload.description = this._description;
+            if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId === '' ? null : this._photoFileId;
+            if (Object.keys(payload).length > 2) ok = (await this._updateOp.run(payload)) !== null;
+        } else {
+            ok = (await this._createOp.run({
+                shop_id: this.shopId,
+                category_id: this.categoryId,
+                name,
+                description: this._description.trim(),
+                portion: this._portion.trim(),
+                badges: this._badges,
+                price_minor: price,
+                photo_file_id: this._photoFileId === '' ? null : this._photoFileId,
+            })) !== null;
         }
+        if (!ok) return;
+        this.onSaved?.();
+        this.close();
     }
 
     private async _uploadPhoto(e: Event) {
@@ -274,27 +272,13 @@ export class ShopProductModal extends PlatformModal {
         return html`
             <div class="body">
                 <div class="top">
-                    <div>
-                        <button class="photo-box" title=${this.t('menu.photo_pick')}
-                            ?disabled=${this._uploadOp.busy}
-                            @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#photo-input')?.click()}>
-                            ${this._photoPreview === ''
-                                ? html`<platform-icon name="image" size="24"></platform-icon><span>${this.t('menu.photo_pick')}</span>`
-                                : html`<img src=${this._photoPreview} alt="">`}
-                        </button>
-                        <div class="photo-actions">
-                            <input id="photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
-                            ${this._photoFileId !== ''
-                                ? html`<platform-button size="sm" variant="accent" ?busy=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
-                                      <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_enhance')}
-                                  </platform-button>`
-                                : nothing}
-                            <platform-button size="sm" variant="accent" ?busy=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
-                                title=${this.t('menu.ai_generate_hint')} @click=${() => this._generatePhoto()}>
-                                <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_generate')}
-                            </platform-button>
-                        </div>
-                    </div>
+                    <button class="photo-box" title=${this.t('menu.photo_pick')}
+                        ?disabled=${this._uploadOp.busy}
+                        @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#photo-input')?.click()}>
+                        ${this._photoPreview === ''
+                            ? html`<platform-icon name="image" size="24"></platform-icon><span>${this.t('menu.photo_pick')}</span>`
+                            : html`<img src=${this._photoPreview} alt="">`}
+                    </button>
                     <div class="fields">
                         <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._name}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = _str(e); }}></platform-field>
@@ -305,11 +289,23 @@ export class ShopProductModal extends PlatformModal {
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._portion = _str(e); }}></platform-field>
                         </div>
                     </div>
+                    <div class="photo-actions">
+                        <input id="photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
+                        ${this._photoFileId !== ''
+                            ? html`<platform-button size="sm" variant="accent" ?loading=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
+                                  <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_enhance')}
+                              </platform-button>`
+                            : nothing}
+                        <platform-button size="sm" variant="accent" ?loading=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
+                            title=${this.t('menu.ai_generate_hint')} @click=${() => this._generatePhoto()}>
+                            <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_generate')}
+                        </platform-button>
+                    </div>
                 </div>
                 <div class="desc-row">
                     <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
-                    <platform-button size="sm" variant="accent" class="desc-ai" ?busy=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
+                    <platform-button size="sm" variant="accent" class="desc-ai" ?loading=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
                         @click=${() => this._describeWithAi()}>
                         <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}
                     </platform-button>
@@ -321,7 +317,7 @@ export class ShopProductModal extends PlatformModal {
                     : nothing}
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>
-                    <platform-button variant="primary" ?busy=${this._saving}
+                    <platform-button variant="primary" ?loading=${this._saving}
                         ?disabled=${this._name.trim() === '' || this._price.trim() === ''}
                         @click=${() => this._save()}>${this.t('menu.save')}</platform-button>
                 </div>
