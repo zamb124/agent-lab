@@ -74,17 +74,17 @@ export class ShopMenuPage extends PlatformPage {
     private _uploadOp: OpController;
     private _locale: SelectController<string>;
 
-    private _categories: CategoryRow[] = [];
-    private _products: ProductRow[] = [];
-    private _badgeIcons: Record<string, string> = {};
-    private _badgeEditorOpen = false;
-    private _newBadgeLabel = '';
-    private _newBadgeIcon = '';
-    private _activeCategory: string | null = null;
-    private _newCategory = '';
-    private _importOpen = false;
-    private _importText = '';
-    private _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null = null;
+    declare _categories: CategoryRow[];
+    declare _products: ProductRow[];
+    declare _badgeIcons: Record<string, string>;
+    declare _badgeEditorOpen: boolean;
+    declare _newBadgeLabel: string;
+    declare _newBadgeIcon: string;
+    declare _activeCategory: string | null;
+    declare _newCategory: string;
+    declare _importOpen: boolean;
+    declare _importText: string;
+    declare _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -245,6 +245,17 @@ export class ShopMenuPage extends PlatformPage {
 
     constructor() {
         super();
+        this._categories = [];
+        this._products = [];
+        this._badgeIcons = {};
+        this._badgeEditorOpen = false;
+        this._newBadgeLabel = '';
+        this._newBadgeIcon = '';
+        this._activeCategory = null;
+        this._newCategory = '';
+        this._importOpen = false;
+        this._importText = '';
+        this._aiItems = null;
         this._shops = this.useResource('shop/shops');
         this._shopUpdateOp = this.useOp('shop/shop_update');
         this._badgeIconsOp = this.useOp('shop/badge_icons_list');

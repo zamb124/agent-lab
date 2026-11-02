@@ -75,12 +75,12 @@ export class ShopModifiersModal extends PlatformModal {
     private _suggestOp: OpController;
     private _locale: SelectController<string>;
 
-    private _groups: GroupRow[] = [];
-    private _openGroupId = '';
-    private _newGroupName = '';
-    private _newOptionName = '';
-    private _newOptionPrice = '';
-    private _suggestBusyFor = '';
+    declare _groups: GroupRow[];
+    declare _openGroupId: string;
+    declare _newGroupName: string;
+    declare _newOptionName: string;
+    declare _newOptionPrice: string;
+    declare _suggestBusyFor: string;
 
     static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
@@ -141,6 +141,12 @@ export class ShopModifiersModal extends PlatformModal {
 
     constructor() {
         super();
+        this._groups = [];
+        this._openGroupId = '';
+        this._newGroupName = '';
+        this._newOptionName = '';
+        this._newOptionPrice = '';
+        this._suggestBusyFor = '';
         this._groupsOp = this.useOp('shop/modifier_groups_list');
         this._groupCreateOp = this.useOp('shop/modifier_group_create');
         this._groupUpdateOp = this.useOp('shop/modifier_group_update');

@@ -108,7 +108,7 @@ export class ShopPromosPage extends PlatformPage {
     private _removeOp: OpController;
     private _locale: SelectController<string>;
 
-    private _draft: Draft | null = null;
+    declare _draft: Draft | null;
 
     static override properties: PropertyDeclarations = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -161,6 +161,7 @@ export class ShopPromosPage extends PlatformPage {
 
     constructor() {
         super();
+        this._draft = null;
         this._promosOp = this.useOp('shop/promos_list');
         this._productsOp = this.useOp('shop/products_list');
         this._createOp = this.useOp('shop/promo_create');

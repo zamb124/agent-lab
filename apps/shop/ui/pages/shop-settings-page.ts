@@ -24,27 +24,27 @@ export class ShopSettingsPage extends PlatformPage {
     private _domainAddOp: OpController;
     private _domainProvisionOp: OpController;
 
-    private _name = '';
-    private _description = '';
-    private _phone = '';
-    private _city = '';
-    private _address = '';
-    private _deliveryEnabled = false;
-    private _pickupEnabled = false;
-    private _deliveryFee = '';
-    private _minOrder = '';
-    private _newDomain = '';
-    private _botToken = '';
+    declare _name: string;
+    declare _description: string;
+    declare _phone: string;
+    declare _city: string;
+    declare _address: string;
+    declare _deliveryEnabled: boolean;
+    declare _pickupEnabled: boolean;
+    declare _deliveryFee: string;
+    declare _minOrder: string;
+    declare _newDomain: string;
+    declare _botToken: string;
     private _telegramConnectOp: OpController;
     private _telegramDisconnectOp: OpController;
     private _uploadOp: OpController;
     private _aiDescribeShopOp: OpController;
     private _aiGenerateCoverOp: OpController;
     private _aiGenerateLogoOp: OpController;
-    private _logoFileId = '';
-    private _coverFileId = '';
+    declare _logoFileId: string;
+    declare _coverFileId: string;
     private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
-    private _loadAttempted = false;
+    declare _loadAttempted: boolean;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -131,6 +131,20 @@ export class ShopSettingsPage extends PlatformPage {
 
     constructor() {
         super();
+        this._loadAttempted = false;
+        this._name = '';
+        this._description = '';
+        this._phone = '';
+        this._city = '';
+        this._address = '';
+        this._deliveryEnabled = false;
+        this._pickupEnabled = false;
+        this._deliveryFee = '';
+        this._minOrder = '';
+        this._newDomain = '';
+        this._botToken = '';
+        this._logoFileId = '';
+        this._coverFileId = '';
         this._shops = this.useResource('shop/shops');
         this._updateOp = this.useOp('shop/shop_update');
         this._publishOp = this.useOp('shop/shop_publish');
@@ -360,7 +374,7 @@ export class ShopSettingsPage extends PlatformPage {
                             ? html`<platform-button variant="primary" size="sm" ?busy=${this._publishOp.busy} @click=${() => this._publish()}>${this.t('settings.publish_button')}</platform-button>`
                             : html`
                                 <platform-button size="sm" ?busy=${this._suspendOp.busy} @click=${() => this._suspend()}>${this.t('settings.suspend_button')}</platform-button>
-                                <a class="hint" href=${storefrontUrl} target="_blank" rel="noopener">${storefrontUrl}</a>
+                                <a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${storefrontUrl}</a>
                             `}
                     </div>
                     <div class="hint">${this.t('settings.publish_hint')}</div>

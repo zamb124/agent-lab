@@ -23,14 +23,14 @@ export class ShopBuilderPage extends PlatformPage {
 
     private _shops: ResourceController;
     private _updateOp: OpController;
-    private _preset = 'menu';
-    private _accent = '#e2553f';
-    private _mode = 'dark';
-    private _device = 'phone';
+    declare _preset: string;
+    declare _accent: string;
+    declare _mode: string;
+    declare _device: string;
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
     private _savedMode = 'dark';
-    private _loadAttempted = false;
+    declare _loadAttempted: boolean;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -172,6 +172,11 @@ export class ShopBuilderPage extends PlatformPage {
 
     constructor() {
         super();
+        this._preset = 'menu';
+        this._accent = '#e2553f';
+        this._mode = 'dark';
+        this._device = 'phone';
+        this._loadAttempted = false;
         this._shops = this.useResource('shop/shops');
         this._updateOp = this.useOp('shop/shop_update');
     }
@@ -247,6 +252,10 @@ export class ShopBuilderPage extends PlatformPage {
                     </platform-empty-state>`;
         }
         const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
+        const slug = typeof shop.slug === 'string' ? shop.slug : '';
+        const previewPath = shop.status === 'published' && slug !== ''
+            ? `/shop/api/v1/public/s/${encodeURIComponent(slug)}`
+            : '';
         return html`
             <div class="layout">
                 <div class="panel">
@@ -312,9 +321,9 @@ export class ShopBuilderPage extends PlatformPage {
                         </div>
                         <span class="preview-url">${storefrontUrl}</span>
                     </div>
-                    ${storefrontUrl === ''
+                    ${previewPath === ''
                         ? html`<platform-empty-state icon="store" title=${this.t('builder.preview_unavailable')}></platform-empty-state>`
-                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${this._previewSrc(storefrontUrl)} title="storefront"></iframe>`}
+                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${this._previewSrc(previewPath)} title="storefront"></iframe>`}
                 </div>
             </div>
         `;

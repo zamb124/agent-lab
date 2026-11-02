@@ -55,14 +55,14 @@ export class ShopProductModal extends PlatformModal {
     private _aiGenerateOp: OpController;
     private _uploadOp: OpController;
 
-    private _name = '';
-    private _price = '';
-    private _portion = '';
-    private _description = '';
-    private _badges: string[] = [];
-    private _photoFileId = '';
-    private _photoPreview = '';
-    private _saving = false;
+    declare _name: string;
+    declare _price: string;
+    declare _portion: string;
+    declare _description: string;
+    declare _badges: string[];
+    declare _photoFileId: string;
+    declare _photoPreview: string;
+    declare _saving: boolean;
 
     static override properties = {
         ...PlatformModal.properties,
@@ -121,6 +121,14 @@ export class ShopProductModal extends PlatformModal {
 
     constructor() {
         super();
+        this._name = '';
+        this._price = '';
+        this._portion = '';
+        this._description = '';
+        this._badges = [];
+        this._photoFileId = '';
+        this._photoPreview = '';
+        this._saving = false;
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
         this._aiDescribeOp = this.useOp('shop/ai_describe');

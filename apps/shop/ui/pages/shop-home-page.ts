@@ -24,8 +24,8 @@ export class ShopHomePage extends PlatformPage {
     private _createOp: OpController;
     private _publishOp: OpController;
     private _autofillOp: OpController;
-    private _newName = '';
-    private _newSlug = '';
+    declare _newName: string;
+    declare _newSlug: string;
     private _slugTouched = false;
 
     static override properties = {
@@ -89,6 +89,8 @@ export class ShopHomePage extends PlatformPage {
 
     constructor() {
         super();
+        this._newName = '';
+        this._newSlug = '';
         this._shops = this.useResource('shop/shops');
         this._createOp = this.useOp('shop/shop_create');
         this._publishOp = this.useOp('shop/shop_publish');
@@ -202,7 +204,7 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`<div class="hint">${this.t('home.fill_hint')}</div>`
                                             : nothing}
                                         ${status === 'published' && storefrontUrl !== ''
-                                            ? html`<a class="hint" href=${storefrontUrl} target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
+                                            ? html`<a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
                                             : nothing}
                                         <div class="actions">
                                             ${(!shop.description || !shop.cover_file_id)
