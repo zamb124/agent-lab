@@ -8,7 +8,7 @@
  */
 
 import { html, css, nothing } from 'lit';
-import type { PropertyDeclarations } from 'lit';
+import type { PropertyDeclarations, PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -173,7 +173,18 @@ export class ShopPromosPage extends PlatformPage {
         this._locale = this.select((state) => (state.i18n.locale === '' ? 'en' : state.i18n.locale));
     }
 
-    async onRouteActive(): Promise<void> {
+    override connectedCallback(): void {
+        super.connectedCallback();
+        void this._loadPromos();
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        const prevShopId = changed.get('shopId');
+        if (typeof prevShopId === 'string' && prevShopId !== this.shopId) void this._loadPromos();
+    }
+
+    private async _loadPromos(): Promise<void> {
         if (this.shopId === '') return;
         await Promise.all([
             this._promosOp.run({ shop_id: this.shopId }),

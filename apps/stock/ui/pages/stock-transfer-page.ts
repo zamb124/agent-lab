@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -69,8 +70,15 @@ export class StockTransferPage extends PlatformPage {
         this._cancel = this.useOp('stock/transfer_cancel');
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._reload();
+    override connectedCallback(): void {
+        super.connectedCallback();
+        void this._reload();
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        const prevTransferId = changed.get('transferId');
+        if (typeof prevTransferId === 'string' && prevTransferId !== this.transferId) void this._reload();
     }
 
     private async _reload(): Promise<void> {

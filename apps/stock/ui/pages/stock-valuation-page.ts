@@ -31,12 +31,9 @@ export class StockValuationPage extends PlatformPage {
 
     constructor() {
         super();
-        this._layers = this.useResource('stock/valuation');
+        this._layers = this.useResource('stock/valuation', { autoload: true });
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._layers.load();
-    }
 
     override render() {
         const items = this._layers.items;

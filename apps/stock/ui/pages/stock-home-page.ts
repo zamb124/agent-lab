@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -82,17 +83,19 @@ export class StockHomePage extends PlatformPage {
 
     constructor() {
         super();
-        this._warehouses = this.useResource('stock/warehouses');
+        this._warehouses = this.useResource('stock/warehouses', { autoload: true });
         this._pulse = this.useOp('stock/warehouse_pulse');
         this._warehouseId = '';
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._warehouses.load();
-        const first = this._warehouses.items[0];
-        if (first && typeof first.warehouse_id === 'string') {
-            this._warehouseId = first.warehouse_id;
-            await this._pulse.run({ warehouse_id: first.warehouse_id });
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (this._warehouseId === '') {
+            const first = this._warehouses.items[0];
+            if (first && typeof first.warehouse_id === 'string') {
+                this._warehouseId = first.warehouse_id;
+                void this._pulse.run({ warehouse_id: first.warehouse_id });
+            }
         }
     }
 

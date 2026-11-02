@@ -93,14 +93,10 @@ export class ShopHomePage extends PlatformPage {
         super();
         this._newName = '';
         this._newSlug = '';
-        this._shops = this.useResource('shop/shops');
+        this._shops = this.useResource('shop/shops', { autoload: true });
         this._createOp = this.useOp('shop/shop_create');
         this._publishOp = this.useOp('shop/shop_publish');
         this._autofillOp = this.useOp('shop/ai_autofill');
-    }
-
-    async onRouteActive(): Promise<void> {
-        await this._shops.load();
     }
 
     private _transliterate(text: string): string {

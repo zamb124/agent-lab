@@ -32,12 +32,9 @@ export class StockTransfersPage extends PlatformPage {
 
     constructor() {
         super();
-        this._transfers = this.useResource('stock/transfers');
+        this._transfers = this.useResource('stock/transfers', { autoload: true });
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._transfers.load();
-    }
 
     private _open(event: Event) {
         const target = event.currentTarget;

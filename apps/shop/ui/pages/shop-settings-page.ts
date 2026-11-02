@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
@@ -47,6 +48,7 @@ export class ShopSettingsPage extends PlatformPage {
     declare _coverFileId: string;
     declare _hours: Array<{ open: string; close: string; closed: boolean }>;
     declare _loadAttempted: boolean;
+    private _hydrated = false;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -147,7 +149,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._logoFileId = '';
         this._coverFileId = '';
         this._hours = [];
-        this._shops = this.useResource('shop/shops');
+        this._shops = this.useResource('shop/shops', { autoload: true });
         this._updateOp = this.useOp('shop/shop_update');
         this._publishOp = this.useOp('shop/shop_publish');
         this._suspendOp = this.useOp('shop/shop_suspend');
@@ -161,10 +163,15 @@ export class ShopSettingsPage extends PlatformPage {
         this._aiGenerateLogoOp = this.useOp('shop/ai_generate_logo');
     }
 
-    async onRouteActive(): Promise<void> {
+    override connectedCallback(): void {
+        super.connectedCallback();
         this._loadAttempted = true;
-        this._shops.load();
-        this._hydrate();
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (changed.has('shopId')) this._hydrated = false;
+        if (!this._hydrated) this._hydrated = this._hydrate();
     }
 
     private _shop(): Record<string, unknown> | null {
@@ -172,9 +179,9 @@ export class ShopSettingsPage extends PlatformPage {
         return row === undefined ? null : (row as Record<string, unknown>);
     }
 
-    private _hydrate() {
+    private _hydrate(): boolean {
         const shop = this._shop();
-        if (shop === null) return;
+        if (shop === null) return false;
         this._name = String(shop.name ?? '');
         this._description = String(shop.description ?? '');
         this._phone = String(shop.phone ?? '');
@@ -198,6 +205,7 @@ export class ShopSettingsPage extends PlatformPage {
                 closed: typeof raw !== 'string' || raw.trim() === '',
             };
         });
+        return true;
     }
 
     private _toMinor(value: string): number {

@@ -4,6 +4,7 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-button.js';
@@ -33,6 +34,7 @@ export class ShopBuilderPage extends PlatformPage {
     private _savedAccent = '#e2553f';
     private _savedMode = 'dark';
     declare _loadAttempted: boolean;
+    private _hydrated = false;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -178,14 +180,19 @@ export class ShopBuilderPage extends PlatformPage {
         this._mode = 'dark';
         this._device = 'phone';
         this._loadAttempted = false;
-        this._shops = this.useResource('shop/shops');
+        this._shops = this.useResource('shop/shops', { autoload: true });
         this._updateOp = this.useOp('shop/shop_update');
     }
 
-    async onRouteActive(): Promise<void> {
+    override connectedCallback(): void {
+        super.connectedCallback();
         this._loadAttempted = true;
-        this._shops.load();
-        this._hydrate();
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (changed.has('shopId')) this._hydrated = false;
+        if (!this._hydrated) this._hydrated = this._hydrate();
     }
 
     private _shop(): Record<string, unknown> | null {
@@ -193,9 +200,9 @@ export class ShopBuilderPage extends PlatformPage {
         return row === undefined ? null : (row as Record<string, unknown>);
     }
 
-    private _hydrate() {
+    private _hydrate(): boolean {
         const shop = this._shop();
-        if (shop === null) return;
+        if (shop === null) return false;
         const theme = (shop.theme ?? {}) as Record<string, unknown>;
         this._preset = typeof theme.preset === 'string' ? theme.preset : 'menu';
         this._accent = typeof theme.accent_color === 'string' ? theme.accent_color : '#e2553f';
@@ -203,6 +210,7 @@ export class ShopBuilderPage extends PlatformPage {
         this._savedPreset = this._preset;
         this._savedAccent = this._accent;
         this._savedMode = this._mode;
+        return true;
     }
 
     private get _dirty(): boolean {

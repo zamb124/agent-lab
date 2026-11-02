@@ -32,12 +32,9 @@ export class StockProductsPage extends PlatformPage {
 
     constructor() {
         super();
-        this._products = this.useResource('stock/products');
+        this._products = this.useResource('stock/products', { autoload: true });
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._products.load();
-    }
 
     override render() {
         const items = this._products.items;

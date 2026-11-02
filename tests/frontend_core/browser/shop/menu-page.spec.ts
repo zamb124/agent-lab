@@ -149,6 +149,55 @@ describe('shop-menu-page: контекст магазина', () => {
     });
 });
 
+describe('shop-menu-page: загрузка при монтировании', () => {
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: FACTORIES });
+    });
+
+    it('connectedCallback диспетчит categories/products/shops list_requested', async () => {
+        const bus = getPlatformBus();
+        const fired: string[] = [];
+        bus.subscribeType(shopCategoriesListOp.events.REQUESTED, (event) => { fired.push(event.type); });
+        bus.subscribeType(shopProductsListOp.events.REQUESTED, (event) => { fired.push(event.type); });
+        bus.subscribeType(shopShopsResource.events.LIST_REQUESTED, (event) => { fired.push(event.type); });
+        await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        expect(fired).to.include(shopCategoriesListOp.events.REQUESTED);
+        expect(fired).to.include(shopProductsListOp.events.REQUESTED);
+        expect(fired).to.include(shopShopsResource.events.LIST_REQUESTED);
+    });
+
+    it('смена shop-id перезагружает списки', async () => {
+        const el = await fixture<HTMLElement>(html`
+            <shop-menu-page shop-id="shop_test"></shop-menu-page>
+        `);
+        await elementUpdated(el);
+        let fired = 0;
+        const bus = getPlatformBus();
+        bus.subscribeType(shopCategoriesListOp.events.REQUESTED, () => { fired += 1; });
+        el.setAttribute('shop-id', 'shop_other');
+        await elementUpdated(el);
+        expect(fired).to.equal(1);
+    });
+});
+
+describe('shop-home-page: загрузка при монтировании', () => {
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: FACTORIES });
+    });
+
+    it('autoload диспетчит shops list_requested при connect', async () => {
+        const bus = getPlatformBus();
+        const fired: string[] = [];
+        bus.subscribeType(shopShopsResource.events.LIST_REQUESTED, (event) => { fired.push(event.type); });
+        await fixture<HTMLElement>(html`<shop-home-page></shop-home-page>`);
+        expect(fired).to.include(shopShopsResource.events.LIST_REQUESTED);
+    });
+});
+
 describe('shop-home-page: slug-поле', () => {
     beforeEach(() => {
         resetPlatformState();
@@ -159,6 +208,7 @@ describe('shop-home-page: slug-поле', () => {
         const el = await fixture<HTMLElement>(html`
             <shop-home-page></shop-home-page>
         `);
+        getPlatformBus().dispatch('shop/shops/list_loaded', { items: [], total: 0 });
         await elementUpdated(el);
         const slugField = el.shadowRoot!.querySelector('platform-field[hint]') as HTMLElement;
         expect(slugField, 'slug platform-field с hint').to.exist;

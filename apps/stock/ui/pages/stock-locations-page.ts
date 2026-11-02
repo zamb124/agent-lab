@@ -30,12 +30,9 @@ export class StockLocationsPage extends PlatformPage {
 
     constructor() {
         super();
-        this._locations = this.useResource('stock/locations');
+        this._locations = this.useResource('stock/locations', { autoload: true });
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._locations.load();
-    }
 
     override render() {
         const items = this._locations.items;

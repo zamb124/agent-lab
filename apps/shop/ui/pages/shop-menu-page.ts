@@ -5,6 +5,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { PropertyValues } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
@@ -277,8 +278,18 @@ export class ShopMenuPage extends PlatformPage {
         this._locale = this.select((state) => (state.i18n.locale === '' ? 'en' : state.i18n.locale));
     }
 
-    async onRouteActive(): Promise<void> {
-        await this._reload();
+    override connectedCallback(): void {
+        super.connectedCallback();
+        void this._reload();
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        const prevShopId = changed.get('shopId');
+        if (typeof prevShopId === 'string' && prevShopId !== this.shopId) {
+            this._activeCategory = null;
+            void this._reload();
+        }
     }
 
     private async _reload() {
