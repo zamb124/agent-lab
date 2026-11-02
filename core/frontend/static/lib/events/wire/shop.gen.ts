@@ -39,6 +39,14 @@ export interface ListResponse_ShopResponse_ {
 }
 
 /**
+ * ListResponse[ShopTableResponse]
+ */
+export interface ListResponse_ShopTableResponse_ {
+    "items": ShopTableResponse[];
+    [key: string]: unknown;
+}
+
+/**
  * OffsetPage[ShopOrderResponse]
  */
 export interface OffsetPage_ShopOrderResponse_ {
@@ -264,7 +272,7 @@ export interface ShopCatalogChangedEventPayload {
  * ShopCategoriesReorderPayload
  */
 export interface ShopCategoriesReorderPayload {
-    "category_ids": string[];
+    "items": ShopCategoryReorderItem[];
     "shop_id": string;
     [key: string]: unknown;
 }
@@ -274,6 +282,7 @@ export interface ShopCategoriesReorderPayload {
  */
 export interface ShopCategoryCreatePayload {
     "name": string;
+    "parent_id"?: string | null | undefined;
     "shop_id": string;
     [key: string]: unknown;
 }
@@ -288,11 +297,21 @@ export interface ShopCategoryIdPayload {
 }
 
 /**
+ * Узел дерева категорий: категория и её родитель после перестановки.
+ */
+export interface ShopCategoryReorderItem {
+    "category_id": string;
+    "parent_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * ShopCategoryResponse
  */
 export interface ShopCategoryResponse {
     "shop_category_id": string;
     "shop_id": string;
+    "parent_id": string | null;
     "name": string;
     "sort": number;
     "is_active": boolean;
@@ -304,7 +323,6 @@ export interface ShopCategoryResponse {
  */
 export interface ShopCategoryUpdatePayload {
     "name"?: string | null | undefined;
-    "sort"?: number | null | undefined;
     "is_active"?: boolean | null | undefined;
     "shop_id": string;
     "shop_category_id": string;
@@ -323,8 +341,11 @@ export interface ShopCreateRequest {
 
 /**
  * Способ получения заказа.
+ * 
+ * ``onsite`` — гость заказывает из заведения (QR на столе): заказ
+ * помечается меткой столика и не требует адреса и телефона.
  */
-export type ShopDeliveryType = "delivery" | "pickup";
+export type ShopDeliveryType = "delivery" | "pickup" | "onsite";
 
 /**
  * Собственный домен магазина вида ``menu.restaurant.ru``.
@@ -511,9 +532,10 @@ export interface ShopModifierOptionUpdatePayload {
 export interface ShopOrderCreatePayload {
     "items": ShopOrderItemRequest[];
     "customer_name": string;
-    "customer_phone": string;
+    "customer_phone"?: string | undefined;
     "delivery_type": ShopDeliveryType;
     "address"?: string | undefined;
+    "table_id"?: string | null | undefined;
     "comment"?: string | undefined;
     "source"?: ShopOrderSource | undefined;
     "idempotency_key"?: string | undefined;
@@ -621,6 +643,8 @@ export interface ShopOrderResponse {
     "customer_phone": string;
     "delivery_type": ShopDeliveryType;
     "address": string;
+    "table_id": string;
+    "table_label": string;
     "comment": string;
     "items_total_minor": number;
     "discount_minor": number;
@@ -663,6 +687,7 @@ export interface ShopOrderStatusResponse {
     "total_minor": number;
     "currency": string;
     "delivery_type": ShopDeliveryType;
+    "table_label": string;
     "created_at": string;
     [key: string]: unknown;
 }
@@ -890,6 +915,7 @@ export interface ShopResponse {
     "working_hours": Record<string, string>;
     "delivery_enabled": boolean;
     "pickup_enabled": boolean;
+    "onsite_enabled": boolean;
     "delivery_fee_minor": number;
     "min_order_minor": number;
     "currency": string;
@@ -918,6 +944,44 @@ export interface ShopShopEventPayload {
  * Жизненный цикл витрины.
  */
 export type ShopStatus = "draft" | "published" | "suspended";
+
+/**
+ * ShopTableCreatePayload
+ */
+export interface ShopTableCreatePayload {
+    "label": string;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopTableIdPayload
+ */
+export interface ShopTableIdPayload {
+    "shop_id": string;
+    "shop_table_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Стол зала: ``shop_table_id`` попадает в QR-ссылку ``?table=``.
+ */
+export interface ShopTableResponse {
+    "shop_table_id": string;
+    "shop_id": string;
+    "label": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopTableUpdatePayload
+ */
+export interface ShopTableUpdatePayload {
+    "label": string;
+    "shop_id": string;
+    "shop_table_id": string;
+    [key: string]: unknown;
+}
 
 /**
  * ShopTelegramConnectPayload
@@ -954,6 +1018,7 @@ export interface ShopUpdatePayload {
     "working_hours"?: Record<string, string> | null | undefined;
     "delivery_enabled"?: boolean | null | undefined;
     "pickup_enabled"?: boolean | null | undefined;
+    "onsite_enabled"?: boolean | null | undefined;
     "delivery_fee_minor"?: number | null | undefined;
     "min_order_minor"?: number | null | undefined;
     "theme"?: ShopTheme | null | undefined;
@@ -1018,6 +1083,10 @@ export interface ShopCommandMap {
     "shop/shops/remove_requested": { payload: ShopIdPayload; result: EmptyPayload },
     "shop/shops/suspend_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/update_requested": { payload: ShopUpdatePayload; result: ShopResponse },
+    "shop/tables/create_requested": { payload: ShopTableCreatePayload; result: ShopTableResponse },
+    "shop/tables/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopTableResponse_ },
+    "shop/tables/remove_requested": { payload: ShopTableIdPayload; result: EmptyPayload },
+    "shop/tables/update_requested": { payload: ShopTableUpdatePayload; result: ShopTableResponse },
     "shop/telegram/connect_requested": { payload: ShopTelegramConnectPayload; result: ShopResponse },
     "shop/telegram/disconnect_requested": { payload: ShopIdPayload; result: ShopResponse }
 }
@@ -1185,6 +1254,18 @@ export interface ShopEventMap {
     "shop/shops/update_failed": PlatformCommandEventPayload,
     "shop/shops/update_requested": PlatformCommandEventPayload,
     "shop/shops/update_succeeded": PlatformCommandEventPayload,
+    "shop/tables/create_failed": PlatformCommandEventPayload,
+    "shop/tables/create_requested": PlatformCommandEventPayload,
+    "shop/tables/create_succeeded": PlatformCommandEventPayload,
+    "shop/tables/list_failed": PlatformCommandEventPayload,
+    "shop/tables/list_requested": PlatformCommandEventPayload,
+    "shop/tables/list_succeeded": PlatformCommandEventPayload,
+    "shop/tables/remove_failed": PlatformCommandEventPayload,
+    "shop/tables/remove_requested": PlatformCommandEventPayload,
+    "shop/tables/remove_succeeded": PlatformCommandEventPayload,
+    "shop/tables/update_failed": PlatformCommandEventPayload,
+    "shop/tables/update_requested": PlatformCommandEventPayload,
+    "shop/tables/update_succeeded": PlatformCommandEventPayload,
     "shop/telegram/connect_failed": PlatformCommandEventPayload,
     "shop/telegram/connect_requested": PlatformCommandEventPayload,
     "shop/telegram/connect_succeeded": PlatformCommandEventPayload,

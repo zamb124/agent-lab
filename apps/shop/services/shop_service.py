@@ -16,6 +16,7 @@ from apps.shop.models import (
     ShopProductModifierGroup,
     ShopPromo,
     ShopStatus,
+    ShopTable,
 )
 from apps.shop.models.api import (
     ShopBadge,
@@ -32,6 +33,8 @@ from apps.shop.models.api import (
     ShopProductUpdateRequest,
     ShopPromoCreateRequest,
     ShopPromoUpdateRequest,
+    ShopTableCreateRequest,
+    ShopTableUpdateRequest,
     ShopUpdateRequest,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
@@ -160,6 +163,51 @@ class ShopService:
         shop.updated_at = utcnow()
         _ = await shop.save()
         return shop
+
+    # --- Столы зала (заказ «в заведении») ---
+
+    async def list_tables(self, company_id: str, shop_id: str) -> list[ShopTable]:
+        _ = await self.get_shop(company_id, shop_id)
+        return await ShopTable.list_by_shop_by_created_asc(shop_id)
+
+    async def create_table(
+        self, company_id: str, shop_id: str, payload: ShopTableCreateRequest
+    ) -> ShopTable:
+        _ = await self.get_shop(company_id, shop_id)
+        now = utcnow()
+        table = ShopTable(
+            shop_table_id=new_id("shoptable"),
+            shop_id=shop_id,
+            label=payload.label,
+            created_at=now,
+            updated_at=now,
+        )
+        return await ShopTable.create(table)
+
+    async def update_table(
+        self,
+        company_id: str,
+        shop_id: str,
+        table_id: str,
+        payload: ShopTableUpdateRequest,
+    ) -> ShopTable:
+        _ = await self.get_shop(company_id, shop_id)
+        table = await ShopTable.get_by_id(table_id)
+        if table is None or table.shop_id != shop_id:
+            raise PlatformNotFoundError("Table not found", error_code="table_not_found")
+        table.label = payload.label
+        table.updated_at = utcnow()
+        _ = await table.save()
+        return table
+
+    async def delete_table(self, company_id: str, shop_id: str, table_id: str) -> None:
+        """Удаление стола: QR-карточка перестаёт вести в витрину со столом,
+        заказы со снапшотом ``table_label`` не трогаются."""
+        _ = await self.get_shop(company_id, shop_id)
+        table = await ShopTable.get_by_id(table_id)
+        if table is None or table.shop_id != shop_id:
+            raise PlatformNotFoundError("Table not found", error_code="table_not_found")
+        _ = await table.delete()
 
     # --- Каталог ---
 

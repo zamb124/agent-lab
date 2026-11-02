@@ -22,6 +22,7 @@ from apps.shop.models.product import ShopProduct
 from apps.shop.models.product_modifier_group import ShopProductModifierGroup
 from apps.shop.models.promo import ShopPromo
 from apps.shop.models.shop import Shop
+from apps.shop.models.table import ShopTable
 
 __all__ = [
     "ModifierGroupKind",
@@ -44,4 +45,5 @@ __all__ = [
     "ShopProductModifierGroup",
     "ShopPromo",
     "ShopStatus",
+    "ShopTable",
 ]

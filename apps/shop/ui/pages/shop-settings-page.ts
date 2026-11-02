@@ -19,6 +19,7 @@ import { shopHeadRow } from '../components/shop-page-head.js';
 import '../components/shop-hours-editor.js';
 import type { ShopDayHours } from '../components/shop-hours-editor.js';
 import '../components/shop-brand-editor.js';
+import '../components/shop-tables-editor.js';
 
 const SECTIONS = ['storefront', 'profile', 'hours', 'delivery', 'notifications'] as const;
 type SettingsSection = (typeof SECTIONS)[number];
@@ -52,6 +53,7 @@ interface FormSnapshot {
     address: string;
     deliveryEnabled: boolean;
     pickupEnabled: boolean;
+    onsiteEnabled: boolean;
     deliveryFee: string;
     minOrder: string;
     hours: ShopDayHours[];
@@ -79,6 +81,7 @@ export class ShopSettingsPage extends PlatformPage {
     declare _address: string;
     declare _deliveryEnabled: boolean;
     declare _pickupEnabled: boolean;
+    declare _onsiteEnabled: boolean;
     declare _deliveryFee: string;
     declare _minOrder: string;
     declare _newDomain: string;
@@ -98,6 +101,7 @@ export class ShopSettingsPage extends PlatformPage {
         _address: { state: true },
         _deliveryEnabled: { state: true },
         _pickupEnabled: { state: true },
+        _onsiteEnabled: { state: true },
         _deliveryFee: { state: true },
         _minOrder: { state: true },
         _newDomain: { state: true },
@@ -420,6 +424,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._address = '';
         this._deliveryEnabled = false;
         this._pickupEnabled = false;
+        this._onsiteEnabled = false;
         this._deliveryFee = '';
         this._minOrder = '';
         this._newDomain = '';
@@ -462,6 +467,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._address = String(shop.address ?? '');
         this._deliveryEnabled = Boolean(shop.delivery_enabled);
         this._pickupEnabled = Boolean(shop.pickup_enabled);
+        this._onsiteEnabled = Boolean(shop.onsite_enabled);
         this._deliveryFee = String((Number(shop.delivery_fee_minor ?? 0) / 100) || '');
         this._minOrder = String((Number(shop.min_order_minor ?? 0) / 100) || '');
         const wh = shop.working_hours !== null && typeof shop.working_hours === 'object'
@@ -489,6 +495,7 @@ export class ShopSettingsPage extends PlatformPage {
             address: this._address,
             deliveryEnabled: this._deliveryEnabled,
             pickupEnabled: this._pickupEnabled,
+            onsiteEnabled: this._onsiteEnabled,
             deliveryFee: this._deliveryFee,
             minOrder: this._minOrder,
             hours: this._hours.map((d) => ({ ...d })),
@@ -509,6 +516,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._address = s.address;
         this._deliveryEnabled = s.deliveryEnabled;
         this._pickupEnabled = s.pickupEnabled;
+        this._onsiteEnabled = s.onsiteEnabled;
         this._deliveryFee = s.deliveryFee;
         this._minOrder = s.minOrder;
         this._hours = s.hours.map((d) => ({ ...d }));
@@ -554,7 +562,7 @@ export class ShopSettingsPage extends PlatformPage {
             { key: 'description', done: String(shop.description ?? '') !== '',       optional: false, section: 'profile' },
             { key: 'menu',        done: Number(shop.products_count ?? 0) > 0,        optional: false, section: null },
             { key: 'hours',       done: Object.keys(wh).length > 0,                  optional: false, section: 'hours' },
-            { key: 'order',       done: Boolean(shop.pickup_enabled) || Boolean(shop.delivery_enabled), optional: false, section: 'delivery' },
+            { key: 'order',       done: Boolean(shop.pickup_enabled) || Boolean(shop.delivery_enabled) || Boolean(shop.onsite_enabled), optional: false, section: 'delivery' },
             { key: 'notify',      done: Boolean(shop.telegram_connected),            optional: true,  section: 'notifications' },
         ];
     }
@@ -578,6 +586,7 @@ export class ShopSettingsPage extends PlatformPage {
             address: this._address,
             delivery_enabled: this._deliveryEnabled,
             pickup_enabled: this._pickupEnabled,
+            onsite_enabled: this._onsiteEnabled,
             delivery_fee_minor: this._toMinor(this._deliveryFee),
             min_order_minor: this._toMinor(this._minOrder),
             working_hours: this._collectHours(),
@@ -852,7 +861,8 @@ export class ShopSettingsPage extends PlatformPage {
         `;
     }
 
-    private _renderDelivery() {
+    private _renderDelivery(shop: Record<string, unknown>) {
+        const slug = String(shop.slug ?? '');
         return html`
             ${this._renderSectionHead('settings.nav_delivery', 'settings.delivery_sub')}
             <div class="option ${this._pickupEnabled ? 'on' : ''}">
@@ -875,6 +885,22 @@ export class ShopSettingsPage extends PlatformPage {
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._deliveryEnabled = Boolean(e.detail.value); }}
                 ></platform-switch>
             </div>
+            <div class="option ${this._onsiteEnabled ? 'on' : ''}">
+                <span class="option-icon"><platform-icon name="restaurant" size="22"></platform-icon></span>
+                <span class="option-body">
+                    <div class="option-title">${this.t('settings.onsite')}</div>
+                    <div class="option-desc">${this.t('settings.onsite_desc')}</div>
+                </span>
+                <platform-switch ?checked=${this._onsiteEnabled}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._onsiteEnabled = Boolean(e.detail.value); }}
+                ></platform-switch>
+            </div>
+            ${this._onsiteEnabled
+                ? html`
+                    <div class="card">
+                        <shop-tables-editor shop-id=${this.shopId} shop-slug=${slug}></shop-tables-editor>
+                    </div>`
+                : nothing}
             ${this._deliveryEnabled
                 ? html`
                     <div class="card">
@@ -974,7 +1000,7 @@ export class ShopSettingsPage extends PlatformPage {
                         ${section === 'storefront' ? this._renderStorefront(shop) : nothing}
                         ${section === 'profile' ? this._renderProfile(shop) : nothing}
                         ${section === 'hours' ? this._renderHours() : nothing}
-                        ${section === 'delivery' ? this._renderDelivery() : nothing}
+                        ${section === 'delivery' ? this._renderDelivery(shop) : nothing}
                         ${section === 'notifications' ? this._renderNotifications(shop) : nothing}
                         ${this._dirty
                             ? html`

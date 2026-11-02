@@ -45,10 +45,15 @@ class ShopOrderStatus(StrEnum):
 
 
 class ShopDeliveryType(StrEnum):
-    """Способ получения заказа."""
+    """Способ получения заказа.
+
+    ``onsite`` — гость заказывает из заведения (QR на столе): заказ
+    помечается меткой столика и не требует адреса и телефона.
+    """
 
     DELIVERY = "delivery"
     PICKUP = "pickup"
+    ONSITE = "onsite"
 
 
 class ShopOrderSource(StrEnum):

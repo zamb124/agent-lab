@@ -28,34 +28,39 @@ _PAGE = """<!DOCTYPE html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 {seo_head}
 <style>
-:root{{--accent:{accent};--bg:#100e0c;--card:#1b1815;--card2:#241f1a;--text:#f6f1e8;--muted:#a89e90;--line:#2b251e;--radius:18px}}
+:root{{--accent:{accent};--on-accent:{on_accent};--afg:{afg_dark};--bg:#131110;--card:#1e1a17;--card2:#2a241f;--text:#f7f3ec;--muted:#a39a8d;--line:#2e2823;--radius:18px;--overlay:rgba(10,9,8,.62);--on-hero:#fff;--success:#4ade80;--warn:#f0b45c;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-lg:0 14px 44px rgba(0,0,0,.55);color-scheme:dark}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
+::selection{{background:color-mix(in srgb,var(--accent) 32%,transparent)}}
+:focus-visible{{outline:2px solid var(--afg);outline-offset:2px}}
 img{{background:var(--card2);transition:opacity .35s ease}}
 img:not(.ld){{opacity:0}}
 body.lock{{overflow:hidden}}
-body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation;overflow-x:hidden;overflow-x:clip}}
+body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation;overflow-x:hidden;overflow-x:clip;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}}
 .serif{{font-family:ui-serif,Georgia,'Times New Roman',serif}}
 .wrap{{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}}
-.hero{{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:linear-gradient(165deg,var(--accent) 0%,#221a12 75%)}}
+.hero{{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:linear-gradient(160deg,var(--accent) 0%,color-mix(in srgb,var(--accent) 42%,#171310) 52%,#171310 100%)}}
 .hero .bg{{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}}
 .hero .veil{{position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,14,12,.15) 20%,rgba(16,14,12,.92) 100%)}}
 .hero .head{{position:absolute;left:24px;right:24px;bottom:18px;display:flex;align-items:flex-end;gap:14px}}
-.hero .logo{{width:64px;height:64px;border-radius:18px;object-fit:cover;border:2px solid rgba(255,255,255,.35);background:var(--card);flex-shrink:0}}
-.hero h1{{font-size:30px;font-weight:650;letter-spacing:-.01em;text-shadow:0 2px 16px rgba(0,0,0,.65)}}
-.hero .desc{{font-size:14px;color:#e8ded0;margin-top:4px;text-shadow:0 1px 8px rgba(0,0,0,.7);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+.hero .logo{{width:64px;height:64px;border-radius:18px;object-fit:cover;border:2px solid rgba(255,255,255,.4);background:var(--card);flex-shrink:0;box-shadow:0 4px 18px rgba(0,0,0,.35)}}
+.hero h1{{font-size:32px;font-weight:650;letter-spacing:-.01em;color:var(--on-hero);text-shadow:0 2px 18px rgba(0,0,0,.7)}}
+.hero .desc{{font-size:14px;color:color-mix(in srgb,var(--on-hero) 86%,transparent);margin-top:4px;text-shadow:0 1px 8px rgba(0,0,0,.7);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
 .meta{{padding:14px 2px 6px;color:var(--muted);font-size:13.5px;display:flex;gap:14px;flex-wrap:wrap}}
 .meta span{{display:inline-flex;align-items:center;gap:6px}}
+.meta svg{{width:15px;height:15px;fill:currentColor;flex-shrink:0;opacity:.85}}
 .ob-open,.ob-closed{{font-weight:650}}
-.ob-open{{color:#4ade80}}
-.ob-closed{{color:#f0b45c}}
+.ob-open{{color:var(--success)}}
+.ob-closed{{color:var(--warn)}}
 .tabs{{position:sticky;top:env(safe-area-inset-top);z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}}
-.msearch{{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px}}
+.msearch{{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px;transition:border-color .15s,box-shadow .15s}}
+.msearch:focus-within{{border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}}
 .msearch svg{{opacity:.5;flex-shrink:0}}
 .msearch input{{flex:1;min-width:0;font:inherit;font-size:15px;background:transparent;border:0;color:var(--text);outline:none}}
 .msearch input::placeholder{{color:var(--muted)}}
 .tabs::-webkit-scrollbar{{display:none}}
 .tabs button{{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}}
-.tabs button.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
+.tabs button:hover{{color:var(--text);border-color:color-mix(in srgb,var(--text) 25%,var(--line))}}
+.tabs button.on{{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}}
 .cat{{font-size:21px;margin:28px 0 6px;letter-spacing:-.01em}}
 .cat.sub{{font-size:17px;margin:18px 0 4px;color:var(--muted);font-weight:600}}
 .mchunk{{animation:fade .3s ease}}
@@ -72,39 +77,40 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 @keyframes fade{{from{{opacity:0;transform:translateY(6px)}}to{{opacity:1}}}}
 .item img{{width:92px;height:92px;border-radius:var(--radius);object-fit:cover;background:var(--card2);flex-shrink:0}}
 .item .b{{flex:1;min-width:0}}
-.item h3{{font-size:16.5px;font-weight:600}}
+.item h3{{font-size:16.5px;font-weight:600;letter-spacing:-.005em}}
 .portion{{font-size:13px;font-weight:500;color:var(--muted);margin-left:6px;white-space:nowrap}}
-.item p{{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
+.item p{{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
 .item .row{{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}}
 .price{{font-size:16.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}}
-.add{{font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:99px;border:0;background:var(--accent);color:#fff;cursor:pointer;transition:transform .1s}}
+.add{{font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;transition:transform .1s,box-shadow .15s}}
+.add:hover{{box-shadow:0 2px 12px color-mix(in srgb,var(--accent) 45%,transparent)}}
 .add:active{{transform:scale(.94)}}
 .stepper{{display:inline-flex;align-items:center;gap:2px;background:var(--card2);border-radius:99px;padding:3px}}
-.stepper button{{width:32px;height:32px;border-radius:99px;border:0;background:var(--accent);color:#fff;font-size:18px;font-weight:700;cursor:pointer;line-height:1}}
-.stepper button.ghost{{background:transparent;color:var(--accent)}}
+.stepper button{{width:32px;height:32px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);font-size:18px;font-weight:700;cursor:pointer;line-height:1}}
+.stepper button.ghost{{background:transparent;color:var(--afg)}}
 .stepper span{{min-width:26px;text-align:center;font-weight:650;font-variant-numeric:tabular-nums}}
 .grid{{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding-top:10px}}
-.gcard{{background:var(--card);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);display:flex;flex-direction:column}}
+.gcard{{background:var(--card);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);display:flex;flex-direction:column;box-shadow:var(--shadow-sm)}}
 .gcard img{{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--card2)}}
 .gcard .b{{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1}}
-.gcard h3{{font-size:15px;font-weight:600}}
-.gcard p{{font-size:12.5px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+.gcard h3{{font-size:15px;font-weight:600;letter-spacing:-.005em}}
+.gcard p{{font-size:12.5px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
 .gcard .row{{display:flex;justify-content:space-between;align-items:center;margin-top:auto;gap:8px}}
 .compact .item{{padding:12px 2px}}
 .compact .item img{{display:none}}
-.cart{{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));width:min(688px,92vw);background:var(--accent);color:#fff;border:0;font:inherit;font-size:16px;font-weight:650;padding:17px;border-radius:99px;cursor:pointer;display:none;box-shadow:0 10px 40px rgba(0,0,0,.55);z-index:10;letter-spacing:.01em}}
+.cart{{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));width:min(688px,92vw);background:var(--accent);color:var(--on-accent);border:0;font:inherit;font-size:16px;font-weight:650;padding:17px;border-radius:99px;cursor:pointer;display:none;box-shadow:var(--shadow-lg);z-index:10;letter-spacing:.01em}}
 .cart.show{{display:block;animation:pop .25s ease}}
 @keyframes pop{{from{{transform:translateX(-50%) translateY(16px);opacity:0}}}}
-.sheet{{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:none;z-index:20}}
+.sheet{{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);display:none;z-index:20}}
 .sheet.show{{display:block}}
-.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease}}
+.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease;box-shadow:var(--shadow-lg)}}
 .panel.drag{{transition:none}}
 .grab{{width:38px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 12px;touch-action:none}}
 @keyframes up{{from{{transform:translateX(-50%) translateY(40px)}}}}
 .panel h2{{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}}
 .pshare{{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(18,18,20,.55);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;z-index:2}}
 .pshare svg{{width:18px;height:18px;fill:currentColor}}
-.toast{{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:calc(90px + env(safe-area-inset-bottom));background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}}
+.toast{{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:calc(90px + env(safe-area-inset-bottom));background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.08);font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}}
 .toast.show{{opacity:1;transform:translateX(-50%) translateY(0)}}
 .cl{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:15px;border-bottom:1px solid var(--line)}}
 .cl .n{{flex:1;min-width:0}}
@@ -114,42 +120,45 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .mg.nest{{margin:12px 0 4px 14px;padding-left:12px;border-left:2px solid var(--line)}}
 .mg-h{{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}}
 .mg-h b{{font-size:15px}}
-.mg-r{{font-size:12px;color:#f0b45c;white-space:nowrap}}
+.mg-r{{font-size:12px;color:var(--warn);white-space:nowrap}}
 .mg-r.ok{{color:var(--muted)}}
 .opts{{display:flex;flex-wrap:wrap;gap:8px}}
 .opt{{font:inherit;font-size:14px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .12s}}
-.opt.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
-.opt.dis{{opacity:.4;cursor:default}}
+.opt:hover{{border-color:color-mix(in srgb,var(--text) 28%,var(--line))}}
+.opt.on{{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}}
+.opt.dis{{opacity:.45;filter:saturate(.4);cursor:default}}
 .opt i{{font-style:normal;font-size:12.5px;opacity:.85}}
 .opt .stepper{{padding:2px}}
 .opt .stepper button{{width:24px;height:24px;font-size:15px}}
 .crow{{display:flex;justify-content:flex-end;margin-top:18px}}
 .seg{{display:flex;background:var(--card2);border-radius:14px;padding:4px;margin:14px 0}}
-.seg button{{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:11px;background:transparent;color:var(--muted);cursor:pointer}}
-.seg button.on{{background:var(--accent);color:#fff}}
-input.f{{width:100%;font:inherit;font-size:15px;padding:14px;margin:6px 0;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--text)}}
-input.f:focus{{outline:none;border-color:var(--accent)}}
-button.big{{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;border-radius:16px;border:0;background:var(--accent);color:#fff;cursor:pointer;margin-top:14px;letter-spacing:.01em}}
+.seg button{{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:11px;background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}}
+.seg button svg{{width:17px;height:17px;fill:currentColor;flex-shrink:0}}
+.seg button.on{{background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-sm)}}
+input.f,select.f{{width:100%;font:inherit;font-size:15px;padding:14px;margin:6px 0;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--text);transition:border-color .15s,box-shadow .15s}}
+input.f:focus,select.f:focus{{outline:none;border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}}
+input.f::placeholder{{color:var(--muted)}}
+button.big{{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;border-radius:16px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;margin-top:14px;letter-spacing:.01em;transition:transform .1s,box-shadow .15s}}
+button.big:hover:not(:disabled){{box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 42%,transparent)}}
 button.big:disabled{{opacity:.45;cursor:default}}
-.minwarn{{font-size:13px;color:#f0b45c;margin-top:10px;text-align:center}}
+.minwarn{{font-size:13px;color:var(--warn);margin-top:10px;text-align:center}}
 .done{{text-align:center;padding:64px 20px}}
-.done .code{{font-size:36px;font-weight:750;color:var(--accent);margin:16px 0;letter-spacing:.02em}}
-.done .st{{font-size:14px;font-weight:650;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
+.done .code{{font-size:36px;font-weight:750;color:var(--afg);margin:16px 0;letter-spacing:.02em}}
+.done .st{{font-size:14px;font-weight:650;color:var(--afg);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
 .done p{{color:var(--muted);font-size:14.5px;line-height:1.6}}
-.pbadge{{display:inline-block;margin-left:8px;padding:3px 10px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-.ptag{{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10.5px;font-weight:700;vertical-align:middle;white-space:nowrap}}
+.pbadge{{display:inline-block;margin-left:8px;padding:3px 10px;border-radius:99px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.ptag{{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--afg);font-size:10.5px;font-weight:700;vertical-align:middle;white-space:nowrap}}
 .ptag svg{{width:12px;height:12px;fill:currentColor;flex-shrink:0}}
-.save{{color:#2e9e5b}}
-.save b{{color:#2e9e5b}}
+.save{{color:var(--success)}}
+.save b{{color:var(--success)}}
 .empty{{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}}
-body.light{{--bg:#f7f4ee;--card:#ffffff;--card2:#efe9de;--text:#29221a;--muted:#7d7264;--line:#e4dbcc;color-scheme:light}}
-body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,rgba(16,14,12,.88) 100%)}}
+body.light{{--bg:#f5f4f2;--card:#ffffff;--card2:#eeebe7;--text:#1d1a16;--muted:#6e665a;--line:#e5e1da;--overlay:rgba(24,20,15,.45);--success:#15803d;--warn:#b45309;--afg:{afg_light};--shadow-sm:0 1px 2px rgba(24,20,15,.07),0 2px 8px rgba(24,20,15,.05);--shadow-lg:0 16px 44px rgba(24,20,15,.16);color-scheme:light}}
 @media(min-width:1024px){{
 .wrap{{max-width:1240px;padding:0 24px calc(140px + env(safe-area-inset-bottom))}}
 .hero{{margin:0 calc(50% - 50vw);height:340px}}
 .hero .head{{left:50%;right:auto;transform:translateX(-50%);width:min(1240px,100%);bottom:28px;padding:0 24px}}
 .hero .logo{{width:84px;height:84px;border-radius:22px}}
-.hero h1{{font-size:38px}}
+.hero h1{{font-size:40px}}
 .hero .desc{{font-size:15.5px;-webkit-line-clamp:3;max-width:680px}}
 .meta{{padding:16px 2px 8px;font-size:14px;gap:18px}}
 .msearch{{margin:14px 0 4px;max-width:460px}}
@@ -162,15 +171,15 @@ body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,
 #app.flat .tabs{{display:none}}
 .tabs button{{text-align:left;border:0;border-radius:12px;background:transparent;padding:11px 14px}}
 .tabs button:hover{{color:var(--text);background:color-mix(in srgb,var(--text) 6%,transparent)}}
-.tabs button.on{{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);font-weight:650}}
+.tabs button.on{{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--afg);font-weight:650}}
 .cat{{font-size:24px;margin:34px 0 10px}}
 .cat.sub{{font-size:18px}}
 #mbody>.mchunk:first-child>.cat{{margin-top:0}}
 body[data-preset=menu] .mchunk,body[data-preset=compact] .mchunk{{display:grid;grid-template-columns:1fr 1fr;column-gap:40px}}
 body[data-preset=menu] .mchunk>.cat,body[data-preset=compact] .mchunk>.cat{{grid-column:1/-1}}
 body[data-preset=grid] .grid{{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}}
-.gcard{{transition:transform .15s ease,border-color .15s ease}}
-.gcard:hover{{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}}
+.gcard{{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}}
+.gcard:hover{{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:var(--shadow-lg)}}
 .item{{border-radius:12px;padding-left:12px;padding-right:12px;margin-left:-12px;margin-right:-12px;transition:background .15s ease}}
 body[data-preset=compact] .item{{padding-left:12px;padding-right:12px}}
 .item:hover{{background:color-mix(in srgb,var(--text) 4%,transparent)}}
@@ -203,6 +212,8 @@ body[data-preset=compact] .item{{padding-left:12px;padding-right:12px}}
 const S=JSON.parse(document.getElementById('snapshot').textContent);
 const PRESET=(S.theme&&S.theme.preset)||'menu';
 const EMBED=new URLSearchParams(location.search).has('embed');
+const TABLE_ID=new URLSearchParams(location.search).get('table')||'';
+const TABLES=Array.isArray(S.tables)?S.tables:[];
 const fmt=v=>(v/100).toLocaleString('ru-RU')+' ₽';
 const IMG=u=>u?`/shop/api/v1/files/download/${{u}}`:'';
 const DAYS=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
@@ -239,6 +250,13 @@ const NEST=S.modifier_nested_groups||{{}};
 const byId=id=>S.products.find(x=>x.id===id);
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
 function photo(u,cls){{return u?`<img class="${{cls||''}}" src="${{IMG(u)}}" loading="lazy" alt="" onload="this.classList.add('ld')">`:'';}}
+const _IC={{pin:'M480-480q33 0 56.5-23.5T560-560q0-33-23.5-56.5T480-640q-33 0-56.5 23.5T400-560q0 33 23.5 56.5T480-480Zm0 294q122-112 181-203.5T720-552q0-109-69.5-178.5T480-800q-141 0-210.5 69.5T200-552q0 71 59 162.5T480-186Z',
+call:'M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-12h162q14 0 25 9.5t13 22.5l26 140q2 16-1 27t-11 19l-97 98q20 37 47.5 71.5T387-386q31 31 65 57.5t72 48.5l94-94q9-9 23.5-13.5T670-390l138 28q14 4 23 14.5t9 23.5v162q0 18-12 30t-30 12ZM241-600l66-66-17-94h-89q5 41 14 81t26 79Zm358 358q39 17 79.5 27t81.5 13v-88l-94-19-67 67ZM241-600Zm358 358Z',
+truck:'M240-160q-50 0-85-35t-35-85H40v-440h80l96-160h384l96 160h224v440h-80q0 50-35 85t-85 35q-50 0-85-35t-35-85H360q0 50-35 85t-85 35Zm0-80q17 0 28.5-11.5T280-280q0-17-11.5-28.5T240-320q-17 0-28.5 11.5T200-280q0 17 11.5 28.5T240-240Zm480 0q17 0 28.5-11.5T760-280q0-17-11.5-28.5T720-320q-17 0-28.5 11.5T680-280q0 17 11.5 28.5T720-240ZM160-360h640v-200H160v200Z',
+store:'M160-720v-80h640v80H160Zm0 560v-280h-40v-80l40-200h640l40 200v80h-40v280h-80v-280H560v280H160Zm80-80h240v-200H240v200Zm-30-280h540-540Zm0 0h540l-25-120H235l-25 120Z',
+clock:'m612-292 56-56-148-148v-184h-80v216l172 172ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 320q133 0 226.5-93.5T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160Z',
+restaurant:'M280-600v-240q0-17 11.5-28.5T320-880q17 0 28.5 11.5T360-840v240h40v-240q0-17 11.5-28.5T440-880q17 0 28.5 11.5T480-840v240q0 56-34.5 98T360-446v326q0 17-11.5 28.5T320-80q-17 0-28.5-11.5T280-120v-326q-51-14-85.5-56T160-600v-240q0-17 11.5-28.5T200-880q17 0 28.5 11.5T240-840v240h40Zm400 200h-80q-17 0-28.5-11.5T560-440v-240q0-70 51.5-135T718-880q18 0 30 14t12 33v713q0 17-11.5 28.5T720-80q-17 0-28.5-11.5T680-120v-280Z'}};
+const ic=n=>`<svg viewBox="0 -960 960 960"><path d="${{_IC[n]}}"/></svg>`;
 function selHash(sel){{return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}}
 function cartQty(pid){{let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}}
 function unitPrice(p,sel){{let abs=0,delta=0;
@@ -279,7 +297,7 @@ const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const hb=hoursBadge();
   let h=`<div class="hero">${{photo(S.cover_file_id,'bg')}}<div class="veil"></div><div class="head">${{photo(S.logo_file_id,'logo')}}<div><h1 class="serif">${{esc(S.name)}}</h1>${{S.description?`<div class="desc">${{esc(S.description)}}</div>`:''}}</div></div></div>
-  <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
+  <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{ic('clock')}}${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>${{ic('pin')}}${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>${{ic('call')}}${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?`<span>${{ic('truck')}}Доставка</span>`:''}}${{S.pickup_enabled?`<span>${{ic('store')}}Самовывоз</span>`:''}}${{S.onsite_enabled?`<span>${{ic('restaurant')}}В заведении</span>`:''}}</div>`;
   if(!S.products.length){{app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}}
   h+=`<div id="msw"></div><div id="menu"></div>`;
   app.innerHTML=h;
@@ -360,21 +378,22 @@ function draw(){{const b=document.getElementById('cart');const n=count();saveCar
     if(n>(b._n||0)){{b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');}}}}else b.classList.remove('show');
   b._n=n;}}
 let dtype='';
+let tableId=TABLE_ID&&TABLES.some(t=>t.id===TABLE_ID)?TABLE_ID:'';
+const DTYPES=[['delivery','truck','Доставка',S.delivery_enabled],['pickup','store','Самовывоз',S.pickup_enabled],['onsite','restaurant','В заведении',S.onsite_enabled&&TABLES.length>0]].filter(d=>d[3]);
 window.openSheet=()=>{{
-  if(!dtype)dtype=S.delivery_enabled?'delivery':'pickup';
+  if(!dtype)dtype=(tableId&&S.onsite_enabled)?'onsite':(DTYPES[0]?DTYPES[0][0]:'');
   renderSheet();
   sheetOpen(document.getElementById('sheet'));
 }};
 window.setDtype=t=>{{dtype=t;renderSheet();}};
+window.setTable=t=>{{tableId=t;}};
 function renderSheet(){{
   const p=document.getElementById('panel');
   const sub=total();
   const fee=dtype==='delivery'?(S.delivery_fee_minor||0):0;
   const below=S.min_order_minor&&sub<S.min_order_minor;
   const hb=hoursBadge();
-  const seg=(S.delivery_enabled&&S.pickup_enabled)?`<div class="seg">
-    <button class="${{dtype==='delivery'?'on':''}}" onclick="setDtype('delivery')">🛵 Доставка</button>
-    <button class="${{dtype==='pickup'?'on':''}}" onclick="setDtype('pickup')">🛍 Самовывоз</button></div>`:'';
+  const seg=DTYPES.length>1?`<div class="seg">${{DTYPES.map(d=>`<button class="${{dtype===d[0]?'on':''}}" onclick="setDtype('${{d[0]}}')">${{ic(d[1])}}${{d[2]}}</button>`).join('')}}</div>`:'';
   p.innerHTML=`<h2>Ваш заказ</h2>`+[...cart.entries()].map(([key,l])=>{{const x=byId(l.pid);if(!x)return'';
     const mods=modsText(x,l.sel);const u=unitPrice(x,l.sel);
     return `<div class="cl"><span class="n">${{esc(x.name)}}${{mods?`<span class="mods">${{esc(mods)}}</span>`:''}}</span><span class="stepper"><button class="ghost" onclick="addLine('${{key}}',-1);renderSheet()">−</button><span>${{l.qty}}</span><button onclick="addLine('${{key}}',1);renderSheet()">+</button></span><b class="s">${{fmt(u*l.qty)}}</b></div>`;}}).join('')+
@@ -382,7 +401,8 @@ function renderSheet(){{
   `<div id="savings"></div>`+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${{fmt(fee)}}</b></div>`:'')+
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
-  <input class="f" id="cn" placeholder="Ваше имя"><input class="f" id="cp" type="tel" placeholder="Телефон">
+  <input class="f" id="cn" placeholder="Ваше имя"><input class="f" id="cp" type="tel" placeholder="${{dtype==='onsite'?'Телефон (необязательно)':'Телефон'}}">
+  ${{dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${{TABLES.map(t=>`<option value="${{t.id}}"${{t.id===tableId?' selected':''}}>${{esc(t.label)}}</option>`).join('')}}</select>`:''}}
   ${{dtype==='delivery'?'<input class="f" id="ca" placeholder="Адрес доставки">':''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
   ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — оформите предзаказ, примем к открытию</div>`:''}}
@@ -412,10 +432,13 @@ async function refreshSavings(){{
 }}
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
 window.submit=async()=>{{
+  if(dtype==='onsite'&&!tableId){{toast('Выберите стол');return;}}
+  if(dtype!=='onsite'&&document.getElementById('cp').value.trim().length<5){{toast('Укажите телефон');return;}}
   const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
     customer_name:document.getElementById('cn').value,customer_phone:document.getElementById('cp').value,
     delivery_type:dtype,
+    table_id:dtype==='onsite'?tableId:null,
     address:dtype==='delivery'?(document.getElementById('ca')?.value||''):'',
     comment:document.getElementById('cc').value,
     source:EMBED?'embed':'web',
@@ -429,13 +452,14 @@ window.submit=async()=>{{
 const STATUS_LABEL={{new:'Принят',accepted:'Подтверждён',preparing:'Готовится',delivering:'В доставке',done:'Выполнен',cancelled:'Отменён'}};
 window.trackOrder=async code=>{{
   const p=document.getElementById('panel');
-  const render=st=>{{p.innerHTML=`<div class="done"><h2 class="serif">Заказ принят!</h2><div class="code">#${{code}}</div><div class="st">${{STATUS_LABEL[st]||st}}</div><p>Сохраните номер заказа — по нему можно проверить статус.<br>Мы свяжемся с вами для подтверждения.</p></div>`;}};
+  const render=(st,d)=>{{const hall=d&&d.delivery_type==='onsite'&&d.table_label?`<br>Ваш стол: ${{esc(d.table_label)}}`:'';
+    p.innerHTML=`<div class="done"><h2 class="serif">Заказ принят!</h2><div class="code">#${{code}}</div><div class="st">${{STATUS_LABEL[st]||st}}</div><p>Сохраните номер заказа — по нему можно проверить статус.${{hall}}<br>Мы свяжемся с вами для подтверждения.</p></div>`;}};
   render('new');
   const poll=async()=>{{
     if(!document.getElementById('sheet').classList.contains('show'))return;
     try{{
       const r=await fetch(`/shop/api/v1/public/orders/${{code}}`);
-      if(r.ok){{const d=await r.json();render(d.status);if(d.status!=='done'&&d.status!=='cancelled')setTimeout(poll,15000);}}
+      if(r.ok){{const d=await r.json();render(d.status,d);if(d.status!=='done'&&d.status!=='cancelled')setTimeout(poll,15000);}}
       else setTimeout(poll,30000);
     }}catch(e){{setTimeout(poll,30000);}}
   }};
@@ -558,6 +582,80 @@ _JSONLD_TYPES: dict[str, str] = {
 }
 _DAYS: tuple[str, ...] = ("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
 
+_DEFAULT_ACCENT = "#e2553f"
+
+_Rgb = tuple[int, int, int]
+# Фоны тем из CSS — производные accent-токены считаются под конкретный фон.
+_BG_DARK: _Rgb = (0x13, 0x11, 0x10)
+_BG_LIGHT: _Rgb = (0xF5, 0xF4, 0xF2)
+_TEXT_DARK: _Rgb = (0xF7, 0xF3, 0xEC)
+_TEXT_LIGHT: _Rgb = (0x1D, 0x1A, 0x16)
+
+
+def hex_rgb(value: str) -> _Rgb:
+    """'#rgb'/'#rrggbb' → (r,g,b); невалидный ввод — rgb дефолтного accent."""
+    s = value.strip().lstrip("#")
+    if len(s) == 3:
+        s = "".join(ch * 2 for ch in s)
+    try:
+        if len(s) != 6:
+            raise ValueError(value)
+        return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+    except ValueError:
+        return (0xE2, 0x55, 0x3F)
+
+
+def rel_luminance(rgb: _Rgb) -> float:
+    """Относительная яркость WCAG 2.x."""
+
+    def lin(channel: int) -> float:
+        c = channel / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+
+
+def contrast_ratio(a: _Rgb, b: _Rgb) -> float:
+    hi = max(rel_luminance(a), rel_luminance(b))
+    lo = min(rel_luminance(a), rel_luminance(b))
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def to_hex(rgb: _Rgb) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def mix_rgb(a: _Rgb, b: _Rgb, t: float) -> _Rgb:
+    return (
+        round(a[0] + (b[0] - a[0]) * t),
+        round(a[1] + (b[1] - a[1]) * t),
+        round(a[2] + (b[2] - a[2]) * t),
+    )
+
+
+def on_accent(accent: _Rgb) -> str:
+    """Текст на accent-кнопке: белый, пока контраст ≥3; иначе тёмный."""
+    return "#fff" if contrast_ratio(accent, (255, 255, 255)) >= 3.0 else "#1d1a16"
+
+
+def accent_fg(accent: _Rgb, bg: _Rgb, text: _Rgb) -> str:
+    """Accent для текста/иконок на фоне: доводится смесью к text до контраста 4.5."""
+    for step in range(0, 21):
+        cand = mix_rgb(accent, text, step / 20)
+        if contrast_ratio(cand, bg) >= 4.5:
+            return to_hex(cand)
+    return to_hex(text)
+
+
+def accent_vars(accent: str) -> dict[str, str]:
+    """Производные токены accent для шаблона: --on-accent и --afg под каждую тему."""
+    rgb = hex_rgb(accent)
+    return {
+        "on_accent": on_accent(rgb),
+        "afg_dark": accent_fg(rgb, _BG_DARK, _TEXT_DARK),
+        "afg_light": accent_fg(rgb, _BG_LIGHT, _TEXT_LIGHT),
+    }
+
 
 def _opening_hours(snapshot: JsonObject) -> list[JsonObject]:
     """working_hours {day: 'HH:MM-HH:MM'} → schema.org openingHoursSpecification."""
@@ -669,7 +767,7 @@ def _seo_head(
 
 def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url: str = "") -> str:
     """HTML витрины с inline-снапшотом для SSR-lite рендера."""
-    accent = "#e2553f"
+    accent = _DEFAULT_ACCENT
     preset = "menu"
     mode = "dark"
     theme = snapshot.get("theme")
@@ -677,6 +775,7 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
         accent = str(theme.get("accent_color", accent))
         preset = str(theme.get("preset", preset))
         mode = str(theme.get("mode", mode))
+    tokens = accent_vars(accent)
     body_class = " ".join(
         part
         for part in (
@@ -698,6 +797,9 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
             jsonld=_storefront_jsonld(snapshot, canonical_url, image_url),
         ),
         accent=escape(accent),
+        on_accent=tokens["on_accent"],
+        afg_dark=tokens["afg_dark"],
+        afg_light=tokens["afg_light"],
         body_class=escape(body_class),
         preset=escape(preset),
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),

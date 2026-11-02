@@ -33,6 +33,32 @@ _STATUS_LABEL: dict[str, str] = {
 }
 
 
+def order_notify_text(order: ShopOrder, items: list[ShopOrderItem]) -> str:
+    """Текст уведомления о заказе для Telegram-бота магазина.
+
+    Способ выдачи одной строкой: адрес для delivery, стол для onsite;
+    pickup без дополнительной строки — гость сам придёт.
+    """
+    lines = [
+        f"Заказ #{order.public_code} — {_STATUS_LABEL[order.status.value]}",
+        "",
+        *[
+            f"• {i.name_snapshot} × {i.qty} — {i.price_minor * i.qty // 100} ₽"
+            for i in items
+        ],
+        "",
+        f"Итого: {order.total_minor // 100} ₽",
+        f"Клиент: {order.customer_name} {order.customer_phone}",
+    ]
+    if order.delivery_type.value == "delivery":
+        lines.append(f"Доставка: {order.address}")
+    elif order.delivery_type.value == "onsite":
+        lines.append(f"В заведении: {order.table_label}")
+    if order.comment:
+        lines.append(f"Комментарий: {order.comment}")
+    return "\n".join(lines)
+
+
 class NotificationService:
     """Telegram магазина: подключение бота, webhook и уведомления о заказах."""
 
@@ -202,21 +228,7 @@ class NotificationService:
         ):
             return False
         items = await ShopOrderItem.list_by_order(order.shop_order_id)
-        lines = [
-            f"Заказ #{order.public_code} — {_STATUS_LABEL[order.status.value]}",
-            "",
-            *[
-                f"• {i.name_snapshot} × {i.qty} — {i.price_minor * i.qty // 100} ₽"
-                for i in items
-            ],
-            "",
-            f"Итого: {order.total_minor // 100} ₽",
-            f"Клиент: {order.customer_name} {order.customer_phone}",
-        ]
-        if order.delivery_type.value == "delivery":
-            lines.append(f"Доставка: {order.address}")
-        if order.comment:
-            lines.append(f"Комментарий: {order.comment}")
+        text = order_notify_text(order, items)
         try:
             _ = await self._bot_call(
                 shop.telegram_bot_token,
@@ -224,7 +236,7 @@ class NotificationService:
                 JsonObject(
                     {
                         "chat_id": shop.telegram_chat_id,
-                        "text": "\n".join(lines),
+                        "text": text,
                     }
                 ),
             )

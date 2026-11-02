@@ -39,6 +39,7 @@ interface OrderRow {
     customer_name: string;
     customer_phone: string;
     delivery_type: string;
+    table_label: string;
     address: string;
     comment: string;
     items_total_minor: number;
@@ -189,9 +190,9 @@ export class ShopOrdersPage extends PlatformPage {
                     <span class="code">#${order.public_code}</span>
                     <span class="time">${this._time(order.created_at)}</span>
                 </div>
-                <span class="meta">${order.customer_name} · ${order.customer_phone}</span>
+                <span class="meta">${order.customer_phone === '' ? order.customer_name : `${order.customer_name} · ${order.customer_phone}`}</span>
                 <span class="meta">
-                    ${this.t(`orders.delivery.${order.delivery_type}`)}${order.address === '' ? '' : ` · ${order.address}`}
+                    ${this.t(`orders.delivery.${order.delivery_type}`)}${order.delivery_type === 'onsite' && order.table_label !== '' ? ` · ${order.table_label}` : ''}${order.delivery_type === 'delivery' && order.address !== '' ? ` · ${order.address}` : ''}
                 </span>
                 ${order.comment === '' ? nothing : html`<span class="comment">«${order.comment}»</span>`}
                 <div class="items">
@@ -204,14 +205,16 @@ export class ShopOrdersPage extends PlatformPage {
                     <span class="total"><span>${this.t('orders.total')}</span><span>${this._money(order.total_minor, order.currency)}</span></span>
                 </div>
                 <div class="card-actions">
-                    ${(NEXT[order.status] ?? []).map((next) => html`
+                    ${(NEXT[order.status] ?? [])
+                        .filter((next) => !(order.delivery_type === 'onsite' && next === 'delivering'))
+                        .map((next) => html`
                         <platform-button
                             size="sm"
                             variant=${next === 'cancelled' ? 'ghost-danger' : 'primary'}
                             ?loading=${this._statusOp.busy}
                             @click=${() => this._setStatus(order, next)}
                         >${this.t(`orders.action.${next}`)}</platform-button>
-                    `)}
+                        `)}
                 </div>
             </div>
         `;

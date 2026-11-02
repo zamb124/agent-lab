@@ -20,6 +20,7 @@ from apps.shop.models import (
     ShopProduct,
     ShopPromo,
     ShopStatus,
+    ShopTable,
 )
 from apps.shop.models.api import (
     ShopCartPriceLineResponse,
@@ -94,6 +95,39 @@ class ShopOrderService:
                 raise PlatformConflictError(
                     "Delivery address is required", error_code="address_required"
                 )
+        elif payload.delivery_type == ShopDeliveryType.PICKUP:
+            if not shop.pickup_enabled:
+                raise PlatformConflictError(
+                    "Pickup is not supported by the shop",
+                    error_code="pickup_disabled",
+                )
+        elif payload.delivery_type == ShopDeliveryType.ONSITE:
+            if not shop.onsite_enabled:
+                raise PlatformConflictError(
+                    "Onsite ordering is not supported by the shop",
+                    error_code="onsite_disabled",
+                )
+        if (
+            payload.delivery_type != ShopDeliveryType.ONSITE
+            and len(payload.customer_phone.strip()) < 5
+        ):
+            raise PlatformConflictError(
+                "Customer phone is required", error_code="phone_required"
+            )
+        table_id = ""
+        table_label = ""
+        if payload.delivery_type == ShopDeliveryType.ONSITE:
+            if not payload.table_id:
+                raise PlatformConflictError(
+                    "Table is required for onsite orders", error_code="table_required"
+                )
+            table = await ShopTable.get_by_id(payload.table_id)
+            if table is None or table.shop_id != shop.shop_id:
+                raise PlatformConflictError(
+                    "Table not found", error_code="table_unknown"
+                )
+            table_id = table.shop_table_id
+            table_label = table.label
         if payload.idempotency_key:
             existing = await ShopOrder.get_by_idempotency_key(shop.shop_id, payload.idempotency_key)
             if existing is not None:
@@ -132,6 +166,8 @@ class ShopOrderService:
             customer_phone=payload.customer_phone,
             delivery_type=payload.delivery_type,
             address=payload.address,
+            table_id=table_id,
+            table_label=table_label,
             comment=payload.comment,
             items_total_minor=items_total,
             discount_minor=discount_total,
@@ -299,6 +335,8 @@ class ShopOrderService:
             customer_phone=order.customer_phone,
             delivery_type=order.delivery_type,
             address=order.address,
+            table_id=order.table_id,
+            table_label=order.table_label,
             comment=order.comment,
             items_total_minor=order.items_total_minor,
             discount_minor=order.discount_minor,

@@ -42,6 +42,9 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopTableCreateRequest,
+    ShopTableResponse,
+    ShopTableUpdateRequest,
     ShopTelegramConnectRequest,
     ShopUpdateRequest,
 )
@@ -83,6 +86,9 @@ from apps.shop.realtime.operations import (
     ShopPromoCreatePayload,
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
+    ShopTableCreatePayload,
+    ShopTableIdPayload,
+    ShopTableUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
     op_ai_autofill,
@@ -133,6 +139,10 @@ from apps.shop.realtime.operations import (
     op_shops_remove,
     op_shops_suspend,
     op_shops_update,
+    op_tables_create,
+    op_tables_list,
+    op_tables_remove,
+    op_tables_update,
     op_telegram_connect,
     op_telegram_disconnect,
 )
@@ -268,6 +278,47 @@ async def reorder_categories(
 async def remove_category(shop_id: str, category_id: str, di: Di) -> EmptyPayload:
     return await op_categories_remove(
         ShopCategoryIdPayload(shop_id=shop_id, shop_category_id=category_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+# --- Столы зала ---
+
+
+@router.get("/{shop_id}/tables", response_model=ListResponse[ShopTableResponse])
+async def list_tables(shop_id: str, di: Di) -> ListResponse[ShopTableResponse]:
+    return await op_tables_list(
+        ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
+    )
+
+
+@router.post("/{shop_id}/tables", response_model=ShopTableResponse)
+async def create_table(
+    shop_id: str, payload: ShopTableCreateRequest, di: Di
+) -> ShopTableResponse:
+    return await op_tables_create(
+        ShopTableCreatePayload(shop_id=shop_id, label=payload.label),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch("/{shop_id}/tables/{table_id}", response_model=ShopTableResponse)
+async def update_table(
+    shop_id: str, table_id: str, payload: ShopTableUpdateRequest, di: Di
+) -> ShopTableResponse:
+    return await op_tables_update(
+        ShopTableUpdatePayload(shop_id=shop_id, shop_table_id=table_id, label=payload.label),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/tables/{table_id}", response_model=EmptyPayload)
+async def remove_table(shop_id: str, table_id: str, di: Di) -> EmptyPayload:
+    return await op_tables_remove(
+        ShopTableIdPayload(shop_id=shop_id, shop_table_id=table_id),
         user=require_context().user,
         di=di,
     )

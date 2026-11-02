@@ -16,7 +16,8 @@ import os
 from contextlib import suppress
 
 import websockets
-from playwright.async_api import BrowserContext, Error as PlaywrightError, WebSocketRoute
+from playwright.async_api import BrowserContext, WebSocketRoute
+from playwright.async_api import Error as PlaywrightError
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ async def _bridge_connection(ws_route: WebSocketRoute, upstream_url: str) -> Non
     try:
         upstream = await websockets.connect(
             upstream_url,
-            subprotocols=list(ws_route.protocols) or None,
+            subprotocols=[websockets.Subprotocol(p) for p in ws_route.protocols] or None,
             ping_interval=None,
             max_size=None,
         )
@@ -52,25 +53,19 @@ async def _bridge_connection(ws_route: WebSocketRoute, upstream_url: str) -> Non
             async for message in upstream:
                 ws_route.send(message)
         except (websockets.ConnectionClosed, PlaywrightError):
-            return
-
-    pump = loop.create_task(_upstream_to_page())
-
-    def _on_page_close(_code: int | None, _reason: str | None) -> None:
-        pump.cancel()
-        loop.create_task(upstream.close())
-
-    def _on_pump_done(_task: asyncio.Task[None]) -> None:
-        async def _finish() -> None:
+            pass
+        finally:
             with suppress(PlaywrightError):
                 await ws_route.close(code=1000)
             await upstream.close()
 
-        loop.create_task(_finish())
+    pump = loop.create_task(_upstream_to_page())
+
+    def _on_page_close(_code: int | None, _reason: str | None) -> None:
+        _ = pump.cancel()
 
     ws_route.on_message(lambda message: loop.create_task(_send_upstream(upstream, message)))
     ws_route.on_close(_on_page_close)
-    pump.add_done_callback(_on_pump_done)
 
 
 async def install_centrifugo_ws_bridge(context: BrowserContext) -> None:

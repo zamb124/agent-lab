@@ -51,6 +51,8 @@ class ShopOrder(PlatformModel):
     customer_phone: str = DbField(max_length=32)
     delivery_type: ShopDeliveryType = DbField()
     address: str = DbField(default="", max_length=500)
+    table_id: str = DbField(default="", max_length=64)
+    table_label: str = DbField(default="", max_length=64)
     comment: str = DbField(default="", max_length=1000)
     items_total_minor: int = DbField(ge=0)
     discount_minor: int = DbField(default=0, ge=0)

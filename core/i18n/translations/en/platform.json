@@ -1062,6 +1062,12 @@
         "shop_telegram_rejected": "Telegram rejected the request — check the bot token",
         "telegram_webhook_not_found": "Webhook not found",
         "order_rate_limited": "Too many orders — try again in a minute",
-        "telegram_update_invalid": "Invalid Telegram update"
+        "telegram_update_invalid": "Invalid Telegram update",
+        "onsite_disabled": "Dine-in ordering is disabled by the shop",
+        "pickup_disabled": "Pickup is disabled by the shop",
+        "phone_required": "Phone number is required",
+        "table_required": "Table is required",
+        "table_unknown": "Table not found",
+        "table_not_found": "Table not found"
     }
 }

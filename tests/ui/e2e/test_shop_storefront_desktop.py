@@ -8,7 +8,9 @@ Chromium рендерит тот же HTML/CSS, что покупатель на
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx2
 import pytest
@@ -73,6 +75,7 @@ async def _create_storefront(
     *,
     categories: tuple[str, ...],
     products_per_category: int,
+    shop_patch: JsonObject | None = None,
 ) -> Storefront:
     shop = await _post(
         client,
@@ -81,6 +84,11 @@ async def _create_storefront(
         {"slug": slug, "name": f"E2E Витрина {slug}", "kind": "cafe"},
     )
     shop_id = str(shop["shop_id"])
+    if shop_patch is not None:
+        resp = await client.patch(
+            f"{_SHOP_API}/shops/{shop_id}", json=shop_patch, headers=headers
+        )
+        assert resp.status_code == 200, f"shop patch: {resp.status_code} {resp.text}"
     plain_product_id = ""
     plain_product_name = ""
     products_total = 0
@@ -166,6 +174,33 @@ async def storefront(
         slug,
         categories=("Горячее", "Десерты"),
         products_per_category=3,
+    )
+
+
+@pytest_asyncio.fixture
+async def themed_storefront(
+    shop_client_http: httpx2.AsyncClient,
+    shop_worker: None,
+    auth_headers_system: dict[str, str],
+    unique_id: str,
+) -> Storefront:
+    """Витрина с контактами и обоими способами выдачи — meta-иконки и seg видны."""
+    _ = shop_worker
+    headers = {**auth_headers_system, **ui_e2e_scope_headers()}
+    slug = f"e2et-{unique_id[:8]}"
+    return await _create_storefront(
+        shop_client_http,
+        headers,
+        slug,
+        categories=("Горячее", "Десерты"),
+        products_per_category=3,
+        shop_patch={
+            "city": "Москва",
+            "address": "Тверская, 1",
+            "phone": "+7 495 000-00-00",
+            "delivery_enabled": True,
+            "pickup_enabled": True,
+        },
     )
 
 
@@ -280,7 +315,7 @@ async def test_desktop_grid_preset_light_theme(
     )
     assert columns >= 3
     background = await _css(page, "body", "backgroundColor")
-    assert background == "rgb(247, 244, 238)"
+    assert background == "rgb(245, 244, 242)"
 
 
 @pytest.mark.asyncio
@@ -407,3 +442,130 @@ async def test_builder_web_preview_shows_desktop_layout(
     tabs = ui_page_system.frame_locator("iframe.desktop").locator(".tabs")
     await expect(tabs).to_be_visible(timeout=30_000)
     await expect(tabs).to_have_css("flex-direction", "column", timeout=15_000)
+
+
+def _rgb_channels(css_color: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"rgb\((\d+), (\d+), (\d+)\)", css_color)
+    assert match is not None, f"ожидали rgb(), got {css_color!r}"
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+async def test_light_theme_readability(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """Light: нейтральный фон, белый текст hero поверх вуали, тень у карточек."""
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    _ = await page.goto(
+        f"{_page_url(themed_storefront.slug)}?tpreset=grid&tmode=light",
+        wait_until="load",
+    )
+    await expect(page.locator(".gcard").first).to_be_visible()
+    assert await _css(page, "body", "backgroundColor") == "rgb(245, 244, 242)"
+    hero_title = _rgb_channels(await _css(page, ".hero h1", "color"))
+    assert min(hero_title) >= 235
+    assert await _css(page, ".gcard", "boxShadow") != "none"
+    assert await _css(page, ".add", "color") == "rgb(255, 255, 255)"
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+async def test_amber_accent_uses_dark_on_accent(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """#f2a33c: текст на accent-кнопке тёмный — иначе белый на янтарном нечитаем."""
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    _ = await page.goto(
+        f"{_page_url(themed_storefront.slug)}?taccent=%23f2a33c", wait_until="load"
+    )
+    await expect(page.locator(".item").first).to_be_visible()
+    assert await _css(page, ".add", "color") == "rgb(29, 26, 22)"
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+async def test_dark_accent_visible_as_sidebar_text(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """#111827 в dark-теме: акцентный текст сайдбара осветлён до читаемого --afg."""
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    _ = await page.goto(
+        f"{_page_url(themed_storefront.slug)}?taccent=%23111827", wait_until="load"
+    )
+    await expect(page.locator(".tabs button.on").first).to_be_visible()
+    active = _rgb_channels(await _css(page, ".tabs button.on", "color"))
+    assert min(active) > 100
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+async def test_meta_icons_render_as_svg(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """Адрес/телефон/доставка/самовывоз — SVG-иконки; эмодзи в meta не осталось."""
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    _ = await page.goto(_page_url(themed_storefront.slug), wait_until="load")
+    await expect(page.locator(".meta svg").first).to_be_visible()
+    assert await page.locator(".meta svg").count() >= 4
+    has_emoji = await _eval_bool(
+        page,
+        "/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.querySelector('.meta').textContent)",
+    )
+    assert has_emoji is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+async def test_focus_ring_on_category_tab(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """Клавиатурный фокус на категории: видимое кольцо --afg, а не отсутствие стиля."""
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    _ = await page.goto(_page_url(themed_storefront.slug), wait_until="load")
+    tab = page.locator(".tabs button").first
+    await expect(tab).to_be_visible()
+    await tab.focus()
+    await expect(tab).to_have_css("outline-style", "solid", timeout=5000)
+    await expect(tab).to_have_css("outline-width", "2px", timeout=5000)
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_theme_screenshot_matrix(
+    page: Page, themed_storefront: Storefront
+) -> None:
+    """Матрица приёмки: 3 пресета × 2 темы desktop + 2 mobile — скриншоты в artifacts."""
+    out_dir = Path(__file__).resolve().parents[3] / "artifacts" / "shop-themes"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    async def _settled() -> None:
+        # Чанки дорисовываются IntersectionObserver'ом: ждём, пока очередь
+        # опустеет (#msent удаляется), затем — конец fade у последнего чанка.
+        await expect(page.locator("#msent")).to_have_count(0, timeout=5000)
+        last = page.locator("#mbody .mchunk").last
+        await expect(last).to_be_visible()
+        await expect(last).to_have_css("opacity", "1", timeout=5000)
+
+    await page.set_viewport_size(_DESKTOP_VIEWPORT)
+    for preset in ("menu", "grid", "compact"):
+        for mode in ("dark", "light"):
+            _ = await page.goto(
+                f"{_page_url(themed_storefront.slug)}?tpreset={preset}&tmode={mode}",
+                wait_until="load",
+            )
+            await _settled()
+            _ = await page.screenshot(path=str(out_dir / f"{preset}-{mode}.png"))
+    await page.set_viewport_size(_MOBILE_VIEWPORT)
+    for mode in ("dark", "light"):
+        _ = await page.goto(
+            f"{_page_url(themed_storefront.slug)}?tmode={mode}",
+            wait_until="load",
+        )
+        await _settled()
+        _ = await page.screenshot(path=str(out_dir / f"mobile-{mode}.png"))

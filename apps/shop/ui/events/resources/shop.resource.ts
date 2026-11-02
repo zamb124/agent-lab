@@ -541,6 +541,45 @@ export const shopPromoRemoveOp = createAsyncOp({
     restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/promos/{shop_promo_id}' },
 });
 
+export const shopTablesListOp: AsyncOpFactory = createAsyncOp({
+    name: 'shop/tables_list',
+    silent: true,
+    commandType: 'shop/tables/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/tables' },
+});
+
+export const shopTableCreateOp = createAsyncOp({
+    name: 'shop/table_create',
+    successToastKey: 'shop:toast.table_created',
+    errorToastKey: 'shop:toast.table_failed',
+    commandType: 'shop/tables/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/tables' },
+});
+
+export const shopTableUpdateOp = createAsyncOp({
+    name: 'shop/table_update',
+    successToastKey: 'shop:toast.table_updated',
+    errorToastKey: 'shop:toast.table_failed',
+    commandType: 'shop/tables/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/tables/{shop_table_id}' },
+});
+
+export const shopTableRemoveOp = createAsyncOp({
+    name: 'shop/table_remove',
+    successToastKey: 'shop:toast.table_removed',
+    errorToastKey: 'shop:toast.table_failed',
+    commandType: 'shop/tables/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/tables/{shop_table_id}' },
+});
+
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
     successToastKey: 'shop:toast.telegram_connected',
@@ -607,6 +646,10 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/promo_create': typeof shopPromoCreateOp;
         'shop/promo_update': typeof shopPromoUpdateOp;
         'shop/promo_remove': typeof shopPromoRemoveOp;
+        'shop/tables_list': typeof shopTablesListOp;
+        'shop/table_create': typeof shopTableCreateOp;
+        'shop/table_update': typeof shopTableUpdateOp;
+        'shop/table_remove': typeof shopTableRemoveOp;
         'shop/telegram_connect': typeof shopTelegramConnectOp;
         'shop/telegram_disconnect': typeof shopTelegramDisconnectOp;
     }

@@ -41,6 +41,9 @@ from apps.shop.realtime.operations import (
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
     ShopPublicOrderStatusPayload,
+    ShopTableCreatePayload,
+    ShopTableIdPayload,
+    ShopTableUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
     op_ai_autofill,
@@ -94,6 +97,10 @@ from apps.shop.realtime.operations import (
     op_shops_remove,
     op_shops_suspend,
     op_shops_update,
+    op_tables_create,
+    op_tables_list,
+    op_tables_remove,
+    op_tables_update,
     op_telegram_connect,
     op_telegram_disconnect,
 )
@@ -122,6 +129,16 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/categories/remove_requested": Operation(
         payload_model=ShopCategoryIdPayload, fn=op_categories_remove
+    ),
+    "shop/tables/list_requested": Operation(payload_model=ShopIdPayload, fn=op_tables_list),
+    "shop/tables/create_requested": Operation(
+        payload_model=ShopTableCreatePayload, fn=op_tables_create
+    ),
+    "shop/tables/update_requested": Operation(
+        payload_model=ShopTableUpdatePayload, fn=op_tables_update
+    ),
+    "shop/tables/remove_requested": Operation(
+        payload_model=ShopTableIdPayload, fn=op_tables_remove
     ),
     "shop/products/list_requested": Operation(payload_model=ShopIdPayload, fn=op_products_list),
     "shop/products/create_requested": Operation(

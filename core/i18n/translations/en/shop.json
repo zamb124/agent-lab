@@ -146,7 +146,8 @@
         },
         "delivery": {
             "delivery": "Delivery",
-            "pickup": "Pickup"
+            "pickup": "Pickup",
+            "onsite": "Dine-in"
         }
     },
     "settings": {
@@ -231,6 +232,14 @@
         "copy_code": "Copy code",
         "pickup_desc": "Guests pick up orders themselves",
         "delivery_desc": "Courier delivers orders",
+        "onsite": "Dine-in",
+        "onsite_desc": "Guests scan a table QR code and order from the hall",
+        "tables_hint": "Each table has its own QR code: print it and place it on the table — guests open the menu and order without a waiter",
+        "tables_empty": "No tables yet — add the first one and print its QR",
+        "field_table": "Table name",
+        "table_add": "Add table",
+        "table_qr": "Download table QR",
+        "table_remove": "Remove table",
         "tg_step_1": "Create a bot via @BotFather in Telegram — it gives you a token",
         "tg_step_2": "Paste the token below and press Connect",
         "tg_step_3": "Send /start to the bot — orders will arrive in the chat",
@@ -296,6 +305,10 @@
         "product_updated": "Product updated",
         "products_reordered": "Product order saved",
         "product_removed": "Product removed",
+        "table_created": "Table added",
+        "table_updated": "Table updated",
+        "table_removed": "Table removed",
+        "table_failed": "Could not save the table: {detail}",
         "order_status_updated": "Order status updated",
         "domain_provisioned": "Domain verified",
         "ai_describe_done": "Description ready",

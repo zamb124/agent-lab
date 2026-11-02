@@ -20,6 +20,7 @@ from apps.shop.models import (
     ShopProduct,
     ShopPromo,
     ShopStatus,
+    ShopTable,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
@@ -105,6 +106,7 @@ class StorefrontService:
         products = await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
         modifier_tree = await load_modifier_tree_by_sort_asc([p.shop_product_id for p in products])
         promos = await ShopPromo.list_active_by_shop_by_priority_desc(shop.shop_id)
+        tables = await ShopTable.list_by_shop_by_created_asc(shop.shop_id)
         return {
             "slug": shop.slug,
             "name": shop.name,
@@ -119,6 +121,10 @@ class StorefrontService:
             "timezone": shop.timezone,
             "delivery_enabled": shop.delivery_enabled,
             "pickup_enabled": shop.pickup_enabled,
+            "onsite_enabled": shop.onsite_enabled,
+            "tables": [
+                {"id": t.shop_table_id, "label": t.label} for t in tables
+            ],
             "delivery_fee_minor": shop.delivery_fee_minor,
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,

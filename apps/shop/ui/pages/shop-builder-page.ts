@@ -60,7 +60,7 @@ export class ShopBuilderPage extends PlatformPage {
                 border-right: 1px solid var(--glass-border-subtle);
             }
             .section { margin-bottom: var(--space-5); }
-            .label { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-secondary); margin-bottom: var(--space-2); }
+            .label { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); margin-bottom: var(--space-2); text-transform: uppercase; letter-spacing: 0.05em; }
             .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
             .preset {
                 border: 2px solid var(--glass-border-subtle);
@@ -72,7 +72,7 @@ export class ShopBuilderPage extends PlatformPage {
                 color: var(--text-primary);
                 transition: border-color 0.15s ease, transform 0.15s ease;
             }
-            .preset:hover { transform: translateY(-1px); }
+            .preset:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--text-primary) 25%, transparent); }
             .preset.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
             .wire {
                 height: 72px;
@@ -101,8 +101,10 @@ export class ShopBuilderPage extends PlatformPage {
                 border-radius: var(--radius-md);
                 border: 3px solid transparent;
                 cursor: pointer;
+                transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
             }
-            .swatch.active { border-color: var(--text-primary); }
+            .swatch:hover { transform: translateY(-1px); }
+            .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
             .modes { display: flex; background: var(--bg-inset); border-radius: var(--radius-md); padding: 4px; gap: 4px; }
             .mode {
                 flex: 1;

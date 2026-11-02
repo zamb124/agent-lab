@@ -159,6 +159,30 @@ async def get_storefront_qr(slug: str, request: Request, di: Di) -> Response:
     )
 
 
+@router.get("/storefront/{slug}/tables/{table_id}/qr.svg", response_model=None)
+async def get_table_qr(slug: str, table_id: str, request: Request, di: Di) -> Response:
+    """QR стола зала (SVG): кодирует витрину с ``?table=<id>`` — гость
+    сканирует карточку на столе и заказывает «в заведении» без ввода
+    номера. 404 при несуществующем столе."""
+    snapshot = await _snapshot_or_404(di, slug)
+    tables = snapshot.get("tables")
+    if not isinstance(tables, list) or not any(
+        isinstance(t, dict) and t.get("id") == table_id for t in tables
+    ):
+        raise WsCommandError("not_found", "Table not found", error_code="table_not_found")
+    url = f"https://{slug}.{di.settings.storefront_domain_suffix}?table={table_id}"
+    etag = f'W/"shop-qr-{hashlib.sha256(url.encode()).hexdigest()[:16]}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="svg", border=2, dark="#181310")
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"ETag": etag, "Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.post("/telegram/webhook/{shop_id}", response_model=None)
 async def telegram_webhook(shop_id: str, request: Request, di: Di) -> Response:
     """Входящий update бота магазина: wire-спек Telegram, не op_*.

@@ -6,6 +6,8 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
+from apps.shop.api.storefront_shell import accent_vars, contrast_ratio, hex_rgb
+from apps.shop.di import ShopDi
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -183,15 +185,17 @@ class TestHostMiddleware:
             ) or "snapshot" not in resp.text[:5000]
 
     async def test_company_subdomain_root_shows_company_shop(
-        self, shop_client_company2: AsyncClient, unique_id: str
+        self, shop_client_company2: AsyncClient, shop_di: ShopDi, unique_id: str
     ) -> None:
         """GET / на <company>.linnex.io — published-витрина этой компании.
 
         Резолв по ``Company.subdomain`` → ``Shop.company_id``, а не по
-        совпадению slug с именем поддомена.
+        совпадению slug с именем поддомена. Tenant-ключ Redis (TTL ~сутки)
+        переживает прогоны — чистим, иначе резолв вернёт slug прошлого запуска.
         """
         slug = f"co2-{unique_id[:8]}"
         await _published_shop(shop_client_company2, slug)
+        _ = await shop_di.redis_client.delete("shop:tenant:company2.linnex.io")
         from httpx2 import ASGITransport
 
         from apps.shop.main import app
@@ -349,8 +353,9 @@ class TestStorefrontPage:
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert html.status_code == 200
         assert 'body class="light"' in html.text
-        assert "--bg:#f7f4ee" in html.text
+        assert "--bg:#f5f4f2" in html.text
         assert "--accent:#3f8cff" in html.text
+        assert "color-scheme:light" in html.text
 
     async def test_theme_mode_invalid_rejected(
         self, shop_client: AsyncClient, unique_id: str
@@ -470,6 +475,92 @@ class TestStorefrontDesktopLayout:
         assert html.status_code == 200
         assert ".wrap{max-width:720px" in html.text
         assert "@media(max-width:520px)" in html.text
+
+
+class TestStorefrontThemeTokens:
+    """Семантические токены витрины: палитры-пары, производные accent, контрасты."""
+
+    async def test_semantic_tokens_emitted(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """HTML содержит полный набор токенов: семантика, тени, оверлей, color-scheme."""
+        slug = f"tok-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        text = html.text
+        for token in (
+            "--on-accent:",
+            "--afg:",
+            "--overlay:",
+            "--on-hero:",
+            "--success:",
+            "--warn:",
+            "--shadow-sm:",
+            "--shadow-lg:",
+            "color-scheme:dark",
+        ):
+            assert token in text, token
+        assert "--bg:#131110" in text
+        assert "var(--on-hero)" in text
+        assert "var(--on-accent)" in text
+
+    async def test_amber_accent_gets_dark_on_accent(
+        self, shop_public_client: AsyncClient, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Светлый accent (#f2a33c) → тёмный текст на кнопках, а не белый."""
+        slug = f"amb-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/s/{slug}?taccent=%23f2a33c"
+        )
+        assert html.status_code == 200
+        assert "--accent:#f2a33c" in html.text
+        assert "--on-accent:#1d1a16" in html.text
+
+    async def test_dark_accent_stays_readable_in_dark_theme(
+        self, shop_public_client: AsyncClient, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Почти чёрный accent (#111827) в dark-теме: --afg осветляется до читаемого."""
+        slug = f"drk-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/s/{slug}?taccent=%23111827"
+        )
+        assert html.status_code == 200
+        root = html.text.split(":root{")[1].split("}")[0]
+        assert "--afg:#111827" not in root
+        assert "--afg:#84868a" in root
+
+    async def test_light_theme_has_no_weak_hero_veil(
+        self, shop_public_client: AsyncClient, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Убрана ослабленная вуаль hero для light — текст читаем в обеих темах."""
+        slug = f"veil-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}?tmode=light")
+        assert html.status_code == 200
+        assert "body.light .hero .veil" not in html.text
+
+
+def test_accent_vars_contrast_guarantee() -> None:
+    """Все 8 акцентов конструктора: --afg даёт контраст ≥4.5 на обоих фонах,
+    --on-accent — ≥3 на самом accent."""
+    accents = [
+        "#e2553f", "#f2a33c", "#34c47c", "#3f8cff",
+        "#9b5de5", "#ef476f", "#111827", "#0f766e",
+    ]
+    for accent in accents:
+        rgb = hex_rgb(accent)
+        vars_ = accent_vars(accent)
+        assert contrast_ratio(rgb, hex_rgb(vars_["on_accent"])) >= 3.0, accent
+        assert contrast_ratio(hex_rgb(vars_["afg_dark"]), (0x13, 0x11, 0x10)) >= 4.5, accent
+        assert contrast_ratio(hex_rgb(vars_["afg_light"]), (0xF5, 0xF4, 0xF2)) >= 4.5, accent
+
+
+def test_accent_vars_invalid_falls_back_to_default() -> None:
+    """Мусорный accent не падает — токены считаются от дефолтного #e2553f."""
+    assert accent_vars("not-a-color") == accent_vars("#e2553f")
 
 
 class TestMarketPage:

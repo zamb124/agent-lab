@@ -1,0 +1,84 @@
+---
+description: "Shop (apps/shop) — меню ресторана/магазина и онлайн-витрина компании: каталог с модификаторами, акции, анонимный заказ, slug/домен, снапшот, агрегатор. Читать при правке apps/shop"
+globs:
+  - "apps/shop/**"
+  - "apps/flows/bundles/shop/**"
+  - "migrations/shop/**"
+  - "tests/shop/**"
+  - "tests/frontend_core/browser/shop/**"
+  - "deploy/helm/agent-lab/templates/80-ingress/shop-ingress.yaml"
+alwaysApply: false
+---
+
+# Shop
+
+Сервис витрин: заведение (ресторан, кафе, пекарня, магазин) ведёт в платформе своё меню или каталог, публикует его как витрину, покупатель без регистрации собирает корзину и оформляет заказ. Порт 8027, база `platform_shop` (`database.shop_url`), очередь TaskIQ `shop` (`apps/shop/worker.py`). REST — `/shop/api/v1/`, публичный слой — `/shop/api/v1/public/*`, SPA конструктора — `/shop`, команды — `SHOP_OPERATIONS`, DI — `ShopDi`. Оплаты нет: заказ — заявка заведению. Склад → `stock.mdc`, файлы → `files.mdc`.
+
+## Модель
+
+Таблицы — `apps/shop/models/<entity>.py`, все `__global_model__`; `company_id` есть только у `Shop` и `ShopDomain`, остальные привязаны через `shop_id`.
+
+- `Shop` (`shop_shops`) — витрина: `slug` (глобально уникален), `kind` (`ShopKind`), контакты, `working_hours`, `timezone`, выдача `delivery`/`pickup`/`onsite` (`*_enabled`), `delivery_fee_minor`, `min_order_minor`, `currency`, `theme` (`ShopTheme`: `preset` `menu`/`grid`/`compact`), `badges` — словарь меток магазина, Telegram-поля, `status` `draft → published ⇄ suspended`, мягкое удаление `deleted_at`.
+- `ShopTable` (`shop_tables`) — стол зала для `onsite`: `label` («Стол 5», «У окна»); стабильный `shop_table_id` кодируется в QR-ссылке `?table=<id>`.
+- `ShopCategory` — дерево разделов (`parent_id`, `sort`).
+- `ShopProduct` — позиция: `price_minor`, `portion`, `badges` (ключи меток магазина), `photo_file_id`, `is_available`.
+- `ShopModifierGroup` + `ShopModifierOption` + `ShopProductModifierGroup` — модификаторы в модели Uber Eats/iiko: группа переиспользуется товарами, связь переопределяет `min_selected`/`max_selected`, опция ссылается на `nested_group_id`. Семантика `kind`/`selection_mode`/`price_mode` — `apps/shop/models/enums.py`.
+- `ShopPromo` — акция: `condition` + `action` + `window` (JSONB) + `priority`/`stacking`; типы — docstring `apps/shop/models/promo.py`.
+- `ShopOrder` + `ShopOrderItem` — заказ анонимного покупателя: `public_code`, `idempotency_key`, `delivery_type` (`ShopDeliveryType`: `delivery`/`pickup`/`onsite`), `table_label` — снапшот метки стола, суммы в минорных единицах, `promos`; строка хранит снапшот имени, цены и модификаторов.
+- `ShopDomain` — свой домен витрины, `ShopDomainStatus`, один на магазин.
+- Метки: иконки — `BADGE_ICONS`, стартовый набор — `DEFAULT_SHOP_BADGES` (`apps/shop/models/badge_icons.py`).
+
+## Инварианты
+
+1. Цены и скидки считает только сервер: клиент шлёт `product_id`, `option_id`, `qty`. Один алгоритм для preview корзины и заказа — `validate_and_price` (`apps/shop/services/modifier_pricing.py`) + `evaluate` (`apps/shop/services/promo_engine.py`).
+2. Заказ принимается только у `published` витрины; повтор с тем же `(shop_id, idempotency_key)` возвращает существующий заказ (`ShopOrderService.create_order`).
+3. Статус заказа меняется только по `_ALLOWED_TRANSITIONS` (`apps/shop/services/order_service.py`), иначе `order_transition_invalid`.
+4. Анонимное чтение витрины не ходит в PostgreSQL: снапшот `shop:sf:{slug}` и резолв `shop:tenant:{host}` в Redis, отсутствие — негативный маркер (`StorefrontService`). `[без гейта]`
+5. Любая мутация каталога, темы или статуса вызывает `_enqueue_rebuild` (`apps/shop/realtime/operations.py`): синхронный `invalidate_snapshot` + `SHOP_REBUILD_STOREFRONT`; каталожная — ещё `shop/catalog/changed`.
+6. Host → витрина: `<slug>.<storefront_domain_suffix>`, поддомен компании (её свежая published-витрина), активный `ShopDomain`; slug сверяется с `SLUG_PATTERN` и `reserved_slugs`.
+7. Принадлежность магазина компании проверяет `ShopService.get_shop(company_id, shop_id)`; дочерние сущности проверяются по `shop_id` найденного магазина. `[без гейта]`
+8. Мутации, AI и `op_shops_list` — `require_company_admin`, остальное чтение — `require_company_viewer`; `op_public_*` анонимны. `[без гейта]`
+9. Публичный заказ по HTTP ограничен `check_order_rate_limit` по IP до вызова `op_public_order_create`.
+10. `onsite`-заказ требует `shop.onsite_enabled` и существующий `table_id` того же магазина (`onsite_disabled`/`table_required`/`table_unknown`); только для `onsite` телефон необязателен — у `delivery`/`pickup` он обязателен.
+11. Статус-флоу `onsite` идёт `new → accepted → preparing → done` без `delivering` — матрица переходов общая, UI фильтрует действие по `delivery_type`.
+
+## Контракты
+
+- Команды `shop/<entity>/<verb>_requested` — каталог `SHOP_OPERATIONS` (`apps/shop/realtime/command_router.py`); анонимные — `shop/public/*`.
+- Push — `apps/shop/events.py`: `shop/shop/created|updated|published`, `shop/catalog/changed` (ещё и доменное событие для flows-триггеров), `shop/order/created|status_changed` без PII.
+- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам), Telegram webhook.
+- Рерайт Host → публичные пути — `StorefrontHostMiddleware` (`apps/shop/host_middleware.py`); в проде ingress `shop.<apex>` (`shop-ingress.yaml`), корень поддомена компании для анонима проксирует `apps/frontend/main.py`.
+
+## Интеграции
+
+- AI (описания, фото, обложка, лого, разбор меню, подсказка модификаторов) — ветки компанийского flow `shop` по A2A (`ShopAiService`, bundle `apps/flows/bundles/shop`); промптов в коде сервиса нет.
+- Уведомления о заказе — свой Telegram-бот магазина (`NotificationService`), доставка задачей `SHOP_NOTIFY_ORDER`.
+- Свой домен — `DomainService` + `SHOP_PROVISION_DOMAIN`, сверка `SHOP_RECONCILE_DOMAINS_TICK`.
+- Задачи — `apps/shop/tasks/task_names.py`; батч AI-описаний `SHOP_AI_DESCRIBE_BATCH` идёт в биллинг компании магазина.
+
+## UI
+
+- SPA `ShopApp` (`apps/shop/ui/app/shop-app.ts`): маршруты `shop_home`, `:shopId/menu`, `:shopId/builder` (тема с live-preview через `?tpreset`/`?taccent`/`?tmode`), `:shopId/orders`, `:shopId/promos`, `:shopId/settings`.
+- Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`.
+- Витрина покупателя — не SPA: HTML + inline JS из `storefront_shell.py`.
+
+## Запреты
+
+1. Цена, скидка или итог из клиента в заказе.
+2. Чтение PostgreSQL на анонимном пути витрины мимо `StorefrontService.get_snapshot`. `[без гейта]`
+3. Мутация каталога, темы или статуса без `_enqueue_rebuild`. `[без гейта]`
+4. Промпты AI в `apps/shop/**` — только в bundle `apps/flows/bundles/shop`. `[без гейта]`
+5. PII покупателя в push-событиях. `[без гейта]`
+
+## Исключения
+
+- Исключение: протокольные публичные хендлеры без `op_*` (снапшот, HTML, QR, robots, sitemap, market, aggregate, resolve, Telegram webhook) — `PROTOCOL_HANDLERS` (`scripts/gates/backend/rest_handlers_call_ops.py`).
+
+## Гейты
+
+- `scripts/gates/backend/rest_handlers_call_ops.py` (`make lint`) — REST shop зовёт `op_*`, кроме протокольных.
+- `tests/shop/test_shop_promos.py` — паритет цены корзины и заказа, движок акций.
+- `tests/shop/test_shop_orders.py` — идемпотентность, rate limit по IP, матрица статусов.
+- `tests/shop/test_shop_storefront.py` — снапшот, Host-рерайт, поддомен компании, `/market`.
+- `tests/shop/test_shop_admin.py`, `tests/shop/test_shop_modifiers.py`, `tests/shop/test_shop_distribution.py`, `tests/shop/test_shop_infra.py` — slug, модификаторы, QR/sitemap/Telegram/инвалидация, очередь и маршруты.
+- `tests/frontend_core/browser/shop/` — меню, дерево категорий, шапка страницы.

@@ -24,6 +24,7 @@ from apps.shop.models import (
     ShopProduct,
     ShopProductModifierGroup,
     ShopPromo,
+    ShopTable,
 )
 from apps.shop.models.api import (
     ShopAiParseMenuResponse,
@@ -59,6 +60,9 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopTableCreateRequest,
+    ShopTableResponse,
+    ShopTableUpdateRequest,
     ShopTheme,
     ShopUpdateRequest,
 )
@@ -119,6 +123,20 @@ class ShopCategoryCreatePayload(ShopCategoryCreateRequest):
 class ShopCategoryUpdatePayload(ShopCategoryUpdateRequest):
     shop_id: str = Field(min_length=1)
     shop_category_id: str = Field(min_length=1)
+
+
+class ShopTableIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_table_id: str = Field(min_length=1)
+
+
+class ShopTableCreatePayload(ShopTableCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopTableUpdatePayload(ShopTableUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_table_id: str = Field(min_length=1)
 
 
 class ShopProductIdPayload(StrictBaseModel):
@@ -311,6 +329,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         working_hours={str(day): str(hours) for day, hours in shop.working_hours.items()},
         delivery_enabled=shop.delivery_enabled,
         pickup_enabled=shop.pickup_enabled,
+        onsite_enabled=shop.onsite_enabled,
         delivery_fee_minor=shop.delivery_fee_minor,
         min_order_minor=shop.min_order_minor,
         currency=shop.currency,
@@ -330,6 +349,14 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         storefront_url=f"https://{shop.slug}.{di.settings.storefront_domain_suffix}",
         plan=shop.plan,
         products_count=products_count,
+    )
+
+
+def _table_response(table: ShopTable) -> ShopTableResponse:
+    return ShopTableResponse(
+        shop_table_id=table.shop_table_id,
+        shop_id=table.shop_id,
+        label=table.label,
     )
 
 
@@ -644,6 +671,65 @@ async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: D
     return EmptyPayload()
 
 
+# --- Столы зала ---
+
+
+async def op_tables_list(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ListResponse[ShopTableResponse]:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        tables = await di.shop_service.list_tables(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ListResponse(items=[_table_response(t) for t in tables])
+
+
+async def op_tables_create(
+    payload: ShopTableCreatePayload, *, user: User, di: Di
+) -> ShopTableResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        table = await di.shop_service.create_table(scope.company_id, payload.shop_id, payload)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _table_response(table)
+
+
+async def op_tables_update(
+    payload: ShopTableUpdatePayload, *, user: User, di: Di
+) -> ShopTableResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        table = await di.shop_service.update_table(
+            scope.company_id, payload.shop_id, payload.shop_table_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _table_response(table)
+
+
+async def op_tables_remove(payload: ShopTableIdPayload, *, user: User, di: Di) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.delete_table(
+            scope.company_id, payload.shop_id, payload.shop_table_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
 # --- Заказы (админ) ---
 
 
@@ -821,6 +907,7 @@ async def op_public_order_status(
         total_minor=order.total_minor,
         currency=order.currency,
         delivery_type=order.delivery_type,
+        table_label=order.table_label,
         created_at=order.created_at.isoformat(),
     )
 

@@ -1062,6 +1062,12 @@
         "shop_telegram_rejected": "Telegram отклонил запрос — проверьте токен бота",
         "telegram_webhook_not_found": "Webhook не найден",
         "order_rate_limited": "Слишком много заказов — попробуйте через минуту",
-        "telegram_update_invalid": "Некорректное обновление Telegram"
+        "telegram_update_invalid": "Некорректное обновление Telegram",
+        "onsite_disabled": "Заказы в заведении отключены магазином",
+        "pickup_disabled": "Самовывоз отключён магазином",
+        "phone_required": "Укажите номер телефона",
+        "table_required": "Укажите стол",
+        "table_unknown": "Стол не найден",
+        "table_not_found": "Стол не найден"
     }
 }

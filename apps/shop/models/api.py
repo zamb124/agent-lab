@@ -69,6 +69,7 @@ class ShopResponse(StrictBaseModel):
     working_hours: dict[str, str]
     delivery_enabled: bool
     pickup_enabled: bool
+    onsite_enabled: bool
     delivery_fee_minor: int
     min_order_minor: int
     currency: str
@@ -105,10 +106,27 @@ class ShopUpdateRequest(StrictBaseModel):
     working_hours: dict[str, str] | None = None
     delivery_enabled: bool | None = None
     pickup_enabled: bool | None = None
+    onsite_enabled: bool | None = None
     delivery_fee_minor: int | None = Field(default=None, ge=0)
     min_order_minor: int | None = Field(default=None, ge=0)
     theme: ShopTheme | None = None
     badges: list[ShopBadge] | None = Field(default=None, max_length=20)
+
+
+class ShopTableResponse(StrictBaseModel):
+    """Стол зала: ``shop_table_id`` попадает в QR-ссылку ``?table=``."""
+
+    shop_table_id: str
+    shop_id: str
+    label: str
+
+
+class ShopTableCreateRequest(StrictBaseModel):
+    label: str = Field(min_length=1, max_length=64)
+
+
+class ShopTableUpdateRequest(StrictBaseModel):
+    label: str = Field(min_length=1, max_length=64)
 
 
 class ShopCategoryResponse(StrictBaseModel):
@@ -375,6 +393,8 @@ class ShopOrderResponse(StrictBaseModel):
     customer_phone: str
     delivery_type: ShopDeliveryType
     address: str
+    table_id: str
+    table_label: str
     comment: str
     items_total_minor: int
     discount_minor: int
@@ -388,13 +408,20 @@ class ShopOrderResponse(StrictBaseModel):
 
 
 class ShopOrderCreateRequest(StrictBaseModel):
-    """Заказ покупателя: позиции + контакты + идемпотентность."""
+    """Заказ покупателя: позиции + контакты + идемпотентность.
+
+    ``customer_phone`` обязателен для delivery/pickup (сервисная
+    валидация ``phone_required``); для ``onsite`` телефон можно опустить —
+    гость уже в зале. ``table_id`` обязателен при ``delivery_type ==
+    onsite`` — стол из QR-ссылки витрины.
+    """
 
     items: list[ShopOrderItemRequest] = Field(min_length=1, max_length=99)
     customer_name: str = Field(min_length=1, max_length=200)
-    customer_phone: str = Field(min_length=5, max_length=32)
+    customer_phone: str = Field(default="", max_length=32)
     delivery_type: ShopDeliveryType
     address: str = Field(default="", max_length=500)
+    table_id: str | None = Field(default=None, max_length=64)
     comment: str = Field(default="", max_length=1000)
     source: ShopOrderSource = ShopOrderSource.WEB
     idempotency_key: str = Field(default="", max_length=128)
@@ -414,6 +441,7 @@ class ShopOrderStatusResponse(StrictBaseModel):
     total_minor: int
     currency: str
     delivery_type: ShopDeliveryType
+    table_label: str
     created_at: str
 
 
