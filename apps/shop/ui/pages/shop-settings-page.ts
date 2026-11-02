@@ -442,10 +442,10 @@ export class ShopSettingsPage extends PlatformPage {
                     </div>
                     <div class="row">
                         <platform-field type="number" mode="edit" label=${this.t('settings.field_delivery_fee')} .value=${this._deliveryFee}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._deliveryFee = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._deliveryFee = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
                         <platform-field type="number" mode="edit" label=${this.t('settings.field_min_order')} .value=${this._minOrder}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
                     </div>
                 </div>

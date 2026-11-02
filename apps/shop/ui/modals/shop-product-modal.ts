@@ -34,7 +34,8 @@ export interface ProductDraft {
 }
 
 function _str(e: CustomEvent<{ value?: unknown }>): string {
-    return typeof e.detail.value === 'string' ? e.detail.value : '';
+    const v = e.detail.value;
+    return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 }
 
 export class ShopProductModal extends PlatformModal {
