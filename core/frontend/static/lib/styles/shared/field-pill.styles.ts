@@ -161,6 +161,13 @@ export const fieldPillStyles = css`
         text-transform: uppercase;
         letter-spacing: var(--field-pill-label-letter);
         color: var(--field-pill-float-color);
+        /* Свой непрозрачный фон под label: legend-notch режет бордер не во всех
+           движках — тогда линия проходит сквозь текст. Патч повторяет композит
+           пилюли (tint поверх surface) и всегда перекрывает бордер под текстом. */
+        padding: 0 var(--field-pill-notch-gap);
+        margin: 0 calc(-1 * var(--field-pill-notch-gap));
+        background: linear-gradient(var(--field-pill-bg), var(--field-pill-bg)), var(--bg-surface);
+        border-radius: var(--radius-sm);
     }
 
     fieldset.field-pill[data-mode='edit']:focus-within .field-pill-float {

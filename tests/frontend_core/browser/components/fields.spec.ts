@@ -616,6 +616,38 @@ describe('platform-field floating label', () => {
         expect(qs(shellRoot(el), 'fieldset').classList.contains('field-pill--float')).to.equal(true);
     });
 
+    it('ввод текста без родительского ребиндинга .value: label улетает (mirror value)', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field type="string" mode="edit" label="Name" value=""></platform-field>
+        `);
+        const inner = qs(shadow(el), 'platform-field-string');
+        const inp = qs(shadow(inner), 'input');
+        inp.value = 'typed';
+        inp.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+        await elementUpdated(el);
+        expect(el.value).to.equal('typed');
+        await elementUpdated(el);
+        const fs = qs(shellRoot(el), 'fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(true);
+    });
+
+    it('blur после ввода: label остаётся floated, resting-текст не возвращается под значение', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field type="string" mode="edit" label="Name" value=""></platform-field>
+        `);
+        const inner = qs(shadow(el), 'platform-field-string');
+        const inp = qs(shadow(inner), 'input');
+        inp.dispatchEvent(new FocusEvent('focusin', { bubbles: true, composed: true }));
+        inp.value = 'typed';
+        inp.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+        inp.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+        await elementUpdated(el);
+        await new Promise((r) => setTimeout(r, 20));
+        await elementUpdated(el);
+        const fs = qs(shellRoot(el), 'fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(true);
+    });
+
     it('focusin внутри поднимает placeholder и метит _focused', async () => {
         const el = await fixture<TestEl>(html`
             <platform-field

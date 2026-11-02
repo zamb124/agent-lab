@@ -156,6 +156,9 @@ export class PlatformField extends PlatformElement {
 
     _onChange(e: CustomEvent<unknown>): void {
         e.stopPropagation();
+        if (e.detail !== null && typeof e.detail === 'object' && 'value' in e.detail) {
+            this.value = (e.detail as { value: unknown }).value;
+        }
         this.dispatchEvent(new CustomEvent('change', {
             detail: e.detail,
             bubbles: true,
@@ -334,7 +337,7 @@ export class PlatformField extends PlatformElement {
         return html`
             <platform-field-shell
                 .label=${this.label}
-                ?floated=${this.mode === 'view' || this._hasValue()}
+                ?floated=${this._floated}
                 density=${this.pillDensity}
                 ?embed=${this.pillEmbed}
                 ?editable=${this.mode === 'edit'}
