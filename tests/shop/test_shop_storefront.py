@@ -7,7 +7,6 @@ from typing import Any
 from httpx2 import AsyncClient
 
 from apps.shop.api.storefront_shell import accent_vars, contrast_ratio, hex_rgb
-from apps.shop.di import ShopDi
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -185,7 +184,7 @@ class TestHostMiddleware:
             ) or "snapshot" not in resp.text[:5000]
 
     async def test_company_subdomain_root_shows_company_shop(
-        self, shop_client_company2: AsyncClient, shop_di: ShopDi, unique_id: str
+        self, shop_client_company2: AsyncClient, shop_di, unique_id: str
     ) -> None:
         """GET / на <company>.linnex.io — published-витрина этой компании.
 

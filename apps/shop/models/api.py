@@ -389,6 +389,7 @@ class ShopOrderResponse(StrictBaseModel):
     shop_id: str
     public_code: str
     status: ShopOrderStatus
+    customer_id: str = ""
     customer_name: str
     customer_phone: str
     delivery_type: ShopDeliveryType
@@ -410,15 +411,13 @@ class ShopOrderResponse(StrictBaseModel):
 class ShopOrderCreateRequest(StrictBaseModel):
     """Заказ покупателя: позиции + контакты + идемпотентность.
 
-    ``customer_phone`` обязателен для delivery/pickup (сервисная
-    валидация ``phone_required``); для ``onsite`` телефон можно опустить —
-    гость уже в зале. ``table_id`` обязателен при ``delivery_type ==
-    onsite`` — стол из QR-ссылки витрины.
+    Телефон берётся из верифицированной customer-сессии (customers.mdc),
+    а не из ввода формы: заказ требует ``customer_token``. ``table_id``
+    обязателен при ``delivery_type == onsite`` — стол из QR-ссылки витрины.
     """
 
     items: list[ShopOrderItemRequest] = Field(min_length=1, max_length=99)
     customer_name: str = Field(min_length=1, max_length=200)
-    customer_phone: str = Field(default="", max_length=32)
     delivery_type: ShopDeliveryType
     address: str = Field(default="", max_length=500)
     table_id: str | None = Field(default=None, max_length=64)

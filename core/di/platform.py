@@ -18,12 +18,16 @@ from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.config.models import (
     BillingConfig,
+    CustomerAuthConfig,
     DatabaseConfig,
     MailConfig,
     MailSyncConfig,
     OpenFGAConfig,
 )
 from core.context import get_context
+from core.customers.auth_service import CustomerAuthService
+from core.customers.service import CustomerService
+from core.customers.session import CustomerSessionService
 from core.db.storage import SharedStorage, Storage
 from core.di.boundary import http_di, task_di
 from core.di.kit import ProcessIdentity, ServiceDi, recipe
@@ -72,6 +76,31 @@ def billing_service(billing: BillingConfig, storage: SharedStorage) -> BillingSe
         shared_storage=storage,
         balance_enforcement_enabled=billing.balance_enforcement_enabled,
         balance_enforcement_exempt_company_ids=list(billing.balance_enforcement_exempt_company_ids),
+    )
+
+
+@recipe
+def customer_service() -> CustomerService:
+    return CustomerService()
+
+
+@recipe
+def customer_session_service() -> CustomerSessionService:
+    return CustomerSessionService()
+
+
+@recipe
+def customer_auth_service(
+    customer_auth: CustomerAuthConfig,
+    redis_client: RedisClient,
+    customer_service: CustomerService,
+    customer_session_service: CustomerSessionService,
+) -> CustomerAuthService:
+    return CustomerAuthService(
+        cfg=customer_auth,
+        redis=redis_client,
+        customers=customer_service,
+        sessions=customer_session_service,
     )
 
 
@@ -129,6 +158,9 @@ class PlatformDi(
         files_service,
         chunked_upload_service,
         mail_service,
+        customer_service,
+        customer_session_service,
+        customer_auth_service,
     ),
 ):
     auth_service: AuthService
@@ -137,6 +169,9 @@ class PlatformDi(
     calendar_service: CalendarService
     chunked_upload_service: ChunkedUploadService
     company_integration_credential_service: CompanyIntegrationCredentialService
+    customer_auth_service: CustomerAuthService
+    customer_service: CustomerService
+    customer_session_service: CustomerSessionService
     document_tree_service: DocumentTreeService
     files_service: FilesService
     mail_service: MailService

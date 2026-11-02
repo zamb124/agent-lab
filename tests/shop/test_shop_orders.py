@@ -6,7 +6,7 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, auth_customer
 
 _SHOPS = f"{API_PREFIX}/shops"
 
@@ -42,7 +42,6 @@ def _order_body(product_id: str, **overrides: Any) -> dict[str, Any]:
     return {
         "items": [{"product_id": product_id, "qty": 2}],
         "customer_name": "Иван",
-        "customer_phone": "+79991112233",
         "delivery_type": "pickup",
         **overrides,
     }
@@ -123,6 +122,8 @@ class TestOrderCreate:
             f"{_SHOPS}/{shop['shop_id']}/products",
             json={"name": "X", "price_minor": 100},
         )
+        # Сессия покупателя есть (scope — компания), но витрина-черновик не опубликована.
+        await auth_customer(shop_public_client, company_id="system")
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body("whatever"),
@@ -156,6 +157,7 @@ class TestOrderCreate:
                 "X-Forwarded-For": f"203.0.113.{int(unique_id[:4], 16) % 254 + 1}",
             },
         ) as limited:
+            await auth_customer(limited, slug)
             for i in range(10):
                 resp = await limited.post(
                     f"{PUBLIC_PREFIX}/storefront/{slug}/orders",

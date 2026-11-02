@@ -16,6 +16,7 @@ from core.config.models import (
     CalendarSyncConfig,
     CallsConfig,
     CodeRunnerSettings,
+    CustomerAuthConfig,
     DatabaseConfig,
     EventsConfig,
     FilesConfig,
@@ -113,6 +114,7 @@ class BaseSettings(PydanticBaseSettings):
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
+    customer_auth: CustomerAuthConfig = Field(default_factory=CustomerAuthConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
@@ -277,6 +279,10 @@ class _SettingsProxy:
     @property
     def payment_providers(self) -> PaymentProvidersConfig:
         return get_settings().payment_providers
+
+    @property
+    def customer_auth(self) -> CustomerAuthConfig:
+        return get_settings().customer_auth
 
     @property
     def rag(self) -> RAGConfig:

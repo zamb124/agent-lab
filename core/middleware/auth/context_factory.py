@@ -8,6 +8,8 @@ from core.authz.errors import AuthzDenied, AuthzUnavailable
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.context import reset_context, set_context
+from core.customers.ref import CustomerRef
+from core.customers.session import CustomerSessionService
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -19,6 +21,11 @@ from core.utils.tokens import TokenData
 from .route_config import RouteContextType, WebhookPlatform
 
 logger = get_logger(__name__)
+
+
+def _customer_ref(request: Request) -> CustomerRef | None:
+    """Декодирует `customer_token` cookie — сессия покупателя витрины."""
+    return CustomerSessionService().resolve_cookie(request)
 
 
 class ContextFactory:
@@ -55,9 +62,13 @@ class ContextFactory:
         language = self._detect_language(request)
         host = request.headers.get("host", "")
 
+        customer = _customer_ref(request)
+
         # Если анонимный контекст, но пользователь есть - используем его
         if context_type == "anonymous" and not user:
-            return await self._create_anonymous_context(request, company, language, trace_id)
+            return await self._create_anonymous_context(
+                request, company, language, trace_id, customer=customer
+            )
 
         if context_type == "api" and user is None and token_data is not None:
             active_cid = ""
@@ -143,6 +154,7 @@ class ContextFactory:
             session_id=token_data.session_id if token_data else None,
             channel=platform or context_type,
             active_company=company,
+            customer=customer,
             user_companies=user_companies,
             active_namespace=active_namespace,
             language=language,
@@ -157,6 +169,7 @@ class ContextFactory:
         company: Company | None,
         language: Language,
         trace_id: str | None = None,
+        customer: CustomerRef | None = None,
     ) -> Context:
         """Создает анонимный контекст"""
         company_id = company.company_id if company else "system"
@@ -190,6 +203,7 @@ class ContextFactory:
             host=request.headers.get("host", ""),
             channel="anonymous",
             active_company=company,
+            customer=customer,
             user_companies=[company] if company else [],
             active_namespace=active_namespace,
             language=language,

@@ -203,6 +203,7 @@ PROVIDER_WHITELIST_PATHS = (
     "core/ai/",
     "core/clients/llm/",
     "core/ai/adapters/",
+    "core/customers/",
     "core/clients/voice_resolver.py",
     "core/clients/voice_resolver/",
     "core/clients/stt_client.py",

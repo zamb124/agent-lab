@@ -36,6 +36,7 @@ from starlette.types import ExceptionHandler
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
+from core.api.customer_auth import customer_auth_router
 from core.api.integrations import router as core_integrations_router
 from core.api.mail import router as core_mail_router
 from core.api.platform_brand import router as platform_brand_router
@@ -164,7 +165,7 @@ async def start_platform_process(
         if settings.tracing.postgres_enabled:
             if not settings.database.tracing_url:
                 raise ValueError(
-                    'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
+                    "tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)"
                 )
             set_tracing_service_name(service_name)
         logger.info("app.event")
@@ -194,7 +195,7 @@ async def start_platform_process(
     if settings.push.enabled:
         if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
             raise ValueError(
-                'push.enabled=true requires push.vapid_private_key and push.vapid_public_key'
+                "push.enabled=true requires push.vapid_private_key and push.vapid_public_key"
             )
         _ = init_web_push_service(
             vapid_private_key=settings.push.vapid_private_key,
@@ -299,12 +300,16 @@ def create_service_app(
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
             ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
     """
-    if (include_platform_routers or include_auth_middleware) and not issubclass(di_class, PlatformDi):
+    if (include_platform_routers or include_auth_middleware) and not issubclass(
+        di_class, PlatformDi
+    ):
         raise TypeError(
             f"{di_class.__qualname__} must inherit PlatformDi: the app mounts platform routers or AuthMiddleware"
         )
     tracing_lifecycle_enabled = (
-        include_platform_lifecycle if include_tracing_lifecycle is None else include_tracing_lifecycle
+        include_platform_lifecycle
+        if include_tracing_lifecycle is None
+        else include_tracing_lifecycle
     )
     settings, project_root, files_segment = prepare_service_settings(
         service_name,
@@ -427,36 +432,34 @@ def assemble_service_app(
             status_code=403,
             content={"detail": str(exc), "code": "billing_balance_blocked"},
         )
+
     _ = _billing_balance_blocked_handler
 
     @app.exception_handler(AuthzDenied)
-    async def _authz_denied_handler(
-        _request: Request, exc: AuthzDenied
-    ) -> JSONResponse:
+    async def _authz_denied_handler(_request: Request, exc: AuthzDenied) -> JSONResponse:
         return JSONResponse(
             status_code=403,
             content={"detail": str(exc), "code": "authz_denied"},
         )
+
     _ = _authz_denied_handler
 
     @app.exception_handler(AuthzUnavailable)
-    async def _authz_unavailable_handler(
-        _request: Request, exc: AuthzUnavailable
-    ) -> JSONResponse:
+    async def _authz_unavailable_handler(_request: Request, exc: AuthzUnavailable) -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={"detail": str(exc), "code": "authz_unavailable"},
         )
+
     _ = _authz_unavailable_handler
 
     @app.exception_handler(AuthzConfigError)
-    async def _authz_config_error_handler(
-        _request: Request, exc: AuthzConfigError
-    ) -> JSONResponse:
+    async def _authz_config_error_handler(_request: Request, exc: AuthzConfigError) -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={"detail": str(exc), "code": "authz_unavailable"},
         )
+
     _ = _authz_config_error_handler
 
     def _boundary_error_response(
@@ -489,9 +492,7 @@ def assemble_service_app(
         )
 
     @app.exception_handler(WsCommandError)
-    async def _ws_command_error_handler(
-        _request: Request, exc: WsCommandError
-    ) -> JSONResponse:
+    async def _ws_command_error_handler(_request: Request, exc: WsCommandError) -> JSONResponse:
         return JSONResponse(
             status_code=ws_command_error_status(exc),
             content=command_failure_payload(exc),
@@ -576,6 +577,7 @@ def assemble_service_app(
         if settings.server.debug:
             payload["exception_detail"] = str(exc)[:4096]
         return JSONResponse(status_code=500, content=payload)
+
     _ = _unhandled_exception_handler
 
     # CORS собираем здесь, подключаем в конце create_service_app (внешний слой стека).
@@ -584,7 +586,9 @@ def assemble_service_app(
     cors_allow_methods = ["*"]
     cors_allow_headers = ["*"]
     resolved_cors_allow_origin_regex = (
-        cors_allow_origin_regex.strip() if cors_allow_origin_regex and cors_allow_origin_regex.strip() else None
+        cors_allow_origin_regex.strip()
+        if cors_allow_origin_regex and cors_allow_origin_regex.strip()
+        else None
     )
 
     # Заголовки прокси
@@ -656,8 +660,12 @@ def assemble_service_app(
         app.include_router(core_mail_router, prefix=mail_prefix, tags=["mail"])
 
         integrations_prefix = f"/{public_segment}"
-        logger.info("service.router_attached", router="core_integrations", prefix=integrations_prefix)
-        app.include_router(core_integrations_router, prefix=integrations_prefix, tags=["integrations"])
+        logger.info(
+            "service.router_attached", router="core_integrations", prefix=integrations_prefix
+        )
+        app.include_router(
+            core_integrations_router, prefix=integrations_prefix, tags=["integrations"]
+        )
 
         team_prefix = f"/{public_segment}/api/team"
         logger.info("service.router_attached", router="core_team", prefix=team_prefix)
@@ -674,8 +682,24 @@ def assemble_service_app(
         logger.info("service.router_attached", router="push", prefix=f"{push_prefix}/api/push")
         app.include_router(push_router, prefix=push_prefix, tags=["push"])
 
+        # Customer-auth — платформенная авторизация покупателя по телефону.
+        # Анонимность решает route_config (`/{seg}/api/v1/public/*`), не mount.
+        customer_auth_prefix = f"{api_prefix}/public"
+        logger.info(
+            "service.router_attached",
+            router="customer_auth",
+            prefix=f"{customer_auth_prefix}/customer-auth",
+        )
+        app.include_router(
+            customer_auth_router, prefix=customer_auth_prefix, tags=["customer-auth"]
+        )
+
         brand_prefix = "/frontend"
-        logger.info("service.router_attached", router="platform_brand", prefix=f"{brand_prefix}/api/platform")
+        logger.info(
+            "service.router_attached",
+            router="platform_brand",
+            prefix=f"{brand_prefix}/api/platform",
+        )
         app.include_router(platform_brand_router, prefix=brand_prefix, tags=["platform-brand"])
 
     # Internal hop bus realtime → владелец команды: монтируется на каждом сервисе,
@@ -734,6 +758,7 @@ def assemble_service_app(
         @app.get(f"/{public_segment}/services/", response_class=HTMLResponse)
         async def platform_services_spa() -> HTMLResponse:
             return HTMLResponse(content=_services_spa_html)
+
         _ = platform_services_spa
 
         logger.info(
@@ -748,11 +773,13 @@ def assemble_service_app(
     @app.get(f"/{service_name}/health")
     async def health() -> dict[str, str]:
         return build_health_payload(settings)
+
     _ = health
 
     @app.get("/")
     async def root() -> JsonObject:
         return {"service": service_name, "version": version, "status": "running"}
+
     _ = root
 
     if resolved_cors_allow_origin_regex is None:

@@ -49,6 +49,7 @@ class ShopOrder(PlatformModel):
     status: ShopOrderStatus = DbField(default=ShopOrderStatus.NEW)
     customer_name: str = DbField(max_length=200)
     customer_phone: str = DbField(max_length=32)
+    customer_id: str = DbField(default="", max_length=64, db_index=True)
     delivery_type: ShopDeliveryType = DbField()
     address: str = DbField(default="", max_length=500)
     table_id: str = DbField(default="", max_length=64)

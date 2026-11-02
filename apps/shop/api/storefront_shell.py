@@ -26,6 +26,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="/static/core/lib/customer-auth/autoload.js" defer></script>
 {seo_head}
 <style>
 :root{{--accent:{accent};--on-accent:{on_accent};--afg:{afg_dark};--bg:#131110;--card:#1e1a17;--card2:#2a241f;--text:#f7f3ec;--muted:#a39a8d;--line:#2e2823;--radius:18px;--overlay:rgba(10,9,8,.62);--on-hero:#fff;--success:#4ade80;--warn:#f0b45c;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-lg:0 14px 44px rgba(0,0,0,.55);color-scheme:dark}}
@@ -401,7 +402,7 @@ function renderSheet(){{
   `<div id="savings"></div>`+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${{fmt(fee)}}</b></div>`:'')+
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
-  <input class="f" id="cn" placeholder="Ваше имя"><input class="f" id="cp" type="tel" placeholder="${{dtype==='onsite'?'Телефон (необязательно)':'Телефон'}}">
+  <input class="f" id="cn" placeholder="Ваше имя">
   ${{dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${{TABLES.map(t=>`<option value="${{t.id}}"${{t.id===tableId?' selected':''}}>${{esc(t.label)}}</option>`).join('')}}</select>`:''}}
   ${{dtype==='delivery'?'<input class="f" id="ca" placeholder="Адрес доставки">':''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
@@ -431,12 +432,27 @@ async function refreshSavings(){{
   }}catch(e){{}}
 }}
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
+const authEl=document.createElement('platform-customer-auth');
+authEl.setAttribute('api-base','/shop/api/v1/public/customer-auth');
+authEl.setAttribute('company-id',S.company_id||'');
+document.body.appendChild(authEl);
+function ensureAuth(){{
+  return new Promise(resolve=>{{
+    const ok=e=>{{done();resolve(e.detail);}};
+    const no=()=>{{done();resolve(null);}};
+    const done=()=>{{authEl.removeEventListener('customer-authenticated',ok);authEl.removeEventListener('customer-auth-cancelled',no);}};
+    authEl.addEventListener('customer-authenticated',ok);
+    authEl.addEventListener('customer-auth-cancelled',no);
+    authEl.open();
+  }});
+}}
 window.submit=async()=>{{
   if(dtype==='onsite'&&!tableId){{toast('Выберите стол');return;}}
-  if(dtype!=='onsite'&&document.getElementById('cp').value.trim().length<5){{toast('Укажите телефон');return;}}
+  const customer=await ensureAuth();
+  if(!customer)return;
   const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
-    customer_name:document.getElementById('cn').value,customer_phone:document.getElementById('cp').value,
+    customer_name:document.getElementById('cn').value||customer.phone_e164,
     delivery_type:dtype,
     table_id:dtype==='onsite'?tableId:null,
     address:dtype==='delivery'?(document.getElementById('ca')?.value||''):'',

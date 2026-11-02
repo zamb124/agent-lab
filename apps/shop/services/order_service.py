@@ -41,7 +41,12 @@ from apps.shop.services.modifier_pricing import (
     validate_and_price,
 )
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
-from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
+from core.errors.boundary import (
+    PlatformAccessDeniedError,
+    PlatformConflictError,
+    PlatformNotFoundError,
+)
+from core.request_scope import CustomerScope
 from core.utils.time import utcnow
 
 
@@ -77,8 +82,20 @@ class ShopOrderService:
             raise PlatformNotFoundError("Storefront not found", error_code="storefront_not_found")
         return shop
 
-    async def create_order(self, shop: Shop, payload: ShopOrderCreateRequest) -> ShopOrder:
-        """Новый заказ: идемпотентность, расчёт суммы по живым ценам каталога."""
+    async def create_order(
+        self, shop: Shop, payload: ShopOrderCreateRequest, *, customer: CustomerScope
+    ) -> ShopOrder:
+        """Новый заказ: идемпотентность, расчёт суммы по живым ценам каталога.
+
+        Телефон и имя покупателя — из верифицированной сессии `customer`
+        (customers.mdc), не из ввода формы; scope сессии обязан совпадать
+        с компанией-владельцем витрины.
+        """
+        if customer.company_id != str(shop.company_id):
+            raise PlatformAccessDeniedError(
+                "Customer session scope does not match this storefront",
+                error_code="forbidden_scope",
+            )
         if shop.status != ShopStatus.PUBLISHED:
             raise PlatformNotFoundError(
                 "Storefront unavailable", error_code="storefront_unavailable"
@@ -107,13 +124,6 @@ class ShopOrderService:
                     "Onsite ordering is not supported by the shop",
                     error_code="onsite_disabled",
                 )
-        if (
-            payload.delivery_type != ShopDeliveryType.ONSITE
-            and len(payload.customer_phone.strip()) < 5
-        ):
-            raise PlatformConflictError(
-                "Customer phone is required", error_code="phone_required"
-            )
         table_id = ""
         table_label = ""
         if payload.delivery_type == ShopDeliveryType.ONSITE:
@@ -163,7 +173,8 @@ class ShopOrderService:
             shop_id=shop.shop_id,
             public_code=await self._allocate_public_code(),
             customer_name=payload.customer_name,
-            customer_phone=payload.customer_phone,
+            customer_phone=customer.phone_e164,
+            customer_id=customer.customer_id,
             delivery_type=payload.delivery_type,
             address=payload.address,
             table_id=table_id,
@@ -331,6 +342,7 @@ class ShopOrderService:
             shop_id=order.shop_id,
             public_code=order.public_code,
             status=ShopOrderStatus(order.status),
+            customer_id=order.customer_id,
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,
             delivery_type=order.delivery_type,

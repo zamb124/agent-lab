@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 from oxyde.exceptions import IntegrityError
@@ -34,7 +35,7 @@ async def ensure_runet_platform_seeded() -> None:
         SYSTEM_COMPANY_ID, RUNET_SEARCH_INDEX_ID
     )
     if index is None:
-        try:
+        with suppress(IntegrityError):
             _ = await SearchIndexDefinition.create(
                 SearchIndexDefinition(
                     search_index_id=RUNET_SEARCH_INDEX_ID,
@@ -49,13 +50,11 @@ async def ensure_runet_platform_seeded() -> None:
                     updated_at=now,
                 )
             )
-        except IntegrityError:
-            pass
     profile = await CrawlProfile.objects.filter(
         crawl_profile_id=RUNET_PLATFORM_CRAWL_PROFILE_ID
     ).get_or_none()
     if profile is None:
-        try:
+        with suppress(IntegrityError):
             _ = await CrawlProfile.create(
                 CrawlProfileCreateRequest(
                     crawl_profile_id=RUNET_PLATFORM_CRAWL_PROFILE_ID,
@@ -64,8 +63,6 @@ async def ensure_runet_platform_seeded() -> None:
                     browser_fallback_enabled=True,
                 )
             )
-        except IntegrityError:
-            pass
 
 
 class CrawlBootstrapService:

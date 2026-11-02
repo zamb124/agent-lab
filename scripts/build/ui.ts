@@ -48,6 +48,7 @@ const EMBED_ENTRYPOINTS = [
     'embed-flow-ui/flow-ui-embed-autoload.ts',
     'flow-ui/shell/embed-autoload.ts',
     'embed-chat/linnex-embed-autoload.ts',
+    'customer-auth/autoload.ts',
     // Realm-файлы: audio rendering thread, service worker, синхронный brand bootstrap.
     // Исходники .ts, выход — стабильные URL `/static/core/lib/...`.
     'voice/worklets/voice-mic-capture.processor.ts',

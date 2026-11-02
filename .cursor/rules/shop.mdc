@@ -39,7 +39,8 @@ alwaysApply: false
 7. Принадлежность магазина компании проверяет `ShopService.get_shop(company_id, shop_id)`; дочерние сущности проверяются по `shop_id` найденного магазина. `[без гейта]`
 8. Мутации, AI и `op_shops_list` — `require_company_admin`, остальное чтение — `require_company_viewer`; `op_public_*` анонимны. `[без гейта]`
 9. Публичный заказ по HTTP ограничен `check_order_rate_limit` по IP до вызова `op_public_order_create`.
-10. `onsite`-заказ требует `shop.onsite_enabled` и существующий `table_id` того же магазина (`onsite_disabled`/`table_required`/`table_unknown`); только для `onsite` телефон необязателен — у `delivery`/`pickup` он обязателен.
+10. `onsite`-заказ требует `shop.onsite_enabled` и существующий `table_id` того же магазина (`onsite_disabled`/`table_required`/`table_unknown`).
+12. Заказ требует customer-сессию (`customers.mdc`): телефон — верифицированный `customer.phone_e164` из `customer_token`, scope — компания витрины.
 11. Статус-флоу `onsite` идёт `new → accepted → preparing → done` без `delivering` — матрица переходов общая, UI фильтрует действие по `delivery_type`.
 
 ## Контракты

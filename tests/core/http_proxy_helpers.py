@@ -54,4 +54,4 @@ def install_mock_httpx_client(
         kwargs.setdefault("transport", transport)
         return _ORIGINAL_ASYNC_CLIENT(*args, **kwargs)
 
-    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", factory)
+    monkeypatch.setattr(httpx2, "AsyncClient", factory)

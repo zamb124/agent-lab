@@ -199,100 +199,6 @@
   "platform_brands": {
     "linnex.io": {
       "platform_name": "Linnex",
-      "support_email": "helpme@linnex.io",
-      "models_product_name": "Linnex Models",
-      "voice_product_name": "Linnex Voice",
-      "llms_display_label": "Linnex LLMs",
-      "flows_product_label": "Linnex Flows",
-      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
-      "legal": {
-        "company_name_ru": "ООО «ЛАЙНЕКС»",
-        "company_name_en": "OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU \"LAINEKS\"",
-        "legal_form_ru": "Общество с ограниченной ответственностью",
-        "legal_form_en": "Limited Liability Company",
-        "inn": "9717194941",
-        "kpp": "771701001",
-        "ogrn": "1267700280132",
-        "legal_address_ru": "129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48",
-        "legal_address_en": "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, B-R ZVEZDNYI, D. 12, K. 1, KV. 48",
-        "contact_email": "legal@linnex.io",
-        "support_email": "helpme@linnex.io",
-        "dpo_email": "dpo@linnex.io",
-        "phone": "+7 (953) 477-10-94",
-        "min_age": 18,
-        "retention_logs": "12 months",
-        "retention_messages": "24 months",
-        "retention_accounts": "5 years after account closure",
-        "cloud_provider": "Yandex Cloud",
-        "cloud_region": "Russian Federation",
-        "analytics_tools": "Internal monitoring and product analytics",
-        "billing_provider": "T-Bank",
-        "bank_name_ru": "АО «ТБанк»",
-        "bank_name_en": "TBank JSC",
-        "bank_account": "40702810010002289174",
-        "bank_bik": "044525974",
-        "bank_correspondent_account": "30101810145250000974",
-        "bank_inn": "7710140679",
-        "bank_address_ru": "127287, г. Москва, ул. 2-я Хуторская, д. 38А, стр. 26",
-        "bank_address_en": "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
-      },
-      "public_site": {
-        "telegram_community_url": "https://t.me/linnexio",
-        "yandex_metrika_id": null,
-        "google_analytics_measurement_id": null
-      },
-      "embed_api_subdomain": "api",
-      "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
-    },
-    "agents-lab.ru": {
-      "platform_name": "Linnex",
-      "support_email": "helpme@linnex.io",
-      "models_product_name": "Linnex Models",
-      "voice_product_name": "Linnex Voice",
-      "llms_display_label": "Linnex LLMs",
-      "flows_product_label": "Linnex Flows",
-      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
-      "legal": {
-        "company_name_ru": "ООО «ЛАЙНЕКС»",
-        "company_name_en": "OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU \"LAINEKS\"",
-        "legal_form_ru": "Общество с ограниченной ответственностью",
-        "legal_form_en": "Limited Liability Company",
-        "inn": "9717194941",
-        "kpp": "771701001",
-        "ogrn": "1267700280132",
-        "legal_address_ru": "129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48",
-        "legal_address_en": "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, B-R ZVEZDNYI, D. 12, K. 1, KV. 48",
-        "contact_email": "legal@linnex.io",
-        "support_email": "helpme@linnex.io",
-        "dpo_email": "dpo@linnex.io",
-        "phone": "+7 (953) 477-10-94",
-        "min_age": 18,
-        "retention_logs": "12 months",
-        "retention_messages": "24 months",
-        "retention_accounts": "5 years after account closure",
-        "cloud_provider": "Yandex Cloud",
-        "cloud_region": "Russian Federation",
-        "analytics_tools": "Internal monitoring and product analytics",
-        "billing_provider": "T-Bank",
-        "bank_name_ru": "АО «ТБанк»",
-        "bank_name_en": "TBank JSC",
-        "bank_account": "40702810010002289174",
-        "bank_bik": "044525974",
-        "bank_correspondent_account": "30101810145250000974",
-        "bank_inn": "7710140679",
-        "bank_address_ru": "127287, г. Москва, ул. 2-я Хуторская, д. 38А, стр. 26",
-        "bank_address_en": "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
-      },
-      "public_site": {
-        "telegram_community_url": "https://t.me/linnexio"
-      },
-      "embed_api_subdomain": "api",
-      "embed_cdn_subdomain": "cdn",
-      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
-    },
-    "linnex.io": {
-      "platform_name": "Linnex",
       "support_email": "info@linnex.io",
       "models_product_name": "Linnex Models",
       "voice_product_name": "Linnex Voice",
@@ -340,6 +246,52 @@
       "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js",
       "auth_apple_client_id": "app.linnex.io",
       "vapid_email": "admin@linnex.io"
+    },
+    "agents-lab.ru": {
+      "platform_name": "Linnex",
+      "support_email": "helpme@linnex.io",
+      "models_product_name": "Linnex Models",
+      "voice_product_name": "Linnex Voice",
+      "llms_display_label": "Linnex LLMs",
+      "flows_product_label": "Linnex Flows",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "legal": {
+        "company_name_ru": "ООО «ЛАЙНЕКС»",
+        "company_name_en": "OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU \"LAINEKS\"",
+        "legal_form_ru": "Общество с ограниченной ответственностью",
+        "legal_form_en": "Limited Liability Company",
+        "inn": "9717194941",
+        "kpp": "771701001",
+        "ogrn": "1267700280132",
+        "legal_address_ru": "129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48",
+        "legal_address_en": "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, B-R ZVEZDNYI, D. 12, K. 1, KV. 48",
+        "contact_email": "legal@linnex.io",
+        "support_email": "helpme@linnex.io",
+        "dpo_email": "dpo@linnex.io",
+        "phone": "+7 (953) 477-10-94",
+        "min_age": 18,
+        "retention_logs": "12 months",
+        "retention_messages": "24 months",
+        "retention_accounts": "5 years after account closure",
+        "cloud_provider": "Yandex Cloud",
+        "cloud_region": "Russian Federation",
+        "analytics_tools": "Internal monitoring and product analytics",
+        "billing_provider": "T-Bank",
+        "bank_name_ru": "АО «ТБанк»",
+        "bank_name_en": "TBank JSC",
+        "bank_account": "40702810010002289174",
+        "bank_bik": "044525974",
+        "bank_correspondent_account": "30101810145250000974",
+        "bank_inn": "7710140679",
+        "bank_address_ru": "127287, г. Москва, ул. 2-я Хуторская, д. 38А, стр. 26",
+        "bank_address_en": "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
+      },
+      "public_site": {
+        "telegram_community_url": "https://t.me/linnexio"
+      },
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-flow-ui/flow-ui-embed-autoload.js"
     },
     "localhost": {
       "platform_name": "Linnex",
@@ -605,6 +557,71 @@
         "api_url": "https://securepay.tinkoff.ru/v2",
         "receipt_enabled": true,
         "taxation": "usn_income_outcome"
+      }
+    }
+  },
+  "customer_auth": {
+    "enabled": true,
+    "emulator_enabled": true,
+    "sms_fallback_enabled": true,
+    "session_ttl_seconds": 2592000,
+    "challenge_ttl_seconds": 600,
+    "code_ttl_seconds": 300,
+    "code_length": 6,
+    "resend_cooldown_seconds": 60,
+    "attempts_per_challenge": 5,
+    "daily_budget_rub": 2000,
+    "limits": {
+      "starts_per_phone_hour": 10,
+      "starts_per_ip_hour": 30,
+      "sends_per_phone_day": 20,
+      "sends_per_ip_day": 60
+    },
+    "method_priority": [
+      "telegram_contact",
+      "max_contact",
+      "yandex_id",
+      "vk_id",
+      "sber_id",
+      "sms_code"
+    ],
+    "brands": {
+      "linnex.io": {
+        "telegram": {
+          "enabled": true,
+          "bot_token": "YOUR_CUSTOMER_TG_BOT_TOKEN",
+          "bot_username": "YOUR_CUSTOMER_TG_BOT_USERNAME",
+          "webhook_secret": "YOUR_CUSTOMER_TG_WEBHOOK_SECRET"
+        },
+        "max": {
+          "enabled": false,
+          "access_token": "YOUR_MAX_BOT_TOKEN",
+          "bot_name": "YOUR_MAX_BOT_NAME",
+          "webhook_secret": "YOUR_MAX_WEBHOOK_SECRET",
+          "api_base_url": "https://botapi.max.ru"
+        },
+        "yandex": {
+          "enabled": false,
+          "client_id": "YOUR_YANDEX_CLIENT_ID",
+          "client_secret": "YOUR_YANDEX_CLIENT_SECRET"
+        },
+        "vk": {
+          "enabled": false,
+          "client_id": "YOUR_VK_CLIENT_ID",
+          "client_secret": "YOUR_VK_CLIENT_SECRET"
+        },
+        "sber": {
+          "enabled": false,
+          "client_id": "YOUR_SBER_CLIENT_ID",
+          "client_secret": "YOUR_SBER_CLIENT_SECRET"
+        },
+        "smsru": {
+          "enabled": false,
+          "api_id": "YOUR_SMSRU_API_ID",
+          "sender": "YOUR_SMSRU_SENDER",
+          "test_mode": false,
+          "code_channel": "sms"
+        }
       }
     }
   },

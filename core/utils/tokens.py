@@ -21,6 +21,7 @@ class TokenType(str, Enum):
     API = "api"          # Перманентный API токен (до 2 лет)
     EMBED_SESSION = "embed_session"  # Короткоживущий токен встраиваемого чата
     FLOW_UI_SHARE = "flow_ui_share"  # Scoped live-session viewer/collaborator
+    CUSTOMER = "customer"  # Сессия покупателя витрины (customers.mdc)
 
 class TokenData(BaseModel):
     """Данные токена"""
@@ -42,6 +43,7 @@ class TokenService:
     API_TOKEN_EXPIRES: ClassVar[int] = 86400 * 365 * 2   # 2 года
     EMBED_SESSION_EXPIRES: ClassVar[int] = 300           # 5 минут
     FLOW_UI_SHARE_EXPIRES: ClassVar[int] = 900           # 15 минут; grant остаётся revocable
+    CUSTOMER_EXPIRES: ClassVar[int] = 86400 * 30         # 30 дней сессия покупателя
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -87,6 +89,8 @@ class TokenService:
                 expires_in = self.EMBED_SESSION_EXPIRES
             elif token_type == TokenType.FLOW_UI_SHARE:
                 expires_in = self.FLOW_UI_SHARE_EXPIRES
+            elif token_type == TokenType.CUSTOMER:
+                expires_in = self.CUSTOMER_EXPIRES
             else:
                 expires_in = self.SESSION_EXPIRES
 
@@ -113,6 +117,8 @@ class TokenService:
             payload["iss"] = SESSION_JWT_ISSUER
             payload["channels"] = session_jwt_channels(user_id, company_id)
             payload["meta"] = session_jwt_meta(company_id)
+        elif token_type == TokenType.CUSTOMER:
+            payload["iss"] = "platform.customer"
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
 
@@ -164,6 +170,30 @@ class TokenService:
             token_type=TokenType.EMBED_SESSION,
             expires_in=expires_in,
             metadata=metadata,
+        )
+
+    def create_customer_token(
+        self,
+        *,
+        customer_id: str,
+        phone_e164: str,
+        scope_company_id: str,
+        session_id: str,
+        expires_in: int = CUSTOMER_EXPIRES,
+    ) -> str:
+        """JWT покупателя витрины. `user_id=customer_id`; scope в metadata."""
+        return self.create_token(
+            user_id=customer_id,
+            company_id=scope_company_id,
+            roles=[],
+            token_type=TokenType.CUSTOMER,
+            expires_in=expires_in,
+            session_id=session_id,
+            metadata={
+                "customer_id": customer_id,
+                "phone_e164": phone_e164,
+                "scope_company_id": scope_company_id,
+            },
         )
 
     def create_flow_ui_share_token(

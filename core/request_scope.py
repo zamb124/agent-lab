@@ -81,6 +81,35 @@ async def require_company_admin(authz_service: AuthzService) -> CompanyScope:
     return scope
 
 
+class CustomerScope(StrictBaseModel):
+    """Покупатель витрины + компания-владелец витрины из scope его сессии."""
+
+    customer_id: str
+    phone_e164: str
+    company_id: str
+
+
+def require_customer() -> CustomerScope:
+    """Покупатель обязателен: `Context.customer` из `customer_token` JWT.
+
+    Сессия скопирована на компанию витрины (`scope_company_id`) — заказ
+    в чужой витрине с чужим токеном не пройдёт.
+    """
+    context = get_context()
+    if context is None or context.customer is None:
+        raise WsCommandError(
+            "unauthorized",
+            "customer_session_required",
+            error_code="session_required",
+        )
+    customer = context.customer
+    return CustomerScope(
+        customer_id=customer.customer_id,
+        phone_e164=customer.phone_e164,
+        company_id=customer.scope_company_id,
+    )
+
+
 async def require_system_admin(authz_service: AuthzService) -> CompanyScope:
     """Платформенный админ: активная компания `system` и FGA `company#admin` в ней."""
     scope = require_company()

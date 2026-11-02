@@ -131,7 +131,7 @@ class TestShopTables:
 
 
 class TestOnsiteOrder:
-    async def test_onsite_order_without_phone(
+    async def test_onsite_order_verified_phone(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"onp-{unique_id[:8]}"
@@ -150,7 +150,7 @@ class TestOnsiteOrder:
         assert orders[0]["delivery_type"] == "onsite"
         assert orders[0]["table_id"] == table["shop_table_id"]
         assert orders[0]["table_label"] == "Стол 5"
-        assert orders[0]["customer_phone"] == ""
+        assert orders[0]["customer_phone"].startswith("+7")
 
     async def test_onsite_requires_enabled(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -203,11 +203,16 @@ class TestOnsiteOrder:
         assert resp.status_code == 409
         assert resp.json()["error_code"] == "table_unknown"
 
-    async def test_phone_required_for_pickup_and_delivery(
+    async def test_pickup_and_delivery_use_session_phone(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
+        """Телефон не из формы: pickup/delivery берут верифицированный номер сессии."""
         slug = f"ph-{unique_id[:8]}"
         shop = await _shop(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"delivery_enabled": True}
+        )
+        assert resp.status_code == 200, resp.text
         for dtype, extra in (("pickup", {}), ("delivery", {"address": "ул. Мира, 2"})):
             resp = await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
@@ -218,8 +223,12 @@ class TestOnsiteOrder:
                     **extra,
                 },
             )
-            assert resp.status_code == 409, dtype
-            assert resp.json()["error_code"] == "phone_required"
+            assert resp.status_code == 200, (dtype, resp.text)
+        orders = (
+            await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")
+        ).json()["items"]
+        assert {o["delivery_type"] for o in orders} == {"pickup", "delivery"}
+        assert all(o["customer_phone"].startswith("+7") for o in orders)
 
     async def test_table_label_is_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

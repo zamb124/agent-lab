@@ -83,7 +83,11 @@ from core.errors.boundary import (
 from core.models import StrictBaseModel
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
-from core.request_scope import require_company_admin, require_company_viewer
+from core.request_scope import (
+    require_company_admin,
+    require_company_viewer,
+    require_customer,
+)
 from core.tasks import enqueue
 from core.websocket import (
     EmptyPayload,
@@ -862,11 +866,12 @@ async def op_domains_provision(payload: ShopDomainIdPayload, *, user: User, di: 
 async def op_public_order_create(
     payload: ShopOrderCreatePayload, *, user: User, di: Di
 ) -> ShopOrderCreatedResponse:
-    """Создать заказ на витрине по slug: анонимный путь, авторизация не нужна."""
+    """Создать заказ на витрине по slug: требует customer-сессию (customers.mdc)."""
     _ = user
+    customer_scope = require_customer()
     try:
         shop = await di.order_service.resolve_published_shop(payload.slug)
-        order = await di.order_service.create_order(shop, payload)
+        order = await di.order_service.create_order(shop, payload, customer=customer_scope)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformConflictError as exc:

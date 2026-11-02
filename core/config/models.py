@@ -2476,6 +2476,120 @@ class LegalConfig(BaseModel):
     bank_address_en: str = "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
 
 
+class CustomerAuthTelegramBotConfig(BaseModel):
+    """Платформенный Telegram-бот приёма контактов на бренд."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    bot_token: str = ""
+    bot_username: str = ""
+    webhook_secret: str = ""
+
+
+class CustomerAuthMaxBotConfig(BaseModel):
+    """Платформенный MAX-бот приёма контактов на бренд."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    access_token: str = ""
+    bot_name: str = ""
+    webhook_secret: str = ""
+    api_base_url: str = "https://botapi.max.ru"
+
+
+class CustomerAuthOAuthClientConfig(BaseModel):
+    """OAuth-клиент платформы у identity-провайдера (Yandex/VK/Sber ID)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str = ""
+
+
+class CustomerAuthSmsruConfig(BaseModel):
+    """SMS.RU — платный SMS/звонок-фолбек; расходы несёт платформа."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    api_id: str = ""
+    sender: str = ""
+    test_mode: bool = False
+    code_channel: str = "sms"  # sms | call
+
+
+class CustomerAuthBrandConfig(BaseModel):
+    """Набор провайдеров customer-auth на один apex-бренд."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    telegram: CustomerAuthTelegramBotConfig | None = None
+    max: CustomerAuthMaxBotConfig | None = None
+    yandex: CustomerAuthOAuthClientConfig | None = None
+    vk: CustomerAuthOAuthClientConfig | None = None
+    sber: CustomerAuthOAuthClientConfig | None = None
+    smsru: CustomerAuthSmsruConfig | None = None
+
+
+class CustomerAuthLimitsConfig(BaseModel):
+    """Rate-лимиты customer-auth (Redis-окна)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    starts_per_phone_hour: int = 10
+    starts_per_ip_hour: int = 30
+    sends_per_phone_day: int = 20
+    sends_per_ip_day: int = 60
+
+
+class CustomerAuthConfig(BaseModel):
+    """Платформенная авторизация покупателей по телефону (customers.mdc).
+
+    Креды всех провайдеров принадлежат платформе (никакого BYOK у мерчантов).
+    `brands` — по registrable apex (`platform_brands`); lookup регистронезависим.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    emulator_enabled: bool = True
+    sms_fallback_enabled: bool = True
+    session_ttl_seconds: int = 30 * 24 * 3600
+    challenge_ttl_seconds: int = 600
+    code_ttl_seconds: int = 300
+    code_length: int = 6
+    resend_cooldown_seconds: int = 60
+    attempts_per_challenge: int = 5
+    daily_budget_rub: int = 2000
+    limits: CustomerAuthLimitsConfig = Field(default_factory=CustomerAuthLimitsConfig)
+    method_priority: list[str] = Field(
+        default_factory=lambda: [
+            "telegram_contact",
+            "max_contact",
+            "yandex_id",
+            "vk_id",
+            "sber_id",
+            "sms_code",
+        ],
+        description="Порядок методов для UI и авто-выбора",
+    )
+    brands: dict[str, CustomerAuthBrandConfig] = Field(default_factory=dict)
+
+    @field_validator("brands")
+    @classmethod
+    def _lowercase_brand_keys(
+        cls, value: dict[str, CustomerAuthBrandConfig]
+    ) -> dict[str, CustomerAuthBrandConfig]:
+        return {k.strip().lower(): v for k, v in value.items()}
+
+    def brand(self, apex: str) -> CustomerAuthBrandConfig | None:
+        """Конфиг провайдеров для apex бренда (`linnex.io`); None — не настроен."""
+        return self.brands.get(apex.strip().lower())
+
+
 class PlatformBrandConfig(BaseModel):
     """Бренд платформы на одном registrable apex-домене (linnex.io, linnex.io, …)."""
 

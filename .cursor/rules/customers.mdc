@@ -1,0 +1,60 @@
+---
+description: "Customers — платформенная авторизация покупателя по номеру телефона: core/customers, провайдеры phone_verification, customer_token, web-компонент platform-customer-auth. Читать при правке core/customers, core/clients/phone_verification, customer-auth роутов и интеграции авторизации покупателя в продукт"
+globs:
+  - "core/customers/**"
+  - "core/clients/phone_verification/**"
+  - "core/frontend/static/lib/customer-auth/**"
+  - "migrations/shared/**"
+alwaysApply: false
+---
+
+# Customers
+
+Платформенная (core) авторизация покупателя по номеру телефона. Покупатель
+— не `User` и не member компании: `Customer` живёт в shared DB глобально,
+а привязка к витрине — `scope_company_id` в его сессии.
+
+## Модель
+
+- `Customer` (`core/customers/models/customer.py`) — одна строка на `phone_e164` (E.164, нормализация `core/customers/phone.py` через `phonenumbers`).
+- `CustomerIdentity` (`core/customers/models/customer_identity.py`) — `(provider, provider_user_id)` → customer; code-каналы пишут `provider_user_id="phone:<e164>"`.
+- `PhoneChallenge` (`core/customers/challenge.py`) — эфемерное состояние попытки в Redis (`RedisClient`, обязательный TTL); код хранится как hash, не plaintext.
+- Контракты и enum'ы — `core/customers/contracts.py`, `core/customers/enums.py`; ошибки — `CustomerAuthError` + `PhoneVerificationErrorCode` (`core/customers/errors.py`).
+- `CustomerSessionService` (`core/customers/session.py`) — JWT `TokenType.CUSTOMER` в httpOnly cookie `customer_token`; прав платформенного пользователя не даёт.
+- `CustomerAuthService` (`core/customers/auth_service.py`) — сценарии start/choose/verify/status/webhook/OAuth, rate limits и дневной бюджет SMS в Redis.
+- Конфиг — `CustomerAuthConfig` (`core/config/models.py`), секция `customer_auth` в conf.json; креды провайдеров — платформенные, per-apex `brands`.
+
+## Инварианты
+
+1. Провайдеры верификации — только `core/clients/phone_verification/` (`PhoneCodeSender`, `ContactShareVerifier`, `OAuthIdVerifier`, `DirectVerifier`, `PhoneVerificationRegistry`); выбор методов — `CustomerAuthService.method_options` по `method_priority` конфига и доступности провайдера на apex.
+2. Бесплатные direct/OAuth-методы (Telegram contact, Yandex/VK/Sber ID) идут перед `sms_code`; SMS — fallback за счёт платформы (`sms_fallback_enabled`, `daily_budget_rub`), мерчанту не выставляется.
+3. Заказ и любое действие покупателя требует `require_customer()` (`core/request_scope.py`) — `CustomerScope` из `customer_token`; scope сессии обязан совпадать с компанией витрины (`forbidden_scope`).
+4. Телефон покупателя в данных продукта — только верифицированный из сессии; «телефон из формы» запрещён.
+5. `Context.customer` заполняет `ContextFactory` из cookie для любого типа контекста; `customer_token` не создаёт `User` и не открывает api-контекст.
+
+## Контракты
+
+- HTTP — `customer_auth_router` (`core/api/customer_auth.py`): протокольные хендлеры (Set-Cookie, webhooks ботов, OAuth redirect), `op_*` нет; монтируется фабрикой `create_service_app` на `/{seg}/api/v1/public/customer-auth/*` каждому сервису с `include_platform_routers`.
+- Анонимность путей — `RouteRule("…/api/v1/public/*", context_type="anonymous")` в `core/middleware/auth/route_config.py`; сервис включает публичный сегмент одной строкой.
+- UI — самодостаточный embed-бандл `<platform-customer-auth>` (`core/frontend/static/lib/customer-auth/`): атрибуты `api-base`, `company-id`; `open()` → событие `customer-authenticated` / `customer-auth-cancelled`. Отдаётся по `/static/core/lib/customer-auth/autoload.js`.
+- Вебхуки ботов контактов — `POST .../customer-auth/webhooks/{provider}`, секрет проверяет `ContactShareVerifier.verify_secret`.
+- OAuth callbacks — `GET .../customer-auth/oauth/{provider}/callback`, `state` → challenge в Redis (защита от CSRF/replay).
+
+## Интеграции
+
+- Исходящий HTTP провайдеров — через `core.http.client` (`request_public_oauth`, `get_httpx_client`, `ProxyStrategy`) → `integrations.mdc`.
+- Shop: `op_public_order_create` зовёт `require_customer()`, `ShopOrderService.create_order` пишет `customer_id`/`customer_phone` из scope; витрина поднимает `<platform-customer-auth>` только при оформлении заказа.
+- Трассинг/логи — без plaintext кода и секретов; номер в логах маскируется.
+
+## Запреты
+
+1. Продуктовые роутеры авторизации покупателя в `apps/**` — поверхность только `core/api/customer_auth.py`.
+2. BYOK провайдеров у мерчанта; креды — только `customer_auth.brands` конфига.
+3. `customer_token` как замена `auth_token`; платформенный `User` из customer-сессии.
+4. Хранение кода, provider access token или webhook secret в логах/БД в открытом виде.
+5. Платный провайдер как первый в `method_priority`. `[без гейта]`
+
+## Гейты
+
+- `scripts/gates/backend/rest_handlers_call_ops.py` (`make lint`) — хендлеры `core/` вне скана apps; продуктовые REST остаются зеркалами `op_*`.
+- `tests/customers/` — нормализация телефона, жизненный цикл challenge, scope сессии, выбор методов.

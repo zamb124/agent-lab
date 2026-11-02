@@ -53,6 +53,7 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/flows/src/api/v1/triggers.py::telegram_webhook",
         "apps/shop/api/public.py::telegram_webhook",
         "apps/shop/api/public.py::get_storefront_qr",
+        "apps/shop/api/public.py::get_table_qr",
         "apps/shop/api/public.py::get_sitemap",
         "apps/shop/api/public.py::get_robots",
         # анонимная витрина и агрегатор: HTML/JSON снапшоты без сессии

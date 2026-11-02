@@ -66,7 +66,6 @@ def _order_body(product_id: str, selections: list[dict[str, Any]], **kw: Any) ->
     return {
         "items": [{"product_id": product_id, "qty": 1, "selections": selections}],
         "customer_name": "Иван",
-        "customer_phone": "+79991112233",
         "delivery_type": "pickup",
         **kw,
     }

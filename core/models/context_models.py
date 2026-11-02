@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from pydantic import ConfigDict, Field
 
+from core.customers.ref import CustomerRef
 from core.models.base import StrictBaseModel
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
@@ -54,6 +55,11 @@ class Context(StrictBaseModel):
         default=None,
         title="Активная компания",
         description="Текущая активная компания пользователя",
+    )
+    customer: CustomerRef | None = Field(
+        default=None,
+        title="Покупатель",
+        description="Авторизованный покупатель витрины (TokenType.CUSTOMER, customers.mdc)",
     )
     user_companies: list[Company] = Field(
         default_factory=list,
@@ -123,6 +129,14 @@ class Context(StrictBaseModel):
                     )
                     for company in self.user_companies
                 ],
+                "customer": (
+                    require_json_object(
+                        self.customer.model_dump(mode="json"),
+                        "Context.customer",
+                    )
+                    if self.customer
+                    else None
+                ),
                 "session_id": self.session_id,
                 "channel": self.channel,
                 "flow_id": self.flow_id,

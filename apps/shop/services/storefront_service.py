@@ -109,6 +109,7 @@ class StorefrontService:
         tables = await ShopTable.list_by_shop_by_created_asc(shop.shop_id)
         return {
             "slug": shop.slug,
+            "company_id": shop.company_id,
             "name": shop.name,
             "description": shop.description,
             "kind": shop.kind.value,
