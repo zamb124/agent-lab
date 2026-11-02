@@ -823,7 +823,8 @@ workers:
     nodeName: master
     enabled: true
     # 1 реплика: single-node master (8 cpu) не вмещает вторую параллельно с
-    # provider-litserve; внутри пода и так --workers 4.
+    # provider-litserve. --workers 2 (не 4): нода на пределе по RAM — каждый
+    # taskiq-воркер это +~450MB RSS полного app-процесса.
     replicas: 1
     terminationGracePeriodSeconds: 300
     command:
@@ -832,7 +833,7 @@ workers:
         "worker",
         "apps.flows.worker:worker_app",
         "--workers",
-        "4",
+        "2",
       ]
     resources:
       requests:
@@ -864,7 +865,7 @@ workers:
         "worker",
         "apps.rag.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -884,7 +885,7 @@ workers:
         "worker",
         "apps.sync.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -903,7 +904,7 @@ workers:
         "worker",
         "apps.crm.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -922,7 +923,7 @@ workers:
         "worker",
         "apps.crm.worker_summary:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -941,7 +942,7 @@ workers:
         "worker",
         "apps.idle.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -1000,7 +1001,7 @@ workers:
         "worker",
         "apps.shop.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
