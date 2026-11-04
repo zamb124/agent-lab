@@ -178,6 +178,40 @@ describe('shop-settings-page: раздел «Выдача заказов»', () 
         expect(shadow(el).querySelector('shop-tables-editor')).to.equal(null);
     });
 
+    it('доставка включена → shop-zone-map; zone-changed → dirty → save с delivery_zone', async () => {
+        const events: Array<{ type: string; payload: unknown }> = [];
+        getPlatformBus().subscribeType(shopUpdateOp.events.REQUESTED, (event) => events.push(event));
+        const el = await deliveryPage(SHOP);
+
+        const map = shadow(el).querySelector('shop-zone-map') as TestEl | null;
+        expect(map, 'редактор зоны в секции доставки').to.exist;
+        expect((map as Record<string, unknown>).shopId).to.equal('shop_test');
+
+        const zone = {
+            type: 'Polygon',
+            coordinates: [[[37.5, 55.7], [37.7, 55.7], [37.7, 55.8], [37.5, 55.8], [37.5, 55.7]]],
+        };
+        map!.dispatchEvent(new CustomEvent('zone-changed', {
+            detail: { zone }, bubbles: true, composed: true,
+        }));
+        await elementUpdated(el);
+
+        const savebar = shadow(el).querySelector('.savebar');
+        expect(savebar, 'zone-changed → dirty-сейв').to.exist;
+        const saveBtn = [...savebar!.querySelectorAll('platform-button')]
+            .find((b) => b.textContent!.includes('Сохранить')) as TestEl;
+        saveBtn.click();
+        const requested = events.find((e) => e.type === shopUpdateOp.events.REQUESTED);
+        expect(requested).to.exist;
+        expect((requested!.payload as Record<string, unknown>).delivery_zone)
+            .to.deep.equal(zone);
+    });
+
+    it('доставка выключена → shop-zone-map не рендерится', async () => {
+        const el = await deliveryPage({ ...SHOP, delivery_enabled: false });
+        expect(shadow(el).querySelector('shop-zone-map')).to.equal(null);
+    });
+
     it('чеклист «Способ выдачи» засчитывает onsite', async () => {
         seedRouter('');
         const el = await fixture<TestEl>(html`<shop-settings-page shop-id="shop_test"></shop-settings-page>`);

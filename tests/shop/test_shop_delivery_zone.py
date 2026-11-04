@@ -10,10 +10,19 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx2
+import pytest
 from httpx2 import AsyncClient
 
+from apps.shop.di import ShopDi
+from apps.shop.models.shop import Shop
+from apps.shop.services.order_service import ShopOrderService
+from core.clients.geocoding.nominatim import NominatimGeocoder
+from core.config.models import GeocodingConfig
+from core.customers.address_service import CustomerAddressService
 from core.customers.contracts import new_id
 from core.customers.models import CustomerAddress
+from tests.core.http_proxy_helpers import install_mock_httpx_client
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, auth_customer
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -285,16 +294,229 @@ class TestCustomerAddressesApi:
         assert resp.status_code == 401
 
 
+def _emu_geocoder(di: ShopDi) -> NominatimGeocoder:
+    """Реальный NominatimGeocoder, enabled — провайдер эмулируется на проводе."""
+    return NominatimGeocoder(
+        GeocodingConfig(enabled=True, nominatim_base_url="https://nominatim.test"),
+        di.redis_client,
+    )
+
+
+def _emu_response(lat: str, lon: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "place_id": 1,
+            "lat": lat,
+            "lon": lon,
+            "display_name": "Эмулированный адрес",
+            "importance": 0.5,
+            "address": {"city": "Москва", "country": "Россия"},
+        }
+    ]
+
+
+class TestDeliveryCheckServiceChain:
+    """Сервис ← реальный NominatimGeocoder ← эмулятор провайдера на проводе.
+
+    Полная прод-цепочка check_delivery: HTTP-ответ провайдерной формы
+    парсится геокодером, точка проверяется по полигону магазина.
+    """
+
+    async def test_inside_zone_deliverable(
+        self,
+        shop_client: AsyncClient,
+        shop_di: ShopDi,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+    ) -> None:
+        slug = f"svc-in-{unique_id[:8]}"
+        _ = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        calls: list[httpx2.Request] = []
+        install_mock_httpx_client(
+            monkeypatch,
+            lambda req: _resp(calls, req, _emu_response("55.75", "37.62")),
+        )
+        shop = await Shop.get_by_slug(slug)
+        assert shop is not None
+        service = ShopOrderService(_emu_geocoder(shop_di))
+        result = await service.check_delivery(shop, f"Тверская 1 {unique_id}")
+        assert result["ok"] is True
+        assert result["inside_zone"] is True
+        assert result["lat"] == pytest.approx(55.75)
+        assert len(calls) == 1
+
+    async def test_outside_zone_not_deliverable(
+        self,
+        shop_client: AsyncClient,
+        shop_di: ShopDi,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+    ) -> None:
+        slug = f"svc-out-{unique_id[:8]}"
+        _ = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        calls: list[httpx2.Request] = []
+        install_mock_httpx_client(
+            monkeypatch,
+            lambda req: _resp(calls, req, _emu_response("55.50", "37.20")),
+        )
+        shop = await Shop.get_by_slug(slug)
+        assert shop is not None
+        service = ShopOrderService(_emu_geocoder(shop_di))
+        result = await service.check_delivery(shop, f"Одинцово {unique_id}")
+        assert result["ok"] is False
+        assert result["inside_zone"] is False
+        assert result["reason"] == "out_of_delivery_zone"
+
+    async def test_provider_empty_unverifiable(
+        self,
+        shop_client: AsyncClient,
+        shop_di: ShopDi,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+    ) -> None:
+        slug = f"svc-none-{unique_id[:8]}"
+        _ = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        calls: list[httpx2.Request] = []
+        install_mock_httpx_client(
+            monkeypatch, lambda req: _resp(calls, req, [])
+        )
+        shop = await Shop.get_by_slug(slug)
+        assert shop is not None
+        service = ShopOrderService(_emu_geocoder(shop_di))
+        result = await service.check_delivery(shop, f"Нет такого {unique_id}")
+        assert result["ok"] is False
+        assert result["reason"] == "address_unverifiable"
+
+    async def test_order_create_saved_address_chain(
+        self,
+        shop_client: AsyncClient,
+        shop_public_client: AsyncClient,
+        shop_di: ShopDi,
+        unique_id: str,
+    ) -> None:
+        """Заказ с `customer_address_id`: touch_used обновляет last_used_at."""
+        slug = f"touch-{unique_id[:8]}"
+        _, product = await _shop_with_product(shop_client, slug)
+        customer = await auth_customer(shop_public_client, slug)
+        row = await _save_address(customer["customer_id"], *_INSIDE, address="Дом")
+        before = row.last_used_at
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(
+                product["shop_product_id"], customer_address_id=row.customer_address_id
+            ),
+        )
+        assert resp.status_code == 200, resp.text
+        fresh = await CustomerAddress.get_for_customer(
+            customer["customer_id"], row.customer_address_id
+        )
+        assert fresh is not None and fresh.last_used_at >= before
+
+
+def _resp(
+    calls: list[httpx2.Request], req: httpx2.Request, body: object
+) -> httpx2.Response:
+    calls.append(req)
+    return httpx2.Response(200, json=body, request=req)
+
+
+class TestCustomerAddressService:
+    """CustomerAddressService: лимит, дедуп, изоляция владельца."""
+
+    async def test_cap_evicts_oldest(
+        self, shop_di: ShopDi, unique_id: str
+    ) -> None:
+        service = CustomerAddressService(shop_di.geocoder)
+        cid = f"cust_cap_{unique_id[:8]}"
+        for i in range(CustomerAddressService.MAX_ADDRESSES + 2):
+            _ = await service.add(cid, address=f"Адрес {unique_id[:6]} {i}")
+        rows = await service.list_for_customer(cid)
+        assert len(rows) == CustomerAddressService.MAX_ADDRESSES
+        # самые новые остались — вытеснены самые старые
+        addrs = {r.address for r in rows}
+        assert f"Адрес {unique_id[:6]} 0" not in addrs
+        assert f"Адрес {unique_id[:6]} {CustomerAddressService.MAX_ADDRESSES + 1}" in addrs
+
+    async def test_dedup_returns_same_row(
+        self, shop_di: ShopDi, unique_id: str
+    ) -> None:
+        service = CustomerAddressService(shop_di.geocoder)
+        cid = f"cust_dedup_{unique_id[:8]}"
+        first = await service.add(cid, address=f"Одинаковый {unique_id[:6]}", label="Дом")
+        second = await service.add(cid, address=f"одинаковый {unique_id[:6]}", label="Работа")
+        assert first.customer_address_id == second.customer_address_id
+        assert len(await service.list_for_customer(cid)) == 1
+
+    async def test_delete_foreign_returns_false(
+        self, shop_di: ShopDi, unique_id: str
+    ) -> None:
+        service = CustomerAddressService(shop_di.geocoder)
+        row = await service.add(
+            f"cust_a_{unique_id[:8]}", address=f"Чужой {unique_id[:6]}"
+        )
+        ok = await service.delete(
+            f"cust_b_{unique_id[:8]}", row.customer_address_id
+        )
+        assert ok is False
+        assert (
+            await service.list_for_customer(f"cust_a_{unique_id[:8]}")
+        )[0].customer_address_id == row.customer_address_id
+
+
+class TestGeocodeEndpoints:
+    """Геокод-эндпоинты при выключенном провайдере — детерминированные отказы."""
+
+    async def test_aggregate_geocode_unverifiable(
+        self, shop_public_client: AsyncClient
+    ) -> None:
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/aggregate/geocode", params={"address": "Москва"}
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error_code"] == "address_unverifiable"
+
+    async def test_shop_geocode_op_unverifiable(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": f"geo-{unique_id[:8]}", "name": "G"}
+        )
+        shop: dict[str, Any] = resp.json()
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/geocode",
+            json={"address": "Москва, Тверская 1"},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error_code"] == "address_unverifiable"
+
+    async def test_snapshot_contains_delivery_zone(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"snap-{unique_id[:8]}"
+        _ = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert resp.status_code == 200
+        assert resp.json()["delivery_zone"]["type"] == "Polygon"
+
+
 class TestMarketCoverage:
     async def test_aggregate_coverage_badges(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug_zoned = f"mz-{unique_id[:8]}"
         slug_open = f"mo-{unique_id[:8]}"
-        await _shop_with_product(
+        _ = await _shop_with_product(
             shop_client, slug_zoned, patch={"delivery_zone": _ZONE}
         )
-        await _shop_with_product(shop_client, slug_open)
+        _ = await _shop_with_product(shop_client, slug_open)
         resp = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/aggregate/shops",
             params={"lat": _INSIDE[0], "lng": _INSIDE[1]},

@@ -40,7 +40,13 @@ function loadLeaflet(): Promise<LeafletModule> {
             link.href = '/shop/ui/static/vendor/leaflet/leaflet.css';
             document.head.appendChild(link);
         }
-        _leafletPromise = import('leaflet');
+        _leafletPromise = import('leaflet').then((mod) => {
+            // Leaflet — UMD: в бандле это default/namespace, в голом браузере —
+            // глобал window.L (dist/leaflet-src.js выставляет его сам).
+            const resolved = ((mod as { default?: LeafletModule }).default ?? mod) as LeafletModule;
+            if (typeof resolved.map === 'function') return resolved;
+            return (window as unknown as { L: LeafletModule }).L;
+        });
     }
     return _leafletPromise;
 }
@@ -108,6 +114,11 @@ export class ShopZoneMap extends PlatformElement {
         super.disconnectedCallback();
     }
 
+    protected override updated(changed: Map<string, unknown>): void {
+        // zone может прийти после init карты (fetch настроек) — перерисовываем.
+        if (changed.has('zone') && this._map) this._renderZone();
+    }
+
     private async _initMap(): Promise<void> {
         const L = (this._L = await loadLeaflet());
         const el = this.renderRoot.querySelector<HTMLElement>('.map');
@@ -148,8 +159,11 @@ export class ShopZoneMap extends PlatformElement {
     private _renderZone(): void {
         if (!this._map || !this._L) return;
         const ring = this._ringLatLngs();
+        if (this._polygon) {
+            this._polygon.remove();
+            this._polygon = null;
+        }
         if (ring) {
-            if (this._polygon) this._polygon.remove();
             this._polygon = this._L.polygon(ring, {
                 color: '#f2542d',
                 weight: 2.5,
