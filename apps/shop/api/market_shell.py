@@ -61,6 +61,13 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .pcard .price{{margin-top:6px;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}}
 .pcard .from{{margin-top:6px;font-size:12px;color:var(--muted);display:inline-block;background:var(--card2);border-radius:99px;padding:3px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .empty{{text-align:center;color:var(--muted);padding:56px 20px;font-size:15px}}
+.addrbar{{max-width:560px;margin:12px auto 0;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:6px 6px 6px 18px}}
+.addrbar input{{flex:1;min-width:0;font:inherit;font-size:14px;background:transparent;border:0;color:var(--text);outline:none}}
+.addrbar input::placeholder{{color:var(--muted)}}
+.addrbar button{{font:inherit;font-size:13px;font-weight:650;padding:8px 16px;border-radius:99px;border:0;background:var(--card);color:var(--text);cursor:pointer}}
+.cov{{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700}}
+.cov.yes{{background:rgba(31,157,85,.15);color:#3ddc84}}
+.cov.no{{background:rgba(210,69,69,.13);color:#ff8f8f}}
 .foot{{margin-top:64px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7}}
 .foot b{{color:var(--text)}}
 @media(max-width:520px){{.hero{{padding:64px 20px 48px}}.shops{{grid-template-columns:1fr 1fr}}.results{{grid-template-columns:1fr 1fr}}}}
@@ -76,6 +83,10 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
       <input id="q" type="search" placeholder="{search_placeholder}" autocomplete="off" oninput="debounced()">
       <button class="go" type="submit">Найти</button>
     </form>
+    <div class="addrbar">
+      <input id="addr" type="text" placeholder="Ваш адрес — покажем, кто доставит" autocomplete="street-address">
+      <button type="button" onclick="applyAddress()">Показать</button>
+    </div>
   </div>
   <div id="hits" class="sec" style="display:none"><h2 id="hitsTitle"></h2><div class="results" id="hitsGrid"></div>
     <button class="chip" id="moreBtn" style="display:none;margin:16px auto 0" onclick="loadMore()">Показать ещё</button></div>
@@ -95,11 +106,14 @@ const IMG=u=>u?`/shop/api/v1/files/download/${{u}}`:'';
 const LINK=s=>`/shop/api/v1/public/s/${{s}}`;
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
 const KIND={{restaurant:'Ресторан',cafe:'Кафе',bakery:'Пекарня',shop:'Магазин',other:'Заведение'}};
-function shopCard(s){{return `<a class="shop" href="${{LINK(s.slug)}}">
+const COVB={{yes:['yes','Доставит к вам'],no:['no','Не доставляет по адресу']}};
+function shopCard(s){{const cov=COVB[s.delivery_coverage];
+  return `<a class="shop" href="${{LINK(s.slug)}}">
   <span class="cover">${{s.cover_file_id?`<img src="${{IMG(s.cover_file_id)}}" loading="lazy" alt="">`:''}}</span>
   <span class="b">${{s.logo_file_id?`<img class="logo" src="${{IMG(s.logo_file_id)}}" alt="">`:''}}<span>
     <h3>${{esc(s.name)}}</h3>
     <span class="meta">${{esc([KIND[s.kind]||KIND.other,s.city].filter(Boolean).join(' · '))}}${{s.description?`<br>${{esc(s.description)}}`:''}}</span>
+    ${{cov?`<span class="cov ${{cov[0]}}">${{cov[1]}}</span>`:''}}
   </span></span></a>`;}}
 let fKind='',fCity='';
 function renderShops(){{
@@ -119,6 +133,39 @@ function renderChips(){{
   chips('cityChips',[{{k:'',t:'Все города'}},...cities],fCity,v=>fCity=v);
 }}
 renderChips();renderShops();
+// ——— «Кто доставит сюда»: адрес → точка → coverage от сервера ———
+let userPoint=null;
+window.applyAddress=async()=>{{
+  const q=(document.getElementById('addr').value||'').trim();
+  if(q.length<5)return;
+  try{{
+    const r=await fetch(`/shop/api/v1/public/aggregate/geocode?address=${{encodeURIComponent(q)}}`);
+    if(!r.ok){{toastAddr('Адрес не найден — попробуйте точнее');return;}}
+    const d=await r.json();
+    userPoint={{lat:d.lat,lng:d.lng}};
+    localStorage.setItem('mkt_addr',q);
+    loadCoverage();
+  }}catch(e){{}}
+}};
+function toastAddr(t){{const el=document.getElementById('addr');el.placeholder=t;el.value='';}}
+async function loadCoverage(){{
+  if(!userPoint)return;
+  try{{
+    const r=await fetch(`/shop/api/v1/public/aggregate/shops?lat=${{userPoint.lat}}&lng=${{userPoint.lng}}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    const cov={{}};
+    (d.items||[]).forEach(s=>cov[s.slug]=s.delivery_coverage);
+    const order={{yes:0,unknown:1,no:2}};
+    S.shops.forEach(s=>s.delivery_coverage=cov[s.slug]||'unknown');
+    S.shops.sort((a,b)=>(order[a.delivery_coverage]??1)-(order[b.delivery_coverage]??1));
+    renderShops();
+  }}catch(e){{}}
+}}
+(function(){{
+  const saved=localStorage.getItem('mkt_addr');
+  if(saved){{document.getElementById('addr').value=saved;applyAddress();}}
+}})();
 let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 let lastQ='';

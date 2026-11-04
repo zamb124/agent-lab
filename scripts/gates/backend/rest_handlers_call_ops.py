@@ -61,8 +61,10 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/shop/api/public.py::get_storefront_page",
         "apps/shop/api/public.py::get_host_storefront_page",
         "apps/shop/api/public.py::get_market_page",
-        "apps/shop/api/public.py::list_aggregate_shops",
+        "apps/shop/api/public.py::list_aggregate_shops_by_score_desc",
         "apps/shop/api/public.py::search_aggregate",
+        "apps/shop/api/public.py::aggregate_geocode",
+        "apps/shop/api/public.py::delivery_check",
         # внутренний резолв Host → slug для прокси/shell слоя
         "apps/shop/api/public.py::resolve_host",
         "apps/office/api/bff.py::onlyoffice_callback",

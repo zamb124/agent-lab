@@ -22,6 +22,8 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopGeocodeRequest,
+    ShopGeocodeResponse,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -66,6 +68,7 @@ from apps.shop.realtime.operations import (
     ShopCategoryUpdatePayload,
     ShopDomainAddPayload,
     ShopDomainIdPayload,
+    ShopGeocodePayload,
     ShopIdPayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
@@ -132,6 +135,7 @@ from apps.shop.realtime.operations import (
     op_promos_list,
     op_promos_remove,
     op_promos_update,
+    op_shop_geocode,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -179,6 +183,17 @@ async def update_shop(shop_id: str, payload: ShopUpdateRequest, di: Di) -> ShopR
         ShopUpdatePayload.model_validate(
             {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/geocode", response_model=ShopGeocodeResponse)
+async def geocode_shop_address(
+    shop_id: str, payload: ShopGeocodeRequest, di: Di
+) -> ShopGeocodeResponse:
+    return await op_shop_geocode(
+        ShopGeocodePayload.model_validate({"shop_id": shop_id, **payload.model_dump()}),
         user=require_context().user,
         di=di,
     )

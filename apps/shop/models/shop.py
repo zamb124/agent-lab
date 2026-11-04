@@ -48,6 +48,7 @@ class Shop(PlatformModel):
     delivery_enabled: bool = DbField(default=True)
     pickup_enabled: bool = DbField(default=True)
     onsite_enabled: bool = DbField(default=False)
+    delivery_zone: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     delivery_fee_minor: int = DbField(default=0, ge=0)
     min_order_minor: int = DbField(default=0, ge=0)
     currency: str = DbField(default="RUB", max_length=3)

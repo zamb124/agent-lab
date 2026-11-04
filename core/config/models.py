@@ -2596,6 +2596,23 @@ class CustomerAuthConfig(BaseModel):
         return self.brands.get(apex.strip().lower())
 
 
+class GeocodingConfig(BaseModel):
+    """Геокодинг адресов платформы (Nominatim/OSM-совместимый API).
+
+    Используется Shop для зон доставки и фильтра витрин по адресу покупателя.
+    Endpoint заменяемый — в тестах подменяется эмулятором, в проде при росте
+    нагрузки можно указать self-hosted Nominatim.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    nominatim_base_url: str = "https://nominatim.openstreetmap.org"
+    user_agent: str = "linnex-platform/1.0 (https://linnex.io)"
+    timeout_seconds: float = 5.0
+    cache_ttl_seconds: int = 30 * 24 * 3600
+
+
 class PlatformBrandConfig(BaseModel):
     """Бренд платформы на одном registrable apex-домене (linnex.io, linnex.io, …)."""
 

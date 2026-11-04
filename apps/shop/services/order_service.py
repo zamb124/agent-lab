@@ -41,12 +41,16 @@ from apps.shop.services.modifier_pricing import (
     validate_and_price,
 )
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
+from core.clients.geocoding.base import Geocoder
+from core.customers.models import CustomerAddress
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformConflictError,
     PlatformNotFoundError,
 )
 from core.request_scope import CustomerScope
+from core.types import JsonObject
+from core.utils.geo import point_in_polygon, polygon_ring
 from core.utils.time import utcnow
 
 
@@ -74,6 +78,63 @@ _ALLOWED_TRANSITIONS: dict[ShopOrderStatus, frozenset[ShopOrderStatus]] = {
 
 class ShopOrderService:
     """Заказы витрины: приём анонимного заказа и жизненный цикл для владельца."""
+
+    def __init__(self, geocoder: Geocoder) -> None:
+        self._geocoder: Geocoder = geocoder
+
+    async def _resolve_delivery_point(
+        self, payload: ShopOrderCreateRequest, customer: CustomerScope
+    ) -> tuple[float | None, float | None]:
+        """Точка доставки заказа: сохранённый адрес покупателя или геокод строки.
+
+        Возвращает (lat, lng); (None, None) — адрес не геокодится. Побочно
+        подменяет ``payload.address`` текстом сохранённого адреса (снапшот).
+        """
+        if payload.customer_address_id:
+            row = await CustomerAddress.get_for_customer(
+                customer.customer_id, payload.customer_address_id
+            )
+            if row is None:
+                raise PlatformConflictError(
+                    "Saved address not found", error_code="address_unknown"
+                )
+            payload.address = row.address
+            await CustomerAddress.touch_used(row.customer_address_id)
+            if row.lat is not None and row.lng is not None:
+                return row.lat, row.lng
+        if not payload.address.strip():
+            return None, None
+        geo = await self._geocoder.geocode(payload.address)
+        if geo is None:
+            return None, None
+        return geo.lat, geo.lng
+
+    async def check_delivery(self, shop: Shop, address: str) -> JsonObject:
+        """Живой чек «доставим ли по адресу» для витрины до оформления заказа."""
+        if not shop.delivery_enabled:
+            return {"ok": False, "reason": "delivery_disabled"}
+        ring = polygon_ring(shop.delivery_zone)
+        geo = await self._geocoder.geocode(address)
+        if geo is None:
+            return {
+                "ok": ring is None,
+                "reason": "address_unverifiable" if ring is not None else "ok",
+                "requires_zone": ring is not None,
+            }
+        result: JsonObject = {
+            "ok": True,
+            "normalized": geo.normalized_address,
+            "lat": geo.lat,
+            "lng": geo.lng,
+            "requires_zone": ring is not None,
+        }
+        if ring is not None:
+            inside = point_in_polygon(geo.lng, geo.lat, ring)
+            result["ok"] = inside
+            result["inside_zone"] = inside
+            if not inside:
+                result["reason"] = "out_of_delivery_zone"
+        return result
 
     async def resolve_published_shop(self, slug: str) -> Shop:
         """Опубликованная витрина по slug для публичного заказа."""
@@ -108,10 +169,23 @@ class ShopOrderService:
                     "Delivery is not supported by the shop",
                     error_code="delivery_disabled",
                 )
-            if not payload.address:
+            if not payload.address and not payload.customer_address_id:
                 raise PlatformConflictError(
                     "Delivery address is required", error_code="address_required"
                 )
+            lat, lng = await self._resolve_delivery_point(payload, customer)
+            ring = polygon_ring(shop.delivery_zone)
+            if ring is not None:
+                if lat is None or lng is None:
+                    raise PlatformConflictError(
+                        "Delivery address could not be verified",
+                        error_code="address_unverifiable",
+                    )
+                if not point_in_polygon(lng, lat, ring):
+                    raise PlatformConflictError(
+                        "Address is outside the delivery zone",
+                        error_code="out_of_delivery_zone",
+                    )
         elif payload.delivery_type == ShopDeliveryType.PICKUP:
             if not shop.pickup_enabled:
                 raise PlatformConflictError(

@@ -158,6 +158,29 @@ class OAuthStartView(StrictBaseModel):
     url: str
 
 
+class CustomerAddressView(StrictBaseModel):
+    """Сохранённый адрес покупателя (чипы в чекауте)."""
+
+    customer_address_id: str
+    label: str = ""
+    address: str
+    lat: float | None = None
+    lng: float | None = None
+
+
+class AddressCreatePayload(StrictBaseModel):
+    """Тело `POST .../customer-auth/addresses`."""
+
+    address: str = Field(min_length=3, max_length=500)
+    label: str = Field(default="", max_length=64)
+
+
+class AddressListView(StrictBaseModel):
+    """Ответ `GET .../customer-auth/addresses`."""
+
+    addresses: list[CustomerAddressView] = Field(default_factory=list)
+
+
 class TelegramWebhookUpdate(StrictBaseModel):
     """Минимально нужная форма Telegram update для contact share."""
 
@@ -171,7 +194,10 @@ __all__ = [
     "AuthStatusView",
     "AuthVerifyPayload",
     "AuthVerifyView",
+    "AddressCreatePayload",
+    "AddressListView",
     "CodeDelivery",
+    "CustomerAddressView",
     "CustomerMe",
     "CustomerRef",
     "DirectVerificationRequest",

@@ -143,6 +143,13 @@ button.big{{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;
 button.big:hover:not(:disabled){{box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 42%,transparent)}}
 button.big:disabled{{opacity:.45;cursor:default}}
 .minwarn{{font-size:13px;color:var(--warn);margin-top:10px;text-align:center}}
+.achips{{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}}
+.achip{{font:inherit;font-size:13px;font-weight:600;padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}}
+.achip.on{{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}}
+.zstat{{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;margin-top:8px;min-height:18px}}
+.zstat.ok{{color:#1f9d55}}
+.zstat.bad{{color:#d24545}}
+.zstat.wait{{color:var(--muted)}}
 .done{{text-align:center;padding:64px 20px}}
 .done .code{{font-size:36px;font-weight:750;color:var(--afg);margin:16px 0;letter-spacing:.02em}}
 .done .st{{font-size:14px;font-weight:650;color:var(--afg);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
@@ -404,11 +411,12 @@ function renderSheet(){{
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
   <input class="f" id="cn" placeholder="Ваше имя">
   ${{dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${{TABLES.map(t=>`<option value="${{t.id}}"${{t.id===tableId?' selected':''}}>${{esc(t.label)}}</option>`).join('')}}</select>`:''}}
-  ${{dtype==='delivery'?'<input class="f" id="ca" placeholder="Адрес доставки">':''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
+  ${{dtype==='delivery'?`<div class="achips" id="addrChips"></div><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()"><div class="zstat" id="zoneStat"></div>`:''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
   ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — оформите предзаказ, примем к открытию</div>`:''}}
   <button class="big" id="payBtn" ${{below?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
   refreshSavings();
+  if(dtype==='delivery'){{loadAddresses();updatePayBtn();}}
 }};
 let priceReq=0;
 async function refreshSavings(){{
@@ -431,6 +439,80 @@ async function refreshSavings(){{
     if(btn&&!btn.disabled)btn.textContent='Оформить заказ · '+fmt(d.total_minor);
   }}catch(e){{}}
 }}
+// ——— Адреса покупателя и зона доставки ———
+let savedAddrs=[];        // список сохранённых адресов из customer-auth API
+let pickedAddrId='';      // выбранный чип (customer_address_id) или '' — ручной ввод
+let zoneOk=null;          // null — зона не проверялась / не требуется; true/false — результат
+const zoneRequired=()=>!!(S.delivery_zone&&S.delivery_zone.coordinates&&S.delivery_zone.coordinates.length);
+async function loadAddresses(){{
+  try{{
+    const r=await fetch('/shop/api/v1/public/customer-auth/addresses',{{credentials:'same-origin'}});
+    if(!r.ok)return;
+    const d=await r.json();
+    savedAddrs=d.addresses||[];
+    renderAddrChips();
+  }}catch(e){{}}
+}}
+function renderAddrChips(){{
+  const el=document.getElementById('addrChips');
+  if(!el)return;
+  el.innerHTML=savedAddrs.map(a=>
+    `<button type="button" class="achip ${{pickedAddrId===a.customer_address_id?'on':''}}"
+      onclick="pickAddr('${{a.customer_address_id}}')">${{esc(a.label||a.address)}}</button>`
+  ).join('');
+}}
+window.pickAddr=id=>{{
+  pickedAddrId=pickedAddrId===id?'':id;
+  const a=savedAddrs.find(x=>x.customer_address_id===pickedAddrId);
+  const inp=document.getElementById('ca');
+  if(inp)inp.value=a?a.address:'';
+  renderAddrChips();
+  // сохранённый адрес уже геокодирован на сервере — зону не дёргаем,
+  // но если зона настроена и координат нет — всё равно проверим по тексту.
+  if(zoneRequired()){{zoneOk=null;clearTimeout(zTimer);zTimer=setTimeout(zoneCheck,150);}}
+  else{{zoneOk=null;updatePayBtn();}}
+}};
+let zTimer=0,zReq=0;
+window.onAddrInput=()=>{{
+  if(pickedAddrId){{pickedAddrId='';renderAddrChips();}}
+  clearTimeout(zTimer);
+  const st=document.getElementById('zoneStat');
+  if(st){{st.className='zstat';st.textContent='';}}
+  zoneOk=null;
+  zTimer=setTimeout(zoneCheck,600);
+}};
+async function zoneCheck(){{
+  const inp=document.getElementById('ca');
+  const q=(inp?.value||'').trim();
+  const st=document.getElementById('zoneStat');
+  if(q.length<5){{zoneOk=null;updatePayBtn();return;}}
+  const my=++zReq;
+  if(st){{st.className='zstat wait';st.textContent='Проверяем зону доставки…';}}
+  try{{
+    const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/delivery-check?address=${{encodeURIComponent(q)}}`);
+    if(my!==zReq)return;
+    const d=await r.json();
+    zoneOk=d.ok===true?true:(d.ok===false?false:null);
+    if(st){{
+      if(zoneOk===true){{st.className='zstat ok';st.textContent=d.inside_zone===false?'Доставим':'Доставим ✓ '+((d.normalized||'').split(',')[0]);}}
+      else if(zoneOk===false){{st.className='zstat bad';st.textContent=d.reason==='out_of_delivery_zone'?'Адрес вне зоны доставки':'Адрес не удалось проверить';}}
+      else{{st.className='zstat';st.textContent='';}}
+    }}
+    updatePayBtn();
+  }}catch(e){{zoneOk=null;updatePayBtn();}}
+}}
+function updatePayBtn(){{
+  const btn=document.getElementById('payBtn');
+  if(!btn)return;
+  const blocked=zoneRequired()&&dtype==='delivery'&&zoneOk!==true;
+  const sub=total();
+  const below=S.min_order_minor&&sub<S.min_order_minor;
+  btn.disabled=!!(below||blocked);
+}}
+async function saveAddress(text){{
+  try{{await fetch('/shop/api/v1/public/customer-auth/addresses',{{method:'POST',credentials:'same-origin',
+    headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{address:text}})}});}}catch(e){{}}
+}}
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
 const authEl=document.createElement('platform-customer-auth');
 authEl.setAttribute('api-base','/shop/api/v1/public/customer-auth');
@@ -448,20 +530,32 @@ function ensureAuth(){{
 }}
 window.submit=async()=>{{
   if(dtype==='onsite'&&!tableId){{toast('Выберите стол');return;}}
+  if(zoneRequired()&&dtype==='delivery'&&zoneOk!==true){{
+    if(zoneOk===false){{toast('Адрес вне зоны доставки');return;}}
+    await zoneCheck();
+    if(zoneOk!==true){{toast(zoneOk===false?'Адрес вне зоны доставки':'Укажите адрес доставки');return;}}
+  }}
   const customer=await ensureAuth();
   if(!customer)return;
+  const addrText=dtype==='delivery'?(document.getElementById('ca')?.value||''):'';
   const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
     customer_name:document.getElementById('cn').value||customer.phone_e164,
     delivery_type:dtype,
     table_id:dtype==='onsite'?tableId:null,
-    address:dtype==='delivery'?(document.getElementById('ca')?.value||''):'',
+    address:addrText,
+    customer_address_id:dtype==='delivery'?pickedAddrId:'',
     comment:document.getElementById('cc').value,
     source:EMBED?'embed':'web',
     idempotency_key:crypto.randomUUID()}};
   const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/orders`,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
-  if(!r.ok){{alert('Не удалось оформить заказ');return;}}
+  if(!r.ok){{
+    let msg='Не удалось оформить заказ';
+    try{{const e=await r.json();if(e&&(e.error_code||e.detail)==='out_of_delivery_zone')msg='Адрес вне зоны доставки';}}catch(_){{}}
+    alert(msg);return;
+  }}
   const d=await r.json();
+  if(dtype==='delivery'&&addrText&&!pickedAddrId)saveAddress(addrText);
   cart.clear();draw();
   trackOrder(d.public_code);
 }};

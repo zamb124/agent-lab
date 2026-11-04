@@ -17,15 +17,22 @@ UI — общий web-компонент ``<platform-customer-auth>``
 
 from __future__ import annotations
 
+import json
+from io import BytesIO
+
+import segno
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 
 from core.customers.contracts import (
+    AddressCreatePayload,
+    AddressListView,
     AuthStartPayload,
     AuthStartView,
     AuthStatusView,
     AuthVerifyPayload,
     AuthVerifyView,
+    CustomerAddressView,
     CustomerMe,
     CustomerRef,
     MethodChallengedView,
@@ -33,6 +40,7 @@ from core.customers.contracts import (
 )
 from core.customers.enums import PhoneVerificationErrorCode, PhoneVerificationMethod
 from core.customers.errors import CustomerAuthError
+from core.customers.models import CustomerAddress
 from core.di.platform import Di
 from core.platform_brand.resolver import resolve_brand_domain
 from core.request_scope import require_customer
@@ -191,6 +199,64 @@ async def customer_logout(request: Request, di: Di) -> Response:
     return resp
 
 
+def _address_view(row: CustomerAddress) -> CustomerAddressView:
+    return CustomerAddressView(
+        customer_address_id=row.customer_address_id,
+        label=row.label,
+        address=row.address,
+        lat=row.lat,
+        lng=row.lng,
+    )
+
+
+@customer_auth_router.get("/addresses", response_model=AddressListView)
+async def customer_addresses_list(di: Di) -> AddressListView:
+    """Сохранённые адреса покупателя (нужна customer-сессия)."""
+    scope = require_customer()
+    rows = await di.customer_address_service.list_for_customer(scope.customer_id)
+    return AddressListView(addresses=[_address_view(r) for r in rows])
+
+
+@customer_auth_router.post("/addresses", response_model=CustomerAddressView)
+async def customer_addresses_create(payload: AddressCreatePayload, di: Di) -> CustomerAddressView:
+    """Сохранить адрес; координаты — из геокодера (best effort)."""
+    scope = require_customer()
+    row = await di.customer_address_service.add(
+        scope.customer_id, address=payload.address, label=payload.label
+    )
+    return _address_view(row)
+
+
+@customer_auth_router.delete("/addresses/{customer_address_id}", response_model=None)
+async def customer_addresses_delete(customer_address_id: str, di: Di) -> Response:
+    """Удалить адрес покупателя; чужой — 404."""
+    scope = require_customer()
+    ok = await di.customer_address_service.delete(
+        scope.customer_id, customer_address_id
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="address_not_found")
+    return Response(status_code=200)
+
+
+@customer_auth_router.get("/deeplink-qr.svg", response_model=None)
+async def customer_auth_deeplink_qr(u: str = "") -> Response:
+    """QR-код deep-link'а провайдера для десктопа (камера → бот).
+
+    Белый список доменов — иначе endpoint был бы открытым QR-прокси.
+    """
+    allowed = ("https://t.me/", "https://max.ru/", "https://m.ttlink.me/")
+    if not any(u.startswith(prefix) for prefix in allowed):
+        raise HTTPException(status_code=400, detail="deeplink_not_allowed")
+    buf = BytesIO()
+    segno.make(u, error="m").save(buf, kind="svg", border=2, dark="#181310")
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @customer_auth_router.post("/webhooks/{provider}", response_model=None)
 async def customer_auth_webhook(provider: str, request: Request, di: Di) -> Response:
     """Webhook ботов контактов (Telegram/MAX): /start → кнопка, contact → confirm."""
@@ -249,11 +315,42 @@ async def customer_auth_oauth_callback(
         )
     except CustomerAuthError as exc:
         raise _http(exc) from exc
-    redirect = RedirectResponse(url=return_url or f"https://{apex}/", status_code=302)
+    # Popup+auto-resume: если вкладку открыл window.opener — шлём postMessage
+    # и закрываемся (пользователь остаётся на витрине). Иначе — обычный redirect
+    # на return_url (мобильный flow, прямой переход). Cookie ставим на оба пути.
+    target = return_url or f"https://{apex}/"
+    html = _oauth_closer_html(target)
+    resp = HTMLResponse(content=html, status_code=200)
     di.customer_session_service.attach_cookie(
-        redirect, request, token, ttl_seconds=di.customer_session_service.token_ttl()
+        resp, request, token, ttl_seconds=di.customer_session_service.token_ttl()
     )
-    return redirect
+    return resp
+
+
+def _oauth_closer_html(return_url: str) -> str:
+    """HTML: postMessage('customer-auth-done') → opener + window.close / redirect.
+
+    `return_url` — URL витрины, его origin = targetOrigin postMessage.
+    """
+    ret = json.dumps(return_url)
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Linnex</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#faf9f7;color:#181310}}.c{{text-align:center}}.s{{width:44px;height:44px;border:4px solid #e8e4de;border-top-color:#f2542d;border-radius:50%;margin:0 auto 16px;animation:r .8s linear infinite}}@keyframes r{{to{{transform:rotate(360deg)}}}}</style>
+</head><body><div class="c"><div class="s"></div><div>Вход выполнен, возвращаем…</div></div>
+<script>
+var RET = {ret};
+function go(){{ location.replace(RET); }}
+try {{
+  if (window.opener && !window.opener.closed) {{
+    var target = '*';
+    try {{ target = new URL(RET).origin; }} catch (e) {{}}
+    window.opener.postMessage({{ type: 'customer-auth-done' }}, target);
+    window.close();
+    setTimeout(function () {{ if (!window.closed) go(); }}, 900);
+  }} else {{ go(); }}
+}} catch (e) {{ go(); }}
+</script></body></html>"""
 
 
 __all__ = ["customer_auth_router"]

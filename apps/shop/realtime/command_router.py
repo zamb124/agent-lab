@@ -19,6 +19,7 @@ from apps.shop.realtime.operations import (
     ShopCategoryUpdatePayload,
     ShopDomainAddPayload,
     ShopDomainIdPayload,
+    ShopGeocodePayload,
     ShopIdPayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
@@ -90,6 +91,7 @@ from apps.shop.realtime.operations import (
     op_public_cart_price,
     op_public_order_create,
     op_public_order_status,
+    op_shop_geocode,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -114,6 +116,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/shops/item_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_get),
     "shop/shops/create_requested": Operation(payload_model=ShopCreateRequest, fn=op_shops_create),
     "shop/shops/update_requested": Operation(payload_model=ShopUpdatePayload, fn=op_shops_update),
+    "shop/shops/geocode_requested": Operation(
+        payload_model=ShopGeocodePayload, fn=op_shop_geocode
+    ),
     "shop/shops/publish_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_publish),
     "shop/shops/suspend_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_suspend),
     "shop/shops/remove_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_remove),

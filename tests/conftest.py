@@ -69,6 +69,7 @@ for _db_key, _db_val in TEST_DATABASE_ENV.items():
 os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:63792/0")
 os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:63792/1")
 os.environ.setdefault("TRACING__TEMPO_ENABLED", "false")
+os.environ.setdefault("GEOCODING__ENABLED", "false")
 os.environ.setdefault("SERVER__DEFAULT_TENANT_ID", "test_tenant")
 os.environ["SERVER__FLOWS_SERVICE_URL"] = "http://localhost:9001"
 os.environ["SERVER__RAG_SERVICE_URL"] = "http://localhost:9002"

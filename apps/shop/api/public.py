@@ -37,6 +37,7 @@ from core.errors.boundary import PlatformNotFoundError
 from core.pagination import OffsetPage
 from core.platform_brand.resolver import resolve_brand_or_primary
 from core.types import JsonObject, parse_json_object
+from core.utils.geo import zone_covers_point
 from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/public", tags=["shop-public"])
@@ -121,6 +122,29 @@ async def create_order(
         )
     op_payload = ShopOrderCreatePayload.model_validate({"slug": slug, **payload.model_dump()})
     return await op_public_order_create(op_payload, user=require_context().user, di=di)
+
+
+@router.get("/storefront/{slug}/delivery-check", response_model=None)
+async def delivery_check(slug: str, address: str, di: Di) -> JsonObject:
+    """Живой чек «доставим ли по адресу»: геокод + полигон зоны магазина."""
+    shop = await di.order_service.resolve_published_shop(slug)
+    return await di.order_service.check_delivery(shop, address)
+
+
+@router.get("/aggregate/geocode", response_model=None)
+async def aggregate_geocode(address: str, di: Di) -> dict[str, object]:
+    """Адрес покупателя → точка карты для фильтра витрин на /market."""
+    geo = await di.geocoder.geocode(address)
+    if geo is None:
+        raise WsCommandError(
+            "not_found", "Address could not be geocoded", error_code="address_unverifiable"
+        )
+    return {
+        "lat": geo.lat,
+        "lng": geo.lng,
+        "normalized": geo.normalized_address,
+        "city": geo.city,
+    }
 
 
 @router.post("/storefront/{slug}/cart/price", response_model=ShopCartPriceResponse)
@@ -281,10 +305,18 @@ async def get_market_page(request: Request, di: Di) -> HTMLResponse:
 
 
 @router.get("/aggregate/shops")
-async def list_aggregate_shops(di: Di, city: str | None = None) -> dict[str, object]:
+async def list_aggregate_shops_by_score_desc(
+    di: Di, city: str | None = None, lat: float | None = None, lng: float | None = None
+) -> dict[str, object]:
     shops = await di.aggregate_service.list_shops(city=city)
-    return {
-        "items": [
+    point = (lat, lng) if lat is not None and lng is not None else None
+    items: list[dict[str, object]] = []
+    for s in shops:
+        coverage = "unknown"
+        if point is not None:
+            covered = zone_covers_point(s.delivery_zone, point[0], point[1])
+            coverage = "yes" if covered else ("no" if covered is False else "unknown")
+        items.append(
             {
                 "slug": s.slug,
                 "name": s.name,
@@ -293,10 +325,13 @@ async def list_aggregate_shops(di: Di, city: str | None = None) -> dict[str, obj
                 "logo_file_id": s.logo_file_id,
                 "cover_file_id": s.cover_file_id,
                 "description": s.description,
+                "delivery_enabled": s.delivery_enabled,
+                "delivery_coverage": coverage,
             }
-            for s in shops
-        ]
-    }
+        )
+    if point is not None:
+        items.sort(key=lambda i: {"yes": 0, "unknown": 1, "no": 2}[str(i["delivery_coverage"])])
+    return {"items": items}
 
 
 @router.get("/aggregate/search", response_model=None)

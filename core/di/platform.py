@@ -13,6 +13,8 @@ from core.authz.factory import build_authz_service
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
 from core.calendar.service import CalendarService
+from core.clients.geocoding.base import Geocoder
+from core.clients.geocoding.nominatim import NominatimGeocoder
 from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
@@ -20,12 +22,14 @@ from core.config.models import (
     BillingConfig,
     CustomerAuthConfig,
     DatabaseConfig,
+    GeocodingConfig,
     MailConfig,
     MailSyncConfig,
     OpenFGAConfig,
     ServerConfig,
 )
 from core.context import get_context
+from core.customers.address_service import CustomerAddressService
 from core.customers.auth_service import CustomerAuthService
 from core.customers.service import CustomerService
 from core.customers.session import CustomerSessionService
@@ -108,6 +112,16 @@ def customer_auth_service(
 
 
 @recipe
+def geocoder(geocoding: GeocodingConfig, redis_client: RedisClient) -> Geocoder:
+    return NominatimGeocoder(geocoding, redis_client)
+
+
+@recipe
+def customer_address_service(geocoder: Geocoder) -> CustomerAddressService:
+    return CustomerAddressService(geocoder)
+
+
+@recipe
 def files_service(identity: ProcessIdentity, document_tree_service: DocumentTreeService) -> FilesService:
     return FilesService(
         tree=document_tree_service,
@@ -164,6 +178,8 @@ class PlatformDi(
         customer_service,
         customer_session_service,
         customer_auth_service,
+        geocoder,
+        customer_address_service,
     ),
 ):
     auth_service: AuthService
@@ -172,9 +188,11 @@ class PlatformDi(
     calendar_service: CalendarService
     chunked_upload_service: ChunkedUploadService
     company_integration_credential_service: CompanyIntegrationCredentialService
+    customer_address_service: CustomerAddressService
     customer_auth_service: CustomerAuthService
     customer_service: CustomerService
     customer_session_service: CustomerSessionService
+    geocoder: Geocoder
     document_tree_service: DocumentTreeService
     files_service: FilesService
     mail_service: MailService

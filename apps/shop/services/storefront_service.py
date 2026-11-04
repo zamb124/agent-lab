@@ -126,6 +126,7 @@ class StorefrontService:
             "tables": [
                 {"id": t.shop_table_id, "label": t.label} for t in tables
             ],
+            "delivery_zone": shop.delivery_zone,
             "delivery_fee_minor": shop.delivery_fee_minor,
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,

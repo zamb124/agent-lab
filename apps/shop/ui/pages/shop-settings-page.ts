@@ -20,6 +20,7 @@ import '../components/shop-hours-editor.js';
 import type { ShopDayHours } from '../components/shop-hours-editor.js';
 import '../components/shop-brand-editor.js';
 import '../components/shop-tables-editor.js';
+import '../components/shop-zone-map.js';
 
 const SECTIONS = ['storefront', 'profile', 'hours', 'delivery', 'notifications'] as const;
 type SettingsSection = (typeof SECTIONS)[number];
@@ -56,6 +57,7 @@ interface FormSnapshot {
     onsiteEnabled: boolean;
     deliveryFee: string;
     minOrder: string;
+    deliveryZone: Record<string, unknown>;
     hours: ShopDayHours[];
 }
 
@@ -84,6 +86,7 @@ export class ShopSettingsPage extends PlatformPage {
     declare _onsiteEnabled: boolean;
     declare _deliveryFee: string;
     declare _minOrder: string;
+    declare _deliveryZone: Record<string, unknown>;
     declare _newDomain: string;
     declare _botToken: string;
     declare _hours: ShopDayHours[];
@@ -104,6 +107,7 @@ export class ShopSettingsPage extends PlatformPage {
         _onsiteEnabled: { state: true },
         _deliveryFee: { state: true },
         _minOrder: { state: true },
+        _deliveryZone: { state: true },
         _newDomain: { state: true },
         _botToken: { state: true },
         _hours: { state: true },
@@ -427,6 +431,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = false;
         this._deliveryFee = '';
         this._minOrder = '';
+        this._deliveryZone = {};
         this._newDomain = '';
         this._botToken = '';
         this._hours = [];
@@ -470,6 +475,10 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = Boolean(shop.onsite_enabled);
         this._deliveryFee = String((Number(shop.delivery_fee_minor ?? 0) / 100) || '');
         this._minOrder = String((Number(shop.min_order_minor ?? 0) / 100) || '');
+        const zone = shop.delivery_zone;
+        this._deliveryZone = zone !== null && typeof zone === 'object'
+            ? (zone as Record<string, unknown>)
+            : {};
         const wh = shop.working_hours !== null && typeof shop.working_hours === 'object'
             ? shop.working_hours as Record<string, unknown>
             : {};
@@ -498,6 +507,7 @@ export class ShopSettingsPage extends PlatformPage {
             onsiteEnabled: this._onsiteEnabled,
             deliveryFee: this._deliveryFee,
             minOrder: this._minOrder,
+            deliveryZone: this._deliveryZone,
             hours: this._hours.map((d) => ({ ...d })),
         };
     }
@@ -519,6 +529,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = s.onsiteEnabled;
         this._deliveryFee = s.deliveryFee;
         this._minOrder = s.minOrder;
+        this._deliveryZone = s.deliveryZone;
         this._hours = s.hours.map((d) => ({ ...d }));
     }
 
@@ -589,6 +600,7 @@ export class ShopSettingsPage extends PlatformPage {
             onsite_enabled: this._onsiteEnabled,
             delivery_fee_minor: this._toMinor(this._deliveryFee),
             min_order_minor: this._toMinor(this._minOrder),
+            delivery_zone: this._deliveryZone,
             working_hours: this._collectHours(),
         });
         if (result !== null) {
@@ -912,6 +924,16 @@ export class ShopSettingsPage extends PlatformPage {
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                             ></platform-field>
                         </div>
+                    </div>
+                    <div class="card">
+                        <div class="option-title" style="margin-bottom: var(--space-1)">${this.t('settings.zone_title')}</div>
+                        <div class="option-desc" style="margin-bottom: var(--space-3)">${this.t('settings.zone_desc')}</div>
+                        <shop-zone-map
+                            .zone=${this._deliveryZone}
+                            .address=${[this._city, this._address].filter(Boolean).join(', ')}
+                            .shopId=${this.shopId}
+                            @zone-changed=${(e: CustomEvent<{ zone: Record<string, unknown> }>) => { this._deliveryZone = e.detail.zone; }}
+                        ></shop-zone-map>
                     </div>`
                 : nothing}
         `;

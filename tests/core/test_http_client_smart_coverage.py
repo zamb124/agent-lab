@@ -453,6 +453,89 @@ async def test_smart_local_skip_proxy_no_rotation(host: str, monkeypatch: pytest
 
 
 @pytest.mark.asyncio
+async def test_local_connect_error_retried_until_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Потерянный под нагрузкой SYN к loopback-listener'у переживается повтором:
+    connect не дошёл до сервера — запрос не был отправлен."""
+    calls = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise httpx2.ConnectError("syn lost", request=request)
+        return httpx2.Response(200)
+
+    install_mock_httpx_client(monkeypatch, handler)
+    monkeypatch.setattr(SmartProxyClient, "LOCAL_CONNECT_RETRY_DELAY_SEC", 0.0)
+    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
+        response = await client.request("GET", "http://127.0.0.1:9025/x")
+    assert response.status_code == 200
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_local_connect_error_exhausts_attempts_and_raises_last(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        calls["n"] += 1
+        raise httpx2.ConnectError("refused", request=request)
+
+    install_mock_httpx_client(monkeypatch, handler)
+    monkeypatch.setattr(SmartProxyClient, "LOCAL_CONNECT_RETRY_DELAY_SEC", 0.0)
+    with pytest.raises(httpx2.ConnectError, match="refused"):
+        async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
+            _ = await client.request("GET", "http://127.0.0.1:9025/x")
+    assert calls["n"] == SmartProxyClient.LOCAL_CONNECT_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_local_stream_connect_error_retried_until_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FlakyStream:
+        def __init__(self, fail: bool) -> None:
+            self._fail: bool = fail
+
+        async def __aenter__(self) -> httpx2.Response:
+            if self._fail:
+                raise httpx2.ConnectError(
+                    "syn lost", request=httpx2.Request("GET", "http://127.0.0.1:9025/s")
+                )
+            return httpx2.Response(200)
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    calls = {"n": 0}
+
+    class FakeAsyncClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+        def stream(self, _method: str, _url: str, **_kwargs: object) -> FlakyStream:
+            calls["n"] += 1
+            return FlakyStream(fail=calls["n"] < 3)
+
+    monkeypatch.setattr(httpx2, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(SmartProxyClient, "LOCAL_CONNECT_RETRY_DELAY_SEC", 0.0)
+    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
+        async with client.stream("GET", "http://127.0.0.1:9025/s") as resp:
+            assert resp.status_code == 200
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
 async def test_smart_429_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     first = ClosedCallResponse(429)
 

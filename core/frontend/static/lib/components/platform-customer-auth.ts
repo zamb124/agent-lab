@@ -19,6 +19,8 @@
 import { css, html, nothing } from 'lit';
 
 import { PlatformElement } from '../platform-element/index.js';
+import { storageGet, storageRemove, storageSet } from '../utils/platform-storage.js';
+import { platformStorageKey } from '../utils/storage-keys.js';
 
 type Step =
     | 'phone'
@@ -78,9 +80,14 @@ const T: Record<string, { ru: string; en: string }> = {
         en: 'Share your contact in the app — we will confirm automatically',
     },
     waiting_oauth: {
-        ru: 'Завершите вход в открывшейся вкладке',
-        en: 'Finish sign-in in the opened tab',
+        ru: 'Завершите вход в открывшемся окне',
+        en: 'Finish sign-in in the opened window',
     },
+    scan_qr: {
+        ru: 'Наведите камеру телефона — откроется чат с ботом',
+        en: 'Point your phone camera — it opens the bot chat',
+    },
+    open_again: { ru: 'Открыть окно ещё раз', en: 'Open the window again' },
     back: { ru: 'Назад', en: 'Back' },
     close: { ru: 'Закрыть', en: 'Close' },
     resend: { ru: 'Отправить ещё раз', en: 'Resend' },
@@ -90,6 +97,19 @@ const T: Record<string, { ru: string; en: string }> = {
     error_rate: { ru: 'Слишком часто. Подождите немного', en: 'Too often. Wait a bit' },
     done: { ru: 'Номер подтверждён', en: 'Number confirmed' },
 };
+
+/** Цвет и короткий знак провайдера для бренд-кнопки метода. */
+const BRAND: Record<string, { color: string; glyph: string }> = {
+    telegram_contact: { color: '#229ED9', glyph: 'TG' },
+    max_contact: { color: '#7B61FF', glyph: 'M' },
+    yandex_id: { color: '#FC3F1D', glyph: 'Я' },
+    vk_id: { color: '#0077FF', glyph: 'VK' },
+    sber_id: { color: '#21A038', glyph: 'S' },
+    sms_code: { color: '#8a8a99', glyph: 'SMS' },
+    emulator: { color: '#6b6b76', glyph: 'DEV' },
+};
+
+const OAUTH_RESUME_KEY = platformStorageKey('core', 'customer_auth.resume');
 
 const ERROR_KEYS: Record<string, string> = {
     invalid_phone: 'error_invalid_phone',
@@ -115,6 +135,7 @@ export class PlatformCustomerAuth extends PlatformElement {
         _error: { state: true },
         _busy: { state: true },
         _deepLink: { state: true },
+        _oauthUrl: { state: true },
         _resendIn: { state: true },
     };
 
@@ -131,9 +152,11 @@ export class PlatformCustomerAuth extends PlatformElement {
     private declare _error: string;
     private declare _busy: boolean;
     private declare _deepLink: string | null;
+    private declare _oauthUrl: string | null;
     private declare _resendIn: number;
     private _pollTimer: number | undefined;
     private _resendTimer: number | undefined;
+    private _oauthMsgHandler: ((ev: MessageEvent) => void) | undefined;
 
     constructor() {
         super();
@@ -150,7 +173,18 @@ export class PlatformCustomerAuth extends PlatformElement {
         this._error = '';
         this._busy = false;
         this._deepLink = null;
+        this._oauthUrl = null;
         this._resendIn = 0;
+    }
+
+    override connectedCallback(): void {
+        super.connectedCallback();
+        // Возврат с mobile OAuth-redirect: флаг ставится перед уходом,
+        // по возвращении сессия уже есть → лист сам завершит вход.
+        if (storageGet(OAUTH_RESUME_KEY) === this.companyId) {
+            storageRemove(OAUTH_RESUME_KEY);
+            void this.open();
+        }
     }
 
     static override styles = css`
@@ -184,12 +218,31 @@ export class PlatformCustomerAuth extends PlatformElement {
         }
         button.primary:disabled { opacity: 0.55; cursor: default; }
         button.method {
-            display: flex; align-items: center; gap: 10px; width: 100%;
-            padding: 13px 14px; margin-top: 8px; font-size: 15px; font-weight: 550;
+            display: flex; align-items: center; gap: 12px; width: 100%;
+            padding: 12px 14px; margin-top: 8px; font-size: 15px; font-weight: 550;
             border: 1.5px solid #e2e2ea; border-radius: 12px; background: #fff;
             color: #1b1b1f; cursor: pointer; text-align: left;
+            transition: border-color .15s, transform .12s, box-shadow .15s;
         }
-        button.method:hover { border-color: #3f6df6; }
+        button.method:hover {
+            border-color: var(--mcolor, #3f6df6);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+        }
+        button.method:active { transform: translateY(0); }
+        .mico {
+            flex: 0 0 34px; height: 34px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 12px; font-weight: 700; letter-spacing: -0.3px;
+            background: var(--mcolor, #8a8a99);
+        }
+        .marrow { margin-left: auto; color: #b9b9c4; font-size: 15px; }
+        .qrwrap { text-align: center; margin: 6px 0 4px; }
+        .qr {
+            width: 190px; height: 190px; border-radius: 14px;
+            border: 1px solid #ececf2; background: #fff; padding: 8px;
+        }
+        .qrcap { font-size: 13px; color: #5b5b66; margin: 8px 0 4px; }
         button.ghost {
             width: 100%; margin-top: 10px; padding: 11px; font-size: 14px;
             border: none; background: none; color: #5b5b66; cursor: pointer;
@@ -310,11 +363,53 @@ export class PlatformCustomerAuth extends PlatformElement {
         } else {
             this._step = view.status === 'awaiting_oauth' ? 'awaiting_oauth' : 'awaiting_contact';
             if (view.status === 'awaiting_oauth' && view.oauth_url) {
-                window.open(view.oauth_url, '_self');
-                return;
+                this._oauthUrl = view.oauth_url;
+                if (this._isDesktop()) {
+                    this._openOauthPopup(view.oauth_url);
+                } else {
+                    // Мобильный flow — полный redirect; флаг вернёт юзера в лист.
+                    storageSet(OAUTH_RESUME_KEY, this.companyId);
+                    window.location.href = view.oauth_url;
+                    return;
+                }
             }
             this._pollStatus();
         }
+    }
+
+    private _isDesktop(): boolean {
+        return window.matchMedia('(min-width: 560px)').matches;
+    }
+
+    /** OAuth в popup: closer-страница шлёт postMessage → опрашиваем /status. */
+    private _openOauthPopup(url: string): void {
+        const w = 540;
+        const h = 720;
+        const left = Math.max(0, (window.screen.width - w) / 2);
+        const top = Math.max(0, (window.screen.height - h) / 2);
+        const popup = window.open(
+            url,
+            'customer-auth',
+            `width=${w},height=${h},left=${left},top=${top},popup=yes`,
+        );
+        if (!popup) {
+            // popup заблокирован — деградируем в redirect с resume-флагом.
+            storageSet(OAUTH_RESUME_KEY, this.companyId);
+            window.location.href = url;
+            return;
+        }
+        if (this._oauthMsgHandler) {
+            window.removeEventListener('message', this._oauthMsgHandler);
+        }
+        this._oauthMsgHandler = (ev: MessageEvent) => {
+            const data = ev.data as { type?: string } | null;
+            if (data && data.type === 'customer-auth-done') {
+                window.removeEventListener('message', this._oauthMsgHandler!);
+                this._oauthMsgHandler = undefined;
+                void this._pollStatus();
+            }
+        };
+        window.addEventListener('message', this._oauthMsgHandler);
     }
 
     private async _verifyDirect(provider: string): Promise<void> {
@@ -377,6 +472,10 @@ export class PlatformCustomerAuth extends PlatformElement {
     private _stopPoll(): void {
         if (this._pollTimer !== undefined) window.clearTimeout(this._pollTimer);
         this._pollTimer = undefined;
+        if (this._oauthMsgHandler) {
+            window.removeEventListener('message', this._oauthMsgHandler);
+            this._oauthMsgHandler = undefined;
+        }
     }
 
     private _startResendCountdown(seconds: number): void {
@@ -425,13 +524,17 @@ export class PlatformCustomerAuth extends PlatformElement {
                     ` : nothing}
                     ${this._step === 'methods' ? html`
                         <p class="sub">${this._t('choose_method')}</p>
-                        ${this._methods.map(
-                            (m) => html`
+                        ${this._methods.map((m) => {
+                            const brand = BRAND[m.kind] ?? { color: '#8a8a99', glyph: '?' };
+                            return html`
                                 <button class="method" ?disabled=${busy}
+                                        style="--mcolor: ${brand.color}"
                                         @click=${() => this._choose(m)}>
-                                    ${this._methodLabel(m.kind)}
-                                </button>`,
-                        )}
+                                    <span class="mico">${brand.glyph}</span>
+                                    <span>${this._methodLabel(m.kind)}</span>
+                                    <span class="marrow">→</span>
+                                </button>`;
+                        })}
                         <button class="ghost" @click=${() => (this._step = 'phone')}>
                             ${this._t('back')}
                         </button>
@@ -460,10 +563,16 @@ export class PlatformCustomerAuth extends PlatformElement {
                         <div class="spinner"></div>
                         <p class="hint">${this._t('waiting_contact')}</p>
                         ${this._deepLink ? html`
-                            <button class="primary" @click=${() =>
-                                window.open(this._deepLink!, '_blank')}>
-                                ${this._t('open_app')}
-                            </button>` : nothing}
+                            <div class="qrwrap">
+                                ${this._isDesktop() ? html`
+                                    <img class="qr" alt="QR"
+                                         src="${this.apiBase}/deeplink-qr.svg?u=${encodeURIComponent(this._deepLink)}" />
+                                    <p class="qrcap">${this._t('scan_qr')}</p>` : nothing}
+                                <button class="primary" @click=${() =>
+                                    window.open(this._deepLink!, '_blank')}>
+                                    ${this._t('open_app')}
+                                </button>
+                            </div>` : nothing}
                         <button class="ghost" @click=${() => { this._stopPoll(); this._step = 'methods'; }}>
                             ${this._t('back')}
                         </button>
@@ -471,6 +580,14 @@ export class PlatformCustomerAuth extends PlatformElement {
                     ${this._step === 'awaiting_oauth' ? html`
                         <div class="spinner"></div>
                         <p class="hint">${this._t('waiting_oauth')}</p>
+                        ${this._oauthUrl ? html`
+                            <button class="ghost" @click=${() =>
+                                this._openOauthPopup(this._oauthUrl!)}>
+                                ${this._t('open_again')}
+                            </button>` : nothing}
+                        <button class="ghost" @click=${() => { this._stopPoll(); this._step = 'methods'; }}>
+                            ${this._t('back')}
+                        </button>
                     ` : nothing}
                     ${this._step === 'done' ? html`
                         <p class="ok">${this._t('done')}</p>

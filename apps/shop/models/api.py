@@ -70,6 +70,7 @@ class ShopResponse(StrictBaseModel):
     delivery_enabled: bool
     pickup_enabled: bool
     onsite_enabled: bool
+    delivery_zone: dict[str, object]
     delivery_fee_minor: int
     min_order_minor: int
     currency: str
@@ -107,10 +108,23 @@ class ShopUpdateRequest(StrictBaseModel):
     delivery_enabled: bool | None = None
     pickup_enabled: bool | None = None
     onsite_enabled: bool | None = None
+    delivery_zone: dict[str, object] | None = None
     delivery_fee_minor: int | None = Field(default=None, ge=0)
     min_order_minor: int | None = Field(default=None, ge=0)
     theme: ShopTheme | None = None
     badges: list[ShopBadge] | None = Field(default=None, max_length=20)
+
+
+class ShopGeocodeRequest(StrictBaseModel):
+    """Геокод адреса для карты зоны доставки в настройках."""
+
+    address: str = Field(min_length=3, max_length=500)
+
+
+class ShopGeocodeResponse(StrictBaseModel):
+    lat: float
+    lng: float
+    normalized: str = ""
 
 
 class ShopTableResponse(StrictBaseModel):
@@ -420,6 +434,7 @@ class ShopOrderCreateRequest(StrictBaseModel):
     customer_name: str = Field(min_length=1, max_length=200)
     delivery_type: ShopDeliveryType
     address: str = Field(default="", max_length=500)
+    customer_address_id: str = Field(default="", max_length=64)
     table_id: str | None = Field(default=None, max_length=64)
     comment: str = Field(default="", max_length=1000)
     source: ShopOrderSource = ShopOrderSource.WEB

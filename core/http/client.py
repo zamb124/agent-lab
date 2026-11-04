@@ -6,6 +6,7 @@ HTTP клиент с поддержкой прокси и автоматичес
         response = await client.post("https://api.example.com", json={...})
 """
 
+import asyncio
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from enum import Enum
@@ -406,6 +407,11 @@ class SmartProxyClient:
     """
 
     MAX_PROXY_RETRIES: ClassVar[int] = 3
+    # Loopback под параллельной нагрузкой теряет SYN (accept-очередь granian
+    # и проброс портов Docker Desktop на macOS): connect, не дошедший до
+    # сервера, безопасно повторить — запрос не был отправлен.
+    LOCAL_CONNECT_ATTEMPTS: ClassVar[int] = 4
+    LOCAL_CONNECT_RETRY_DELAY_SEC: ClassVar[float] = 0.15
 
     def __init__(
         self,
@@ -545,8 +551,18 @@ class SmartProxyClient:
         strategy = self._strategy
 
         if self._is_local_url(url):
-            async with self._create_client() as client:
-                return await _send_request(client, http_method, url, kwargs)
+            last_exc: httpx2.ConnectError | httpx2.ConnectTimeout | None = None
+            for attempt in range(self.LOCAL_CONNECT_ATTEMPTS):
+                try:
+                    async with self._create_client() as client:
+                        return await _send_request(client, http_method, url, kwargs)
+                except _CONNECT_RETRY_EXCEPTIONS as exc:
+                    last_exc = exc
+                    if attempt + 1 < self.LOCAL_CONNECT_ATTEMPTS:
+                        await asyncio.sleep(self.LOCAL_CONNECT_RETRY_DELAY_SEC)
+            if last_exc is None:
+                raise RuntimeError("local request: LOCAL_CONNECT_ATTEMPTS must be >= 1")
+            raise last_exc
 
         absolute_url = self._absolute_request_url(url)
         origin = normalized_http_origin(absolute_url)
@@ -697,7 +713,18 @@ class _StreamContextManager:
         strategy = self._smart_client.strategy
 
         if self._smart_client.is_local_url(self._url):
-            return await self._enter_direct_stream()
+            local_exc: httpx2.ConnectError | httpx2.ConnectTimeout | None = None
+            for attempt in range(self._smart_client.LOCAL_CONNECT_ATTEMPTS):
+                try:
+                    return await self._enter_direct_stream()
+                except _CONNECT_RETRY_EXCEPTIONS as exc:
+                    local_exc = exc
+                    await self._cleanup_stream()
+                    if attempt + 1 < self._smart_client.LOCAL_CONNECT_ATTEMPTS:
+                        await asyncio.sleep(self._smart_client.LOCAL_CONNECT_RETRY_DELAY_SEC)
+            if local_exc is None:
+                raise RuntimeError("local stream: LOCAL_CONNECT_ATTEMPTS must be >= 1")
+            raise local_exc
 
         absolute_url = self._smart_client.absolute_request_url(self._url)
         origin = normalized_http_origin(absolute_url)

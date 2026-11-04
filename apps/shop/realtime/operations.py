@@ -38,6 +38,8 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopGeocodeRequest,
+    ShopGeocodeResponse,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -75,6 +77,7 @@ from apps.shop.tasks.task_names import (
     SHOP_REBUILD_STOREFRONT,
 )
 from core.errors.boundary import (
+    PlatformAccessDeniedError,
     PlatformBoundaryError,
     PlatformConflictError,
     PlatformNotFoundError,
@@ -92,6 +95,7 @@ from core.tasks import enqueue
 from core.websocket import (
     EmptyPayload,
     raise_conflict,
+    raise_forbidden,
     raise_not_found,
     raise_unavailable,
 )
@@ -334,6 +338,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         delivery_enabled=shop.delivery_enabled,
         pickup_enabled=shop.pickup_enabled,
         onsite_enabled=shop.onsite_enabled,
+        delivery_zone=dict(shop.delivery_zone),
         delivery_fee_minor=shop.delivery_fee_minor,
         min_order_minor=shop.min_order_minor,
         currency=shop.currency,
@@ -461,6 +466,30 @@ async def op_shops_update(payload: ShopUpdatePayload, *, user: User, di: Di) -> 
     )
     await _enqueue_rebuild(di, shop.shop_id, shop.slug)
     return await _shop_response(shop, di)
+
+
+class ShopGeocodePayload(ShopGeocodeRequest):
+    """Геокод адреса магазина для центрирования карты зоны доставки."""
+
+    shop_id: str = Field(min_length=1)
+
+
+async def op_shop_geocode(
+    payload: ShopGeocodePayload, *, user: User, di: Di
+) -> ShopGeocodeResponse:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        _shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    geo = await di.geocoder.geocode(payload.address)
+    if geo is None:
+        raise_not_found(
+            PlatformNotFoundError("Address could not be geocoded"),
+            error_code="address_unverifiable",
+        )
+    return ShopGeocodeResponse(lat=geo.lat, lng=geo.lng, normalized=geo.normalized_address)
 
 
 async def op_shops_publish(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
@@ -874,6 +903,8 @@ async def op_public_order_create(
         order = await di.order_service.create_order(shop, payload, customer=customer_scope)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    except PlatformAccessDeniedError as exc:
+        raise_forbidden(exc)
     except PlatformConflictError as exc:
         raise_conflict(exc)
     except PlatformBoundaryError as exc:
