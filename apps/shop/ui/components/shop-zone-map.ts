@@ -140,6 +140,7 @@ export class ShopZoneMap extends PlatformElement {
             scrollWheelZoom: false,
             zoomControl: false,
         }));
+        map.attributionControl.setPrefix('');
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap',
             maxZoom: 19,

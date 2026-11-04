@@ -291,6 +291,9 @@ export class ShopZoneEditorModal extends PlatformModal {
             zoom: 11,
             scrollWheelZoom: true,
         }));
+        // Префикс Leaflet с флагом не показываем; «© OpenStreetMap» остаётся
+        // (ODbL требует атрибуцию данных).
+        map.attributionControl.setPrefix('');
         map.pm.setLang(this._localeSel.value === 'ru' ? 'ru' : 'en');
         this._addTiles();
         map.on('pm:create', (e: { layer: LeafletPolygon }) => {

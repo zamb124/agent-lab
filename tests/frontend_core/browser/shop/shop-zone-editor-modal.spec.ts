@@ -160,6 +160,9 @@ describe('shop-zone-editor-modal', function () {
         const tile = modal.shadowRoot.querySelector<HTMLElement>('.leaflet-tile');
         expect(tile, 'тайл загружен').to.exist;
         expect(getComputedStyle(tile!).position, 'тайл позиционируется абсолютно').to.equal('absolute');
+        const attribution = modal.shadowRoot.querySelector('.leaflet-control-attribution');
+        expect(attribution?.textContent ?? '', 'префикс Leaflet с флагом убран').to.not.include('Leaflet');
+        expect(attribution?.textContent ?? '', 'атрибуция OSM на месте').to.include('OpenStreetMap');
         expect(modal._polygon).to.equal(null);
         expect(modal._points).to.equal(0);
         expect(modal.shadowRoot.querySelector('.ztools'), 'панель инструментов').to.exist;
