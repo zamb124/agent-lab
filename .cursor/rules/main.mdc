@@ -32,6 +32,7 @@ SaaS автоматизации средних компаний. Подписк�
 | Речь STT/TTS/VAD | `apps/voice`, `core/clients/voice_resolver.py` | `voice_resolver` | `voice.mdc` |
 | Складской учёт | `apps/stock` | `StockMoveEngine` | `stock.mdc` |
 | Витрина и заказ | `apps/shop` | `ShopOrderService`, `ShopService` | `shop.mdc` |
+| Геоданные и маршруты | `apps/geo` | `GeoClient` | `geo.mdc` |
 | Покупатель по телефону | `core/customers` | `customer_token`, `CustomerAddress` | `customers.mdc` |
 | Геокодинг | `core/clients/geocoding` | `Geocoder` | `integrations.mdc` |
 | Права | OpenFGA через `AuthzService` (`core/authz`) | `require_can_*` | `authorization.mdc` |
@@ -224,6 +225,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | realtime | 8025 | bus `PlatformEvent`, peer Centrifugo |
 | stock | 8026 | склад |
 | shop | 8027 | витрина, меню, заказ |
+| geo | 8028 | адреса, зоны, маршруты |
 
 Очереди и воркеры TaskIQ — `apps/worker_manifest.py` → `taskiq.mdc`. Команды разработки → `AGENTS.md`.
 
@@ -255,6 +257,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `datasources.mdc` | живая БД — `NodeType.DATASOURCE` |
 | `stock.mdc` | количество меняет только `StockMove` A→B |
 | `shop.mdc` | витрина: каталог, заказ, снапшот, агрегатор, зоны доставки |
+| `geo.mdc` | справочник адресов и маршруты; PostGIS + pgRouting, поколения импорта |
 | `customers.mdc` | покупатель — не `User`; сессия `customer_token` |
 | `flows.mdc` | ноды, ресурсы, триггеры, layout `src/`, конфигурация в БД |
 | `flows_runtime.mdc` | `workflow_events` — источник истины; `ExecutionState` — projection |

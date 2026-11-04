@@ -35,7 +35,10 @@ storageClassName: microk8s-hostpath
 
 postgres:
   nodeName: master
-  image: pgvector/pgvector:0.8.7-pg18
+  # Свой образ: pgvector + PostGIS + pgRouting (deploy/postgres/Dockerfile,
+  # собирается job postgres-image в deploy.yml). Тот же PG 18 — каталог данных
+  # совместим; обновление postgis — ручной bump тега.
+  image: ghcr.io/zamb124/agent-lab-postgres:latest
   storage: 50Gi
   resources:
     requests:
@@ -458,6 +461,31 @@ applications:
       - /shop/ui/static
       - --static-path-mount
       - apps/shop/ui-dist
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  geo:
+    nodeName: master
+    enabled: true
+    port: 8028
+    replicas: 1
+    serviceName: geo
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.geo.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8028"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -1010,6 +1038,26 @@ workers:
       limits:
         cpu: "1"
         memory: 2Gi
+  geo-worker:
+    nodeName: master
+    enabled: true
+    replicas: 1
+    terminationGracePeriodSeconds: 300
+    command:
+      [
+        "taskiq",
+        "worker",
+        "apps.geo.worker:worker_app",
+        "--workers",
+        "1",
+      ]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 4Gi
 
 litserve:
   enabled: true

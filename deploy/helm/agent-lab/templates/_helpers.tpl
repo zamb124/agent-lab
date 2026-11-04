@@ -82,6 +82,8 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_stock
 - name: DATABASE__SHOP_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_shop
+- name: DATABASE__GEO_URL
+  value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_geo
 - name: OPENFGA__API_URL
   value: http://openfga:8080
 {{- /* Server (Deployment) смотрит openfga.enabled; client authz включаем только с pin ids — иначе CrashLoop на первом деплое до bootstrap. */}}
@@ -156,6 +158,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 {{- if and $shop $shop.enabled }}
 - name: SERVER__SHOP_SERVICE_URL
   value: http://{{ $shop.serviceName }}:{{ $shop.port }}
+{{- end }}
+{{- $geo := index .Values.applications "geo" }}
+{{- if and $geo $geo.enabled }}
+- name: SERVER__GEO_SERVICE_URL
+  value: http://{{ $geo.serviceName }}:{{ $geo.port }}
 {{- end }}
 - name: SERVER__OFFICE_SERVICE_URL
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}

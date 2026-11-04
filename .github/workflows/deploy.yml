@@ -62,6 +62,7 @@ on:
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
   IMAGE_GPU: ghcr.io/${{ github.repository_owner }}/agent-lab-gpu
+  IMAGE_PG: ghcr.io/${{ github.repository_owner }}/agent-lab-postgres
   K8S_NAMESPACE: platform
   K8S_RELEASE: agent-lab
   HELM_CHART: ./deploy/helm/agent-lab
@@ -211,6 +212,29 @@ jobs:
           labels: ${{ steps.meta_gpu.outputs.labels }}
           cache-from: type=gha,scope=gpu
           cache-to: type=gha,scope=gpu,mode=max
+
+      # Postgres-образ платформы (pgvector + PostGIS + pgRouting). Mutable latest:
+      # StatefulSet тянет IfNotPresent — обновление postgis делается осознанным
+      # bump тега в values.yaml, а не автоматом на каждый деплой.
+      - name: Docker metadata (postgres)
+        id: meta_pg
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_PG }}
+          tags: |
+            type=raw,value=latest
+
+      - name: Build and push postgres image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/postgres/Dockerfile
+          push: true
+          pull: true
+          tags: ${{ steps.meta_pg.outputs.tags }}
+          labels: ${{ steps.meta_pg.outputs.labels }}
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,scope=postgres,mode=max
 
   deploy:
     name: Deploy to Kubernetes

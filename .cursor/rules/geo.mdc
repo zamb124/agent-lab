@@ -1,0 +1,54 @@
+---
+description: "Geo (apps/geo) — платформенный гео-движок: справочник адресов, зоны (GeoJSON→точные адреса внутри), маршруты car/foot/bike/scooter, матрица, TSP, изохроны на PostGIS+pgRouting. Читать при правке apps/geo, geo-клиента и интеграции карт/адресов/ETA в продукт"
+globs:
+  - "apps/geo/**"
+  - "core/clients/geo_client.py"
+  - "core/frontend/static/lib/map/**"
+  - "core/frontend/static/lib/components/platform-zone-address-panel.ts"
+  - "migrations/geo/**"
+  - "tests/geo/**"
+alwaysApply: false
+---
+
+# Geo
+
+Платформенный гео-движок. Порт 8028, база `platform_geo` (`database.geo_url`, PostGIS + pgRouting), очередь TaskIQ `geo` (`apps/geo/worker.py`). REST — `/geo/api/v1/`, команды — `GEO_OPERATIONS`, DI — `GeoDi`, SPA нет. Данные — справочные и глобальные: `__global_model__`, `company_id` нет ни в одной таблице; ops требуют `require_company` (контекст компании на вызов, не на данные).
+
+**Один владелец:** продукт не знает про OSM, PostGIS и SQL — только `GeoClient` (`core/clients/geo_client.py`) с координатами и GeoJSON. Свои таблицы адресов/дорог, свои spatial-запросы в других сервисах запрещены.
+
+## Модель
+
+- `GeoAddress` (`geo_addresses`) — справочник адресов из OSM: `display_name`, `city`, `street`, `housenumber`, `postcode`, `lat`/`lng`; `geom` — generated column `ST_MakePoint(lng, lat)` + GiST, Oxyde пишет только координаты.
+- `GeoRoadVertex` (`geo_road_vertices`) — узлы дорожного графа; PK суррогатный, `node_id` — OSM id (конфликт поколений невозможен).
+- `GeoRoadEdge` (`geo_road_edges`) — сегменты графа: `source`/`target` (pgr), `geom`, `length_m`, `oneway`, `highway`, пары `*_cost`/`*_reverse_cost` в секундах на направление для каждого `RouteMode` (`-1` — непроходимо).
+- `GeoImportState` (`geo_import_state`) — поколение импорта: строки нового импорта пишутся с `generation=N+1`, `current_generation` переключается атомарно; failed-импорт живые данные не трогает.
+
+## Операции
+
+`GEO_OPERATIONS` (`apps/geo/realtime/operations.py`), REST-зеркала — `apps/geo/api/geo.py`. Все — `require_company`, платформенные (нет scope по namespace).
+
+- `geo/addresses/in_zone` — точный список адресов внутри GeoJSON-полигона: `ST_Covers` (граница считается внутри), `q`+`limit`/`offset`, `GeoAddressListResult`.
+- `geo/addresses/suggest` — автокомплит (pg_trgm), опционально внутри зоны.
+- `geo/addresses/nearest` — KNN ближайшие адреса к точке.
+- `geo/route/calculate` — dijkstra: `distance_m`, `duration_s`, геометрия LineString.
+- `geo/route/matrix` — N×M `durations_s`.
+- `geo/route/optimal_order` — `pgr_TSP` порядок точек.
+- `geo/route/isochrone` — `pgr_drivingDistance` → concave hull «зона за N минут».
+- `geo/import/status` — состояние последнего синка.
+
+## Режимы маршрута
+
+`RouteMode = car | foot | bike | scooter` (`apps/geo/models/api.py`). Колонки стоимости — `_MODE_COLUMNS` в `GeoRoutingService`; snap к ближайшему **проходимому для режима** ребру (`-1` исключается). `car` — только моторный граф; `foot` — всё кроме motor-классов без `foot=yes`; `bike`/`scooter` — гибрид: и проезжая часть (кроме motor-классов без `bicycle=yes`), и path/footway/pedestrian/steps — dijkstra выбирает быстрейшее, пробок нет. `bicycle=dismount` — ребро проходимо со скоростью пешехода. Скорости и access-правила — `GeoSettings` (`*_speeds`, `foot_speed_overrides`, `light_*_fallback_kmh`) и `_mode_costs` в `OsmImportService`: теги `access`/`bicycle`/`foot`/`motor_vehicle`/`oneway:*`/`cycleway=opposite`/`junction=roundabout`/`motorroad`.
+
+## Импорт и обновления
+
+`OsmImportService` — трёхпроходный pyosmium-парс (нужные ноды → локации → адреса+ребра), bulk-insert пачками под лимит bind-параметров, атомарный своп поколения. `GEO_OSM_SYNC_TICK` (scheduled TaskIQ на очереди `geo`) — If-Modified-Since → реимпорт → своп; источник — `osm_extract_url` в `GeoSettings`. Экстракты берутся под конкретную витрину-регион.
+
+## Потребители
+
+- `apps/shop`: зона доставки — `zone_addresses` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `route/calculate` по `Shop.courier_mode`; ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.
+- UI: loader `core/frontend/static/lib/map/leaflet.ts` (vendor в `lib/map/vendor/`), `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны. Leaflet — только через этот loader; свои копии vendor в сервисах запрещены.
+
+## Прод
+
+Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvector + PostGIS + pgRouting), helm `values.yaml postgres.image` → ghcr. База `platform_geo` на существующем кластере создаётся вручную один раз: `CREATE DATABASE platform_geo; GRANT …; \c platform_geo; CREATE EXTENSION postgis; CREATE EXTENSION pgrouting;` (init.sql — только для свежих кластеров). Миграции — `migrations/geo/` (Oxyde + raw DDL для spatial-колонок).
