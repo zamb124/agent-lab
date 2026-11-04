@@ -50,6 +50,67 @@ class GeoSettings(BaseSettings):
         gt=0,
         description="Скорость пешехода (км/ч) по всем ходовым классам.",
     )
+    foot_speed_overrides: dict[str, float] = Field(
+        default_factory=lambda: {"steps": 3.0, "path": 4.0, "track": 4.2, "bridleway": 4.0},
+        description="Точечная скорость foot (км/ч) для классов, где базовая завышена.",
+    )
+    bike_speeds: dict[str, int] = Field(
+        default_factory=lambda: {
+            "trunk": 15,
+            "primary": 16,
+            "secondary": 17,
+            "tertiary": 18,
+            "unclassified": 18,
+            "residential": 18,
+            "living_street": 12,
+            "service": 16,
+            "road": 17,
+            "cycleway": 20,
+            "track": 13,
+            "path": 11,
+            "bridleway": 10,
+            "pedestrian": 8,
+            "footway": 8,
+            "steps": 4,
+        },
+        description=(
+            "Скорость bike-профиля (км/ч) по классу highway. Bike гибридный: "
+            "едет и по проезжей части (кроме motor-классов без bicycle=yes), и по "
+            "path/footway/pedestrian/steps — dijkstra выбирает самое быстрое."
+        ),
+    )
+    scooter_speeds: dict[str, int] = Field(
+        default_factory=lambda: {
+            "trunk": 17,
+            "primary": 18,
+            "secondary": 19,
+            "tertiary": 20,
+            "unclassified": 20,
+            "residential": 20,
+            "living_street": 14,
+            "service": 18,
+            "road": 19,
+            "cycleway": 22,
+            "track": 14,
+            "path": 12,
+            "bridleway": 10,
+            "pedestrian": 8,
+            "footway": 8,
+            "steps": 4,
+        },
+        description=(
+            "Скорость scooter-профиля (км/ч, электросамокат) по классу highway. "
+            "Те же правила доступа, что bike; чуть быстрее на дорогах."
+        ),
+    )
+    light_road_fallback_kmh: dict[str, int] = Field(
+        default_factory=lambda: {"bike": 16, "scooter": 18},
+        description="Скорость bike/scooter на неизвестном дорожном классе (км/ч).",
+    )
+    light_path_fallback_kmh: dict[str, int] = Field(
+        default_factory=lambda: {"bike": 9, "scooter": 9},
+        description="Скорость bike/scooter на неизвестном пешем классе (км/ч).",
+    )
     matrix_max_cells: int = Field(
         default=10_000,
         ge=1,

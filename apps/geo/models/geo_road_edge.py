@@ -2,9 +2,9 @@
 
 Таблица ``geo_road_edges`` (``__global_model__``). Имена ``source``/``target``/
 ``cost``/``reverse_cost`` — контракт pgRouting: ``edges_sql`` читает их
-напрямую. Стоимость хранится в секундах по профилям ``car``/``foot``;
-``-1`` — проезд в направлении запрещён. Колонка ``geom`` — GENERATED ALWAYS
-``ST_MakeLine`` из координат концов в миграции.
+напрямую. Стоимость хранится в секундах по профилям ``car``/``foot``/
+``bike``/``scooter``; ``-1`` — проезд в направлении запрещён. Колонка
+``geom`` — GENERATED ALWAYS ``ST_MakeLine`` из координат концов в миграции.
 """
 
 from __future__ import annotations
@@ -38,6 +38,10 @@ class GeoRoadEdge(PlatformModel):
     car_reverse_cost: float = DbField()
     foot_cost: float = DbField()
     foot_reverse_cost: float = DbField()
+    bike_cost: float = DbField(default=-1.0)
+    bike_reverse_cost: float = DbField(default=-1.0)
+    scooter_cost: float = DbField(default=-1.0)
+    scooter_reverse_cost: float = DbField(default=-1.0)
     oneway: int = DbField(default=0)
     highway: str = DbField(default="", db_type="TEXT")
     name: str = DbField(default="", db_type="TEXT")

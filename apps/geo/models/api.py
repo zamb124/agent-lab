@@ -9,7 +9,7 @@ from pydantic import Field
 from core.models import StrictBaseModel
 from core.types import JsonObject
 
-RouteMode = Literal["car", "foot"]
+RouteMode = Literal["car", "foot", "bike", "scooter"]
 
 
 class GeoPoint(StrictBaseModel):

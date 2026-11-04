@@ -34,6 +34,19 @@ logger = get_logger(__name__)
 _HIGHWAY_SKIP = frozenset(
     {"proposed", "construction", "raceway", "corridor", "elevator", "escape", "bus_guideway"}
 )
+# Классы только для мототранспорта: foot/bike/scooter проходят лишь по
+# явному разрешению (foot=yes / bicycle=yes).
+_MOTOR_ONLY = frozenset({"motorway", "motorway_link", "trunk", "trunk_link"})
+# Пешие/лёгкие классы: на них oneway распространяется и на пешехода.
+_PATH_CLASSES = frozenset(
+    {"path", "track", "footway", "pedestrian", "steps", "cycleway", "bridleway"}
+)
+_ACCESS_DENY = frozenset({"no", "private"})
+_ACCESS_ALLOW = frozenset(
+    {"yes", "true", "1", "designated", "official", "permissive", "destination", "customers", "public"}
+)
+_ONEWAY_YES = frozenset({"yes", "true", "1"})
+_ONEWAY_NO = frozenset({"no", "false", "0"})
 _EARTH_R = 6_371_000.0
 
 
@@ -53,6 +66,140 @@ def _display_name(tags: TagList) -> str | None:
         return None
     city = tags.get("addr:city") or tags.get("addr:place") or tags.get("addr:suburb") or ""
     return ", ".join(part for part in (city, street, housenumber) if part)
+
+
+def _access_allowed(tags: TagList, key: str, default: bool) -> bool:
+    """Доступность режима по тегам: явный deny/allow важнее общего ``access``."""
+    explicit = tags.get(key)
+    if explicit in _ACCESS_DENY:
+        return False
+    if explicit in _ACCESS_ALLOW:
+        return True
+    return default and tags.get("access") not in _ACCESS_DENY
+
+
+def _dir_override(tag_val: str | None, default: int) -> int:
+    """Направление из ``oneway*``-тега: 1 прямое, -1 обратное, 0 обе."""
+    if tag_val in _ONEWAY_YES:
+        return 1
+    if tag_val == "-1":
+        return -1
+    if tag_val in _ONEWAY_NO:
+        return 0
+    return default
+
+
+def _has_opposite_cycleway(tags: TagList) -> bool:
+    """Встречная велополоса на односторонней дороге → bike/scooter двунаправлены."""
+    for key in ("cycleway", "cycleway:left", "cycleway:right", "cycleway:both"):
+        if "opposite" in (tags.get(key) or ""):
+            return True
+    return False
+
+
+class _ModeCosts:
+    """Пары (cost, reverse_cost) секунд для каждого режима одного ребра."""
+
+    __slots__: tuple[str, str, str, str] = ("car", "foot", "bike", "scooter")
+
+    def __init__(self) -> None:
+        self.car: tuple[float, float] = (-1.0, -1.0)
+        self.foot: tuple[float, float] = (-1.0, -1.0)
+        self.bike: tuple[float, float] = (-1.0, -1.0)
+        self.scooter: tuple[float, float] = (-1.0, -1.0)
+
+    def any_passable(self) -> bool:
+        return any(
+            c > 0 or r > 0
+            for c, r in (self.car, self.foot, self.bike, self.scooter)
+        )
+
+
+def _sec(length_m: float, kmh: float) -> float:
+    return length_m / (kmh / 3.6)
+
+
+def _pair(length_m: float, kmh: float | None, direction: int) -> tuple[float, float]:
+    """(cost, reverse_cost): direction 0 — обе, 1 — прямое, -1 — обратное."""
+    if not kmh:
+        return -1.0, -1.0
+    sec = _sec(length_m, kmh)
+    if direction == 1:
+        return sec, -1.0
+    if direction == -1:
+        return -1.0, sec
+    return sec, sec
+
+
+def _mode_costs(tags: TagList, highway: str, length_m: float, settings: GeoSettings) -> _ModeCosts:
+    """Стоимости четырёх режимов ребра из OSM-тегов.
+
+    bike/scooter — гибридные: едут и по проезжей части (кроме motor-классов
+    без ``bicycle=yes``), и по path/footway/steps — dijkstra выбирает самое
+    быстрое; пробок у них нет. ``bicycle=dismount`` — спешивание: ребро
+    проходимо со скоростью пешехода. ``oneway`` связывает car всегда, лёгкие
+    — если не отменён ``oneway:bicycle=no``/встречной велополосой, пешехода —
+    только на path-классах или при явном ``oneway:foot``.
+    """
+    out = _ModeCosts()
+    motor_default = highway not in _MOTOR_ONLY and tags.get("motorroad") != "yes"
+
+    oneway_tag = tags.get("oneway")
+    mv_dir = 1 if oneway_tag in _ONEWAY_YES else (-1 if oneway_tag == "-1" else 0)
+    if mv_dir == 0 and tags.get("junction") == "roundabout":
+        mv_dir = 1
+
+    # car: моторный граф; vehicle=no/private режет без явного motor_vehicle.
+    car_kmh = settings.car_speeds.get(highway)
+    vehicle_deny = (
+        tags.get("vehicle") in _ACCESS_DENY
+        and tags.get("motor_vehicle") not in _ACCESS_ALLOW
+        and tags.get("motorcar") not in _ACCESS_ALLOW
+    )
+    car_allowed = (
+        car_kmh is not None
+        and not vehicle_deny
+        and _access_allowed(tags, "motor_vehicle", True)
+        and tags.get("motorcar") not in _ACCESS_DENY
+    )
+    car_dir = _dir_override(tags.get("oneway:motor_vehicle"), mv_dir)
+    out.car = _pair(length_m, car_kmh if car_allowed else None, car_dir)
+
+    # foot: всё кроме motor-классов/motorroad без foot=yes.
+    foot_allowed = _access_allowed(tags, "foot", motor_default)
+    foot_kmh = settings.foot_speed_overrides.get(highway, settings.foot_speed_kmh)
+    foot_dir = _dir_override(
+        tags.get("oneway:foot"), mv_dir if highway in _PATH_CLASSES else 0
+    )
+    out.foot = _pair(length_m, foot_kmh if foot_allowed else None, foot_dir)
+
+    # bike/scooter: гибрид дороги и пеших путей.
+    light_default = motor_default and _access_allowed(tags, "bicycle", True)
+    dismount = tags.get("bicycle") == "dismount"
+    ob = tags.get("oneway:bicycle")
+    if ob is not None:
+        light_dir = _dir_override(ob, 0)
+    elif _has_opposite_cycleway(tags):
+        light_dir = 0
+    else:
+        light_dir = mv_dir
+    for mode, speeds, fb_key in (
+        ("bike", settings.bike_speeds, "bike"),
+        ("scooter", settings.scooter_speeds, "scooter"),
+    ):
+        allowed = light_default
+        kmh: float | None = speeds.get(highway)
+        if kmh is None and allowed:
+            fb = settings.light_path_fallback_kmh if highway in _PATH_CLASSES else settings.light_road_fallback_kmh
+            kmh = float(fb.get(fb_key, 0))
+        if dismount and allowed:
+            kmh = settings.foot_speed_kmh
+        pair = _pair(length_m, kmh if allowed else None, light_dir)
+        if mode == "bike":
+            out.bike = pair
+        else:
+            out.scooter = pair
+    return out
 
 
 class _NeededNodesHandler(osmium.SimpleHandler):
@@ -147,12 +294,9 @@ class _WaysHandler(osmium.SimpleHandler):
         highway = tags.get("highway")
         if not highway or highway in _HIGHWAY_SKIP:
             return
-        speeds = self._settings.car_speeds
-        car_kmh = speeds.get(highway)
-        foot = highway not in {"motorway", "trunk", "motorway_link", "trunk_link"}
-        oneway_tag = tags.get("oneway", "")
-        oneway = 1 if oneway_tag in {"yes", "true", "1"} else (-1 if oneway_tag == "-1" else 0)
         name = tags.get("name", "")
+        oneway_tag = tags.get("oneway", "")
+        oneway = 1 if oneway_tag in _ONEWAY_YES else (-1 if oneway_tag == "-1" else 0)
 
         for i in range(len(w.nodes) - 1):
             a = coords[i]
@@ -160,17 +304,8 @@ class _WaysHandler(osmium.SimpleHandler):
             if a is None or b is None or a == b:
                 continue
             length_m = _haversine_m(a[0], a[1], b[0], b[1])
-            car_cost = length_m / (car_kmh / 3.6) if car_kmh else -1.0
-            car_rcost = car_cost
-            foot_cost = length_m / (self._settings.foot_speed_kmh / 3.6) if foot else -1.0
-            foot_rcost = foot_cost
-            if oneway == 1:
-                car_rcost = -1.0
-                foot_rcost = -1.0
-            elif oneway == -1:
-                car_cost = -1.0
-                foot_cost = -1.0
-            if car_cost < 0 and car_rcost < 0 and foot_cost < 0 and foot_rcost < 0:
+            costs = _mode_costs(tags, highway, length_m, self._settings)
+            if not costs.any_passable():
                 continue
             self.vertex_ids.update((w.nodes[i].ref, w.nodes[i + 1].ref))
             self.edges.append(
@@ -182,10 +317,14 @@ class _WaysHandler(osmium.SimpleHandler):
                     "dst_lat": b[0],
                     "dst_lng": b[1],
                     "length_m": length_m,
-                    "car_cost": car_cost,
-                    "car_reverse_cost": car_rcost,
-                    "foot_cost": foot_cost,
-                    "foot_reverse_cost": foot_rcost,
+                    "car_cost": costs.car[0],
+                    "car_reverse_cost": costs.car[1],
+                    "foot_cost": costs.foot[0],
+                    "foot_reverse_cost": costs.foot[1],
+                    "bike_cost": costs.bike[0],
+                    "bike_reverse_cost": costs.bike[1],
+                    "scooter_cost": costs.scooter[0],
+                    "scooter_reverse_cost": costs.scooter[1],
                     "oneway": oneway,
                     "highway": highway,
                     "name": name,
@@ -339,7 +478,7 @@ class OsmImportService:
         for i in range(0, len(rows), bs):
             chunk = rows[i : i + bs]
             values = ",".join(
-                "(" + ",".join(f"${{{j * cols + k}}}" for k in range(1, cols + 1)) + ")"
+                "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
                 for j in range(len(chunk))
             )
             params: list[object] = []
@@ -377,7 +516,7 @@ class OsmImportService:
         for i in range(0, len(ids), bs):
             chunk = ids[i : i + bs]
             values = ",".join(
-                f"(${{{j * cols + 1}}},${{{j * cols + 2}}},${{{j * cols + 3}}},${{{j * cols + 4}}})"
+                f"(${j * cols + 1},${j * cols + 2},${j * cols + 3},${j * cols + 4})"
                 for j in range(len(chunk))
             )
             params: list[object] = []
@@ -397,12 +536,12 @@ class OsmImportService:
     async def _bulk_insert_edges(
         self, rows: list[dict[str, object]], generation: int
     ) -> None:
-        cols = 16
+        cols = 20
         bs = min(self._settings.import_batch_size, 60_000 // cols)
         for i in range(0, len(rows), bs):
             chunk = rows[i : i + bs]
             values = ",".join(
-                "(" + ",".join(f"${{{j * cols + k}}}" for k in range(1, cols + 1)) + ")"
+                "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
                 for j in range(len(chunk))
             )
             params: list[object] = []
@@ -412,6 +551,8 @@ class OsmImportService:
                         r["source"], r["target"], r["src_lat"], r["src_lng"],
                         r["dst_lat"], r["dst_lng"], r["length_m"], r["car_cost"],
                         r["car_reverse_cost"], r["foot_cost"], r["foot_reverse_cost"],
+                        r["bike_cost"], r["bike_reverse_cost"],
+                        r["scooter_cost"], r["scooter_reverse_cost"],
                         r["oneway"], r["highway"], r["name"], r["osm_way_id"],
                         generation,
                     ]
@@ -421,7 +562,9 @@ class OsmImportService:
                 INSERT INTO geo_road_edges
                     (source, target, src_lat, src_lng, dst_lat, dst_lng,
                      length_m, car_cost, car_reverse_cost, foot_cost,
-                     foot_reverse_cost, oneway, highway, name, osm_way_id, generation)
+                     foot_reverse_cost, bike_cost, bike_reverse_cost,
+                     scooter_cost, scooter_reverse_cost,
+                     oneway, highway, name, osm_way_id, generation)
                 VALUES {values}
                 """,
                 params,

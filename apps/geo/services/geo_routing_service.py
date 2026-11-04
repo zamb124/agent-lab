@@ -1,10 +1,15 @@
 """Дорожный роутинг поверх pgRouting и таблиц ``geo_road_*``.
 
-Контракт графа — миграция ``geo/0001``: рёбра хранят стоимость в секундах
-по профилям ``car``/``foot`` (``-1`` — направление запрещено). ``edges_sql``
-pgRouting собирается под режим и активное поколение (int литералом в тексте —
-placeholders внутри ``edges_sql`` pgr не связывает). Порядок TSP считается
-детерминированным NN+2-opt поверх матрицы pgRouting — предсказуемо для тестов.
+Контракт графа — миграции ``geo/0001``+``geo/0002``: рёбра хранят стоимость
+в секундах по профилям ``car``/``foot``/``bike``/``scooter`` (``-1`` —
+направление запрещено). ``bike``/``scooter`` — гибридные лёгкие режимы:
+движок импорта разрешает им и проезжую часть (без motor-классов), и
+path/footway/steps — dijkstra сама выбирает самое быстрое, пробок нет.
+``edges_sql`` pgRouting собирается под режим и активное поколение (int
+литералом в тексте — placeholders внутри ``edges_sql`` pgr не связывает).
+Snap идёт к ближайшему ПРОХОДИМОМУ для режима ребру (не к вершине моторного
+графа — иначе пешеход «прилипает» к магистрали). Порядок TSP — NN+2-opt
+поверх матрицы pgRouting, детерминированно.
 """
 
 from __future__ import annotations
@@ -33,6 +38,18 @@ class GeoRoutingError(Exception):
         self.code = code
 
 
+_EARTH_R = 6_371_000.0
+
+
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    dlat = radians(lat2 - lat1)
+    dlng = radians(lng2 - lng1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+    return 2 * _EARTH_R * asin(sqrt(a))
+
+
 def _edges_sql(cost_col: str, rcost_col: str, generation: int) -> str:
     """SQL-набор рёбер для pgr_* по профилю и поколению.
 
@@ -46,10 +63,19 @@ def _edges_sql(cost_col: str, rcost_col: str, generation: int) -> str:
     )
 
 
+_MODE_COLUMNS: dict[str, tuple[str, str]] = {
+    "car": ("car_cost", "car_reverse_cost"),
+    "foot": ("foot_cost", "foot_reverse_cost"),
+    "bike": ("bike_cost", "bike_reverse_cost"),
+    "scooter": ("scooter_cost", "scooter_reverse_cost"),
+}
+
+
 def _mode_columns(mode: str) -> tuple[str, str]:
-    if mode == "foot":
-        return "foot_cost", "foot_reverse_cost"
-    return "car_cost", "car_reverse_cost"
+    cols = _MODE_COLUMNS.get(mode)
+    if cols is None:
+        raise GeoRoutingError("route_mode_unknown", f"Unknown route mode {mode!r}")
+    return cols
 
 
 class GeoRoutingService:
@@ -58,17 +84,25 @@ class GeoRoutingService:
     def __init__(self, settings: GeoSettings) -> None:
         self._settings: GeoSettings = settings
 
-    async def _snap_vertex(self, lat: float, lng: float, *, generation: int) -> int:
-        """Ближайшая вершина графа к точке; лимит притяжки из настроек."""
+    async def _snap_vertex(
+        self, lat: float, lng: float, *, mode: str, generation: int
+    ) -> int:
+        """Вершина ближайшего ПРОХОДИМОГО для режима ребра к точке.
+
+        KNN по ``geom`` ребра (индекс, градусы → ближайшее ребро), точная
+        дистанция в метрах одним рядом geography; из концов выбирается
+        ближайший. Пешеход/самокат так не «прилипают» к магистрали.
+        """
+        cost_col, rcost_col = _mode_columns(mode)
         rows = await execute_raw(
-            """
-            SELECT node_id,
+            f"""
+            SELECT source, target, src_lat, src_lng, dst_lat, dst_lng,
                    ST_Distance(
                        geom::geography,
                        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
                    ) AS dist_m
-            FROM geo_road_vertices
-            WHERE generation = $3
+            FROM geo_road_edges
+            WHERE generation = $3 AND ({cost_col} > 0 OR {rcost_col} > 0)
             ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
             LIMIT 1
             """,
@@ -77,16 +111,19 @@ class GeoRoutingService:
         )
         if not rows:
             raise PlatformUnavailableError(
-                "Road graph is empty — run OSM import",
+                f"Road graph has no {mode}-passable edges — run OSM import",
                 error_code="geo_import_unavailable",
             )
-        dist_m = float(rows[0]["dist_m"])
+        edge = rows[0]
+        dist_m = float(edge["dist_m"])
         if dist_m > self._settings.snap_max_distance_m:
             raise GeoRoutingError(
                 "point_too_far_from_road",
-                f"Point is {dist_m:.0f}m from the road graph",
+                f"Point is {dist_m:.0f}m from the {mode} road graph",
             )
-        return int(rows[0]["node_id"])
+        src_d = _haversine_m(lat, lng, float(edge["src_lat"]), float(edge["src_lng"]))
+        dst_d = _haversine_m(lat, lng, float(edge["dst_lat"]), float(edge["dst_lng"]))
+        return int(edge["source"] if src_d <= dst_d else edge["target"])
 
     async def calculate(
         self,
@@ -99,8 +136,10 @@ class GeoRoutingService:
     ) -> GeoRouteResponse:
         """Кратчайший путь: дистанция, длительность, геометрия LineString."""
         generation = await GeoImportState.active_generation()
-        start_vid = await self._snap_vertex(from_lat, from_lng, generation=generation)
-        end_vid = await self._snap_vertex(to_lat, to_lng, generation=generation)
+        start_vid = await self._snap_vertex(
+            from_lat, from_lng, mode=mode, generation=generation
+        )
+        end_vid = await self._snap_vertex(to_lat, to_lng, mode=mode, generation=generation)
         cost_col, rcost_col = _mode_columns(mode)
         edges_sql = _edges_sql(cost_col, rcost_col, generation)
         rows = await execute_raw(
@@ -148,11 +187,11 @@ class GeoRoutingService:
             )
         generation = await GeoImportState.active_generation()
         src_vids = [
-            await self._snap_vertex(lat, lng, generation=generation)
+            await self._snap_vertex(lat, lng, mode=mode, generation=generation)
             for lat, lng in sources
         ]
         dst_vids = [
-            await self._snap_vertex(lat, lng, generation=generation)
+            await self._snap_vertex(lat, lng, mode=mode, generation=generation)
             for lat, lng in targets
         ]
         durations = await self._cost_matrix(
@@ -259,7 +298,7 @@ class GeoRoutingService:
                 f"{minutes}min exceed limit {self._settings.isochrone_max_minutes}min",
             )
         generation = await GeoImportState.active_generation()
-        start_vid = await self._snap_vertex(lat, lng, generation=generation)
+        start_vid = await self._snap_vertex(lat, lng, mode=mode, generation=generation)
         cost_col, rcost_col = _mode_columns(mode)
         edges_sql = _edges_sql(cost_col, rcost_col, generation)
         rows = await execute_raw(
