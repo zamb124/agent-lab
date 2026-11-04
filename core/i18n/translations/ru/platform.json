@@ -1086,6 +1086,8 @@
     "address_unverifiable": "Не удалось проверить адрес — уточните его",
     "address_unknown": "Сохранённый адрес не найден",
     "address_not_found": "Адрес не найден",
-    "deeplink_not_allowed": "Ссылка не разрешена"
+    "deeplink_not_allowed": "Ссылка не разрешена",
+    "shop_closed": "Сейчас закрыто — заказы откроются {next_open}",
+    "invalid_delivery_zone": "Некорректная зона доставки: нужен GeoJSON Polygon с одним замкнутым кольцом"
   }
 }

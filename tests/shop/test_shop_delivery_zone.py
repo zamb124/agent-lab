@@ -325,7 +325,7 @@ class TestDeliveryCheckServiceChain:
     async def test_inside_zone_deliverable(
         self,
         shop_client: AsyncClient,
-        shop_di: ShopDi,
+        shop_di,
         monkeypatch: pytest.MonkeyPatch,
         unique_id: str,
     ) -> None:
@@ -350,7 +350,7 @@ class TestDeliveryCheckServiceChain:
     async def test_outside_zone_not_deliverable(
         self,
         shop_client: AsyncClient,
-        shop_di: ShopDi,
+        shop_di,
         monkeypatch: pytest.MonkeyPatch,
         unique_id: str,
     ) -> None:
@@ -374,7 +374,7 @@ class TestDeliveryCheckServiceChain:
     async def test_provider_empty_unverifiable(
         self,
         shop_client: AsyncClient,
-        shop_di: ShopDi,
+        shop_di,
         monkeypatch: pytest.MonkeyPatch,
         unique_id: str,
     ) -> None:
@@ -397,7 +397,7 @@ class TestDeliveryCheckServiceChain:
         self,
         shop_client: AsyncClient,
         shop_public_client: AsyncClient,
-        shop_di: ShopDi,
+        shop_di,
         unique_id: str,
     ) -> None:
         """Заказ с `customer_address_id`: touch_used обновляет last_used_at."""
@@ -430,7 +430,7 @@ class TestCustomerAddressService:
     """CustomerAddressService: лимит, дедуп, изоляция владельца."""
 
     async def test_cap_evicts_oldest(
-        self, shop_di: ShopDi, unique_id: str
+        self, shop_di, unique_id: str
     ) -> None:
         service = CustomerAddressService(shop_di.geocoder)
         cid = f"cust_cap_{unique_id[:8]}"
@@ -444,7 +444,7 @@ class TestCustomerAddressService:
         assert f"Адрес {unique_id[:6]} {CustomerAddressService.MAX_ADDRESSES + 1}" in addrs
 
     async def test_dedup_returns_same_row(
-        self, shop_di: ShopDi, unique_id: str
+        self, shop_di, unique_id: str
     ) -> None:
         service = CustomerAddressService(shop_di.geocoder)
         cid = f"cust_dedup_{unique_id[:8]}"
@@ -454,7 +454,7 @@ class TestCustomerAddressService:
         assert len(await service.list_for_customer(cid)) == 1
 
     async def test_delete_foreign_returns_false(
-        self, shop_di: ShopDi, unique_id: str
+        self, shop_di, unique_id: str
     ) -> None:
         service = CustomerAddressService(shop_di.geocoder)
         row = await service.add(
@@ -532,3 +532,87 @@ class TestMarketCoverage:
         )
         by_slug = {i["slug"]: i for i in resp.json()["items"]}
         assert by_slug[slug_zoned]["delivery_coverage"] == "no"
+
+
+class TestDeliveryZoneValidation:
+    """PATCH shops: delivery_zone — строго один внешний ring GeoJSON Polygon."""
+
+    async def _patch(
+        self, client: AsyncClient, slug: str, zone: Any
+    ) -> httpx2.Response:
+        resp = await client.post(
+            _SHOPS, json={"slug": slug, "name": f"Z {slug}", "kind": "cafe"}
+        )
+        assert resp.status_code == 200, resp.text
+        shop = resp.json()
+        return await client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"delivery_zone": zone}
+        )
+
+    async def test_valid_polygon_accepted(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        resp = await self._patch(shop_client, f"zv-ok-{unique_id[:8]}", _ZONE)
+        assert resp.status_code == 200, resp.text
+
+    async def test_empty_object_clears_zone(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        resp = await self._patch(shop_client, f"zv-clr-{unique_id[:8]}", {})
+        assert resp.status_code == 200, resp.text
+
+    async def test_multipolygon_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        zone = {"type": "MultiPolygon", "coordinates": [_ZONE["coordinates"]]}
+        resp = await self._patch(shop_client, f"zv-mp-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+        assert resp.json()["error_code"] == "invalid_delivery_zone"
+
+    async def test_polygon_with_hole_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        hole = _ZONE["coordinates"]
+        zone = {"type": "Polygon", "coordinates": [hole, hole]}
+        resp = await self._patch(shop_client, f"zv-h-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_unclosed_ring_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        zone = {
+            "type": "Polygon",
+            "coordinates": [[[37.5, 55.7], [37.7, 55.7], [37.7, 55.8], [37.6, 55.9]]],
+        }
+        resp = await self._patch(shop_client, f"zv-u-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_non_numeric_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        zone = {
+            "type": "Polygon",
+            "coordinates": [[["a", 55.7], [37.7, 55.7], [37.7, 55.8], ["a", 55.7]]],
+        }
+        resp = await self._patch(shop_client, f"zv-nn-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_out_of_bounds_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        zone = {
+            "type": "Polygon",
+            "coordinates": [[[200.0, 55.7], [37.7, 55.7], [37.7, 55.8], [200.0, 55.7]]],
+        }
+        resp = await self._patch(shop_client, f"zv-b-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_oversized_ring_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        # 257 точек замкнутого кольца — за пределом разумного редактора.
+        ring = [[37.5 + i * 0.0001, 55.7] for i in range(256)]
+        ring.append(ring[0])
+        zone = {"type": "Polygon", "coordinates": [ring]}
+        resp = await self._patch(shop_client, f"zv-big-{unique_id[:8]}", zone)
+        assert resp.status_code == 400

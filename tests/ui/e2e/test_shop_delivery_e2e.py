@@ -122,6 +122,40 @@ async def test_zoned_delivery_unverifiable_address_blocks_checkout(
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.timeout(90)
+async def test_closed_shop_disables_checkout(
+    page: Page,
+    shop_client_http: httpx2.AsyncClient,
+    shop_worker: None,
+    auth_headers_system: dict[str, str],
+    unique_id: str,
+) -> None:
+    """Магазин закрыт по расписанию → предупреждение + кнопка заказа выключена."""
+    storefront = await _create_storefront(
+        shop_client_http,
+        {**auth_headers_system, **ui_e2e_scope_headers()},
+        f"closed{unique_id[:8]}",
+        categories=("Меню",),
+        products_per_category=1,
+        shop_patch={
+            "pickup_enabled": True,
+            "working_hours": dict.fromkeys(
+                (str(d) for d in range(7)), "00:00-00:00"
+            ),
+        },
+    )
+    await _cart_to_sheet(page, storefront)
+    warn = page.locator(".minwarn", has_text="Сейчас закрыто")
+    await expect(warn).to_be_visible()
+    await expect(page.locator("#payBtn")).to_be_disabled()
+    # Прямой submit тоже не доходит до авторизации.
+    await page.evaluate("submit()")
+    await page.wait_for_timeout(400)
+    assert not await _auth(page).locator(".sheet").is_visible()
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(90)
 async def test_zoned_pickup_bypasses_address_and_zone(
     page: Page, zoned_storefront: Storefront, unique_id: str
 ) -> None:

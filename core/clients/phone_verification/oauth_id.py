@@ -4,7 +4,7 @@
 (code → token → userinfo → phones). Каждый провайдер знает свои endpoint'ы
 и маппинг полей; креды — `CustomerAuthOAuthClientConfig` из бренда.
 
-Регистрация приложений (док. — `.cursor/rules/customers.mdc` § Провайдеры):
+Регистрация приложений (док. — `.cursor/rules/customers.mdc` § Модель):
 - Yandex: https://oauth.yandex.ru → «Веб-сервисы», redirect URI колбэка,
   права «Номер телефона» (яндекс отдаёт `default_phone.number`).
 - VK ID: https://id.vk.ru/about/business/go/console → PKCE-флоу

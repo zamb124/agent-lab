@@ -1,5 +1,5 @@
 ---
-description: "Customers — платформенная авторизация покупателя по номеру телефона: core/customers, провайдеры phone_verification, customer_token, web-компонент platform-customer-auth. Читать при правке core/customers, core/clients/phone_verification, customer-auth роутов и интеграции авторизации покупателя в продукт"
+description: "Платформенная авторизация покупателя по телефону: core/customers, провайдеры phone_verification, customer_token, platform-customer-auth"
 globs:
   - "core/customers/**"
   - "core/clients/phone_verification/**"
@@ -26,7 +26,7 @@ alwaysApply: false
 
 ## Инварианты
 
-1. Провайдеры верификации — только `core/clients/phone_verification/` (`PhoneCodeSender`, `ContactShareVerifier`, `OAuthIdVerifier`, `DirectVerifier`, `PhoneVerificationRegistry`); выбор методов — `CustomerAuthService.method_options` по `method_priority` конфига и доступности провайдера на apex.
+1. Провайдеры верификации — только `core/clients/phone_verification/` (`CodeSender`, `ContactShareVerifier`, `OAuthVerifier`, `DirectVerifier`, `PhoneVerificationRegistry`); выбор методов — `CustomerAuthService.method_options` по `method_priority` конфига и доступности провайдера на apex.
 2. Бесплатные direct/OAuth-методы (Telegram contact, Yandex/VK/Sber ID) идут перед `sms_code`; SMS — fallback за счёт платформы (`sms_fallback_enabled`, `daily_budget_rub`), мерчанту не выставляется.
 3. Заказ и любое действие покупателя требует `require_customer()` (`core/request_scope.py`) — `CustomerScope` из `customer_token`; scope сессии обязан совпадать с компанией витрины (`forbidden_scope`).
 4. Телефон покупателя в данных продукта — только верифицированный из сессии; «телефон из формы» запрещён.

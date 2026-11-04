@@ -3,7 +3,7 @@
 Протокол аналогичен Telegram: deep link → кнопка «Поделиться номером» →
 webhook update с `contact` и `vcf_info`/hash, связывающим номер с аккаунтом.
 Канал выключен по умолчанию (`brands.<apex>.max.enabled=false`) — включается
-после верификационного спайка протокола (customers.mdc § Риски).
+после верификационного спайка протокола (customers.mdc § Инварианты).
 """
 
 from __future__ import annotations

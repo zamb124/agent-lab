@@ -1086,6 +1086,8 @@
     "address_unverifiable": "Could not verify the address — please refine it",
     "address_unknown": "Saved address not found",
     "address_not_found": "Address not found",
-    "deeplink_not_allowed": "Deeplink is not allowed"
+    "deeplink_not_allowed": "Deeplink is not allowed",
+    "shop_closed": "We are closed — ordering opens {next_open}",
+    "invalid_delivery_zone": "Invalid delivery zone: expected GeoJSON Polygon with a single closed ring"
   }
 }

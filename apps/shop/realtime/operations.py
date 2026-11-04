@@ -92,10 +92,12 @@ from core.request_scope import (
     require_customer,
 )
 from core.tasks import enqueue
+from core.utils.geo import is_valid_delivery_zone
 from core.websocket import (
     EmptyPayload,
     raise_conflict,
     raise_forbidden,
+    raise_invalid,
     raise_not_found,
     raise_unavailable,
 )
@@ -455,6 +457,13 @@ async def op_shops_get(payload: ShopIdPayload, *, user: User, di: Di) -> ShopRes
 async def op_shops_update(payload: ShopUpdatePayload, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
+    if "delivery_zone" in payload.model_fields_set and not is_valid_delivery_zone(
+        payload.delivery_zone
+    ):
+        raise_invalid(
+            ValueError("delivery_zone is not a valid single-ring GeoJSON Polygon"),
+            error_code="invalid_delivery_zone",
+        )
     try:
         shop = await di.shop_service.update_shop(scope.company_id, payload.shop_id, payload)
     except PlatformNotFoundError as exc:

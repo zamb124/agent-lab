@@ -234,17 +234,26 @@ function hoursBadge(){{
   const day=(now.getDay()+6)%7;
   const mins=now.getHours()*60+now.getMinutes();
   const hm=v=>{{const p=v.split(':');return (+p[0])*60+(+p[1]||0);}};
-  const range=v=>{{if(typeof v!=='string')return null;const p=v.split('-');return p.length<2?null:{{o:p[0],c:p[1],om:hm(p[0]),cm:hm(p[1])}};}};
+  const range=v=>{{if(typeof v!=='string')return null;const p=v.split('-');
+    if(p.length<2)return null;const r={{o:p[0],c:p[1],om:hm(p[0]),cm:hm(p[1])}};
+    return r.om===r.cm?null:r;}};
+  const prev=range(wh[String((day+6)%7)]);
+  if(prev&&prev.om>prev.cm&&mins<prev.cm)return{{t:'Открыто · до '+prev.c,open:true}};
   const today=range(wh[String(day)]);
   if(today){{
-    if(mins>=today.om&&mins<today.cm)return{{t:'Открыто · до '+today.c,open:true}};
-    if(mins<today.om)return{{t:'Откроемся в '+today.o,open:false}};
+    if(today.om<today.cm){{
+      if(mins>=today.om&&mins<today.cm)return{{t:'Открыто · до '+today.c,open:true}};
+      if(mins<today.om)return{{t:'Откроемся в '+today.o,open:false}};
+    }}else{{
+      if(mins>=today.om)return{{t:'Открыто · до '+today.c,open:true}};
+      return{{t:'Откроемся в '+today.o,open:false}};
+    }}
   }}
   for(let d=1;d<=7;d++){{
     const nd=(day+d)%7,tr=range(wh[String(nd)]);
     if(tr)return{{t:'Откроемся '+DAYS[nd]+' в '+tr.o,open:false}};
   }}
-  return null;
+  return{{t:'временно не работает',open:false}};
 }}
 const CART_KEY='shopcart:'+S.slug;
 const cart=new Map();
@@ -413,8 +422,8 @@ function renderSheet(){{
   ${{dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${{TABLES.map(t=>`<option value="${{t.id}}"${{t.id===tableId?' selected':''}}>${{esc(t.label)}}</option>`).join('')}}</select>`:''}}
   ${{dtype==='delivery'?`<div class="achips" id="addrChips"></div><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()"><div class="zstat" id="zoneStat"></div>`:''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
-  ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — оформите предзаказ, примем к открытию</div>`:''}}
-  <button class="big" id="payBtn" ${{below?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
+  ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — ${{hb.t}}</div>`:''}}
+  <button class="big" id="payBtn" ${{(below||(hb&&!hb.open))?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
   refreshSavings();
   if(dtype==='delivery'){{loadAddresses();updatePayBtn();}}
 }};
@@ -505,9 +514,11 @@ function updatePayBtn(){{
   const btn=document.getElementById('payBtn');
   if(!btn)return;
   const blocked=zoneRequired()&&dtype==='delivery'&&zoneOk!==true;
+  const hb=hoursBadge();
+  const closed=!!(hb&&!hb.open);
   const sub=total();
   const below=S.min_order_minor&&sub<S.min_order_minor;
-  btn.disabled=!!(below||blocked);
+  btn.disabled=!!(below||blocked||closed);
 }}
 async function saveAddress(text){{
   try{{await fetch('/shop/api/v1/public/customer-auth/addresses',{{method:'POST',credentials:'same-origin',
@@ -529,6 +540,8 @@ function ensureAuth(){{
   }});
 }}
 window.submit=async()=>{{
+  const hbSub=hoursBadge();
+  if(hbSub&&!hbSub.open){{toast('Сейчас закрыто — '+(hbSub?hbSub.t:''));return;}}
   if(dtype==='onsite'&&!tableId){{toast('Выберите стол');return;}}
   if(zoneRequired()&&dtype==='delivery'&&zoneOk!==true){{
     if(zoneOk===false){{toast('Адрес вне зоны доставки');return;}}
@@ -551,8 +564,12 @@ window.submit=async()=>{{
   const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/orders`,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
   if(!r.ok){{
     let msg='Не удалось оформить заказ';
-    try{{const e=await r.json();if(e&&(e.error_code||e.detail)==='out_of_delivery_zone')msg='Адрес вне зоны доставки';}}catch(_){{}}
-    alert(msg);return;
+    try{{const e=await r.json();
+      const code=e&&(e.error_code||e.detail);
+      if(code==='out_of_delivery_zone')msg='Адрес вне зоны доставки';
+      else if(code==='shop_closed'){{const np=e.error_params&&e.error_params.next_open;msg='Сейчас закрыто'+(np?' — откроемся '+np:'');}}
+    }}catch(_){{}}
+    toast(msg);return;
   }}
   const d=await r.json();
   if(dtype==='delivery'&&addrText&&!pickedAddrId)saveAddress(addrText);

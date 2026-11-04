@@ -35,6 +35,7 @@ from apps.shop.models.api import (
 )
 from apps.shop.models.common import new_id
 from apps.shop.models.order import new_public_code
+from apps.shop.services.hours import shop_open_state
 from apps.shop.services.modifier_pricing import (
     load_modifier_tree_by_sort_asc,
     nested_lookup,
@@ -156,6 +157,13 @@ class ShopOrderService:
             raise PlatformAccessDeniedError(
                 "Customer session scope does not match this storefront",
                 error_code="forbidden_scope",
+            )
+        open_state = shop_open_state(shop.working_hours, shop.timezone, utcnow())
+        if not open_state.open:
+            raise PlatformConflictError(
+                "Shop is closed now",
+                error_code="shop_closed",
+                error_params={"next_open": open_state.next_open or ""},
             )
         if shop.status != ShopStatus.PUBLISHED:
             raise PlatformNotFoundError(

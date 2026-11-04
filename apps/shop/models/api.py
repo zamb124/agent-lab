@@ -70,7 +70,7 @@ class ShopResponse(StrictBaseModel):
     delivery_enabled: bool
     pickup_enabled: bool
     onsite_enabled: bool
-    delivery_zone: dict[str, object]
+    delivery_zone: JsonObject
     delivery_fee_minor: int
     min_order_minor: int
     currency: str
@@ -108,7 +108,7 @@ class ShopUpdateRequest(StrictBaseModel):
     delivery_enabled: bool | None = None
     pickup_enabled: bool | None = None
     onsite_enabled: bool | None = None
-    delivery_zone: dict[str, object] | None = None
+    delivery_zone: JsonObject | None = None
     delivery_fee_minor: int | None = Field(default=None, ge=0)
     min_order_minor: int | None = Field(default=None, ge=0)
     theme: ShopTheme | None = None

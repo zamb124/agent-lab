@@ -76,6 +76,8 @@ export class ShopZoneMap extends PlatformElement {
     private _draftLine: LeafletPolyline | null = null;
     private _draftPoints: LatLngTuple[] = [];
     private _marker: LeafletMarker | null = null;
+    private _ro: ResizeObserver | null = null;
+    private _mapSized = false;
 
     constructor() {
         super();
@@ -109,6 +111,9 @@ export class ShopZoneMap extends PlatformElement {
     }
 
     override disconnectedCallback(): void {
+        this._ro?.disconnect();
+        this._ro = null;
+        this._mapSized = false;
         this._map?.remove();
         this._map = null;
         super.disconnectedCallback();
@@ -135,6 +140,22 @@ export class ShopZoneMap extends PlatformElement {
         map.on('click', (ev: { latlng: { lat: number; lng: number } }) => {
             if (this._drawing) this._addVertex(ev.latlng.lat, ev.latlng.lng);
         });
+        // Контейнер мог быть display:none/0×0 при init (ленивые секции
+        // настроек) — Leaflet кэширует размер и рисует «уголки» тайлов.
+        // invalidateSize на реальный resize возвращает карту в норму, первый
+        // ненулевой размер — повод заново подогнать полигон под вьюпорт.
+        this._ro = new ResizeObserver(() => {
+            if (!this._map || !el.offsetWidth || !el.offsetHeight) return;
+            this._map.invalidateSize();
+            if (!this._mapSized) {
+                this._mapSized = true;
+                if (this._polygon) {
+                    this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24] });
+                }
+            }
+        });
+        this._ro.observe(el);
+        requestAnimationFrame(() => this._map?.invalidateSize());
         this._renderZone();
     }
 
@@ -192,8 +213,9 @@ export class ShopZoneMap extends PlatformElement {
             weight: 2.5,
             dashArray: '6 6',
         }).addTo(this._map);
-        this._hint = this._draftPoints.length < 3
-            ? `Ещё ${3 - this._draftPoints.length} точки минимум`
+        const left = 3 - this._draftPoints.length;
+        this._hint = left > 0
+            ? `Ещё ${left} ${left === 1 ? 'точка' : 'точки'} минимум`
             : '«Замкнуть» — готово, или добавьте ещё точек';
     }
 

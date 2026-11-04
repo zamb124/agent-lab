@@ -77,3 +77,50 @@ def bbox_of_ring(ring: list[tuple[float, float]]) -> tuple[float, float, float, 
     xs = [p[0] for p in ring]
     ys = [p[1] for p in ring]
     return min(xs), min(ys), max(xs), max(ys)
+
+
+_ZONE_MAX_POINTS = 256
+
+
+def is_valid_delivery_zone(zone: JsonObject | None) -> bool:
+    """Строгая валидация зоны на запись: один внешний ring GeoJSON Polygon.
+
+    Поддерживаем ровно то, что умеет point-in-polygon: type=="Polygon",
+    одно кольцо (дырки и MultiPolygon отклоняем честно), 4..256 точек,
+    каждая — числовая пара [lng±180, lat±90], кольцо замкнуто.
+    Пустая зона ({}/None) — валидна: так зону снимают.
+    """
+    if not zone:
+        return True
+    if zone.get("type") != "Polygon":
+        return False
+    coords = zone.get("coordinates")
+    if (
+        not isinstance(coords, list)
+        or len(coords) != 1  # только внешнее кольцо — дырок/MultiPolygon нет
+        or not isinstance(coords[0], list)
+    ):
+        return False
+    ring_raw = coords[0]
+    if not 4 <= len(ring_raw) <= _ZONE_MAX_POINTS:
+        return False
+    first = last = None
+    for pt in ring_raw:
+        if (
+            not isinstance(pt, (list, tuple))
+            or len(pt) != 2
+            or isinstance(pt[0], bool)
+            or isinstance(pt[1], bool)
+            or not isinstance(pt[0], (int, float))
+            or not isinstance(pt[1], (int, float))
+        ):
+            return False
+        lng, lat = float(pt[0]), float(pt[1])
+        if not (-180.0 <= lng <= 180.0 and -90.0 <= lat <= 90.0):
+            return False
+        if first is None:
+            first = (lng, lat)
+        last = (lng, lat)
+    if first is None or last is None:
+        return False
+    return abs(first[0] - last[0]) < 1e-9 and abs(first[1] - last[1]) < 1e-9
