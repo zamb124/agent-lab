@@ -27,9 +27,9 @@ alwaysApply: false
 10. **Уровень — от потребителя.** Сила сигнала: HTTP/ASGI-клиент (маршрут, JSON, статус, ошибка) → компонент `<svc>_di` → чистая функция с переиспользуемым контрактом. Изменение домена покрывают сценарии «запрос → ответ» и «задача воркера → эффект в БД или очереди»; команда — тождество WS ≡ REST → `architecture.mdc` § Новая команда. `[без гейта]`
 11. **Запись — ответ и состояние.** После записи (в том числе воркером) тест проверяет ответ и состояние: повторный GET/list того же контракта и/или строки через методы модели Oxyde; сырой SQL — только для агрегата или индекса без метода модели, с пояснением в кейсе. Сценарий A2A или Flow UI сверяет streaming frames, blocking `Task`, `GetTask` после rehydrate и durable projection: порядок Artifacts, Parts и metadata совпадают, snapshot и patches артефакта `state` дают state `GetTask`. `[без гейта]`
 12. **Ассерты и имена.** Ассерт сравнивает структуру целиком или явный фрагмент, статус и тело — рядом; truthy-проверка (`assert body.get("x")`) запрещена; порядок без контракта — `sorted(..., key=...)` или множества. Имя — `test_<сценарий>_<ожидание>` или `test_<действие>_when_<условие>_then_<результат>`, не `test_*_works`; кейс — в docstring; Arrange → Act → Assert; длинная подготовка — в фикстурах и хелперах `tests/`. `[без гейта]`
-13. **Таймаут — потолок зависания.** Глобальный лимит — `pytest.ini` (`timeout=5`, `timeout_method=thread`, `timeout_func_only=true`); лимиты пакетов ставит только `pytest_collection_modifyitems` (`tests/conftest.py`, `tests/ui/e2e/conftest.py`, `tests/realtime/conftest.py`); зависший xdist-воркер снимает `tests/hang_guard.py`, весь прогон — `scripts/testing/pytest_with_timeout.py`. `[без гейта]`
+13. **Таймаут — потолок зависания.** Глобальный лимит — `pytest.ini` (`timeout=60`, `timeout_method=thread`, `timeout_func_only=true`); лимиты пакетов ставит только `pytest_collection_modifyitems` (`tests/conftest.py`, `tests/ui/e2e/conftest.py`, `tests/realtime/conftest.py`); зависший xdist-воркер снимает `tests/hang_guard.py`, весь прогон — `scripts/testing/pytest_with_timeout.py`. `[без гейта]`
 14. **Skip — только внешнее окружение.** `pytest.skip` и `pytest.mark.skip` — только при отсутствии окружения вне стека (сеть, системная библиотека, ключ провайдера) с причиной в сообщении; недоступный стек — `pytest.fail`. Гейт: ratchet `tests_skip_markers`.
-15. **Property-based — дополнительный слой.** Hypothesis-тесты (`test_*_fuzz.py`, `deadline=None`) и JS `*.fuzz.spec.js` дополняют детерминированные кейсы и не заменяют их. `[без гейта]`
+15. **Property-based — дополнительный слой.** Hypothesis-тесты (`test_*_fuzz.py`, `deadline=None`) и JS `*.fuzz.spec.ts` дополняют детерминированные кейсы и не заменяют их. `[без гейта]`
 
 ### Фикстуры
 
@@ -43,7 +43,7 @@ alwaysApply: false
 | `<svc>_service` / `<svc>_worker` | readiness стека; `sandbox_services`, `all_services` — наборы URL |
 | `<svc>_di` | DI процесса; flows — `di` |
 | `service_processes` | session: приложения сервисов с lifespan и DI воркеров внутри процесса тестов (`tests/fixtures/service_processes.py`) |
-| `auth_token_*` / `auth_headers_*` | персоны `system`, `system_user2`, `company2`, `company2_user2` (`tests/fixtures/auth.py`) |
+| `auth_token_*` / `auth_headers_*` | персоны system, system_user2, company2, company2_user2 — полное имя `auth_headers_company2_user2` и т.п. (`tests/fixtures/auth.py`) |
 | `mock_llm`, `mock_llm_with_queue`, `mock_llm_redis`, `mock_llm_capture` | § MockLLM и задачи |
 | `test_context`, `reset_mock_llm`, `sync_tools` | autouse: `Context` компании `system`; сброс `MockLLM`; `enqueue` in-process |
 | `platform_events_listener` | единственный листенер шины `platform:events` (`tests/fixtures/platform_events.py`) |
@@ -58,7 +58,7 @@ alwaysApply: false
 
 - `mock_llm_with_queue([...])` — очередь ответов в процессе теста (текст или `{"type": "tool_call", ...}`); `mock_llm_redis([...])` — очередь `mock_llm:responses:<test_scope>` для granian и воркеров; `mock_llm_capture` — журнал вызовов `mock_llm:capture:<test_scope>`. `MockLLM` любого процесса снимает ответы только из очереди своего scope (`resolve_test_scope`, `core/test_scope.py`). `[без гейта]`
 - Фоновая side-effect задача (CRM daily/period summary, note markdown format) получает scope `{parent}:{kind}` (`side_effect_test_scope`, `core/test_scope.py`) и не снимает FIFO породившего теста. `[без гейта]`
-- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`) — статический `test_e2e_static` через `test_scope_default` (ENV `TEST_SCOPE_DEFAULT`). `[без гейта]`
+- UI E2E под xdist — scope `test_e2e_<worker>` от `ui_e2e_test_scope()` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`) — статический `test_e2e_static` через `test_scope_default` (ENV `TEST_SCOPE_DEFAULT`). `[без гейта]`
 - `sync_tools` исполняет `enqueue` in-process: задача получает DI своего процесса по аннотации `di` (`ServiceProcesses.di`, `tests/fixtures/service_processes.py`), как `task_di` воркера; Redis Pub/Sub реальный. `@pytest.mark.real_taskiq` отключает `sync_tools`: задача идёт через воркер стека, ответы — только `mock_llm_redis`. `[без гейта]`
 - Исполняемый `llm_node` задаёт `llm.provider="mock"` и `llm.model="mock-gpt-4"` явно: скрытый fallback на модель по умолчанию runtime отвергает (`_validate_explicit_primary`, `apps/flows/src/runtime/effective_llm_config.py`). `[без гейта]`
 - `MockLLM` повторяет контракт `LLMClient.stream` (`core/clients/llm/client.py`): чанки, `tool_calls`, `usage`; расхождение с провайдером чинится в `MockLLM`, а не в тесте. `[без гейта]`
@@ -79,14 +79,14 @@ alwaysApply: false
 
 | Слой | Файлы | Раннер |
 |---|---|---|
-| Unit фундамента UI | `tests/frontend_core/unit/**/*.spec.js` | Vitest, `vitest.config.ts` |
-| Компонентный браузерный | `tests/frontend_core/browser/**/*.spec.js`, `tests/ui/design-system/components/**/contract.spec.js`, `tests/ui/design-system/flows/**/*.spec.js` | Web Test Runner + Playwright Chromium, `web-test-runner.config.ts` |
+| Unit фундамента UI | `tests/frontend_core/unit/**/*.spec.ts` | Vitest, `vitest.config.ts` |
+| Компонентный браузерный | `tests/frontend_core/browser/**/*.spec.ts`, `tests/ui/design-system/components/**/contract.spec.ts`, `tests/ui/design-system/flows/**/*.spec.ts` | Web Test Runner + Playwright Chromium, `web-test-runner.config.ts` |
 | Документационный UI Kit | `tests/ui/design-system/components/**/playwright.spec.py`, маркер `ui_component` | pytest + Playwright |
 | E2E | `tests/ui/e2e/**` | pytest + Playwright, `--dist=loadfile` |
 
 - Unit и компонентный слой работают без бэкенда; E2E — против стека `make test-up`; `tests/ui/*.py` — только движок: `conftest.py`, реестр `SERVICE_UI_REGISTRY` (`tests/ui/apps.py`), `AppUI` (`tests/ui/harness.py`), персоны, scope воркера. `[без гейта]`
-- Компонентный тест сбрасывает bus и реестры фабрик `resetPlatformState()` (`tests/frontend_core/browser/helpers/reset.js`); import map WTR повторяет приложение (`lit`, `@platform/lib/`, `@capacitor/*`) → `ui_factories.mdc`. `[без гейта]`
-- E2E-воркер xdist получает свою компанию `ui_e2e_gwN` (subdomain `ui-gwN`), scope `test_e2e_gwN` и одну сессию Chromium (`tests/ui/e2e_worker.py`); UI-фикстуры не добавляют членов в `system`. Персоны — `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `ui_page_anonymous`; метаданные — `ui_user_*` (`UiTestUser`, `tests/ui/personas.py`). `[без гейта]`
+- Компонентный тест сбрасывает bus и реестры фабрик `resetPlatformState()` (`tests/frontend_core/browser/helpers/reset.ts`); import map WTR повторяет приложение (`lit`, `@platform/lib/`, `@capacitor/*`) → `ui_factories.mdc`. `[без гейта]`
+- E2E-воркер xdist получает свою компанию `ui_e2e_<worker>` (subdomain `ui-<worker>`), scope `test_e2e_<worker>` и одну сессию Chromium (`tests/ui/e2e_worker.py`); UI-фикстуры не добавляют членов в `system`. Персоны — `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `ui_page_anonymous`; метаданные — `ui_user_*` (`UiTestUser`, `tests/ui/personas.py`). `[без гейта]`
 - Бюджет тела E2E — 15 с (`tests/ui/e2e/conftest.py`); длиннее — `scenario(timeout_seconds=N)` или `@pytest.mark.timeout(N)` до 360 с. `[без гейта]`
 - Share Flow UI проверяется новым браузером после подтверждения сервера, а не локальным store или DOM. Parity редактора: canvas и production route рендерят один `FlowUIDocument` одним `<platform-flow-ui>`, assert идёт по `data-block-id` каждого блока; скриншот без assert модели не доказывает parity. `[без гейта]`
 - `@pytest.mark.scenario` — исходник пользовательской инструкции `docs/scenarios/<service>/<tag>/<slug>/`: `tag` из `docs/scenarios/taxonomy.yaml`, `title_en` и `description_en` на маркере, `label_en` (при `details` — `details_en`) на каждом `scenario.step`, PNG рядом с README. Процедура — скил `documentator`. Гейт: `scripts/gates/repo/scenario_docs_quality.py`.
@@ -95,7 +95,7 @@ alwaysApply: false
 
 1. `unittest.mock` (`patch`, `MagicMock`, `AsyncMock`) и фейковые классы внутренних компонентов. Гейт: ratchet `tests_asyncmock`.
 2. `monkeypatch.setattr` по модулям `core.` и `apps.` сверх baseline. Гейт: ratchet `tests_monkeypatch_internal`.
-3. `SessionServerManager`, `SessionWorkerManager` и старт процессов стека в фикстурах. `[без гейта]`
+3. Старт процессов стека в фикстурах и свой менеджер процессов стека. `[без гейта]`
 4. В теле теста: `try/except` и `except: pass` (ожидаемая ошибка — `pytest.raises`); свой `AsyncClient`, `httpx2.Client`, сессия БД или процесс; чтение `app.state.di`; `os.environ[...] = ...` (только `monkeypatch.setenv`) и присвоение атрибута модуля (только `monkeypatch.setattr`); ожидание через `time.sleep` (только `asyncio.wait_for` или поллинг `asyncio.sleep`). `[без гейта]`
 5. Прямой сброс singleton (`_settings_instance = None`) и мутация готового DI. `[без гейта]`
 6. Повышение таймаута, poll или httpx2 `timeout` вместо устранения причины (очередь воркера, лишний запрос, Check OpenFGA); `@pytest.mark.timeout` короче лимита пакета sandbox (`_is_sandbox_runtime_test`, `tests/conftest.py`). `[без гейта]`

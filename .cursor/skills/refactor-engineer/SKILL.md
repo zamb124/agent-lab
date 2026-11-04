@@ -34,7 +34,7 @@ description: "Автономный рефакторинг Платформы п�
 - Гейты в режиме отчёта (baseline выше) и ratchet по файлам: `uv run python .cursor/skills/refactor-engineer/scripts/ratchet_list.py [<metric>]`.
 - Детекторы классов из каталога в границе запуска.
 - Нормы без детектора: `rg -n "\[без гейта\]" .cursor/rules`.
-- Дрейф правил: `python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py`.
+- Дрейф правил: `uv run python -m scripts.gates.repo.rules_drift`.
 
 Совпадение — кандидат, а не приговор: открыть код, вызывающих (граф `trace_path` или `rg`), правило-владельца. Исключение из запрета существует только как пункт `Исключение:` правила-владельца.
 
@@ -132,4 +132,4 @@ description: "Автономный рефакторинг Платформы п�
 - `.cursor/skills/refactor-engineer/references/playbooks.md` — рецепты срезов и добавления детектора.
 - `.cursor/skills/refactor-engineer/scripts/gates_report.py` — все шаги `make lint` в режиме отчёта.
 - `.cursor/skills/refactor-engineer/scripts/ratchet_list.py` — нарушения ratchet по файлам.
-- `.cursor/skills/refactor-engineer/scripts/rules_drift.py` — дрейф `.cursor/rules` относительно кода и `rules.mdc`.
+- `scripts/gates/repo/rules_drift.py` — дрейф `.cursor/rules` относительно кода и `rules.mdc`.

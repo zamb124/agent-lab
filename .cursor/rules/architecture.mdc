@@ -27,7 +27,7 @@ alwaysApply: true
 
 1. `async def op_<entity>_<verb>(payload, *, user: User, di: Di) -> Result | None` в `apps/<svc>/realtime/operations.py` или `realtime/<area>_operations.py`; один `op_*` на verb.
 2. Каталог — `<SVC>_OPERATIONS: dict[str, RegisteredOperation[<Svc>Di]]` в `apps/<svc>/realtime/command_router.py`, значения `Operation(payload_model, fn)` (`core/websocket/operation.py`); регистрирует `create_service_app(operations=...)`.
-3. Scope — только хелперы `core/request_scope.py` (`require_company`, `require_company_viewer`, `require_company_admin`, `require_system_admin`, `require_namespace`) и `core.context`: они проверяют членство в компании и namespace. Объектный Check, ветки сценария и `None` → not-found живут в сервисе → `main.mdc` § Куда писать код. `[без гейта]`
+3. Scope — только хелперы `core/request_scope.py` (`require_company`, `require_company_viewer`, `require_company_admin`, `require_system_admin`, `require_namespace`, `require_customer`) и `core.context`: они проверяют членство в компании и namespace. Объектный Check, ветки сценария и `None` → not-found живут в сервисе → `main.mdc` § Куда писать код. `[без гейта]`
 4. Команда без аргументов принимает `core.websocket.EmptyPayload`; свой `<Svc>EmptyPayload` запрещён.
 5. `op_*`, общий для нескольких сервисов, живёт в `core/` и регистрируется каталогами сервисов: `core/namespace/operations.py::op_namespaces_list`, `core/identity/team_operations.py::op_team_members_list`.
 6. `op_*` ставит тяжёлую работу через `enqueue`; сама команда исполняется in-process. Шаблон `op_*` → `main.mdc` § Куда писать код.

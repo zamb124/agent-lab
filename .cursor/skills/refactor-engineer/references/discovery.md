@@ -8,7 +8,7 @@
 git status --porcelain > /tmp/refactor_preflight_status.txt
 uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py /tmp/refactor_gates_before
 uv run python .cursor/skills/refactor-engineer/scripts/ratchet_list.py --top 5
-python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py
+uv run python -m scripts.gates.repo.rules_drift
 rg -n "\[без гейта\]" .cursor/rules
 ```
 
@@ -49,7 +49,7 @@ RETURN f.qualified_name, f.file_path LIMIT 200
 
 ## Дрейф правил (режим `rules`)
 
-1. `python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py` — список нарушений канона `rules.mdc`.
+1. `uv run python -m scripts.gates.repo.rules_drift` — список нарушений канона `rules.mdc`.
 2. Для каждого мёртвого пути найти фактическое место символа (`rg -n "class <Name>|def <name>" apps core`) и исправить правило as-is; символа нет нигде — удалить упоминание.
 3. Ссылка из кода на несуществующее правило — заменить на правило-владельца из `main.mdc` § Навигация.
 4. Норма правила противоречит коду — определить, что нарушено: код (срез `slice`) или правило (исправить as-is); узаконивать нарушение правкой правила запрещено.

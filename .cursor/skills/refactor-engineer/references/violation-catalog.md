@@ -256,7 +256,7 @@ uv run python -m scripts.tools.report_ui_i18n_gaps --app <svc>
 **R1. Мёртвый путь, ссылка на несуществующее правило или раздел, раздел вне шаблона, стоп-слово, frontmatter, бюджет.** Норма: `rules.mdc`. Цель: правило as-is по шаблону.
 
 ```bash
-python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py
+uv run python -m scripts.gates.repo.rules_drift
 ```
 
 **R2. Норма без детектора.** Норма: `rules.mdc` § Канон, п. 7. Цель: детектор в `scripts/`.

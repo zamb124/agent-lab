@@ -42,16 +42,99 @@ def fail(message: str) -> None:
     ERRORS.append(message)
 
 
+def _code_mask(text: str) -> bytearray:
+    """Битовая маска позиций, которые являются кодом (не строкой и не комментарием).
+
+    Бандлы полны учебных строк вида ``import { X } from 'echarts/components'``
+    внутри ``error("…")`` и комментариев ``from "extension"`` — без маски
+    регулярка ловит их как настоящие импорты. Маска сохраняет offsets, так что
+    позиция матча напрямую проверяется на принадлежность коду.
+    """
+    n = len(text)
+    mask = bytearray(n)
+    i = 0
+    state = "code"  # code | str | line | block
+    quote = ""
+    stack: list[str] = []  # '{': обычный блок, 'tpl': выражение ${ в template literal
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if state == "code":
+            mask[i] = 1
+            if c == "/" and nxt == "/":
+                i += 2
+                state = "line"
+                continue
+            if c == "/" and nxt == "*":
+                i += 2
+                state = "block"
+                continue
+            if c in "'\"`":
+                quote = c
+                state = "str"
+                i += 1
+                continue
+            if c == "{":
+                stack.append("{")
+            elif c == "}":
+                if stack and stack[-1] == "tpl":
+                    _ = stack.pop()
+                    quote = "`"
+                    state = "str"
+                elif stack:
+                    _ = stack.pop()
+            i += 1
+            continue
+        if state == "line":
+            if c == "\n":
+                mask[i] = 1
+                state = "code"
+            i += 1
+            continue
+        if state == "block":
+            if c == "*" and nxt == "/":
+                i += 2
+                state = "code"
+                continue
+            i += 1
+            continue
+        # state == "str"
+        if c == "\\":
+            i += 2
+            continue
+        if quote == "`" and c == "$" and nxt == "{":
+            stack.append("tpl")
+            i += 2
+            state = "code"
+            continue
+        if c == quote:
+            i += 1
+            state = "code"
+            continue
+        i += 1
+    return mask
+
+
 def _check_file(path: Path, text: str) -> None:
+    mask = _code_mask(text)
+    offset = 0
     for i, line in enumerate(text.splitlines(), start=1):
-        for spec in STATIC_IMPORT_RE.findall(line) + DYNAMIC_IMPORT_RE.findall(line):
+        matches = [
+            *STATIC_IMPORT_RE.finditer(line),
+            *DYNAMIC_IMPORT_RE.finditer(line),
+        ]
+        for match in matches:
+            if not mask[offset + match.start()]:
+                continue
+            spec = match.group(1)
             if not SPECIFIER_RE.match(spec) or spec.startswith("."):
                 continue
             kind = "bare specifier" if not spec.startswith(("http://", "https://", "/")) else "external URL"
             fail(
                 f"{path.relative_to(ROOT)}:{i}: embed-бандл не self-contained "
-                f"({kind} {spec!r} — на внешнем сайте нет import map)"
+                + f"({kind} {spec!r} — на внешнем сайте нет import map)"
             )
+        offset += len(line) + 1
 
 
 def main() -> int:

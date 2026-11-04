@@ -30,7 +30,7 @@ alwaysApply: false
 - Событие UI — `{ id, type, payload, meta }`; поля `meta` (`ts`, `source`, `causation_id`, `correlation_id`, `trace_id`) и допустимые `source` — `core/frontend/static/lib/events/contract.ts`. `dispatch` без `payload` — `throw`, пустое событие несёт `null`.
 - `type` — `<scope>/<entity>/<verb>`, lowercase snake_case, не меньше трёх сегментов; проверяет `assertEventType` при `dispatch` и `useEvent`.
 - Команда на backend оканчивается на `_requested`; исходы выводятся механически — `<type без _requested>_succeeded` и `_failed`, связь с командой — `meta.causation_id`. Push с backend — `PlatformEvent` без `delivery` (→ `events.mdc` § Канон), bus диспатчит его как любое событие.
-- `CoreEvents` (`core/frontend/static/lib/events/contract.ts`) — единственный реестр платформенных UI-типов; core-константы доменов (`CoreAuthEvents`, `FILES_EVENTS`, `TEAM_EVENTS` и др.) экспортирует `@platform/lib/events/index.js`. Типы сервиса порождает фабрика, push-типы сервиса — константы `apps/<svc>/ui/events/types.js`, их литерал в `pages/`, `modals/`, `components/`, `app/` запрещён; свой `events/contract.ts` сервиса запрещён.
+- `CoreEvents` (`core/frontend/static/lib/events/contract.ts`) — единственный реестр платформенных UI-типов; core-константы доменов (`CoreAuthEvents`, `FILES_EVENTS`, `TEAM_EVENTS` и др.) экспортирует `@platform/lib/events/index.js`. Типы сервиса порождает фабрика, push-типы сервиса — константы `apps/<svc>/ui/events/types.ts`, их литерал в `pages/`, `modals/`, `components/`, `app/` запрещён; свой `events/contract.ts` сервиса запрещён.
 
 ### Шесть фабрик
 
@@ -110,7 +110,7 @@ alwaysApply: false
 - Модуль фабрик расширяет `PlatformFactoryRegistry` блоком `declare module '@platform/lib/events/factory-registry.js'` с записью `'<svc>/<entity>': typeof <factory>`; имя вне реестра в `use*` — ошибка `tsc`.
 - Фабрика, на которую ссылается `use*` в UI сервиса, зарегистрирована в `static factories` этого сервиса; иначе `getFactory: not registered`.
 - `getServiceSlices()` для slice фабрики запрещён; `getServiceEffects()` — только core-effects (`createRouterEffect` и др.) и bridge-effect. `[без гейта]`
-- Bridge-effect (`apps/<svc>/ui/events/<svc>-*.effect.js`) — только тонкая связка доменных событий с `STORAGE_*`, `ROUTER_*`, `WS_*`, `AUTH_*`; HTTP/WS-запрос, мутация slice и бизнес-логика в нём запрещены. `[без гейта]`
+- Bridge-effect (`apps/<svc>/ui/events/<svc>-*.effect.ts`) — только тонкая связка доменных событий с `STORAGE_*`, `ROUTER_*`, `WS_*`, `AUTH_*`; HTTP/WS-запрос, мутация slice и бизнес-логика в нём запрещены. `[без гейта]`
 - Маршрут `createRouterEffect({ routes })` задаёт `titleKey: 'routes.<key>'` — подпись top-bar и breadcrumbs. `[без гейта]`
 
 ### Запрет фолбеков
@@ -119,7 +119,7 @@ alwaysApply: false
 - В `pages/`, `modals/`, `components/`, `events/resources/` запрещены `state[sliceKey] || initial`, `event.payload || {}`, `(x && x.items) || []`, `q || ''`, `draft || {}`, `?? '—'`, `?? null` и тихий `catch { return null }`.
 - Форма slice — канонический payload API/WS; перекладка полей между двумя почти одинаковыми формами запрещена → `main.mdc` § Внешняя граница. Форма нормализуется только в фабрике: `mapItem` (`createResourceCollection`, `createCursorList`) и `_normalize*` в `request`/`extraReducer`; отсутствие обязательного поля ответа — `throw`, невалидный push игнорируется явной проверкой `typeof` (`return state`).
 - `catch` — только конкретный класс (`HttpError`, `WsTransportError`, `SyntaxError` из `JSON.parse`, `DOMException` storage и clipboard), и каждый пойманный диспатчит `*_FAILED`.
-- Выбор источника отображения (`a.b` или `a.c`) — только helper `apps/<svc>/ui/_helpers/<svc>-id-resolvers.js`, не в pages, modals, components. `[без гейта]`
+- Выбор источника отображения (`a.b` или `a.c`) — только helper `apps/<svc>/ui/_helpers/<svc>-id-resolvers.ts`, не в pages, modals, components. `[без гейта]`
 
 ### Push и исходы команд
 
@@ -131,14 +131,14 @@ alwaysApply: false
 
 ### Размещение
 
-- Фабрики сервиса — `apps/<svc>/ui/events/resources/*.resource.js`; фабрики сервисов без своего UI и кросс-сервисные фабрики владельцев — `core/frontend/static/lib/events/resources/` (владелец — префикс `name`); upload — `platform/file_create` → `frontend.mdc` § Утилиты.
+- Фабрики сервиса — `apps/<svc>/ui/events/resources/*.resource.ts`; фабрики сервисов без своего UI и кросс-сервисные фабрики владельцев — `core/frontend/static/lib/events/resources/` (владелец — префикс `name`); upload — `platform/file_create` → `frontend.mdc` § Утилиты.
 - Core-effects и core-reducers — только `core/frontend/static/lib/events/effects/` и `core/frontend/static/lib/events/reducers/`; реестр core-типов `CoreEvents` — один, `core/frontend/static/lib/events/contract.ts` → `events.mdc`.
 
 ### Тестирование
 
 - Reducer — unit `(state, event) => state` без bus и моков; effect — фейковый `ctx = { dispatch, getState }` и настоящий `httpRequest` с подменой `fetch`; контроллер — Web Test Runner на настоящей фабрике, проверка по dispatch.
-- Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`core/frontend/static/lib/events/factories/_internal.ts`), `resetPlatformBusForTests()`; изолированный `<flows-flow-canvas>` регистрирует `FLOW_CANVAS_FACTORIES` (`tests/frontend_core/helpers/flows-dataflow-fixtures.js`).
-- Канон сериализованного create — `tests/frontend_core/unit/factories/resource-collection.spec.js`, `tests/frontend_core/unit/factories/resource-controller-create-idempotency.spec.js`. Стек тестов → `testing.mdc`.
+- Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`core/frontend/static/lib/events/factories/_internal.ts`), `resetPlatformBusForTests()`; изолированный `<flows-flow-canvas>` регистрирует `FLOW_CANVAS_FACTORIES` (`tests/frontend_core/helpers/flows-dataflow-fixtures.ts`).
+- Канон сериализованного create — `tests/frontend_core/unit/factories/resource-collection.spec.ts`, `tests/frontend_core/unit/factories/resource-controller-create-idempotency.spec.ts`. Стек тестов → `testing.mdc`.
 
 ## Гейты
 
@@ -147,6 +147,6 @@ alwaysApply: false
 - `scripts/gates/backend/command_rest_mirror.py` (`make check-command-rest-mirror`) — `restMirror` операций `createAsyncOp`, `createResourceCollection`, `createCursorList` указывает на FastAPI route владельца; `transport: 'ws'` у `COMMAND_WS_SERVICES` вне `COMMAND_WS_HTTP_ALLOWLIST`.
 - `scripts/gates/frontend/core_frontend_canon.py` (`make check-core-frontend-canon`) — фолбеки в `events/reducers/` и `events/factories/`, имена `CoreEvents`, `fetch` и `WebSocket` только в `events/http.ts` и `events/effects/`.
 - `scripts/gates/frontend/ui_canon.sh` (`make check-ui-canon`) — п.12 литерал в `this.dispatch(...)` по форме `<scope>/<entity>/<verb>`; п.13 импорт фабрик и контроллеров, `new <X>Controller`, каталог `events/effects/`; п.14 `await (this.dispatch(...))`; п.15 `||`/`??`-фолбеки в `*.resource.ts`.
-- `scripts/gates/backend/platform_events.py` — `_check_push_reload`: reload по push и исходу мутации в pages, modals, components; `_check_bare_push_literals_outside_types`: литерал push-типа вне `events/types.js` и `events/resources/`.
+- `scripts/gates/backend/platform_events.py` — `_check_push_reload`: reload по push и исходу мутации в pages, modals, components; `_check_bare_push_literals_outside_types`: литерал push-типа вне `events/types.ts` и `events/resources/`.
 - Фабрики бросают на старте: `assertResourceName`, `requireI18nKey` (`core/frontend/static/lib/events/factories/_internal.ts`), `normalizeTransport`, `normalizeRestMirror*` (`core/frontend/static/lib/events/factories/_transport.ts`).
-- `tests/frontend_core/unit/factories/*.spec.js` — контракты фабрик. Все гейты входят в `make check-events-canon` и `make lint-ts`.
+- `tests/frontend_core/unit/factories/*.spec.ts` — контракты фабрик. Все гейты входят в `make check-events-canon` и `make lint-ts`.

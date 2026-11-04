@@ -92,6 +92,7 @@ GATES: tuple[Gate, ...] = (
         _TS_EVENTS,
     ),
     Gate("repo.repo_hygiene", _py("scripts.gates.repo.repo_hygiene"), _LINT),
+    Gate("repo.rules_drift", _py("scripts.gates.repo.rules_drift"), _LINT),
     Gate("repo.conf_secrets", _py("scripts.gates.repo.conf_secrets"), _LINT),
     Gate("repo.conf_keys_declared", _py("scripts.gates.repo.conf_keys_declared"), _LINT),
     Gate("repo.platform_brand_hardcode", _py("scripts.gates.repo.platform_brand_hardcode"), _LINT),

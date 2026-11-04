@@ -8,7 +8,7 @@
 git status --porcelain > /tmp/ui_preflight_status.txt
 uv run python .cursor/skills/frontend-engineer/scripts/ui_audit.py --json /tmp/ui_audit_before.json
 uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py /tmp/ui_gates_before
-python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py
+uv run python -m scripts.gates.repo.rules_drift
 ```
 
 - Файлы из `/tmp/ui_preflight_status.txt` — чужие правки: не трогаются, не откатываются, не форматируются, не коммитятся.

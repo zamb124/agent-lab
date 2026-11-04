@@ -115,7 +115,7 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 
 Когда: режим `rules`, R1.
 
-1. `python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py`.
+1. `uv run python -m scripts.gates.repo.rules_drift`.
 2. Мёртвый путь: найти фактическое место (`rg -n "class <Name>|def <name>" apps core`), исправить путь; символа нет — удалить упоминание вместе с нормой, если норма описывала несуществующее.
 3. Норма противоречит коду: нарушен код — это срез `slice`, правило не меняется; правило описывает несуществующее — исправить as-is.
 4. Стоп-слово: переписать норму императивом без истории.

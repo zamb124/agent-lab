@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## Что мы строим
 
-SaaS автоматизации средних компаний. Подписка создаёт `Company` (tenant `company_id`, свой subdomain); сотрудники сразу получают все сервисы: агенты (Flows), CRM (NetWorkle), чат и звонки (Sync), документы (Documents), базу знаний (Wiki), задачи (Worktracker), склад (Stock), почту, голос, поиск. Один аккаунт, одна компания, одна сессия.
+SaaS автоматизации средних компаний. Подписка создаёт `Company` (tenant `company_id`, свой subdomain); сотрудники сразу получают все сервисы: агенты (Flows), CRM (NetWorkle), чат и звонки (Sync), документы (Documents), базу знаний (Wiki), задачи (Worktracker), склад (Stock), витрину (Shop), почту, голос, поиск. Один аккаунт, одна компания, одна сессия.
 
 - Агентов строит сама компания во Flows: граф нод, код в isolated code-runner, skills, tools, MCP, datasources. Новая продуктовая потребность закрывается flow, skill или capability, а не новым сервисом.
 - AI-first: любая операция доступна человеку (UI) и агенту (builtin tool, capability, A2A) через один `op_*` и один контракт. Lara (`flow_id=lara`) — единый ассистент во всех SPA.
@@ -31,6 +31,9 @@ SaaS автоматизации средних компаний. Подписк�
 | Семантический индекс | `apps/rag`, `core/rag` | `RagClient`, индекс по `file_id` | `rag.mdc` |
 | Речь STT/TTS/VAD | `apps/voice`, `core/clients/voice_resolver.py` | `voice_resolver` | `voice.mdc` |
 | Складской учёт | `apps/stock` | `StockMoveEngine` | `stock.mdc` |
+| Витрина и заказ | `apps/shop` | `ShopOrderService`, `ShopService` | `shop.mdc` |
+| Покупатель по телефону | `core/customers` | `customer_token`, `CustomerAddress` | `customers.mdc` |
+| Геокодинг | `core/clients/geocoding` | `Geocoder` | `integrations.mdc` |
 | Права | OpenFGA через `AuthzService` (`core/authz`) | `require_can_*` | `authorization.mdc` |
 | Идентичность агента | `User` `flow_employee_{flow_id}` | одна ось `user_id` | `flow_employee.mdc` |
 | Пространства работы | `Namespace` (`core/namespace`) | `NamespaceService` | `namespace.mdc` |
@@ -68,12 +71,12 @@ SaaS автоматизации средних компаний. Подписк�
 9. **Дублирование функционала.** Совпавшие по смыслу классы и модели сливаются end-to-end. `[без гейта]`
 10. **In-process пользовательский код.** code_node, inline tool, code-condition — только `RemoteCodeRunner` → `code-runner-*` и capability-gateway; `eval`, `exec`, `PythonNamespaceBuilder` запрещены → `eval.mdc`. `[без гейта]`
 11. **Translation-слои.** `*_to_*`, `*_from_*`, `convert_*`, `map_*`, `adapt_*`, `normalize_*`, `to_dict`/`from_dict`, proxy между почти одинаковыми моделями запрещены — нужен общий нативный тип. `[без гейта]`
-12. **Glue и compat-обёртки.** Wrapper, shim, compat-слой, patch «чтобы не трогать callers», метод-делегат запрещены: старый контракт удаляется, consumers обновляются. `[без гейта]`
+12. **Обёртки и посредники.** Wrapper, слой «чтобы не трогать callers», patch, метод-делегат запрещены: контракт меняется, consumers обновляются в том же изменении. `[без гейта]`
 13. **Дубли моделей.** Одна сущность — одна модель на всех слоях; `Foo`/`FooDTO`/`FooData`/`FooResponse` с теми же полями запрещены; отдельная модель — только при другой форме. `[без гейта]`
-14. **Незаконченный breaking change.** Старые атрибуты контракта со слоем преобразования вокруг них запрещены. `[без гейта]`
+14. **Незаконченный breaking change.** Две формы атрибутов контракта со слоем преобразования между ними запрещены. `[без гейта]`
 15. **Второй владелец.** Сущность из § Владельцы сущностей не заводится вторично. Гейты: `scripts/gates/files/files_canon.py`, `scripts/gates/backend/taskiq.py`, `scripts/gates/backend/platform_events.py`, `scripts/gates/authz/canon.py`, `scripts/gates/backend/billing_span.py`, `scripts/gates/ai/rag_post_retrieval_rerank_single.py`.
 16. **Копипаста между сервисами.** Одинаковый модуль в двух `apps/<svc>/` выносится в `core/`. Гейт: `scripts/gates/backend/cross_service_imports.py` (импорты); совпадение содержимого `[без гейта]`.
-17. **Oxyde вне модели.** Таблица — один `PlatformModel` в своём `models/<entity>.py`; запросы и PK-CRUD (`get`, `set`, `delete_by_id`, `list`, `count_all`, `get_many`) — `@classmethod` на `cls.objects`; `TableRepository`, `*Repository`, `db/repositories/`, `*_queries.py`, свободные функции над `objects` запрещены → `database.mdc`. Гейт: ratchet `raw_storage_in_services`; один `PlatformModel` на файл — `scripts/gates/backend/model_files.py`; расположение `models/<entity>.py` `[без гейта]`.
+17. **Oxyde вне модели.** Таблица — один `PlatformModel` в своём `models/<entity>.py`; запросы и PK-CRUD (`get`, `set`, `delete_by_id`, `list`, `count_all`, `get_many`) — `@classmethod` на `cls.objects`; `*Repository`, `db/repositories/`, `*_queries.py`, свободные функции над `objects` запрещены → `database.mdc`. Гейт: ratchet `raw_storage_in_services`; один `PlatformModel` на файл — `scripts/gates/backend/model_files.py`; расположение `models/<entity>.py` `[без гейта]`.
 18. **Второй объект композиции.** Service locator, `dependencies.py`, `container.py`, Protocol-зеркало DI и передача `di` в service/runtime/model/client запрещены → `architecture.mdc` § Service Kit DI. Гейт: `scripts/gates/backend/dependency_injection.py`; файлы `dependencies.py`/`container.py` `[без гейта]`.
 
 ## Куда писать код
@@ -120,7 +123,7 @@ apps/<svc>/
 - `apps/<svc>/db/`, `db/repositories/`, `dependencies.py`, `container.py`, `*_queries.py` не существуют; `di.py` содержит только `<Svc>Di`, recipes и alias `Di`. `[без гейта]`
 - Общее — из `create_service_app` (`core/app/factory.py`): middleware, платформенные роутеры, health, tracing/logging lifecycle, каталог событий, `static_mounts`, `/{segment}/services`. Свой lifespan, `on_startup`/`on_shutdown`, `@app.exception_handler`, `app.add_middleware` в `main.py` запрещены → `architecture.mdc` § App-level поведение. `[без гейта]`
 - Статика и SPA-fallback — только `mount_service_spa` (`core/app/spa.py`) после собственных маршрутов; core-статику (`/static/core/lib` — собранный `embed-dist`, затем `/static/core`) монтирует только `mount_core_frontend`.
-- Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) — подмножество той же схемы без новых папок. `idle` — процесс без HTTP: `di.py`, `worker.py`, `worker_a2a_push.py`, `tasks/`. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/` и, если есть очередь, `worker.py` с `tasks/`.
+- Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `search`, `voice`, `capability_gateway`, `code_runner_*`, `guest_runtime`) — подмножество той же схемы без новых папок. `idle` — процесс без HTTP: `di.py`, `worker.py`, `worker_a2a_push.py`, `tasks/`. `apps/test_a2a_sample` — самодостаточный образ A2A-агента тестового стека, вне `core` и layout сервиса. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/` и, если есть очередь, `worker.py` с `tasks/`.
 - `apps/` содержит только процессы из § Сервисы и стек и библиотечный домен без HTTP-процесса `apps/worker_manifest.py` (топология очередей TaskIQ). `[без гейта]`
 - Типы событий регистрирует `apps/<svc>/events.py` (flows — `apps/flows/src/events.py`).
 
@@ -133,7 +136,7 @@ apps/<svc>/
 
 `core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/gates/backend/cross_service_imports.py`.
 
-`core/` — общая библиотека и wire-контракты платформы. Состав top-level модулей документируется здесь: новый модуль — сначала запись в этом списке. Канон: `a2a`, `ai`, `api`, `app`, `app_state`, `auth`, `authz`, `billing`, `cache`, `calendar`, `capabilities`, `clients`, `code_contract`, `config`, `context`, `data_tables`, `datasources`, `db`, `di`, `docs`, `documents`, `errors`, `events`, `facet_query`, `files`, `frontend`, `guest_runtime`, `http`, `i18n`, `identity`, `imports`, `integrations`, `internal_context_headers`, `lanes`, `llm_context`, `logging`, `mail`, `middleware`, `models`, `namespace`, `observability`, `office`, `pagination`, `payments`, `platform_brand`, `push`, `rag`, `rag_indexing_schema`, `realtime`, `redis_inventory`, `request_scope`, `scheduler`, `search`, `secrets`, `short_links`, `tasks`, `test_scope`, `text_transforms`, `tracing`, `types`, `ui_document` (wire-грамматика Flow UI: `document`, `protocol`, `interface`, `json_patch`; машинерия мутаций state — `apps/flows/src/flow_ui`), `utils`, `variables`, `viz`, `voice`, `websocket`, `worktracker`. Клиенты к сервисам и внешним API — только `core/clients/`. Код с единственным потребителем-сервисом живёт в `apps/<svc>`: `ExecutionState` и контракты его полей — `apps/flows/src/state`, звонки LiveKit — `apps/sync`, схема поисковых провайдеров компании — `apps/search`.
+`core/` — общая библиотека и wire-контракты платформы. Состав top-level модулей документируется здесь: новый модуль — сначала запись в этом списке. Канон: `a2a`, `ai`, `api`, `app`, `app_state`, `auth`, `authz`, `billing`, `cache`, `calendar`, `capabilities`, `clients`, `code_contract`, `config`, `context`, `customers`, `data_tables`, `datasources`, `db`, `di`, `docs`, `documents`, `errors`, `events`, `facet_query`, `files`, `frontend`, `guest_runtime`, `http`, `i18n`, `identity`, `imports`, `integrations`, `internal_context_headers`, `lanes`, `llm_context`, `logging`, `mail`, `middleware`, `models`, `namespace`, `observability`, `office`, `pagination`, `payments`, `platform_brand`, `push`, `rag`, `rag_indexing_schema`, `realtime`, `redis_inventory`, `request_scope`, `scheduler`, `search`, `secrets`, `short_links`, `tasks`, `test_scope`, `text_transforms`, `tracing`, `types`, `ui_document` (wire-грамматика Flow UI: `document`, `protocol`, `interface`, `json_patch`; машинерия мутаций state — `apps/flows/src/flow_ui`), `utils`, `variables`, `viz`, `voice`, `websocket`, `worktracker`. Клиенты к сервисам и внешним API — только `core/clients/`. Код с единственным потребителем-сервисом живёт в `apps/<svc>`: `ExecutionState` и контракты его полей — `apps/flows/src/state`, звонки LiveKit — `apps/sync`, схема поисковых провайдеров компании — `apps/search`.
 
 ## Типизация
 
@@ -157,7 +160,7 @@ apps/<svc>/
 
 | Сущность | Канонические имена | Правило |
 |---|---|---|
-| Пользователь, компания | `user_id` `User`; `company_id` `Company`, `company_subdomain`, `company_host` | `authorization.mdc` |
+| Пользователь, компания | `user_id` `User`; `company_id` `Company`, `company_subdomain` | `authorization.mdc` |
 | Пространство | `namespace` `Namespace`; векторный каталог — `namespace_id` | `namespace.mdc`, `rag.mdc` |
 | Flow, ветка, нода, ресурс | `flow_id` `FlowConfig`; `branch_id`; `node_id` `node_type`; `resource_id` `resource_type` | `flows.mdc` |
 | Сессия исполнения | `session_id` = `flow_id:context_id`; `task_id`; `task_state`, `terminal_task_state`, `terminal_task_error` | `flows_runtime.mdc` |
@@ -170,6 +173,8 @@ apps/<svc>/
 | CRM | `entity_id` `CRMEntity` `entity_type`; `relationship_id`; `template_key`/`template_id`; `task_id` `CRMTask`; `suggest_id` | `crm.mdc` |
 | Задача, очередь, доска | `work_item_id` `WorkItem`; `work_queue_id`; `board_id`, `board_column_id` | `worktracker.mdc` |
 | Sync | `channel_id`, `thread_id`, `message_id`, `call_id`, `recording_id`, `link_token`, `git_ref_id` | `sync.mdc` |
+| Витрина, заказ | `shop_id` `Shop`, `shop_table_id`, `shop_product_id`, `shop_order_id`, `shop_domain_id` | `shop.mdc` |
+| Покупатель | `customer_id` `Customer`, `customer_address_id`; cookie `customer_token` | `customers.mdc` |
 | Почта, календарь | `company_mail_connection_id`, `mailbox_binding_id`; `event_id` `CalendarEvent`, `integration_id` | `mail.mdc` |
 | Голос, credential, расписание | `provider`/`model`/`voice`/`kind`; `credential_id`; `schedule_task_id`, `schedule_id` | `voice.mdc`, `integrations.mdc`, `taskiq.mdc` |
 | Событие, запрос, трейс | `PlatformEvent` (`event_id`, `type`, `payload`, `meta`); `request_id`, `trace_id`, `span_id` | `events.mdc`, `logging.mdc`, `tracing.mdc` |
@@ -179,7 +184,7 @@ apps/<svc>/
 | Смысл | Использовать | Не использовать |
 |---|---|---|
 | Изоляция компании | `company_id` | `tenant_id`, `org_id`, `workspace_id` |
-| Host компании | `company_subdomain`, `company_host`, `company_host_context` | `tenant_subdomain`, `tenant_host`, `tenant_slug` |
+| Host компании | `company_subdomain` | `tenant_subdomain`, `tenant_host`, `tenant_slug` |
 | Пространство | `namespace` | `space_id`, `workspace_id` (space/workspace — только UI-copy) |
 | Организация в CRM | `entity_type="organization"` | `company_id`, `Company` |
 | Id и тип сущности | `<entity>_id`; `<entity>_type` или `kind` | голые `id`, `type` в доменной модели |
@@ -218,8 +223,9 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | guest_runtime | 8024 | ферма `code_agent` |
 | realtime | 8025 | bus `PlatformEvent`, peer Centrifugo |
 | stock | 8026 | склад |
+| shop | 8027 | витрина, меню, заказ |
 
-Воркеры TaskIQ: `flows_worker`, `crm_worker`, `crm_summary_worker`, `rag_worker`, `sync_worker`, `search_worker`, `idle_worker` → `taskiq.mdc`. Команды разработки → `AGENTS.md`.
+Очереди и воркеры TaskIQ — `apps/worker_manifest.py` → `taskiq.mdc`. Команды разработки → `AGENTS.md`.
 
 ## Навигация
 
@@ -248,6 +254,8 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `wiki.mdc` | дерево страниц в namespace; ProseMirror — источник правды |
 | `datasources.mdc` | живая БД — `NodeType.DATASOURCE` |
 | `stock.mdc` | количество меняет только `StockMove` A→B |
+| `shop.mdc` | витрина: каталог, заказ, снапшот, агрегатор, зоны доставки |
+| `customers.mdc` | покупатель — не `User`; сессия `customer_token` |
 | `flows.mdc` | ноды, ресурсы, триггеры, layout `src/`, конфигурация в БД |
 | `flows_runtime.mdc` | `workflow_events` — источник истины; `ExecutionState` — projection |
 | `a2a.mdc` | A2A 1.0 — единственный протокол агентов; commit до publish |
@@ -266,6 +274,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `sync.mdc` | чат и звонки; DM/@mention будят flow-сотрудника через шину |
 | `mail.mdc` | почта и календарь |
 | `voice.mdc` | STT/TTS/VAD только через `voice_resolver` |
+| `provider_litserve.mdc` | локальный инференс: embedding, rerank, STT/TTS/VAD |
 | `invites.mdc` | одноразовые invite JWT и short links |
 | `frontend.mdc` | UI наследует core-базы; zero-import, zero-fallback; i18n ru+en |
 | `ui_factories.mdc` | доменное состояние UI — только шесть фабрик |

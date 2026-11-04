@@ -38,7 +38,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 2. `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, show_title, blocks[]}`; `block_id` уникален на странице; блок — `FlowUIBlockBase{block_id, visible_when}` с discriminator `type`; метаданные палитры — `x-flow-ui-block {group, icon}`.
 3. Input-блок — `FlowUIInputBase{field, label, required, error_message, action}`; `field` — top-level путь state, frozen-поля запрещены (publish gate `frozen_path`); действие — `FlowUIActionSpec{name, payload}` у `button` и input-блоков.
 4. `slot` — именованная цель `ui_render`; `html` — `source`, `height`, `fields` (≤ 64 путей), пути разметки — `html_bound_paths` (`data-bind`/`data-show`).
-5. Шаблоны текста `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`) и JS (`runtime/templating.js`), паритет — фикстура `templating.json`; обязательный `{path}` без значения не рендерит блок.
+5. Шаблоны текста `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`) и JS (`runtime/templating.ts`), паритет — фикстура `templating.json`; обязательный `{path}` без значения не рендерит блок.
 
 ### Backend runtime
 
@@ -53,11 +53,11 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 ### Frontend runtime
 
 1. `core/frontend/static/lib/flow-ui/` — единственный runtime (`protocol`, `runtime`, `blocks`, `components`, `editor`, `shell`, `utils`, `voice`); host-копии запрещены.
-2. `FlowUIClient` (`runtime/flow-ui-client.js`) — SDK и единственный транспорт `<platform-flow-ui>` (`open`, `send`, `cancel`, события); Python-аналог — `core/clients/flow_ui_client.py::FlowUIClient` поверх `A2AClient`; `fetch`, store и transport Flow UI в `apps/**` запрещены.
+2. `FlowUIClient` (`runtime/flow-ui-client.ts`) — SDK и единственный транспорт `<platform-flow-ui>` (`open`, `send`, `cancel`, события); Python-аналог — `core/clients/flow_ui_client.py::FlowUIClient` поверх `A2AClient`; `fetch`, store и transport Flow UI в `apps/**` запрещены.
 3. `FlowUIStore` — один store (документ, state по порядку Parts, локальные значения полей, `ui_slots`, страница, лента); ошибка протокола (patch до snapshot, чужой mediaType, неизвестный `kind`) — `throw`.
 4. Рендер блока — только `renderBlock` через `blockContext()`; `navigate` на неизвестную страницу — `throw`. Submit собирает `fields` страницы источника, `source = block_id`, `payload = action.payload`; локальные значения после отправки очищаются.
-5. Chrome-строки — `utils/text.js::flowUIText` (runtime standalone, без i18n bus); тема — `--flow-ui-*` как алиасы platform tokens (`shell/tokens.css`).
-6. Эффекты хоста фиксированы грамматикой (`blocks/actions.js`, `blocks/platform.js`): `link` — переход по `url` в новой вкладке, `browser_preview` — `openBrowserPreview`, `file_list` — ссылка на файл, `html` — только мост `window.flowUi`; произвольное имя действия из артефакта хост не исполняет — его интерпретирует flow.
+5. Chrome-строки — `utils/text.ts::flowUIText` (runtime standalone, без i18n bus); тема — `--flow-ui-*` как алиасы platform tokens (`shell/tokens.css`).
+6. Эффекты хоста фиксированы грамматикой (`blocks/actions.ts`, `blocks/platform.ts`): `link` — переход по `url` в новой вкладке, `browser_preview` — `openBrowserPreview`, `file_list` — ссылка на файл, `html` — только мост `window.flowUi`; произвольное имя действия из артефакта хост не исполняет — его интерпретирует flow.
 7. Предпросмотр и итог действия агента — блоки `action_preview`/`action_result` в `conversation` (артефакт `ui`).
 
 ### Голос
@@ -69,7 +69,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 
 ### Редактор интерфейса
 
-1. Холст — тот же `<platform-flow-ui editing>`: production-рендер, скрытые `visible_when` блоки видны, неизвестные пути остаются `{path}`; геометрия выделения — `editor/selection.js`; отдельного редакторского рендера нет.
+1. Холст — тот же `<platform-flow-ui editing>`: production-рендер, скрытые `visible_when` блоки видны, неизвестные пути остаются `{path}`; геометрия выделения — `editor/selection.ts`; отдельного редакторского рендера нет.
 2. Состояние — slice `flows/interface_editor` (`interface-editor.resource.ts`: `history{present, past, future}`, страница, выбор, viewport); доменная логика — `interface-editor-domain.ts`; черновики — `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
 3. Publish: `documentProblems` (severity `error` блокирует) → документ сохраняется вместе с графом; ответ помощника — одна команда истории.
 
@@ -77,7 +77,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 
 1. Один runtime для всех хостов. Embed (`TokenType.EMBED_SESSION`) стартует новую сессию; `EmbedConfig.presentation` `drawer`/`page`; сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload (`embed-flow-ui/flow-ui-embed-autoload.ts`) читают одни `data-*`; после mount — `window.linnexFlowUI` и событие `linnex-flow-ui-mounted`; A2A allowlist embed — `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks` (с `contextId`), `SubscribeToTask`, `CancelTask`. `EmbedConfig.list_unordered_window_for_company(company_id, *, limit, offset) -> list[EmbedConfig]` — окно виджетов компании, порядка нет.
 2. Live share (`TokenType.FLOW_UI_SHARE`) — `FlowUIShareGrant` (`context_id`, `permission` `viewer`/`editor`, `redacted_paths`, `expires_at`, `revoked_at`) на существующий `context_id`. `active_for_grant` читает грант, у которого нет `revoked_at` и `expires_at` ещё впереди: нет строки, отзыв или срок — `None`, пустой `grant_id` — `ValueError`. `FlowUIShareGrant.list_unrevoked_by_grant_id_asc(*, limit) -> list[FlowUIShareGrant]` — неотменённые гранты, `ORDER BY grant_id ASC`. `limit is None` не ограничивает. `limit < 1` — `[]`. `FlowUIShareGrant.list_for_owner_by_created_at_desc(*, company_id, flow_id, context_id, created_by_user_id) -> list[FlowUIShareGrant]` — гранты владельца, `ORDER BY created_at DESC`. Предела нет. Пустой scope — `ValueError` с текстом `share list scope is required`. `FlowUIShareGrant.revoke_by_creator(*, grant_id, company_id, created_by_user_id) -> bool` — нет гранта, чужая компания, другой автор или уже отозванный дают `False`. Иначе пишется `revoked_at` и возвращается `True`. Без новой беседы, snapshot и ветки; Check — OpenFGA `flow_ui_share` на каждом вызове; redaction — `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из артефакта `state`; `ui-action` на скрытое поле — `assert_fields_outside_redacted`; ledger и проекция владельца не меняются.
-3. HITL: оператор отвечает через `runtime/hitl-transport.js` (REST worktracker), пользователь — обычным A2A-ходом; лента читает артефакт `operator_reply`; режим — из parked Task (`metadata.platform_interrupt`) → `worktracker.mdc`.
+3. HITL: оператор отвечает через `runtime/hitl-transport.ts` (REST worktracker), пользователь — обычным A2A-ходом; лента читает артефакт `operator_reply`; режим — из parked Task (`metadata.platform_interrupt`) → `worktracker.mdc`.
 
 ### Безопасность
 
@@ -89,15 +89,15 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 
 1. Двойники `FlowUIDocument` (`*Config`, `*Profile`, `*Template`), translation-слой между editor/runtime/embed/share, chat-specific runtime, host-specific renderer.
 2. A2A extension, negotiation, второй envelope или endpoint, `metadata`-протокол для интерфейса.
-3. Имена `ui_document`, `ui_values`, `ui_state`, `mutation_id`, `base_revision`, `FlowInterfaceConfig`, `interface_override`, `ui_event`, `present_ui`.
+3. Имена `ui_document`, `ui_values`, `ui_state`, `mutation_id`, `base_revision`, `FlowInterfaceConfig`, `interface_override`, `ui_event`.
 
 ## Исключения
 
 - Исключение: `POST /flows/api/v1/flow-ui/shares/exchange/{grant_id}` — HTTP без команды (аноним + Origin); меню share в Flow UI — fetch, не фабрика. `PROTOCOL_HANDLERS` в `scripts/gates/backend/rest_handlers_call_ops.py`.
-- Исключение: `core/frontend/static/lib/embed-chat/` — CDN-shim старых embed-сниппетов, только import общего autoload; `ALLOWLIST_PREFIXES` в `scripts/gates/flows/flow_ui_hard_cut.py`.
+- Исключение: `core/frontend/static/lib/embed-chat/` — CDN-точка внешних embed-сниппетов, только import общего autoload; `ALLOWLIST_PREFIXES` в `scripts/gates/flows/flow_ui_hard_cut.py`.
 
 ## Гейты
 
 - `scripts/gates/flows/flow_ui_hard_cut.py` (`make lint`) — удалённые имена и маркеры, паритет рендереров JS ↔ грамматика, бюджеты (файл ≤ 600 строк, `flow-ui/**` ≤ 9000, редактор ≤ 2800), sandbox/CSP ↔ фикстура.
-- Conformance: `tests/fixtures/flow_ui/*.json` ↔ `tests/flows/unit/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`, `tests/core/ui_document/test_flow_ui_protocol_docs.py`, `tests/frontend_core/unit/flow-ui/conformance.spec.js`.
+- Conformance: `tests/fixtures/flow_ui/*.json` ↔ `tests/flows/unit/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`, `tests/core/ui_document/test_flow_ui_protocol_docs.py`, `tests/frontend_core/unit/flow-ui/conformance.spec.ts`.
 - Поведение: `tests/flows/unit/` (mutation), `tests/core/ui_document/` (wire), `tests/flows/api/test_flow_interface.py`, `test_flow_ui_shares.py`, `tests/core/clients/test_flow_ui_client.py`, `tests/frontend_core/browser/flow-ui/`.
