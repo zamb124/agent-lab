@@ -24,6 +24,7 @@ dependencies = [
     "oxyde>=0.8.0",
     "segno>=1.6.6",
     "phonenumbers>=9.0.42",
+    "osmium>=4.3.2",
 ]
 [tool.uv]
 default-groups = [

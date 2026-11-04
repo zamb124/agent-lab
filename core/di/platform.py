@@ -13,6 +13,7 @@ from core.authz.factory import build_authz_service
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
 from core.calendar.service import CalendarService
+from core.clients.geo_client import GeoClient
 from core.clients.geocoding.base import Geocoder
 from core.clients.geocoding.nominatim import NominatimGeocoder
 from core.clients.rag_client import RagClient
@@ -117,6 +118,11 @@ def geocoder(geocoding: GeocodingConfig, redis_client: RedisClient) -> Geocoder:
 
 
 @recipe
+def geo_client(service_client: ServiceClient) -> GeoClient:
+    return GeoClient(http=service_client)
+
+
+@recipe
 def customer_address_service(geocoder: Geocoder) -> CustomerAddressService:
     return CustomerAddressService(geocoder)
 
@@ -179,6 +185,7 @@ class PlatformDi(
         customer_session_service,
         customer_auth_service,
         geocoder,
+        geo_client,
         customer_address_service,
     ),
 ):
@@ -193,6 +200,8 @@ class PlatformDi(
     customer_service: CustomerService
     customer_session_service: CustomerSessionService
     geocoder: Geocoder
+    geo_client: GeoClient
+    service_client: ServiceClient
     document_tree_service: DocumentTreeService
     files_service: FilesService
     mail_service: MailService

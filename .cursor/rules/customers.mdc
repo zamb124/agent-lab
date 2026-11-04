@@ -3,6 +3,8 @@ description: "Платформенная авторизация покупате
 globs:
   - "core/customers/**"
   - "core/clients/phone_verification/**"
+  - "core/clients/geocoding/**"
+  - "core/utils/geo.py"
   - "core/frontend/static/lib/customer-auth/**"
   - "migrations/shared/**"
 alwaysApply: false
@@ -22,6 +24,7 @@ alwaysApply: false
 - Контракты и enum'ы — `core/customers/contracts.py`, `core/customers/enums.py`; ошибки — `CustomerAuthError` + `PhoneVerificationErrorCode` (`core/customers/errors.py`).
 - `CustomerSessionService` (`core/customers/session.py`) — JWT `TokenType.CUSTOMER` в httpOnly cookie `customer_token`; прав платформенного пользователя не даёт.
 - `CustomerAuthService` (`core/customers/auth_service.py`) — сценарии start/choose/verify/status/webhook/OAuth, rate limits и дневной бюджет SMS в Redis.
+- `CustomerAddress` (`core/customers/models/customer_address.py`) — сохранённый адрес покупателя с координатами; CRUD и геокодинг — `CustomerAddressService` (`core/customers/address_service.py`, DI `customer_address_service`).
 - Конфиг — `CustomerAuthConfig` (`core/config/models.py`), секция `customer_auth` в conf.json; креды провайдеров — платформенные, per-apex `brands`.
 
 ## Инварианты
@@ -43,6 +46,7 @@ alwaysApply: false
 ## Интеграции
 
 - Исходящий HTTP провайдеров — через `core.http.client` (`request_public_oauth`, `get_httpx_client`, `ProxyStrategy`) → `integrations.mdc`.
+- Геокодинг — `Geocoder` (`core/clients/geocoding/`, Nominatim, секция `geocoding` конфига, DI `geocoder`); точка адреса проверяется `delivery_zone` витрины → `shop.mdc`.
 - Shop: `op_public_order_create` зовёт `require_customer()`, `ShopOrderService.create_order` пишет `customer_id`/`customer_phone` из scope; витрина поднимает `<platform-customer-auth>` только при оформлении заказа.
 - Трассинг/логи — без plaintext кода и секретов; номер в логах маскируется.
 

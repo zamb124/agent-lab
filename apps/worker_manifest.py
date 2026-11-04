@@ -32,6 +32,7 @@ _QUEUE_SERVICE: dict[str, str] = {
     "search": "search_worker",
     "stock": "stock_worker",
     "shop": "shop_worker",
+    "geo": "geo_worker",
 }
 
 # push_notification_tasks биндит задачи и idle, и a2a_push: оба брокера
@@ -61,6 +62,7 @@ _QUEUE_TASK_MODULES: dict[str, tuple[str, ...]] = {
     "search": ("apps.search.tasks",),
     "stock": ("apps.stock.tasks",),
     "shop": ("apps.shop.tasks",),
+    "geo": ("apps.geo.tasks",),
 }
 
 

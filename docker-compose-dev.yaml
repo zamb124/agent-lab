@@ -3,7 +3,10 @@ name: agentlab-dev
 services:
   postgres:
     platform: "linux/amd64"
-    image: pgvector/pgvector:0.8.7-pg18
+    image: agentlab-postgres:local
+    build:
+      context: .
+      dockerfile: deploy/postgres/Dockerfile
     container_name: agentlab_postgres_dev
     environment:
       POSTGRES_DB: platform_shared

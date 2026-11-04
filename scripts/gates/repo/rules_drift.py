@@ -442,6 +442,8 @@ def scan_code(root: Path) -> CodeScan:
             files.extend(Path(current) / name for name in names)
     for path in files:
         suffix = path.suffix
+        acc.idents.add(path.stem)
+        acc.idents.add(path.parent.name)
         if suffix == ".js":
             acc.js_names.add(path.name)
         elif suffix == ".ts":

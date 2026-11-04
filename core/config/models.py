@@ -146,6 +146,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_shop (витрины, каталог, заказы, домены)",
     )
+    geo_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_geo (адресный справочник, дорожный граф, PostGIS)",
+    )
     redis_url: str = "redis://localhost:8099"
     redis_inventory_interval_seconds: int = Field(
         default=900,
@@ -393,6 +397,7 @@ class ServerConfig(BaseModel):
         "realtime": 8025,
         "stock": 8026,
         "shop": 8027,
+        "geo": 8028,
     }
 
     def get_service_url(self, service: str | None = None) -> str:

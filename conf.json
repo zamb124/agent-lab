@@ -13,6 +13,7 @@
     "realtime_service_url": "http://localhost:8025",
     "stock_service_url": "http://localhost:8026",
     "shop_service_url": "http://localhost:8027",
+    "geo_service_url": "http://localhost:8028",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -40,6 +41,7 @@
     "realtime_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_realtime",
     "stock_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_stock",
     "shop_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shop",
+    "geo_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_geo",
     "redis_url": "redis://localhost:63791/0"
   },
   "openfga": {
@@ -889,6 +891,14 @@
         "name": "shop",
         "host": "0.0.0.0",
         "port": 8027,
+        "debug": true
+      }
+    },
+    "geo": {
+      "server": {
+        "name": "geo",
+        "host": "0.0.0.0",
+        "port": 8028,
         "debug": true
       }
     },

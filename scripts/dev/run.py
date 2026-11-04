@@ -177,6 +177,15 @@ SERVICES = {
             ("/shop/ui/static", "apps/shop/ui-dist"),
         ],
     },
+    "geo": {
+        "type": "granian",
+        "app": "apps.geo.main:app",
+        "port": "8028",
+        "static": [
+            CORE_FRONTEND_EMBED,
+            CORE_FRONTEND_STATIC,
+        ],
+    },
     "guest_runtime": {
         "type": "granian",
         "app": "apps.guest_runtime.main:app",
@@ -279,6 +288,11 @@ SERVICES = {
     "shop_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.shop.worker:worker_app",
+        "workers": "1",
+    },
+    "geo_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.geo.worker:worker_app",
         "workers": "1",
     },
     "crm_worker": {

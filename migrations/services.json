@@ -69,6 +69,11 @@
       "name": "shop",
       "models_module": "apps.shop.models",
       "database_url_key": "shop_url"
+    },
+    {
+      "name": "geo",
+      "models_module": "apps.geo.models",
+      "database_url_key": "geo_url"
     }
   ],
   "postgres": {
@@ -87,12 +92,16 @@
       "platform_realtime",
       "platform_stock",
       "platform_shop",
+      "platform_geo",
       "openfga"
     ],
     "vector_extensions": [
       "platform_shared",
       "platform_crm",
       "platform_rag"
+    ],
+    "postgis_extensions": [
+      "platform_geo"
     ]
   }
 }

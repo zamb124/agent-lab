@@ -4,7 +4,8 @@
 Перед `scripts.db.migrate upgrade` вызывается автоматически: на старом томе Postgres
 init.sql не перезапускается, поэтому новые БД (например platform_wiki) создаются здесь.
 На каждую БД из postgres.databases ставится pg_stat_statements; vector — на БД из
-postgres.vector_extensions (как migrations/postgres/init.sql).
+postgres.vector_extensions; postgis/pg_trgm/pgrouting — на БД из postgres.postgis_extensions
+(как migrations/postgres/init.sql).
 """
 
 from __future__ import annotations
@@ -107,10 +108,15 @@ async def _apply_extensions(
     connection: asyncpg.Connection,
     *,
     need_vector: bool,
+    need_postgis: bool,
 ) -> None:
     _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
     if need_vector:
         _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    if need_postgis:
+        _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+        _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        _ = await connection.execute("CREATE EXTENSION IF NOT EXISTS pgrouting")
 
 
 async def ensure_postgres_service_databases_async(
@@ -125,6 +131,7 @@ async def ensure_postgres_service_databases_async(
     postgres_config = load_migration_manifest().postgres
     databases = list(postgres_config.databases)
     vector_dbs = list(postgres_config.vector_extensions)
+    postgis_dbs = list(postgres_config.postgis_extensions)
 
     if reference_shared_url is not None:
         shared_str = reference_shared_url.strip()
@@ -152,6 +159,12 @@ async def ensure_postgres_service_databases_async(
                 f"postgres.vector_extensions contains {ext_db!r} that is missing from postgres.databases"
             )
         _require_safe_ident(ext_db, "ensure_postgres_service_databases (vector_extensions)")
+    for ext_db in postgis_dbs:
+        if ext_db not in databases:
+            raise ValueError(
+                f"postgres.postgis_extensions contains {ext_db!r} that is missing from postgres.databases"
+            )
+        _require_safe_ident(ext_db, "ensure_postgres_service_databases (postgis_extensions)")
 
     admin = await _open(shared_str, "postgres")
     try:
@@ -173,7 +186,11 @@ async def ensure_postgres_service_databases_async(
     for db_name in databases:
         connection = await _open(shared_str, db_name)
         try:
-            await _apply_extensions(connection, need_vector=db_name in vector_dbs)
+            await _apply_extensions(
+                connection,
+                need_vector=db_name in vector_dbs,
+                need_postgis=db_name in postgis_dbs,
+            )
         except InvalidPasswordError as exc:
             raise RuntimeError(
                 f"{_PG_AUTH_HINT}\nBase for extensions: {db_name}. {_pg_target_debug(shared_str)}"

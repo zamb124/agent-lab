@@ -1,0 +1,11 @@
+"""Scheduled-синхронизация OSM-данных справочника и графа."""
+
+from apps.geo.di import Di
+from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
+from core.tasks import platform_task
+
+
+@platform_task(GEO_OSM_SYNC_TICK)
+async def geo_osm_sync_tick(di: Di) -> dict[str, object]:
+    """If-Modified-Since → импорт → своп поколения (см. OsmImportService)."""
+    return await di.osm_import_service.run_sync()

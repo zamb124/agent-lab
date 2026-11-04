@@ -15,6 +15,7 @@ CREATE DATABASE platform_wiki;
 CREATE DATABASE platform_realtime;
 CREATE DATABASE platform_stock;
 CREATE DATABASE platform_shop;
+CREATE DATABASE platform_geo;
 CREATE DATABASE openfga;
 -- Probe DB for live datasource tests (not an Alembic service tree).
 CREATE DATABASE platform_datasource_customer;
@@ -33,6 +34,7 @@ GRANT ALL PRIVILEGES ON DATABASE platform_wiki TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_realtime TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_stock TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_shop TO platform_user;
+GRANT ALL PRIVILEGES ON DATABASE platform_geo TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE openfga TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_datasource_customer TO platform_user;
 
@@ -81,3 +83,9 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 \connect platform_shop
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+\connect platform_geo
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pgrouting;

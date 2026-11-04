@@ -1,0 +1,466 @@
+"""Импорт OSM-экстрактов в справочник адресов и дорожный граф.
+
+Конвейер ``run_sync``: If-Modified-Since → stream-download → pyosmium
+(три прохода: нужные ноды → локации → строки) → batch INSERT в
+``generation=N+1`` → атомарный своп ``current_generation`` → чистка старых
+поколений. Падение на любом шаге оставляет прошлое поколение живым —
+запросы продолжают обслуживаться.
+
+Читаются и ``.osm.pbf``, и ``.osm`` (XML) — тесты ходят по XML-фикстуре
+без бинарного PBF.
+"""
+
+from __future__ import annotations
+
+import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import osmium
+from oxyde import execute_raw
+
+from apps.geo.config import GeoSettings
+from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
+from core.http import get_httpx_client
+from core.logging import get_logger
+
+if TYPE_CHECKING:
+    from osmium.osm import Node, TagList, Way
+
+logger = get_logger(__name__)
+
+# highway-классы, исключаемые из графа вообще
+_HIGHWAY_SKIP = frozenset(
+    {"proposed", "construction", "raceway", "corridor", "elevator", "escape", "bus_guideway"}
+)
+_EARTH_R = 6_371_000.0
+
+
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    dlat = radians(lat2 - lat1)
+    dlng = radians(lng2 - lng1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+    return 2 * _EARTH_R * asin(sqrt(a))
+
+
+def _display_name(tags: TagList) -> str | None:
+    housenumber = tags.get("addr:housenumber")
+    street = tags.get("addr:street")
+    if not housenumber or not street:
+        return None
+    city = tags.get("addr:city") or tags.get("addr:place") or tags.get("addr:suburb") or ""
+    return ", ".join(part for part in (city, street, housenumber) if part)
+
+
+class _NeededNodesHandler(osmium.SimpleHandler):
+    """Проход 1: id нод, нужных ways-адресам и ways-дорогам."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.needed: set[int] = set()
+
+    def way(self, w: Way) -> None:
+        if w.tags.get("addr:housenumber") or w.tags.get("highway"):
+            self.needed.update(n.ref for n in w.nodes)
+
+
+class _NodeLocationsHandler(osmium.SimpleHandler):
+    """Проход 2: локации только нужных нод + узлы-адреса напрямую."""
+
+    def __init__(self, needed: set[int], bbox: tuple[float, float, float, float]) -> None:
+        super().__init__()
+        self._needed: set[int] = needed
+        self._bbox: tuple[float, float, float, float] = bbox
+        self.locations: dict[int, tuple[float, float]] = {}
+        self.node_addresses: list[dict[str, object]] = []
+
+    def node(self, n: Node) -> None:
+        if not n.location.valid():
+            return
+        lat_min, lng_min, lat_max, lng_max = self._bbox
+        if not (lat_min <= n.location.lat <= lat_max and lng_min <= n.location.lon <= lng_max):
+            return
+        if n.id in self._needed:
+            self.locations[n.id] = (n.location.lat, n.location.lon)
+        if n.tags.get("addr:housenumber"):
+            name = _display_name(n.tags)
+            if name:
+                self.node_addresses.append(
+                    {
+                        "osm_type": "node",
+                        "osm_id": n.id,
+                        "display_name": name,
+                        "city": n.tags.get("addr:city") or n.tags.get("addr:place") or "",
+                        "street": n.tags.get("addr:street") or "",
+                        "housenumber": n.tags.get("addr:housenumber") or "",
+                        "postcode": n.tags.get("addr:postcode") or "",
+                        "lat": n.location.lat,
+                        "lng": n.location.lon,
+                    }
+                )
+
+
+class _WaysHandler(osmium.SimpleHandler):
+    """Проход 3: ways → адреса (центроид) и рёбра дорожного графа."""
+
+    def __init__(
+        self,
+        locations: dict[int, tuple[float, float]],
+        settings: GeoSettings,
+    ) -> None:
+        super().__init__()
+        self._loc: dict[int, tuple[float, float]] = locations
+        self._settings: GeoSettings = settings
+        self.way_addresses: list[dict[str, object]] = []
+        self.edges: list[dict[str, object]] = []
+        self.vertex_ids: set[int] = set()
+
+    def way(self, w: Way) -> None:
+        tags = w.tags
+        coords = [self._loc.get(n.ref) for n in w.nodes]
+
+        housenumber = tags.get("addr:housenumber")
+        if housenumber:
+            known = [c for c in coords if c is not None]
+            if known:
+                name = _display_name(tags)
+                if name:
+                    clat = sum(c[0] for c in known) / len(known)
+                    clng = sum(c[1] for c in known) / len(known)
+                    self.way_addresses.append(
+                        {
+                            "osm_type": "way",
+                            "osm_id": w.id,
+                            "display_name": name,
+                            "city": tags.get("addr:city") or tags.get("addr:place") or "",
+                            "street": tags.get("addr:street") or "",
+                            "housenumber": housenumber,
+                            "postcode": tags.get("addr:postcode") or "",
+                            "lat": clat,
+                            "lng": clng,
+                        }
+                    )
+
+        highway = tags.get("highway")
+        if not highway or highway in _HIGHWAY_SKIP:
+            return
+        speeds = self._settings.car_speeds
+        car_kmh = speeds.get(highway)
+        foot = highway not in {"motorway", "trunk", "motorway_link", "trunk_link"}
+        oneway_tag = tags.get("oneway", "")
+        oneway = 1 if oneway_tag in {"yes", "true", "1"} else (-1 if oneway_tag == "-1" else 0)
+        name = tags.get("name", "")
+
+        for i in range(len(w.nodes) - 1):
+            a = coords[i]
+            b = coords[i + 1]
+            if a is None or b is None or a == b:
+                continue
+            length_m = _haversine_m(a[0], a[1], b[0], b[1])
+            car_cost = length_m / (car_kmh / 3.6) if car_kmh else -1.0
+            car_rcost = car_cost
+            foot_cost = length_m / (self._settings.foot_speed_kmh / 3.6) if foot else -1.0
+            foot_rcost = foot_cost
+            if oneway == 1:
+                car_rcost = -1.0
+                foot_rcost = -1.0
+            elif oneway == -1:
+                car_cost = -1.0
+                foot_cost = -1.0
+            if car_cost < 0 and car_rcost < 0 and foot_cost < 0 and foot_rcost < 0:
+                continue
+            self.vertex_ids.update((w.nodes[i].ref, w.nodes[i + 1].ref))
+            self.edges.append(
+                {
+                    "source": w.nodes[i].ref,
+                    "target": w.nodes[i + 1].ref,
+                    "src_lat": a[0],
+                    "src_lng": a[1],
+                    "dst_lat": b[0],
+                    "dst_lng": b[1],
+                    "length_m": length_m,
+                    "car_cost": car_cost,
+                    "car_reverse_cost": car_rcost,
+                    "foot_cost": foot_cost,
+                    "foot_reverse_cost": foot_rcost,
+                    "oneway": oneway,
+                    "highway": highway,
+                    "name": name,
+                    "osm_way_id": w.id,
+                }
+            )
+
+
+class OsmImportService:
+    """Загрузка, парсинг и атомарная публикация поколений OSM-данных."""
+
+    def __init__(self, settings: GeoSettings) -> None:
+        self._settings: GeoSettings = settings
+
+    async def run_sync(self) -> dict[str, object]:
+        """Полный цикл синхронизации; идемпотентен по Last-Modified."""
+        state = await self._ensure_state()
+        if not self._settings.sync_enabled:
+            return {"skipped": True, "reason": "sync_disabled"}
+
+        state.status = GeoImportStatus.DOWNLOADING
+        state.started_at = datetime.now(UTC)
+        state.updated_at = datetime.now(UTC)
+        _ = await state.save()
+
+        try:
+            paths, source_modified = await self._download_if_newer(state)
+            if paths is None:
+                state.status = GeoImportStatus.IDLE
+                state.updated_at = datetime.now(UTC)
+                _ = await state.save()
+                return {"skipped": True, "reason": "not_modified"}
+            try:
+                counts = await self._import(paths, generation=state.current_generation + 1)
+            finally:
+                for p in paths:
+                    Path(p).unlink(missing_ok=True)
+            await self._publish(state, source_modified, counts)
+            return {"imported": True, **counts}
+        except Exception as exc:
+            state.status = GeoImportStatus.FAILED
+            state.last_error = str(exc)[:2000]
+            state.updated_at = datetime.now(UTC)
+            _ = await state.save()
+            raise
+
+    async def _ensure_state(self) -> GeoImportState:
+        state = await GeoImportState.get_state()
+        if state is None:
+            state = GeoImportState(id=1, updated_at=datetime.now(UTC))
+            _ = await state.save()
+        return state
+
+    async def _download_if_newer(
+        self, state: GeoImportState
+    ) -> tuple[list[str] | None, datetime | None]:
+        """HEAD по всем экстрактам; свежих нет → ``(None, None)``."""
+        newest: datetime | None = None
+        async with get_httpx_client(
+            timeout=self._settings.osm_http_timeout_seconds
+        ) as client:
+            for url in self._settings.osm_extract_urls:
+                if url.startswith("file://"):
+                    mtime = Path(url.removeprefix("file://")).stat().st_mtime
+                    modified = datetime.fromtimestamp(mtime, UTC)
+                else:
+                    head = await client.request(
+                        "HEAD", url, follow_redirects=True
+                    )
+                    _ = head.raise_for_status()
+                    lm = head.headers.get("last-modified")
+                    modified = (
+                        datetime.strptime(
+                            lm, "%a, %d %b %Y %H:%M:%S %Z"
+                        ).replace(tzinfo=UTC)
+                        if lm
+                        else datetime.now(UTC)
+                    )
+                if newest is None or modified > newest:
+                    newest = modified
+            if (
+                state.source_modified_at is not None
+                and newest is not None
+                and newest <= state.source_modified_at
+                and state.current_generation > 0
+            ):
+                return None, None
+
+            paths: list[str] = []
+            for url in self._settings.osm_extract_urls:
+                if url.startswith("file://"):
+                    paths.append(url.removeprefix("file://"))
+                    continue
+                tmp_path: str | None = None
+                async with client.stream("GET", url, follow_redirects=True) as resp:
+                    _ = resp.raise_for_status()
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".osm.pbf", delete=False
+                    ) as tmp:
+                        tmp_path = tmp.name
+                        async for chunk in resp.aiter_bytes(1 << 20):
+                            _ = tmp.write(chunk)
+                assert tmp_path is not None
+                paths.append(tmp_path)
+        return paths, newest
+
+    async def _import(self, paths: list[str], *, generation: int) -> dict[str, int]:
+        """Парсинг всех экстрактов и заливка в новое поколение."""
+        state = await GeoImportState.get_state()
+        assert state is not None
+        state.status = GeoImportStatus.IMPORTING
+        state.updated_at = datetime.now(UTC)
+        _ = await state.save()
+
+        needed: set[int] = set()
+        for p in paths:
+            h = _NeededNodesHandler()
+            h.apply_file(p, locations=False)
+            needed |= h.needed
+
+        locations: dict[int, tuple[float, float]] = {}
+        addresses: list[dict[str, object]] = []
+        edges: list[dict[str, object]] = []
+        vertex_ids: set[int] = set()
+        for p in paths:
+            nh = _NodeLocationsHandler(needed, self._settings.coverage_bbox)
+            nh.apply_file(p, locations=False)
+            locations.update(nh.locations)
+            addresses.extend(nh.node_addresses)
+            wh = _WaysHandler(locations, self._settings)
+            wh.apply_file(p, locations=False)
+            addresses.extend(wh.way_addresses)
+            edges.extend(wh.edges)
+            vertex_ids |= wh.vertex_ids
+
+        await self._bulk_insert_addresses(addresses, generation)
+        await self._bulk_insert_vertices(locations, vertex_ids, generation)
+        await self._bulk_insert_edges(edges, generation)
+        return {
+            "rows_addresses": len(addresses),
+            "rows_vertices": len([v for v in vertex_ids if v in locations]),
+            "rows_edges": len(edges),
+        }
+
+    async def _bulk_insert_addresses(
+        self, rows: list[dict[str, object]], generation: int
+    ) -> None:
+        # bind-лимит Postgres 65535 — пачка ограничена ~5.4K строк по 11 колонок
+        cols = 11
+        bs = min(self._settings.import_batch_size, 60_000 // cols)
+        for i in range(0, len(rows), bs):
+            chunk = rows[i : i + bs]
+            values = ",".join(
+                "(" + ",".join(f"${{{j * cols + k}}}" for k in range(1, cols + 1)) + ")"
+                for j in range(len(chunk))
+            )
+            params: list[object] = []
+            for r in chunk:
+                params.extend(
+                    [
+                        r["osm_type"], r["osm_id"], r["display_name"], r["city"],
+                        r["street"], r["housenumber"], r["postcode"], r["lat"],
+                        r["lng"], generation, datetime.now(UTC),
+                    ]
+                )
+            _ = await execute_raw(
+                f"""
+                INSERT INTO geo_addresses
+                    (osm_type, osm_id, display_name, city, street, housenumber,
+                     postcode, lat, lng, generation, created_at)
+                VALUES {values}
+                ON CONFLICT (osm_type, osm_id, generation) DO NOTHING
+                """,
+                params,
+                using="geo",
+            )
+
+    async def _bulk_insert_vertices(
+        self,
+        locations: dict[int, tuple[float, float]],
+        vertex_ids: set[int],
+        generation: int,
+    ) -> None:
+        # Вершины без локации (нод вне bbox) пропускаем — рёбра к ним
+        # просто не притянутся на snap.
+        ids = sorted(v for v in vertex_ids if v in locations)
+        cols = 4
+        bs = min(self._settings.import_batch_size, 60_000 // cols)
+        for i in range(0, len(ids), bs):
+            chunk = ids[i : i + bs]
+            values = ",".join(
+                f"(${{{j * cols + 1}}},${{{j * cols + 2}}},${{{j * cols + 3}}},${{{j * cols + 4}}})"
+                for j in range(len(chunk))
+            )
+            params: list[object] = []
+            for vid in chunk:
+                lat, lng = locations[vid]
+                params.extend([vid, lat, lng, generation])
+            _ = await execute_raw(
+                f"""
+                INSERT INTO geo_road_vertices (node_id, lat, lng, generation)
+                VALUES {values}
+                ON CONFLICT (node_id, generation) DO NOTHING
+                """,
+                params,
+                using="geo",
+            )
+
+    async def _bulk_insert_edges(
+        self, rows: list[dict[str, object]], generation: int
+    ) -> None:
+        cols = 16
+        bs = min(self._settings.import_batch_size, 60_000 // cols)
+        for i in range(0, len(rows), bs):
+            chunk = rows[i : i + bs]
+            values = ",".join(
+                "(" + ",".join(f"${{{j * cols + k}}}" for k in range(1, cols + 1)) + ")"
+                for j in range(len(chunk))
+            )
+            params: list[object] = []
+            for r in chunk:
+                params.extend(
+                    [
+                        r["source"], r["target"], r["src_lat"], r["src_lng"],
+                        r["dst_lat"], r["dst_lng"], r["length_m"], r["car_cost"],
+                        r["car_reverse_cost"], r["foot_cost"], r["foot_reverse_cost"],
+                        r["oneway"], r["highway"], r["name"], r["osm_way_id"],
+                        generation,
+                    ]
+                )
+            _ = await execute_raw(
+                f"""
+                INSERT INTO geo_road_edges
+                    (source, target, src_lat, src_lng, dst_lat, dst_lng,
+                     length_m, car_cost, car_reverse_cost, foot_cost,
+                     foot_reverse_cost, oneway, highway, name, osm_way_id, generation)
+                VALUES {values}
+                """,
+                params,
+                using="geo",
+            )
+
+    async def _publish(
+        self,
+        state: GeoImportState,
+        source_modified: datetime | None,
+        counts: dict[str, int],
+    ) -> None:
+        """Атомарный своп поколения + очистка старого."""
+        new_gen = state.current_generation + 1
+        _ = await execute_raw(
+            """
+            UPDATE geo_import_state
+            SET current_generation = $1, status = 'idle',
+                source_modified_at = $2, rows_addresses = $3,
+                rows_vertices = $4, rows_edges = $5,
+                last_error = '', finished_at = $6, updated_at = $6
+            WHERE id = 1
+            """,
+            [
+                new_gen, source_modified, counts["rows_addresses"],
+                counts["rows_vertices"], counts["rows_edges"],
+                datetime.now(UTC),
+            ],
+            using="geo",
+        )
+        # Чистка старых поколений — после свопа, батчами.
+        for table in ("geo_addresses", "geo_road_vertices", "geo_road_edges"):
+            _ = await execute_raw(
+                f"DELETE FROM {table} WHERE generation < $1",
+                [new_gen],
+                using="geo",
+            )
+        logger.info(
+            "geo.import.published",
+            generation=new_gen,
+            **counts,
+        )

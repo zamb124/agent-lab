@@ -408,6 +408,12 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             "AGGREGATOR_HOST": "shop.lvh.me",
         },
     ),
+    GranianService(
+        name="geo",
+        app_path="apps.geo.main:app",
+        port=9028,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
 )
 
 
@@ -482,6 +488,13 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
             "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
             "AGGREGATOR_HOST": "shop.lvh.me",
         },
+    ),
+    TaskiqWorkerService(
+        name="geo_worker",
+        worker_module="apps.geo.worker:worker_app",
+        stream_name="geo",
+        workers=1,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(
         name="a2a_push_worker",

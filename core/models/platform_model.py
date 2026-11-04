@@ -309,8 +309,8 @@ class BoundQueryManager[TModel: "PlatformModel"](QueryManager[TModel]):
         )
 
 
-def _require_database_alias(model_name: str, database: str | None) -> None:
-    if database in {
+_ALLOWED_DATABASE_ALIASES: frozenset[str | None] = frozenset(
+    {
         None,
         "shared",
         "flows",
@@ -326,10 +326,19 @@ def _require_database_alias(model_name: str, database: str | None) -> None:
         "sync",
         "stock",
         "shop",
-    }:
+        "geo",
+    }
+)
+
+
+def _require_database_alias(model_name: str, database: str | None) -> None:
+    if database in _ALLOWED_DATABASE_ALIASES:
         return
+    allowed = ", ".join(
+        repr(a) for a in sorted(a for a in _ALLOWED_DATABASE_ALIASES if a is not None)
+    )
     raise RuntimeError(
-        f"{model_name} __database_alias__ must be 'shared', 'flows', 'tracing', 'rag', 'secrets', 'realtime', 'office', 'worktracker', 'wiki', 'search', 'crm', 'sync', 'stock', 'shop' or None"
+        f"{model_name} __database_alias__ must be {allowed} or None"
     )
 
 

@@ -35,18 +35,18 @@ def test_frontmatter_globs_missing(tmp_path: Path) -> None:
 
 def test_dead_path() -> None:
     text = "сервис собирает `apps/voice/container.py` и `apps/shop/main.py`"
-    errors = dead_path_errors(REPO, "x.mdc", text)
+    errors = dead_path_errors(REPO, "ghost_rule", text)
     assert len(errors) == 1 and "apps/voice/container.py" in errors[0]
 
 
 def test_stop_words_outside_backticks() -> None:
-    assert stop_word_errors("x.mdc", "`legacy` слой убран — правило legacy")
-    assert not stop_word_errors("x.mdc", "`legacy` слой убран")
+    assert stop_word_errors("ghost_rule", "`legacy` слой убран — правило legacy")
+    assert not stop_word_errors("ghost_rule", "`legacy` слой убран")
 
 
 def test_numbering_gap() -> None:
     text = "## Канон\n1. а\n2. б\n4. в\n"
-    errors = numbering_errors("x.mdc", text)
+    errors = numbering_errors("ghost_rule", text)
     assert errors and "нумерация 4 после 2" in errors[0]
 
 
@@ -60,26 +60,26 @@ def test_section_template() -> None:
 def test_symbols() -> None:
     idents = frozenset({"RealClassName", "existing_func"})
     text = "метод `existing_func` и `ghost_service_client`"
-    errors = symbol_errors("x.mdc", text, idents)
+    errors = symbol_errors("ghost_rule", text, idents)
     assert len(errors) == 1 and "ghost_service_client" in errors[0]
 
 
 def test_symbol_pair() -> None:
     text = "`ShopOrderService` (`apps/shop/services/order_service.py`) и `Ghost` (`apps/shop/main.py`)"
-    errors = pair_errors(REPO, "x.mdc", text)
+    errors = pair_errors(REPO, "ghost_rule", text)
     assert len(errors) == 1 and "Ghost" in errors[0]
 
 
 def test_js_mask() -> None:
     text = "спек `*.spec.js`"
-    errors = js_mask_errors("x.mdc", text, frozenset(), frozenset({"x.spec.ts"}))
+    errors = js_mask_errors("ghost_rule", text, frozenset(), frozenset({"x.spec.ts"}))
     assert errors and ".ts" in errors[0]
-    assert not js_mask_errors("x.mdc", text, frozenset({"x.spec.js"}), frozenset())
+    assert not js_mask_errors("ghost_rule", text, frozenset({"x.spec.js"}), frozenset())
 
 
 def test_commands(tmp_path: Path) -> None:
     targets = frozenset({"lint", "test-ui"})
-    errors = command_errors(tmp_path, "x.mdc", "`make lint` и `make nosuch`", targets)
+    errors = command_errors(tmp_path, "ghost_rule", "`make lint` и `make nosuch`", targets)
     assert len(errors) == 1 and "nosuch" in errors[0]
 
 

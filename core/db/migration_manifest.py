@@ -23,6 +23,7 @@ class MigrationPostgresConfig(StrictBaseModel):
 
     databases: list[str]
     vector_extensions: list[str] = Field(default_factory=list)
+    postgis_extensions: list[str] = Field(default_factory=list)
 
 
 class MigrationServiceEntry(StrictBaseModel):
@@ -90,6 +91,8 @@ def database_url_for_migration_key(
             return database.stock_url
         case "shop_url":
             return database.shop_url
+        case "geo_url":
+            return database.geo_url
 
 
 def migration_entry_is_active(entry: MigrationServiceEntry) -> bool:
