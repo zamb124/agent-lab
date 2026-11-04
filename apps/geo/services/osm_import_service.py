@@ -27,6 +27,7 @@ from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.tasks import enqueue
+from core.types import SqlParameterValue
 
 if TYPE_CHECKING:
     from osmium.osm import Node, TagList, Way
@@ -225,7 +226,7 @@ class _NodeLocationsHandler(osmium.SimpleHandler):
         self._needed: set[int] = needed
         self._bbox: tuple[float, float, float, float] = bbox
         self.locations: dict[int, tuple[float, float]] = {}
-        self.node_addresses: list[dict[str, object]] = []
+        self.node_addresses: list[dict[str, SqlParameterValue]] = []
 
     def node(self, n: Node) -> None:
         if not n.location.valid():
@@ -264,8 +265,8 @@ class _WaysHandler(osmium.SimpleHandler):
         super().__init__()
         self._loc: dict[int, tuple[float, float]] = locations
         self._settings: GeoSettings = settings
-        self.way_addresses: list[dict[str, object]] = []
-        self.edges: list[dict[str, object]] = []
+        self.way_addresses: list[dict[str, SqlParameterValue]] = []
+        self.edges: list[dict[str, SqlParameterValue]] = []
         self.vertex_ids: set[int] = set()
 
     def way(self, w: Way) -> None:
@@ -342,7 +343,7 @@ class OsmImportService:
     def __init__(self, settings: GeoSettings) -> None:
         self._settings: GeoSettings = settings
 
-    async def run_sync(self) -> dict[str, object]:
+    async def run_sync(self) -> dict[str, SqlParameterValue]:
         """Полный цикл синхронизации; идемпотентен по Last-Modified.
 
         Session advisory lock сериализует конкурентные тики (cron,
@@ -357,7 +358,7 @@ class OsmImportService:
                 return {"skipped": True, "reason": "import_in_progress"}
             return await self._run_locked()
 
-    async def _run_locked(self) -> dict[str, object]:
+    async def _run_locked(self) -> dict[str, SqlParameterValue]:
         """Тело синка под advisory lock; state перечитывается свежим."""
         state = await self._ensure_state()
 
@@ -486,8 +487,8 @@ class OsmImportService:
             needed |= h.needed
 
         locations: dict[int, tuple[float, float]] = {}
-        addresses: list[dict[str, object]] = []
-        edges: list[dict[str, object]] = []
+        addresses: list[dict[str, SqlParameterValue]] = []
+        edges: list[dict[str, SqlParameterValue]] = []
         vertex_ids: set[int] = set()
         for p in paths:
             nh = _NodeLocationsHandler(needed, self._settings.coverage_bbox)
@@ -510,7 +511,7 @@ class OsmImportService:
         }
 
     async def _bulk_insert_addresses(
-        self, rows: list[dict[str, object]], generation: int
+        self, rows: list[dict[str, SqlParameterValue]], generation: int
     ) -> None:
         # bind-лимит Postgres 65535 — пачка ограничена ~5.4K строк по 11 колонок
         cols = 11
@@ -521,7 +522,7 @@ class OsmImportService:
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
                 for j in range(len(chunk))
             )
-            params: list[object] = []
+            params: list[SqlParameterValue] = []
             for r in chunk:
                 params.extend(
                     [
@@ -559,7 +560,7 @@ class OsmImportService:
                 f"(${j * cols + 1},${j * cols + 2},${j * cols + 3},${j * cols + 4})"
                 for j in range(len(chunk))
             )
-            params: list[object] = []
+            params: list[SqlParameterValue] = []
             for vid in chunk:
                 lat, lng = locations[vid]
                 params.extend([vid, lat, lng, generation])
@@ -574,7 +575,7 @@ class OsmImportService:
             )
 
     async def _bulk_insert_edges(
-        self, rows: list[dict[str, object]], generation: int
+        self, rows: list[dict[str, SqlParameterValue]], generation: int
     ) -> None:
         cols = 20
         bs = min(self._settings.import_batch_size, 60_000 // cols)
@@ -584,7 +585,7 @@ class OsmImportService:
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
                 for j in range(len(chunk))
             )
-            params: list[object] = []
+            params: list[SqlParameterValue] = []
             for r in chunk:
                 params.extend(
                     [

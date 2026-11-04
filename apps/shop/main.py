@@ -16,11 +16,14 @@ from apps.shop.realtime.command_router import SHOP_OPERATIONS
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
 from core.config import get_settings
+from core.config.loader import load_merged_config
 
 # side-effect: регистрация типов событий shop в каталоге платформы
 _ = importlib.import_module("apps.shop.events")
 
-_settings = get_settings()
+_settings = ShopSettings.model_validate(
+    load_merged_config(service_name="shop", silent=True)
+)
 
 app = create_service_app(
     "shop",
@@ -30,19 +33,15 @@ app = create_service_app(
     operations=SHOP_OPERATIONS,
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[get_api_router()],
-    outer_middlewares=(
-        [
-            (
-                StorefrontHostMiddleware,
-                {
-                    "domain_suffix": _settings.storefront_domain_suffix,
-                    "aggregator_host": _settings.aggregator_host,
-                },
-            )
-        ]
-        if isinstance(_settings, ShopSettings)
-        else None
-    ),
+    outer_middlewares=[
+        (
+            StorefrontHostMiddleware,
+            {
+                "domain_suffix": _settings.storefront_domain_suffix,
+                "aggregator_host": _settings.aggregator_host,
+            },
+        )
+    ],
     title="Shop Service",
     description="Витрины интернет-магазинов и публичный агрегатор поиска",
     api_version="v1",

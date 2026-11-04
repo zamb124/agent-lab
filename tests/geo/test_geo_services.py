@@ -155,7 +155,7 @@ async def test_addresses_in_zone_exact_list(
     geo_seed, addresses: GeoAddressService
 ) -> None:
     """ST_Covers: 3 внутри + 1 на границе; Арбат снаружи не попадает."""
-    result = await addresses.addresses_in_zone(
+    result = await addresses.addresses_in_zone_by_name_asc(
         zone_geojson=_ZONE, query=None, limit=50, offset=0
     )
     names = {a.display_name for a in result.items}
@@ -172,7 +172,7 @@ async def test_addresses_in_zone_query_and_page(
     geo_seed, addresses: GeoAddressService
 ) -> None:
     """Фильтр q и пагинация: total — полный счёт, items — страница."""
-    page = await addresses.addresses_in_zone(
+    page = await addresses.addresses_in_zone_by_name_asc(
         zone_geojson=_ZONE, query="Тверская", limit=2, offset=1
     )
     assert page.total == 3
@@ -181,7 +181,7 @@ async def test_addresses_in_zone_query_and_page(
 
 
 async def test_suggest(geo_seed, addresses: GeoAddressService) -> None:
-    hits = await addresses.suggest(
+    hits = await addresses.suggest_by_score_desc(
         query="Тверская", zone_geojson=None, lat=None, lng=None, limit=5
     )
     assert [h.display_name for h in hits] == [
@@ -192,7 +192,7 @@ async def test_suggest(geo_seed, addresses: GeoAddressService) -> None:
 
 
 async def test_nearest(geo_seed, addresses: GeoAddressService) -> None:
-    hits = await addresses.nearest(lat=55.75010, lng=37.61732, limit=1)
+    hits = await addresses.nearest_by_distance(lat=55.75010, lng=37.61732, limit=1)
     assert len(hits) == 1
     assert hits[0].display_name == "Тверская улица, 1"
 

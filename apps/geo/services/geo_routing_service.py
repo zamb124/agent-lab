@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 
 from oxyde import execute_raw
+from pydantic import BaseModel
 
 from apps.geo.config import GeoSettings
 from apps.geo.models.api import (
@@ -35,7 +36,7 @@ class GeoRoutingError(Exception):
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
-        self.code = code
+        self.code: str = code
 
 
 _EARTH_R = 6_371_000.0
@@ -78,6 +79,49 @@ def _mode_columns(mode: str) -> tuple[str, str]:
     return cols
 
 
+_ROUTE_SQL = """
+    WITH path AS (
+        SELECT * FROM pgr_dijkstra($1, $2::bigint, $3::bigint, directed => true)
+    )
+    SELECT COUNT(*) AS legs,
+           COALESCE(SUM(e.length_m), 0) AS distance_m,
+           COALESCE(SUM(p.cost), 0) AS duration_s,
+           ST_AsGeoJSON(
+               ST_LineMerge(ST_Collect(e.geom ORDER BY p.path_seq))
+           )::text AS geometry
+    FROM path p
+    LEFT JOIN geo_road_edges e ON e.id = p.edge
+"""
+
+
+class _SnapRow(BaseModel):
+    source: int
+    target: int
+    src_lat: float
+    src_lng: float
+    dst_lat: float
+    dst_lng: float
+    dist_m: float
+
+
+class _RouteRow(BaseModel):
+    legs: int
+    distance_m: float
+    duration_s: float
+    geometry: str | None
+
+
+class _CostRow(BaseModel):
+    start_vid: int
+    end_vid: int
+    agg_cost: float
+
+
+class _IsochroneRow(BaseModel):
+    vertices: int
+    polygon: str | None
+
+
 class GeoRoutingService:
     """Роутинг: маршрут, матрица, оптимальный порядок, изохрона."""
 
@@ -114,16 +158,15 @@ class GeoRoutingService:
                 f"Road graph has no {mode}-passable edges — run OSM import",
                 error_code="geo_import_unavailable",
             )
-        edge = rows[0]
-        dist_m = float(edge["dist_m"])
-        if dist_m > self._settings.snap_max_distance_m:
+        edge = _SnapRow.model_validate(rows[0])
+        if edge.dist_m > self._settings.snap_max_distance_m:
             raise GeoRoutingError(
                 "point_too_far_from_road",
-                f"Point is {dist_m:.0f}m from the {mode} road graph",
+                f"Point is {edge.dist_m:.0f}m from the {mode} road graph",
             )
-        src_d = _haversine_m(lat, lng, float(edge["src_lat"]), float(edge["src_lng"]))
-        dst_d = _haversine_m(lat, lng, float(edge["dst_lat"]), float(edge["dst_lng"]))
-        return int(edge["source"] if src_d <= dst_d else edge["target"])
+        src_d = _haversine_m(lat, lng, edge.src_lat, edge.src_lng)
+        dst_d = _haversine_m(lat, lng, edge.dst_lat, edge.dst_lng)
+        return edge.source if src_d <= dst_d else edge.target
 
     async def calculate(
         self,
@@ -143,32 +186,19 @@ class GeoRoutingService:
         cost_col, rcost_col = _mode_columns(mode)
         edges_sql = _edges_sql(cost_col, rcost_col, generation)
         rows = await execute_raw(
-            """
-            WITH path AS (
-                SELECT * FROM pgr_dijkstra($1, $2::bigint, $3::bigint, directed => true)
-            )
-            SELECT COUNT(*) AS legs,
-                   COALESCE(SUM(e.length_m), 0) AS distance_m,
-                   COALESCE(SUM(p.cost), 0) AS duration_s,
-                   ST_AsGeoJSON(
-                       ST_LineMerge(ST_Collect(e.geom ORDER BY p.path_seq))
-                   )::text AS geometry
-            FROM path p
-            LEFT JOIN geo_road_edges e ON e.id = p.edge
-            """,
+            _ROUTE_SQL,
             [edges_sql, start_vid, end_vid],
             using="geo",
         )
-        row = rows[0]
-        if int(row["legs"]) == 0:
+        row = _RouteRow.model_validate(rows[0])
+        if row.legs == 0:
             raise PlatformNotFoundError(
                 "No route between points", error_code="route_not_found"
             )
-        geometry = row["geometry"]
         return GeoRouteResponse(
-            distance_m=float(row["distance_m"]),
-            duration_s=float(row["duration_s"]),
-            geometry=json.loads(str(geometry)) if geometry else None,
+            distance_m=row.distance_m,
+            duration_s=row.duration_s,
+            geometry=json.loads(row.geometry) if row.geometry else None,
         )
 
     async def matrix(
@@ -231,10 +261,10 @@ class GeoRoutingService:
             [edges_sql, vids],
             using="geo",
         )
-        table: dict[tuple[int, int], float] = {
-            (int(r["start_vid"]), int(r["end_vid"])): float(r["agg_cost"])
-            for r in rows
-        }
+        table: dict[tuple[int, int], float] = {}
+        for r in rows:
+            cell = _CostRow.model_validate(r)
+            table[(cell.start_vid, cell.end_vid)] = cell.agg_cost
         return [
             [0.0 if sv == dv else table.get((sv, dv)) for dv in dst_vids]
             for sv in src_vids
@@ -324,11 +354,10 @@ class GeoRoutingService:
             [edges_sql, start_vid, minutes * 60, generation],
             using="geo",
         )
-        row = rows[0]
-        polygon = row["polygon"]
+        row = _IsochroneRow.model_validate(rows[0])
         return GeoIsochroneResponse(
-            polygon=json.loads(str(polygon)) if polygon else None,
-            reachable_vertices=int(row["vertices"]),
+            polygon=json.loads(row.polygon) if row.polygon else None,
+            reachable_vertices=row.vertices,
         )
 
 

@@ -734,7 +734,7 @@ class TestCourierEta:
     async def test_check_delivery_eta(
         self,
         geo_service: None,
-        shop_di: ShopDi,
+        shop_di,
         nominatim_service: None,
         unique_id: str,
     ) -> None:
@@ -775,7 +775,7 @@ class TestCourierEta:
     async def test_check_delivery_geo_down_graceful(
         self,
         geo_service: None,
-        shop_di: ShopDi,
+        shop_di,
         nominatim_service: None,
         unique_id: str,
     ) -> None:

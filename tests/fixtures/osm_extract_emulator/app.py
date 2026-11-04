@@ -1,7 +1,7 @@
 """Эмулятор HTTP-зеркала OSM-экстрактов для тестового стека.
 
 Внешний источник ``GEO__OSM_EXTRACT_URLS`` заменяется локальным сервером
-того же протокола (testing.mdc §3): HEAD отдаёт ``Last-Modified``, GET —
+того же протокола (testing.mdc § Канон): HEAD отдаёт ``Last-Modified``, GET —
 байты ``tests/geo/fixtures/micro.osm.pbf``. Так в тестах проходит реальный
 wire-путь ``OsmImportService._download_if_newer`` (HEAD → If-Modified-Since →
 стриминг в tmp → pyosmium-парс), а не ``file://``.

@@ -30,9 +30,9 @@ class GeoAddressService:
     """Точечные адресные запросы: в зоне, подсказки, ближайшие."""
 
     def __init__(self, settings: GeoSettings) -> None:
-        self._settings = settings
+        self._settings: GeoSettings = settings
 
-    async def addresses_in_zone(
+    async def addresses_in_zone_by_name_asc(
         self,
         *,
         zone_geojson: str,
@@ -63,10 +63,10 @@ class GeoAddressService:
             [generation, zone_geojson, query],
             using="geo",
         )
-        total = int(count_rows[0]["total"]) if count_rows else 0
+        total: int = count_rows[0]["total"] if count_rows else 0
         return GeoAddressListResponse(items=_hits(rows), total=total)
 
-    async def suggest(
+    async def suggest_by_score_desc(
         self,
         *,
         query: str,
@@ -97,7 +97,7 @@ class GeoAddressService:
         )
         return _hits(rows)
 
-    async def nearest(
+    async def nearest_by_distance(
         self, *, lat: float, lng: float, limit: int
     ) -> list[GeoAddressHit]:
         """Ближайшие адреса к точке (GiST KNN по ``geom <->``)."""

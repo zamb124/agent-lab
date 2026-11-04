@@ -65,7 +65,7 @@ async def op_geo_addresses_in_zone(
     zone = _validate_zone(payload.zone)
     assert zone is not None
     limit = min(payload.limit, di.settings.zone_addresses_limit_max)
-    return await di.geo_address_service.addresses_in_zone(
+    return await di.geo_address_service.addresses_in_zone_by_name_asc(
         zone_geojson=zone, query=payload.q, limit=limit, offset=payload.offset
     )
 
@@ -77,7 +77,7 @@ async def op_geo_addresses_suggest(
     _ = user
     zone = _validate_zone(payload.zone)
     limit = min(payload.limit, di.settings.suggest_limit_max)
-    items = await di.geo_address_service.suggest(
+    items = await di.geo_address_service.suggest_by_score_desc(
         query=payload.q,
         zone_geojson=zone,
         lat=payload.lat,
@@ -92,7 +92,7 @@ async def op_geo_addresses_nearest(
 ) -> GeoAddressListResponse:
     _ = require_company()
     _ = user
-    items = await di.geo_address_service.nearest(
+    items = await di.geo_address_service.nearest_by_distance(
         lat=payload.lat, lng=payload.lng, limit=payload.limit
     )
     return GeoAddressListResponse(items=items, total=len(items))

@@ -140,6 +140,12 @@ COMMON_TEST_ENV: dict[str, str] = {
     # неизвестный адрес → [] → address_unverifiable, "lat,lng" → точка.
     "GEOCODING__NOMINATIM_BASE_URL": "http://127.0.0.1:18098",
     "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
+    # Observability-бэкенды в стеке отсутствуют: flows logs/traces ops ждут
+    # *_failed (unavailable), а не пустой succeeded от чужого dev-стека
+    # на localhost:3100/3200. Порт 1 — гарантированный ConnectError.
+    "LOGGING__LOKI_URL": "http://127.0.0.1:1/loki/api/v1/push",
+    "LOGGING__LOKI_QUERY_URL": "http://127.0.0.1:1",
+    "TRACING__TEMPO_HTTP_URL": "http://127.0.0.1:1",
 }
 
 

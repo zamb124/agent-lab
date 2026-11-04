@@ -333,7 +333,7 @@ class TestStorefrontPage:
         assert body["timezone"]
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert "hoursBadge" in html.text
-        assert "предзаказ" in html.text
+        assert "Сейчас закрыто" in html.text
         assert "menuSearch" in html.text
         assert "msearch" in html.text
 

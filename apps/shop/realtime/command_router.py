@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.shop.di import ShopDi
-from apps.shop.models.api import ShopCreateRequest
+from apps.shop.models.api import ShopCreateRequest, ShopZoneAddressesRequest
 from apps.shop.realtime.operations import (
     ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
@@ -47,7 +47,6 @@ from apps.shop.realtime.operations import (
     ShopTableUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
-    ShopZoneAddressesRequest,
     op_ai_autofill,
     op_ai_describe_batch,
     op_ai_describe_product,
