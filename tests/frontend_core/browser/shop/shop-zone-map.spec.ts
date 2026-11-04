@@ -87,6 +87,12 @@ describe('shop-zone-map', () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         await mapReady(el);
         await elementUpdated(el);
+        // leaflet.css обязан жить в shadow root — head-стили сквозь boundary не идут.
+        const link = el.shadowRoot.querySelector<HTMLLinkElement>('link[href*="leaflet.css"]');
+        expect(link, 'leaflet.css в shadow root').to.exist;
+        const tile = el.shadowRoot.querySelector<HTMLElement>('.leaflet-tile');
+        expect(tile, 'тайл загружен').to.exist;
+        expect(getComputedStyle(tile!).position, 'тайл позиционируется абсолютно').to.equal('absolute');
         expect(el.shadowRoot.querySelector('.empty-badge'), 'бейдж пустой зоны').to.exist;
         expect(openBtn(el).textContent).to.include('Задать зону');
     });

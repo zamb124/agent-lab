@@ -18,7 +18,7 @@ import type { PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { loadLeaflet } from '../_helpers/leaflet.js';
+import { loadLeaflet, leafletCssLinks } from '../_helpers/leaflet.js';
 import type { LeafletModule } from '../_helpers/leaflet.js';
 
 type LeafletMap = import('leaflet').Map;
@@ -244,6 +244,7 @@ export class ShopZoneMap extends PlatformElement {
     protected override render(): TemplateResult {
         const hasZone = this._ringLatLngs() !== null;
         return html`
+            ${leafletCssLinks()}
             <div class="mapwrap">
                 <div class="map"></div>
                 ${!hasZone ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>` : nothing}

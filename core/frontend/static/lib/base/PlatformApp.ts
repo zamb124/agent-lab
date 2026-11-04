@@ -446,7 +446,9 @@ export class PlatformApp extends PlatformElement {
                 throw error;
             }
         };
-        // Both settled promises can reject on rapid route changes; catch each.
+        // Все три промиса транзиции могут реджектиться (быстрая смена маршрута,
+        // document.hidden): ready/updateCallbackDone/finished — гасим каждый.
+        transition.ready.catch(swallowRouteTransitionAbort);
         transition.updateCallbackDone.catch(swallowRouteTransitionAbort);
         transition.finished
             .catch(swallowRouteTransitionAbort)

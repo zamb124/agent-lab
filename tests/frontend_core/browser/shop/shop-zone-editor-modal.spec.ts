@@ -150,6 +150,16 @@ describe('shop-zone-editor-modal', function () {
         });
         await mapReady(modal);
         await elementUpdated(modal);
+        // leaflet.css/geoman.css обязаны жить в shadow root: стили из head
+        // не проходят сквозь shadow boundary — без них тайлы «пазлом».
+        const links = [...modal.shadowRoot.querySelectorAll('link[rel="stylesheet"]')].map((l) =>
+            (l as HTMLLinkElement).href,
+        );
+        expect(links.some((h) => h.includes('leaflet.css')), 'leaflet.css в shadow root').to.equal(true);
+        expect(links.some((h) => h.includes('geoman')), 'geoman css в shadow root').to.equal(true);
+        const tile = modal.shadowRoot.querySelector<HTMLElement>('.leaflet-tile');
+        expect(tile, 'тайл загружен').to.exist;
+        expect(getComputedStyle(tile!).position, 'тайл позиционируется абсолютно').to.equal('absolute');
         expect(modal._polygon).to.equal(null);
         expect(modal._points).to.equal(0);
         expect(modal.shadowRoot.querySelector('.ztools'), 'панель инструментов').to.exist;

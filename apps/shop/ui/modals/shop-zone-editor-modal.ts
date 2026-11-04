@@ -20,7 +20,7 @@ import type { OpController } from '@platform/lib/base/use-resource.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { loadGeoman } from '../_helpers/leaflet.js';
+import { loadGeoman, leafletCssLinks } from '../_helpers/leaflet.js';
 import type { LeafletModule } from '../_helpers/leaflet.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
@@ -539,6 +539,7 @@ export class ShopZoneEditorModal extends PlatformModal {
         const perim = _fmtKm(this._perimM);
         const perimUnit = this._perimM >= 1000 ? this.t('settings.zone_unit_km') : this.t('settings.zone_unit_m');
         return html`
+            ${leafletCssLinks({ geoman: true })}
             <div class="zwrap">
                 <div class="zmap ${this._drawing ? 'drawing' : ''}"></div>
                 <div class="ztools">

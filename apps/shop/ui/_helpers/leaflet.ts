@@ -10,21 +10,28 @@
 
 export type LeafletModule = typeof import('leaflet');
 
+export const LEAFLET_CSS = '/shop/ui/static/vendor/leaflet/leaflet.css';
+export const GEOMAN_CSS = '/shop/ui/static/vendor/geoman/leaflet-geoman.css';
+
 let _leafletPromise: Promise<LeafletModule> | null = null;
 let _geomanPromise: Promise<LeafletModule> | null = null;
 
-function _ensureCss(id: string, href: string): void {
-    if (document.getElementById(id)) return;
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = href;
-    document.head.appendChild(link);
+import { html } from 'lit';
+import type { TemplateResult } from 'lit';
+
+/**
+ * Стили карты должны жить ВНУТРИ shadow root компонента — stylesheet из
+ * document.head сквозь shadow boundary не проходит (без них тайлы Leaflet
+ * плывут «пазлом» в DOM-порядке). Вставлять в шаблон рядом с .map-контейнером.
+ */
+export function leafletCssLinks({ geoman = false }: { geoman?: boolean } = {}): TemplateResult {
+    return html`<link rel="stylesheet" href=${LEAFLET_CSS} />${geoman
+        ? html`<link rel="stylesheet" href=${GEOMAN_CSS} />`
+        : ''}`;
 }
 
 export function loadLeaflet(): Promise<LeafletModule> {
     if (!_leafletPromise) {
-        _ensureCss('leaflet-css', '/shop/ui/static/vendor/leaflet/leaflet.css');
         _leafletPromise = import('leaflet').then((mod) => {
             const resolved = ((mod as { default?: LeafletModule }).default ?? mod) as LeafletModule;
             const L = typeof resolved.map === 'function'
@@ -41,7 +48,6 @@ export function loadLeaflet(): Promise<LeafletModule> {
 
 export function loadGeoman(): Promise<LeafletModule> {
     if (!_geomanPromise) {
-        _ensureCss('geoman-css', '/shop/ui/static/vendor/geoman/leaflet-geoman.css');
         _geomanPromise = loadLeaflet().then((L) =>
             import('@geoman-io/leaflet-geoman-free').then(() => L),
         );
