@@ -15,10 +15,9 @@ class GeoSettings(BaseSettings):
 
     osm_extract_urls: list[str] = Field(
         default_factory=lambda: [
-            "https://download.openstreetmap.fr/extracts/europe/russia/central_federal_district/moscow.osm.pbf",
-            "https://download.openstreetmap.fr/extracts/europe/russia/central_federal_district/moscow_oblast.osm.pbf",
+            "https://download.geofabrik.de/russia/central-fed-district-latest.osm.pbf",
         ],
-        description="PBF-экстракты OSM для импорта (объединение). Альтернатива — Geofabrik central-fed-district.",
+        description="PBF-экстракты OSM для импорта (объединение). Импорт клипает к coverage_bbox — хватает одного экстракта ЦФО Geofabrik; у download.openstreetmap.fr России нет.",
     )
     coverage_bbox: tuple[float, float, float, float] = Field(
         default=(54.2, 35.1, 56.9, 40.4),
