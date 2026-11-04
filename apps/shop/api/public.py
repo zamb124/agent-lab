@@ -131,6 +131,15 @@ async def delivery_check(slug: str, address: str, di: Di) -> JsonObject:
     return await di.order_service.check_delivery(shop, address)
 
 
+@router.get("/storefront/{slug}/address-suggest", response_model=None)
+async def address_suggest(slug: str, q: str, di: Di) -> JsonObject:
+    """Автокомплит адреса по справочнику geo внутри зоны доставки витрины."""
+    shop = await di.order_service.resolve_published_shop(slug)
+    if len(q.strip()) < 2:
+        return {"items": []}
+    return await di.order_service.address_suggest(shop, q.strip())
+
+
 @router.get("/aggregate/geocode", response_model=None)
 async def aggregate_geocode(address: str, di: Di) -> dict[str, object]:
     """Адрес покупателя → точка карты для фильтра витрин на /market."""

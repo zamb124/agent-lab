@@ -18,7 +18,7 @@ alwaysApply: false
 
 Таблицы — `apps/shop/models/<entity>.py`, все `__global_model__`; `company_id` есть только у `Shop` и `ShopDomain`, остальные привязаны через `shop_id`.
 
-- `Shop` (`shop_shops`) — витрина: `slug` (глобально уникален), `kind` (`ShopKind`), контакты, `working_hours`, `timezone`, выдача `delivery`/`pickup`/`onsite` (`*_enabled`), `delivery_fee_minor`, `min_order_minor`, `currency`, `theme` (`ShopTheme`: `preset` `menu`/`grid`/`compact`), `badges` — словарь меток магазина, Telegram-поля, `status` `draft → published ⇄ suspended`, мягкое удаление `deleted_at`.
+- `Shop` (`shop_shops`) — витрина: `slug` (глобально уникален), `kind` (`ShopKind`), контакты, `working_hours`, `timezone`, выдача `delivery`/`pickup`/`onsite` (`*_enabled`), `delivery_zone` (GeoJSON-полигон зоны доставки, точка внутри — `zone_covers_point` в `core/utils/geo.py`), `delivery_fee_minor`, `min_order_minor`, `currency`, `theme` (`ShopTheme`: `preset` `menu`/`grid`/`compact`), `badges` — словарь меток магазина, Telegram-поля, `status` `draft → published ⇄ suspended`, мягкое удаление `deleted_at`.
 - `ShopTable` (`shop_tables`) — стол зала для `onsite`: `label` («Стол 5», «У окна»); стабильный `shop_table_id` кодируется в QR-ссылке `?table=<id>`.
 - `ShopCategory` — дерево разделов (`parent_id`, `sort`).
 - `ShopProduct` — позиция: `price_minor`, `portion`, `badges` (ключи меток магазина), `photo_file_id`, `is_available`.
@@ -47,7 +47,7 @@ alwaysApply: false
 
 - Команды `shop/<entity>/<verb>_requested` — каталог `SHOP_OPERATIONS` (`apps/shop/realtime/command_router.py`); анонимные — `shop/public/*`.
 - Push — `apps/shop/events.py`: `shop/shop/created|updated|published`, `shop/catalog/changed` (ещё и доменное событие для flows-триггеров), `shop/order/created|status_changed` без PII.
-- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам), Telegram webhook.
+- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам, сортировка по `delivery_coverage`), `GET /storefront/{slug}/delivery-check` и `GET /aggregate/geocode` (геокодинг адреса через `di.geocoder` + проверка `delivery_zone`; нерезолвленный адрес — `address_unverifiable`), Telegram webhook.
 - Рерайт Host → публичные пути — `StorefrontHostMiddleware` (`apps/shop/host_middleware.py`); в проде ingress `shop.<apex>` (`shop-ingress.yaml`), корень поддомена компании для анонима проксирует `apps/frontend/main.py`.
 
 ## Интеграции
@@ -60,7 +60,7 @@ alwaysApply: false
 ## UI
 
 - SPA `ShopApp` (`apps/shop/ui/app/shop-app.ts`): маршруты `shop_home`, `:shopId/menu`, `:shopId/builder` (тема с live-preview через `?tpreset`/`?taccent`/`?tmode`), `:shopId/orders`, `:shopId/promos`, `:shopId/settings`.
-- Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`.
+- Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`; карта зоны доставки — `apps/shop/ui/components/shop-zone-map.ts` (vendored Leaflet).
 - Витрина покупателя — не SPA: HTML + inline JS из `storefront_shell.py`.
 
 ## Запреты

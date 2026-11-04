@@ -340,7 +340,7 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di))
+        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
         result = await service.check_delivery(shop, f"Тверская 1 {unique_id}")
         assert result["ok"] is True
         assert result["inside_zone"] is True
@@ -365,7 +365,7 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di))
+        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
         result = await service.check_delivery(shop, f"Одинцово {unique_id}")
         assert result["ok"] is False
         assert result["inside_zone"] is False
@@ -388,7 +388,7 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di))
+        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
         result = await service.check_delivery(shop, f"Нет такого {unique_id}")
         assert result["ok"] is False
         assert result["reason"] == "address_unverifiable"

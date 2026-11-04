@@ -47,6 +47,7 @@ from apps.shop.realtime.operations import (
     ShopTableUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    ShopZoneAddressesRequest,
     op_ai_autofill,
     op_ai_describe_batch,
     op_ai_describe_product,
@@ -92,6 +93,7 @@ from apps.shop.realtime.operations import (
     op_public_order_create,
     op_public_order_status,
     op_shop_geocode,
+    op_shop_zone_addresses,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -118,6 +120,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/shops/update_requested": Operation(payload_model=ShopUpdatePayload, fn=op_shops_update),
     "shop/shops/geocode_requested": Operation(
         payload_model=ShopGeocodePayload, fn=op_shop_geocode
+    ),
+    "shop/shops/zone_addresses_requested": Operation(
+        payload_model=ShopZoneAddressesRequest, fn=op_shop_zone_addresses
     ),
     "shop/shops/publish_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_publish),
     "shop/shops/suspend_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_suspend),

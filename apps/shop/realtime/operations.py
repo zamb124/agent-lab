@@ -67,6 +67,7 @@ from apps.shop.models.api import (
     ShopTableUpdateRequest,
     ShopTheme,
     ShopUpdateRequest,
+    ShopZoneAddressesRequest,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
@@ -76,6 +77,8 @@ from apps.shop.tasks.task_names import (
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
 )
+from core.clients.geo_models import GeoAddressListResult
+from core.clients.service_client import ServiceClientError
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformBoundaryError,
@@ -499,6 +502,30 @@ async def op_shop_geocode(
             error_code="address_unverifiable",
         )
     return ShopGeocodeResponse(lat=geo.lat, lng=geo.lng, normalized=geo.normalized_address)
+
+
+async def op_shop_zone_addresses(
+    payload: ShopZoneAddressesRequest, *, user: User, di: Di
+) -> GeoAddressListResult:
+    """Адреса справочника geo внутри редактируемой зоны — для панели редактора.
+
+    Зона приходит из payload (ещё не сохранена на сервере), поэтому
+    валидируется здесь. Контекст компании ServiceClient прокидывает сам.
+    """
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    _ = scope
+    if not is_valid_delivery_zone(payload.zone):
+        raise_invalid(
+            ValueError("delivery_zone is not a valid single-ring GeoJSON Polygon"),
+            error_code="invalid_delivery_zone",
+        )
+    try:
+        return await di.geo_client.addresses_in_zone(
+            zone=payload.zone, q=payload.q, limit=payload.limit, offset=payload.offset
+        )
+    except ServiceClientError as exc:
+        raise_unavailable(exc, error_code="geo_unavailable")
 
 
 async def op_shops_publish(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:

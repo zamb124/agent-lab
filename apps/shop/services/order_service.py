@@ -42,7 +42,9 @@ from apps.shop.services.modifier_pricing import (
     validate_and_price,
 )
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
+from core.clients.geo_client import GeoClient
 from core.clients.geocoding.base import Geocoder
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.customers.models import CustomerAddress
 from core.errors.boundary import (
     PlatformAccessDeniedError,
@@ -51,7 +53,7 @@ from core.errors.boundary import (
 )
 from core.request_scope import CustomerScope
 from core.types import JsonObject
-from core.utils.geo import point_in_polygon, polygon_ring
+from core.utils.geo import is_valid_delivery_zone, point_in_polygon, polygon_ring
 from core.utils.time import utcnow
 
 
@@ -80,8 +82,13 @@ _ALLOWED_TRANSITIONS: dict[ShopOrderStatus, frozenset[ShopOrderStatus]] = {
 class ShopOrderService:
     """Заказы витрины: приём анонимного заказа и жизненный цикл для владельца."""
 
-    def __init__(self, geocoder: Geocoder) -> None:
+    def __init__(self, geocoder: Geocoder, service_client: ServiceClient) -> None:
         self._geocoder: Geocoder = geocoder
+        self._service_client: ServiceClient = service_client
+
+    def _geo(self, shop: Shop) -> GeoClient:
+        """GeoClient от имени компании витрины — для анонимных вызовов покупателя."""
+        return GeoClient(http=self._service_client, company_id=shop.company_id)
 
     async def _resolve_delivery_point(
         self, payload: ShopOrderCreateRequest, customer: CustomerScope
@@ -135,7 +142,60 @@ class ShopOrderService:
             result["inside_zone"] = inside
             if not inside:
                 result["reason"] = "out_of_delivery_zone"
+        if result["ok"]:
+            await self._enrich_route(shop, geo.lat, geo.lng, result)
         return result
+
+    async def _enrich_route(
+        self, shop: Shop, cust_lat: float, cust_lng: float, result: JsonObject
+    ) -> None:
+        """Дорожная дистанция/время до адреса, если гео-движок доступен.
+
+        Деградация явная: geo недоступен → метрик в ответе просто нет,
+        чек доставки остаётся рабочим.
+        """
+        if not shop.address.strip():
+            return
+        shop_geo = await self._geocoder.geocode(shop.address)
+        if shop_geo is None:
+            return
+        try:
+            route = await self._geo(shop).route_calculate(
+                from_lat=shop_geo.lat,
+                from_lng=shop_geo.lng,
+                to_lat=cust_lat,
+                to_lng=cust_lng,
+                mode="car",
+            )
+        except ServiceClientError:
+            return
+        result["distance_m"] = route.distance_m
+        result["duration_s"] = route.duration_s
+
+    async def address_suggest(self, shop: Shop, query: str) -> JsonObject:
+        """Автокомплит адреса покупателя по справочнику внутри зоны доставки.
+
+        Деградация: geo недоступен → пустой список, витрина откатывается
+        на свободный ввод (чек всё равно геокодирует строку).
+        """
+        zone = shop.delivery_zone if is_valid_delivery_zone(shop.delivery_zone) else None
+        try:
+            hits = await self._geo(shop).suggest(q=query, zone=zone, limit=8)
+        except ServiceClientError:
+            return {"items": [], "geo_unavailable": True}
+        return {
+            "items": [
+                {
+                    "display_name": h.display_name,
+                    "lat": h.lat,
+                    "lng": h.lng,
+                    "city": h.city,
+                    "street": h.street,
+                    "housenumber": h.housenumber,
+                }
+                for h in hits.items
+            ]
+        }
 
     async def resolve_published_shop(self, slug: str) -> Shop:
         """Опубликованная витрина по slug для публичного заказа."""

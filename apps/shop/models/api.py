@@ -127,6 +127,19 @@ class ShopGeocodeResponse(StrictBaseModel):
     normalized: str = ""
 
 
+class ShopZoneAddressesRequest(StrictBaseModel):
+    """Адреса geo-справочника внутри редактируемой зоны доставки.
+
+    ``zone`` — GeoJSON-полигон прямо из редактора (ещё не сохранён),
+    поэтому оп валидирует его сам.
+    """
+
+    zone: JsonObject
+    q: str | None = Field(default=None, max_length=200)
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
 class ShopTableResponse(StrictBaseModel):
     """Стол зала: ``shop_table_id`` попадает в QR-ссылку ``?table=``."""
 
