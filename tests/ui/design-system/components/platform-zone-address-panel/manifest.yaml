@@ -1,0 +1,13 @@
+component: platform-zone-address-panel
+doc_slug: platform-zone-address-panel
+tier: T0
+title_ru: Панель адресов зоны
+title_en: Zone address panel
+import: "@platform/lib/components/platform-zone-address-panel.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

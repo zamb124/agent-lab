@@ -57,6 +57,8 @@ interface FormSnapshot {
     onsiteEnabled: boolean;
     deliveryFee: string;
     minOrder: string;
+    prepMinutes: string;
+    courierMode: string;
     deliveryZone: Record<string, unknown>;
     hours: ShopDayHours[];
 }
@@ -86,6 +88,8 @@ export class ShopSettingsPage extends PlatformPage {
     declare _onsiteEnabled: boolean;
     declare _deliveryFee: string;
     declare _minOrder: string;
+    declare _prepMinutes: string;
+    declare _courierMode: string;
     declare _deliveryZone: Record<string, unknown>;
     declare _newDomain: string;
     declare _botToken: string;
@@ -107,6 +111,8 @@ export class ShopSettingsPage extends PlatformPage {
         _onsiteEnabled: { state: true },
         _deliveryFee: { state: true },
         _minOrder: { state: true },
+        _prepMinutes: { state: true },
+        _courierMode: { state: true },
         _deliveryZone: { state: true },
         _newDomain: { state: true },
         _botToken: { state: true },
@@ -431,6 +437,8 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = false;
         this._deliveryFee = '';
         this._minOrder = '';
+        this._prepMinutes = '';
+        this._courierMode = 'scooter';
         this._deliveryZone = {};
         this._newDomain = '';
         this._botToken = '';
@@ -475,6 +483,8 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = Boolean(shop.onsite_enabled);
         this._deliveryFee = String((Number(shop.delivery_fee_minor ?? 0) / 100) || '');
         this._minOrder = String((Number(shop.min_order_minor ?? 0) / 100) || '');
+        this._prepMinutes = String(Number(shop.prep_minutes ?? 0) || '');
+        this._courierMode = String(shop.courier_mode ?? 'scooter');
         const zone = shop.delivery_zone;
         this._deliveryZone = zone !== null && typeof zone === 'object'
             ? (zone as Record<string, unknown>)
@@ -507,6 +517,8 @@ export class ShopSettingsPage extends PlatformPage {
             onsiteEnabled: this._onsiteEnabled,
             deliveryFee: this._deliveryFee,
             minOrder: this._minOrder,
+            prepMinutes: this._prepMinutes,
+            courierMode: this._courierMode,
             deliveryZone: this._deliveryZone,
             hours: this._hours.map((d) => ({ ...d })),
         };
@@ -529,6 +541,8 @@ export class ShopSettingsPage extends PlatformPage {
         this._onsiteEnabled = s.onsiteEnabled;
         this._deliveryFee = s.deliveryFee;
         this._minOrder = s.minOrder;
+        this._prepMinutes = s.prepMinutes;
+        this._courierMode = s.courierMode;
         this._deliveryZone = s.deliveryZone;
         this._hours = s.hours.map((d) => ({ ...d }));
     }
@@ -548,6 +562,11 @@ export class ShopSettingsPage extends PlatformPage {
     private _toMinor(value: string): number {
         const parsed = parseFloat(value.replace(',', '.'));
         return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : 0;
+    }
+
+    private _toInt(value: string): number {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 600) : 0;
     }
 
     private _collectHours(): Record<string, string> {
@@ -600,6 +619,8 @@ export class ShopSettingsPage extends PlatformPage {
             onsite_enabled: this._onsiteEnabled,
             delivery_fee_minor: this._toMinor(this._deliveryFee),
             min_order_minor: this._toMinor(this._minOrder),
+            prep_minutes: this._toInt(this._prepMinutes),
+            courier_mode: this._courierMode,
             delivery_zone: this._deliveryZone,
             working_hours: this._collectHours(),
         });
@@ -922,6 +943,13 @@ export class ShopSettingsPage extends PlatformPage {
                             ></platform-field>
                             <platform-field type="number" mode="edit" label=${this.t('settings.field_min_order')} .value=${this._minOrder}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                            ></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('settings.field_prep_minutes')} .value=${this._prepMinutes}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._prepMinutes = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                            ></platform-field>
+                            <platform-field type="enum" mode="edit" label=${this.t('settings.field_courier_mode')} .value=${this._courierMode}
+                                .config=${{ values: ['scooter', 'bike', 'foot', 'car'].map((m) => ({ value: m, label: this.t(`settings.courier_mode_${m}`) })) }}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._courierMode = typeof e.detail.value === 'string' ? e.detail.value : 'scooter'; }}
                             ></platform-field>
                         </div>
                     </div>

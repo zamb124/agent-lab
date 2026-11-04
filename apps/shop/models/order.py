@@ -52,6 +52,7 @@ class ShopOrder(PlatformModel):
     customer_id: str = DbField(default="", max_length=64, db_index=True)
     delivery_type: ShopDeliveryType = DbField()
     address: str = DbField(default="", max_length=500)
+    delivery_eta_minutes: int | None = DbField(default=None)
     table_id: str = DbField(default="", max_length=64)
     table_label: str = DbField(default="", max_length=64)
     comment: str = DbField(default="", max_length=1000)

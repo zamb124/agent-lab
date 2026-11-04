@@ -37,7 +37,7 @@ class GeoClient:
         self, http: ServiceClient | None = None, *, company_id: str | None = None
     ) -> None:
         self._http: ServiceClient = http or ServiceClient()
-        self._headers = (
+        self._headers: dict[str, str] | None = (
             build_internal_context_headers(
                 company_id=company_id, user_id=GEO_CALLER_USER_ID
             )

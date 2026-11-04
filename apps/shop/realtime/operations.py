@@ -346,6 +346,8 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         delivery_zone=dict(shop.delivery_zone),
         delivery_fee_minor=shop.delivery_fee_minor,
         min_order_minor=shop.min_order_minor,
+        prep_minutes=shop.prep_minutes,
+        courier_mode=shop.courier_mode,
         currency=shop.currency,
         theme=ShopTheme.model_validate(shop.theme or {}),
         badges=[

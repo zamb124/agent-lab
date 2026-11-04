@@ -146,31 +146,58 @@ class ShopOrderService:
             await self._enrich_route(shop, geo.lat, geo.lng, result)
         return result
 
-    async def _enrich_route(
-        self, shop: Shop, cust_lat: float, cust_lng: float, result: JsonObject
-    ) -> None:
-        """Дорожная дистанция/время до адреса, если гео-движок доступен.
+    async def _courier_route(
+        self, shop: Shop, cust_lat: float, cust_lng: float
+    ) -> tuple[float, float] | None:
+        """Дистанция/время дороги курьера до адреса по ``shop.courier_mode``.
 
-        Деградация явная: geo недоступен → метрик в ответе просто нет,
-        чек доставки остаётся рабочим.
+        Деградация: geo недоступен → ``None``; чек и заказ остаются рабочими.
         """
         if not shop.address.strip():
-            return
+            return None
         shop_geo = await self._geocoder.geocode(shop.address)
         if shop_geo is None:
-            return
+            return None
         try:
             route = await self._geo(shop).route_calculate(
                 from_lat=shop_geo.lat,
                 from_lng=shop_geo.lng,
                 to_lat=cust_lat,
                 to_lng=cust_lng,
-                mode="car",
+                mode=shop.courier_mode,
             )
         except ServiceClientError:
+            return None
+        return route.distance_m, route.duration_s
+
+    async def _delivery_eta_minutes(
+        self, shop: Shop, cust_lat: float, cust_lng: float
+    ) -> int | None:
+        """ETA заказа: готовка + дорога курьера. ``None`` — geo недоступен."""
+        routed = await self._courier_route(shop, cust_lat, cust_lng)
+        if routed is None:
+            return None
+        _dist, travel_s = routed
+        return int(-(-(shop.prep_minutes * 60 + travel_s) // 60))
+
+    async def _enrich_route(
+        self, shop: Shop, cust_lat: float, cust_lng: float, result: JsonObject
+    ) -> None:
+        """Дорожная метрика курьера + ETA (готовка + дорога) в чек доставки.
+
+        Деградация явная: geo недоступен → метрик в ответе просто нет,
+        чек доставки остаётся рабочим.
+        """
+        routed = await self._courier_route(shop, cust_lat, cust_lng)
+        if routed is None:
             return
-        result["distance_m"] = route.distance_m
-        result["duration_s"] = route.duration_s
+        dist_m, travel_s = routed
+        result["distance_m"] = dist_m
+        result["duration_s"] = travel_s
+        result["courier_travel_s"] = travel_s
+        result["courier_mode"] = shop.courier_mode
+        result["prep_minutes"] = shop.prep_minutes
+        result["eta_minutes"] = int(-(-(shop.prep_minutes * 60 + travel_s) // 60))
 
     async def address_suggest(self, shop: Shop, query: str) -> JsonObject:
         """Автокомплит адреса покупателя по справочнику внутри зоны доставки.
@@ -231,6 +258,7 @@ class ShopOrderService:
             )
         if payload.honeypot:
             raise PlatformConflictError("Order rejected", error_code="order_rejected")
+        delivery_eta: int | None = None
         if payload.delivery_type == ShopDeliveryType.DELIVERY:
             if not shop.delivery_enabled:
                 raise PlatformConflictError(
@@ -242,6 +270,8 @@ class ShopOrderService:
                     "Delivery address is required", error_code="address_required"
                 )
             lat, lng = await self._resolve_delivery_point(payload, customer)
+            if lat is not None and lng is not None:
+                delivery_eta = await self._delivery_eta_minutes(shop, lat, lng)
             ring = polygon_ring(shop.delivery_zone)
             if ring is not None:
                 if lat is None or lng is None:
@@ -319,6 +349,7 @@ class ShopOrderService:
             customer_id=customer.customer_id,
             delivery_type=payload.delivery_type,
             address=payload.address,
+            delivery_eta_minutes=delivery_eta,
             table_id=table_id,
             table_label=table_label,
             comment=payload.comment,
@@ -489,6 +520,7 @@ class ShopOrderService:
             customer_phone=order.customer_phone,
             delivery_type=order.delivery_type,
             address=order.address,
+            delivery_eta_minutes=order.delivery_eta_minutes,
             table_id=order.table_id,
             table_label=order.table_label,
             comment=order.comment,

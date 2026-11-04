@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from apps.shop.models.enums import (
@@ -73,6 +75,8 @@ class ShopResponse(StrictBaseModel):
     delivery_zone: JsonObject
     delivery_fee_minor: int
     min_order_minor: int
+    prep_minutes: int
+    courier_mode: str
     currency: str
     theme: ShopTheme
     badges: list[ShopBadgeResponse]
@@ -94,6 +98,9 @@ class ShopCreateRequest(StrictBaseModel):
     kind: ShopKind = ShopKind.RESTAURANT
 
 
+CourierMode = Literal["car", "foot", "bike", "scooter"]
+
+
 class ShopUpdateRequest(StrictBaseModel):
     name: str | None = Field(default=None, max_length=200)
     description: str | None = None
@@ -111,6 +118,8 @@ class ShopUpdateRequest(StrictBaseModel):
     delivery_zone: JsonObject | None = None
     delivery_fee_minor: int | None = Field(default=None, ge=0)
     min_order_minor: int | None = Field(default=None, ge=0)
+    prep_minutes: int | None = Field(default=None, ge=0, le=600)
+    courier_mode: CourierMode | None = None
     theme: ShopTheme | None = None
     badges: list[ShopBadge] | None = Field(default=None, max_length=20)
 
@@ -421,6 +430,7 @@ class ShopOrderResponse(StrictBaseModel):
     customer_phone: str
     delivery_type: ShopDeliveryType
     address: str
+    delivery_eta_minutes: int | None = None
     table_id: str
     table_label: str
     comment: str

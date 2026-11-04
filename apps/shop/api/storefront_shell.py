@@ -503,7 +503,9 @@ async function zoneCheck(){{
     const d=await r.json();
     zoneOk=d.ok===true?true:(d.ok===false?false:null);
     if(st){{
-      if(zoneOk===true){{st.className='zstat ok';st.textContent=d.inside_zone===false?'Доставим':'Доставим ✓ '+((d.normalized||'').split(',')[0]);}}
+      if(zoneOk===true){{st.className='zstat ok';
+        const eta=d.eta_minutes?` ~${{d.eta_minutes}} мин`:'';
+        st.textContent='Доставим'+eta+(d.inside_zone===false?'':' ✓ '+((d.normalized||'').split(',')[0]));}}
       else if(zoneOk===false){{st.className='zstat bad';st.textContent=d.reason==='out_of_delivery_zone'?'Адрес вне зоны доставки':'Адрес не удалось проверить';}}
       else{{st.className='zstat';st.textContent='';}}
     }}

@@ -51,6 +51,8 @@ class Shop(PlatformModel):
     delivery_zone: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     delivery_fee_minor: int = DbField(default=0, ge=0)
     min_order_minor: int = DbField(default=0, ge=0)
+    prep_minutes: int = DbField(default=15, ge=0, le=600)
+    courier_mode: str = DbField(default="scooter", max_length=16)
     currency: str = DbField(default="RUB", max_length=3)
     theme: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     badges: list[dict[str, str]] = DbField(default_factory=list, db_type="JSONB")

@@ -41,6 +41,7 @@ interface OrderRow {
     delivery_type: string;
     table_label: string;
     address: string;
+    delivery_eta_minutes?: number | null;
     comment: string;
     items_total_minor: number;
     delivery_fee_minor: number;
@@ -192,7 +193,7 @@ export class ShopOrdersPage extends PlatformPage {
                 </div>
                 <span class="meta">${order.customer_phone === '' ? order.customer_name : `${order.customer_name} · ${order.customer_phone}`}</span>
                 <span class="meta">
-                    ${this.t(`orders.delivery.${order.delivery_type}`)}${order.delivery_type === 'onsite' && order.table_label !== '' ? ` · ${order.table_label}` : ''}${order.delivery_type === 'delivery' && order.address !== '' ? ` · ${order.address}` : ''}
+                    ${this.t(`orders.delivery.${order.delivery_type}`)}${order.delivery_type === 'delivery' && order.delivery_eta_minutes ? ` · ${this.t('orders.eta', { min: order.delivery_eta_minutes })}` : ''}${order.delivery_type === 'onsite' && order.table_label !== '' ? ` · ${order.table_label}` : ''}${order.delivery_type === 'delivery' && order.address !== '' ? ` · ${order.address}` : ''}
                 </span>
                 ${order.comment === '' ? nothing : html`<span class="comment">«${order.comment}»</span>`}
                 <div class="items">
