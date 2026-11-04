@@ -150,6 +150,12 @@ button.big:disabled{{opacity:.45;cursor:default}}
 .zstat.ok{{color:#1f9d55}}
 .zstat.bad{{color:#d24545}}
 .zstat.wait{{color:var(--muted)}}
+.sug{{display:none;margin-top:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;box-shadow:0 8px 24px color-mix(in srgb,var(--afg) 14%,transparent)}}
+.sug.open{{display:block}}
+.sugrow{{padding:11px 14px;font-size:14px;font-weight:550;color:var(--text);cursor:pointer;border-bottom:1px solid var(--line);line-height:1.35}}
+.sugrow:last-child{{border-bottom:0}}
+.sugrow:hover,.sugrow.on{{background:color-mix(in srgb,var(--accent) 10%,transparent)}}
+.sugrow small{{display:block;font-size:11.5px;color:var(--muted);font-weight:500}}
 .done{{text-align:center;padding:64px 20px}}
 .done .code{{font-size:36px;font-weight:750;color:var(--afg);margin:16px 0;letter-spacing:.02em}}
 .done .st{{font-size:14px;font-weight:650;color:var(--afg);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
@@ -420,7 +426,7 @@ function renderSheet(){{
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
   <input class="f" id="cn" placeholder="Ваше имя">
   ${{dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${{TABLES.map(t=>`<option value="${{t.id}}"${{t.id===tableId?' selected':''}}>${{esc(t.label)}}</option>`).join('')}}</select>`:''}}
-  ${{dtype==='delivery'?`<div class="achips" id="addrChips"></div><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()"><div class="zstat" id="zoneStat"></div>`:''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
+  ${{dtype==='delivery'?`<div class="achips" id="addrChips"></div><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()"><div class="sug" id="caSug"></div><div class="zstat" id="zoneStat"></div>`:''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
   ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — ${{hb.t}}</div>`:''}}
   <button class="big" id="payBtn" ${{(below||(hb&&!hb.open))?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
@@ -481,14 +487,43 @@ window.pickAddr=id=>{{
   if(zoneRequired()){{zoneOk=null;clearTimeout(zTimer);zTimer=setTimeout(zoneCheck,150);}}
   else{{zoneOk=null;updatePayBtn();}}
 }};
-let zTimer=0,zReq=0;
+let zTimer=0,zReq=0,sugTimer=0,sugReq=0;
+function hideSug(){{const el=document.getElementById('caSug');if(el)el.classList.remove('open');}}
+window.pickSug=(i)=>{{
+  const el=document.getElementById('caSug');
+  const row=el?.querySelector(`[data-i="${{i}}"]`);
+  const inp=document.getElementById('ca');
+  if(inp&&row)inp.value=row.dataset.name||'';
+  hideSug();
+  if(pickedAddrId){{pickedAddrId='';renderAddrChips();}}
+  zoneOk=null;clearTimeout(zTimer);zoneCheck();
+}};
+async function addrSuggest(){{
+  const inp=document.getElementById('ca');
+  const el=document.getElementById('caSug');
+  const q=(inp?.value||'').trim();
+  if(!el)return;
+  if(q.length<3){{hideSug();return;}}
+  const my=++sugReq;
+  try{{
+    const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/address-suggest?q=${{encodeURIComponent(q)}}`);
+    if(my!==sugReq)return;
+    const d=await r.json();
+    const items=Array.isArray(d.items)?d.items:[];
+    if(!items.length){{hideSug();return;}}
+    el.innerHTML=items.map((a,i)=>`<div class="sugrow" data-i="${{i}}" data-name="${{esc(a.display_name||'')}}" onclick="pickSug(${{i}})">${{esc(a.display_name||'')}}<small>${{esc(a.city||'')}}</small></div>`).join('');
+    el.classList.add('open');
+  }}catch(e){{hideSug();}}
+}}
 window.onAddrInput=()=>{{
   if(pickedAddrId){{pickedAddrId='';renderAddrChips();}}
   clearTimeout(zTimer);
+  clearTimeout(sugTimer);
   const st=document.getElementById('zoneStat');
   if(st){{st.className='zstat';st.textContent='';}}
   zoneOk=null;
   zTimer=setTimeout(zoneCheck,600);
+  sugTimer=setTimeout(addrSuggest,250);
 }};
 async function zoneCheck(){{
   const inp=document.getElementById('ca');
@@ -527,6 +562,10 @@ async function saveAddress(text){{
     headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{address:text}})}});}}catch(e){{}}
 }}
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
+document.addEventListener('click',e=>{{
+  const t=e.target;
+  if(t&&t.id!=='ca'&&t.id!=='caSug'&&!t.closest?.('#caSug'))hideSug();
+}});
 const authEl=document.createElement('platform-customer-auth');
 authEl.setAttribute('api-base','/shop/api/v1/public/customer-auth');
 authEl.setAttribute('company-id',S.company_id||'');
