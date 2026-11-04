@@ -47,11 +47,12 @@ alwaysApply: false
 
 - Команды `shop/<entity>/<verb>_requested` — каталог `SHOP_OPERATIONS` (`apps/shop/realtime/command_router.py`); анонимные — `shop/public/*`.
 - Push — `apps/shop/events.py`: `shop/shop/created|updated|published`, `shop/catalog/changed` (ещё и доменное событие для flows-триггеров), `shop/order/created|status_changed` без PII.
-- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам, сортировка по `delivery_coverage`), `GET /storefront/{slug}/delivery-check` и `GET /aggregate/geocode` (геокодинг адреса через `di.geocoder` + проверка `delivery_zone`; нерезолвленный адрес — `address_unverifiable`), Telegram webhook.
+- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам, сортировка по `delivery_coverage`), `GET /storefront/{slug}/delivery-check` и `GET /aggregate/geocode` (геокодинг адреса через `di.geocoder` + проверка `delivery_zone`; нерезолвленный адрес — `address_unverifiable`), `GET /storefront/{slug}/address-suggest` (автокомплит чекаута внутри зоны через GeoClient), Telegram webhook.
 - Рерайт Host → публичные пути — `StorefrontHostMiddleware` (`apps/shop/host_middleware.py`); в проде ingress `shop.<apex>` (`shop-ingress.yaml`), корень поддомена компании для анонима проксирует `apps/frontend/main.py`.
 
 ## Интеграции
 
+- Geo (`geo.mdc`) — единственный владелец адресов, зон и маршрутов; shop ходит только через `GeoClient` (`zone_addresses`, `address_suggest`, `route/calculate`). ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута по `courier_mode`. Geo недоступен → чек и заказ работают без метрик (degrade). Свой spatial SQL, OSM-парсинг и PostGIS-запросы в shop запрещены.
 - AI (описания, фото, обложка, лого, разбор меню, подсказка модификаторов) — ветки компанийского flow `shop` по A2A (`ShopAiService`, bundle `apps/flows/bundles/shop`); промптов в коде сервиса нет.
 - Уведомления о заказе — свой Telegram-бот магазина (`NotificationService`), доставка задачей `SHOP_NOTIFY_ORDER`.
 - Свой домен — `DomainService` + `SHOP_PROVISION_DOMAIN`, сверка `SHOP_RECONCILE_DOMAINS_TICK`.

@@ -21,9 +21,12 @@ import osmium
 from oxyde import execute_raw
 
 from apps.geo.config import GeoSettings
+from apps.geo.db.import_lock import geo_import_lock
 from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
+from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.tasks import enqueue
 
 if TYPE_CHECKING:
     from osmium.osm import Node, TagList, Way
@@ -340,10 +343,23 @@ class OsmImportService:
         self._settings: GeoSettings = settings
 
     async def run_sync(self) -> dict[str, object]:
-        """Полный цикл синхронизации; идемпотентен по Last-Modified."""
-        state = await self._ensure_state()
+        """Полный цикл синхронизации; идемпотентен по Last-Modified.
+
+        Session advisory lock сериализует конкурентные тики (cron,
+        bootstrap, ручной enqueue): импортер один на кластер, повторный
+        тик завершается skip — без дублей поколения.
+        """
+        _ = await self._ensure_state()
         if not self._settings.sync_enabled:
             return {"skipped": True, "reason": "sync_disabled"}
+        async with geo_import_lock(self._settings.database.geo_url) as acquired:
+            if not acquired:
+                return {"skipped": True, "reason": "import_in_progress"}
+            return await self._run_locked()
+
+    async def _run_locked(self) -> dict[str, object]:
+        """Тело синка под advisory lock; state перечитывается свежим."""
+        state = await self._ensure_state()
 
         state.status = GeoImportStatus.DOWNLOADING
         state.started_at = datetime.now(UTC)
@@ -371,6 +387,23 @@ class OsmImportService:
             state.updated_at = datetime.now(UTC)
             _ = await state.save()
             raise
+
+    async def ensure_bootstrapped(self) -> bool:
+        """Пустой справочник → синк ставится сразу, без ожидания cron-тика.
+
+        Старт geo_worker: поколения ещё нет — ``GEO_OSM_SYNC_TICK`` уходит в
+        очередь немедленно (первый импорт региона не ждёт расписание);
+        данные есть — no-op, дальше работает регулярный тик scheduler.
+        Повторный вызов безопасен: лишний тик завершится ``not_modified``.
+        """
+        if not self._settings.sync_enabled or not self._settings.osm_extract_urls:
+            return False
+        state = await self._ensure_state()
+        if state.current_generation > 0:
+            return False
+        _ = await enqueue(GEO_OSM_SYNC_TICK, background_kind="background")
+        logger.info("geo.import.bootstrap_enqueued")
+        return True
 
     async def _ensure_state(self) -> GeoImportState:
         state = await GeoImportState.get_state()
@@ -586,22 +619,17 @@ class OsmImportService:
     ) -> None:
         """Атомарный своп поколения + очистка старого."""
         new_gen = state.current_generation + 1
-        _ = await execute_raw(
-            """
-            UPDATE geo_import_state
-            SET current_generation = $1, status = 'idle',
-                source_modified_at = $2, rows_addresses = $3,
-                rows_vertices = $4, rows_edges = $5,
-                last_error = '', finished_at = $6, updated_at = $6
-            WHERE id = 1
-            """,
-            [
-                new_gen, source_modified, counts["rows_addresses"],
-                counts["rows_vertices"], counts["rows_edges"],
-                datetime.now(UTC),
-            ],
-            using="geo",
-        )
+        state.current_generation = new_gen
+        state.status = GeoImportStatus.IDLE
+        state.source_modified_at = source_modified
+        state.rows_addresses = counts["rows_addresses"]
+        state.rows_vertices = counts["rows_vertices"]
+        state.rows_edges = counts["rows_edges"]
+        state.last_error = ""
+        now = datetime.now(UTC)
+        state.finished_at = now
+        state.updated_at = now
+        _ = await state.save()
         # Чистка старых поколений — после свопа, батчами.
         for table in ("geo_addresses", "geo_road_vertices", "geo_road_edges"):
             _ = await execute_raw(

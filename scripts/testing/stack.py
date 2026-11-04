@@ -63,6 +63,11 @@ ensure_local_no_proxy()
 
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
 STACK_LOG_DIR = Path("/tmp/platform_test_stack")
+# OSM-экстракт geo_worker в тестовом стеке: реальный pyosmium-парс фикстуры,
+# продовый путь file:// без гигабайтных загрузок.
+_MICRO_OSM_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "tests" / "geo" / "fixtures" / "micro.osm"
+)
 BASELINE_PYTEST_WORKERS = 10
 # Parallel spawn of granian + TaskIQ: import under ~100 processes takes ~2 min.
 # 90–120 s expire while late processes are still importing.
@@ -131,6 +136,10 @@ COMMON_TEST_ENV: dict[str, str] = {
     "RAG__EMBEDDING__API__DIMENSION": "1024",
     "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
     "LLM__OPENROUTER__API_KEY": "sk-test-key",
+    # Геокодинг провайдера — эмулятор Nominatim стека (не внешний OSM):
+    # неизвестный адрес → [] → address_unverifiable, "lat,lng" → точка.
+    "GEOCODING__NOMINATIM_BASE_URL": "http://127.0.0.1:18098",
+    "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
 }
 
 
@@ -406,13 +415,24 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             # зеркало продового <slug>.linnex.io без правки /etc/hosts.
             "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
             "AGGREGATOR_HOST": "shop.lvh.me",
-            "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
         },
     ),
     GranianService(
         name="geo",
         app_path="apps.geo.main:app",
         port=9028,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="nominatim",
+        app_path="tests.fixtures.nominatim_emulator.app:app",
+        port=18098,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="osm_extract",
+        app_path="tests.fixtures.osm_extract_emulator.app:app",
+        port=18099,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
 )
@@ -496,6 +516,13 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         stream_name="geo",
         workers=1,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+        env={
+            # Бутстрап-импорт пустого справочника — микро-экстракт из репо:
+            # реальный pyosmium-парс за секунды, без внешней сети.
+            "OSM_EXTRACT_URLS": json.dumps(
+                [f"file://{_MICRO_OSM_FIXTURE}"]
+            ),
+        },
     ),
     TaskiqWorkerService(
         name="a2a_push_worker",

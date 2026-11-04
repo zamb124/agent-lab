@@ -44,6 +44,15 @@ alwaysApply: false
 
 `OsmImportService` — трёхпроходный pyosmium-парс (нужные ноды → локации → адреса+ребра), bulk-insert пачками под лимит bind-параметров, атомарный своп поколения. `GEO_OSM_SYNC_TICK` (scheduled TaskIQ на очереди `geo`) — If-Modified-Since → реимпорт → своп; источник — `osm_extract_url` в `GeoSettings`. Экстракты берутся под конкретную витрину-регион.
 
+1. Пустой справочник не ждёт крона: lifecycle воркера зовёт `OsmImportService.ensure_bootstrapped()` — нет опубликованного поколения → немедленный `enqueue` импорта.
+2. `run_sync` сериализован advisory-lock (`apps/geo/db/import_lock.py`): конкурентный вызов/tick — no-op, двойной публикации и дублей строк не бывает.
+3. Failed-импорт живое поколение не трогает: `status=FAILED` + `last_error`, `current_generation` остаётся на старом.
+4. Публикация через `GeoImportState.save()` — `execute_raw` с nullable-параметрами не использовать (баг биндингов oxyde-core 0.7.1: NULL→non-NULL в переиспользованном prepared statement сдвигает параметры).
+
+## Тест-стек
+
+`tests/geo/` — реальный Postgres/PostGIS+pgRouting, Redis, geo_worker и TaskIQ, без моков. Эмуляторы провайдеров: Nominatim `:18098` (`/search?q=<lat>,<lng>` → точка, иное — `[]`), OSM-экстракт `:18099` (HEAD/GET, `Last-Modified`, 404). Импортные поколения `<500_000_000` — тестовые, cleanup их трёт; сиды графа живут `≥500_000_000`.
+
 ## Потребители
 
 - `apps/shop`: зона доставки — `zone_addresses` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `route/calculate` по `Shop.courier_mode`; ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.

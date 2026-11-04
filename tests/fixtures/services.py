@@ -227,6 +227,20 @@ def geo_service(setup_database_before_tests):
 
 
 @pytest.fixture(scope="session")
+def nominatim_service(setup_database_before_tests):
+    """Эмулятор Nominatim на 18098 — провайдер геокодинга стека."""
+    _ = setup_database_before_tests
+    require_http_service("nominatim", 18098)
+
+
+@pytest.fixture(scope="session")
+def osm_extract_service(setup_database_before_tests):
+    """Эмулятор OSM-зеркала экстрактов на 18099 (HEAD+GET, Last-Modified)."""
+    _ = setup_database_before_tests
+    require_http_service("osm_extract", 18099)
+
+
+@pytest.fixture(scope="session")
 def all_services(
     flows_service,
     rag_service,

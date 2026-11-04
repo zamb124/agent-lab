@@ -173,6 +173,13 @@ def shop_worker(shop_service):
     require_taskiq_worker("shop_worker", "shop")
 
 
+@pytest.fixture(scope="session")
+def geo_worker(geo_service):
+    """geo_worker стека: OSM-импорт справочника и графа (bootstrap + тики)."""
+    _ = geo_service
+    require_taskiq_worker("geo_worker", "geo")
+
+
 @pytest.fixture
 def taskiq_broker(rag_worker):
     """

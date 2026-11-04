@@ -11,6 +11,7 @@ from apps.flows.src.tasks.task_names import (
     TASK_MCP_CATALOG_RESYNC_TOOLS,
     TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
 )
+from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from apps.idle.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
@@ -756,6 +757,13 @@ async def ensure_platform_schedules(
         task_name=CRM_RECONCILE_DAILY_SUMMARY.name,
         cron=CRM_RECONCILE_DAILY_SUMMARY_CRON,
         log_label="CRM daily summary reconcile",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_OSM_SYNC_TICK.name,
+        cron="25 3 * * *",
+        log_label="Geo OSM sync",
     )
     if not is_testing():
         await ensure_search_crawl_schedules(scheduler_service=scheduler_service)

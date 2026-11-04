@@ -20,14 +20,12 @@ from apps.geo.models.geo_import_state import GeoImportState
 from apps.shop.di import ShopDi
 from apps.shop.models.shop import Shop
 from apps.shop.services.order_service import ShopOrderService
-from core.clients.geocoding.base import GeocodedAddress
 from core.clients.geocoding.nominatim import NominatimGeocoder
 from core.clients.service_client import ServiceClient
 from core.config.models import GeocodingConfig
 from core.customers.address_service import CustomerAddressService
 from core.customers.contracts import new_id
 from core.customers.models import CustomerAddress
-from tests.core.http_proxy_helpers import install_mock_httpx_client
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, auth_customer
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -299,79 +297,61 @@ class TestCustomerAddressesApi:
         assert resp.status_code == 401
 
 
+_NOMINATIM_EMU_URL = "http://127.0.0.1:18098"
+
+
 def _emu_geocoder(di: ShopDi) -> NominatimGeocoder:
-    """Реальный NominatimGeocoder, enabled — провайдер эмулируется на проводе."""
+    """Реальный NominatimGeocoder → локальный эмулятор провайдера на 18098."""
     return NominatimGeocoder(
-        GeocodingConfig(enabled=True, nominatim_base_url="https://nominatim.test"),
+        GeocodingConfig(enabled=True, nominatim_base_url=_NOMINATIM_EMU_URL),
         di.redis_client,
     )
 
 
-def _emu_response(lat: str, lon: str) -> list[dict[str, Any]]:
-    return [
-        {
-            "place_id": 1,
-            "lat": lat,
-            "lon": lon,
-            "display_name": "Эмулированный адрес",
-            "importance": 0.5,
-            "address": {"city": "Москва", "country": "Россия"},
-        }
-    ]
-
-
 class TestDeliveryCheckServiceChain:
-    """Сервис ← реальный NominatimGeocoder ← эмулятор провайдера на проводе.
+    """Сервис ← реальный NominatimGeocoder ← эмулятор провайдера на 18098.
 
-    Полная прод-цепочка check_delivery: HTTP-ответ провайдерной формы
-    парсится геокодером, точка проверяется по полигону магазина.
+    Полная прод-цепочка check_delivery: запрос ``"<lat>,<lng>"`` отдаёт
+    эмулятору точку, ответ парсится геокодером, точка проверяется по
+    полигону магазина — без моков и перехвата HTTP.
     """
 
     async def test_inside_zone_deliverable(
         self,
         shop_client: AsyncClient,
         shop_di,
-        monkeypatch: pytest.MonkeyPatch,
+        nominatim_service: None,
         unique_id: str,
     ) -> None:
+        _ = nominatim_service
         slug = f"svc-in-{unique_id[:8]}"
         _ = await _shop_with_product(
             shop_client, slug, patch={"delivery_zone": _ZONE}
         )
-        calls: list[httpx2.Request] = []
-        install_mock_httpx_client(
-            monkeypatch,
-            lambda req: _resp(calls, req, _emu_response("55.75", "37.62")),
-        )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
         service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
-        result = await service.check_delivery(shop, f"Тверская 1 {unique_id}")
+        result = await service.check_delivery(shop, "55.75,37.62")
         assert result["ok"] is True
         assert result["inside_zone"] is True
         assert result["lat"] == pytest.approx(55.75)
-        assert len(calls) == 1
 
     async def test_outside_zone_not_deliverable(
         self,
         shop_client: AsyncClient,
         shop_di,
-        monkeypatch: pytest.MonkeyPatch,
+        nominatim_service: None,
         unique_id: str,
     ) -> None:
+        _ = nominatim_service
         slug = f"svc-out-{unique_id[:8]}"
         _ = await _shop_with_product(
             shop_client, slug, patch={"delivery_zone": _ZONE}
         )
-        calls: list[httpx2.Request] = []
-        install_mock_httpx_client(
-            monkeypatch,
-            lambda req: _resp(calls, req, _emu_response("55.50", "37.20")),
-        )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
         service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
-        result = await service.check_delivery(shop, f"Одинцово {unique_id}")
+        result = await service.check_delivery(shop, "55.50,37.20")
         assert result["ok"] is False
         assert result["inside_zone"] is False
         assert result["reason"] == "out_of_delivery_zone"
@@ -380,16 +360,13 @@ class TestDeliveryCheckServiceChain:
         self,
         shop_client: AsyncClient,
         shop_di,
-        monkeypatch: pytest.MonkeyPatch,
+        nominatim_service: None,
         unique_id: str,
     ) -> None:
+        _ = nominatim_service
         slug = f"svc-none-{unique_id[:8]}"
         _ = await _shop_with_product(
             shop_client, slug, patch={"delivery_zone": _ZONE}
-        )
-        calls: list[httpx2.Request] = []
-        install_mock_httpx_client(
-            monkeypatch, lambda req: _resp(calls, req, [])
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
@@ -422,13 +399,6 @@ class TestDeliveryCheckServiceChain:
             customer["customer_id"], row.customer_address_id
         )
         assert fresh is not None and fresh.last_used_at >= before
-
-
-def _resp(
-    calls: list[httpx2.Request], req: httpx2.Request, body: object
-) -> httpx2.Response:
-    calls.append(req)
-    return httpx2.Response(200, json=body, request=req)
 
 
 class TestCustomerAddressService:
@@ -706,28 +676,17 @@ class TestDeliveryZoneValidation:
 class TestCourierEta:
     """ETA курьера: ``prep_minutes`` + дорога по живому графу geo на 9028.
 
-    Сервисный слой со stub-геокодером (тестовый ``GEOCODING__ENABLED=false``)
-    и реальным ``GeoClient``/``ServiceClient`` → granian geo. Граф — своё
-    поколение ``_ETA_GEN``, опубликованное строкой ``geo_import_state``;
-    синглтон сериализован общей группой ``xdist_group("geo")``.
+    Полная прод-цепочка: реальный ``NominatimGeocoder`` → эмулятор на 18098
+    (адрес вида ``"<lat>,<lng>"`` геокодится в точку), ``GeoClient``/
+    ``ServiceClient`` → granian geo. Граф — своё поколение ``_ETA_GEN``,
+    опубликованное строкой ``geo_import_state``; синглтон сериализован
+    общей группой ``xdist_group("geo")``.
     """
 
     _ETA_GEN = 880_000_001
     _SHOP_POINT = (55.75000, 37.61700)
     _CUST_POINT = (55.75030, 37.61840)
     _TRAVEL_S = 40.0
-
-    class _StubGeocoder:
-        """Детерминированные координаты: адрес склада vs адрес покупателя."""
-
-        def __init__(self, answers: dict[str, tuple[float, float]]) -> None:
-            self._answers = answers
-
-        async def geocode(self, query: str) -> Any:
-            point = self._answers.get(query)
-            if point is None:
-                return None
-            return GeocodedAddress(lat=point[0], lng=point[1], normalized_address=query)
 
     async def _seed_graph(self) -> int:
         gen = self._ETA_GEN
@@ -773,17 +732,18 @@ class TestCourierEta:
         return previous
 
     async def test_check_delivery_eta(
-        self, geo_service: None, unique_id: str
+        self,
+        geo_service: None,
+        shop_di: ShopDi,
+        nominatim_service: None,
+        unique_id: str,
     ) -> None:
+        _ = geo_service, nominatim_service
         previous = await self._seed_graph()
         try:
-            geocoder = self._StubGeocoder(
-                {
-                    "Склад, тест": self._SHOP_POINT,
-                    "Клиент, тест": self._CUST_POINT,
-                }
+            svc = ShopOrderService(
+                geocoder=_emu_geocoder(shop_di), service_client=ServiceClient()
             )
-            svc = ShopOrderService(geocoder=geocoder, service_client=ServiceClient())
             shop = Shop(
                 shop_id=f"eta-{unique_id[:8]}",
                 company_id="system",
@@ -791,11 +751,13 @@ class TestCourierEta:
                 created_by_user_id="test",
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
-                address="Склад, тест",
+                address=f"{self._SHOP_POINT[0]},{self._SHOP_POINT[1]}",
                 prep_minutes=20,
                 courier_mode="scooter",
             )
-            result = await svc.check_delivery(shop, "Клиент, тест")
+            result = await svc.check_delivery(
+                shop, f"{self._CUST_POINT[0]},{self._CUST_POINT[1]}"
+            )
             assert result["ok"] is True
             assert result["courier_mode"] == "scooter"
             assert result["prep_minutes"] == 20
@@ -811,9 +773,14 @@ class TestCourierEta:
             )
 
     async def test_check_delivery_geo_down_graceful(
-        self, geo_service: None, unique_id: str
+        self,
+        geo_service: None,
+        shop_di: ShopDi,
+        nominatim_service: None,
+        unique_id: str,
     ) -> None:
         """Без опубликованного поколения метрик нет, но чек жив (degrade)."""
+        _ = geo_service, nominatim_service
         previous = await self._seed_graph()
         try:
             _ = await execute_raw(
@@ -822,13 +789,9 @@ class TestCourierEta:
                 [datetime.now(UTC)],
                 using="geo",
             )
-            geocoder = self._StubGeocoder(
-                {
-                    "Склад, тест": self._SHOP_POINT,
-                    "Клиент, тест": self._CUST_POINT,
-                }
+            svc = ShopOrderService(
+                geocoder=_emu_geocoder(shop_di), service_client=ServiceClient()
             )
-            svc = ShopOrderService(geocoder=geocoder, service_client=ServiceClient())
             shop = Shop(
                 shop_id=f"etad-{unique_id[:8]}",
                 company_id="system",
@@ -836,9 +799,11 @@ class TestCourierEta:
                 created_by_user_id="test",
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
-                address="Склад, тест",
+                address=f"{self._SHOP_POINT[0]},{self._SHOP_POINT[1]}",
             )
-            result = await svc.check_delivery(shop, "Клиент, тест")
+            result = await svc.check_delivery(
+                shop, f"{self._CUST_POINT[0]},{self._CUST_POINT[1]}"
+            )
             assert result["ok"] is True
             assert "eta_minutes" not in result
         finally:

@@ -1,6 +1,6 @@
 # Агентам: вход в репозиторий
 
-Канон — `.cursor/rules/`: конституция `main.mdc`, взаимодействие `architecture.mdc`, канон самих правил `rules.mdc`, домены — `<домен>.mdc`. Процедуры — `.cursor/skills/`: выравнивание кода под канон — `refactor-engineer`, backend — `backend-engineer`, UI — `frontend-engineer`, прод и релизы — `devops-engineer`.
+Канон — `.cursor/rules/`: конституция `main.mdc`, взаимодействие `architecture.mdc`, канон самих правил `rules.mdc`, домены — `<домен>.mdc`. Процедуры — `.cursor/skills/`: выравнивание кода под канон — `refactor-engineer`, backend — `backend-engineer`, UI — `frontend-engineer`, прод и релизы — `devops-engineer`, новый сервис — `new-service`, tools — `design-flow-tools`, UI-документация — `documentator`.
 
 ## Поиск по коду
 
