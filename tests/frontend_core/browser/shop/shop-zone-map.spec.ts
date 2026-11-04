@@ -1,12 +1,13 @@
 /**
- * shop-zone-map — редактор зоны доставки на Leaflet/OSM.
+ * shop-zone-map — превью зоны доставки на Leaflet/OSM + открытие редактора.
  *
  * Реальный браузер: Leaflet монтируется настоящий (динамический import
- * резолвится сборкой), полигон рисуется событиями карты как в проде —
- * клики → вершины → «Замкнуть» → GeoJSON Polygon в `zone-changed`.
+ * резолвится сборкой), полигон — настоящий слой на карте. Клик «Изменить» —
+ * настоящий openModal('shop.zone_editor') через UI_MODAL_OPEN; результат
+ * редактора приходит в onApply → zone-changed.
  */
 
-import { fixture, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
+import { fixture, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
@@ -15,6 +16,7 @@ import {
     shopGeocodeOp,
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '../../../../apps/shop/ui/components/shop-zone-map.js';
+import '../../../../apps/shop/ui/modals/shop-zone-editor-modal.js';
 
 const FACTORIES = [shopShopsResource, shopGeocodeOp];
 
@@ -36,26 +38,34 @@ type TestEl = HTMLElement & {
     zone: Record<string, unknown> | null;
     address: string;
     shopId: string;
-    _drawing: boolean;
-    _draftPoints: Array<[number, number]>;
-    _map: { fire: (type: string, ev: unknown) => void; _loaded: boolean };
+    _map: { _loaded: boolean } | null;
 };
 
 async function seedI18n() {
+    // Ждём settle штатного i18n-эффекта (bootstrap → /api/i18n/<locale>),
+    // иначе его async-ответ перетирает locale/translations после сидирования.
+    const bus = getPlatformBus();
+    await waitUntil(
+        () => {
+            const i18n = bus.getState().i18n;
+            if (i18n.loading) return false;
+            const bundle = i18n.translations[i18n.locale];
+            return Boolean(bundle && typeof bundle === 'object' && 'platform' in bundle);
+        },
+        'i18n bootstrap settled',
+        { timeout: 15_000 },
+    );
     const response = await fetch('/core/i18n/generated/ru.json');
     if (!response.ok) throw new Error(`seedI18n: ${response.status}`);
     const bundle = (await response.json()) as { shop: Record<string, unknown> };
-    const bus = getPlatformBus();
     const prev = bus.getState().i18n.translations.ru;
     bus.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale: 'ru', bundle: { ...prev, shop: bundle.shop } });
     bus.dispatch(CoreEvents.I18N_LOCALE_CHANGED, { locale: 'ru' });
 }
 
-function btn(el: TestEl, text: string): HTMLButtonElement {
-    const found = [...el.shadowRoot.querySelectorAll('platform-button')].find((b) =>
-        b.textContent!.includes(text),
-    ) as HTMLButtonElement | undefined;
-    expect(found, `кнопка «${text}»`).to.exist;
+function openBtn(el: TestEl): HTMLButtonElement {
+    const found = el.shadowRoot.querySelector<HTMLButtonElement>('.open-editor');
+    expect(found, 'кнопка редактора на превью').to.exist;
     return found!;
 }
 
@@ -63,11 +73,6 @@ async function mapReady(el: TestEl): Promise<void> {
     // Leaflet грузится динамическим импортом — ждём реальный init.
     for (let i = 0; i < 50 && !el._map?._loaded; i++) await aTimeout(20);
     expect(el._map, 'карта инициализирована').to.exist;
-}
-
-async function clickMap(el: TestEl, lat: number, lng: number): Promise<void> {
-    el._map.fire('click', { latlng: { lat, lng } });
-    await elementUpdated(el);
 }
 
 describe('shop-zone-map', () => {
@@ -78,17 +83,15 @@ describe('shop-zone-map', () => {
         await seedI18n();
     });
 
-    it('пустая зона → «Нарисовать зону», без «Очистить»', async () => {
+    it('пустая зона → бейдж «зона не задана» + «Задать зону»', async () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         await mapReady(el);
-        expect(btn(el, 'Нарисовать зону')).to.exist;
-        const clear = [...el.shadowRoot.querySelectorAll('platform-button')].find((b) =>
-            b.textContent!.includes('Очистить'),
-        );
-        expect(clear).to.equal(undefined);
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.empty-badge'), 'бейдж пустой зоны').to.exist;
+        expect(openBtn(el).textContent).to.include('Задать зону');
     });
 
-    it('готовый полигон → overlay pane + «Перерисовать» + «Очистить»', async () => {
+    it('готовый полигон → слой на карте + «Изменить зону», без бейджа', async () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         el.zone = ZONE;
         await mapReady(el);
@@ -97,72 +100,82 @@ describe('shop-zone-map', () => {
         expect(polygon, 'полигон добавлен слоем на карту').to.exist;
         const ring = polygon._latlngs[0] as unknown[];
         expect(ring.length, 'кольцо полигона на карте').to.be.greaterThanOrEqual(4);
-        expect(btn(el, 'Перерисовать зону')).to.exist;
-        expect(btn(el, 'Очистить')).to.exist;
+        expect(el.shadowRoot.querySelector('.empty-badge')).to.equal(null);
+        expect(openBtn(el).textContent).to.include('Изменить зону');
     });
 
-    it('рисование: 3 клика → «Замкнуть» → zone-changed с замкнутым Polygon', async () => {
+    it('«Изменить зону» → UI_MODAL_OPEN с kind shop.zone_editor и props', async () => {
+        const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
+        el.zone = ZONE;
+        el.address = 'Москва, Тверская 1';
+        el.shopId = 'shop_test';
+        await mapReady(el);
+        await elementUpdated(el);
+
+        const opened: Array<{ kind: string; props: Record<string, unknown> }> = [];
+        getPlatformBus().subscribeType(CoreEvents.UI_MODAL_OPEN, (event) =>
+            opened.push(event.payload as { kind: string; props: Record<string, unknown> }),
+        );
+        openBtn(el).click();
+        await aTimeout(30);
+
+        expect(opened.length).to.equal(1);
+        expect(opened[0]!.kind).to.equal('shop.zone_editor');
+        const props = opened[0]!.props;
+        expect(props['zone']).to.deep.equal(ZONE);
+        expect(props['address']).to.equal('Москва, Тверская 1');
+        expect(props['shop_id'] ?? props['shopId']).to.equal('shop_test');
+        expect(typeof props['onApply']).to.equal('function');
+    });
+
+    it('onApply из модалки → zone-changed + полигон перерисован', async () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         await mapReady(el);
+        const opened: Array<{ props: Record<string, unknown> }> = [];
+        getPlatformBus().subscribeType(CoreEvents.UI_MODAL_OPEN, (event) =>
+            opened.push(event.payload as { props: Record<string, unknown> }),
+        );
+        openBtn(el).click();
+        await aTimeout(30);
+        const onApply = opened[0]!.props['onApply'] as (z: Record<string, unknown>) => void;
+        expect(onApply, 'onApply передан в модалку').to.exist;
+
         const events: Array<Record<string, unknown>> = [];
         el.addEventListener('zone-changed', (e) =>
             events.push((e as CustomEvent).detail as Record<string, unknown>),
         );
-
-        btn(el, 'Нарисовать зону').click();
-        await elementUpdated(el);
-        expect(el._drawing).to.equal(true);
-
-        await clickMap(el, 55.7, 37.5);
-        await clickMap(el, 55.7, 37.7);
-        await clickMap(el, 55.8, 37.6);
-        expect(el._draftPoints.length).to.equal(3);
-
-        btn(el, 'Замкнуть зону').click();
+        onApply(ZONE);
         await elementUpdated(el);
 
         expect(events.length).to.equal(1);
-        const zone = events[0]!['zone'] as {
-            type: string;
-            coordinates: number[][][];
-        };
-        expect(zone.type).to.equal('Polygon');
-        const ring = zone.coordinates[0]!;
-        expect(ring.length).to.equal(4); // замкнуто: первая точка повторена
-        expect(ring[0]).to.deep.equal(ring[ring.length - 1]);
-        expect(ring[0]).to.deep.equal([37.5, 55.7]); // GeoJSON [lng, lat]
-        expect(el._drawing).to.equal(false);
+        expect(events[0]!['zone']).to.deep.equal(ZONE);
+        expect(el.zone).to.deep.equal(ZONE);
+        const polygon = (el as unknown as { _polygon: unknown })._polygon;
+        expect(polygon, 'полигон перерисован после onApply').to.exist;
     });
 
-    it('«Отмена» в режиме рисования → без zone-changed, карта чистая', async () => {
-        const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
-        await mapReady(el);
-        const events: unknown[] = [];
-        el.addEventListener('zone-changed', (e) => events.push(e));
-
-        btn(el, 'Нарисовать зону').click();
-        await clickMap(el, 55.7, 37.5);
-        btn(el, 'Отмена').click();
-        await elementUpdated(el);
-        expect(el._drawing).to.equal(false);
-        expect(events.length).to.equal(0);
-    });
-
-    it('«Очистить» → zone-changed с пустым объектом', async () => {
+    it('onApply с {} → zone-changed с пустым объектом, полигон снят', async () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         el.zone = ZONE;
         await mapReady(el);
         await elementUpdated(el);
+        const opened: Array<{ props: Record<string, unknown> }> = [];
+        getPlatformBus().subscribeType(CoreEvents.UI_MODAL_OPEN, (event) =>
+            opened.push(event.payload as { props: Record<string, unknown> }),
+        );
+        openBtn(el).click();
+        await aTimeout(30);
+        const onApply = opened[0]!.props['onApply'] as (z: Record<string, unknown>) => void;
+
         const events: Array<Record<string, unknown>> = [];
         el.addEventListener('zone-changed', (e) =>
             events.push((e as CustomEvent).detail as Record<string, unknown>),
         );
-
-        btn(el, 'Очистить').click();
+        onApply({});
         await elementUpdated(el);
-        expect(events.length).to.equal(1);
+
         expect(events[0]!['zone']).to.deep.equal({});
-        expect(el.shadowRoot.querySelector('.leaflet-overlay-pane path')).to.equal(null);
+        expect((el as unknown as { _polygon: unknown })._polygon).to.equal(null);
     });
 
     it('«Найти магазин на карте» → shop/shop_geocode_requested с адресом', async () => {
@@ -176,7 +189,11 @@ describe('shop-zone-map', () => {
         getPlatformBus().subscribeType(shopGeocodeOp.events.REQUESTED, (event) =>
             events.push(event),
         );
-        btn(el, 'Найти магазин на карте').click();
+        const locate = [...el.shadowRoot.querySelectorAll('platform-button')].find((b) =>
+            b.textContent!.includes('Найти магазин'),
+        ) as HTMLElement | undefined;
+        expect(locate, 'кнопка геолокации').to.exist;
+        locate!.click();
         await aTimeout(50);
 
         const requested = events.find((e) => e.type === shopGeocodeOp.events.REQUESTED);

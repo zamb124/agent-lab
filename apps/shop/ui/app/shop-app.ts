@@ -74,6 +74,7 @@ import '../pages/shop-promos-page.js';
 import '../pages/shop-settings-page.js';
 import '../modals/shop-modifiers-modal.js';
 import '../modals/shop-product-modal.js';
+import '../modals/shop-zone-editor-modal.js';
 
 const SHOP_ROUTES = [
     { key: 'shop_home',      path: '',                  titleKey: 'routes.shop_home' },

@@ -81,13 +81,72 @@ def bbox_of_ring(ring: list[tuple[float, float]]) -> tuple[float, float, float, 
 
 _ZONE_MAX_POINTS = 256
 
+_EPS = 1e-12
+
+
+def _orient(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _on_segment(
+    a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]
+) -> bool:
+    return (
+        min(a[0], b[0]) - _EPS <= p[0] <= max(a[0], b[0]) + _EPS
+        and min(a[1], b[1]) - _EPS <= p[1] <= max(a[1], b[1]) + _EPS
+    )
+
+
+def _segments_touch(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+    d: tuple[float, float],
+) -> bool:
+    """Отрезки пересекаются или касаются (перекрёст, T-стык, общая точка)."""
+    d1 = _orient(c, d, a)
+    d2 = _orient(c, d, b)
+    d3 = _orient(a, b, c)
+    d4 = _orient(a, b, d)
+    if (
+        (d1 > _EPS and d2 < -_EPS or d1 < -_EPS and d2 > _EPS)
+        and (d3 > _EPS and d4 < -_EPS or d3 < -_EPS and d4 > _EPS)
+    ):
+        return True
+    return (
+        abs(d1) <= _EPS and _on_segment(c, d, a)
+        or abs(d2) <= _EPS and _on_segment(c, d, b)
+        or abs(d3) <= _EPS and _on_segment(a, b, c)
+        or abs(d4) <= _EPS and _on_segment(a, b, d)
+    )
+
+
+def _ring_self_intersects(ring: list[tuple[float, float]]) -> bool:
+    """Кольцо самопересекается/защемлёно: bowtie, вершина на чужом ребре,
+    повторная вершина вне соседних рёбер. O(n²), n ≤ _ZONE_MAX_POINTS."""
+    m = len(ring)
+    segs = [(ring[i], ring[i + 1]) for i in range(m - 1)]
+    for i, (a, b) in enumerate(segs):
+        if a == b:  # нулевая грань — дублирующаяся вершина подряд
+            return True
+        for j in range(i + 2, len(segs)):
+            if i == 0 and j == len(segs) - 1:
+                continue  # первое и последнее рёбра соседние (общая точка замыкания)
+            c, d = segs[j]
+            if c == d:
+                return True
+            if _segments_touch(a, b, c, d):
+                return True
+    return False
+
 
 def is_valid_delivery_zone(zone: JsonObject | None) -> bool:
     """Строгая валидация зоны на запись: один внешний ring GeoJSON Polygon.
 
     Поддерживаем ровно то, что умеет point-in-polygon: type=="Polygon",
     одно кольцо (дырки и MultiPolygon отклоняем честно), 4..256 точек,
-    каждая — числовая пара [lng±180, lat±90], кольцо замкнуто.
+    каждая — числовая пара [lng±180, lat±90], кольцо замкнуто и без
+    самопересечений (bowtie/защемление ломает смысл «внутри/снаружи»).
     Пустая зона ({}/None) — валидна: так зону снимают.
     """
     if not zone:
@@ -104,7 +163,7 @@ def is_valid_delivery_zone(zone: JsonObject | None) -> bool:
     ring_raw = coords[0]
     if not 4 <= len(ring_raw) <= _ZONE_MAX_POINTS:
         return False
-    first = last = None
+    ring: list[tuple[float, float]] = []
     for pt in ring_raw:
         if (
             not isinstance(pt, (list, tuple))
@@ -118,9 +177,7 @@ def is_valid_delivery_zone(zone: JsonObject | None) -> bool:
         lng, lat = float(pt[0]), float(pt[1])
         if not (-180.0 <= lng <= 180.0 and -90.0 <= lat <= 90.0):
             return False
-        if first is None:
-            first = (lng, lat)
-        last = (lng, lat)
-    if first is None or last is None:
+        ring.append((lng, lat))
+    if not ring or abs(ring[0][0] - ring[-1][0]) >= 1e-9 or abs(ring[0][1] - ring[-1][1]) >= 1e-9:
         return False
-    return abs(first[0] - last[0]) < 1e-9 and abs(first[1] - last[1]) < 1e-9
+    return not _ring_self_intersects(ring)

@@ -343,5 +343,12 @@ export const browserTestDevMiddleware: Middleware = async (context, next) => {
         const rest = pathname.slice('/static/core/'.length);
         context.url = `/core/frontend/static/${rest}${_search(context)}`;
     }
+    // Vendor-ассеты SPA: прод отдаёт их из `apps/<svc>/ui-dist/vendor/` по
+    // `/<svc>/ui/static/vendor/…`; в WTR бандла нет — мапим на исходники ui/vendor.
+    const vendorMatch = /^\/([a-z0-9_]+)\/ui\/static\/vendor\/(.+)$/.exec(pathname);
+    if (pathname.startsWith('/') && vendorMatch) {
+        const [, svc, rest] = vendorMatch;
+        context.url = `/apps/${svc}/ui/vendor/${rest}${_search(context)}`;
+    }
     return next();
 };

@@ -616,3 +616,82 @@ class TestDeliveryZoneValidation:
         zone = {"type": "Polygon", "coordinates": [ring]}
         resp = await self._patch(shop_client, f"zv-big-{unique_id[:8]}", zone)
         assert resp.status_code == 400
+
+    async def test_self_intersecting_bowtie_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        # «Песочные часы»: диагонали пересекаются — у зоны нет «внутри».
+        zone = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [37.5, 55.7],
+                    [37.7, 55.9],
+                    [37.7, 55.7],
+                    [37.5, 55.9],
+                    [37.5, 55.7],
+                ]
+            ],
+        }
+        resp = await self._patch(shop_client, f"zv-bt-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+        assert resp.json()["error_code"] == "invalid_delivery_zone"
+
+    async def test_pinched_ring_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        # Вершина (37.6, 55.75) повторяется вне соседних рёбер — защемление.
+        zone = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [37.5, 55.7],
+                    [37.7, 55.7],
+                    [37.6, 55.75],
+                    [37.5, 55.8],
+                    [37.6, 55.75],
+                    [37.5, 55.7],
+                ]
+            ],
+        }
+        resp = await self._patch(shop_client, f"zv-pn-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_duplicate_vertex_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        # Дублирующаяся вершина подряд — нулевая грань.
+        zone = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [37.5, 55.7],
+                    [37.7, 55.7],
+                    [37.7, 55.7],
+                    [37.7, 55.8],
+                    [37.5, 55.7],
+                ]
+            ],
+        }
+        resp = await self._patch(shop_client, f"zv-dv-{unique_id[:8]}", zone)
+        assert resp.status_code == 400
+
+    async def test_collinear_midpoint_accepted(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        # Точка на собственном ребре (как midpoint-вставка geoman) — легально.
+        zone = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [37.5, 55.7],
+                    [37.6, 55.7],
+                    [37.7, 55.7],
+                    [37.7, 55.8],
+                    [37.5, 55.8],
+                    [37.5, 55.7],
+                ]
+            ],
+        }
+        resp = await self._patch(shop_client, f"zv-mp2-{unique_id[:8]}", zone)
+        assert resp.status_code == 200, resp.text

@@ -1,8 +1,9 @@
 /**
- * ShopZoneMap — редактор зоны доставки: полигон на карте (Leaflet + OSM).
+ * ShopZoneMap — превью зоны доставки на карте (Leaflet + OSM).
  *
- * Директор рисует кольцо кликами: «Рисовать зону» → клики ставят вершины →
- * «Замкнуть». Результат — GeoJSON Polygon в событии `zone-changed`
+ * Только просмотр: полигон, центровка по магазину. Редактирование —
+ * полноэкранная модалка `shop.zone_editor` (Geoman) по кнопке «Изменить»:
+ * openModal с onApply → GeoJSON Polygon в событии `zone-changed`
  * (`detail.zone`, пустой объект — зоны нет), родитель сохраняет его в
  * `shop.delivery_zone` обычным `shop/shop_update`.
  *
@@ -17,38 +18,16 @@ import type { PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { loadLeaflet } from '../_helpers/leaflet.js';
+import type { LeafletModule } from '../_helpers/leaflet.js';
 
-type LeafletModule = typeof import('leaflet');
 type LeafletMap = import('leaflet').Map;
 type LeafletPolygon = import('leaflet').Polygon;
-type LeafletPolyline = import('leaflet').Polyline;
 type LeafletMarker = import('leaflet').Marker;
 type LatLngTuple = [number, number];
 
 interface ZoneChangedDetail {
     zone: Record<string, unknown>;
-}
-
-let _leafletPromise: Promise<LeafletModule> | null = null;
-
-function loadLeaflet(): Promise<LeafletModule> {
-    if (!_leafletPromise) {
-        if (!document.getElementById('leaflet-css')) {
-            const link = document.createElement('link');
-            link.id = 'leaflet-css';
-            link.rel = 'stylesheet';
-            link.href = '/shop/ui/static/vendor/leaflet/leaflet.css';
-            document.head.appendChild(link);
-        }
-        _leafletPromise = import('leaflet').then((mod) => {
-            // Leaflet — UMD: в бандле это default/namespace, в голом браузере —
-            // глобал window.L (dist/leaflet-src.js выставляет его сам).
-            const resolved = ((mod as { default?: LeafletModule }).default ?? mod) as LeafletModule;
-            if (typeof resolved.map === 'function') return resolved;
-            return (window as unknown as { L: LeafletModule }).L;
-        });
-    }
-    return _leafletPromise;
 }
 
 export class ShopZoneMap extends PlatformElement {
@@ -58,23 +37,17 @@ export class ShopZoneMap extends PlatformElement {
         zone: { type: Object, attribute: false },
         address: { type: String, attribute: false },
         shopId: { type: String, attribute: 'shop-id' },
-        _drawing: { state: true },
         _locating: { state: true },
-        _hint: { state: true },
     };
 
     declare zone: Record<string, unknown> | null;
     declare address: string;
     declare shopId: string;
-    declare _drawing: boolean;
     declare _locating: boolean;
-    declare _hint: string;
 
     private _L: LeafletModule | null = null;
     private _map: LeafletMap | null = null;
     private _polygon: LeafletPolygon | null = null;
-    private _draftLine: LeafletPolyline | null = null;
-    private _draftPoints: LatLngTuple[] = [];
     private _marker: LeafletMarker | null = null;
     private _ro: ResizeObserver | null = null;
     private _mapSized = false;
@@ -84,25 +57,58 @@ export class ShopZoneMap extends PlatformElement {
         this.zone = null;
         this.address = '';
         this.shopId = '';
-        this._drawing = false;
         this._locating = false;
-        this._hint = '';
     }
 
     static override styles = [
         PlatformElement.styles,
         css`
             :host { display: flex; flex-direction: column; gap: var(--space-3); }
-            .map {
-                height: 340px;
+            .mapwrap {
+                position: relative;
+                height: 280px;
                 border-radius: var(--radius-m, 12px);
                 overflow: hidden;
                 border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
                 background: var(--bg-secondary, #f2f0ec);
             }
-            .map.drawing { cursor: crosshair; }
+            .map { position: absolute; inset: 0; }
+            .open-editor {
+                position: absolute;
+                right: var(--space-3);
+                bottom: var(--space-3);
+                z-index: 500;
+                border: none;
+                border-radius: var(--radius-full, 999px);
+                padding: var(--space-2) var(--space-4);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                background: color-mix(in srgb, var(--bg-primary, #fff) 94%, transparent);
+                backdrop-filter: blur(12px);
+                box-shadow: 0 6px 22px color-mix(in srgb, var(--text-primary) 18%, transparent);
+                color: var(--accent);
+                font: inherit;
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+            .open-editor:hover { background: var(--bg-primary, #fff); }
+            .empty-badge {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 500;
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-full, 999px);
+                background: color-mix(in srgb, var(--bg-primary, #fff) 92%, transparent);
+                backdrop-filter: blur(12px);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                pointer-events: none;
+            }
             .toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-            .hint { font-size: var(--text-sm); color: var(--text-tertiary); line-height: 1.45; }
         `,
     ];
 
@@ -131,15 +137,13 @@ export class ShopZoneMap extends PlatformElement {
         const map = (this._map = L.map(el, {
             center: [55.7512, 37.6184],
             zoom: 11,
-            scrollWheelZoom: true,
+            scrollWheelZoom: false,
+            zoomControl: false,
         }));
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap',
             maxZoom: 19,
         }).addTo(map);
-        map.on('click', (ev: { latlng: { lat: number; lng: number } }) => {
-            if (this._drawing) this._addVertex(ev.latlng.lat, ev.latlng.lng);
-        });
         // Контейнер мог быть display:none/0×0 при init (ленивые секции
         // настроек) — Leaflet кэширует размер и рисует «уголки» тайлов.
         // invalidateSize на реальный resize возвращает карту в норму, первый
@@ -150,7 +154,7 @@ export class ShopZoneMap extends PlatformElement {
             if (!this._mapSized) {
                 this._mapSized = true;
                 if (this._polygon) {
-                    this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24] });
+                    this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24], animate: false });
                 }
             }
         });
@@ -189,80 +193,33 @@ export class ShopZoneMap extends PlatformElement {
                 color: '#f2542d',
                 weight: 2.5,
                 fillOpacity: 0.12,
+                interactive: false,
             }).addTo(this._map);
-            this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24] });
+            this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24], animate: false });
         }
     }
 
-    private _emitZone(): void {
+    private _emitZone(zone: Record<string, unknown>): void {
         this.dispatchEvent(
             new CustomEvent<ZoneChangedDetail>('zone-changed', {
-                detail: { zone: this.zone ?? {} },
+                detail: { zone },
                 bubbles: true,
                 composed: true,
             }),
         );
     }
 
-    private _addVertex(lat: number, lng: number): void {
-        if (!this._map || !this._L) return;
-        this._draftPoints.push([lat, lng]);
-        if (this._draftLine) this._draftLine.remove();
-        this._draftLine = this._L.polyline(this._draftPoints, {
-            color: '#f2542d',
-            weight: 2.5,
-            dashArray: '6 6',
-        }).addTo(this._map);
-        const left = 3 - this._draftPoints.length;
-        this._hint = left > 0
-            ? `Ещё ${left} ${left === 1 ? 'точка' : 'точки'} минимум`
-            : '«Замкнуть» — готово, или добавьте ещё точек';
-    }
-
-    private _startDraw(): void {
-        this._drawing = true;
-        this._draftPoints = [];
-        this._hint = 'Кликайте по карте — ставьте вершины зоны';
-        this._clearZone(false);
-    }
-
-    private _finishDraw(): void {
-        if (this._draftPoints.length < 3 || !this._L) return;
-        const first = this._draftPoints[0];
-        if (!first) return;
-        const closed = [...this._draftPoints, first];
-        this.zone = {
-            type: 'Polygon',
-            coordinates: [closed.map(([lat, lng]) => [lng, lat])],
-        };
-        this._drawing = false;
-        this._draftPoints = [];
-        if (this._draftLine) {
-            this._draftLine.remove();
-            this._draftLine = null;
-        }
-        this._hint = '';
-        this._renderZone();
-        this._emitZone();
-    }
-
-    private _cancelDraw(): void {
-        this._drawing = false;
-        this._draftPoints = [];
-        if (this._draftLine) {
-            this._draftLine.remove();
-            this._draftLine = null;
-        }
-        this._hint = '';
-    }
-
-    private _clearZone(emit = true): void {
-        this.zone = {};
-        if (this._polygon) {
-            this._polygon.remove();
-            this._polygon = null;
-        }
-        if (emit) this._emitZone();
+    private _openEditor(): void {
+        this.openModal('shop.zone_editor', {
+            zone: this.zone ?? {},
+            address: this.address,
+            shopId: this.shopId,
+            onApply: (zone: Record<string, unknown>) => {
+                this.zone = zone;
+                this._renderZone();
+                this._emitZone(zone);
+            },
+        });
     }
 
     private async _locate(): Promise<void> {
@@ -275,7 +232,7 @@ export class ShopZoneMap extends PlatformElement {
                 address: q,
             })) as { lat: number; lng: number } | null;
             if (data) {
-                this._map.setView([data.lat, data.lng], 14);
+                this._map.setView([data.lat, data.lng], 14, { animate: false });
                 if (this._marker) this._marker.remove();
                 this._marker = this._L.marker([data.lat, data.lng]).addTo(this._map);
             }
@@ -287,43 +244,25 @@ export class ShopZoneMap extends PlatformElement {
     protected override render(): TemplateResult {
         const hasZone = this._ringLatLngs() !== null;
         return html`
-            <div class="map ${this._drawing ? 'drawing' : ''}"></div>
-            <div class="toolbar">
-                ${this._drawing
-                    ? html`
-                        <platform-button size="sm" variant="primary"
-                            ?disabled=${this._draftPoints.length < 3}
-                            @click=${() => this._finishDraw()}>
-                            Замкнуть зону
-                        </platform-button>
-                        <platform-button size="sm" variant="secondary"
-                            @click=${() => this._cancelDraw()}>
-                            Отмена
-                        </platform-button>`
-                    : html`
-                        <platform-button size="sm" variant="secondary"
-                            @click=${() => this._startDraw()}>
-                            <platform-icon name="edit" size="14"></platform-icon>
-                            ${hasZone ? 'Перерисовать зону' : 'Нарисовать зону'}
-                        </platform-button>
-                        ${hasZone
-                            ? html`
-                                <platform-button size="sm" variant="secondary"
-                                    @click=${() => this._clearZone()}>
-                                    Очистить
-                                </platform-button>`
-                            : nothing}
-                        ${this.address.trim()
-                            ? html`
-                                <platform-button size="sm" variant="secondary"
-                                    ?busy=${this._locating}
-                                    @click=${() => this._locate()}>
-                                    <platform-icon name="pin" size="14"></platform-icon>
-                                    Найти магазин на карте
-                                </platform-button>`
-                            : nothing}`}
+            <div class="mapwrap">
+                <div class="map"></div>
+                ${!hasZone ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>` : nothing}
+                <button type="button" class="open-editor" @click=${() => this._openEditor()}>
+                    <platform-icon name="edit" size="14"></platform-icon>
+                    ${hasZone ? this.t('settings.zone_edit') : this.t('settings.zone_set')}
+                </button>
             </div>
-            ${this._hint ? html`<div class="hint">${this._hint}</div>` : nothing}
+            <div class="toolbar">
+                ${this.address.trim()
+                    ? html`
+                        <platform-button size="sm" variant="secondary"
+                            ?busy=${this._locating}
+                            @click=${() => this._locate()}>
+                            <platform-icon name="pin" size="14"></platform-icon>
+                            ${this.t('settings.zone_locate')}
+                        </platform-button>`
+                    : nothing}
+            </div>
         `;
     }
 }
