@@ -18,11 +18,16 @@ from __future__ import annotations
 
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.execution_identity import resolve_execution_context
+from apps.flows.src.services.flow_access_service import FlowAccessService
+from apps.flows.src.services.public_bundle_materialize import materialize_public_bundle
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from core.authz.service import AuthzService
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
+from core.files.service import FilesService
 from core.identity.flow_employee import is_flow_employee, require_flow_employee_flow_id
 from core.logging import get_logger
+from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from core.tasks import enqueue
 from core.types import JsonObject
@@ -40,8 +45,19 @@ logger = get_logger(__name__)
 class EmployeeInboxService:
     """Запуск flow-сотрудника на входящую работу (sync / worktracker)."""
 
-    def __init__(self, work_item_service: WorkItemService) -> None:
+    def __init__(
+        self,
+        work_item_service: WorkItemService,
+        flow_access_service: FlowAccessService,
+        files_service: FilesService,
+        authz_service: AuthzService,
+        mail_service: MailService,
+    ) -> None:
         self._work_item_service: WorkItemService = work_item_service
+        self._flow_access: FlowAccessService = flow_access_service
+        self._files: FilesService = files_service
+        self._authz: AuthzService = authz_service
+        self._mail: MailService = mail_service
 
     async def dispatch_sync_message(
         self,
@@ -170,6 +186,14 @@ class EmployeeInboxService:
         _ = set_context(initiator_context)
         try:
             flow_config = await FlowConfig.current_for_flow(flow_id)
+            if flow_config is None:
+                flow_config = await materialize_public_bundle(
+                    flow_id=flow_id,
+                    flow_access_service=self._flow_access,
+                    files_service=self._files,
+                    authz_service=self._authz,
+                    mail_service=self._mail,
+                )
             if flow_config is None:
                 raise ValueError(f"employee inbox: flow {flow_id} not found")
 

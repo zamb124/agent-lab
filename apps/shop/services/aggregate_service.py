@@ -1,7 +1,9 @@
 """AggregateService — публичный агрегатор: поиск товаров по всем витринам.
 
 Индекс — прямой запрос по ``shop_products`` опубликованных магазинов с
-pg_trgm-индексами по name/description; пересборка задачи актуализирует
+pg_trgm-индексами по name/description; в выдачу попадают только блюда из
+доступных позиций активных меню, цена — минимальная итоговая цена позиции
+(``price_minor_override`` или цена каталога); пересборка задачи актуализирует
 снапшоты витрин. Стратегия чтения: ILIKE-подстрока или триграммное
 совпадение ``%`` (устойчиво к опечаткам), ранжирование по
 ``word_similarity`` — индекс используется и для фильтра, и для ILIKE.
@@ -18,30 +20,40 @@ from core.pagination import OffsetPage
 from core.types import JsonValue
 
 _SEARCH_WHERE = """
-    FROM shop_products
-    WHERE is_available
-      AND shop_id IN ({in_clause})
+    FROM shop_products p
+    JOIN (
+        SELECT mi.shop_product_id,
+               MIN(COALESCE(mi.price_minor_override, pp.price_minor)) AS price_minor
+        FROM shop_menu_items mi
+        JOIN shop_menus m ON m.shop_menu_id = mi.shop_menu_id AND m.status = 'active'
+        JOIN shop_products pp ON pp.shop_product_id = mi.shop_product_id
+        WHERE mi.is_available
+        GROUP BY mi.shop_product_id
+    ) listed ON listed.shop_product_id = p.shop_product_id
+    WHERE p.is_available
+      AND p.shop_id IN ({in_clause})
       AND (
-          name ILIKE $2 ESCAPE '\\'
-          OR COALESCE(description, '') ILIKE $2 ESCAPE '\\'
-          OR name % $1::text
-          OR name <% $1::text
-          OR COALESCE(description, '') % $1::text
-          OR COALESCE(description, '') <% $1::text
+          p.name ILIKE $2 ESCAPE '\\'
+          OR COALESCE(p.description, '') ILIKE $2 ESCAPE '\\'
+          OR p.name % $1::text
+          OR p.name <% $1::text
+          OR COALESCE(p.description, '') % $1::text
+          OR COALESCE(p.description, '') <% $1::text
       )
 """
 
 _SEARCH_SELECT = (
     """
-    SELECT shop_id, shop_product_id, name, description, portion, badges, price_minor, photo_file_id,
+    SELECT p.shop_id, p.shop_product_id, p.name, p.description, p.measure, p.measure_unit,
+           p.badges, listed.price_minor, p.photo_file_id,
            GREATEST(
-               word_similarity($1::text, name),
-               word_similarity($1::text, COALESCE(description, '')) * 0.5
+               word_similarity($1::text, p.name),
+               word_similarity($1::text, COALESCE(p.description, '')) * 0.5
            ) AS score
     """
     + _SEARCH_WHERE
     + """
-    ORDER BY score DESC, name ASC
+    ORDER BY score DESC, p.name ASC
     LIMIT {limit_param} OFFSET {offset_param}
 """
 )
@@ -132,7 +144,8 @@ class AggregateService:
                 "product_id": row["shop_product_id"],
                 "name": row["name"],
                 "description": row["description"],
-                "portion": row["portion"],
+                "measure": row["measure"],
+                "measure_unit": row["measure_unit"],
                 "badges": [
                     badge_defs[row["shop_id"]][key]
                     for key in _badge_keys(row)

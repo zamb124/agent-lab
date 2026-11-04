@@ -1,0 +1,232 @@
+{
+  "flow_id": "shop_menu_agent",
+  "name": "Shop Menu Agent",
+  "description": "AI-сотрудник меню витрины shop. Работает по WorkItem на flow_employee_shop_menu_agent: режим в WorkItem.variables.mode — import (распознать меню по фото вложений с рамками фото блюд), template (собрать меню из каталога), enrich (заполнить пустые поля блюд). Write-back — shop_menu_import_apply / shop_products_enrich_apply, они же закрывают WorkItem; отказ закрывает WorkItem как failed.",
+  "tags": [
+    "shop",
+    "menu",
+    "worktracker",
+    "employee"
+  ],
+  "employee": {
+    "enabled": true,
+    "roles": ["member"],
+    "display_name": "Shop Menu Agent",
+    "curator_user_ids": ["$company_owner"]
+  },
+  "entry": "load_job",
+  "nodes": {
+    "load_job": {
+      "type": "code",
+      "name": "Load WorkItem",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "WORK_ITEM_CONTEXT_PREFIX = 'work_item:'\nMODES = ('import', 'template', 'enrich')\n\n\ndef _variable(variables, key):\n    entry = variables.get(key)\n    if entry is None:\n        return None\n    if not isinstance(entry, dict):\n        raise TypeError(f'shop_menu_agent: WorkItem variable {key} must be an object')\n    return entry.get('value')\n\n\ndef _is_vision_ref(ref):\n    file_id = ref.get('file_id')\n    content_type = ref.get('content_type')\n    if not isinstance(file_id, str) or not isinstance(content_type, str):\n        return False\n    return content_type.startswith('image/') or content_type == 'application/pdf'\n\n\nasync def run(args, state):\n    context_id = state['context_id']\n    if not isinstance(context_id, str) or not context_id.startswith(WORK_ITEM_CONTEXT_PREFIX):\n        raise ValueError('shop_menu_agent: context_id must be work_item:<work_item_id> from the employee inbox')\n    work_item_id = context_id[len(WORK_ITEM_CONTEXT_PREFIX):]\n    item = await tools.work_item_get(work_item_id=work_item_id)\n    variables = item['variables']\n    mode = _variable(variables, 'mode')\n    if mode not in MODES:\n        raise ValueError(f'shop_menu_agent: unsupported WorkItem mode {mode!r}')\n    shop_id = _variable(variables, 'shop_id')\n    if not isinstance(shop_id, str) or shop_id == '':\n        raise ValueError('shop_menu_agent: WorkItem variable shop_id is required')\n    attachments = item['attachments']\n    vision_files = [ref for ref in attachments if _is_vision_ref(ref)]\n    attachment_file_ids = [\n        ref['file_id'] for ref in attachments if isinstance(ref.get('file_id'), str)\n    ]\n    state['shop_job'] = {\n        'work_item_id': work_item_id,\n        'mode': mode,\n        'shop_id': shop_id,\n        'menu_name': _variable(variables, 'menu_name'),\n        'brief': _variable(variables, 'brief'),\n        'shop_product_ids': _variable(variables, 'shop_product_ids'),\n        'attachment_file_ids': attachment_file_ids,\n    }\n    state['files'] = vision_files\n    state['shop_attachments_text'] = '\\n'.join(\n        f\"{index + 1}. file_id={ref['file_id']}; {ref['original_name']}; {ref['content_type']}\"\n        for index, ref in enumerate(vision_files)\n    ) or 'изображений нет'\n    state['failure_reason'] = ''\n    if mode == 'import' and len(vision_files) == 0:\n        state['failure_reason'] = 'Нет изображений или PDF меню во вложениях задачи.'\n        state['job_route'] = 'failed'\n    elif mode == 'import':\n        state['job_route'] = 'import'\n    else:\n        state['job_route'] = 'catalog'\n    return state\n"
+    },
+    "import_vision": {
+      "type": "llm_node",
+      "name": "Recognize menu",
+      "prompt": "prompts/import_vision.md",
+      "llm_capability": "llm_vision",
+      "llm": {
+        "model": "auto",
+        "temperature": 0.1,
+        "provider": "linnex_llm"
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/import_plan.output_schema.json",
+      "output_mapping": {
+        "sections": "menu_sections",
+        "failure_reason": "failure_reason"
+      }
+    },
+    "load_catalog": {
+      "type": "code",
+      "name": "Load catalog",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import json\n\nDISH_FIELDS = (\n    'shop_product_id',\n    'name',\n    'description',\n    'price_minor',\n    'measure',\n    'measure_unit',\n    'ingredients',\n    'nutrition',\n    'allergens',\n)\n\n\nasync def run(args, state):\n    job = state['shop_job']\n    page = await tools.shop_catalog_list(shop_id=job['shop_id'])\n    dishes = page['items']\n    if job['mode'] == 'enrich':\n        wanted = job['shop_product_ids']\n        if not isinstance(wanted, list) or len(wanted) == 0:\n            raise ValueError('shop_menu_agent: enrich WorkItem requires shop_product_ids')\n        wanted_ids = set(wanted)\n        dishes = [dish for dish in dishes if dish['shop_product_id'] in wanted_ids]\n    if len(dishes) == 0:\n        state['catalog_route'] = 'failed'\n        state['failure_reason'] = 'В каталоге заведения нет блюд для этой задачи.'\n        return state\n    state['shop_catalog_json'] = json.dumps(\n        [{field: dish[field] for field in DISH_FIELDS} for dish in dishes],\n        ensure_ascii=False,\n    )\n    state['catalog_route'] = job['mode']\n    return state\n"
+    },
+    "compose_template": {
+      "type": "llm_node",
+      "name": "Compose menu from catalog",
+      "prompt": "prompts/template.md",
+      "llm": {
+        "model": "auto",
+        "temperature": 0.3,
+        "provider": "linnex_llm"
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/import_plan.output_schema.json",
+      "output_mapping": {
+        "sections": "menu_sections",
+        "failure_reason": "failure_reason"
+      }
+    },
+    "enrich_dishes": {
+      "type": "llm_node",
+      "name": "Enrich dishes",
+      "prompt": "prompts/enrich.md",
+      "llm": {
+        "model": "auto",
+        "temperature": 0.4,
+        "provider": "linnex_llm"
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/enrich_plan.output_schema.json",
+      "output_mapping": {
+        "updates": "enrich_updates",
+        "failure_reason": "failure_reason"
+      }
+    },
+    "apply_menu": {
+      "type": "code",
+      "name": "Write menu",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "async def run(args, state):\n    job = state['shop_job']\n    sections = state['menu_sections']\n    if not isinstance(sections, list) or len(sections) == 0:\n        raise ValueError('shop_menu_agent: menu_sections must be a non-empty array')\n    attachment_ids = set(job.get('attachment_file_ids') or [])\n    for section in sections:\n        items = section.get('items')\n        if not isinstance(items, list):\n            continue\n        for dish in items:\n            if not isinstance(dish, dict):\n                continue\n            photo = dish.get('photo')\n            if isinstance(photo, dict) and photo.get('file_id') not in attachment_ids:\n                dish['photo'] = None\n    applied = await tools.shop_menu_import_apply(\n        shop_id=job['shop_id'],\n        work_item_id=job['work_item_id'],\n        sections=sections,\n    )\n    state['shop_apply_result'] = applied\n    state['response'] = (\n        f\"Меню записано. Новых блюд: {len(applied['shop_product_ids'])}, \"\n        f\"похожих на существующие: {applied['similar_count']}.\"\n    )\n    return state\n"
+    },
+    "apply_enrich": {
+      "type": "code",
+      "name": "Write enrichment",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "async def run(args, state):\n    job = state['shop_job']\n    updates = state['enrich_updates']\n    if not isinstance(updates, list) or len(updates) == 0:\n        raise ValueError('shop_menu_agent: enrich_updates must be a non-empty array')\n    applied = await tools.shop_products_enrich_apply(\n        shop_id=job['shop_id'],\n        work_item_id=job['work_item_id'],\n        updates=updates,\n    )\n    state['shop_apply_result'] = applied\n    state['response'] = f\"Обогащено блюд: {len(applied['shop_product_ids'])}.\"\n    return state\n"
+    },
+    "fail_job": {
+      "type": "code",
+      "name": "Fail WorkItem",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "async def run(args, state):\n    job = state['shop_job']\n    reason = state['failure_reason']\n    if not isinstance(reason, str) or reason.strip() == '':\n        raise ValueError('shop_menu_agent: failure_reason is required to fail the WorkItem')\n    await tools.work_item_complete(\n        work_item_id=job['work_item_id'],\n        terminal_state='failed',\n        resolution_text=reason.strip(),\n    )\n    state['response'] = reason.strip()\n    return state\n"
+    }
+  },
+  "edges": [
+    {
+      "from_node": "load_job",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "job_route",
+        "operator": "==",
+        "value": "failed"
+      }
+    },
+    {
+      "from_node": "load_job",
+      "to_node": "import_vision",
+      "condition": {
+        "type": "simple",
+        "variable": "job_route",
+        "operator": "==",
+        "value": "import"
+      }
+    },
+    {
+      "from_node": "load_job",
+      "to_node": "load_catalog",
+      "condition": {
+        "type": "simple",
+        "variable": "job_route",
+        "operator": "==",
+        "value": "catalog"
+      }
+    },
+    {
+      "from_node": "load_catalog",
+      "to_node": "compose_template",
+      "condition": {
+        "type": "simple",
+        "variable": "catalog_route",
+        "operator": "==",
+        "value": "template"
+      }
+    },
+    {
+      "from_node": "load_catalog",
+      "to_node": "enrich_dishes",
+      "condition": {
+        "type": "simple",
+        "variable": "catalog_route",
+        "operator": "==",
+        "value": "enrich"
+      }
+    },
+    {
+      "from_node": "load_catalog",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "catalog_route",
+        "operator": "==",
+        "value": "failed"
+      }
+    },
+    {
+      "from_node": "import_vision",
+      "to_node": "apply_menu",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "==",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "import_vision",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "!=",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "compose_template",
+      "to_node": "apply_menu",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "==",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "compose_template",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "!=",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "enrich_dishes",
+      "to_node": "apply_enrich",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "==",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "enrich_dishes",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "!=",
+        "value": ""
+      }
+    }
+  ],
+  "branches": {}
+}

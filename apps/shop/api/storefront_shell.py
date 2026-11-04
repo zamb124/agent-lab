@@ -236,7 +236,14 @@ const app=document.getElementById('app');
 let query='';
 window.menuSearch=v=>{{query=v.trim().toLowerCase();renderMenu();}};
 const NEST=S.modifier_nested_groups||{{}};
-const byId=id=>S.products.find(x=>x.id===id);
+const byId=id=>S.items.find(x=>x.id===id);
+const SEC_MENU={{}};for(const s of S.sections)SEC_MENU[s.id]=s.menu_id;
+const MENUS=(S.menus||[]).filter(m=>S.items.some(p=>SEC_MENU[p.section_id]===m.id));
+let curMenu=MENUS.length?MENUS[0].id:'';
+const inMenu=p=>SEC_MENU[p.section_id]===curMenu;
+function drawMenus(){{const el=document.getElementById('mtabs');if(!el||MENUS.length<2)return;
+  el.innerHTML=`<div class="seg">${{MENUS.map(m=>`<button class="${{m.id===curMenu?'on':''}}" onclick="setMenu('${{m.id}}')">${{esc(m.name)}}</button>`).join('')}}</div>`;}}
+window.setMenu=id=>{{curMenu=id;drawMenus();renderMenu();window.scrollTo({{top:0}});}};
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
 function photo(u,cls){{return u?`<img class="${{cls||''}}" src="${{IMG(u)}}" loading="lazy" alt="" onload="this.classList.add('ld')">`:'';}}
 function selHash(sel){{return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}}
@@ -258,7 +265,10 @@ function promoApplies(a,pid){{if(!a)return false;
   const ids=a.product_ids;if(Array.isArray(ids)&&ids.length)return ids.includes(pid);
   if(a.type==='fixed_bundle_price'&&Array.isArray(a.items))return a.items.some(i=>i.product_id===pid);
   return a.type==='n_plus_m_free'||a.type==='percent_items';}}
-function portionOf(p){{return p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:'';}}
+const UNITS={{g:'г',ml:'мл',pcs:'шт'}};
+function portionOf(p){{return p.measure?`<span class="portion">${{p.measure}} ${{UNITS[p.measure_unit]}}</span>`:'';}}
+const ALLERGENS={{gluten:'глютен',dairy:'молоко',egg:'яйца',fish:'рыба',shellfish:'ракообразные',nuts:'орехи',peanuts:'арахис',soy:'соя',sesame:'кунжут',mustard:'горчица',celery:'сельдерей',lupin:'люпин',molluscs:'моллюски',sulphites:'сульфиты'}};
+function approx(p){{return p.ai_unverified?' · ориентировочно':'';}}
 const DEFS=S.badge_defs||{{}};
 function tags(p){{return (p.badges||[]).map(b=>{{const d=DEFS[b];
   return d?`<span class="ptag">${{d.icon_path?`<svg viewBox="0 -960 960 960"><path d="${{d.icon_path}}"/></svg>`:''}}${{esc(d.label)}}</span>`:'';}}).join('');}}
@@ -272,18 +282,19 @@ function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
 function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
 const STOP=`onclick="event.stopPropagation()"`;
-function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}" ${{STOP}}>${{qtyCtl(p)}}</span></div>`).join('');}}
+function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.product_id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.product_id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')"><div class="b"><h3>${{esc(p.name)}}${{badge(p.product_id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}" ${{STOP}}>${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const hb=hoursBadge();
   let h=`<div class="hero">${{photo(S.cover_file_id,'bg')}}<div class="veil"></div><div class="head">${{photo(S.logo_file_id,'logo')}}<div><h1 class="serif">${{esc(S.name)}}</h1>${{S.description?`<div class="desc">${{esc(S.description)}}</div>`:''}}</div></div></div>
   <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
-  if(!S.products.length){{app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}}
-  h+=`<div id="msw"></div><div id="menu"></div>`;
+  if(!S.items.length){{app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}}
+  h+=`<div id="mtabs"></div><div id="msw"></div><div id="menu"></div>`;
   app.innerHTML=h;
-  if(S.products.length>=6){{document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}}
+  drawMenus();
+  if(S.items.length>=6){{document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}}
   renderMenu();
 }}
 let queue=[],spyIO=null,moreIO=null;
@@ -297,21 +308,22 @@ function chunkHtml(b){{const t=b.depth?3:2;
 function renderMenu(){{
   const menu=document.getElementById('menu');if(!menu)return;
   spyIO?.disconnect();moreIO?.disconnect();queue=[];
-  const other=S.products.filter(p=>!p.category_id);
+  const its=S.items.filter(inMenu),secs=S.sections.filter(s=>s.menu_id===curMenu);
   if(query){{
     app.classList.add('flat');
-    const hits=S.products.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
+    const hits=its.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
     menu.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${{esc(query)}}» ничего не нашлось</div>`;
     return;
   }}
   // Прогрессивный рендер: табы сразу, тело дорисовывается чанками по мере скролла —
   // все данные уже в снапшоте, поэтому подгрузка мгновенная и бесшовная.
-  // Дерево категорий: секции в depth-first порядке; категория видна, когда в её
-  // поддереве есть товары; узел с родителем вне снапшота считается корнем.
+  // Дерево разделов выбранного меню: секции в depth-first порядке; раздел виден, когда
+  // в его поддереве есть позиции; узел с родителем вне снапшота считается корнем.
+  // Порядок siblings — порядок массива снапшота: sort раздела внутри меню.
   const CH=12,blocks=[],byId={{}};
-  for(const c of S.categories)byId[c.id]=c;
-  const prods=cid=>S.products.filter(p=>p.category_id===cid);
-  const kids=p=>S.categories.filter(c=>((c.parent_id&&byId[c.parent_id])?c.parent_id:null)===p).sort((a,b)=>a.sort-b.sort);
+  for(const c of secs)byId[c.id]=c;
+  const prods=cid=>its.filter(p=>p.section_id===cid);
+  const kids=p=>secs.filter(c=>((c.parent_id&&byId[c.parent_id])?c.parent_id:null)===p);
   const subHas=c=>prods(c.id).length>0||kids(c.id).some(subHas);
   const roots=kids(null).filter(subHas);
   app.classList.toggle('flat',roots.length+(other.length?1:0)<=1);
@@ -321,15 +333,14 @@ function renderMenu(){{
       blocks.push({{id:i===0?'c-'+id:'',name:i===0?name:'',depth,root,items:items.slice(i,i+CH)}});}};
   for(const r of roots){{const walk=(c,depth)=>{{push(c.id,c.name,depth,r.id,prods(c.id));
     for(const k of kids(c.id))if(subHas(k))walk(k,depth+1);}};walk(r,0);}}
-  if(other.length)push('other','Ещё',0,'other',other);
-  menu.innerHTML=`<div class="tabs">${{roots.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
+  menu.innerHTML=`<div class="tabs">${{roots.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
   const body=menu.querySelector('#mbody'),sent=menu.querySelector('#msent');
   queue=blocks;
   const flush=()=>{{const b=queue.shift();
     if(!b){{sent.remove();moreIO?.disconnect();return;}}
     body.insertAdjacentHTML('beforeend',chunkHtml(b));
     spy(body);}};
-  const first=roots[0]?.id||(other.length?'other':'');
+  const first=roots[0]?.id||'';
   if(first)activate(first);
   for(let i=0;i<3&&queue.length;i++)flush();
   spyIO=new IntersectionObserver(es=>{{for(const e of es)if(e.isIntersecting)activate(e.target.dataset.root);}},{{rootMargin:'-30% 0px -60% 0px'}});
@@ -393,7 +404,7 @@ let priceReq=0;
 async function refreshSavings(){{
   const my=++priceReq;
   try{{
-    const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
+    const body={{items:[...cart.values()].map(l=>({{shop_menu_item_id:l.pid,qty:l.qty,
       selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
       delivery_type:dtype}};
     const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/cart/price`,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
@@ -412,7 +423,7 @@ async function refreshSavings(){{
 }}
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
 window.submit=async()=>{{
-  const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
+  const body={{items:[...cart.values()].map(l=>({{shop_menu_item_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
     customer_name:document.getElementById('cn').value,customer_phone:document.getElementById('cp').value,
     delivery_type:dtype,
@@ -531,6 +542,9 @@ function renderCust(){{if(!cust)return;const p=byId(cust.pid);if(!p)return;
     `<button class="pshare" onclick="shareProduct('${{p.id}}')" aria-label="Поделиться">${{SHARE_ICON}}</button>`+
     `${{photo(p.photo_file_id,'phero')}}<h2>${{esc(p.name)}}${{tags(p)}}${{portionOf(p)}}</h2>`+
     `${{p.description?`<p class="pdesc">${{esc(p.description)}}</p>`:''}}`+
+    `${{p.ingredients&&p.ingredients.length?`<p class="pdesc">Состав: ${{esc(p.ingredients.join(', '))}}${{approx(p)}}</p>`:''}}`+
+    `${{p.nutrition?`<p class="pdesc">На 100 г: ${{Math.round(p.nutrition.calories_kcal)}} ккал · Б ${{p.nutrition.proteins_g}} · Ж ${{p.nutrition.fats_g}} · У ${{p.nutrition.carbs_g}}${{approx(p)}}</p>`:''}}`+
+    `${{p.allergens&&p.allergens.length?`<p class="pdesc">Аллергены: ${{esc(p.allergens.map(a=>ALLERGENS[a]||a).join(', '))}}${{approx(p)}}</p>`:''}}`+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
     `<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${{cust.qty}}</span><button onclick="custQty(1)">+</button></span></div>`+
     `<button class="big"${{ok?'':' disabled'}} onclick="addCustom()">В корзину · ${{fmt(u*cust.qty)}}</button>`;}}
@@ -540,10 +554,12 @@ window.addCustom=()=>{{if(!cust)return;const p=byId(cust.pid);
   const l=cart.get(key)||{{pid:cust.pid,sel:new Map(cust.sel),qty:0}};
   l.qty+=cust.qty;cart.set(key,l);
   cust=null;closeCust();refreshQty(p.id);draw();}};
+const deeplink=new URLSearchParams(location.search).get('p');
+const deepItem=deeplink?S.items.find(x=>x.id===deeplink||x.product_id===deeplink):null;
+if(deepItem&&SEC_MENU[deepItem.section_id])curMenu=SEC_MENU[deepItem.section_id];
 render();
 loadCart();for(const l of cart.values())refreshQty(l.pid);draw();
-const deeplink=new URLSearchParams(location.search).get('p');
-if(deeplink){{const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');
+if(deepItem){{const el=document.querySelector('[data-pid="'+CSS.escape(deepItem.id)+'"]');
   if(el){{el.classList.add('flash');setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'center'}}),200);}}}}
 </script>
 </body>
@@ -584,7 +600,7 @@ def _opening_hours(snapshot: JsonObject) -> list[JsonObject]:
 
 def _menu_items(snapshot: JsonObject) -> list[JsonObject]:
     """Позиции каталога → hasMenu/hasMenuItem с offers для rich-результатов."""
-    raw = snapshot.get("products")
+    raw = snapshot.get("items")
     if not isinstance(raw, list):
         return []
     items: list[JsonObject] = []

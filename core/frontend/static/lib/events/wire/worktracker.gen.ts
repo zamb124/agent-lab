@@ -216,6 +216,15 @@ export interface RagDocumentLink {
 }
 
 /**
+ * ShopLink
+ */
+export interface ShopLink {
+    "link_kind"?: "shop" | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * StockLocationLink
  */
 export interface StockLocationLink {
@@ -332,7 +341,7 @@ export interface WorkItem {
     "interaction"?: WorkItemInteractionSpec | null | undefined;
     "hooks"?: WorkItemHook[] | undefined;
     "resolution"?: WorkItemResolution | null | undefined;
-    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | WorkItemToWorkItemLink)[] | undefined;
+    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | ShopLink | WorkItemToWorkItemLink)[] | undefined;
     "variables"?: Record<string, VariableEntry> | undefined;
     "attachments"?: FileRef[] | undefined;
     "interaction_policy"?: WorkItemInteractionPolicy | null | undefined;
@@ -442,7 +451,7 @@ export interface WorkItemCreateRequest {
     "labels"?: string[] | undefined;
     "assignment"?: UnassignedAssignment | UsersAssignment | QueueAssignment | null | undefined;
     "blocking"?: boolean | undefined;
-    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | WorkItemToWorkItemLink)[] | undefined;
+    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | ShopLink | WorkItemToWorkItemLink)[] | undefined;
     "variables"?: Record<string, VariableEntry> | undefined;
     "attachments"?: FileRef[] | undefined;
     [key: string]: unknown;
@@ -580,7 +589,7 @@ export interface WorkItemUpdatePayload {
     "priority"?: WorkItemPriority | null | undefined;
     "due_date"?: string | null | undefined;
     "labels"?: string[] | null | undefined;
-    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | WorkItemToWorkItemLink)[] | null | undefined;
+    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | ShopLink | WorkItemToWorkItemLink)[] | null | undefined;
     "variables"?: Record<string, VariableEntry> | null | undefined;
     "attachments"?: FileRef[] | null | undefined;
     "work_item_id": string;

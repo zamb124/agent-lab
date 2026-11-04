@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 from apps.shop.di import Di
-from apps.shop.events import publish_shop_catalog_changed
-from apps.shop.models import Shop, ShopCategory, ShopDomain, ShopDomainStatus, ShopProduct
+from apps.shop.models import ShopDomain, ShopDomainStatus
 from apps.shop.tasks.task_names import (
-    SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_AGGREGATE,
@@ -19,15 +17,9 @@ from apps.shop.tasks.task_names import (
     SHOP_RECONCILE_DOMAINS_TICK,
 )
 from core.context import clear_context, set_context
-from core.context.job_context import build_job_context, pick_company_billing_user
 from core.identity.system_bootstrap import build_system_admin_job_context
-from core.logging import get_logger
-from core.models.identity_models import Company
-from core.tasks import enqueue, platform_task
+from core.tasks import platform_task
 from core.types import JsonObject
-from core.utils.time import utcnow
-
-logger = get_logger(__name__)
 
 
 async def _enter_worker_context(*, trace_id: str) -> None:
@@ -119,79 +111,5 @@ async def shop_rebuild_aggregate(
     try:
         indexed = await di.aggregate_service.rebuild(shop_id)
         return JsonObject({"indexed": indexed})
-    finally:
-        clear_context()
-
-
-@platform_task(SHOP_AI_DESCRIBE_BATCH)
-async def shop_ai_describe_batch(
-    shop_id: str,
-    company_id: str,
-    *,
-    di: Di,
-) -> JsonObject:
-    """AI-описания для всех позиций магазина без описания.
-
-    Контекст — платёжный пользователь компании магазина: LLM-вызовы идут
-    в биллинг компании, а не system. Без retry: генерации стоят денег,
-    повтор батча идемпотентен по факту пустого описания.
-    """
-    trace_id = f"shop:ai-batch:{shop_id}"
-    shop = await Shop.get_by_id(shop_id)
-    if shop is None or str(shop.company_id) != company_id:
-        return JsonObject({"updated": 0, "failed": 0})
-    company = await Company.get(company_id)
-    if company is None:
-        raise ValueError(f"shop_ai_describe_batch: company {company_id} not found")
-    billing_user = await pick_company_billing_user(company=company)
-    _ = set_context(
-        build_job_context(
-            company=company,
-            user=billing_user,
-            host="shop-job.local",
-            trace_id=trace_id,
-            session_id=trace_id,
-            channel="shop",
-        )
-    )
-    try:
-        categories = {
-            c.shop_category_id: c.name
-            for c in await ShopCategory.list_by_shop_by_sort_asc(shop_id)
-        }
-        products = [
-            p
-            for p in await ShopProduct.list_by_shop_by_sort_asc(shop_id)
-            if not p.description.strip()
-        ]
-        updated = 0
-        failed = 0
-        for product in products:
-            try:
-                text = await di.ai_service.describe_product(
-                    name=product.name,
-                    category_name=categories.get(product.category_id or ""),
-                    photo_file_id=product.photo_file_id,
-                )
-            except Exception as exc:
-                failed += 1
-                logger.warning(
-                    "shop.ai_describe_batch.product_failed",
-                    shop_id=shop_id,
-                    shop_product_id=product.shop_product_id,
-                    error=str(exc),
-                )
-                continue
-            product.description = text
-            product.updated_at = utcnow()
-            _ = await product.save()
-            updated += 1
-        if updated:
-            await di.storefront_service.invalidate_snapshot(shop_id)
-            await publish_shop_catalog_changed(shop_id, shop.slug, company_id)
-            _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=shop.slug)
-        return JsonObject(
-            {"updated": updated, "failed": failed, "total": len(products)}
-        )
     finally:
         clear_context()

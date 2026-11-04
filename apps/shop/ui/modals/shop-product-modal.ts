@@ -1,41 +1,33 @@
 /**
- * ShopProductModal — карточка товара: создание и редактирование.
+ * ShopProductModal — карточка блюда каталога: создание и редактирование.
  *
- * Фото (загрузить / AI-улучшить / AI-сгенерировать), имя, цена, порция,
- * описание с AI-автозаполнением, метки. Один экземпляр на create/edit.
+ * Фото (загрузить / AI-улучшить / AI-сгенерировать), имя, цена, выход
+ * (`measure` + `measure_unit`), описание с AI-автозаполнением, метки.
+ * Блюдо с `ai_unverified` предлагает подтвердить AI-поля, блюдо с
+ * `similar_shop_product_id` — открыть сравнение `shop.product_merge`.
  */
 
 import { html, css, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor } from '@platform/lib/base/use-resource.js';
+import type { ShopBadgeResponse, ShopMeasureUnit, ShopProductResponse } from '@platform/lib/events/wire/shop.gen.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { shopBadgeSvg, shopFileUrl, shopMeasureUnitLabel, shopPriceMinor } from '../_helpers/shop-format.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 
-interface ShopBadgeDef {
-    key: string;
-    label: string;
-    icon: string;
-    icon_path: string;
-}
+const MEASURE_UNITS: readonly ShopMeasureUnit[] = ['g', 'ml', 'pcs'];
 
-export interface ProductDraft {
-    shop_product_id?: string;
-    name: string;
-    description: string;
-    price_minor: number;
-    portion: string;
-    badges: string[];
-    photo_file_id: string | null;
-}
-
-function _str(e: CustomEvent<{ value?: unknown }>): string {
+function fieldText(e: CustomEvent<{ value?: unknown }>): string {
     const v = e.detail.value;
     return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+}
+
+function isMeasureUnit(value: unknown): value is ShopMeasureUnit {
+    return value === 'g' || value === 'ml' || value === 'pcs';
 }
 
 export class ShopProductModal extends PlatformModal {
@@ -43,40 +35,39 @@ export class ShopProductModal extends PlatformModal {
     static i18nNamespace = 'shop';
 
     declare shopId: string;
-    declare categoryId: string | null;
-    declare product: ProductDraft | null;
-    declare badgeDefs: ShopBadgeDef[];
-    declare onSaved: (() => void) | null;
+    declare product: ShopProductResponse | null;
+    declare badgeDefs: ShopBadgeResponse[];
+    declare onSaved: ((product: ShopProductResponse) => void) | null;
 
-    private _createOp: OpController;
-    private _updateOp: OpController;
-    private _aiDescribeOp: OpController;
-    private _aiEnhanceOp: OpController;
-    private _aiGenerateOp: OpController;
-    private _uploadOp: OpController;
+    private _createOp: ControllerFor<'shop/product_create'>;
+    private _updateOp: ControllerFor<'shop/product_update'>;
+    private _verifyOp: ControllerFor<'shop/product_verify'>;
+    private _aiDescribeOp: ControllerFor<'shop/ai_describe'>;
+    private _aiEnhanceOp: ControllerFor<'shop/ai_enhance_photo'>;
+    private _aiGenerateOp: ControllerFor<'shop/ai_generate_photo'>;
+    private _uploadOp: ControllerFor<'platform/file_create'>;
 
     declare _name: string;
     declare _price: string;
-    declare _portion: string;
+    declare _measure: string;
+    declare _measureUnit: ShopMeasureUnit;
     declare _description: string;
     declare _badges: string[];
     declare _photoFileId: string;
-    declare _photoPreview: string;
 
     static override properties = {
         ...PlatformModal.properties,
         shopId: { type: String, attribute: 'shop-id' },
-        categoryId: { attribute: false },
         product: { attribute: false },
         badgeDefs: { attribute: false },
         onSaved: { attribute: false },
         _name: { state: true },
         _price: { state: true },
-        _portion: { state: true },
+        _measure: { state: true },
+        _measureUnit: { state: true },
         _description: { state: true },
         _badges: { state: true },
         _photoFileId: { state: true },
-        _photoPreview: { state: true },
     };
 
     static override styles = [
@@ -96,7 +87,7 @@ export class ShopProductModal extends PlatformModal {
             .photo-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
             .photo-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2); }
             .fields { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-            .row2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-3); }
+            .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
             .desc-row { display: flex; flex-direction: column; gap: var(--space-2); }
             .desc-ai { align-self: flex-end; }
             .badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
@@ -109,25 +100,37 @@ export class ShopProductModal extends PlatformModal {
             }
             .bchip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
             .bchip svg { width: 13px; height: 13px; fill: currentColor; }
+            .notice {
+                display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+                padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--warning) 10%, transparent);
+                color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.45;
+            }
+            .notice span { flex: 1; min-width: 0; }
             .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
             @media (max-width: 560px) {
                 .top { grid-template-columns: 1fr; }
                 .photo-box { width: 100%; height: 160px; }
+                .row3 { grid-template-columns: 1fr 1fr; }
             }
         `,
     ];
 
     constructor() {
         super();
+        this.product = null;
+        this.badgeDefs = [];
+        this.onSaved = null;
         this._name = '';
         this._price = '';
-        this._portion = '';
+        this._measure = '';
+        this._measureUnit = 'g';
         this._description = '';
         this._badges = [];
         this._photoFileId = '';
-        this._photoPreview = '';
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
+        this._verifyOp = this.useOp('shop/product_verify');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
         this._aiGenerateOp = this.useOp('shop/ai_generate_photo');
@@ -139,26 +142,30 @@ export class ShopProductModal extends PlatformModal {
         if (typeof this.shopId !== 'string' || this.shopId.length === 0) {
             throw new Error('ShopProductModal: prop "shopId" required');
         }
+        if (!Array.isArray(this.badgeDefs)) {
+            throw new Error('ShopProductModal: prop "badgeDefs" must be an array');
+        }
         const p = this.product;
-        if (p !== null && p !== undefined) {
+        if (p !== null) {
             this._name = p.name;
             this._price = (p.price_minor / 100).toString();
-            this._portion = p.portion;
+            this._measure = p.measure === null ? '' : String(p.measure);
+            this._measureUnit = p.measure_unit;
             this._description = p.description;
             this._badges = [...p.badges];
-            this._photoFileId = p.photo_file_id ?? '';
-            this._photoPreview = p.photo_file_id !== null
-                ? `/shop/api/v1/files/download/${p.photo_file_id}`
-                : '';
+            this._photoFileId = p.photo_file_id === null ? '' : p.photo_file_id;
         }
     }
 
-    private get _editing(): boolean {
-        return this.product !== null && this.product !== undefined && typeof this.product.shop_product_id === 'string';
+    private get _saving(): boolean {
+        return this._createOp.busy || this._updateOp.busy;
     }
 
-    private _iconSvg(path: string) {
-        return unsafeHTML(`<svg viewBox="0 -960 960 960"><path d="${path}"/></svg>`);
+    private _measureValue(): number | null {
+        const text = this._measure.trim().replace(',', '.');
+        if (text === '') return null;
+        const value = Math.round(Number(text));
+        return Number.isFinite(value) && value > 0 ? value : null;
     }
 
     private _toggleBadge(key: string) {
@@ -167,159 +174,175 @@ export class ShopProductModal extends PlatformModal {
             : [...this._badges, key];
     }
 
-    private get _saving(): boolean {
-        return this._createOp.busy || this._updateOp.busy;
-    }
-
     private async _save() {
         const name = this._name.trim();
-        const price = Math.round(parseFloat(this._price.replace(',', '.')) * 100);
-        if (name === '' || !Number.isFinite(price) || price < 0 || this._saving) return;
-        let ok = true;
-        if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
-            const p = this.product;
-            const payload: Record<string, unknown> = {
+        const price = shopPriceMinor(this._price);
+        if (name === '' || price === null || this._saving) return;
+        const measure = this._measureValue();
+        const photo = this._photoFileId === '' ? null : this._photoFileId;
+        const p = this.product;
+        const saved = p === null
+            ? await this._createOp.run({
                 shop_id: this.shopId,
-                shop_product_id: p.shop_product_id,
-            };
-            if (name !== p.name) payload.name = name;
-            if (price !== p.price_minor) payload.price_minor = price;
-            if (this._portion !== p.portion) payload.portion = this._portion;
-            if (JSON.stringify(this._badges) !== JSON.stringify(p.badges)) payload.badges = this._badges;
-            if (this._description !== p.description) payload.description = this._description;
-            if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId === '' ? null : this._photoFileId;
-            if (Object.keys(payload).length > 2) ok = (await this._updateOp.run(payload)) !== null;
-        } else {
-            ok = (await this._createOp.run({
-                shop_id: this.shopId,
-                category_id: this.categoryId,
                 name,
                 description: this._description.trim(),
-                portion: this._portion.trim(),
+                measure,
+                measure_unit: this._measureUnit,
                 badges: this._badges,
                 price_minor: price,
-                photo_file_id: this._photoFileId === '' ? null : this._photoFileId,
-            })) !== null;
-        }
-        if (!ok) return;
-        this.onSaved?.();
+                photo_file_id: photo,
+            })
+            : await this._updateOp.run({
+                shop_id: this.shopId,
+                shop_product_id: p.shop_product_id,
+                name,
+                description: this._description,
+                measure,
+                measure_unit: this._measureUnit,
+                badges: this._badges,
+                price_minor: price,
+                photo_file_id: photo,
+            });
+        if (saved === null) return;
+        if (this.onSaved !== null) this.onSaved(saved);
+        this.close();
+    }
+
+    private async _verify() {
+        const p = this.product;
+        if (p === null) return;
+        const verified = await this._verifyOp.run({ shop_id: this.shopId, shop_product_id: p.shop_product_id });
+        if (verified !== null) this.product = verified;
+    }
+
+    private _openMerge() {
+        const p = this.product;
+        if (p === null) return;
+        this.openModal('shop.product_merge', { shopId: this.shopId, product: p });
         this.close();
     }
 
     private async _uploadPhoto(e: Event) {
-        const input = e.target as HTMLInputElement;
-        const file = input.files && input.files[0];
-        if (!file) return;
-        const params: { shopId: string; productId?: string } = { shopId: this.shopId };
-        if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
-            params.productId = this.product.shop_product_id;
-        }
-        const result = await this._uploadOp.run({
-            file,
-            spec: buildShopProductFileCreateSpecJson(params),
-        });
-        if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
-            const fileId = (result as { file_id?: unknown }).file_id;
-            if (typeof fileId === 'string') {
-                this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
-            }
-        }
+        const input = e.target;
+        if (!(input instanceof HTMLInputElement) || input.files === null) return;
+        const file = input.files[0];
+        if (file === undefined) return;
+        const p = this.product;
+        const spec = p === null
+            ? buildShopProductFileCreateSpecJson({ shopId: this.shopId })
+            : buildShopProductFileCreateSpecJson({ shopId: this.shopId, productId: p.shop_product_id });
+        const uploaded = await this._uploadOp.run({ file, spec });
         input.value = '';
+        if (uploaded === null) return;
+        const fileId = uploaded.file_id;
+        if (typeof fileId !== 'string' || fileId === '') {
+            throw new Error('ShopProductModal: platform/file_create must return result.file_id');
+        }
+        this._photoFileId = fileId;
     }
 
     private async _enhancePhoto() {
         if (this._photoFileId === '') return;
         const result = await this._aiEnhanceOp.run({ shop_id: this.shopId, file_id: this._photoFileId });
-        if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
-            const fileId = (result as { file_id?: unknown }).file_id;
-            if (typeof fileId === 'string') {
-                this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
-            }
-        }
+        if (result !== null) this._photoFileId = result.file_id;
     }
 
     private async _generatePhoto() {
         const name = this._name.trim();
         if (name === '') return;
         const result = await this._aiGenerateOp.run({ shop_id: this.shopId, name, description: this._description.trim() });
-        if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
-            const fileId = (result as { file_id?: unknown }).file_id;
-            if (typeof fileId === 'string') {
-                this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
-            }
-        }
+        if (result !== null) this._photoFileId = result.file_id;
     }
 
     private async _describeWithAi() {
         const name = this._name.trim();
         if (name === '') return;
         const result = await this._aiDescribeOp.run({ shop_id: this.shopId, name, category_name: null });
-        if (result !== null && typeof result === 'object' && 'text' in (result as Record<string, unknown>)) {
-            const text = (result as { text?: unknown }).text;
-            if (typeof text === 'string') this._description = text;
-        }
+        if (result !== null) this._description = result.text;
     }
 
     override renderHeader() {
-        return this._editing ? this.t('menu.product_edit') : this.t('menu.product_new');
+        return this.product === null ? this.t('product.title_new') : this.t('product.title_edit');
+    }
+
+    private _renderNotices(): TemplateResult | typeof nothing {
+        const p = this.product;
+        if (p === null) return nothing;
+        return html`
+            ${p.ai_unverified ? html`
+                <div class="notice">
+                    <platform-icon name="sparkle" size="14"></platform-icon>
+                    <span>${this.t('product.ai_unverified_hint')}</span>
+                    <platform-button size="sm" variant="secondary" ?loading=${this._verifyOp.busy}
+                        @click=${() => this._verify()}
+                    ><platform-icon name="badge-check" size="14"></platform-icon> ${this.t('product.verify')}</platform-button>
+                </div>` : nothing}
+            ${p.similar_shop_product_id !== null ? html`
+                <div class="notice">
+                    <platform-icon name="git-compare" size="14"></platform-icon>
+                    <span>${this.t('product.similar_hint')}</span>
+                    <platform-button size="sm" variant="secondary" @click=${() => this._openMerge()}
+                    >${this.t('product.merge')}</platform-button>
+                </div>` : nothing}
+        `;
     }
 
     override renderBody(): TemplateResult {
-        const badges = Array.isArray(this.badgeDefs) ? this.badgeDefs : [];
         return html`
             <div class="body">
+                ${this._renderNotices()}
                 <div class="top">
-                    <button class="photo-box" title=${this.t('menu.photo_pick')}
+                    <button class="photo-box" type="button" title=${this.t('product.photo_pick')}
                         ?disabled=${this._uploadOp.busy}
-                        @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#photo-input')?.click()}>
-                        ${this._photoPreview === ''
-                            ? html`<platform-icon name="image" size="24"></platform-icon><span>${this.t('menu.photo_pick')}</span>`
-                            : html`<img src=${this._photoPreview} alt="">`}
+                        @click=${() => { const input = this.renderRoot.querySelector<HTMLInputElement>('#photo-input'); if (input !== null) input.click(); }}>
+                        ${this._photoFileId === ''
+                            ? html`<platform-icon name="image" size="24"></platform-icon><span>${this.t('product.photo_pick')}</span>`
+                            : html`<img src=${shopFileUrl(this._photoFileId)} alt="">`}
                     </button>
                     <div class="fields">
-                        <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._name}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = _str(e); }}></platform-field>
-                        <div class="row2">
-                            <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._price}
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._price = _str(e); }}></platform-field>
-                            <platform-field type="string" mode="edit" label=${this.t('menu.field_portion')} .value=${this._portion}
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._portion = _str(e); }}></platform-field>
+                        <platform-field type="string" mode="edit" label=${this.t('product.field_name')} .value=${this._name}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = fieldText(e); }}></platform-field>
+                        <div class="row3">
+                            <platform-field type="number" mode="edit" label=${this.t('product.field_price')} .value=${this._price}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._price = fieldText(e); }}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('product.field_measure')} .value=${this._measure}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._measure = fieldText(e); }}></platform-field>
+                            <platform-field type="enum" mode="edit" label=${this.t('product.field_measure_unit')} .value=${this._measureUnit}
+                                .config=${{ values: MEASURE_UNITS.map((unit) => ({ value: unit, label: shopMeasureUnitLabel(unit, (key) => this.t(key)) })) }}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { if (isMeasureUnit(e.detail.value)) this._measureUnit = e.detail.value; }}></platform-field>
                         </div>
                     </div>
                     <div class="photo-actions">
-                        <input id="photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
+                        <input id="photo-input" type="file" accept="image/*" hidden @change=${(e: Event) => this._uploadPhoto(e)}>
                         ${this._photoFileId !== ''
                             ? html`<platform-button size="sm" variant="accent" ?loading=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
-                                  <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_enhance')}
+                                  <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('product.ai_enhance')}
                               </platform-button>`
                             : nothing}
                         <platform-button size="sm" variant="accent" ?loading=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
-                            title=${this.t('menu.ai_generate_hint')} @click=${() => this._generatePhoto()}>
-                            <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_generate')}
+                            title=${this.t('product.ai_generate_hint')} @click=${() => this._generatePhoto()}>
+                            <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('product.ai_generate')}
                         </platform-button>
                     </div>
                 </div>
                 <div class="desc-row">
-                    <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
-                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
+                    <platform-field type="text" mode="edit" label=${this.t('product.field_description')} .value=${this._description}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = fieldText(e); }}></platform-field>
                     <platform-button size="sm" variant="accent" class="desc-ai" ?loading=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
                         @click=${() => this._describeWithAi()}>
-                        <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}
+                        <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('product.ai_describe')}
                     </platform-button>
                 </div>
-                ${badges.length > 0
-                    ? html`<div class="badges">${badges.map((b) => html`
+                ${this.badgeDefs.length > 0
+                    ? html`<div class="badges">${this.badgeDefs.map((b) => html`
                           <button type="button" class="bchip ${this._badges.includes(b.key) ? 'on' : ''}"
-                              @click=${() => this._toggleBadge(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`)}</div>`
+                              @click=${() => this._toggleBadge(b.key)}>${shopBadgeSvg(b.icon_path)} ${b.label}</button>`)}</div>`
                     : nothing}
                 <div class="actions">
-                    <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>
+                    <platform-button variant="secondary" @click=${() => this.close()}>${this.t('product.cancel')}</platform-button>
                     <platform-button variant="primary" ?loading=${this._saving}
-                        ?disabled=${this._name.trim() === '' || this._price.trim() === ''}
-                        @click=${() => this._save()}>${this.t('menu.save')}</platform-button>
+                        ?disabled=${this._name.trim() === '' || shopPriceMinor(this._price) === null}
+                        @click=${() => this._save()}>${this.t('product.save')}</platform-button>
                 </div>
             </div>`;
     }

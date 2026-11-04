@@ -14,9 +14,11 @@ import json
 from apps.shop.config import ShopSettings
 from apps.shop.models import (
     Shop,
-    ShopCategory,
     ShopDomain,
     ShopDomainStatus,
+    ShopMenu,
+    ShopMenuItem,
+    ShopMenuSection,
     ShopProduct,
     ShopPromo,
     ShopStatus,
@@ -100,11 +102,27 @@ class StorefrontService:
         return snapshot
 
     async def build_snapshot(self, shop: Shop) -> JsonObject:
-        """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API."""
-        categories = await ShopCategory.list_by_shop_by_sort_asc(shop.shop_id)
-        products = await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
-        modifier_tree = await load_modifier_tree_by_sort_asc([p.shop_product_id for p in products])
+        """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API.
+
+        Активные меню по sort → разделы → позиции с итоговой ценой. ``sections``
+        идут в порядке меню, внутри меню — по sort; ``items`` — доступные позиции
+        с доступным блюдом каталога, ``id`` позиции — ``shop_menu_item_id``.
+        """
+        menus = await ShopMenu.list_active_by_shop_by_sort_asc(shop.shop_id)
+        products = {
+            p.shop_product_id: p
+            for p in await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
+        }
+        modifier_tree = await load_modifier_tree_by_sort_asc(list(products))
         promos = await ShopPromo.list_active_by_shop_by_priority_desc(shop.shop_id)
+        sections: list[ShopMenuSection] = []
+        listed: list[tuple[ShopMenuItem, ShopProduct]] = []
+        for menu in menus:
+            sections.extend(await ShopMenuSection.list_by_menu_by_sort_asc(menu.shop_menu_id))
+            for item in await ShopMenuItem.list_by_menu_by_sort_asc(menu.shop_menu_id):
+                product = products.get(item.shop_product_id)
+                if item.is_available and product is not None:
+                    listed.append((item, product))
         return {
             "slug": shop.slug,
             "name": shop.name,
@@ -160,27 +178,37 @@ class StorefrontService:
                 }
                 for ag in modifier_tree.get("__nested__", [])
             },
-            "categories": [
+            "menus": [{"id": m.shop_menu_id, "name": m.name} for m in menus],
+            "sections": [
                 {
-                    "id": c.shop_category_id,
-                    "parent_id": c.parent_id,
-                    "name": c.name,
-                    "sort": c.sort,
+                    "id": s.shop_menu_section_id,
+                    "menu_id": s.shop_menu_id,
+                    "parent_id": s.parent_id,
+                    "name": s.name,
+                    "sort": s.sort,
                 }
-                for c in categories
-                if c.is_active
+                for s in sections
             ],
-            "products": [
+            "items": [
                 {
-                    "id": p.shop_product_id,
-                    "category_id": p.category_id,
+                    "id": item.shop_menu_item_id,
+                    "product_id": p.shop_product_id,
+                    "section_id": item.shop_menu_section_id,
                     "name": p.name,
                     "description": p.description,
-                    "portion": p.portion,
+                    "measure": p.measure,
+                    "measure_unit": p.measure_unit.value,
+                    "ingredients": list(p.ingredients),
+                    "nutrition": None
+                    if p.nutrition is None
+                    else parse_json_object(p.nutrition.model_dump_json(), "shop nutrition"),
+                    "allergens": [a.value for a in p.allergens],
+                    "ai_unverified": p.ai_unverified,
                     "badges": list(p.badges),
-                    "price_minor": p.price_minor,
+                    "price_minor": item.effective_price_minor(p.price_minor),
                     "price_from_minor": min_price_minor(
-                        p, modifier_tree.get(p.shop_product_id, [])
+                        item.effective_price_minor(p.price_minor),
+                        modifier_tree.get(p.shop_product_id, []),
                     ),
                     "photo_file_id": p.photo_file_id,
                     "modifier_groups": [
@@ -208,7 +236,7 @@ class StorefrontService:
                         for ag in modifier_tree.get(p.shop_product_id, [])
                     ],
                 }
-                for p in products
+                for item, p in listed
             ],
         }
 

@@ -1,6 +1,6 @@
 """Auto-generated migration.
 
-Created: 2026-10-31 15:15:16
+Created: 2026-11-02 17:30:58
 """
 
 depends_on = None
@@ -8,6 +8,22 @@ depends_on = None
 
 def upgrade(ctx):
     """Apply migration."""
+    ctx.create_enum_type('modifier_group_kind_enum', [
+    'addon',
+    'remove'
+])
+    ctx.create_enum_type('modifier_price_mode_enum', [
+    'delta',
+    'absolute'
+])
+    ctx.create_enum_type('modifier_selection_mode_enum', [
+    'single',
+    'multi'
+])
+    ctx.create_enum_type('promo_stacking_enum', [
+    'all',
+    'exclusive'
+])
     ctx.create_enum_type('shop_delivery_type_enum', [
     'delivery',
     'pickup'
@@ -25,6 +41,16 @@ def upgrade(ctx):
     'bakery',
     'shop',
     'other'
+])
+    ctx.create_enum_type('shop_measure_unit_enum', [
+    'g',
+    'ml',
+    'pcs'
+])
+    ctx.create_enum_type('shop_menu_status_enum', [
+    'draft',
+    'active',
+    'archived'
 ])
     ctx.create_enum_type('shop_order_source_enum', [
     'web',
@@ -351,6 +377,21 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
+                'name': 'badges',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
                 'name': 'status',
                 'column_type': {
                     'kind': 'enum',
@@ -389,6 +430,38 @@ def upgrade(ctx):
             },
             {
                 'name': 'telegram_bind_token_hash',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 128
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 128,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'telegram_bot_token',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 128
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 128,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'telegram_webhook_secret',
                 'column_type': {
                     'kind': 'string',
                     'length': 128
@@ -519,6 +592,211 @@ def upgrade(ctx):
         ],
     )
     ctx.create_table(
+        "shop_promos",
+        fields=[
+            {
+                'name': 'shop_promo_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 200
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 200,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'is_active',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'TRUE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'priority',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'stacking',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'promo_stacking_enum',
+                    'values': [
+                        'all',
+                        'exclusive'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'all'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'active_window',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'condition',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'action',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_promos_shop_id_is_active_sort_idx',
+                'fields': [
+                    'shop_id',
+                    'is_active',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
         "shop_products",
         fields=[
             {
@@ -554,22 +832,6 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
-                'name': 'category_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
                 'name': 'name',
                 'column_type': {
                     'kind': 'string',
@@ -595,6 +857,102 @@ def upgrade(ctx):
                 'primary_key': False,
                 'unique': False,
                 'default': "''",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'measure',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'measure_unit',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'shop_measure_unit_enum',
+                    'values': [
+                        'g',
+                        'ml',
+                        'pcs'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'g'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'ingredients',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'nutrition',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'allergens',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'badges',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
                 'auto_increment': False,
                 'max_length': None,
                 'max_digits': None,
@@ -647,6 +1005,37 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
+                'name': 'ai_unverified',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'similar_shop_product_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
                 'name': 'sort',
                 'column_type': {
                     'kind': 'big_integer'
@@ -694,10 +1083,9 @@ def upgrade(ctx):
         ],
         indexes=[
             {
-                'name': 'shop_products_shop_id_category_id_sort_idx',
+                'name': 'shop_products_shop_id_sort_idx',
                 'fields': [
                     'shop_id',
-                    'category_id',
                     'sort'
                 ],
                 'unique': False,
@@ -713,6 +1101,25 @@ def upgrade(ctx):
                 'method': None
             }
         ],
+    )
+    # Oxyde create_table не собирает составной PRIMARY KEY из двух db_pk —
+    # два отдельных PRIMARY KEY падают в Postgres.
+    ctx.execute(
+        "CREATE TABLE shop_product_modifier_groups ("
+        "product_id varchar(64) NOT NULL, "
+        "group_id varchar(64) NOT NULL, "
+        "sort bigint NOT NULL DEFAULT 0, "
+        "min_selected bigint NULL, "
+        "max_selected bigint NULL, "
+        "PRIMARY KEY (product_id, group_id))"
+    )
+    ctx.execute(
+        "CREATE INDEX shop_product_modifier_groups_product_id_sort_idx "
+        "ON shop_product_modifier_groups (product_id, sort)"
+    )
+    ctx.execute(
+        "CREATE INDEX shop_product_modifier_groups_group_id_idx "
+        "ON shop_product_modifier_groups (group_id)"
     )
     ctx.create_table(
         "shop_orders",
@@ -889,6 +1296,21 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
+                'name': 'discount_minor',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
                 'name': 'delivery_fee_minor',
                 'column_type': {
                     'kind': 'big_integer'
@@ -909,6 +1331,21 @@ def upgrade(ctx):
                     'kind': 'big_integer'
                 },
                 'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'promos',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
                 'nullable': False,
                 'primary_key': False,
                 'unique': False,
@@ -1106,6 +1543,22 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
+                'name': 'shop_menu_item_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
                 'name': 'name_snapshot',
                 'column_type': {
                     'kind': 'string',
@@ -1150,6 +1603,36 @@ def upgrade(ctx):
                 'max_length': None,
                 'max_digits': None,
                 'decimal_places': None
+            },
+            {
+                'name': 'discount_minor',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'modifiers',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
             }
         ],
         indexes=[
@@ -1157,6 +1640,828 @@ def upgrade(ctx):
                 'name': 'shop_order_items_order_id_idx',
                 'fields': [
                     'order_id'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "shop_modifier_options",
+        fields=[
+            {
+                'name': 'shop_modifier_option_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'group_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 200
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 200,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'price_minor',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'is_default',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'is_available',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'TRUE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'max_per_option',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '1',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'nested_group_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'external_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 128
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 128,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_modifier_options_group_id_sort_idx',
+                'fields': [
+                    'group_id',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "shop_modifier_groups",
+        fields=[
+            {
+                'name': 'shop_modifier_group_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 200
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 200,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'description',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 500
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "''",
+                'auto_increment': False,
+                'max_length': 500,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'kind',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'modifier_group_kind_enum',
+                    'values': [
+                        'addon',
+                        'remove'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'addon'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'selection_mode',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'modifier_selection_mode_enum',
+                    'values': [
+                        'single',
+                        'multi'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'multi'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'min_selected',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'max_selected',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'price_mode',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'modifier_price_mode_enum',
+                    'values': [
+                        'delta',
+                        'absolute'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'delta'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'is_active',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'TRUE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_modifier_groups_shop_id_sort_idx',
+                'fields': [
+                    'shop_id',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "shop_menus",
+        fields=[
+            {
+                'name': 'shop_menu_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 200
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 200,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'status',
+                'column_type': {
+                    'kind': 'enum',
+                    'name': 'shop_menu_status_enum',
+                    'values': [
+                        'draft',
+                        'active',
+                        'archived'
+                    ]
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "'draft'",
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_menus_shop_id_status_sort_idx',
+                'fields': [
+                    'shop_id',
+                    'status',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "shop_menu_sections",
+        fields=[
+            {
+                'name': 'shop_menu_section_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_menu_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'parent_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 200
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 200,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_menu_sections_shop_menu_id_parent_id_sort_idx',
+                'fields': [
+                    'shop_menu_id',
+                    'parent_id',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "shop_menu_items",
+        fields=[
+            {
+                'name': 'shop_menu_item_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_menu_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_menu_section_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'shop_product_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'price_minor_override',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'is_available',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'TRUE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'sort',
+                'column_type': {
+                    'kind': 'big_integer'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': '0',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'shop_menu_items_shop_menu_id_shop_menu_section_id_sort_idx',
+                'fields': [
+                    'shop_menu_id',
+                    'shop_menu_section_id',
+                    'sort'
+                ],
+                'unique': False,
+                'method': None
+            },
+            {
+                'name': 'shop_menu_items_shop_product_id_idx',
+                'fields': [
+                    'shop_product_id'
                 ],
                 'unique': False,
                 'method': None
@@ -1335,143 +2640,31 @@ def upgrade(ctx):
             }
         ],
     )
-    ctx.create_table(
-        "shop_categories",
-        fields=[
-            {
-                'name': 'shop_category_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': True,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'shop_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'name',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 200
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 200,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'sort',
-                'column_type': {
-                    'kind': 'big_integer'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': '0',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'is_active',
-                'column_type': {
-                    'kind': 'boolean'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': 'TRUE',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'created_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'updated_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            }
-        ],
-        indexes=[
-            {
-                'name': 'shop_categories_shop_id_sort_idx',
-                'fields': [
-                    'shop_id',
-                    'sort'
-                ],
-                'unique': False,
-                'method': None
-            }
-        ],
-    )
 
 
 def downgrade(ctx):
     """Revert migration."""
-    ctx.drop_table("shop_categories")
     ctx.drop_table("shop_domains")
+    ctx.drop_table("shop_menu_items")
+    ctx.drop_table("shop_menu_sections")
+    ctx.drop_table("shop_menus")
+    ctx.drop_table("shop_modifier_groups")
+    ctx.drop_table("shop_modifier_options")
     ctx.drop_table("shop_order_items")
     ctx.drop_table("shop_orders")
+    ctx.drop_table("shop_product_modifier_groups")
     ctx.drop_table("shop_products")
+    ctx.drop_table("shop_promos")
     ctx.drop_table("shop_shops")
     ctx.drop_enum_type('shop_status_enum')
     ctx.drop_enum_type('shop_order_status_enum')
     ctx.drop_enum_type('shop_order_source_enum')
+    ctx.drop_enum_type('shop_menu_status_enum')
+    ctx.drop_enum_type('shop_measure_unit_enum')
     ctx.drop_enum_type('shop_kind_enum')
     ctx.drop_enum_type('shop_domain_status_enum')
     ctx.drop_enum_type('shop_delivery_type_enum')
+    ctx.drop_enum_type('promo_stacking_enum')
+    ctx.drop_enum_type('modifier_selection_mode_enum')
+    ctx.drop_enum_type('modifier_price_mode_enum')
+    ctx.drop_enum_type('modifier_group_kind_enum')

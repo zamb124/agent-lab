@@ -90,3 +90,61 @@ class PromoStacking(StrEnum):
     EXCLUSIVE = "exclusive"
 
 
+class ShopMenuStatus(StrEnum):
+    """Жизненный цикл меню заведения."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class ShopMeasureUnit(StrEnum):
+    """Единица выхода блюда (как у Яндекс Еды)."""
+
+    G = "g"
+    ML = "ml"
+    PCS = "pcs"
+
+
+class ShopAllergen(StrEnum):
+    """Фиксированный набор аллергенов для карточки блюда."""
+
+    GLUTEN = "gluten"
+    DAIRY = "dairy"
+    EGG = "egg"
+    FISH = "fish"
+    SHELLFISH = "shellfish"
+    NUTS = "nuts"
+    PEANUTS = "peanuts"
+    SOY = "soy"
+    SESAME = "sesame"
+    MUSTARD = "mustard"
+    CELERY = "celery"
+    LUPIN = "lupin"
+    MOLLUSCS = "molluscs"
+    SULPHITES = "sulphites"
+
+
+class ShopMenuImportTarget(StrEnum):
+    """Куда писать результат импорта меню."""
+
+    CATALOG = "catalog"
+    NEW_MENU = "new_menu"
+    INTO_MENU = "into_menu"
+
+
+class ShopMenuImportMode(StrEnum):
+    """Режим агента shop_menu_agent в WorkItem.variables.mode."""
+
+    IMPORT = "import"
+    TEMPLATE = "template"
+    ENRICH = "enrich"
+
+
+class ShopMenuFileFormat(StrEnum):
+    """Формат файлового импорта меню."""
+
+    XLSX = "xlsx"
+    YANDEX_JSON = "yandex_json"
+
+

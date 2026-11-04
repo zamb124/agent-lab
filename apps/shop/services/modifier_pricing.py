@@ -20,7 +20,6 @@ from apps.shop.models.api import ShopOrderItemSelection
 from apps.shop.models.enums import ModifierPriceMode, ModifierSelectionMode
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
-from apps.shop.models.product import ShopProduct
 from apps.shop.models.product_modifier_group import ShopProductModifierGroup
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 
@@ -157,7 +156,7 @@ def _validate_group(
 
 
 def validate_and_price(
-    product: ShopProduct,
+    base_price_minor: int,
     selections: list[ShopOrderItemSelection],
     attached: list[AttachedGroup],
     nested: dict[str, AttachedGroup],
@@ -166,6 +165,7 @@ def validate_and_price(
 ) -> tuple[int, list[dict[str, object]]]:
     """Проверяет выбор и возвращает (unit_price_minor, modifiers_snapshot).
 
+    ``base_price_minor`` — итоговая цена позиции меню без модификаторов.
     ``unit_price`` — итог за единицу с модификаторами. Снапшот —
     список ``{group_name, option_name, price_minor, qty}`` для кухни/чека.
     """
@@ -213,11 +213,11 @@ def validate_and_price(
             )
     for gid in activated:
         _validate_group(nested[gid], picked, snapshot, sums)
-    base = sums["absolute"] if sums["absolute"] else product.price_minor
+    base = sums["absolute"] if sums["absolute"] else base_price_minor
     return base + sums["delta"], snapshot
 
 
-def min_price_minor(product: ShopProduct, attached: list[AttachedGroup]) -> int:
+def min_price_minor(base_price_minor: int, attached: list[AttachedGroup]) -> int:
     """Минимальная валидная цена «от N ₽» для карточки на витрине."""
     absolute_min: list[int] = []
     delta_min = 0
@@ -231,5 +231,5 @@ def min_price_minor(product: ShopProduct, attached: list[AttachedGroup]) -> int:
             absolute_min.append(available[0] * ag.min_selected)
         else:
             delta_min += sum(available[: ag.min_selected])
-    base = sum(absolute_min) if absolute_min else product.price_minor
+    base = sum(absolute_min) if absolute_min else base_price_minor
     return base + delta_min

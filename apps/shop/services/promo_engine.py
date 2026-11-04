@@ -34,10 +34,13 @@ def _as_int(v: JsonValue) -> int:
 
 @dataclass
 class CartLine:
-    """Входная строка корзины (уже с модификаторами в unit_minor)."""
+    """Входная строка корзины (уже с модификаторами в unit_minor).
+
+    ``section_id`` — ``shop_menu_section_id`` позиции меню, из которой взята строка.
+    """
 
     product_id: str
-    category_id: str | None
+    section_id: str
     qty: int
     unit_minor: int
 
@@ -46,7 +49,7 @@ class CartLine:
 class _Unit:
     line_idx: int
     product_id: str
-    category_id: str | None
+    section_id: str
     unit_minor: int
     locked: bool = False
 
@@ -123,10 +126,10 @@ def _condition_met(
         return len(_scope(units, condition.get("product_ids"))) >= n
     if ctype == "min_total":
         return subtotal_minor >= _as_int(condition.get("minor", 0))
-    if ctype == "category_qty":
-        cat = condition.get("category_id")
+    if ctype == "section_qty":
+        section_id = condition.get("shop_menu_section_id")
         n = _as_int(condition.get("n", 0))
-        return len([u for u in units if not u.locked and u.category_id == cat]) >= n
+        return len([u for u in units if not u.locked and u.section_id == section_id]) >= n
     if ctype == "items_present":
         ids = condition.get("product_ids")
         if not isinstance(ids, list):
@@ -226,7 +229,7 @@ def evaluate(
     отсортированы по priority/sort на уровне запроса.
     """
     units = [
-        _Unit(idx, line.product_id, line.category_id, line.unit_minor)
+        _Unit(idx, line.product_id, line.section_id, line.unit_minor)
         for idx, line in enumerate(lines)
         for _ in range(line.qty)
     ]

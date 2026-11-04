@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import (
+    API_PREFIX,
+    PUBLIC_PREFIX,
+    make_active_menu_item,
+    make_product,
+)
 
 _SHOPS = f"{API_PREFIX}/shops"
 
@@ -19,7 +24,6 @@ class TestWorkerTopology:
 
     def test_shop_task_specs_declared(self) -> None:
         from apps.shop.tasks.task_names import (
-            SHOP_AI_DESCRIBE_BATCH,
             SHOP_NOTIFY_ORDER,
             SHOP_PROVISION_DOMAIN,
             SHOP_REBUILD_AGGREGATE,
@@ -28,7 +32,6 @@ class TestWorkerTopology:
         )
 
         for spec in (
-            SHOP_AI_DESCRIBE_BATCH,
             SHOP_REBUILD_STOREFRONT,
             SHOP_NOTIFY_ORDER,
             SHOP_PROVISION_DOMAIN,
@@ -88,10 +91,10 @@ class TestAggregate:
             )
             shop = resp.json()
             await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-            await shop_client.post(
-                f"{_SHOPS}/{shop['shop_id']}/products",
-                json={"name": f"Суши сет {suffix}", "price_minor": 1000 * (i + 1)},
+            product = await make_product(
+                shop_client, shop["shop_id"], f"Суши сет {suffix}", 1000 * (i + 1)
             )
+            await make_active_menu_item(shop_client, shop["shop_id"], product["shop_product_id"])
         resp = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/aggregate/search", params={"q": "Суши сет"}
         )
@@ -123,10 +126,10 @@ class TestAggregate:
             _SHOPS, json={"slug": slug, "name": "DraftRest"}
         )
         shop = resp.json()
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": f"УникПродукт{unique_id[:6]}", "price_minor": 100},
+        product = await make_product(
+            shop_client, shop["shop_id"], f"УникПродукт{unique_id[:6]}", 100
         )
+        await make_active_menu_item(shop_client, shop["shop_id"], product["shop_product_id"])
         resp = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/aggregate/search",
             params={"q": f"УникПродукт{unique_id[:6]}"},
@@ -135,6 +138,24 @@ class TestAggregate:
         assert all(
             item["shop_slug"] != slug for item in resp.json()["items"]
         )
+
+    async def test_search_excludes_products_outside_active_menus(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Блюдо каталога без позиции активного меню в агрегатор не попадает."""
+        slug = f"nomenu-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "NoMenuRest", "kind": "restaurant"}
+        )
+        shop = resp.json()
+        await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        marker = f"ВнеМеню{unique_id[:6]}"
+        await make_product(shop_client, shop["shop_id"], marker, 100)
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/aggregate/search", params={"q": marker}
+        )
+        assert resp.status_code == 200, resp.text
+        assert [i for i in resp.json()["items"] if i["shop_slug"] == slug] == []
 
     async def test_search_matches_description_and_typos(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -147,14 +168,14 @@ class TestAggregate:
         shop = resp.json()
         await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
         marker = unique_id[:6]
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={
-                "name": f"Суп дня {marker}",
-                "price_minor": 100,
-                "description": f"с пампушками {marker} и сметаной",
-            },
+        product = await make_product(
+            shop_client,
+            shop["shop_id"],
+            f"Суп дня {marker}",
+            100,
+            description=f"с пампушками {marker} и сметаной",
         )
+        await make_active_menu_item(shop_client, shop["shop_id"], product["shop_product_id"])
         by_desc = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/aggregate/search",
             params={"q": f"пампушками {marker}"},

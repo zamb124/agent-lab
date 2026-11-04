@@ -50,7 +50,13 @@ async def ensure_runet_platform_seeded() -> None:
                 )
             )
         except IntegrityError:
-            pass
+            if (
+                await SearchIndexDefinition.by_search_index_id(
+                    SYSTEM_COMPANY_ID, RUNET_SEARCH_INDEX_ID
+                )
+                is None
+            ):
+                raise
     profile = await CrawlProfile.objects.filter(
         crawl_profile_id=RUNET_PLATFORM_CRAWL_PROFILE_ID
     ).get_or_none()
@@ -65,7 +71,13 @@ async def ensure_runet_platform_seeded() -> None:
                 )
             )
         except IntegrityError:
-            pass
+            if (
+                await CrawlProfile.objects.filter(
+                    crawl_profile_id=RUNET_PLATFORM_CRAWL_PROFILE_ID
+                ).get_or_none()
+                is None
+            ):
+                raise
 
 
 class CrawlBootstrapService:

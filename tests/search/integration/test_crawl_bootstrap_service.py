@@ -141,23 +141,12 @@ async def test_bootstrap_disabled_does_not_queue_seed(
 async def test_bootstrap_seeds_platform_profile_when_missing(
     search_di,
     search_system_context,
-    monkeypatch,
 ):
     _ = search_di, search_system_context
-    queued: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
-
-    async def _capture_enqueue(task: TaskSpec | str, *args: object, **kwargs: object) -> None:
-        queued.append((taskiq_task_name(task), args, kwargs))
-
-    monkeypatch.setattr(
-        "apps.search.services.crawl.bootstrap_service.enqueue",
-        _capture_enqueue,
-    )
-
     bootstrap = CrawlBootstrapService(
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id="runet_platform",
-            bootstrap_tranco_on_empty=True,
+            bootstrap_tranco_on_empty=False,
             tranco_seed_limit=5,
         ),
     )

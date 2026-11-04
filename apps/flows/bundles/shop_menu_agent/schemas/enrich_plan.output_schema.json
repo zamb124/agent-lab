@@ -1,0 +1,89 @@
+{
+  "type": "object",
+  "properties": {
+    "updates": {
+      "type": "array",
+      "description": "Обогащение по блюдам; пустой массив только вместе с failure_reason",
+      "items": {
+        "type": "object",
+        "properties": {
+          "shop_product_id": { "type": "string", "description": "Блюдо из переданного списка" },
+          "description": {
+            "type": ["string", "null"],
+            "description": "Только если описание блюда пустое; иначе null"
+          },
+          "measure": {
+            "type": ["integer", "null"],
+            "description": "Только если выход не задан; иначе null"
+          },
+          "measure_unit": {
+            "type": ["string", "null"],
+            "enum": ["g", "ml", "pcs", null],
+            "description": "Единица для measure; null вместе с measure"
+          },
+          "ingredients": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Только если состав пустой; иначе null"
+          },
+          "nutrition": {
+            "anyOf": [
+              {
+                "type": "object",
+                "description": "Ориентировочное КБЖУ на 100 г",
+                "properties": {
+                  "calories_kcal": { "type": "number" },
+                  "proteins_g": { "type": "number" },
+                  "fats_g": { "type": "number" },
+                  "carbs_g": { "type": "number" }
+                },
+                "required": ["calories_kcal", "proteins_g", "fats_g", "carbs_g"],
+                "additionalProperties": false
+              },
+              { "type": "null" }
+            ]
+          },
+          "allergens": {
+            "type": ["array", "null"],
+            "description": "Только если аллергены не заданы; иначе null",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gluten",
+                "dairy",
+                "egg",
+                "fish",
+                "shellfish",
+                "nuts",
+                "peanuts",
+                "soy",
+                "sesame",
+                "mustard",
+                "celery",
+                "lupin",
+                "molluscs",
+                "sulphites"
+              ]
+            }
+          }
+        },
+        "required": [
+          "shop_product_id",
+          "description",
+          "measure",
+          "measure_unit",
+          "ingredients",
+          "nutrition",
+          "allergens"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "failure_reason": {
+      "type": "string",
+      "description": "Пустая строка при успехе; иначе короткая причина для менеджера"
+    }
+  },
+  "required": ["updates", "failure_reason"],
+  "additionalProperties": false
+}

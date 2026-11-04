@@ -6,7 +6,7 @@
 (детерминизм применения). Новые механики добавляются типами в JSONB,
 без миграций схемы.
 
-Condition types: ``always``, ``min_qty``, ``min_total``, ``category_qty``,
+Condition types: ``always``, ``min_qty``, ``min_total``, ``section_qty``,
 ``items_present``.
 Action types: ``percent_items``, ``amount_order``, ``percent_order``,
 ``fixed_bundle_price``, ``n_plus_m_free``, ``free_delivery``.

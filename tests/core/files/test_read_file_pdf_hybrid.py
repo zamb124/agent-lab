@@ -16,8 +16,6 @@ from tests.core.files.corpus.read_helpers import store_corpus_in_files_service
 from tests.fixtures.s3 import require_s3_configured
 
 _MOCK_VISION = "MOCK_VISION"
-_TEXT_MARKER = "Hello PDF text marker"
-_TEXT_AND_IMAGE_PDF = Path(__file__).parent / "fixtures" / "pdf_text_and_image.pdf"
 
 
 def _state_with(file_ref: FileRef) -> ExecutionState:
@@ -90,29 +88,38 @@ async def test_read_file_pdf_text_only_stays_text_lane(
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(300)
-@pytest.mark.usefixtures("file_reader_billing_service")
-async def test_read_file_pdf_text_and_embedded_image_merged(
+async def test_read_file_pdf_text_and_embedded_image_markdown_refs(
     mock_llm_with_queue,
 ) -> None:
+    """Usable text + embedded image: TEXT lane, markdown якоря; без auto-OCR nested."""
+    import tempfile
+    from pathlib import Path
+
+    from core.files.reader.engine import read_files_to_envelope
+    from core.files.reader.models import ReadFileArgs
+    from tests.core.files.golden.bytes import pdf_text_and_embedded_image
+
+    marker = "Hello PDF text marker"
+    raw = pdf_text_and_embedded_image(marker)
+    path = Path(tempfile.mkdtemp()) / "text_and_image.pdf"
+    path.write_bytes(raw)
     file_ref = FileRef(
-        original_name=_TEXT_AND_IMAGE_PDF.name,
-        url=str(_TEXT_AND_IMAGE_PDF),
+        original_name=path.name,
+        url=str(path),
         content_type="application/pdf",
-        file_size=_TEXT_AND_IMAGE_PDF.stat().st_size,
+        file_size=len(raw),
     )
     mock_llm_with_queue([_MOCK_VISION])
-    state = _state_with(file_ref)
-
-    payload = require_json_object(
-        await read_file.run({"names": [file_ref.original_name]}, state),
-        "read_file.text_and_image",
+    envelope = await read_files_to_envelope(
+        [file_ref],
+        ReadFileArgs(names=[file_ref.original_name]),
+        tool_name="read_file",
     )
-    files = require_json_array(payload["files"], "read_file.text_and_image.files")
-    file_result = require_json_object(files[0], "read_file.text_and_image.files[0]")
-    assert file_result["success"] is True
-    assert file_result["read_lane"] == ReadLane.HYBRID.value
-    results = require_json_array(file_result["results"], "read_file.text_and_image.results")
-    merged = str(require_json_object(results[0], "read_file.text_and_image.results[0]")["result"])
-    assert _TEXT_MARKER in merged
-    assert _MOCK_VISION in merged
-    assert "[image 1]" in merged
+    file_result = envelope.files[0]
+    assert file_result.success is True
+    assert file_result.read_lane is ReadLane.TEXT
+    merged = file_result.results[0].result
+    assert marker in merged
+    assert _MOCK_VISION not in merged
+    assert "![" in merged
+    assert len(file_result.nested) >= 1

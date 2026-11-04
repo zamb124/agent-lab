@@ -65,6 +65,12 @@ class ShopSettings(BaseSettings):
         default=10,
         description="Заказов в минуту с одного IP на витрину (Redis-счётчик).",
     )
+    similar_name_threshold: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Порог pg_trgm similarity названия: новое блюдо с похожим именем получает similar_shop_product_id.",
+    )
     telegram_bot_token: str = Field(
         default="",
         description="Токен платформенного Telegram-бота shop для уведомлений владельцам; секрет через env/conf.local.",

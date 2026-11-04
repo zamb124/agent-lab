@@ -20,6 +20,7 @@ SHOP_SHOP_CREATED = "shop/shop/created"
 SHOP_SHOP_UPDATED = "shop/shop/updated"
 SHOP_SHOP_PUBLISHED = "shop/shop/published"
 SHOP_CATALOG_CHANGED = "shop/catalog/changed"
+SHOP_MENU_UPDATED = "shop/menu/updated"
 SHOP_ORDER_CREATED = "shop/order/created"
 SHOP_ORDER_STATUS_CHANGED = "shop/order/status_changed"
 
@@ -37,6 +38,13 @@ class ShopCatalogChangedEventPayload(BaseModel):
 
     shop_id: str
     slug: str
+
+
+class ShopMenuUpdatedEventPayload(BaseModel):
+    """Payload `shop/menu/updated` — меню, его разделы или позиции изменились."""
+
+    shop_id: str
+    shop_menu_id: str
 
 
 class ShopOrderEventPayload(BaseModel):
@@ -69,6 +77,11 @@ register_platform_event(
     SHOP_CATALOG_CHANGED,
     ShopCatalogChangedEventPayload,
     description="Изменился каталог магазина shop: снапшот витрины инвалидирован.",
+)
+register_platform_event(
+    SHOP_MENU_UPDATED,
+    ShopMenuUpdatedEventPayload,
+    description="Изменилось меню заведения shop: статус, разделы или позиции.",
 )
 register_platform_event(
     SHOP_ORDER_CREATED,
@@ -116,6 +129,15 @@ async def publish_shop_catalog_changed(
     )
 
 
+async def publish_shop_menu_updated(shop_id: str, shop_menu_id: str, company_id: str) -> None:
+    payload = ShopMenuUpdatedEventPayload(shop_id=shop_id, shop_menu_id=shop_menu_id)
+    await publish_event_to_company(
+        company_id=company_id,
+        type=SHOP_MENU_UPDATED,
+        payload=payload.model_dump(mode="json"),
+    )
+
+
 async def publish_shop_order_event(
     event_type: str,
     shop_id: str,
@@ -143,15 +165,18 @@ async def publish_shop_order_event(
 
 __all__ = [
     "SHOP_CATALOG_CHANGED",
+    "SHOP_MENU_UPDATED",
     "SHOP_ORDER_CREATED",
     "SHOP_ORDER_STATUS_CHANGED",
     "SHOP_SHOP_CREATED",
     "SHOP_SHOP_PUBLISHED",
     "SHOP_SHOP_UPDATED",
     "ShopCatalogChangedEventPayload",
+    "ShopMenuUpdatedEventPayload",
     "ShopOrderEventPayload",
     "ShopShopEventPayload",
     "publish_shop_catalog_changed",
     "publish_shop_event",
+    "publish_shop_menu_updated",
     "publish_shop_order_event",
 ]

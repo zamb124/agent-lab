@@ -23,6 +23,7 @@ from core.worktracker.models.types import (
     FlowSessionLink,
     QueueAssignment,
     RagDocumentLink,
+    ShopLink,
     StockLocationLink,
     StockTransferLink,
     SyncMessageLink,
@@ -37,6 +38,7 @@ from core.worktracker.models.types import (
     WorkItemInteractionPolicy,
     WorkItemInteractionSpec,
     WorkItemKind,
+    WorkItemLinkKind,
     WorkItemPriority,
     WorkItemResolution,
     WorkItemState,
@@ -83,6 +85,7 @@ class WorkItem(PlatformModel):
         | CalendarEventLink
         | StockTransferLink
         | StockLocationLink
+        | ShopLink
         | WorkItemToWorkItemLink
     ] = DbField(default_factory=list, db_type="JSONB")
     variables: VariableMap = DbField(default_factory=dict, db_type="JSONB")
@@ -216,6 +219,38 @@ class WorkItem(PlatformModel):
         if isinstance(total, bool) or not isinstance(total, int):
             raise TypeError("work_item count must be int")
         return total
+
+    @classmethod
+    async def list_open_for_shop_by_created_at_desc(
+        cls, company_id: str, shop_id: str, *, limit: int = 50
+    ) -> list[WorkItem]:
+        """Нетерминальные задачи компании с ShopLink(shop_id), ORDER BY created_at DESC, не больше limit."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        sql = work_item_sql(
+            company_id,
+            board_id=None,
+            namespace=None,
+            kind=None,
+            state=None,
+            work_queue_id=None,
+            assignee_user_id=None,
+            assignee_flow_id=None,
+            exclude_terminal=True,
+            queue_unclaimed_only=False,
+            work_queue_ids=None,
+        )
+        link_json = sql.add(
+            json.dumps([{"link_kind": WorkItemLinkKind.SHOP.value, "shop_id": shop_id}])
+        )
+        sql.clauses.append(f"links @> {link_json}::jsonb")
+        sql.params.append(limit)
+        query = (
+            "SELECT row_to_json(work_items) AS item FROM work_items "
+            + f"WHERE {sql.where()} ORDER BY created_at DESC LIMIT ${len(sql.params)}"
+        )
+        rows = await execute_raw(query, sql.params, using="worktracker")
+        return [_work_item_from_row(row) for row in rows]
 
     @classmethod
     async def any_by_correlation_id(

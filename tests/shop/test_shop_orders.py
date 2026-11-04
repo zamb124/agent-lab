@@ -6,41 +6,21 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import (
+    API_PREFIX,
+    PUBLIC_PREFIX,
+    make_active_menu_item,
+    make_product,
+    make_shop,
+    shop_with_sellable_item,
+)
 
 _SHOPS = f"{API_PREFIX}/shops"
 
 
-async def _shop_with_product(
-    client: AsyncClient, slug: str, *, delivery_fee: int = 0
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    resp = await client.post(
-        _SHOPS,
-        json={
-            "slug": slug,
-            "name": f"Shop {slug}",
-            "kind": "restaurant",
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    shop = resp.json()
-    if delivery_fee:
-        resp = await client.patch(
-            f"{_SHOPS}/{shop['shop_id']}", json={"delivery_fee_minor": delivery_fee}
-        )
-        assert resp.status_code == 200
-    await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-    resp = await client.post(
-        f"{_SHOPS}/{shop['shop_id']}/products",
-        json={"name": "Маргарита", "price_minor": 50000},
-    )
-    assert resp.status_code == 200, resp.text
-    return shop, resp.json()
-
-
-def _order_body(product_id: str, **overrides: Any) -> dict[str, Any]:
+def _order_body(shop_menu_item_id: str, **overrides: Any) -> dict[str, Any]:
     return {
-        "items": [{"product_id": product_id, "qty": 2}],
+        "items": [{"shop_menu_item_id": shop_menu_item_id, "qty": 2}],
         "customer_name": "Иван",
         "customer_phone": "+79991112233",
         "delivery_type": "pickup",
@@ -53,13 +33,13 @@ class TestOrderCreate:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"ord-{unique_id[:8]}"
-        shop, product = await _shop_with_product(
+        _, _, item = await shop_with_sellable_item(
             shop_client, slug, delivery_fee=30000
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 delivery_type="delivery",
                 address="ул. Ленина, 1",
             ),
@@ -75,8 +55,8 @@ class TestOrderCreate:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"idem-{unique_id[:8]}"
-        _, product = await _shop_with_product(shop_client, slug)
-        body = _order_body(product["shop_product_id"], idempotency_key=f"k-{unique_id}")
+        _, _, item = await shop_with_sellable_item(shop_client, slug)
+        body = _order_body(item["shop_menu_item_id"], idempotency_key=f"k-{unique_id}")
         first = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=body
@@ -97,11 +77,11 @@ class TestOrderCreate:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"st-{unique_id[:8]}"
-        _, product = await _shop_with_product(shop_client, slug)
+        _, _, item = await shop_with_sellable_item(shop_client, slug)
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"]),
+                json=_order_body(item["shop_menu_item_id"]),
             )
         ).json()
         status = await shop_public_client.get(
@@ -114,29 +94,57 @@ class TestOrderCreate:
     async def test_order_on_draft_shop_rejected(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
+        """Черновик заведения не принимает заказы даже на позицию активного меню."""
         slug = f"drord-{unique_id[:8]}"
-        resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "Draft"}
-        )
-        shop = resp.json()
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "X", "price_minor": 100},
+        shop = await make_shop(shop_client, slug, name="Draft")
+        product = await make_product(shop_client, shop["shop_id"], "X", 100)
+        _, _, item = await make_active_menu_item(
+            shop_client, shop["shop_id"], product["shop_product_id"]
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body("whatever"),
+            json=_order_body(item["shop_menu_item_id"]),
         )
         assert resp.status_code == 404
+
+    async def test_item_of_draft_menu_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Позиция меню, снятого в черновик, в заказ не берётся: menu_item_not_found."""
+        slug = f"drmenu-{unique_id[:8]}"
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menus/{item['shop_menu_id']}/status",
+            json={"status": "draft"},
+        )
+        assert resp.status_code == 200, resp.text
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(item["shop_menu_item_id"]),
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error_code"] == "menu_item_not_found"
+
+    async def test_unknown_menu_item_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"nomi-{unique_id[:8]}"
+        await shop_with_sellable_item(shop_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(f"shopmi_missing_{unique_id[:8]}"),
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error_code"] == "menu_item_not_found"
 
     async def test_delivery_requires_address(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"noaddr-{unique_id[:8]}"
-        _, product = await _shop_with_product(shop_client, slug)
+        _, _, item = await shop_with_sellable_item(shop_client, slug)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="delivery"),
+            json=_order_body(item["shop_menu_item_id"], delivery_type="delivery"),
         )
         assert resp.status_code == 409
 
@@ -147,7 +155,7 @@ class TestOrderCreate:
         from httpx2 import ASGITransport, AsyncClient
 
         slug = f"rl-{unique_id[:8]}"
-        _, product = await _shop_with_product(shop_client, slug)
+        _, _, item = await shop_with_sellable_item(shop_client, slug)
         async with AsyncClient(
             transport=ASGITransport(app=shop_app),
             base_url="http://linnex.io",
@@ -160,14 +168,14 @@ class TestOrderCreate:
                 resp = await limited.post(
                     f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
                     json=_order_body(
-                        product["shop_product_id"], idempotency_key=f"rl-{i}-{unique_id}"
+                        item["shop_menu_item_id"], idempotency_key=f"rl-{i}-{unique_id}"
                     ),
                 )
                 assert resp.status_code == 200, resp.text
             resp = await limited.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
                 json=_order_body(
-                    product["shop_product_id"], idempotency_key=f"rl-x-{unique_id}"
+                    item["shop_menu_item_id"], idempotency_key=f"rl-x-{unique_id}"
                 ),
             )
             assert resp.status_code == 429
@@ -177,16 +185,59 @@ class TestOrderCreate:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"unav-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await shop_with_sellable_item(shop_client, slug)
         await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
             json={"is_available": False},
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(item["shop_menu_item_id"]),
         )
         assert resp.status_code == 409
+
+
+    async def test_unavailable_menu_item_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Позиция, выключенная в меню, отклоняется при доступном блюде каталога."""
+        slug = f"unmi-{unique_id[:8]}"
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/menu-items/{item['shop_menu_item_id']}",
+            json={"is_available": False},
+        )
+        assert resp.status_code == 200, resp.text
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(item["shop_menu_item_id"]),
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error_code"] == "product_unavailable"
+
+    async def test_menu_item_price_override_used(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Цена позиции меню перекрывает цену каталога; заказ хранит shop_menu_item_id."""
+        slug = f"ovr-{unique_id[:8]}"
+        shop, product, item = await shop_with_sellable_item(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/menu-items/{item['shop_menu_item_id']}",
+            json={"price_minor_override": 42000},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["effective_price_minor"] == 42000
+        created = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(item["shop_menu_item_id"]),
+        )
+        assert created.status_code == 200, created.text
+        assert created.json()["total_minor"] == 42000 * 2
+        orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
+        row = next(o for o in orders["items"] if o["public_code"] == created.json()["public_code"])
+        assert [(i["product_id"], i["shop_menu_item_id"], i["price_minor"]) for i in row["items"]] == [
+            (product["shop_product_id"], item["shop_menu_item_id"], 42000)
+        ]
 
 
 class TestOrderStatusFlow:
@@ -194,11 +245,11 @@ class TestOrderStatusFlow:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"flow-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"]),
+                json=_order_body(item["shop_menu_item_id"]),
             )
         ).json()
         orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
@@ -217,10 +268,10 @@ class TestOrderStatusFlow:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"badtr-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
         await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(item["shop_menu_item_id"]),
         )
         orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
         order_id = orders["items"][0]["shop_order_id"]
@@ -238,10 +289,10 @@ class TestOrderStatusFlow:
         unique_id: str,
     ) -> None:
         slug = f"oiso-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
         await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(item["shop_menu_item_id"]),
         )
         resp = await shop_client_company2.get(f"{_SHOPS}/{shop['shop_id']}/orders")
         assert resp.status_code == 404
@@ -251,11 +302,11 @@ class TestOrderStatusFlow:
     ) -> None:
         """Заказ из embed-виджета помечается source=embed и виден в админ-списке."""
         slug = f"emb-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"], source="embed"),
+                json=_order_body(item["shop_menu_item_id"], source="embed"),
             )
         )
         assert created.status_code == 200, created.text

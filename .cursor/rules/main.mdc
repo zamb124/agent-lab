@@ -31,6 +31,7 @@ SaaS автоматизации средних компаний. Подписк�
 | Семантический индекс | `apps/rag`, `core/rag` | `RagClient`, индекс по `file_id` | `rag.mdc` |
 | Речь STT/TTS/VAD | `apps/voice`, `core/clients/voice_resolver.py` | `voice_resolver` | `voice.mdc` |
 | Складской учёт | `apps/stock` | `StockMoveEngine` | `stock.mdc` |
+| Витрины заведений | `apps/shop` | `ShopClient`, builtins `shop_*` | `shop.mdc` |
 | Права | OpenFGA через `AuthzService` (`core/authz`) | `require_can_*` | `authorization.mdc` |
 | Идентичность агента | `User` `flow_employee_{flow_id}` | одна ось `user_id` | `flow_employee.mdc` |
 | Пространства работы | `Namespace` (`core/namespace`) | `NamespaceService` | `namespace.mdc` |
@@ -167,6 +168,7 @@ apps/<svc>/
 | Файл, документ Documents | `file_id` `FileRecord` `FileRef`; `catalog_id`, `document_type` | `files.mdc`, `office.mdc` |
 | RAG-документ, страница wiki | `document_id` `VectorDocument`; `wiki_page_id` `WikiPage` | `rag.mdc`, `wiki.mdc` |
 | Datasource, склад | `datasource_id`, `connector_id`; `StockMove`, `StockQuant` | `datasources.mdc`, `stock.mdc` |
+| Витрина, меню, блюдо | `shop_id` `Shop`; `shop_menu_id` `ShopMenu`; `shop_menu_section_id` `ShopMenuSection`; `shop_menu_item_id` `ShopMenuItem`; `shop_product_id` `ShopProduct` | `shop.mdc` |
 | CRM | `entity_id` `CRMEntity` `entity_type`; `relationship_id`; `template_key`/`template_id`; `task_id` `CRMTask`; `suggest_id` | `crm.mdc` |
 | Задача, очередь, доска | `work_item_id` `WorkItem`; `work_queue_id`; `board_id`, `board_column_id` | `worktracker.mdc` |
 | Sync | `channel_id`, `thread_id`, `message_id`, `call_id`, `recording_id`, `link_token`, `git_ref_id` | `sync.mdc` |
@@ -218,6 +220,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | guest_runtime | 8024 | ферма `code_agent` |
 | realtime | 8025 | bus `PlatformEvent`, peer Centrifugo |
 | stock | 8026 | склад |
+| shop | 8027 | витрины заведений, меню, заказы |
 
 Воркеры TaskIQ: `flows_worker`, `crm_worker`, `crm_summary_worker`, `rag_worker`, `sync_worker`, `search_worker`, `idle_worker` → `taskiq.mdc`. Команды разработки → `AGENTS.md`.
 
@@ -248,6 +251,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `wiki.mdc` | дерево страниц в namespace; ProseMirror — источник правды |
 | `datasources.mdc` | живая БД — `NodeType.DATASOURCE` |
 | `stock.mdc` | количество меняет только `StockMove` A→B |
+| `shop.mdc` | каталог блюд, меню с разделами, витрина и импорт |
 | `flows.mdc` | ноды, ресурсы, триггеры, layout `src/`, конфигурация в БД |
 | `flows_runtime.mdc` | `workflow_events` — источник истины; `ExecutionState` — projection |
 | `a2a.mdc` | A2A 1.0 — единственный протокол агентов; commit до publish |

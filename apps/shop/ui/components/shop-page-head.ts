@@ -2,9 +2,11 @@
  * ShopPageHead — контекстная шапка внутренних страниц конструктора витрин.
  *
  * Крошки «Магазины / <имя магазина> / <раздел>» через platform-breadcrumbs:
- * имя магазина — trail-сегмент, ведущий на рабочий экран меню, раздел —
- * current-label. Крупно показывает имя магазина со статусом и ссылкой на
- * публичную витрину; действия страницы приходят через слот `actions`.
+ * имя магазина — trail-сегмент, ведущий на каталог заведения, раздел —
+ * current-label. `nested` — маршрут вложен в раздел заведения (редактор меню
+ * под списком меню): цепочка маршрутов уже ведёт в заведение, trail не нужен.
+ * Крупно показывает имя магазина со статусом и ссылкой на публичную витрину;
+ * действия страницы приходят через слот `actions`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -47,10 +49,12 @@ export class ShopPageHead extends PlatformElement {
         shop: { attribute: false },
         shopId: { type: String, attribute: 'shop-id' },
         section: { type: String },
+        nested: { type: Boolean },
     };
     declare shop: ShopHeadRow | null;
     declare shopId: string;
     declare section: string;
+    declare nested: boolean;
 
     static override styles = [
         PlatformElement.styles,
@@ -121,12 +125,13 @@ export class ShopPageHead extends PlatformElement {
         this.shop = null;
         this.shopId = '';
         this.section = '';
+        this.nested = false;
     }
 
     override render(): TemplateResult {
         const shop = this.shop;
-        const trail = shop !== null
-            ? [{ label: shop.name, routeKey: 'shop_menu', params: { shopId: this.shopId } }]
+        const trail = shop !== null && !this.nested
+            ? [{ label: shop.name, routeKey: 'shop_catalog', params: { shopId: this.shopId } }]
             : [];
         const published = shop?.status === 'published';
         return html`

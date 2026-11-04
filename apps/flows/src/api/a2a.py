@@ -7,7 +7,6 @@ Hard cut: только PascalCase методы из core.a2a.methods; 0.3 names 
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
-from pathlib import Path
 from typing import TypeVar, cast
 
 from a2a.types import (
@@ -38,9 +37,8 @@ from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.durable_execution.models import WorkflowProjectionMismatchError
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
-from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.src.services.public_bundle_materialize import materialize_public_bundle
 from core.a2a import (
     A2A_ERROR_CODE_NAMES,
     A2A_METHODS,
@@ -74,7 +72,6 @@ from core.types import (
     JsonObject,
     JsonValue,
     parse_json_object,
-    parse_yaml_value,
     require_json_object,
 )
 from core.ui_document.interface import (
@@ -619,35 +616,14 @@ async def _get_flow_config(
 
 
 async def _materialize_public_bundle(di: Di, flow_id: str) -> FlowConfig | None:
-    """Загрузить public-bundle из registry в активную компанию при первом обращении.
-
-    Публичные bundle копируются компаниям в company_init; агент, добавленный
-    позже, доезжает до уже существующих компаний здесь — по первому запросу
-    к его flow_id. Возвращает None, если flow_id не является public-bundle
-    (дальше обычный 404).
-    """
-    flows_src_dir = Path(__file__).resolve().parents[2]
-    registry_path = flows_src_dir / "registry.yaml"
-    if not registry_path.exists():
-        return None
-    loaded = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
-    registry = FlowBundleRegistry.model_validate(
-        require_json_object(loaded, "registry.yaml") if loaded is not None else {}
-    )
-    entry = next((item for item in registry.flows if item.id == flow_id), None)
-    if entry is None or not entry.public:
-        return None
-    loader = FlowsLoader(
-        bundles_dir=flows_src_dir / "bundles",
-        registry_path=registry_path,
+    """Загрузить public-bundle из registry в активную компанию при первом обращении."""
+    return await materialize_public_bundle(
+        flow_id=flow_id,
         flow_access_service=di.flow_access_service,
         files_service=di.files_service,
+        authz_service=di.authz_service,
+        mail_service=di.mail_service,
     )
-    try:
-        _ = await loader.reload_flow_bundle(flow_id)
-    except ValueError:
-        return None
-    return await FlowConfig.current_for_flow(flow_id)
 
 
 def _get_base_url(request: Request) -> str:

@@ -140,7 +140,7 @@ export class ShopHomePage extends PlatformPage {
             await this._shops.load();
             const created = result as { shop_id?: string };
             if (created && typeof created.shop_id === 'string') {
-                this.navigate('shop_menu', { shopId: created.shop_id });
+                this.navigate('shop_catalog', { shopId: created.shop_id });
             }
         }
     }
@@ -205,7 +205,7 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`<a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
                                             : nothing}
                                         <div class="actions">
-                                            <platform-button class="primary" block size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
+                                            <platform-button class="primary" block size="sm" variant="primary" @click=${() => this.navigate('shop_menus', { shopId })}>
                                                 <platform-icon name="book-open" size="14"></platform-icon> ${this.t('home.open_menu')}
                                             </platform-button>
                                             ${(!shop.description || !shop.cover_file_id)

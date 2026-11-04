@@ -30,6 +30,7 @@ class ShopOrderItem(PlatformModel):
     shop_order_item_id: str = DbField(db_pk=True, max_length=64)
     order_id: str = DbField(max_length=64)
     product_id: str = DbField(max_length=64)
+    shop_menu_item_id: str | None = DbField(default=None, max_length=64)
     name_snapshot: str = DbField(max_length=300)
     price_minor: int = DbField(ge=0)
     qty: int = DbField(ge=1)

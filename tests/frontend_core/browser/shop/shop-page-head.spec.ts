@@ -46,7 +46,8 @@ const FACTORIES = [
 
 const SHOP_ROUTES = [
     { key: 'shop_home', path: '', titleKey: 'routes.shop_home' },
-    { key: 'shop_menu', path: ':shopId/menu', parent: 'shop_home', titleKey: 'routes.shop_menu' },
+    { key: 'shop_catalog', path: ':shopId/catalog', parent: 'shop_home', titleKey: 'routes.shop_catalog' },
+    { key: 'shop_menus', path: ':shopId/menus', parent: 'shop_home', titleKey: 'routes.shop_menus' },
     { key: 'shop_builder', path: ':shopId/builder', parent: 'shop_home', titleKey: 'routes.shop_builder' },
     { key: 'shop_orders', path: ':shopId/orders', parent: 'shop_home', titleKey: 'routes.shop_orders' },
     { key: 'shop_promos', path: ':shopId/promos', parent: 'shop_home', titleKey: 'routes.shop_promos' },
@@ -97,7 +98,7 @@ describe('shop-page-head: компонент', () => {
     });
 
     it('показывает имя, раздел, статус и крошки «Магазины / имя / раздел»', async () => {
-        seedRouter('shop_menu');
+        seedRouter('shop_menus');
         const el = await fixture<TestEl>(html`
             <shop-page-head .shop=${PUBLISHED} shop-id="shop_test" section="Меню"></shop-page-head>
         `);
@@ -109,7 +110,7 @@ describe('shop-page-head: компонент', () => {
     });
 
     it('published: ссылка на витрину ведёт на /public/s/<slug>', async () => {
-        seedRouter('shop_menu');
+        seedRouter('shop_menus');
         const el = await fixture<TestEl>(html`
             <shop-page-head .shop=${PUBLISHED} shop-id="shop_test" section="Меню"></shop-page-head>
         `);
@@ -121,7 +122,7 @@ describe('shop-page-head: компонент', () => {
     });
 
     it('draft: ссылки на витрину нет, статус «Черновик»', async () => {
-        seedRouter('shop_menu');
+        seedRouter('shop_menus');
         const el = await fixture<TestEl>(html`
             <shop-page-head .shop=${DRAFT} shop-id="shop_test" section="Меню"></shop-page-head>
         `);
@@ -141,7 +142,7 @@ describe('shop-page-head: компонент', () => {
         expect(crumbLabels(el)).to.deep.equal(['Магазины', 'Заказы']);
     });
 
-    it('клик по крошке с именем ведёт в меню этого магазина', async () => {
+    it('клик по крошке с именем ведёт в каталог этого магазина', async () => {
         seedRouter('shop_orders');
         const el = await fixture<TestEl>(html`
             <shop-page-head .shop=${PUBLISHED} shop-id="shop_test" section="Заказы"></shop-page-head>
@@ -156,7 +157,7 @@ describe('shop-page-head: компонент', () => {
 
         const navigate = events.find((e) => e.type === CoreEvents.ROUTER_NAVIGATE_REQUESTED);
         expect(navigate).to.exist;
-        expect(navigate!.payload).to.deep.equal({ routeKey: 'shop_menu', params: { shopId: 'shop_test' } });
+        expect(navigate!.payload).to.deep.equal({ routeKey: 'shop_catalog', params: { shopId: 'shop_test' } });
     });
 });
 

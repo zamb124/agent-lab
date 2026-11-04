@@ -17,11 +17,13 @@ from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.files.file_ref import FileRef, stored_file_ref
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.models import (
+    MAX_NESTED_DEFAULT,
     MAX_READ_BUDGET,
     CompressionMode,
     Continuation,
     FileReadKind,
     FileResult,
+    NestedMode,
     PageLayout,
     PageLayoutKind,
     ReadFileArgs,
@@ -122,13 +124,36 @@ def _resolve_file_refs_for_read(
     return file_refs, errors
 
 
+def _upsert_nested_refs(state: ExecutionState, files: list[FileResult]) -> None:
+    for file_result in files:
+        for item in file_result.nested:
+            if item.file_id is None or not item.file_id.strip():
+                continue
+            file_size = 0
+            if item.bytes_b64 is not None and item.bytes_b64.strip():
+                # приблизительный размер из base64; точный — после persist в FilesService
+                file_size = max((len(item.bytes_b64) * 3) // 4, 0)
+            upsert_state_file(
+                state,
+                FileRef(
+                    file_id=item.file_id,
+                    original_name=item.original_name,
+                    content_type=item.content_type,
+                    file_size=file_size,
+                    checksum=item.checksum,
+                ),
+            )
+
+
 @tool(
     name="read_file",
     description=(
         "Читает вложения из state.files по списку имён names. "
-        "Передаёшь список original_name — tool находит объекты файлов в state "
-        "и вызывает движок чтения. Если names не указан, берутся все файлы в state.files. "
-        "Vision/OCR — только если текст единицы layout непригоден."
+        "Результат страниц — markdown с якорями вложенного content. "
+        "nested_mode=refs (default): nested → FileRef в state.files; "
+        "nested_mode=parts: markdown + A2A Part(raw) в tool-result. "
+        "recursive=true (только refs): один уровень авто-read nested в окне. "
+        "Vision/OCR страницы — если текст layout непригоден; nested OCR — recursive/parts."
     ),
     tags=["files"],
     parameters_model=ReadFileArgs,
@@ -148,6 +173,9 @@ async def read_file(
     forced_lane: ReadLane | None = None,
     persist_assets_namespace: str | None = None,
     budget: int = MAX_READ_BUDGET,
+    nested_mode: NestedMode = NestedMode.REFS,
+    recursive: bool = False,
+    max_nested: int = MAX_NESTED_DEFAULT,
     *,
     state: ExecutionState,
 ) -> JsonObject:
@@ -155,42 +183,35 @@ async def read_file(
     if not all_files:
         raise ValueError("No files to read")
 
+    resolved_compression = (
+        compression if compression is not None else CompressionMode.NEVER
+    )
     if names:
         file_refs, errors = _resolve_file_refs_for_read(state, names)
-        args = ReadFileArgs(
-            names=names,
-            page_start=page_start,
-            page_end=page_end,
-            page_summarizations=page_summarizations,
-            summarization_prompt=summarization_prompt,
-            summarization_model=summarization_model,
-            vision_prompt=vision_prompt,
-            vision_model=vision_model,
-            compression=compression if compression is not None else CompressionMode.NEVER,
-            transcription_company_id=transcription_company_id,
-            forced_lane=forced_lane,
-            persist_assets_namespace=persist_assets_namespace,
-            budget=budget,
-        )
+        resolved_names = names
     else:
         file_refs = list(all_files)
         errors = []
-        taken_names = [file_ref.original_name for file_ref in file_refs]
-        args = ReadFileArgs(
-            names=taken_names,
-            page_start=page_start,
-            page_end=page_end,
-            page_summarizations=page_summarizations,
-            summarization_prompt=summarization_prompt,
-            summarization_model=summarization_model,
-            vision_prompt=vision_prompt,
-            vision_model=vision_model,
-            compression=compression if compression is not None else CompressionMode.NEVER,
-            transcription_company_id=transcription_company_id,
-            forced_lane=forced_lane,
-            persist_assets_namespace=persist_assets_namespace,
-            budget=budget,
-        )
+        resolved_names = [file_ref.original_name for file_ref in file_refs]
+
+    args = ReadFileArgs(
+        names=resolved_names,
+        page_start=page_start,
+        page_end=page_end,
+        page_summarizations=page_summarizations,
+        summarization_prompt=summarization_prompt,
+        summarization_model=summarization_model,
+        vision_prompt=vision_prompt,
+        vision_model=vision_model,
+        compression=resolved_compression,
+        transcription_company_id=transcription_company_id,
+        forced_lane=forced_lane,
+        persist_assets_namespace=persist_assets_namespace,
+        budget=budget,
+        nested_mode=nested_mode,
+        recursive=recursive,
+        max_nested=max_nested,
+    )
 
     if not file_refs and errors:
         raise ValueError(
@@ -211,6 +232,8 @@ async def read_file(
             }
         )
 
+    _upsert_nested_refs(state, envelope.files)
+    # bytes nested остаются в envelope для llm_runner → Part(raw); activity JSON strip'ится там.
     return require_json_object(envelope.model_dump(mode="json"), "read_file.result")
 
 

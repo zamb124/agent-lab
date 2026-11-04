@@ -133,6 +133,7 @@ class WorkItemLinkKind(StrEnum):
     CALENDAR_EVENT = "calendar_event"
     STOCK_TRANSFER = "stock_transfer"
     STOCK_LOCATION = "stock_location"
+    SHOP = "shop"
     WORK_ITEM = "work_item"
 
 
@@ -187,6 +188,11 @@ class StockLocationLink(WorktrackerModel):
     location_id: str = Field(..., min_length=1)
 
 
+class ShopLink(WorktrackerModel):
+    link_kind: Literal[WorkItemLinkKind.SHOP] = WorkItemLinkKind.SHOP
+    shop_id: str = Field(..., min_length=1)
+
+
 class WorkItemToWorkItemLink(WorktrackerModel):
     link_kind: Literal[WorkItemLinkKind.WORK_ITEM] = WorkItemLinkKind.WORK_ITEM
     work_item_id: str = Field(..., min_length=1)
@@ -202,6 +208,7 @@ WorkItemLink = Annotated[
     | CalendarEventLink
     | StockTransferLink
     | StockLocationLink
+    | ShopLink
     | WorkItemToWorkItemLink,
     Field(discriminator="link_kind"),
 ]

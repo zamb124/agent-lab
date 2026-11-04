@@ -70,11 +70,15 @@ Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_
 
 ### FileReader
 
-1. Продуктовый контракт — `await FileReader().read(source, ReadFileArgs(...), file_name=..., file_id=...) -> FileExtract` (`source`: bytes, path, `file_id`, `FileRef`); `FileExtract.pages[]` — `UniversalPage` + `ExtractBlock` + `FileRef`.
-2. Формат-специфика — только внутри reader'а; оркестрация не ветвится по формату; LLM tool `read_file` рендерит `render_file_result(extract, args)`.
-3. Потребители: flows `read_file`, RAG (`ReadFileArgs(page_end=-1)`), CRM `file_text_reader`, capability `files.read`, Office preview; байты по `file_id` — `read_stored_file_by_id`.
-4. Ассеты figure-блоков пишутся как `FileRef` при `ReadFileArgs.persist_assets_namespace` (`FileSourceKind.RAG_DOCUMENT`, без повторной индексации); `configure_asset_persist(files_service)` — на старте rag и rag_worker.
-5. Зашифрованный PDF без пароля — успешный `read` с пустым текстом и warning.
+1. Продуктовый контракт — `await FileReader().read(source, ReadFileArgs(...), file_name=..., file_id=...) -> FileExtract` (`source`: bytes, path, `file_id`, `FileRef`); `FileExtract.pages[]` — `UniversalPage` + `ExtractBlock` + `FileRef` + `NestedContent`.
+2. Формат-специфика — только внутри reader'а; оркестрация не ветвится по формату; LLM tool `read_file` рендерит `render_file_result(extract, args)` → markdown (`page_to_markdown`) с якорями nested.
+3. `ReadFileArgs.nested_mode`: `refs` (default) — якоря + persist nested → `FileRef` в `state.files`; `parts` — якоря + A2A `Part(raw, media_type=child.content_type)` в tool-result (через `add_tool_message` / `build_tool_result_message`). `recursive=true` — один уровень авто-read nested в окне страниц, только с `nested_mode=refs` (`parts`∧`recursive` — `ValueError`). `forced_lane=TEXT` — nested не материализуются.
+4. Page-level hybrid OCR (текст непригоден → raster/OCR) сохраняется; при usable text + embedded nested vision по каждому nested в `refs` не вызывается (агент / `recursive` / `parts`).
+5. Redis `FileExtract`-cache без nested bytes; rehydrate из raw при cache hit для `parts`/recursive.
+6. Потребители: flows `read_file`, RAG (`ReadFileArgs(page_end=-1)`), CRM `file_text_reader`, capability `files.read`, Office preview; байты по `file_id` — `read_stored_file_by_id`.
+7. Ассеты figure-блоков пишутся как `FileRef` при `ReadFileArgs.persist_assets_namespace` (`FileSourceKind.RAG_DOCUMENT`, без повторной индексации); nested без namespace — `GENERATED_EPHEMERAL`; `configure_asset_persist(files_service)` — на старте rag/flows.
+8. Optional export для FileWriter: `markdown_with_data_uris`; `image_fetch` принимает `data:` URI.
+9. Зашифрованный PDF без пароля — успешный `read` с пустым текстом и warning.
 
 ## Запреты
 

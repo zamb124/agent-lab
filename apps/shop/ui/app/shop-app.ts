@@ -1,8 +1,9 @@
 /**
  * ShopApp — корневой компонент конструктора витрин (`/shop`).
  *
- * Разделы: магазины компании (home), меню/товары, внешний вид витрины,
- * заказы, настройки и домены. Всё адресуется `:shopId` в маршруте.
+ * Разделы: магазины компании (home), каталог блюд, меню заведения и
+ * редактор одного меню, внешний вид витрины, заказы, акции, настройки.
+ * Всё адресуется `:shopId` в маршруте.
  */
 
 import { html, css } from 'lit';
@@ -17,30 +18,45 @@ import {
     shopPublishOp,
     shopSuspendOp,
     shopBadgeIconsListOp,
-    shopCategoriesListOp,
-    shopCategoriesReorderOp,
-    shopCategoryCreateOp,
-    shopCategoryUpdateOp,
-    shopCategoryRemoveOp,
     shopProductsListOp,
     shopProductCreateOp,
     shopProductUpdateOp,
     shopProductRemoveOp,
-    shopProductsImportOp,
-    shopProductsReorderOp,
+    shopProductVerifyOp,
+    shopProductSimilarListOp,
+    shopProductMergeOp,
+    shopProductDismissSimilarOp,
+    shopProductsEnrichOp,
+    shopMenusListOp,
+    shopMenuCreateOp,
+    shopMenuUpdateOp,
+    shopMenusReorderOp,
+    shopMenuSetStatusOp,
+    shopMenuRemoveOp,
+    shopMenuSectionCreateOp,
+    shopMenuSectionUpdateOp,
+    shopMenuSectionRemoveOp,
+    shopMenuSectionsReorderOp,
+    shopMenuItemAddOp,
+    shopMenuItemUpdateOp,
+    shopMenuItemMoveOp,
+    shopMenuItemRemoveOp,
+    shopMenuItemsReorderOp,
+    shopMenuImportsListOp,
+    shopMenuImportStartOp,
+    shopMenuTemplateBuildOp,
+    shopMenuFileImportRunOp,
     shopOrdersListOp,
     shopOrderSetStatusOp,
     shopDomainAddOp,
     shopDomainProvisionOp,
     shopAiDescribeOp,
-    shopAiDescribeBatchOp,
     shopAiAutofillOp,
     shopAiDescribeShopOp,
     shopAiEnhancePhotoOp,
     shopAiGenerateCoverOp,
     shopAiGenerateLogoOp,
     shopAiGeneratePhotoOp,
-    shopAiParseMenuOp,
     shopAiSuggestOptionsOp,
     shopModifierGroupsListOp,
     shopModifierGroupCreateOp,
@@ -62,6 +78,8 @@ import {
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/shop-sidebar.js';
 import '../pages/shop-home-page.js';
+import '../pages/shop-catalog-page.js';
+import '../pages/shop-menus-page.js';
 import '../pages/shop-menu-page.js';
 import '../pages/shop-builder-page.js';
 import '../pages/shop-orders-page.js';
@@ -69,10 +87,15 @@ import '../pages/shop-promos-page.js';
 import '../pages/shop-settings-page.js';
 import '../modals/shop-modifiers-modal.js';
 import '../modals/shop-product-modal.js';
+import '../modals/shop-product-merge-modal.js';
+import '../modals/shop-menu-import-modal.js';
+import '../modals/shop-menu-template-modal.js';
 
 const SHOP_ROUTES = [
     { key: 'shop_home',      path: '',                  titleKey: 'routes.shop_home' },
-    { key: 'shop_menu',      path: ':shopId/menu',      parent: 'shop_home', titleKey: 'routes.shop_menu' },
+    { key: 'shop_catalog',   path: ':shopId/catalog',   parent: 'shop_home', titleKey: 'routes.shop_catalog' },
+    { key: 'shop_menus',     path: ':shopId/menus',     parent: 'shop_home', titleKey: 'routes.shop_menus' },
+    { key: 'shop_menu',      path: ':shopId/menus/:menuId', parent: 'shop_menus', titleKey: 'routes.shop_menu' },
     { key: 'shop_builder',   path: ':shopId/builder',   parent: 'shop_home', titleKey: 'routes.shop_builder' },
     { key: 'shop_orders',    path: ':shopId/orders',    parent: 'shop_home', titleKey: 'routes.shop_orders' },
     { key: 'shop_promos',    path: ':shopId/promos',    parent: 'shop_home', titleKey: 'routes.shop_promos' },
@@ -81,7 +104,8 @@ const SHOP_ROUTES = [
 
 const SHOP_BOTTOM_NAV_ITEMS = [
     { key: 'home',      routeKey: 'shop_home',   icon: 'store',    labelKey: 'bottom_nav.home' },
-    { key: 'menu',      routeKey: 'shop_menu',   icon: 'book-open', labelKey: 'bottom_nav.menu' },
+    { key: 'catalog',   routeKey: 'shop_catalog', icon: 'list', labelKey: 'bottom_nav.catalog' },
+    { key: 'menus',     routeKey: 'shop_menus',  icon: 'book-open', labelKey: 'bottom_nav.menus' },
     { key: 'orders',    routeKey: 'shop_orders', icon: 'scroll-text', labelKey: 'bottom_nav.orders' },
     { key: 'profile',   sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
@@ -102,30 +126,45 @@ export class ShopApp extends PlatformApp {
         shopPublishOp,
         shopSuspendOp,
         shopBadgeIconsListOp,
-        shopCategoriesListOp,
-        shopCategoryCreateOp,
-        shopCategoryUpdateOp,
-        shopCategoryRemoveOp,
-        shopCategoriesReorderOp,
         shopProductsListOp,
         shopProductCreateOp,
         shopProductUpdateOp,
         shopProductRemoveOp,
-        shopProductsImportOp,
-        shopProductsReorderOp,
+        shopProductVerifyOp,
+        shopProductSimilarListOp,
+        shopProductMergeOp,
+        shopProductDismissSimilarOp,
+        shopProductsEnrichOp,
+        shopMenusListOp,
+        shopMenuCreateOp,
+        shopMenuUpdateOp,
+        shopMenusReorderOp,
+        shopMenuSetStatusOp,
+        shopMenuRemoveOp,
+        shopMenuSectionCreateOp,
+        shopMenuSectionUpdateOp,
+        shopMenuSectionRemoveOp,
+        shopMenuSectionsReorderOp,
+        shopMenuItemAddOp,
+        shopMenuItemUpdateOp,
+        shopMenuItemMoveOp,
+        shopMenuItemRemoveOp,
+        shopMenuItemsReorderOp,
+        shopMenuImportsListOp,
+        shopMenuImportStartOp,
+        shopMenuTemplateBuildOp,
+        shopMenuFileImportRunOp,
         shopOrdersListOp,
         shopOrderSetStatusOp,
         shopDomainAddOp,
         shopDomainProvisionOp,
         shopAiDescribeOp,
-        shopAiDescribeBatchOp,
         shopAiAutofillOp,
         shopAiDescribeShopOp,
         shopAiEnhancePhotoOp,
         shopAiGenerateCoverOp,
         shopAiGenerateLogoOp,
         shopAiGeneratePhotoOp,
-        shopAiParseMenuOp,
         shopAiSuggestOptionsOp,
         shopModifierGroupsListOp,
         shopModifierGroupCreateOp,
@@ -199,6 +238,7 @@ export class ShopApp extends PlatformApp {
         return {
             shop_route: routeKey,
             shop_id: typeof params.shopId === 'string' ? params.shopId : '',
+            shop_menu_id: typeof params.menuId === 'string' ? params.menuId : '',
         };
     }
 
@@ -215,9 +255,14 @@ export class ShopApp extends PlatformApp {
 
     private _renderPage(routeKey: string | null, params: Record<string, string>) {
         const shopId = typeof params.shopId === 'string' ? params.shopId : '';
+        const menuId = typeof params.menuId === 'string' ? params.menuId : '';
         switch (routeKey) {
+            case 'shop_catalog':
+                return html`<shop-catalog-page shop-id=${shopId}></shop-catalog-page>`;
+            case 'shop_menus':
+                return html`<shop-menus-page shop-id=${shopId}></shop-menus-page>`;
             case 'shop_menu':
-                return html`<shop-menu-page shop-id=${shopId}></shop-menu-page>`;
+                return html`<shop-menu-page shop-id=${shopId} menu-id=${menuId}></shop-menu-page>`;
             case 'shop_builder':
                 return html`<shop-builder-page shop-id=${shopId}></shop-builder-page>`;
             case 'shop_orders':

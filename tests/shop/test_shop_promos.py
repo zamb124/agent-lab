@@ -11,34 +11,36 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import (
+    API_PREFIX,
+    PUBLIC_PREFIX,
+    add_menu_item,
+    make_product,
+    shop_with_sellable_item,
+)
 
 _SHOPS = f"{API_PREFIX}/shops"
 
 
-async def _shop_with_product(
+async def _shop_with_item(
     client: AsyncClient, slug: str, price: int = 50000
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    return await shop_with_sellable_item(client, slug, product_name="Пицца", price_minor=price)
+
+
+async def _add_item(
+    client: AsyncClient, shop_id: str, beside: dict[str, Any], name: str, price: int
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
+    """Второе блюдо в том же разделе активного меню, что и позиция ``beside``."""
+    product = await make_product(client, shop_id, name, price)
+    item = await add_menu_item(
+        client,
+        shop_id,
+        beside["shop_menu_id"],
+        beside["shop_menu_section_id"],
+        product["shop_product_id"],
     )
-    assert resp.status_code == 200, resp.text
-    shop = resp.json()
-    await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-    resp = await client.post(
-        f"{_SHOPS}/{shop['shop_id']}/products",
-        json={"name": "Пицца", "price_minor": price},
-    )
-    assert resp.status_code == 200, resp.text
-    return shop, resp.json()
-
-
-async def _make_product(client: AsyncClient, shop_id: str, name: str, price: int) -> dict[str, Any]:
-    resp = await client.post(
-        f"{_SHOPS}/{shop_id}/products", json={"name": name, "price_minor": price}
-    )
-    assert resp.status_code == 200, resp.text
-    return resp.json()
+    return product, item
 
 
 async def _make_promo(
@@ -71,7 +73,7 @@ def _cart_body(items: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
 
 class TestPromoAdmin:
     async def test_promo_crud(self, shop_client: AsyncClient, unique_id: str) -> None:
-        shop, _ = await _shop_with_product(shop_client, f"pr-{unique_id[:8]}")
+        shop, _, _ = await _shop_with_item(shop_client, f"pr-{unique_id[:8]}")
         shop_id = shop["shop_id"]
         promo = await _make_promo(
             shop_client,
@@ -103,7 +105,7 @@ class TestPromoAdmin:
         shop_client_company2: AsyncClient,
         unique_id: str,
     ) -> None:
-        shop, _ = await _shop_with_product(shop_client, f"pi-{unique_id[:8]}")
+        shop, _, _ = await _shop_with_item(shop_client, f"pi-{unique_id[:8]}")
         resp = await shop_client_company2.get(f"{_SHOPS}/{shop['shop_id']}/promos")
         assert resp.status_code == 404
 
@@ -113,7 +115,7 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"pd-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, product, item = await _shop_with_item(shop_client, slug, price=50000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
@@ -126,7 +128,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": product["shop_product_id"], "qty": 2}]),
+            json=_order_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 2}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["total_minor"] == 2 * 50000 - 2 * 10000
@@ -148,14 +150,14 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"pp-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=30000)
+        shop, _, item = await _shop_with_item(shop_client, slug, price=30000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
             "-10%",
             action={"type": "percent_order", "pct": 10},
         )
-        items = [{"product_id": product["shop_product_id"], "qty": 3}]
+        items = [{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 3}]
         preview = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
             json=_cart_body(items),
@@ -178,8 +180,8 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"nm-{unique_id[:8]}"
-        shop, pizza = await _shop_with_product(shop_client, slug, price=50000)
-        cola = await _make_product(shop_client, shop["shop_id"], "Кола", 10000)
+        shop, _, pizza_item = await _shop_with_item(shop_client, slug, price=50000)
+        _, cola_item = await _add_item(shop_client, shop["shop_id"], pizza_item, "Кола", 10000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
@@ -187,8 +189,8 @@ class TestPromoEngine:
             action={"type": "n_plus_m_free", "n": 2, "m": 1},
         )
         items = [
-            {"product_id": pizza["shop_product_id"], "qty": 2},
-            {"product_id": cola["shop_product_id"], "qty": 1},
+            {"shop_menu_item_id": pizza_item["shop_menu_item_id"], "qty": 2},
+            {"shop_menu_item_id": cola_item["shop_menu_item_id"], "qty": 1},
         ]
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(items)
@@ -199,7 +201,7 @@ class TestPromoEngine:
         # Второй заказ: 3 пиццы → бесплатна одна пицца.
         resp2 = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": pizza["shop_product_id"], "qty": 3}]),
+            json=_order_body([{"shop_menu_item_id": pizza_item["shop_menu_item_id"], "qty": 3}]),
         )
         assert resp2.status_code == 200
         assert resp2.json()["total_minor"] == 2 * 50000
@@ -208,8 +210,8 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"fb-{unique_id[:8]}"
-        shop, pizza = await _shop_with_product(shop_client, slug, price=70000)
-        cola = await _make_product(shop_client, shop["shop_id"], "Кола", 15000)
+        shop, pizza, pizza_item = await _shop_with_item(shop_client, slug, price=70000)
+        cola, cola_item = await _add_item(shop_client, shop["shop_id"], pizza_item, "Кола", 15000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
@@ -224,8 +226,8 @@ class TestPromoEngine:
             },
         )
         items = [
-            {"product_id": pizza["shop_product_id"], "qty": 1},
-            {"product_id": cola["shop_product_id"], "qty": 1},
+            {"shop_menu_item_id": pizza_item["shop_menu_item_id"], "qty": 1},
+            {"shop_menu_item_id": cola_item["shop_menu_item_id"], "qty": 1},
         ]
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(items)
@@ -235,7 +237,7 @@ class TestPromoEngine:
         # Одна пицца без колы — комбо не собирается, скидки нет.
         resp2 = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": pizza["shop_product_id"], "qty": 1}]),
+            json=_cart_body([{"shop_menu_item_id": pizza_item["shop_menu_item_id"], "qty": 1}]),
         )
         assert resp2.status_code == 200
         assert resp2.json()["discount_minor"] == 0
@@ -245,7 +247,7 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"ex-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, _, item = await _shop_with_item(shop_client, slug, price=50000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
@@ -263,7 +265,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": product["shop_product_id"], "qty": 2}]),
+            json=_cart_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 2}]),
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -275,7 +277,7 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"wn-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, _, item = await _shop_with_item(shop_client, slug, price=50000)
         future = (datetime.now(UTC) + timedelta(days=30)).isoformat()
         await _make_promo(
             shop_client,
@@ -286,7 +288,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": product["shop_product_id"], "qty": 1}]),
+            json=_cart_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 1}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["discount_minor"] == 0
@@ -296,7 +298,7 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"ia-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, _, item = await _shop_with_item(shop_client, slug, price=50000)
         await _make_promo(
             shop_client,
             shop["shop_id"],
@@ -306,16 +308,47 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": product["shop_product_id"], "qty": 1}]),
+            json=_order_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 1}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["total_minor"] == 50000
+
+    async def test_section_qty_condition_counts_menu_section(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """section_qty считает юниты раздела меню, из которого взята позиция."""
+        slug = f"sq-{unique_id[:8]}"
+        shop, _, item = await _shop_with_item(shop_client, slug, price=50000)
+        await _make_promo(
+            shop_client,
+            shop["shop_id"],
+            "-10% от двух из раздела",
+            condition={
+                "type": "section_qty",
+                "shop_menu_section_id": item["shop_menu_section_id"],
+                "n": 2,
+            },
+            action={"type": "percent_order", "pct": 10},
+        )
+        one = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
+            json=_cart_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 1}]),
+        )
+        assert one.status_code == 200, one.text
+        assert (one.json()["discount_minor"], one.json()["applied_promos"]) == (0, [])
+        two = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
+            json=_cart_body([{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 2}]),
+        )
+        assert two.status_code == 200, two.text
+        assert two.json()["discount_minor"] == 10000
+        assert [p["name"] for p in two.json()["applied_promos"]] == ["-10% от двух из раздела"]
 
     async def test_free_delivery_over_min_total(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"fd-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=100000)
+        shop, _, item = await _shop_with_item(shop_client, slug, price=100000)
         shop_id = shop["shop_id"]
         resp = await shop_client.patch(f"{_SHOPS}/{shop_id}", json={"delivery_fee_minor": 30000})
         assert resp.status_code == 200
@@ -326,7 +359,7 @@ class TestPromoEngine:
             condition={"type": "min_total", "minor": 80000},
             action={"type": "free_delivery"},
         )
-        items = [{"product_id": product["shop_product_id"], "qty": 1}]
+        items = [{"shop_menu_item_id": item["shop_menu_item_id"], "qty": 1}]
         preview = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
             json=_cart_body(items, delivery_type="delivery"),
@@ -345,7 +378,7 @@ class TestPromoEngine:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"sp-{unique_id[:8]}"
-        shop, _ = await _shop_with_product(shop_client, slug)
+        shop, _, _ = await _shop_with_item(shop_client, slug)
         promo = await _make_promo(
             shop_client,
             shop["shop_id"],

@@ -234,6 +234,9 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.stock.stock_tools", "stock_move_apply_decision"),
     ("apps.flows.tools.stock.stock_tools", "stock_valuation_product_value"),
     ("apps.flows.tools.stock.stock_tools", "stock_valuation_layers_list"),
+    ("apps.flows.tools.shop.menu_tools", "shop_catalog_list"),
+    ("apps.flows.tools.shop.menu_tools", "shop_menu_import_apply"),
+    ("apps.flows.tools.shop.menu_tools", "shop_products_enrich_apply"),
 )
 
 

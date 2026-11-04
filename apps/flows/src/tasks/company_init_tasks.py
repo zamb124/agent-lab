@@ -144,6 +144,8 @@ async def init_company_resources(
             registry_path=registry_path,
             flow_access_service=di.flow_access_service,
             files_service=di.files_service,
+            authz_service=di.authz_service,
+            mail_service=di.mail_service,
         )
 
         # Универсальный метод - работает и для system и для company

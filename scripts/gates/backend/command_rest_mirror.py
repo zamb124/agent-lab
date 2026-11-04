@@ -72,6 +72,7 @@ COMMAND_WS_SERVICES = {
     "scheduler",
     "frontend",
     "stock",
+    "shop",
 }
 
 COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(

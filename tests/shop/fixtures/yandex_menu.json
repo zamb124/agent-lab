@@ -1,0 +1,59 @@
+{
+  "categories": [
+    {"id": "cat-hot", "name": "Горячее", "sortOrder": 1},
+    {"id": "cat-pizza", "parentId": "cat-hot", "name": "Пицца", "sortOrder": 2},
+    {"id": "cat-drinks", "name": "Напитки", "sortOrder": 3}
+  ],
+  "items": [
+    {
+      "id": "item-margherita",
+      "categoryId": "cat-pizza",
+      "name": "Маргарита",
+      "description": "Томатный соус, моцарелла, базилик",
+      "price": 590,
+      "vat": 20,
+      "measure": 450,
+      "measureUnit": "г",
+      "sortOrder": 1,
+      "nutrients": {"calories": 250.5, "proteins": 11, "fats": 9.5, "carbohydrates": 30},
+      "images": [{"hash": "a1", "url": "https://example.com/margherita.jpg"}],
+      "additional_descriptions": {"consisting_ingredients": ["тесто", "томаты", "моцарелла"]},
+      "modifierGroups": [
+        {
+          "id": "grp-size",
+          "name": "Размер",
+          "minSelectedModifiers": 1,
+          "maxSelectedModifiers": 1,
+          "sortOrder": 1,
+          "modifiers": [
+            {"id": "mod-30", "name": "30 см", "price": 0, "minAmount": 0, "maxAmount": 1},
+            {"id": "mod-40", "name": "40 см", "price": 200, "minAmount": 0, "maxAmount": 1}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "item-lemonade",
+      "categoryId": "cat-drinks",
+      "name": "Лимонад",
+      "price": 149.9,
+      "measure": 500,
+      "measureUnit": "ml",
+      "sortOrder": 2
+    },
+    {
+      "id": "item-free",
+      "categoryId": "cat-drinks",
+      "name": "Вода",
+      "price": 0,
+      "sortOrder": 3
+    },
+    {
+      "id": "item-orphan",
+      "categoryId": "cat-missing",
+      "name": "Сирота",
+      "price": 100,
+      "sortOrder": 4
+    }
+  ]
+}

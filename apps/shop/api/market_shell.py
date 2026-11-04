@@ -123,9 +123,10 @@ let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 let lastQ='';
 const PTAGS=b=>`<span class="ptag">${{b.icon_path?`<svg viewBox="0 -960 960 960"><path d="${{b.icon_path}}"/></svg>`:''}}${{esc(b.label)}}</span>`;
+const UNITS={{g:'г',ml:'мл',pcs:'шт'}};
 const pcardHtml=p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
   ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
-  <span class="b"><h3>${{esc(p.name)}}${{(p.badges||[]).map(PTAGS).join('')}}${{p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
+  <span class="b"><h3>${{esc(p.name)}}${{(p.badges||[]).map(PTAGS).join('')}}${{p.measure?`<span class="portion">${{p.measure}} ${{UNITS[p.measure_unit]}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
 function searchUrl(q,offset){{let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24&offset=${{offset}}`;
   if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;return url;}}
 function syncMore(total){{const g=document.getElementById('hitsGrid');

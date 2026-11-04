@@ -1040,6 +1040,8 @@ async def op_flows_reload_from_bundle(
         registry_path=flows_root / "registry.yaml",
         flow_access_service=di.flow_access_service,
         files_service=di.files_service,
+        authz_service=di.authz_service,
+        mail_service=di.mail_service,
     )
     try:
         loaded_id = await loader.reload_flow_bundle(payload.flow_id)

@@ -51,6 +51,7 @@ _SERVICE_APP_MODULES: dict[str, str] = {
     "secrets": "apps.secrets.main",
     "search": "apps.search.main",
     "shop": "apps.shop.main",
+    "realtime": "apps.realtime.main",
     "capability_gateway": "apps.capability_gateway.main",
 }
 

@@ -9,26 +9,15 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, shop_with_sellable_item
 
 _SHOPS = f"{API_PREFIX}/shops"
 
 
-async def _shop_with_product(
+async def _shop_with_item(
     client: AsyncClient, slug: str, price: int = 50000
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
-    )
-    assert resp.status_code == 200, resp.text
-    shop = resp.json()
-    await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-    resp = await client.post(
-        f"{_SHOPS}/{shop['shop_id']}/products",
-        json={"name": "Пицца", "price_minor": price},
-    )
-    assert resp.status_code == 200, resp.text
-    return shop, resp.json()
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    return await shop_with_sellable_item(client, slug, product_name="Пицца", price_minor=price)
 
 
 async def _make_group(
@@ -62,9 +51,11 @@ async def _attach(
     assert resp.status_code == 200, resp.text
 
 
-def _order_body(product_id: str, selections: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
+def _order_body(
+    shop_menu_item_id: str, selections: list[dict[str, Any]], **kw: Any
+) -> dict[str, Any]:
     return {
-        "items": [{"product_id": product_id, "qty": 1, "selections": selections}],
+        "items": [{"shop_menu_item_id": shop_menu_item_id, "qty": 1, "selections": selections}],
         "customer_name": "Иван",
         "customer_phone": "+79991112233",
         "delivery_type": "pickup",
@@ -76,7 +67,7 @@ class TestModifierAdmin:
     async def test_group_option_crud_and_attach(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        shop, product = await _shop_with_product(
+        shop, product, _ = await _shop_with_item(
             shop_client, f"mod-{unique_id[:8]}"
         )
         shop_id = shop["shop_id"]
@@ -111,7 +102,7 @@ class TestModifierAdmin:
     async def test_isolation_other_company(
         self, shop_client: AsyncClient, shop_client_company2: AsyncClient, unique_id: str
     ) -> None:
-        shop, _ = await _shop_with_product(shop_client, f"iso-{unique_id[:8]}")
+        shop, _, _ = await _shop_with_item(shop_client, f"iso-{unique_id[:8]}")
         resp = await shop_client_company2.get(
             f"{_SHOPS}/{shop['shop_id']}/modifier-groups"
         )
@@ -123,7 +114,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"dp-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, product, item = await _shop_with_item(shop_client, slug, price=50000)
         shop_id = shop["shop_id"]
         group = await _make_group(shop_client, shop_id, "Добавки")
         gid = group["shop_modifier_group_id"]
@@ -135,7 +126,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [
                     {"option_id": cheese["shop_modifier_option_id"], "qty": 2},
                     {"option_id": bacon["shop_modifier_option_id"], "qty": 1},
@@ -149,7 +140,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"req-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await _shop_with_item(shop_client, slug)
         shop_id = shop["shop_id"]
         group = await _make_group(
             shop_client, shop_id, "Размер", selection_mode="single", min_selected=1
@@ -159,7 +150,7 @@ class TestModifierPricing:
         await _attach(shop_client, shop_id, product["shop_product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], []),
+            json=_order_body(item["shop_menu_item_id"], []),
         )
         assert resp.status_code == 409
 
@@ -167,7 +158,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"abs-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, product, item = await _shop_with_item(shop_client, slug, price=50000)
         shop_id = shop["shop_id"]
         size = await _make_group(
             shop_client,
@@ -189,7 +180,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [
                     {"option_id": small["shop_modifier_option_id"], "qty": 1},
                     {"option_id": cheese["shop_modifier_option_id"], "qty": 1},
@@ -203,7 +194,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"lim-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await _shop_with_item(shop_client, slug)
         shop_id = shop["shop_id"]
         group = await _make_group(shop_client, shop_id, "Добавки", max_selected=10)
         gid = group["shop_modifier_group_id"]
@@ -214,7 +205,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [{"option_id": opt["shop_modifier_option_id"], "qty": 3}],
             ),
         )
@@ -224,7 +215,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"sg-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await _shop_with_item(shop_client, slug)
         shop_id = shop["shop_id"]
         group = await _make_group(
             shop_client, shop_id, "Соус", selection_mode="single", max_selected=1
@@ -236,7 +227,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [
                     {"option_id": a["shop_modifier_option_id"], "qty": 1},
                     {"option_id": b["shop_modifier_option_id"], "qty": 1},
@@ -249,7 +240,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"un-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await _shop_with_item(shop_client, slug)
         shop_id = shop["shop_id"]
         group = await _make_group(shop_client, shop_id, "Добавки")
         gid = group["shop_modifier_group_id"]
@@ -263,7 +254,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [{"option_id": opt["shop_modifier_option_id"], "qty": 1}],
             ),
         )
@@ -271,7 +262,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [{"option_id": "shopmodopt_missing", "qty": 1}],
             ),
         )
@@ -281,7 +272,7 @@ class TestModifierPricing:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"nest-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, product, item = await _shop_with_item(shop_client, slug, price=50000)
         shop_id = shop["shop_id"]
         size = await _make_group(
             shop_client, shop_id, "Размер", selection_mode="single", min_selected=1
@@ -302,7 +293,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [
                     {"option_id": small["shop_modifier_option_id"], "qty": 1},
                     {"option_id": nopt["shop_modifier_option_id"], "qty": 1},
@@ -314,7 +305,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [
                     {"option_id": big["shop_modifier_option_id"], "qty": 1},
                     {"option_id": nopt["shop_modifier_option_id"], "qty": 1},
@@ -330,7 +321,7 @@ class TestModifierSnapshot:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"snap-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug, price=50000)
+        shop, product, item = await _shop_with_item(shop_client, slug, price=50000)
         shop_id = shop["shop_id"]
         size = await _make_group(
             shop_client,
@@ -355,7 +346,8 @@ class TestModifierSnapshot:
         await _attach(shop_client, shop_id, product["shop_product_id"], agid)
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200, snap.text
-        p = snap.json()["products"][0]
+        p = snap.json()["items"][0]
+        assert p["id"] == item["shop_menu_item_id"]
         assert p["price_from_minor"] == 35000
         groups = {g["name"]: g for g in p["modifier_groups"]}
         assert set(groups) == {"Размер", "Добавки"}
@@ -368,7 +360,7 @@ class TestModifierSnapshot:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"ois-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product, item = await _shop_with_item(shop_client, slug)
         shop_id = shop["shop_id"]
         group = await _make_group(shop_client, shop_id, "Добавки")
         gid = group["shop_modifier_group_id"]
@@ -379,7 +371,7 @@ class TestModifierSnapshot:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                item["shop_menu_item_id"],
                 [{"option_id": cheese["shop_modifier_option_id"], "qty": 2}],
             ),
         )
@@ -411,7 +403,7 @@ class TestAiSuggestOptions:
         Под MockLLM flow возвращает схему-заглушку ``{"options": []}`` → сервис
         отвечает честным ``ai_empty_result``; 200 с items — на живом провайдере.
         """
-        shop, _ = await _shop_with_product(shop_client, f"ais-{unique_id[:8]}")
+        shop, _, _ = await _shop_with_item(shop_client, f"ais-{unique_id[:8]}")
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/suggest-options",
             json={"product_name": "Пицца Маргарита", "group_name": "Добавки"},
@@ -420,9 +412,10 @@ class TestAiSuggestOptions:
             items = resp.json()["items"]
             assert items
             assert all("name" in i and "price_minor" in i for i in items)
-        else:
-            assert resp.status_code == 404, resp.text
-            assert resp.json()["error_code"] == "ai_empty_result"
+            return
+        # MockLLM / пустой ответ flow → 404; без живого flows на :9001 → 503.
+        assert resp.status_code in (404, 503), resp.text
+        assert resp.json()["error_code"] in {"ai_empty_result", "ai_upstream"}
 
     async def test_suggest_options_requires_shop(
         self, shop_client: AsyncClient

@@ -23,9 +23,9 @@ alwaysApply: false
 ## Инварианты
 
 1. Сотрудник — обычный `user_id` везде, где исполнитель — человек (участник канала, `UsersAssignment(user_ids=[flow_employee_{flow_id}])`, @mention).
-2. Provisioning на create/update/delete flow — `flow_employee_provisioning.py`: `user.companies` + `company.members` (team API, Sync, @mention).
+2. Provisioning на create/update/delete flow — `flow_employee_provisioning.py`: `user.companies` + `company.members` (team API, Sync, @mention). Bundle с `employee.enabled` — `FlowsLoader` резолвит куратора `$company_owner` и зовёт `sync_flow_employee` при company init / reload.
 3. Исполнение от сотрудника — `resolve_execution_context` (`execution_identity.py`) выпускает SESSION JWT сотрудника; тот же вход — A2A, Flow UI, inbox, scheduler.
-4. Inbox — только consumer group `flows` шины (`PlatformEventConsumerService` → `EmployeeInboxService`); HTTP-входа и прямых вызовов «сервис → flows» нет → `events.mdc`.
+4. Inbox — только consumer group `flows` шины (`PlatformEventConsumerService` → `EmployeeInboxService`); HTTP-входа и прямых вызовов «сервис → flows» нет → `events.mdc`. Промах `FlowConfig` для public-bundle — `materialize_public_bundle` (тот же helper, что A2A), затем обычный 404.
 5. Act-as куратора — `POST /{svc}/api/team/employees/{user_id}/act-as` (+ stop), `impersonated_by` в metadata JWT.
 6. Kickoff дочернего flow при handoff идёт с контекстом parent-канала; identity сотрудника child резолвится `create_task` с первого ответа пользователя → `handoff.mdc`.
 

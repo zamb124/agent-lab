@@ -80,7 +80,13 @@ async def test_dispatch_to_employee_inbox_succeeds(
 
     try:
         # диспатч проходит без ошибок: inbox нашёл сотрудника и flow, поставил в очередь
-        dispatched = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
+        dispatched = await EmployeeInboxService(
+            di.work_item_service,
+            di.flow_access_service,
+            di.files_service,
+            di.authz_service,
+            di.mail_service,
+        ).dispatch_sync_message(
             company_id=company_id,
             employee_user_id=emp_id,
             sender_user_id=sync_user_id,

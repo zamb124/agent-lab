@@ -406,6 +406,9 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             # зеркало продового <slug>.linnex.io без правки /etc/hosts.
             "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
             "AGGREGATOR_HOST": "shop.lvh.me",
+            # Bot API — закрытый локальный порт: connect_telegram детерминированно
+            # отвечает shop_telegram_unavailable без выхода в интернет.
+            "TELEGRAM__API_BASE": "http://127.0.0.1:9",
         },
     ),
 )

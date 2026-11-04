@@ -4,22 +4,47 @@ from __future__ import annotations
 
 from apps.shop.di import ShopDi
 from apps.shop.models.api import ShopCreateRequest
+from apps.shop.models.import_api import (
+    ShopMenuFileImportRunPayload,
+    ShopMenuImportApplyPayload,
+    ShopMenuImportStartPayload,
+    ShopMenuTemplateBuildPayload,
+    ShopProductsEnrichApplyPayload,
+    ShopProductsEnrichPayload,
+)
+from apps.shop.realtime.menu_import_operations import (
+    op_menu_file_imports_run,
+    op_menu_imports_apply,
+    op_menu_imports_list,
+    op_menu_imports_start,
+    op_menu_templates_build,
+    op_products_enrich,
+    op_products_enrich_apply,
+)
 from apps.shop.realtime.operations import (
-    ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
     ShopAiGeneratePhotoPayload,
-    ShopAiParseMenuPayload,
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopCartPricePayload,
-    ShopCategoriesReorderPayload,
-    ShopCategoryCreatePayload,
-    ShopCategoryIdPayload,
-    ShopCategoryUpdatePayload,
     ShopDomainAddPayload,
     ShopDomainIdPayload,
     ShopIdPayload,
+    ShopMenuCreatePayload,
+    ShopMenuIdPayload,
+    ShopMenuItemAddPayload,
+    ShopMenuItemIdPayload,
+    ShopMenuItemMovePayload,
+    ShopMenuItemsReorderPayload,
+    ShopMenuItemUpdatePayload,
+    ShopMenuSectionCreatePayload,
+    ShopMenuSectionIdPayload,
+    ShopMenuSectionsReorderPayload,
+    ShopMenuSectionUpdatePayload,
+    ShopMenuSetStatusPayload,
+    ShopMenusReorderPayload,
+    ShopMenuUpdatePayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
     ShopModifierGroupUpdatePayload,
@@ -32,9 +57,9 @@ from apps.shop.realtime.operations import (
     ShopOrderSetStatusPayload,
     ShopProductCreatePayload,
     ShopProductIdPayload,
+    ShopProductMergePayload,
     ShopProductModifierAttachPayload,
     ShopProductModifierDetachPayload,
-    ShopProductsImportPayload,
     ShopProductsReorderPayload,
     ShopProductUpdatePayload,
     ShopPromoCreatePayload,
@@ -44,24 +69,32 @@ from apps.shop.realtime.operations import (
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
     op_ai_autofill,
-    op_ai_describe_batch,
     op_ai_describe_product,
     op_ai_describe_shop,
     op_ai_enhance_photo,
     op_ai_generate_cover,
     op_ai_generate_logo,
     op_ai_generate_photo,
-    op_ai_parse_menu,
     op_ai_suggest_options,
     op_badge_icons_list,
-    op_categories_create,
-    op_categories_list,
-    op_categories_remove,
-    op_categories_reorder,
-    op_categories_update,
     op_domains_add,
     op_domains_provision,
     op_domains_remove,
+    op_menu_items_add,
+    op_menu_items_move,
+    op_menu_items_remove,
+    op_menu_items_reorder,
+    op_menu_items_update,
+    op_menu_sections_create,
+    op_menu_sections_remove,
+    op_menu_sections_reorder,
+    op_menu_sections_update,
+    op_menus_create,
+    op_menus_list,
+    op_menus_remove,
+    op_menus_reorder,
+    op_menus_set_status,
+    op_menus_update,
     op_modifier_groups_create,
     op_modifier_groups_list,
     op_modifier_groups_remove,
@@ -73,13 +106,16 @@ from apps.shop.realtime.operations import (
     op_orders_list,
     op_orders_set_status,
     op_products_create,
-    op_products_import,
+    op_products_dismiss_similar,
     op_products_list,
+    op_products_merge,
     op_products_modifier_attach,
     op_products_modifier_detach,
     op_products_remove,
     op_products_reorder,
+    op_products_similar_list,
     op_products_update,
+    op_products_verify,
     op_promos_create,
     op_promos_list,
     op_promos_remove,
@@ -110,25 +146,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/shops/publish_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_publish),
     "shop/shops/suspend_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_suspend),
     "shop/shops/remove_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_remove),
-    "shop/categories/list_requested": Operation(payload_model=ShopIdPayload, fn=op_categories_list),
-    "shop/categories/create_requested": Operation(
-        payload_model=ShopCategoryCreatePayload, fn=op_categories_create
-    ),
-    "shop/categories/update_requested": Operation(
-        payload_model=ShopCategoryUpdatePayload, fn=op_categories_update
-    ),
-    "shop/categories/reorder_requested": Operation(
-        payload_model=ShopCategoriesReorderPayload, fn=op_categories_reorder
-    ),
-    "shop/categories/remove_requested": Operation(
-        payload_model=ShopCategoryIdPayload, fn=op_categories_remove
-    ),
     "shop/products/list_requested": Operation(payload_model=ShopIdPayload, fn=op_products_list),
     "shop/products/create_requested": Operation(
         payload_model=ShopProductCreatePayload, fn=op_products_create
-    ),
-    "shop/products/import_requested": Operation(
-        payload_model=ShopProductsImportPayload, fn=op_products_import
     ),
     "shop/products/update_requested": Operation(
         payload_model=ShopProductUpdatePayload, fn=op_products_update
@@ -138,6 +158,82 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/products/remove_requested": Operation(
         payload_model=ShopProductIdPayload, fn=op_products_remove
+    ),
+    "shop/products/verify_requested": Operation(
+        payload_model=ShopProductIdPayload, fn=op_products_verify
+    ),
+    "shop/products/similar_list_requested": Operation(
+        payload_model=ShopProductIdPayload, fn=op_products_similar_list
+    ),
+    "shop/products/merge_requested": Operation(
+        payload_model=ShopProductMergePayload, fn=op_products_merge
+    ),
+    "shop/products/dismiss_similar_requested": Operation(
+        payload_model=ShopProductIdPayload, fn=op_products_dismiss_similar
+    ),
+    "shop/menus/list_requested": Operation(payload_model=ShopIdPayload, fn=op_menus_list),
+    "shop/menus/create_requested": Operation(
+        payload_model=ShopMenuCreatePayload, fn=op_menus_create
+    ),
+    "shop/menus/update_requested": Operation(
+        payload_model=ShopMenuUpdatePayload, fn=op_menus_update
+    ),
+    "shop/menus/reorder_requested": Operation(
+        payload_model=ShopMenusReorderPayload, fn=op_menus_reorder
+    ),
+    "shop/menus/set_status_requested": Operation(
+        payload_model=ShopMenuSetStatusPayload, fn=op_menus_set_status
+    ),
+    "shop/menus/remove_requested": Operation(
+        payload_model=ShopMenuIdPayload, fn=op_menus_remove
+    ),
+    "shop/menu_sections/create_requested": Operation(
+        payload_model=ShopMenuSectionCreatePayload, fn=op_menu_sections_create
+    ),
+    "shop/menu_sections/update_requested": Operation(
+        payload_model=ShopMenuSectionUpdatePayload, fn=op_menu_sections_update
+    ),
+    "shop/menu_sections/remove_requested": Operation(
+        payload_model=ShopMenuSectionIdPayload, fn=op_menu_sections_remove
+    ),
+    "shop/menu_sections/reorder_requested": Operation(
+        payload_model=ShopMenuSectionsReorderPayload, fn=op_menu_sections_reorder
+    ),
+    "shop/menu_items/add_requested": Operation(
+        payload_model=ShopMenuItemAddPayload, fn=op_menu_items_add
+    ),
+    "shop/menu_items/update_requested": Operation(
+        payload_model=ShopMenuItemUpdatePayload, fn=op_menu_items_update
+    ),
+    "shop/menu_items/move_requested": Operation(
+        payload_model=ShopMenuItemMovePayload, fn=op_menu_items_move
+    ),
+    "shop/menu_items/remove_requested": Operation(
+        payload_model=ShopMenuItemIdPayload, fn=op_menu_items_remove
+    ),
+    "shop/menu_items/reorder_requested": Operation(
+        payload_model=ShopMenuItemsReorderPayload, fn=op_menu_items_reorder
+    ),
+    "shop/menu_imports/start_requested": Operation(
+        payload_model=ShopMenuImportStartPayload, fn=op_menu_imports_start
+    ),
+    "shop/menu_imports/list_requested": Operation(
+        payload_model=ShopIdPayload, fn=op_menu_imports_list
+    ),
+    "shop/menu_imports/apply_requested": Operation(
+        payload_model=ShopMenuImportApplyPayload, fn=op_menu_imports_apply
+    ),
+    "shop/menu_templates/build_requested": Operation(
+        payload_model=ShopMenuTemplateBuildPayload, fn=op_menu_templates_build
+    ),
+    "shop/products/enrich_requested": Operation(
+        payload_model=ShopProductsEnrichPayload, fn=op_products_enrich
+    ),
+    "shop/products/enrich_apply_requested": Operation(
+        payload_model=ShopProductsEnrichApplyPayload, fn=op_products_enrich_apply
+    ),
+    "shop/menu_file_imports/run_requested": Operation(
+        payload_model=ShopMenuFileImportRunPayload, fn=op_menu_file_imports_run
     ),
     "shop/modifiers/groups/list_requested": Operation(
         payload_model=ShopIdPayload, fn=op_modifier_groups_list
@@ -209,9 +305,6 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/ai/describe_requested": Operation(
         payload_model=ShopAiDescribePayload, fn=op_ai_describe_product
     ),
-    "shop/ai/describe_batch_requested": Operation(
-        payload_model=ShopAiDescribeBatchPayload, fn=op_ai_describe_batch
-    ),
     "shop/ai/enhance_photo_requested": Operation(
         payload_model=ShopAiEnhancePhotoPayload, fn=op_ai_enhance_photo
     ),
@@ -228,7 +321,4 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
         payload_model=ShopAiShopPayload, fn=op_ai_generate_logo
     ),
     "shop/ai/autofill_requested": Operation(payload_model=ShopIdPayload, fn=op_ai_autofill),
-    "shop/ai/parse_menu_requested": Operation(
-        payload_model=ShopAiParseMenuPayload, fn=op_ai_parse_menu
-    ),
 }

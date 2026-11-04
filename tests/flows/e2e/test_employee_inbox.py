@@ -19,6 +19,16 @@ pytestmark = pytest.mark.asyncio
 _NODES = {"main": {"type": "llm_node", "prompt": "hi"}}
 
 
+def _inbox(di) -> EmployeeInboxService:
+    return EmployeeInboxService(
+        di.work_item_service,
+        di.flow_access_service,
+        di.files_service,
+        di.authz_service,
+        di.mail_service,
+    )
+
+
 async def _provision_employee_flow(client, flow_id: str, curator_id: str) -> None:
     resp = await client.post(
         "/flows/api/v1/flows/",
@@ -44,7 +54,7 @@ async def test_sync_message_enqueues(app, client, di, unique_id, system_user_id)
     await _provision_employee_flow(client, flow_id, system_user_id)
     emp_id = flow_employee_user_id(flow_id)
 
-    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
+    dispatched = await _inbox(di).dispatch_sync_message(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -72,7 +82,7 @@ async def test_work_item_assigned_enqueues_with_write_back(
         created_by=SystemActor(),
     )
 
-    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_work_item_assigned(
+    dispatched = await _inbox(di).dispatch_work_item_assigned(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -113,7 +123,7 @@ async def test_work_item_assigned_enqueues_without_request_context(
     clear_context()
     assert get_context() is None
 
-    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_work_item_assigned(
+    dispatched = await _inbox(di).dispatch_work_item_assigned(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -138,7 +148,7 @@ async def test_not_flow_employee_ignored(app, di, unique_id, system_user_id):
     )
     await User.set(plain)
 
-    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
+    dispatched = await _inbox(di).dispatch_sync_message(
         company_id="system",
         employee_user_id=plain_id,
         sender_user_id=system_user_id,
@@ -153,7 +163,7 @@ async def test_not_flow_employee_ignored(app, di, unique_id, system_user_id):
 async def test_unknown_employee_errors(app, di, unique_id, system_user_id):
     _ = app
     with pytest.raises(ValueError, match="not found"):
-        _ = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
+        _ = await _inbox(di).dispatch_sync_message(
             company_id="system",
             employee_user_id=f"flow_employee_missing_{unique_id}",
             sender_user_id=system_user_id,

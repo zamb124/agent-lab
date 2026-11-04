@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from apps.shop.models.enums import (
+    ShopAllergen,
     ShopDeliveryType,
     ShopKind,
+    ShopMeasureUnit,
+    ShopMenuStatus,
     ShopOrderSource,
     ShopOrderStatus,
     ShopStatus,
 )
+from apps.shop.models.menu_section import ShopMenuSection
+from apps.shop.models.nutrition import ShopNutrition
 from core.models import StrictBaseModel
 from core.types import JsonObject
 
@@ -111,75 +118,54 @@ class ShopUpdateRequest(StrictBaseModel):
     badges: list[ShopBadge] | None = Field(default=None, max_length=20)
 
 
-class ShopCategoryResponse(StrictBaseModel):
-    shop_category_id: str
-    shop_id: str
-    parent_id: str | None
-    name: str
-    sort: int
-    is_active: bool
-
-
-class ShopCategoryCreateRequest(StrictBaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    parent_id: str | None = None
-
-
-class ShopCategoryUpdateRequest(StrictBaseModel):
-    name: str | None = Field(default=None, max_length=200)
-    is_active: bool | None = None
-
-
 class ShopProductResponse(StrictBaseModel):
     shop_product_id: str
     shop_id: str
-    category_id: str | None
     name: str
     description: str
-    portion: str
+    measure: int | None
+    measure_unit: ShopMeasureUnit
+    ingredients: list[str]
+    nutrition: ShopNutrition | None
+    allergens: list[ShopAllergen]
     badges: list[str]
     price_minor: int
     photo_file_id: str | None
     is_available: bool
+    ai_unverified: bool
+    similar_shop_product_id: str | None
     sort: int
 
 
 class ShopProductCreateRequest(StrictBaseModel):
-    category_id: str | None = None
+    """Новое блюдо каталога; ``ai_unverified`` ставит агентный импорт."""
+
     name: str = Field(min_length=1, max_length=300)
     description: str = ""
-    portion: str = Field(default="", max_length=50)
+    measure: int | None = Field(default=None, ge=0)
+    measure_unit: ShopMeasureUnit = ShopMeasureUnit.G
+    ingredients: list[str] = Field(default_factory=list, max_length=100)
+    nutrition: ShopNutrition | None = None
+    allergens: list[ShopAllergen] = Field(default_factory=list)
     badges: list[str] = Field(default_factory=list, max_length=5)
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
+    ai_unverified: bool = False
 
 
 class ShopProductUpdateRequest(StrictBaseModel):
-    category_id: str | None = None
-    name: str | None = Field(default=None, max_length=300)
+    name: str | None = Field(default=None, min_length=1, max_length=300)
     description: str | None = None
-    portion: str | None = Field(default=None, max_length=50)
+    measure: int | None = Field(default=None, ge=0)
+    measure_unit: ShopMeasureUnit | None = None
+    ingredients: list[str] | None = Field(default=None, max_length=100)
+    nutrition: ShopNutrition | None = None
+    allergens: list[ShopAllergen] | None = None
     badges: list[str] | None = Field(default=None, max_length=5)
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
     is_available: bool | None = None
     sort: int | None = None
-
-
-class ShopProductImportItem(StrictBaseModel):
-    name: str = Field(min_length=1, max_length=300)
-    description: str = ""
-    portion: str = Field(default="", max_length=50)
-    price_minor: int = Field(ge=0)
-
-
-class ShopProductsImportRequest(StrictBaseModel):
-    category_id: str | None = None
-    items: list[ShopProductImportItem] = Field(min_length=1, max_length=500)
-
-
-class ShopProductsImportResponse(StrictBaseModel):
-    created: int
 
 
 class ShopProductsReorderRequest(StrictBaseModel):
@@ -188,21 +174,132 @@ class ShopProductsReorderRequest(StrictBaseModel):
     product_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
-class ShopCategoryReorderItem(StrictBaseModel):
-    """Узел дерева категорий: категория и её родитель после перестановки."""
+class ShopProductSimilarResponse(StrictBaseModel):
+    """Кандидат на объединение: блюдо каталога и pg_trgm similarity названия."""
 
-    category_id: str = Field(min_length=1)
+    product: ShopProductResponse
+    score: float
+
+
+ShopProductMergeField = Literal[
+    "name",
+    "description",
+    "measure",
+    "measure_unit",
+    "ingredients",
+    "nutrition",
+    "allergens",
+    "badges",
+    "price_minor",
+    "photo_file_id",
+]
+
+
+class ShopProductMergeRequest(StrictBaseModel):
+    """Слияние блюда в ``into_shop_product_id``.
+
+    Поля из ``fields`` переносятся с исходного блюда в целевое, позиции меню
+    исходного блюда переходят к целевому, исходное блюдо удаляется.
+    """
+
+    into_shop_product_id: str = Field(min_length=1)
+    fields: list[ShopProductMergeField] = Field(default_factory=list)
+
+
+class ShopMenuItemResponse(StrictBaseModel):
+    """Позиция меню с итоговой ценой: override позиции или цена каталога."""
+
+    shop_menu_item_id: str
+    shop_menu_id: str
+    shop_menu_section_id: str
+    shop_product_id: str
+    price_minor_override: int | None
+    is_available: bool
+    sort: int
+    effective_price_minor: int
+
+
+class ShopMenuResponse(StrictBaseModel):
+    """Меню целиком: разделы по sort и позиции по (раздел, sort)."""
+
+    shop_menu_id: str
+    shop_id: str
+    name: str
+    status: ShopMenuStatus
+    sort: int
+    sections: list[ShopMenuSection]
+    items: list[ShopMenuItemResponse]
+
+
+class ShopMenuCreateRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class ShopMenuUpdateRequest(StrictBaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class ShopMenusReorderRequest(StrictBaseModel):
+    """Новый порядок меню заведения: ids в желаемой последовательности."""
+
+    shop_menu_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class ShopMenuSetStatusRequest(StrictBaseModel):
+    status: ShopMenuStatus
+
+
+class ShopMenuSectionCreateRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=200)
     parent_id: str | None = None
 
 
-class ShopCategoriesReorderRequest(StrictBaseModel):
-    """Полное дерево категорий меню: все узлы в depth-first порядке.
+class ShopMenuSectionUpdateRequest(StrictBaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
 
-    ``sort`` каждой категории вычисляется сервером — позиция среди siblings
-    в порядке обхода ``items``. Все категории магазина обязаны присутствовать.
+
+class ShopMenuSectionReorderItem(StrictBaseModel):
+    """Узел дерева разделов: раздел и его родитель после перестановки."""
+
+    shop_menu_section_id: str = Field(min_length=1)
+    parent_id: str | None = None
+
+
+class ShopMenuSectionsReorderRequest(StrictBaseModel):
+    """Полное дерево разделов меню: все узлы в depth-first порядке.
+
+    ``sort`` каждого раздела вычисляется сервером — позиция среди siblings
+    в порядке обхода ``items``. Все разделы меню обязаны присутствовать.
     """
 
-    items: list[ShopCategoryReorderItem] = Field(min_length=1, max_length=200)
+    items: list[ShopMenuSectionReorderItem] = Field(min_length=1, max_length=500)
+
+
+class ShopMenuItemAddRequest(StrictBaseModel):
+    shop_menu_section_id: str = Field(min_length=1)
+    shop_product_id: str = Field(min_length=1)
+    price_minor_override: int | None = Field(default=None, ge=0)
+    is_available: bool = True
+
+
+class ShopMenuItemUpdateRequest(StrictBaseModel):
+    """Patch позиции: явный ``price_minor_override: null`` возвращает цену каталога."""
+
+    price_minor_override: int | None = Field(default=None, ge=0)
+    is_available: bool | None = None
+
+
+class ShopMenuItemMoveRequest(StrictBaseModel):
+    """Перенос позиции в другой раздел того же меню — в конец раздела."""
+
+    shop_menu_section_id: str = Field(min_length=1)
+
+
+class ShopMenuItemsReorderRequest(StrictBaseModel):
+    """Новый порядок позиций раздела: ids в желаемой последовательности."""
+
+    shop_menu_section_id: str = Field(min_length=1)
+    shop_menu_item_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 class ShopAiDescribeRequest(StrictBaseModel):
@@ -276,24 +373,6 @@ class ShopAiSuggestOptionsResponse(StrictBaseModel):
     items: list[ShopAiOptionSuggestion]
 
 
-class ShopAiMenuItem(StrictBaseModel):
-    """Позиция, извлечённая AI из свободного текста меню."""
-
-    name: str
-    price_minor: int = Field(ge=0, le=10_000_000)
-    description: str = ""
-    portion: str = Field(default="", max_length=50)
-    category: str = ""
-
-
-class ShopAiParseMenuRequest(StrictBaseModel):
-    text: str = Field(min_length=3, max_length=50_000)
-
-
-class ShopAiParseMenuResponse(StrictBaseModel):
-    items: list[ShopAiMenuItem]
-
-
 class ShopModifierOptionCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=200)
     price_minor: int = Field(default=0, ge=0, le=10_000_000)
@@ -339,7 +418,9 @@ class ShopOrderItemSelection(StrictBaseModel):
 
 
 class ShopOrderItemRequest(StrictBaseModel):
-    product_id: str = Field(min_length=1)
+    """Строка корзины: позиция активного меню витрины — она задаёт блюдо и цену."""
+
+    shop_menu_item_id: str = Field(min_length=1)
     qty: int = Field(ge=1, le=99)
     selections: list[ShopOrderItemSelection] = Field(default_factory=list, max_length=50)
 
@@ -353,6 +434,7 @@ class ShopOrderItemModifierResponse(StrictBaseModel):
 
 class ShopOrderItemResponse(StrictBaseModel):
     product_id: str
+    shop_menu_item_id: str | None
     name: str
     price_minor: int
     qty: int
@@ -425,6 +507,7 @@ class ShopCartPriceRequest(StrictBaseModel):
 
 
 class ShopCartPriceLineResponse(StrictBaseModel):
+    shop_menu_item_id: str
     product_id: str
     qty: int
     unit_minor: int

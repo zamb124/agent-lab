@@ -1,16 +1,19 @@
 /**
  * Фабрики событий магазина: каждая команда — `op_*` через WS RPC + REST-зеркало.
  *
- * Ресурс `shop/shops` — коллекция магазинов компании; категории, товары и
- * заказы адресуются `shop_id` из маршрута, поэтому они — async ops, а не
- * коллекции.
+ * Ресурс `shop/shops` — коллекция магазинов компании; каталог блюд, меню,
+ * импорты и заказы адресуются `shop_id` из маршрута, поэтому они — async ops,
+ * а не коллекции. Списки перечитываются push-событиями `shop/catalog/changed`,
+ * `shop/menu/updated` и `worktracker/work_item/*` своего заведения.
  */
 
 import { createAsyncOp, createResourceCollection, rerunLastRequest } from '@platform/lib/events/index.js';
 import type { AsyncOpFactory } from '@platform/lib/events/factories/async-op.js';
 import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
 import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
+import { WORK_ITEM_EVENTS } from '@platform/lib/events/resources/work-items.resource.js';
 import type { ShopResponse, ShopShopEventPayload, ShopStatus } from '@platform/lib/events/wire/shop.gen.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
 
 const SHOP_STATUSES: readonly ShopStatus[] = ['draft', 'published', 'suspended'];
 
@@ -111,64 +114,177 @@ export const shopSuspendOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/suspend' },
 });
 
-export const shopCategoriesListOp = createAsyncOp({
-    name: 'shop/categories_list',
+/** Последний запрос op адресован заведению `shopId`. */
+function forShop(shopId: string): (payload: unknown) => boolean {
+    return (payload) => isPlainRecord(payload) && payload.shop_id === shopId;
+}
+
+/** `shop_id` запроса из `<op>/succeeded` (`{ result, request }`); `null` — другой контракт. */
+function succeededShopId(event: PlatformEvent, succeededType: string): string | null {
+    if (event.type !== succeededType || !isPlainRecord(event.payload)) {
+        return null;
+    }
+    const request = event.payload.request;
+    return isPlainRecord(request) && typeof request.shop_id === 'string' ? request.shop_id : null;
+}
+
+export const shopMenusListOp = createAsyncOp({
+    name: 'shop/menus_list',
     silent: true,
-    commandType: 'shop/categories/list_requested',
+    commandType: 'shop/menus/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/categories' },
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/menus' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
-            return false;
+        if (isPlatformEventType(event, ['shop/menu/updated', 'shop/catalog/changed'])) {
+            return rerunLastRequest(ctx, shopMenusListOp, { when: forShop(event.payload.shop_id) });
         }
-        const pushedShopId = event.payload.shop_id;
-        return rerunLastRequest(ctx, shopCategoriesListOp, {
-            when: (payload) =>
-                isPlainRecord(payload)
-                && payload.shop_id === pushedShopId,
-        });
+        const reorderedShopId = succeededShopId(event, shopMenusReorderOp.events.SUCCEEDED);
+        if (reorderedShopId !== null) {
+            return rerunLastRequest(ctx, shopMenusListOp, { when: forShop(reorderedShopId) });
+        }
+        return false;
     },
 });
 
-export const shopCategoryCreateOp = createAsyncOp({
-    name: 'shop/category_create',
-    successToastKey: 'shop:toast.category_created',
-    errorToastKey: 'shop:toast.category_create_failed',
-    commandType: 'shop/categories/create_requested',
+export const shopMenuCreateOp = createAsyncOp({
+    name: 'shop/menu_create',
+    successToastKey: 'shop:toast.menu_created',
+    errorToastKey: 'shop:toast.menu_create_failed',
+    commandType: 'shop/menus/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/categories' },
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus' },
 });
 
-export const shopCategoryUpdateOp = createAsyncOp({
-    name: 'shop/category_update',
-    successToastKey: 'shop:toast.category_updated',
-    errorToastKey: 'shop:toast.category_update_failed',
-    commandType: 'shop/categories/update_requested',
+export const shopMenuUpdateOp = createAsyncOp({
+    name: 'shop/menu_update',
+    successToastKey: 'shop:toast.menu_updated',
+    errorToastKey: 'shop:toast.menu_update_failed',
+    commandType: 'shop/menus/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/categories/{shop_category_id}' },
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}' },
 });
 
-export const shopCategoryRemoveOp = createAsyncOp({
-    name: 'shop/category_remove',
-    successToastKey: 'shop:toast.category_removed',
-    errorToastKey: 'shop:toast.category_remove_failed',
-    commandType: 'shop/categories/remove_requested',
+export const shopMenusReorderOp = createAsyncOp({
+    name: 'shop/menus_reorder',
+    successToastKey: 'shop:toast.menus_reordered',
+    errorToastKey: 'shop:toast.menus_reorder_failed',
+    commandType: 'shop/menus/reorder_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/categories/{shop_category_id}' },
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus/reorder' },
 });
 
-export const shopCategoriesReorderOp = createAsyncOp({
-    name: 'shop/categories_reorder',
-    successToastKey: 'shop:toast.categories_reordered',
-    errorToastKey: 'shop:toast.category_reorder_failed',
-    commandType: 'shop/categories/reorder_requested',
+export const shopMenuSetStatusOp = createAsyncOp({
+    name: 'shop/menu_set_status',
+    successToastKey: 'shop:toast.menu_status_updated',
+    errorToastKey: 'shop:toast.menu_status_failed',
+    commandType: 'shop/menus/set_status_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}/status' },
+});
+
+export const shopMenuRemoveOp = createAsyncOp({
+    name: 'shop/menu_remove',
+    successToastKey: 'shop:toast.menu_removed',
+    errorToastKey: 'shop:toast.menu_remove_failed',
+    commandType: 'shop/menus/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}' },
+});
+
+export const shopMenuSectionCreateOp = createAsyncOp({
+    name: 'shop/menu_section_create',
+    successToastKey: 'shop:toast.section_created',
+    errorToastKey: 'shop:toast.section_create_failed',
+    commandType: 'shop/menu_sections/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}/sections' },
+});
+
+export const shopMenuSectionUpdateOp = createAsyncOp({
+    name: 'shop/menu_section_update',
+    successToastKey: 'shop:toast.section_updated',
+    errorToastKey: 'shop:toast.section_update_failed',
+    commandType: 'shop/menu_sections/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/menu-sections/{shop_menu_section_id}' },
+});
+
+export const shopMenuSectionRemoveOp = createAsyncOp({
+    name: 'shop/menu_section_remove',
+    successToastKey: 'shop:toast.section_removed',
+    errorToastKey: 'shop:toast.section_remove_failed',
+    commandType: 'shop/menu_sections/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/menu-sections/{shop_menu_section_id}' },
+});
+
+export const shopMenuSectionsReorderOp = createAsyncOp({
+    name: 'shop/menu_sections_reorder',
+    successToastKey: 'shop:toast.sections_reordered',
+    errorToastKey: 'shop:toast.sections_reorder_failed',
+    commandType: 'shop/menu_sections/reorder_requested',
     transport: 'ws',
     wsTimeoutMs: 15_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/categories/reorder' },
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}/sections/reorder' },
+});
+
+export const shopMenuItemAddOp = createAsyncOp({
+    name: 'shop/menu_item_add',
+    successToastKey: 'shop:toast.menu_item_added',
+    errorToastKey: 'shop:toast.menu_item_add_failed',
+    commandType: 'shop/menu_items/add_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menus/{shop_menu_id}/items' },
+});
+
+export const shopMenuItemUpdateOp = createAsyncOp({
+    name: 'shop/menu_item_update',
+    successToastKey: 'shop:toast.menu_item_updated',
+    errorToastKey: 'shop:toast.menu_item_update_failed',
+    commandType: 'shop/menu_items/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/menu-items/{shop_menu_item_id}' },
+});
+
+export const shopMenuItemMoveOp = createAsyncOp({
+    name: 'shop/menu_item_move',
+    successToastKey: 'shop:toast.menu_item_moved',
+    errorToastKey: 'shop:toast.menu_item_move_failed',
+    commandType: 'shop/menu_items/move_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-items/{shop_menu_item_id}/move' },
+});
+
+export const shopMenuItemRemoveOp = createAsyncOp({
+    name: 'shop/menu_item_remove',
+    successToastKey: 'shop:toast.menu_item_removed',
+    errorToastKey: 'shop:toast.menu_item_remove_failed',
+    commandType: 'shop/menu_items/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/menu-items/{shop_menu_item_id}' },
+});
+
+export const shopMenuItemsReorderOp = createAsyncOp({
+    name: 'shop/menu_items_reorder',
+    successToastKey: 'shop:toast.menu_items_reordered',
+    errorToastKey: 'shop:toast.menu_items_reorder_failed',
+    commandType: 'shop/menu_items/reorder_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-items/reorder' },
 });
 
 export const shopProductsListOp = createAsyncOp({
@@ -211,26 +327,6 @@ export const shopProductUpdateOp = createAsyncOp({
     restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}' },
 });
 
-export const shopProductsImportOp = createAsyncOp({
-    name: 'shop/products_import',
-    successToastKey: 'shop:toast.products_imported',
-    errorToastKey: 'shop:toast.products_import_failed',
-    commandType: 'shop/products/import_requested',
-    transport: 'ws',
-    wsTimeoutMs: 15_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/import' },
-});
-
-export const shopProductsReorderOp = createAsyncOp({
-    name: 'shop/products_reorder',
-    successToastKey: 'shop:toast.products_reordered',
-    errorToastKey: 'shop:toast.product_reorder_failed',
-    commandType: 'shop/products/reorder_requested',
-    transport: 'ws',
-    wsTimeoutMs: 15_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/reorder' },
-});
-
 export const shopProductRemoveOp = createAsyncOp({
     name: 'shop/product_remove',
     successToastKey: 'shop:toast.product_removed',
@@ -239,6 +335,136 @@ export const shopProductRemoveOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}' },
+});
+
+export const shopProductVerifyOp = createAsyncOp({
+    name: 'shop/product_verify',
+    successToastKey: 'shop:toast.product_verified',
+    errorToastKey: 'shop:toast.product_verify_failed',
+    commandType: 'shop/products/verify_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}/verify' },
+});
+
+export const shopProductSimilarListOp = createAsyncOp({
+    name: 'shop/product_similar_list',
+    silent: true,
+    commandType: 'shop/products/similar_list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}/similar' },
+});
+
+export const shopProductMergeOp = createAsyncOp({
+    name: 'shop/product_merge',
+    successToastKey: 'shop:toast.product_merged',
+    errorToastKey: 'shop:toast.product_merge_failed',
+    commandType: 'shop/products/merge_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}/merge' },
+});
+
+export const shopProductDismissSimilarOp = createAsyncOp({
+    name: 'shop/product_dismiss_similar',
+    successToastKey: 'shop:toast.similar_dismissed',
+    errorToastKey: 'shop:toast.similar_dismiss_failed',
+    commandType: 'shop/products/dismiss_similar_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}/dismiss-similar' },
+});
+
+export const shopProductsEnrichOp = createAsyncOp({
+    name: 'shop/products_enrich',
+    successToastKey: 'shop:toast.enrich_started',
+    errorToastKey: 'shop:toast.enrich_failed',
+    commandType: 'shop/products/enrich_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/enrich' },
+});
+
+export const shopMenuImportStartOp = createAsyncOp({
+    name: 'shop/menu_import_start',
+    successToastKey: 'shop:toast.menu_import_started',
+    errorToastKey: 'shop:toast.menu_import_failed',
+    commandType: 'shop/menu_imports/start_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-imports' },
+});
+
+export const shopMenuTemplateBuildOp = createAsyncOp({
+    name: 'shop/menu_template_build',
+    successToastKey: 'shop:toast.menu_template_started',
+    errorToastKey: 'shop:toast.menu_template_failed',
+    commandType: 'shop/menu_templates/build_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-templates' },
+});
+
+export const shopMenuFileImportRunOp = createAsyncOp({
+    name: 'shop/menu_file_import_run',
+    successToastKey: 'shop:toast.menu_file_import_done',
+    errorToastKey: 'shop:toast.menu_file_import_failed',
+    commandType: 'shop/menu_file_imports/run_requested',
+    transport: 'ws',
+    wsTimeoutMs: 120_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-file-imports' },
+});
+
+/** Заведения, к которым push WorkItem привязан ссылкой `ShopLink`. */
+function workItemShopIds(event: PlatformEvent): string[] {
+    if (!isPlatformEventType(event, WORK_ITEM_EVENTS)) {
+        return [];
+    }
+    const workItem = event.payload.work_item;
+    if (!isPlainRecord(workItem) || !Array.isArray(workItem.links)) {
+        return [];
+    }
+    const ids: string[] = [];
+    for (const link of workItem.links) {
+        if (isPlainRecord(link) && link.link_kind === 'shop' && typeof link.shop_id === 'string') {
+            ids.push(link.shop_id);
+        }
+    }
+    return ids;
+}
+
+const AGENT_JOB_STARTED = [
+    shopMenuImportStartOp.events.SUCCEEDED,
+    shopMenuTemplateBuildOp.events.SUCCEEDED,
+    shopProductsEnrichOp.events.SUCCEEDED,
+    shopMenuFileImportRunOp.events.SUCCEEDED,
+];
+
+export const shopMenuImportsListOp = createAsyncOp({
+    name: 'shop/menu_imports_list',
+    silent: true,
+    commandType: 'shop/menu_imports/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/menu-imports' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (isPlatformEventType(event, 'shop/catalog/changed')) {
+            return rerunLastRequest(ctx, shopMenuImportsListOp, { when: forShop(event.payload.shop_id) });
+        }
+        for (const shopId of workItemShopIds(event)) {
+            if (rerunLastRequest(ctx, shopMenuImportsListOp, { when: forShop(shopId) })) {
+                return true;
+            }
+        }
+        for (const succeededType of AGENT_JOB_STARTED) {
+            const startedShopId = succeededShopId(event, succeededType);
+            if (startedShopId !== null) {
+                return rerunLastRequest(ctx, shopMenuImportsListOp, { when: forShop(startedShopId) });
+            }
+        }
+        return false;
+    },
 });
 
 export const shopOrdersListOp: AsyncOpFactory = createAsyncOp({
@@ -359,26 +585,6 @@ export const shopAiAutofillOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 180_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/autofill' },
-});
-
-export const shopAiParseMenuOp = createAsyncOp({
-    name: 'shop/ai_parse_menu',
-    successToastKey: 'shop:toast.ai_parse_done',
-    errorToastKey: 'shop:toast.ai_parse_failed',
-    commandType: 'shop/ai/parse_menu_requested',
-    transport: 'ws',
-    wsTimeoutMs: 120_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/parse-menu' },
-});
-
-export const shopAiDescribeBatchOp = createAsyncOp({
-    name: 'shop/ai_describe_batch',
-    successToastKey: 'shop:toast.ai_batch_started',
-    errorToastKey: 'shop:toast.ai_batch_failed',
-    commandType: 'shop/ai/describe_batch_requested',
-    transport: 'ws',
-    wsTimeoutMs: 30_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe-all' },
 });
 
 export const shopModifierGroupsListOp: AsyncOpFactory = createAsyncOp({
@@ -569,17 +775,34 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/shop_publish': typeof shopPublishOp;
         'shop/shop_suspend': typeof shopSuspendOp;
         'shop/badge_icons_list': typeof shopBadgeIconsListOp;
-        'shop/categories_list': typeof shopCategoriesListOp;
-        'shop/category_create': typeof shopCategoryCreateOp;
-        'shop/category_update': typeof shopCategoryUpdateOp;
-        'shop/category_remove': typeof shopCategoryRemoveOp;
-        'shop/categories_reorder': typeof shopCategoriesReorderOp;
         'shop/products_list': typeof shopProductsListOp;
         'shop/product_create': typeof shopProductCreateOp;
         'shop/product_update': typeof shopProductUpdateOp;
         'shop/product_remove': typeof shopProductRemoveOp;
-        'shop/products_reorder': typeof shopProductsReorderOp;
-        'shop/products_import': typeof shopProductsImportOp;
+        'shop/product_verify': typeof shopProductVerifyOp;
+        'shop/product_similar_list': typeof shopProductSimilarListOp;
+        'shop/product_merge': typeof shopProductMergeOp;
+        'shop/product_dismiss_similar': typeof shopProductDismissSimilarOp;
+        'shop/products_enrich': typeof shopProductsEnrichOp;
+        'shop/menus_list': typeof shopMenusListOp;
+        'shop/menu_create': typeof shopMenuCreateOp;
+        'shop/menu_update': typeof shopMenuUpdateOp;
+        'shop/menus_reorder': typeof shopMenusReorderOp;
+        'shop/menu_set_status': typeof shopMenuSetStatusOp;
+        'shop/menu_remove': typeof shopMenuRemoveOp;
+        'shop/menu_section_create': typeof shopMenuSectionCreateOp;
+        'shop/menu_section_update': typeof shopMenuSectionUpdateOp;
+        'shop/menu_section_remove': typeof shopMenuSectionRemoveOp;
+        'shop/menu_sections_reorder': typeof shopMenuSectionsReorderOp;
+        'shop/menu_item_add': typeof shopMenuItemAddOp;
+        'shop/menu_item_update': typeof shopMenuItemUpdateOp;
+        'shop/menu_item_move': typeof shopMenuItemMoveOp;
+        'shop/menu_item_remove': typeof shopMenuItemRemoveOp;
+        'shop/menu_items_reorder': typeof shopMenuItemsReorderOp;
+        'shop/menu_imports_list': typeof shopMenuImportsListOp;
+        'shop/menu_import_start': typeof shopMenuImportStartOp;
+        'shop/menu_template_build': typeof shopMenuTemplateBuildOp;
+        'shop/menu_file_import_run': typeof shopMenuFileImportRunOp;
         'shop/orders_list': typeof shopOrdersListOp;
         'shop/order_set_status': typeof shopOrderSetStatusOp;
         'shop/domain_add': typeof shopDomainAddOp;
@@ -591,8 +814,6 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/ai_generate_cover': typeof shopAiGenerateCoverOp;
         'shop/ai_generate_logo': typeof shopAiGenerateLogoOp;
         'shop/ai_autofill': typeof shopAiAutofillOp;
-        'shop/ai_parse_menu': typeof shopAiParseMenuOp;
-        'shop/ai_describe_batch': typeof shopAiDescribeBatchOp;
         'shop/modifier_groups_list': typeof shopModifierGroupsListOp;
         'shop/modifier_group_create': typeof shopModifierGroupCreateOp;
         'shop/modifier_group_update': typeof shopModifierGroupUpdateOp;

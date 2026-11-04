@@ -16,7 +16,7 @@ import re
 from pydantic import TypeAdapter
 
 from apps.shop.config import ShopSettings
-from apps.shop.models.api import ShopAiMenuItem, ShopAiOptionSuggestion
+from apps.shop.models.api import ShopAiOptionSuggestion
 from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
 from core.config import get_settings
 from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
@@ -39,7 +39,6 @@ _BRANCH_GENERATE_PHOTO = "generate_photo"
 _BRANCH_DESCRIBE_SHOP = "describe_shop"
 _BRANCH_GENERATE_COVER = "generate_cover"
 _BRANCH_GENERATE_LOGO = "generate_logo"
-_BRANCH_PARSE_MENU = "parse_menu"
 
 
 class ShopAiService:
@@ -250,18 +249,6 @@ class ShopAiService:
             content=f"Сгенерируй фотографию «{name}»",
             variables=variables,
         )
-
-    async def parse_menu(self, *, text: str) -> list[ShopAiMenuItem]:
-        """Разбор свободного текста меню: ветка ``parse_menu`` (structured output)."""
-        payload = await self._flow_json(
-            _BRANCH_PARSE_MENU,
-            content=text,
-            variables={},
-        )
-        items_raw = payload.get("items")
-        if not isinstance(items_raw, list) or not items_raw:
-            raise PlatformNotFoundError("ai returned empty items", error_code="ai_empty_result")
-        return TypeAdapter(list[ShopAiMenuItem]).validate_python(items_raw)[:500]
 
     async def describe_shop(
         self, *, name: str, description: str = "", city: str = ""

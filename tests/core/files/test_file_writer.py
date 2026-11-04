@@ -105,6 +105,22 @@ def test_html_embeds_http_images() -> None:
     assert "data:image/png;base64," in html
 
 
+def test_html_embeds_data_uri_images() -> None:
+    from core.files.writer.image_fetch import fetch_url_bytes
+
+    b64 = base64.b64encode(MIN_PNG).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+    data, mime = fetch_url_bytes(data_uri, max_bytes=1024 * 1024, timeout_seconds=1.0)
+    assert data == MIN_PNG
+    assert mime == "image/png"
+
+    w = FileWriter()
+    md = f"![]({data_uri})"
+    r = w.build_bytes(md, "data_uri.html", content_mode="markdown")
+    html = r.data.decode("utf-8")
+    assert "data:image/png;base64," in html
+
+
 def test_pdf_builds() -> None:
     w = FileWriter()
     r = w.build_bytes("# H\n\npara", "a.pdf", content_mode="markdown")

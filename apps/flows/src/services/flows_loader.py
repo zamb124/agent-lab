@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from apps.flows.src.models import (
     CodeMode,
     FlowConfig,
+    FlowEmployeeConfig,
     FlowToolReference,
     NodeConfig,
     ToolReference,
@@ -28,9 +29,11 @@ from apps.flows.src.models import (
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.services.flow_access_service import FlowAccessService
+from apps.flows.src.services.flow_employee_provisioning import sync_flow_employee
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
+from core.authz.service import AuthzService
 from core.context import get_context
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import stored_file_ref
@@ -40,6 +43,8 @@ from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
+from core.mail.service import MailService
+from core.models.identity_models import Company
 from core.types import (
     JsonArray,
     JsonObject,
@@ -50,6 +55,8 @@ from core.types import (
     require_json_array,
     require_json_object,
 )
+
+COMPANY_OWNER_CURATOR = "$company_owner"
 
 logger = get_logger(__name__)
 
@@ -87,10 +94,14 @@ class FlowsLoader:
         registry_path: Path | None = None,
         flow_access_service: FlowAccessService | None = None,
         files_service: FilesService | None = None,
+        authz_service: AuthzService | None = None,
+        mail_service: MailService | None = None,
     ):
         self.bundles_dir: Path = bundles_dir
         self.flow_access_service: FlowAccessService | None = flow_access_service
         self.files_service: FilesService | None = files_service
+        self.authz_service: AuthzService | None = authz_service
+        self.mail_service: MailService | None = mail_service
         self.registry_path: Path = registry_path or (bundles_dir / "registry.yaml")
         self._registry: JsonObject = {}
         self._bundle_registry: FlowBundleRegistry = FlowBundleRegistry()
@@ -110,6 +121,17 @@ class FlowsLoader:
             company_id=company_id,
             owner_user_id="system",
         )
+        if flow_config.employee.enabled:
+            if self.authz_service is None or self.mail_service is None:
+                logger.warning(
+                    "flows.loader.employee_provision_skipped",
+                    flow_id=flow_config.flow_id,
+                    reason="authz_service_or_mail_service_missing",
+                )
+            else:
+                await sync_flow_employee(
+                    self.authz_service, self.mail_service, flow_config
+                )
 
     def load_registry_yaml(self) -> None:
         """Загружает ``registry.yaml`` в ``_registry`` и ``_defaults`` (секция ``defaults``)."""
@@ -324,6 +346,7 @@ class FlowsLoader:
         flow_config = await self.build_flow_bundle_config(bundle_id)
         if flow_config is None:
             return None
+        flow_config = await self._resolve_employee_curators(flow_config)
 
         previous = await FlowConfig.current_for_flow(flow_config.flow_id)
         _ = await FlowConfig.create_version(flow_config)
@@ -338,6 +361,44 @@ class FlowsLoader:
 
         logger.info("flows.loader.bundle_saved", bundle_id=bundle_id, name=flow_config.name)
         return flow_config.flow_id
+
+    async def _resolve_employee_curators(self, flow_config: FlowConfig) -> FlowConfig:
+        """Подставляет ``$company_owner`` в ``employee.curator_user_ids`` перед persist."""
+        if not flow_config.employee.enabled:
+            return flow_config
+        company_id = self._resolve_target_company_id()
+        company = await Company.get(company_id)
+        if company is None:
+            raise ValueError(
+                f"flows.loader: company {company_id} not found for employee curators of flow {flow_config.flow_id}"
+            )
+        raw_owner = company.owner_user_id
+        if not isinstance(raw_owner, str) or not raw_owner.strip():
+            raise ValueError(
+                f"flows.loader: company {company_id} has empty owner_user_id for flow {flow_config.flow_id} employee"
+            )
+        owner_user_id = raw_owner.strip()
+        resolved: list[str] = []
+        for curator_id in flow_config.employee.curator_user_ids:
+            cleaned = curator_id.strip()
+            if cleaned == COMPANY_OWNER_CURATOR:
+                if owner_user_id not in resolved:
+                    resolved.append(owner_user_id)
+                continue
+            if cleaned and cleaned not in resolved:
+                resolved.append(cleaned)
+        if not resolved:
+            raise ValueError(
+                f"flows.loader: flow {flow_config.flow_id} employee has no curators after resolve"
+            )
+        flow_config.employee = FlowEmployeeConfig(
+            enabled=True,
+            roles=list(flow_config.employee.roles),
+            curator_user_ids=resolved,
+            display_name=flow_config.employee.display_name,
+            avatar_url=flow_config.employee.avatar_url,
+        )
+        return flow_config
 
     async def build_flow_bundle_config(self, bundle_id: str) -> FlowConfig | None:
         """Собирает FlowConfig из bundle без сохранения в БД."""
@@ -398,6 +459,7 @@ class FlowsLoader:
         depends_on_flow_ids = self._read_bundle_depends_on_flow_ids(bundle_dir)
 
         raw_interface = raw_config.get("interface")
+        raw_employee = raw_config.get("employee")
         return FlowConfig.model_validate(
             {
                 "flow_id": raw_flow_id,
@@ -415,6 +477,7 @@ class FlowsLoader:
                 "hidden": raw_hidden,
                 "depends_on_flow_ids": depends_on_flow_ids,
                 **({"interface": raw_interface} if raw_interface is not None else {}),
+                **({"employee": raw_employee} if raw_employee is not None else {}),
             }
         )
 

@@ -2051,6 +2051,15 @@ export interface SearchMentionsRequest {
 }
 
 /**
+ * ShopLink
+ */
+export interface ShopLink {
+    "link_kind"?: "shop" | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * Кратчайший путь между двумя entities.
  * 
  * Использует weighted алгоритм Dijkstra.
@@ -2341,7 +2350,7 @@ export interface WorkItem {
     "interaction"?: WorkItemInteractionSpec | null | undefined;
     "hooks"?: WorkItemHook[] | undefined;
     "resolution"?: WorkItemResolution | null | undefined;
-    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | WorkItemToWorkItemLink)[] | undefined;
+    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | ShopLink | WorkItemToWorkItemLink)[] | undefined;
     "variables"?: Record<string, VariableEntry> | undefined;
     "attachments"?: FileRef[] | undefined;
     "interaction_policy"?: WorkItemInteractionPolicy | null | undefined;

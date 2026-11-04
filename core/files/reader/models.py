@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.files.file_ref import FileRef, file_id_from_download_url
 from core.types import JsonArray, JsonValue, parse_json_value, require_json_array
@@ -22,6 +22,12 @@ TRUNCATION_MARKER: str = "\n…[truncated]"
 
 DEFAULT_VIRTUAL_PAGE_SIZE: int = 4_000
 """Размер виртуальной страницы для сплошных форматов (txt/csv/json/html/docx без нативных страниц)."""
+
+MAX_NESTED_DEFAULT: int = 32
+"""Максимум вложенных content на один read-вызов (Parts / recursive)."""
+
+NESTED_OMITTED_STUB: str = "(omitted:budget)"
+"""Заглушка якоря nested, не влезшего в budget / max_nested."""
 
 
 def default_page_label(index: int) -> str:
@@ -91,6 +97,13 @@ class CompressionMode(StrEnum):
     ON_ERROR = "on_error"
 
 
+class NestedMode(StrEnum):
+    """Как read_file отдаёт вложенный content другого content_type."""
+
+    REFS = "refs"
+    PARTS = "parts"
+
+
 # ---------------------------------------------------------------------------
 # Вспомогательные модели render-слоя
 # ---------------------------------------------------------------------------
@@ -133,6 +146,7 @@ class UniversalPage(BaseModel):
     content_mode: ContentMode
     blocks: list[ExtractBlock] = Field(default_factory=list)
     files: list[FileRef] = Field(default_factory=list)
+    nested: list["NestedContent"] = Field(default_factory=list)
 
 
 class PageResult(BaseModel):
@@ -214,6 +228,31 @@ class ReadFileArgs(BaseModel):
         ge=0,
         description="Общий бюджет символов на чтение всех файлов вызова.",
     )
+    nested_mode: NestedMode = Field(
+        default=NestedMode.REFS,
+        description=(
+            "refs — якоря + FileRef в state.files; "
+            "parts — якоря + A2A Part(raw) в tool-result."
+        ),
+    )
+    recursive: bool = Field(
+        default=False,
+        description=(
+            "True — один уровень авто-read вложенного content в окне страниц "
+            "(только с nested_mode=refs)."
+        ),
+    )
+    max_nested: int = Field(
+        default=MAX_NESTED_DEFAULT,
+        ge=0,
+        description="Лимит вложенных content на вызов (Parts и recursive).",
+    )
+
+    @model_validator(mode="after")
+    def forbid_parts_with_recursive(self) -> ReadFileArgs:
+        if self.nested_mode is NestedMode.PARTS and self.recursive:
+            raise ValueError("nested_mode=parts cannot be combined with recursive=true")
+        return self
 
     @field_validator("names", mode="before")
     @classmethod
@@ -291,6 +330,9 @@ class FileResult(BaseModel):
     page_summarizations_used: bool = False
     results: list[PageResult] = Field(default_factory=list)
     continuation: Continuation
+    nested_mode: NestedMode = NestedMode.REFS
+    recursive: bool = False
+    nested: list["NestedContent"] = Field(default_factory=list)
 
 
 class ReadFileEnvelope(BaseModel):
@@ -328,6 +370,7 @@ class ReadAssetKind(StrEnum):
     EMBEDDED_IMAGE = "embedded_image"
     PAGE_RASTER = "page_raster"
     ATTACHMENT = "attachment"
+    OFFICE_MEDIA = "office_media"
 
 
 class ReadAsset(BaseModel):
@@ -340,6 +383,24 @@ class ReadAsset(BaseModel):
     bytes_b64: str | None = Field(
         default=None,
         description="Base64 только при ReadOptions.include_asset_bytes=True",
+    )
+
+
+class NestedContent(BaseModel):
+    """Вложенный content внутри контейнера (image/*, вложения, будущие бинари)."""
+
+    anchor: str = Field(min_length=1)
+    original_name: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+    kind: ReadAssetKind
+    checksum: str = Field(description="SHA-256 hex сырых байт")
+    page_index: int = Field(ge=0)
+    file_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    bytes_b64: str | None = Field(
+        default=None,
+        description="Ephemeral base64; strip перед Redis extract-cache",
     )
 
 

@@ -522,6 +522,18 @@ async def secrets_client_http(secrets_service):
 
 
 @pytest_asyncio.fixture
+async def shop_client_http(shop_service, auth_headers_system):
+    """HTTP клиент Shop API (реальный Granian :9027), владелец `system`: хелперы `tests/fixtures/shop.py`."""
+    _ = shop_service
+    async with AsyncClient(
+        base_url="http://localhost:9027",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+        headers=auth_headers_system,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def scheduler_client_http(scheduler_service):
     """HTTP клиент Scheduler API (реальный Granian :9006)."""
     _ = scheduler_service

@@ -14,6 +14,9 @@ from zoneinfo import ZoneInfo
 from apps.shop.models import (
     Shop,
     ShopDeliveryType,
+    ShopMenu,
+    ShopMenuItem,
+    ShopMenuStatus,
     ShopOrder,
     ShopOrderItem,
     ShopOrderStatus,
@@ -48,6 +51,7 @@ from core.utils.time import utcnow
 class _PricedItem:
     """Строка корзины с авторитетной ценой за единицу и снапшотом опций."""
 
+    menu_item: ShopMenuItem
     product: ShopProduct
     qty: int
     unit_minor: int
@@ -115,6 +119,7 @@ class ShopOrderService:
                 shop_order_item_id=new_id("shoporderitem"),
                 order_id=order_id,
                 product_id=p.product.shop_product_id,
+                shop_menu_item_id=p.menu_item.shop_menu_item_id,
                 name_snapshot=p.product.name,
                 price_minor=p.unit_minor,
                 qty=p.qty,
@@ -157,32 +162,46 @@ class ShopOrderService:
     async def _price_items(
         self, shop: Shop, items: list[ShopOrderItemRequest]
     ) -> list[_PricedItem]:
-        """Авторитетная цена позиций: каталог + модификаторы, клиентские
-        цены не участвуют. Общий шаг для preview и создания заказа."""
-        product_ids = [item.product_id for item in items]
-        products = await ShopProduct.list_many_by_ids(product_ids)
-        by_id = {p.shop_product_id: p for p in products}
-        modifier_tree = await load_modifier_tree_by_sort_asc(product_ids)
+        """Авторитетная цена позиций: позиция активного меню (override или цена
+        каталога) + модификаторы, клиентские цены не участвуют. Общий шаг для
+        preview и создания заказа."""
+        menu_items = await ShopMenuItem.get_many(list({i.shop_menu_item_id for i in items}))
+        menus = await ShopMenu.get_many(list({mi.shop_menu_id for mi in menu_items.values()}))
+        products = await ShopProduct.get_many(
+            list({mi.shop_product_id for mi in menu_items.values()})
+        )
+        modifier_tree = await load_modifier_tree_by_sort_asc(list(products))
         nested = nested_lookup(modifier_tree.get("__nested__", []))
         priced: list[_PricedItem] = []
         for item in items:
-            product = by_id.get(item.product_id)
-            if product is None or product.shop_id != shop.shop_id:
+            menu_item = menu_items.get(item.shop_menu_item_id)
+            menu = None if menu_item is None else menus.get(menu_item.shop_menu_id)
+            product = None if menu_item is None else products.get(menu_item.shop_product_id)
+            if (
+                menu_item is None
+                or menu is None
+                or product is None
+                or menu.shop_id != shop.shop_id
+                or menu.status != ShopMenuStatus.ACTIVE
+                or product.shop_id != shop.shop_id
+            ):
                 raise PlatformNotFoundError(
-                    "Item not found in catalog", error_code="product_not_found"
+                    "Item not found in an active menu", error_code="menu_item_not_found"
                 )
-            if not product.is_available:
+            if not menu_item.is_available or not product.is_available:
                 raise PlatformConflictError(
                     f"Item {product.name} is unavailable",
                     error_code="product_unavailable",
                 )
             unit_minor, modifiers_snapshot = validate_and_price(
-                product,
+                menu_item.effective_price_minor(product.price_minor),
                 item.selections,
                 modifier_tree.get(product.shop_product_id, []),
                 nested,
             )
-            priced.append(_PricedItem(product, item.qty, unit_minor, modifiers_snapshot))
+            priced.append(
+                _PricedItem(menu_item, product, item.qty, unit_minor, modifiers_snapshot)
+            )
         return priced
 
     async def _evaluate_promos(
@@ -198,7 +217,12 @@ class ShopOrderService:
             return PricedCart(line_discounts=[0] * len(priced))
         delivery_fee = shop.delivery_fee_minor if delivery_type == ShopDeliveryType.DELIVERY else 0
         lines = [
-            CartLine(p.product.shop_product_id, p.product.category_id, p.qty, p.unit_minor)
+            CartLine(
+                p.product.shop_product_id,
+                p.menu_item.shop_menu_section_id,
+                p.qty,
+                p.unit_minor,
+            )
             for p in priced
         ]
         try:
@@ -224,6 +248,7 @@ class ShopOrderService:
         return ShopCartPriceResponse(
             lines=[
                 ShopCartPriceLineResponse(
+                    shop_menu_item_id=p.menu_item.shop_menu_item_id,
                     product_id=p.product.shop_product_id,
                     qty=p.qty,
                     unit_minor=p.unit_minor,
@@ -311,6 +336,7 @@ class ShopOrderService:
             items=[
                 ShopOrderItemResponse(
                     product_id=i.product_id,
+                    shop_menu_item_id=i.shop_menu_item_id,
                     name=i.name_snapshot,
                     price_minor=i.price_minor,
                     qty=i.qty,

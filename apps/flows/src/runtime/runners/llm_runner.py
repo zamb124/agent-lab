@@ -13,7 +13,7 @@ import json
 import time
 from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timezone
-from typing import ClassVar, override
+from typing import ClassVar, NotRequired, TypedDict, override
 
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
@@ -23,6 +23,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
+from pydantic import ValidationError
 
 from apps.flows.src.contracts import ToolRegistryProtocol
 from apps.flows.src.durable_execution import (
@@ -120,6 +121,9 @@ from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
+from core.files.pdf_render import pdf_page_pngs
+from core.files.reader.models import ReadFileEnvelope
+from core.files.reader.parts import parts_from_file_results, strip_envelope_nested_bytes
 from core.llm_context import (
     LLMContextBlock,
     LLMContextProfile,
@@ -260,11 +264,45 @@ def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> No
             target[key] = value
 
 
+class ToolResultPayload(TypedDict):
+    tool_call_id: str
+    content: str
+    parts: NotRequired[list[Part]]
+
+
 def _format_tool_result_content(result: JsonValue) -> str:
     """Строка tool_result для LLM history и SSE: JSON для объектов, не Python repr."""
     if isinstance(result, str):
         return result
     return json.dumps(result, ensure_ascii=False)
+
+
+def _tool_result_extra_parts(payload: ToolResultPayload) -> Sequence[Part] | None:
+    parts = payload.get("parts")
+    if parts is None:
+        return None
+    return parts
+
+
+def _split_tool_result_parts(result: JsonValue) -> tuple[JsonValue, list[Part]]:
+    """read_file nested_mode=parts → Part(raw); JSON tool text без bytes."""
+    if not isinstance(result, dict):
+        return result, []
+    tool_name = result.get("tool")
+    if tool_name != "read_file":
+        return result, []
+    try:
+        envelope = ReadFileEnvelope.model_validate(result)
+    except ValidationError:
+        return result, []
+    parts = parts_from_file_results(envelope.files)
+    if not parts:
+        return result, []
+    stripped = strip_envelope_nested_bytes(envelope)
+    return (
+        require_json_object(stripped.model_dump(mode="json"), "read_file.stripped"),
+        parts,
+    )
 
 
 class LlmNodeRunner(BaseLlmNodeRunner):
@@ -833,6 +871,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             sid,
                             context_id=context_id,
                             task_id=task_id,
+                            extra_parts=_tool_result_extra_parts(tr),
                         )
                     )
                 InterruptManager.clear_interrupt_path(state)
@@ -1154,6 +1193,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             sid,
                                             context_id=context_id,
                                             task_id=task_id,
+                                            extra_parts=_tool_result_extra_parts(tr),
                                         )
                                     )
                                     tool_call_id = tr["tool_call_id"]
@@ -1373,19 +1413,22 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         messages: list[Message],
     ) -> list[Message]:
-        """``llm_vision``: байты image-файлов ``state.files`` — Parts последнего user-сообщения.
+        """``llm_vision``: image/* и PDF из ``state.files`` → Parts последнего user-сообщения.
 
-        Инжекция только в исходящий вызов, в ``state.messages`` сырьё не пишется
-        (в durable state живут FileRef'ы); байты кешируются на прогон ноды.
+        PDF рендерится в PNG по страницам (``pdf_page_pngs``). Инжекция только в
+        исходящий вызов; в durable state остаются FileRef'ы; байты кешируются на прогон.
         """
-        image_refs = [
+        vision_refs = [
             ref
             for ref in state.files
             if ref.file_id is not None
             and bool(ref.file_id.strip())
-            and ref.content_type.startswith("image/")
+            and (
+                ref.content_type.startswith("image/")
+                or ref.content_type == "application/pdf"
+            )
         ]
-        if not image_refs:
+        if not vision_refs:
             return messages
         last_user_index = -1
         for index in range(len(messages) - 1, -1, -1):
@@ -1396,19 +1439,40 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return messages
         vision_message = Message()
         vision_message.CopyFrom(messages[last_user_index])
-        for ref in image_refs:
+        for ref in vision_refs:
             if ref.file_id is None:
                 continue
-            vision_message.parts.append(
-                Part(
-                    raw=await self._vision_file_bytes(ref.file_id),
-                    media_type=ref.content_type,
-                    filename=ref.original_name or ref.file_id,
-                )
-            )
+            for part in await self._vision_parts_for_ref(ref.file_id, ref.content_type, ref.original_name):
+                vision_message.parts.append(part)
         injected = list(messages)
         injected[last_user_index] = vision_message
         return injected
+
+    async def _vision_parts_for_ref(
+        self,
+        file_id: str,
+        content_type: str,
+        original_name: str | None,
+    ) -> list[Part]:
+        data = await self._vision_file_bytes(file_id)
+        base_name = original_name if original_name is not None and original_name != "" else file_id
+        if content_type.startswith("image/"):
+            return [
+                Part(raw=data, media_type=content_type, filename=base_name),
+            ]
+        if content_type == "application/pdf" or data.startswith(b"%PDF"):
+            pages = await asyncio.to_thread(pdf_page_pngs, data)
+            if len(pages) == 0:
+                raise ValueError(f"llm_vision: PDF has no pages: {file_id}")
+            return [
+                Part(
+                    raw=page_png,
+                    media_type="image/png",
+                    filename=f"{base_name}#page={page_index}",
+                )
+                for page_index, page_png in enumerate(pages)
+            ]
+        raise ValueError(f"llm_vision: unsupported content_type {content_type!r} for {file_id}")
 
     async def _vision_file_bytes(self, file_id: str) -> bytes:
         cached = self._vision_bytes.get(file_id)
@@ -1602,7 +1666,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
-    ) -> list[dict[str, str]]:
+    ) -> list[ToolResultPayload]:
         """
         Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
 
@@ -1629,7 +1693,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Собираем результаты и мержим state
-        tool_results: list[dict[str, str]] = []
+        tool_results: list[ToolResultPayload] = []
         deferred_interrupt: FlowInterrupt | None = None
         deferred_error: Exception | None = None
         for tc, result, state_copy in zip(tool_calls, results, state_copies):
@@ -1738,7 +1802,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
-    ) -> list[dict[str, str]]:
+    ) -> list[ToolResultPayload]:
         """Выполняет один tool."""
         tracer = get_tracer()
         tool_name = tc.name
@@ -1876,13 +1940,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     state=state,
                     reasoning_count_before=reasoning_count_before,
                 )
-                state.tool_results[tool_name] = result
+                message_result, tool_parts = _split_tool_result_parts(result)
+                state.tool_results[tool_name] = message_result
 
                 tool_duration = (time.time() - tool_start) * 1000
-                tracer.record_tool_result(tool_span, result, tool_duration)
+                tracer.record_tool_result(tool_span, message_result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state.model_dump(mode="json", exclude_none=False))
                 state_delta = build_state_delta(before_tool_state, state)
-                tool_result_content = _format_tool_result_content(result)
+                tool_result_content = _format_tool_result_content(message_result)
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,
                     result_json={
@@ -1896,12 +1961,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if not completed:
                     raise RuntimeError(f"Failed to mark tool activity as completed: {activity_id!r}")
 
-                return [
-                    {
-                        "tool_call_id": tool_call_id,
-                        "content": tool_result_content,
-                    }
-                ]
+                payload: ToolResultPayload = {
+                    "tool_call_id": tool_call_id,
+                    "content": tool_result_content,
+                }
+                if tool_parts:
+                    payload["parts"] = tool_parts
+                return [payload]
             except FlowInterrupt:
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,

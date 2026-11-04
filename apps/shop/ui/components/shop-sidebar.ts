@@ -17,12 +17,13 @@ import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
 
 const NAV_ITEMS = [
-    { route: 'shop_home',     icon: 'store',   label_key: 'sidebar.nav.shop_home' },
-    { route: 'shop_menu',     icon: 'book-open', label_key: 'sidebar.nav.shop_menu' },
-    { route: 'shop_builder',  icon: 'edit',    label_key: 'sidebar.nav.shop_builder' },
-    { route: 'shop_orders',   icon: 'scroll-text', label_key: 'sidebar.nav.shop_orders' },
-    { route: 'shop_promos',   icon: 'tag',     label_key: 'sidebar.nav.shop_promos' },
-    { route: 'shop_settings', icon: 'settings', label_key: 'sidebar.nav.shop_settings' },
+    { route: 'shop_home',     icon: 'store',   label_key: 'sidebar.nav.shop_home', activeRoutes: ['shop_home'] },
+    { route: 'shop_catalog',  icon: 'list',    label_key: 'sidebar.nav.shop_catalog', activeRoutes: ['shop_catalog'] },
+    { route: 'shop_menus',    icon: 'book-open', label_key: 'sidebar.nav.shop_menus', activeRoutes: ['shop_menus', 'shop_menu'] },
+    { route: 'shop_builder',  icon: 'edit',    label_key: 'sidebar.nav.shop_builder', activeRoutes: ['shop_builder'] },
+    { route: 'shop_orders',   icon: 'scroll-text', label_key: 'sidebar.nav.shop_orders', activeRoutes: ['shop_orders'] },
+    { route: 'shop_promos',   icon: 'tag',     label_key: 'sidebar.nav.shop_promos', activeRoutes: ['shop_promos'] },
+    { route: 'shop_settings', icon: 'settings', label_key: 'sidebar.nav.shop_settings', activeRoutes: ['shop_settings'] },
 ];
 
 export class ShopSidebar extends PlatformElement {
@@ -90,8 +91,9 @@ export class ShopSidebar extends PlatformElement {
         this.closeMobile();
     }
 
-    private _isActive(route: string) {
-        return this._routeKeySel.value === route;
+    private _isActive(activeRoutes: readonly string[]) {
+        const routeKey = this._routeKeySel.value;
+        return typeof routeKey === 'string' && activeRoutes.includes(routeKey);
     }
 
     override render() {
@@ -112,7 +114,7 @@ export class ShopSidebar extends PlatformElement {
                         const disabled = needsShop && shopId === '';
                         return html`
                             <button
-                                class="nav-item ${this._isActive(item.route) ? 'active' : ''} ${disabled ? 'disabled' : ''}"
+                                class="nav-item ${this._isActive(item.activeRoutes) ? 'active' : ''} ${disabled ? 'disabled' : ''}"
                                 @click=${() => this._navigate(item.route, needsShop ? { shopId } : {})}
                             >
                                 <platform-icon name=${item.icon}></platform-icon>

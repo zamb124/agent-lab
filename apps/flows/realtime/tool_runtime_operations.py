@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Never
 
 from pydantic import Field, ValidationError
 
@@ -26,6 +27,7 @@ from core.capabilities import (
     CapabilityManifest,
     verify_execution_context,
 )
+from core.clients.service_client import ServiceClientError
 from core.context import get_context, reset_context, set_context
 from core.context.job_context import build_job_context
 from core.logging import get_logger
@@ -33,7 +35,13 @@ from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.types import JsonObject, require_json_object
-from core.websocket import raise_forbidden, raise_invalid
+from core.websocket import (
+    raise_conflict,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+    raise_upstream,
+)
 
 logger = get_logger(__name__)
 
@@ -132,6 +140,27 @@ async def op_flows_tool_runtime_manifest(
     return CapabilityManifest(version="capabilities.v1", capabilities=capability_list)
 
 
+def _raise_from_service_client(tool_id: str, exc: ServiceClientError) -> Never:
+    """4xx peer (shop/wiki/…) → тот же код границы; иначе upstream.
+
+    Иначе ``ServiceClientError`` из thin ``@tool`` даёт голый FastAPI 500
+    «Internal server error», и code-runner теряет ``error_code``/detail peer.
+    """
+    status = exc.status_code
+    detail = exc.http_detail()
+    message = detail if isinstance(detail, str) and detail != "" else str(exc)
+    error_params: JsonObject | None = detail if isinstance(detail, dict) else None
+    if status == 404:
+        raise_not_found(exc, message, error_params=error_params)
+    if status == 403:
+        raise_forbidden(exc, error_params=error_params)
+    if status == 409:
+        raise_conflict(exc, message, error_params=error_params)
+    if status is not None and 400 <= status < 500:
+        raise_invalid(ValueError(f"Tool {tool_id}: {message}"), error_params=error_params)
+    raise_upstream(exc, error_params=error_params)
+
+
 async def op_flows_tool_runtime_call(
     payload: ToolRuntimeCallPayload,
     *,
@@ -173,6 +202,13 @@ async def op_flows_tool_runtime_call(
             raise_invalid(
                 ValueError(f"Tool {payload.tool_id} arguments failed validation: {exc.errors()}")
             )
+        except ServiceClientError as exc:
+            logger.info(
+                "tool_runtime.peer_error",
+                tool_id=payload.tool_id,
+                status_code=exc.status_code,
+            )
+            _raise_from_service_client(payload.tool_id, exc)
         return CapabilityCallResponse(
             status="ok",
             result=result,

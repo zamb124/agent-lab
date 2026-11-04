@@ -1118,7 +1118,13 @@ async def test_handle_event_fires_triggers(
         workflow_runtime=di.workflow_runtime,
         authz_service=di.authz_service,
         hitl_work_item_service=di.node_constructor.hitl_work_item_service,
-        employee_inbox_service=EmployeeInboxService(di.work_item_service),
+        employee_inbox_service=EmployeeInboxService(
+            di.work_item_service,
+            di.flow_access_service,
+            di.files_service,
+            di.authz_service,
+            di.mail_service,
+        ),
     )
     await consumer.handle_event(event)
 

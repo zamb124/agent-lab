@@ -6,7 +6,14 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from tests.fixtures.shop import (
+    API_PREFIX,
+    PUBLIC_PREFIX,
+    make_active_menu_item,
+    make_product,
+    make_shop,
+    publish_shop,
+)
 
 _SHOPS = f"{API_PREFIX}/shops"
 
@@ -14,32 +21,92 @@ _SHOPS = f"{API_PREFIX}/shops"
 async def _published_shop(
     client: AsyncClient, slug: str
 ) -> dict[str, Any]:
-    resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Store {slug}", "kind": "cafe"}
+    shop = await make_shop(client, slug, name=f"Store {slug}", kind="cafe")
+    return await publish_shop(client, shop["shop_id"])
+
+
+async def _menu_product(
+    client: AsyncClient, shop_id: str, name: str, price_minor: int, **overrides: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Блюдо каталога позицией собственного активного меню: product, item."""
+    product = await make_product(client, shop_id, name, price_minor, **overrides)
+    _, _, item = await make_active_menu_item(
+        client, shop_id, product["shop_product_id"], menu_name=f"Меню {name}"
     )
-    assert resp.status_code == 200, resp.text
-    shop = resp.json()
-    resp = await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-    assert resp.status_code == 200, resp.text
-    return shop
+    return product, item
 
 
 class TestStorefrontSnapshot:
     async def test_published_shop_served_anonymously(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
+        """Снапшот: активное меню → раздел → позиция; id позиции — shop_menu_item_id."""
         slug = f"sf-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Латте", "price_minor": 25000},
+        product = await make_product(
+            shop_client, shop["shop_id"], "Латте", 25000, measure=300, measure_unit="ml"
         )
-        assert resp.status_code == 200
+        menu, section, item = await make_active_menu_item(
+            shop_client, shop["shop_id"], product["shop_product_id"], section_name="Кофе"
+        )
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200, snap.text
         body = snap.json()
-        assert body["slug"] == slug
-        assert body["name"] == f"Store {slug}"
+        assert (body["slug"], body["name"]) == (slug, f"Store {slug}")
+        assert body["menus"] == [{"id": menu["shop_menu_id"], "name": "Меню"}]
+        assert [(s["id"], s["menu_id"], s["name"]) for s in body["sections"]] == [
+            (section["shop_menu_section_id"], menu["shop_menu_id"], "Кофе")
+        ]
+        assert [
+            (i["id"], i["product_id"], i["section_id"], i["name"], i["price_minor"], i["measure"], i["measure_unit"])
+            for i in body["items"]
+        ] == [
+            (
+                item["shop_menu_item_id"],
+                product["shop_product_id"],
+                section["shop_menu_section_id"],
+                "Латте",
+                25000,
+                300,
+                "ml",
+            )
+        ]
+
+    async def test_catalog_product_without_active_menu_not_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Каталог без меню и позиции черновика меню на витрину не попадают."""
+        slug = f"nomenu-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        await make_product(shop_client, shop["shop_id"], "Только каталог", 100)
+        _, item = await _menu_product(shop_client, shop["shop_id"], "Черновое", 200)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menus/{item['shop_menu_id']}/status",
+            json={"status": "draft"},
+        )
+        assert resp.status_code == 200, resp.text
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200, snap.text
+        body = snap.json()
+        assert (body["menus"], body["sections"], body["items"]) == ([], [], [])
+
+    async def test_menu_item_price_override_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Цена позиции на витрине — override позиции, иначе цена каталога."""
+        slug = f"ovr-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        _, item = await _menu_product(shop_client, shop["shop_id"], "Суп", 30000)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/menu-items/{item['shop_menu_item_id']}",
+            json={"price_minor_override": 27000},
+        )
+        assert resp.status_code == 200, resp.text
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200, snap.text
+        assert [(i["id"], i["price_minor"]) for i in snap.json()["items"]] == [
+            (item["shop_menu_item_id"], 27000)
+        ]
 
     async def test_etag_and_304(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -88,55 +155,80 @@ class TestStorefrontSnapshot:
     ) -> None:
         slug = f"hide-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Скрытый", "price_minor": 100},
-        )
-        product = resp.json()
-        await shop_client.patch(
+        product, _ = await _menu_product(shop_client, shop["shop_id"], "Скрытый", 100)
+        await _menu_product(shop_client, shop["shop_id"], "Видимый", 200)
+        resp = await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
             json={"is_available": False},
         )
+        assert resp.status_code == 200, resp.text
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200
-        names = [p["name"] for p in snap.json()["products"]]
-        assert "Скрытый" not in names
+        assert [i["name"] for i in snap.json()["items"]] == ["Видимый"]
 
-    async def test_categories_hierarchy_in_snapshot(
+    async def test_menu_sections_hierarchy_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
-        """Снапшот несёт parent_id категорий — витрина строит дерево разделов."""
+        """Снапшот несёт parent_id разделов активного меню — витрина строит дерево."""
         slug = f"hier-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/categories", json={"name": "Пицца"}
+        product = (
+            await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/products",
+                json={"name": "Маргарита", "price_minor": 50000},
+            )
+        ).json()
+        menu = (
+            await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/menus", json={"name": "Основное"}
+            )
+        ).json()
+        parent = (
+            await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/menus/{menu['shop_menu_id']}/sections",
+                json={"name": "Пицца"},
+            )
+        ).json()
+        child = (
+            await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/menus/{menu['shop_menu_id']}/sections",
+                json={"name": "Классика", "parent_id": parent["shop_menu_section_id"]},
+            )
+        ).json()
+        add = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menus/{menu['shop_menu_id']}/items",
+            json={
+                "shop_menu_section_id": child["shop_menu_section_id"],
+                "shop_product_id": product["shop_product_id"],
+            },
         )
-        parent = resp.json()
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/categories",
-            json={"name": "Классика", "parent_id": parent["shop_category_id"]},
+        assert add.status_code == 200, add.text
+        status = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menus/{menu['shop_menu_id']}/status",
+            json={"status": "active"},
         )
-        child = resp.json()
+        assert status.status_code == 200, status.text
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200, snap.text
-        cats = {c["id"]: c for c in snap.json()["categories"]}
-        assert cats[parent["shop_category_id"]]["parent_id"] is None
-        assert cats[child["shop_category_id"]]["parent_id"] == parent["shop_category_id"]
+        sections = {s["id"]: s for s in snap.json()["sections"]}
+        assert sections[parent["shop_menu_section_id"]]["parent_id"] is None
+        assert (
+            sections[child["shop_menu_section_id"]]["parent_id"]
+            == parent["shop_menu_section_id"]
+        )
 
     async def test_badges_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"bdg-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Хитовая", "price_minor": 100, "badges": ["hit", "spicy"]},
+        await _menu_product(
+            shop_client, shop["shop_id"], "Хитовая", 100, badges=["hit", "spicy"]
         )
-        assert resp.status_code == 200, resp.text
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200
-        product = next(p for p in snap.json()["products"] if p["name"] == "Хитовая")
-        assert product["badges"] == ["hit", "spicy"]
+        item = next(i for i in snap.json()["items"] if i["name"] == "Хитовая")
+        assert item["badges"] == ["hit", "spicy"]
         defs = snap.json()["badge_defs"]
         assert defs["hit"]["label"] == "Хит"
         assert defs["hit"]["icon_path"].startswith("M")
@@ -183,7 +275,7 @@ class TestHostMiddleware:
             ) or "snapshot" not in resp.text[:5000]
 
     async def test_company_subdomain_root_shows_company_shop(
-        self, shop_client_company2: AsyncClient, unique_id: str
+        self, shop_client_company2: AsyncClient, shop_di, unique_id: str
     ) -> None:
         """GET / на <company>.linnex.io — published-витрина этой компании.
 
@@ -192,6 +284,9 @@ class TestHostMiddleware:
         """
         slug = f"co2-{unique_id[:8]}"
         await _published_shop(shop_client_company2, slug)
+        # Host→slug кэшируется в Redis; сбрасываем ключ, иначе предыдущий
+        # published shop company2 останется на company2.linnex.io до TTL.
+        _ = await shop_di.redis_client.delete("shop:tenant:company2.linnex.io")
         from httpx2 import ASGITransport
 
         from apps.shop.main import app
@@ -252,14 +347,14 @@ class TestStorefrontPage:
     ) -> None:
         slug = f"page-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Борщ", "price_minor": 35000, "description": "Со сметаной"},
+        await _menu_product(
+            shop_client, shop["shop_id"], "Борщ", 35000, description="Со сметаной"
         )
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
         assert slug in resp.text
+        assert "Борщ" in resp.text and "Со сметаной" in resp.text
         assert resp.headers.get("etag")
 
     async def test_storefront_page_seo_jsonld(
@@ -268,10 +363,7 @@ class TestStorefrontPage:
         """SEO-слой витрины: OG-теги, canonical и JSON-LD LocalBusiness с меню."""
         slug = f"seo-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Борщ", "price_minor": 35000},
-        )
+        await _menu_product(shop_client, shop["shop_id"], "Борщ", 35000)
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert html.status_code == 200
         assert 'property="og:title"' in html.text
@@ -283,15 +375,13 @@ class TestStorefrontPage:
     async def test_storefront_deeplink_marks_product(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
-        """Диплинк ?p=<product_id>: карточки несут data-pid, JS скроллит и подсвечивает."""
+        """Диплинк ?p=<shop_menu_item_id>: карточки несут data-pid позиции, JS скроллит и подсвечивает."""
         slug = f"deep-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Борщ", "price_minor": 35000},
-        )
-        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}?p=x")
+        _, item = await _menu_product(shop_client, shop["shop_id"], "Борщ", 35000)
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}?p={item['shop_menu_item_id']}")
         assert html.status_code == 200
+        assert item["shop_menu_item_id"] in html.text
         assert 'data-pid="' in html.text
         assert "flashRing" in html.text
         assert "get('p')" in html.text
@@ -371,12 +461,7 @@ class TestStorefrontPage:
         slug = f"modpage-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
         shop_id = shop["shop_id"]
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop_id}/products",
-            json={"name": "Пицца", "price_minor": 50000},
-        )
-        assert resp.status_code == 200, resp.text
-        product = resp.json()
+        product, _ = await _menu_product(shop_client, shop_id, "Пицца", 50000)
         resp = await shop_client.post(
             f"{_SHOPS}/{shop_id}/modifier-groups",
             json={"name": "Размер", "selection_mode": "single", "min_selected": 1, "price_mode": "absolute"},

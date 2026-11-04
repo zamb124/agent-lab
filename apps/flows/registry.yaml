@@ -49,6 +49,10 @@ flows:
   - id: shop
     public: true
     description: "AI-функции витрины shop: описания товаров и предложения опций-модификаторов"
+
+  - id: shop_menu_agent
+    public: true
+    description: "AI-сотрудник меню shop по WorkItem: импорт меню по фото, меню из каталога, обогащение блюд (режим в WorkItem.variables.mode)"
   
   # Telegram Demo
   - id: telegram_demo

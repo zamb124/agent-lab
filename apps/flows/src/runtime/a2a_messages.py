@@ -119,14 +119,23 @@ def build_tool_result_message(
     source_node_id: str,
     context_id: str | None = None,
     task_id: str | None = None,
+    *,
+    extra_parts: Sequence[Part] | None = None,
 ) -> Message:
-    return _build_message(
+    parts: list[Part] = [Part(text=content)]
+    if extra_parts:
+        parts.extend(extra_parts)
+    message = Message(
+        message_id=str(uuid.uuid4()),
         role=ROLE_AGENT,
-        content=content,
-        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
+        parts=parts,
         context_id=context_id,
         task_id=task_id,
     )
+    message.metadata.CopyFrom(
+        struct_from_mapping({"tool_call_id": tool_call_id, "node_id": source_node_id})
+    )
+    return message
 
 
 def build_system_message(

@@ -13,12 +13,13 @@ from apps.shop.events import (
     SHOP_SHOP_UPDATED,
     publish_shop_catalog_changed,
     publish_shop_event,
+    publish_shop_menu_updated,
     publish_shop_order_event,
 )
 from apps.shop.models import (
     Shop,
-    ShopCategory,
     ShopDomain,
+    ShopMenuSection,
     ShopModifierGroup,
     ShopModifierOption,
     ShopProduct,
@@ -26,17 +27,25 @@ from apps.shop.models import (
     ShopPromo,
 )
 from apps.shop.models.api import (
-    ShopAiParseMenuResponse,
     ShopAiSuggestOptionsResponse,
     ShopBadgeIconsResponse,
     ShopBadgeResponse,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
-    ShopCategoriesReorderRequest,
-    ShopCategoryCreateRequest,
-    ShopCategoryResponse,
-    ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopMenuCreateRequest,
+    ShopMenuItemAddRequest,
+    ShopMenuItemMoveRequest,
+    ShopMenuItemResponse,
+    ShopMenuItemsReorderRequest,
+    ShopMenuItemUpdateRequest,
+    ShopMenuResponse,
+    ShopMenuSectionCreateRequest,
+    ShopMenuSectionsReorderRequest,
+    ShopMenuSectionUpdateRequest,
+    ShopMenuSetStatusRequest,
+    ShopMenusReorderRequest,
+    ShopMenuUpdateRequest,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -49,9 +58,9 @@ from apps.shop.models.api import (
     ShopOrderResponse,
     ShopOrderStatusResponse,
     ShopProductCreateRequest,
+    ShopProductMergeRequest,
     ShopProductResponse,
-    ShopProductsImportRequest,
-    ShopProductsImportResponse,
+    ShopProductSimilarResponse,
     ShopProductsReorderRequest,
     ShopProductUpdateRequest,
     ShopPromoCreateRequest,
@@ -65,7 +74,6 @@ from apps.shop.models.api import (
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.tasks.task_names import (
-    SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
@@ -107,30 +115,12 @@ class ShopDomainIdPayload(StrictBaseModel):
     shop_domain_id: str = Field(min_length=1)
 
 
-class ShopCategoryIdPayload(StrictBaseModel):
-    shop_id: str = Field(min_length=1)
-    shop_category_id: str = Field(min_length=1)
-
-
-class ShopCategoryCreatePayload(ShopCategoryCreateRequest):
-    shop_id: str = Field(min_length=1)
-
-
-class ShopCategoryUpdatePayload(ShopCategoryUpdateRequest):
-    shop_id: str = Field(min_length=1)
-    shop_category_id: str = Field(min_length=1)
-
-
 class ShopProductIdPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     shop_product_id: str = Field(min_length=1)
 
 
 class ShopProductCreatePayload(ShopProductCreateRequest):
-    shop_id: str = Field(min_length=1)
-
-
-class ShopProductsImportPayload(ShopProductsImportRequest):
     shop_id: str = Field(min_length=1)
 
 
@@ -143,7 +133,75 @@ class ShopProductsReorderPayload(ShopProductsReorderRequest):
     shop_id: str = Field(min_length=1)
 
 
-class ShopCategoriesReorderPayload(ShopCategoriesReorderRequest):
+class ShopProductMergePayload(ShopProductMergeRequest):
+    shop_id: str = Field(min_length=1)
+    shop_product_id: str = Field(min_length=1)
+
+
+class ShopMenuIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenuCreatePayload(ShopMenuCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuUpdatePayload(ShopMenuUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenusReorderPayload(ShopMenusReorderRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuSetStatusPayload(ShopMenuSetStatusRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenuSectionCreatePayload(ShopMenuSectionCreateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenuSectionUpdatePayload(ShopMenuSectionUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_section_id: str = Field(min_length=1)
+
+
+class ShopMenuSectionIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_menu_section_id: str = Field(min_length=1)
+
+
+class ShopMenuSectionsReorderPayload(ShopMenuSectionsReorderRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenuItemAddPayload(ShopMenuItemAddRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_id: str = Field(min_length=1)
+
+
+class ShopMenuItemUpdatePayload(ShopMenuItemUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_item_id: str = Field(min_length=1)
+
+
+class ShopMenuItemMovePayload(ShopMenuItemMoveRequest):
+    shop_id: str = Field(min_length=1)
+    shop_menu_item_id: str = Field(min_length=1)
+
+
+class ShopMenuItemIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_menu_item_id: str = Field(min_length=1)
+
+
+class ShopMenuItemsReorderPayload(ShopMenuItemsReorderRequest):
     shop_id: str = Field(min_length=1)
 
 
@@ -259,19 +317,10 @@ class ShopAiGeneratePhotoPayload(StrictBaseModel):
     description: str = Field(default="", max_length=1000)
 
 
-class ShopAiDescribeBatchPayload(StrictBaseModel):
-    shop_id: str = Field(min_length=1)
-
-
 class ShopAiSuggestOptionsPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     product_name: str = Field(min_length=1, max_length=300)
     group_name: str | None = Field(default=None, max_length=200)
-
-
-class ShopAiParseMenuPayload(StrictBaseModel):
-    shop_id: str = Field(min_length=1)
-    text: str = Field(min_length=3, max_length=50_000)
 
 
 class ShopAiShopPayload(StrictBaseModel):
@@ -288,10 +337,6 @@ class ShopAiTextResponse(StrictBaseModel):
 
 class ShopAiFileResponse(StrictBaseModel):
     file_id: str
-
-
-class ShopAiBatchResponse(StrictBaseModel):
-    enqueued: int
 
 
 async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
@@ -333,29 +378,23 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
     )
 
 
-def _category_response(category: ShopCategory) -> ShopCategoryResponse:
-    return ShopCategoryResponse(
-        shop_category_id=category.shop_category_id,
-        shop_id=category.shop_id,
-        parent_id=category.parent_id,
-        name=category.name,
-        sort=category.sort,
-        is_active=category.is_active,
-    )
-
-
 def _product_response(product: ShopProduct) -> ShopProductResponse:
     return ShopProductResponse(
         shop_product_id=product.shop_product_id,
         shop_id=product.shop_id,
-        category_id=product.category_id,
         name=product.name,
         description=product.description,
-        portion=product.portion,
+        measure=product.measure,
+        measure_unit=product.measure_unit,
+        ingredients=list(product.ingredients),
+        nutrition=product.nutrition,
+        allergens=list(product.allergens),
         badges=list(product.badges),
         price_minor=product.price_minor,
         photo_file_id=product.photo_file_id,
         is_available=product.is_available,
+        ai_unverified=product.ai_unverified,
+        similar_shop_product_id=product.similar_shop_product_id,
         sort=product.sort,
     )
 
@@ -373,6 +412,18 @@ async def _enqueue_rebuild(
         if shop is not None:
             await publish_shop_catalog_changed(shop_id, slug, str(shop.company_id))
     _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=slug)
+
+
+async def _rebuild_for_shop(di: Di, company_id: str, shop_id: str) -> None:
+    shop = await di.shop_service.get_shop(company_id, shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+
+
+async def _menu_changed(di: Di, company_id: str, shop_id: str, shop_menu_id: str) -> None:
+    """Мутация меню, раздела или позиции: push `shop/menu/updated` и пересборка витрины."""
+    shop = await di.shop_service.get_shop(company_id, shop_id)
+    await publish_shop_menu_updated(shop.shop_id, shop_menu_id, company_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
 
 
 # --- Витрины (админ) ---
@@ -473,87 +524,7 @@ async def op_shops_remove(payload: ShopIdPayload, *, user: User, di: Di) -> Empt
     return EmptyPayload()
 
 
-# --- Категории ---
-
-
-async def op_categories_list(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> ListResponse[ShopCategoryResponse]:
-    scope = await require_company_viewer(di.authz_service)
-    _ = user
-    try:
-        categories = await di.shop_service.list_categories(scope.company_id, payload.shop_id)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ListResponse(items=[_category_response(c) for c in categories])
-
-
-async def op_categories_create(
-    payload: ShopCategoryCreatePayload, *, user: User, di: Di
-) -> ShopCategoryResponse:
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    try:
-        category = await di.shop_service.create_category(scope.company_id, payload.shop_id, payload)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return _category_response(category)
-
-
-async def op_categories_update(
-    payload: ShopCategoryUpdatePayload, *, user: User, di: Di
-) -> ShopCategoryResponse:
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    try:
-        category = await di.shop_service.update_category(
-            scope.company_id, payload.shop_id, payload.shop_category_id, payload
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return _category_response(category)
-
-
-async def op_categories_remove(
-    payload: ShopCategoryIdPayload, *, user: User, di: Di
-) -> EmptyPayload:
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    try:
-        await di.shop_service.delete_category(
-            scope.company_id, payload.shop_id, payload.shop_category_id
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return EmptyPayload()
-
-
-async def op_categories_reorder(
-    payload: ShopCategoriesReorderPayload, *, user: User, di: Di
-) -> EmptyPayload:
-    """Замена дерева категорий меню — ``items`` в depth-first порядке."""
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    try:
-        await di.shop_service.reorder_categories(
-            scope.company_id, payload.shop_id, payload.items
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    except PlatformConflictError as exc:
-        raise_conflict(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return EmptyPayload()
-
-
-# --- Товары ---
+# --- Каталог блюд ---
 
 
 async def op_products_list(
@@ -577,8 +548,7 @@ async def op_products_create(
         product = await di.shop_service.create_product(scope.company_id, payload.shop_id, payload)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
     return _product_response(product)
 
 
@@ -593,15 +563,14 @@ async def op_products_update(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
     return _product_response(product)
 
 
 async def op_products_reorder(
     payload: ShopProductsReorderPayload, *, user: User, di: Di
 ) -> EmptyPayload:
-    """Перестановка позиций меню — стрелки в конструкторе и порядок на витрине."""
+    """Перестановка блюд каталога — порядок списка в конструкторе."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -610,24 +579,8 @@ async def op_products_reorder(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
     return EmptyPayload()
-
-
-async def op_products_import(
-    payload: ShopProductsImportPayload, *, user: User, di: Di
-) -> ShopProductsImportResponse:
-    """Пакетный импорт позиций меню — одна команда вместо N create."""
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    try:
-        created = await di.shop_service.import_products(scope.company_id, payload.shop_id, payload)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return ShopProductsImportResponse(created=created)
 
 
 async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: Di) -> EmptyPayload:
@@ -639,8 +592,339 @@ async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: D
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()
+
+
+async def op_products_verify(
+    payload: ShopProductIdPayload, *, user: User, di: Di
+) -> ShopProductResponse:
+    """Владелец подтвердил AI-поля блюда — пометка «ориентировочно» снимается."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        product = await di.menu_service.verify_product(
+            scope.company_id, payload.shop_id, payload.shop_product_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _product_response(product)
+
+
+async def op_products_similar_list(
+    payload: ShopProductIdPayload, *, user: User, di: Di
+) -> ListResponse[ShopProductSimilarResponse]:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        matches = await di.menu_service.list_similar_products(
+            scope.company_id, payload.shop_id, payload.shop_product_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ListResponse(
+        items=[
+            ShopProductSimilarResponse(product=_product_response(product), score=score)
+            for product, score in matches
+        ]
+    )
+
+
+async def op_products_merge(
+    payload: ShopProductMergePayload, *, user: User, di: Di
+) -> ShopProductResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        product = await di.menu_service.merge_products(
+            scope.company_id,
+            payload.shop_id,
+            payload.shop_product_id,
+            payload.into_shop_product_id,
+            payload.fields,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _product_response(product)
+
+
+async def op_products_dismiss_similar(
+    payload: ShopProductIdPayload, *, user: User, di: Di
+) -> ShopProductResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        product = await di.menu_service.dismiss_similar(
+            scope.company_id, payload.shop_id, payload.shop_product_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _product_response(product)
+
+
+# --- Меню ---
+
+
+async def op_menus_list(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ListResponse[ShopMenuResponse]:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        menus = await di.menu_service.list_menus(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ListResponse(items=menus)
+
+
+async def op_menus_create(
+    payload: ShopMenuCreatePayload, *, user: User, di: Di
+) -> ShopMenuResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        menu = await di.menu_service.create_menu(scope.company_id, payload.shop_id, payload)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, menu.shop_menu_id)
+    return menu
+
+
+async def op_menus_update(
+    payload: ShopMenuUpdatePayload, *, user: User, di: Di
+) -> ShopMenuResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        menu = await di.menu_service.update_menu(
+            scope.company_id, payload.shop_id, payload.shop_menu_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, menu.shop_menu_id)
+    return menu
+
+
+async def op_menus_reorder(
+    payload: ShopMenusReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    """Порядок меню заведения — порядок табов витрины."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.menu_service.reorder_menus(
+            scope.company_id, payload.shop_id, payload.shop_menu_ids
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
+async def op_menus_set_status(
+    payload: ShopMenuSetStatusPayload, *, user: User, di: Di
+) -> ShopMenuResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        menu = await di.menu_service.set_menu_status(
+            scope.company_id, payload.shop_id, payload.shop_menu_id, payload.status
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, menu.shop_menu_id)
+    return menu
+
+
+async def op_menus_remove(payload: ShopMenuIdPayload, *, user: User, di: Di) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.menu_service.remove_menu(scope.company_id, payload.shop_id, payload.shop_menu_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, payload.shop_menu_id)
+    return EmptyPayload()
+
+
+# --- Разделы меню ---
+
+
+async def op_menu_sections_create(
+    payload: ShopMenuSectionCreatePayload, *, user: User, di: Di
+) -> ShopMenuSection:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        section = await di.menu_service.create_section(
+            scope.company_id, payload.shop_id, payload.shop_menu_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, section.shop_menu_id)
+    return section
+
+
+async def op_menu_sections_update(
+    payload: ShopMenuSectionUpdatePayload, *, user: User, di: Di
+) -> ShopMenuSection:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        section = await di.menu_service.update_section(
+            scope.company_id, payload.shop_id, payload.shop_menu_section_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, section.shop_menu_id)
+    return section
+
+
+async def op_menu_sections_remove(
+    payload: ShopMenuSectionIdPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    """Удаление раздела: подразделы и позиции поднимаются к родителю."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        section = await di.menu_service.remove_section(
+            scope.company_id, payload.shop_id, payload.shop_menu_section_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, section.shop_menu_id)
+    return EmptyPayload()
+
+
+async def op_menu_sections_reorder(
+    payload: ShopMenuSectionsReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    """Замена дерева разделов меню — ``items`` в depth-first порядке."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.menu_service.reorder_sections(
+            scope.company_id, payload.shop_id, payload.shop_menu_id, payload.items
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, payload.shop_menu_id)
+    return EmptyPayload()
+
+
+# --- Позиции меню ---
+
+
+async def op_menu_items_add(
+    payload: ShopMenuItemAddPayload, *, user: User, di: Di
+) -> ShopMenuItemResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        item = await di.menu_service.add_item(
+            scope.company_id, payload.shop_id, payload.shop_menu_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, item.shop_menu_id)
+    return item
+
+
+async def op_menu_items_update(
+    payload: ShopMenuItemUpdatePayload, *, user: User, di: Di
+) -> ShopMenuItemResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        item = await di.menu_service.update_item(
+            scope.company_id, payload.shop_id, payload.shop_menu_item_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, item.shop_menu_id)
+    return item
+
+
+async def op_menu_items_move(
+    payload: ShopMenuItemMovePayload, *, user: User, di: Di
+) -> ShopMenuItemResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        item = await di.menu_service.move_item(
+            scope.company_id,
+            payload.shop_id,
+            payload.shop_menu_item_id,
+            payload.shop_menu_section_id,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, item.shop_menu_id)
+    return item
+
+
+async def op_menu_items_remove(
+    payload: ShopMenuItemIdPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        item = await di.menu_service.remove_item(
+            scope.company_id, payload.shop_id, payload.shop_menu_item_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, item.shop_menu_id)
+    return EmptyPayload()
+
+
+async def op_menu_items_reorder(
+    payload: ShopMenuItemsReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        section = await di.menu_service.reorder_items(
+            scope.company_id,
+            payload.shop_id,
+            payload.shop_menu_section_id,
+            payload.shop_menu_item_ids,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _menu_changed(di, scope.company_id, payload.shop_id, section.shop_menu_id)
     return EmptyPayload()
 
 
@@ -892,37 +1176,6 @@ async def op_ai_generate_photo(
     return ShopAiFileResponse(file_id=file_id)
 
 
-async def op_ai_describe_batch(
-    payload: ShopAiDescribeBatchPayload, *, user: User, di: Di
-) -> ShopAiBatchResponse:
-    """Постановка фоновой AI-генерации описаний для всех позиций без текста."""
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    products = await ShopProduct.list_by_shop_by_sort_asc(payload.shop_id)
-    pending = sum(1 for p in products if not p.description.strip())
-    _ = await enqueue(
-        SHOP_AI_DESCRIBE_BATCH,
-        shop_id=payload.shop_id,
-        company_id=scope.company_id,
-    )
-    return ShopAiBatchResponse(enqueued=max(pending, 0))
-
-
-async def op_ai_parse_menu(
-    payload: ShopAiParseMenuPayload, *, user: User, di: Di
-) -> ShopAiParseMenuResponse:
-    """AI-разбор свободного текста меню в позиции каталога (импорт-превью)."""
-    scope = await require_company_admin(di.authz_service)
-    _ = user
-    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        items = await di.ai_service.parse_menu(text=payload.text)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiParseMenuResponse(items=items)
-
-
 async def op_ai_describe_shop(
     payload: ShopAiShopPayload, *, user: User, di: Di
 ) -> ShopAiTextResponse:
@@ -1048,11 +1301,6 @@ def _modifier_group_response(
         product_ids=product_ids or [],
         options=[_option_response(o) for o in options],
     )
-
-
-async def _rebuild_for_shop(di: Di, company_id: str, shop_id: str) -> None:
-    shop = await di.shop_service.get_shop(company_id, shop_id)
-    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
 
 
 async def op_modifier_groups_list(

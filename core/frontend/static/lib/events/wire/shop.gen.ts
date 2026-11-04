@@ -6,19 +6,98 @@
 
 
 /**
+ * CalendarEventLink
+ */
+export interface CalendarEventLink {
+    "link_kind"?: "calendar_event" | undefined;
+    "event_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * CrmEntityLink
+ */
+export interface CrmEntityLink {
+    "link_kind"?: "crm_entity" | undefined;
+    "entity_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * Команда без аргументов: WS `payload: null|{}` и REST без тела/query.
  */
 export type EmptyPayload = {
     [key: string]: unknown;
 };
 
+/**
+ * Typed capabilities attached to a FileRef.
+ */
+export interface FileCapabilities {
+    "document"?: FileDocumentCapability | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Documents library capability attached to a FileRef (keyed by file_id).
+ */
+export interface FileDocumentCapability {
+    "kind"?: "onlyoffice" | undefined;
+    "file_id": string;
+    "catalog_id": string;
+    "document_type": string;
+    "title": string;
+    "namespace": string;
+    "editor_url": string;
+    "editable"?: boolean | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * FileLink
+ */
+export interface FileLink {
+    "link_kind"?: "file" | undefined;
+    "file_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Канонический элемент `ExecutionState.files`.
+ */
+export interface FileRef {
+    "file_id"?: string | null | undefined;
+    "original_name": string;
+    "url"?: string | null | undefined;
+    "content_type": string;
+    "file_size": number;
+    "checksum"?: string | null | undefined;
+    "is_public"?: boolean | null | undefined;
+    "created_at"?: string | null | undefined;
+    "capabilities"?: FileCapabilities | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * FlowSessionLink
+ */
+export interface FlowSessionLink {
+    "link_kind"?: "flow_session" | undefined;
+    "session_id": string;
+    "a2a_task_id"?: string | null | undefined;
+    "context_id"?: string | null | undefined;
+    "flow_id"?: string | null | undefined;
+    "branch_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
 export type JsonValue = unknown;
 
 /**
- * ListResponse[ShopCategoryResponse]
+ * ListResponse[ShopMenuResponse]
  */
-export interface ListResponse_ShopCategoryResponse_ {
-    "items": ShopCategoryResponse[];
+export interface ListResponse_ShopMenuResponse_ {
+    "items": ShopMenuResponse[];
     [key: string]: unknown;
 }
 
@@ -31,10 +110,26 @@ export interface ListResponse_ShopProductResponse_ {
 }
 
 /**
+ * ListResponse[ShopProductSimilarResponse]
+ */
+export interface ListResponse_ShopProductSimilarResponse_ {
+    "items": ShopProductSimilarResponse[];
+    [key: string]: unknown;
+}
+
+/**
  * ListResponse[ShopResponse]
  */
 export interface ListResponse_ShopResponse_ {
     "items": ShopResponse[];
+    [key: string]: unknown;
+}
+
+/**
+ * ListResponse[WorkItem]
+ */
+export interface ListResponse_WorkItem_ {
+    "items": WorkItem[];
     [key: string]: unknown;
 }
 
@@ -57,18 +152,21 @@ export type PlatformCommandEventPayload = {
 };
 
 /**
- * ShopAiBatchResponse
+ * QueueAssignment
  */
-export interface ShopAiBatchResponse {
-    "enqueued": number;
+export interface QueueAssignment {
+    "assignee_kind"?: "queue" | undefined;
+    "work_queue_id": string;
+    "claimed_by_user_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
 /**
- * ShopAiDescribeBatchPayload
+ * RagDocumentLink
  */
-export interface ShopAiDescribeBatchPayload {
-    "shop_id": string;
+export interface RagDocumentLink {
+    "link_kind"?: "rag_document" | undefined;
+    "document_id": string;
     [key: string]: unknown;
 }
 
@@ -111,40 +209,11 @@ export interface ShopAiGeneratePhotoPayload {
 }
 
 /**
- * Позиция, извлечённая AI из свободного текста меню.
- */
-export interface ShopAiMenuItem {
-    "name": string;
-    "price_minor": number;
-    "description"?: string | undefined;
-    "portion"?: string | undefined;
-    "category"?: string | undefined;
-    [key: string]: unknown;
-}
-
-/**
  * ShopAiOptionSuggestion
  */
 export interface ShopAiOptionSuggestion {
     "name": string;
     "price_minor": number;
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiParseMenuPayload
- */
-export interface ShopAiParseMenuPayload {
-    "shop_id": string;
-    "text": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiParseMenuResponse
- */
-export interface ShopAiParseMenuResponse {
-    "items": ShopAiMenuItem[];
     [key: string]: unknown;
 }
 
@@ -185,6 +254,11 @@ export interface ShopAiTextResponse {
 }
 
 /**
+ * Фиксированный набор аллергенов для карточки блюда.
+ */
+export type ShopAllergen = "gluten" | "dairy" | "egg" | "fish" | "shellfish" | "nuts" | "peanuts" | "soy" | "sesame" | "mustard" | "celery" | "lupin" | "molluscs" | "sulphites";
+
+/**
  * Метка из собственного набора магазина.
  * 
  * ``key`` можно не передавать — сервер сгенерирует уникальный;
@@ -220,6 +294,7 @@ export interface ShopBadgeResponse {
  * ShopCartPriceLineResponse
  */
 export interface ShopCartPriceLineResponse {
+    "shop_menu_item_id": string;
     "product_id": string;
     "qty": number;
     "unit_minor": number;
@@ -257,57 +332,6 @@ export interface ShopCartPriceResponse {
 export interface ShopCatalogChangedEventPayload {
     "shop_id": string;
     "slug": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopCategoriesReorderPayload
- */
-export interface ShopCategoriesReorderPayload {
-    "category_ids": string[];
-    "shop_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopCategoryCreatePayload
- */
-export interface ShopCategoryCreatePayload {
-    "name": string;
-    "shop_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopCategoryIdPayload
- */
-export interface ShopCategoryIdPayload {
-    "shop_id": string;
-    "shop_category_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopCategoryResponse
- */
-export interface ShopCategoryResponse {
-    "shop_category_id": string;
-    "shop_id": string;
-    "name": string;
-    "sort": number;
-    "is_active": boolean;
-    [key: string]: unknown;
-}
-
-/**
- * ShopCategoryUpdatePayload
- */
-export interface ShopCategoryUpdatePayload {
-    "name"?: string | null | undefined;
-    "sort"?: number | null | undefined;
-    "is_active"?: boolean | null | undefined;
-    "shop_id": string;
-    "shop_category_id": string;
     [key: string]: unknown;
 }
 
@@ -381,6 +405,355 @@ export interface ShopIdPayload {
  * Вид заведения: влияет на шаблон витрины и фильтры агрегатора.
  */
 export type ShopKind = "restaurant" | "cafe" | "bakery" | "shop" | "other";
+
+/**
+ * ShopLink
+ */
+export interface ShopLink {
+    "link_kind"?: "shop" | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Единица выхода блюда (как у Яндекс Еды).
+ */
+export type ShopMeasureUnit = "g" | "ml" | "pcs";
+
+/**
+ * ShopMenuCreatePayload
+ */
+export interface ShopMenuCreatePayload {
+    "name": string;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Формат файлового импорта меню.
+ */
+export type ShopMenuFileFormat = "xlsx" | "yandex_json";
+
+/**
+ * Строка файла, которая не стала блюдом. ``row`` — 1-based номер строки или позиции.
+ */
+export interface ShopMenuFileImportError {
+    "row": number;
+    "error_code": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuFileImportReport
+ */
+export interface ShopMenuFileImportReport {
+    "shop_id": string;
+    "shop_menu_id": string | null;
+    "created": number;
+    "similar": number;
+    "errors": ShopMenuFileImportError[];
+    "enrich_work_item_id": string | null;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuFileImportRunPayload
+ */
+export interface ShopMenuFileImportRunPayload {
+    "shop_id": string;
+    "target": ShopMenuImportTarget;
+    "shop_menu_id"?: string | null | undefined;
+    "menu_name"?: string | null | undefined;
+    "file_id": string;
+    "format": ShopMenuFileFormat;
+    "enrich_after"?: boolean | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuIdPayload
+ */
+export interface ShopMenuIdPayload {
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportApplyPayload
+ */
+export interface ShopMenuImportApplyPayload {
+    "shop_id": string;
+    "work_item_id": string;
+    "sections": ShopMenuImportSectionPlan[];
+    [key: string]: unknown;
+}
+
+/**
+ * Итог write-back; хранится в ``WorkItem.variables.apply_result``.
+ */
+export interface ShopMenuImportApplyResult {
+    "work_item_id": string;
+    "shop_id": string;
+    "shop_menu_id": string | null;
+    "shop_product_ids": string[];
+    "similar_count": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Позиция плана: существующее блюдо (``shop_product_id``) или новое.
+ */
+export interface ShopMenuImportItemPlan {
+    "shop_product_id"?: string | null | undefined;
+    "name"?: string | undefined;
+    "description"?: string | undefined;
+    "price_minor"?: number | null | undefined;
+    "measure"?: number | null | undefined;
+    "measure_unit"?: ShopMeasureUnit | undefined;
+    "ingredients"?: string[] | undefined;
+    "nutrition"?: ShopNutrition | null | undefined;
+    "allergens"?: ShopAllergen[] | undefined;
+    "photo"?: ShopMenuPhotoCrop | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportSectionPlan
+ */
+export interface ShopMenuImportSectionPlan {
+    "name": string;
+    "items": ShopMenuImportItemPlan[];
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportStartPayload
+ */
+export interface ShopMenuImportStartPayload {
+    "shop_id": string;
+    "target": ShopMenuImportTarget;
+    "shop_menu_id"?: string | null | undefined;
+    "menu_name"?: string | null | undefined;
+    "file_ids": string[];
+    [key: string]: unknown;
+}
+
+/**
+ * Куда писать результат импорта меню.
+ */
+export type ShopMenuImportTarget = "catalog" | "new_menu" | "into_menu";
+
+/**
+ * ShopMenuItemAddPayload
+ */
+export interface ShopMenuItemAddPayload {
+    "shop_menu_section_id": string;
+    "shop_product_id": string;
+    "price_minor_override"?: number | null | undefined;
+    "is_available"?: boolean | undefined;
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuItemIdPayload
+ */
+export interface ShopMenuItemIdPayload {
+    "shop_id": string;
+    "shop_menu_item_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuItemMovePayload
+ */
+export interface ShopMenuItemMovePayload {
+    "shop_menu_section_id": string;
+    "shop_id": string;
+    "shop_menu_item_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Позиция меню с итоговой ценой: override позиции или цена каталога.
+ */
+export interface ShopMenuItemResponse {
+    "shop_menu_item_id": string;
+    "shop_menu_id": string;
+    "shop_menu_section_id": string;
+    "shop_product_id": string;
+    "price_minor_override": number | null;
+    "is_available": boolean;
+    "sort": number;
+    "effective_price_minor": number;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuItemUpdatePayload
+ */
+export interface ShopMenuItemUpdatePayload {
+    "price_minor_override"?: number | null | undefined;
+    "is_available"?: boolean | null | undefined;
+    "shop_id": string;
+    "shop_menu_item_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuItemsReorderPayload
+ */
+export interface ShopMenuItemsReorderPayload {
+    "shop_menu_section_id": string;
+    "shop_menu_item_ids": string[];
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Прямоугольник фото блюда во вложении; координаты — доли страницы.
+ */
+export interface ShopMenuPhotoCrop {
+    "file_id": string;
+    "page"?: number | undefined;
+    "x0": number;
+    "y0": number;
+    "x1": number;
+    "y1": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Меню целиком: разделы по sort и позиции по (раздел, sort).
+ */
+export interface ShopMenuResponse {
+    "shop_menu_id": string;
+    "shop_id": string;
+    "name": string;
+    "status": ShopMenuStatus;
+    "sort": number;
+    "sections": ShopMenuSection[];
+    "items": ShopMenuItemResponse[];
+    [key: string]: unknown;
+}
+
+/**
+ * Раздел меню. Таблица ``shop_menu_sections``.
+ */
+export interface ShopMenuSection {
+    "shop_menu_section_id": string;
+    "shop_menu_id": string;
+    "parent_id"?: string | null | undefined;
+    "name": string;
+    "sort"?: number | undefined;
+    "created_at": string;
+    "updated_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuSectionCreatePayload
+ */
+export interface ShopMenuSectionCreatePayload {
+    "name": string;
+    "parent_id"?: string | null | undefined;
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuSectionIdPayload
+ */
+export interface ShopMenuSectionIdPayload {
+    "shop_id": string;
+    "shop_menu_section_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Узел дерева разделов: раздел и его родитель после перестановки.
+ */
+export interface ShopMenuSectionReorderItem {
+    "shop_menu_section_id": string;
+    "parent_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuSectionUpdatePayload
+ */
+export interface ShopMenuSectionUpdatePayload {
+    "name"?: string | null | undefined;
+    "shop_id": string;
+    "shop_menu_section_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuSectionsReorderPayload
+ */
+export interface ShopMenuSectionsReorderPayload {
+    "items": ShopMenuSectionReorderItem[];
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuSetStatusPayload
+ */
+export interface ShopMenuSetStatusPayload {
+    "status": ShopMenuStatus;
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Жизненный цикл меню заведения.
+ */
+export type ShopMenuStatus = "draft" | "active" | "archived";
+
+/**
+ * ShopMenuTemplateBuildPayload
+ */
+export interface ShopMenuTemplateBuildPayload {
+    "shop_id": string;
+    "menu_name": string;
+    "brief"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuUpdatePayload
+ */
+export interface ShopMenuUpdatePayload {
+    "name"?: string | null | undefined;
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload `shop/menu/updated` — меню, его разделы или позиции изменились.
+ */
+export interface ShopMenuUpdatedEventPayload {
+    "shop_id": string;
+    "shop_menu_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenusReorderPayload
+ */
+export interface ShopMenusReorderPayload {
+    "shop_menu_ids": string[];
+    "shop_id": string;
+    [key: string]: unknown;
+}
 
 /**
  * ShopModifierGroupCreatePayload
@@ -506,6 +879,17 @@ export interface ShopModifierOptionUpdatePayload {
 }
 
 /**
+ * Пищевая ценность на 100 г продукта.
+ */
+export interface ShopNutrition {
+    "calories_kcal": number;
+    "proteins_g": number;
+    "fats_g": number;
+    "carbs_g": number;
+    [key: string]: unknown;
+}
+
+/**
  * Заказ с витрины: магазин резолвится по slug — анонимный вызов.
  */
 export interface ShopOrderCreatePayload {
@@ -567,10 +951,10 @@ export interface ShopOrderItemModifierResponse {
 }
 
 /**
- * ShopOrderItemRequest
+ * Строка корзины: позиция активного меню витрины — она задаёт блюдо и цену.
  */
 export interface ShopOrderItemRequest {
-    "product_id": string;
+    "shop_menu_item_id": string;
     "qty": number;
     "selections"?: ShopOrderItemSelection[] | undefined;
     [key: string]: unknown;
@@ -581,6 +965,7 @@ export interface ShopOrderItemRequest {
  */
 export interface ShopOrderItemResponse {
     "product_id": string;
+    "shop_menu_item_id": string | null;
     "name": string;
     "price_minor": number;
     "qty": number;
@@ -671,14 +1056,33 @@ export interface ShopOrderStatusResponse {
  * ShopProductCreatePayload
  */
 export interface ShopProductCreatePayload {
-    "category_id"?: string | null | undefined;
     "name": string;
     "description"?: string | undefined;
-    "portion"?: string | undefined;
+    "measure"?: number | null | undefined;
+    "measure_unit"?: ShopMeasureUnit | undefined;
+    "ingredients"?: string[] | undefined;
+    "nutrition"?: ShopNutrition | null | undefined;
+    "allergens"?: ShopAllergen[] | undefined;
     "badges"?: string[] | undefined;
     "price_minor": number;
     "photo_file_id"?: string | null | undefined;
+    "ai_unverified"?: boolean | undefined;
     "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Обогащение блюда: каждое поле пишется только в пустое поле каталога.
+ */
+export interface ShopProductEnrichUpdate {
+    "shop_product_id": string;
+    "description"?: string | null | undefined;
+    "measure"?: number | null | undefined;
+    "measure_unit"?: ShopMeasureUnit | null | undefined;
+    "ingredients"?: string[] | null | undefined;
+    "nutrition"?: ShopNutrition | null | undefined;
+    "allergens"?: ShopAllergen[] | null | undefined;
+    "photo_file_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -692,13 +1096,13 @@ export interface ShopProductIdPayload {
 }
 
 /**
- * ShopProductImportItem
+ * ShopProductMergePayload
  */
-export interface ShopProductImportItem {
-    "name": string;
-    "description"?: string | undefined;
-    "portion"?: string | undefined;
-    "price_minor": number;
+export interface ShopProductMergePayload {
+    "into_shop_product_id": string;
+    "fields"?: ("name" | "description" | "measure" | "measure_unit" | "ingredients" | "nutrition" | "allergens" | "badges" | "price_minor" | "photo_file_id")[] | undefined;
+    "shop_id": string;
+    "shop_product_id": string;
     [key: string]: unknown;
 }
 
@@ -730,15 +1134,29 @@ export interface ShopProductModifierDetachPayload {
 export interface ShopProductResponse {
     "shop_product_id": string;
     "shop_id": string;
-    "category_id": string | null;
     "name": string;
     "description": string;
-    "portion": string;
+    "measure": number | null;
+    "measure_unit": ShopMeasureUnit;
+    "ingredients": string[];
+    "nutrition": ShopNutrition | null;
+    "allergens": ShopAllergen[];
     "badges": string[];
     "price_minor": number;
     "photo_file_id": string | null;
     "is_available": boolean;
+    "ai_unverified": boolean;
+    "similar_shop_product_id": string | null;
     "sort": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Кандидат на объединение: блюдо каталога и pg_trgm similarity названия.
+ */
+export interface ShopProductSimilarResponse {
+    "product": ShopProductResponse;
+    "score": number;
     [key: string]: unknown;
 }
 
@@ -746,10 +1164,13 @@ export interface ShopProductResponse {
  * ShopProductUpdatePayload
  */
 export interface ShopProductUpdatePayload {
-    "category_id"?: string | null | undefined;
     "name"?: string | null | undefined;
     "description"?: string | null | undefined;
-    "portion"?: string | null | undefined;
+    "measure"?: number | null | undefined;
+    "measure_unit"?: ShopMeasureUnit | null | undefined;
+    "ingredients"?: string[] | null | undefined;
+    "nutrition"?: ShopNutrition | null | undefined;
+    "allergens"?: ShopAllergen[] | null | undefined;
     "badges"?: string[] | null | undefined;
     "price_minor"?: number | null | undefined;
     "photo_file_id"?: string | null | undefined;
@@ -761,20 +1182,31 @@ export interface ShopProductUpdatePayload {
 }
 
 /**
- * ShopProductsImportPayload
+ * ShopProductsEnrichApplyPayload
  */
-export interface ShopProductsImportPayload {
-    "category_id"?: string | null | undefined;
-    "items": ShopProductImportItem[];
+export interface ShopProductsEnrichApplyPayload {
     "shop_id": string;
+    "work_item_id": string;
+    "updates": ShopProductEnrichUpdate[];
     [key: string]: unknown;
 }
 
 /**
- * ShopProductsImportResponse
+ * Итог обогащения; хранится в ``WorkItem.variables.apply_result``.
  */
-export interface ShopProductsImportResponse {
-    "created": number;
+export interface ShopProductsEnrichApplyResult {
+    "work_item_id": string;
+    "shop_id": string;
+    "shop_product_ids": string[];
+    [key: string]: unknown;
+}
+
+/**
+ * Пустой ``shop_product_ids`` — все блюда без фото, КБЖУ или состава.
+ */
+export interface ShopProductsEnrichPayload {
+    "shop_id": string;
+    "shop_product_ids"?: string[] | undefined;
     [key: string]: unknown;
 }
 
@@ -963,29 +1395,265 @@ export interface ShopUpdatePayload {
 }
 
 /**
+ * StockLocationLink
+ */
+export interface StockLocationLink {
+    "link_kind"?: "stock_location" | undefined;
+    "location_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * StockTransferLink
+ */
+export interface StockTransferLink {
+    "link_kind"?: "stock_transfer" | undefined;
+    "transfer_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * SyncMessageLink
+ */
+export interface SyncMessageLink {
+    "link_kind"?: "sync_message" | undefined;
+    "channel_id": string;
+    "message_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * SystemActor
+ */
+export interface SystemActor {
+    "actor_kind"?: "system" | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * UnassignedAssignment
+ */
+export interface UnassignedAssignment {
+    "assignee_kind"?: "unassigned" | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * UserActor
+ */
+export interface UserActor {
+    "actor_kind"?: "user" | undefined;
+    "user_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * UsersAssignment
+ */
+export interface UsersAssignment {
+    "assignee_kind"?: "users" | undefined;
+    "user_ids": string[];
+    [key: string]: unknown;
+}
+
+/**
+ * VariableEntry
+ */
+export interface VariableEntry {
+    /**
+     * Значение переменной
+     */
+    "value": JsonValue;
+    /**
+     * Скрывать значение в UI
+     */
+    "secret"?: boolean | undefined;
+    /**
+     * Публичная переменная для agent-card (A2A)
+     */
+    "public"?: boolean | undefined;
+    /**
+     * Заголовок переменной
+     */
+    "title"?: string | null | undefined;
+    /**
+     * Описание переменной
+     */
+    "description"?: string | null | undefined;
+    /**
+     * Порядок отображения
+     */
+    "order"?: number | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Каноническая единица работы. Таблица ``work_items``.
+ */
+export interface WorkItem {
+    "work_item_id": string;
+    "company_id": string;
+    "title": string;
+    "created_by": UserActor | SystemActor;
+    "created_at": string;
+    "updated_at": string;
+    "namespace"?: string | null | undefined;
+    "description"?: string | undefined;
+    "kind"?: WorkItemKind | undefined;
+    "state"?: WorkItemState | undefined;
+    "board_id"?: string | null | undefined;
+    "board_column_id"?: string | null | undefined;
+    "priority"?: WorkItemPriority | undefined;
+    "due_date"?: string | null | undefined;
+    "labels"?: string[] | undefined;
+    "assignment"?: UnassignedAssignment | UsersAssignment | QueueAssignment | undefined;
+    "blocking"?: boolean | undefined;
+    "interaction"?: WorkItemInteractionSpec | null | undefined;
+    "hooks"?: WorkItemHook[] | undefined;
+    "resolution"?: WorkItemResolution | null | undefined;
+    "links"?: (CrmEntityLink | FlowSessionLink | SyncMessageLink | RagDocumentLink | FileLink | CalendarEventLink | StockTransferLink | StockLocationLink | ShopLink | WorkItemToWorkItemLink)[] | undefined;
+    "variables"?: Record<string, VariableEntry> | undefined;
+    "attachments"?: FileRef[] | undefined;
+    "interaction_policy"?: WorkItemInteractionPolicy | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Ссылка на разговор flows-сессии для встроенного чата в карточке задачи.
+ */
+export interface WorkItemConversationRef {
+    "session_id": string;
+    "context_id": string;
+    "flow_id": string;
+    "branch_id"?: string | undefined;
+    "a2a_task_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Binding жизненного цикла для durable-потребителей шины.
+ * 
+ * `service`/`path` — метаданные потребителя (flows: path=`platform:events`);
+ * `binding` — непрозрачные данные (например HITL resume snapshot). HTTP
+ * dispatch удалён: обработка только через consumer group на `platform:events`.
+ */
+export interface WorkItemHook {
+    "event": WorkItemHookEvent;
+    "service": string;
+    "path": string;
+    "binding"?: Record<string, JsonValue> | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Событие жизненного цикла WorkItem, на которое подписан хук.
+ */
+export type WorkItemHookEvent = "assigned" | "comment" | "completed";
+
+/**
+ * Как оператор взаимодействует с задачей в её карточке.
+ */
+export type WorkItemInteractionMode = "none" | "single_reply" | "takeover";
+
+/**
+ * Вычисляемая политика композера для карточки задачи (проекция, не персист).
+ */
+export interface WorkItemInteractionPolicy {
+    "mode"?: WorkItemInteractionMode | undefined;
+    "can_send"?: boolean | undefined;
+    "can_complete"?: boolean | undefined;
+    "conversation"?: WorkItemConversationRef | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * First-class контракт взаимодействия: задаётся создателем задачи (flows HITL).
+ * 
+ * Определяет, показывать ли встроенный чат сессии и какие кнопки в композере.
+ * Хранится на задаче, не в непрозрачном `hook.binding`.
+ */
+export interface WorkItemInteractionSpec {
+    "mode"?: WorkItemInteractionMode | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Происхождение/поведение задачи.
+ */
+export type WorkItemKind = "generic" | "operator_handoff" | "agent_job" | "crm_activity";
+
+/**
+ * WorkItemLinkRelation
+ */
+export type WorkItemLinkRelation = "blocks" | "related" | "parent";
+
+/**
+ * WorkItemPriority
+ */
+export type WorkItemPriority = "low" | "normal" | "high" | "urgent";
+
+/**
+ * WorkItemResolution
+ */
+export interface WorkItemResolution {
+    "text"?: string | undefined;
+    "files"?: FileRef[] | undefined;
+    "resolved_by"?: UserActor | SystemActor | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Движковое состояние задачи (стейт-машина ядра).
+ */
+export type WorkItemState = "open" | "in_progress" | "blocked" | "done" | "cancelled" | "failed";
+
+/**
+ * WorkItemToWorkItemLink
+ */
+export interface WorkItemToWorkItemLink {
+    "link_kind"?: "work_item" | undefined;
+    "work_item_id": string;
+    "relation"?: WorkItemLinkRelation | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Карта команд сервиса: `type` → `{ payload, result }`.
  * Типизированный dispatch/оп-результат по имени команды.
  */
 export interface ShopCommandMap {
     "shop/ai/autofill_requested": { payload: ShopIdPayload; result: ShopResponse },
-    "shop/ai/describe_batch_requested": { payload: ShopAiDescribeBatchPayload; result: ShopAiBatchResponse },
     "shop/ai/describe_requested": { payload: ShopAiDescribePayload; result: ShopAiTextResponse },
     "shop/ai/describe_shop_requested": { payload: ShopAiShopPayload; result: ShopAiTextResponse },
     "shop/ai/enhance_photo_requested": { payload: ShopAiEnhancePhotoPayload; result: ShopAiFileResponse },
     "shop/ai/generate_cover_requested": { payload: ShopAiShopPayload; result: ShopAiFileResponse },
     "shop/ai/generate_logo_requested": { payload: ShopAiShopPayload; result: ShopAiFileResponse },
     "shop/ai/generate_photo_requested": { payload: ShopAiGeneratePhotoPayload; result: ShopAiFileResponse },
-    "shop/ai/parse_menu_requested": { payload: ShopAiParseMenuPayload; result: ShopAiParseMenuResponse },
     "shop/ai/suggest_options_requested": { payload: ShopAiSuggestOptionsPayload; result: ShopAiSuggestOptionsResponse },
     "shop/badge_icons/list_requested": { payload: EmptyPayload; result: ShopBadgeIconsResponse },
-    "shop/categories/create_requested": { payload: ShopCategoryCreatePayload; result: ShopCategoryResponse },
-    "shop/categories/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopCategoryResponse_ },
-    "shop/categories/remove_requested": { payload: ShopCategoryIdPayload; result: EmptyPayload },
-    "shop/categories/reorder_requested": { payload: ShopCategoriesReorderPayload; result: EmptyPayload },
-    "shop/categories/update_requested": { payload: ShopCategoryUpdatePayload; result: ShopCategoryResponse },
     "shop/domains/add_requested": { payload: ShopDomainAddPayload; result: ShopDomain },
     "shop/domains/provision_requested": { payload: ShopDomainIdPayload; result: ShopDomain },
     "shop/domains/remove_requested": { payload: ShopDomainIdPayload; result: EmptyPayload },
+    "shop/menu_file_imports/run_requested": { payload: ShopMenuFileImportRunPayload; result: ShopMenuFileImportReport },
+    "shop/menu_imports/apply_requested": { payload: ShopMenuImportApplyPayload; result: ShopMenuImportApplyResult },
+    "shop/menu_imports/list_requested": { payload: ShopIdPayload; result: ListResponse_WorkItem_ },
+    "shop/menu_imports/start_requested": { payload: ShopMenuImportStartPayload; result: WorkItem },
+    "shop/menu_items/add_requested": { payload: ShopMenuItemAddPayload; result: ShopMenuItemResponse },
+    "shop/menu_items/move_requested": { payload: ShopMenuItemMovePayload; result: ShopMenuItemResponse },
+    "shop/menu_items/remove_requested": { payload: ShopMenuItemIdPayload; result: EmptyPayload },
+    "shop/menu_items/reorder_requested": { payload: ShopMenuItemsReorderPayload; result: EmptyPayload },
+    "shop/menu_items/update_requested": { payload: ShopMenuItemUpdatePayload; result: ShopMenuItemResponse },
+    "shop/menu_sections/create_requested": { payload: ShopMenuSectionCreatePayload; result: ShopMenuSection },
+    "shop/menu_sections/remove_requested": { payload: ShopMenuSectionIdPayload; result: EmptyPayload },
+    "shop/menu_sections/reorder_requested": { payload: ShopMenuSectionsReorderPayload; result: EmptyPayload },
+    "shop/menu_sections/update_requested": { payload: ShopMenuSectionUpdatePayload; result: ShopMenuSection },
+    "shop/menu_templates/build_requested": { payload: ShopMenuTemplateBuildPayload; result: WorkItem },
+    "shop/menus/create_requested": { payload: ShopMenuCreatePayload; result: ShopMenuResponse },
+    "shop/menus/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopMenuResponse_ },
+    "shop/menus/remove_requested": { payload: ShopMenuIdPayload; result: EmptyPayload },
+    "shop/menus/reorder_requested": { payload: ShopMenusReorderPayload; result: EmptyPayload },
+    "shop/menus/set_status_requested": { payload: ShopMenuSetStatusPayload; result: ShopMenuResponse },
+    "shop/menus/update_requested": { payload: ShopMenuUpdatePayload; result: ShopMenuResponse },
     "shop/modifiers/groups/create_requested": { payload: ShopModifierGroupCreatePayload; result: ShopModifierGroupResponse },
     "shop/modifiers/groups/list_requested": { payload: ShopIdPayload; result: ShopModifierGroupsResponse },
     "shop/modifiers/groups/remove_requested": { payload: ShopModifierGroupIdPayload; result: EmptyPayload },
@@ -997,13 +1665,18 @@ export interface ShopCommandMap {
     "shop/orders/list_requested": { payload: ShopOrderListPayload; result: OffsetPage_ShopOrderResponse_ },
     "shop/orders/set_status_requested": { payload: ShopOrderSetStatusPayload; result: ShopOrderResponse },
     "shop/products/create_requested": { payload: ShopProductCreatePayload; result: ShopProductResponse },
-    "shop/products/import_requested": { payload: ShopProductsImportPayload; result: ShopProductsImportResponse },
+    "shop/products/dismiss_similar_requested": { payload: ShopProductIdPayload; result: ShopProductResponse },
+    "shop/products/enrich_apply_requested": { payload: ShopProductsEnrichApplyPayload; result: ShopProductsEnrichApplyResult },
+    "shop/products/enrich_requested": { payload: ShopProductsEnrichPayload; result: WorkItem },
     "shop/products/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopProductResponse_ },
+    "shop/products/merge_requested": { payload: ShopProductMergePayload; result: ShopProductResponse },
     "shop/products/modifiers/attach_requested": { payload: ShopProductModifierAttachPayload; result: EmptyPayload },
     "shop/products/modifiers/detach_requested": { payload: ShopProductModifierDetachPayload; result: EmptyPayload },
     "shop/products/remove_requested": { payload: ShopProductIdPayload; result: EmptyPayload },
     "shop/products/reorder_requested": { payload: ShopProductsReorderPayload; result: EmptyPayload },
+    "shop/products/similar_list_requested": { payload: ShopProductIdPayload; result: ListResponse_ShopProductSimilarResponse_ },
     "shop/products/update_requested": { payload: ShopProductUpdatePayload; result: ShopProductResponse },
+    "shop/products/verify_requested": { payload: ShopProductIdPayload; result: ShopProductResponse },
     "shop/promos/create_requested": { payload: ShopPromoCreatePayload; result: ShopPromoResponse },
     "shop/promos/list_requested": { payload: ShopIdPayload; result: ShopPromosResponse },
     "shop/promos/remove_requested": { payload: ShopPromoIdPayload; result: EmptyPayload },
@@ -1029,9 +1702,6 @@ export interface ShopEventMap {
     "shop/ai/autofill_failed": PlatformCommandEventPayload,
     "shop/ai/autofill_requested": PlatformCommandEventPayload,
     "shop/ai/autofill_succeeded": PlatformCommandEventPayload,
-    "shop/ai/describe_batch_failed": PlatformCommandEventPayload,
-    "shop/ai/describe_batch_requested": PlatformCommandEventPayload,
-    "shop/ai/describe_batch_succeeded": PlatformCommandEventPayload,
     "shop/ai/describe_failed": PlatformCommandEventPayload,
     "shop/ai/describe_requested": PlatformCommandEventPayload,
     "shop/ai/describe_shop_failed": PlatformCommandEventPayload,
@@ -1050,9 +1720,6 @@ export interface ShopEventMap {
     "shop/ai/generate_photo_failed": PlatformCommandEventPayload,
     "shop/ai/generate_photo_requested": PlatformCommandEventPayload,
     "shop/ai/generate_photo_succeeded": PlatformCommandEventPayload,
-    "shop/ai/parse_menu_failed": PlatformCommandEventPayload,
-    "shop/ai/parse_menu_requested": PlatformCommandEventPayload,
-    "shop/ai/parse_menu_succeeded": PlatformCommandEventPayload,
     "shop/ai/suggest_options_failed": PlatformCommandEventPayload,
     "shop/ai/suggest_options_requested": PlatformCommandEventPayload,
     "shop/ai/suggest_options_succeeded": PlatformCommandEventPayload,
@@ -1060,21 +1727,6 @@ export interface ShopEventMap {
     "shop/badge_icons/list_requested": PlatformCommandEventPayload,
     "shop/badge_icons/list_succeeded": PlatformCommandEventPayload,
     "shop/catalog/changed": ShopCatalogChangedEventPayload,
-    "shop/categories/create_failed": PlatformCommandEventPayload,
-    "shop/categories/create_requested": PlatformCommandEventPayload,
-    "shop/categories/create_succeeded": PlatformCommandEventPayload,
-    "shop/categories/list_failed": PlatformCommandEventPayload,
-    "shop/categories/list_requested": PlatformCommandEventPayload,
-    "shop/categories/list_succeeded": PlatformCommandEventPayload,
-    "shop/categories/remove_failed": PlatformCommandEventPayload,
-    "shop/categories/remove_requested": PlatformCommandEventPayload,
-    "shop/categories/remove_succeeded": PlatformCommandEventPayload,
-    "shop/categories/reorder_failed": PlatformCommandEventPayload,
-    "shop/categories/reorder_requested": PlatformCommandEventPayload,
-    "shop/categories/reorder_succeeded": PlatformCommandEventPayload,
-    "shop/categories/update_failed": PlatformCommandEventPayload,
-    "shop/categories/update_requested": PlatformCommandEventPayload,
-    "shop/categories/update_succeeded": PlatformCommandEventPayload,
     "shop/domains/add_failed": PlatformCommandEventPayload,
     "shop/domains/add_requested": PlatformCommandEventPayload,
     "shop/domains/add_succeeded": PlatformCommandEventPayload,
@@ -1084,6 +1736,67 @@ export interface ShopEventMap {
     "shop/domains/remove_failed": PlatformCommandEventPayload,
     "shop/domains/remove_requested": PlatformCommandEventPayload,
     "shop/domains/remove_succeeded": PlatformCommandEventPayload,
+    "shop/menu/updated": ShopMenuUpdatedEventPayload,
+    "shop/menu_file_imports/run_failed": PlatformCommandEventPayload,
+    "shop/menu_file_imports/run_requested": PlatformCommandEventPayload,
+    "shop/menu_file_imports/run_succeeded": PlatformCommandEventPayload,
+    "shop/menu_imports/apply_failed": PlatformCommandEventPayload,
+    "shop/menu_imports/apply_requested": PlatformCommandEventPayload,
+    "shop/menu_imports/apply_succeeded": PlatformCommandEventPayload,
+    "shop/menu_imports/list_failed": PlatformCommandEventPayload,
+    "shop/menu_imports/list_requested": PlatformCommandEventPayload,
+    "shop/menu_imports/list_succeeded": PlatformCommandEventPayload,
+    "shop/menu_imports/start_failed": PlatformCommandEventPayload,
+    "shop/menu_imports/start_requested": PlatformCommandEventPayload,
+    "shop/menu_imports/start_succeeded": PlatformCommandEventPayload,
+    "shop/menu_items/add_failed": PlatformCommandEventPayload,
+    "shop/menu_items/add_requested": PlatformCommandEventPayload,
+    "shop/menu_items/add_succeeded": PlatformCommandEventPayload,
+    "shop/menu_items/move_failed": PlatformCommandEventPayload,
+    "shop/menu_items/move_requested": PlatformCommandEventPayload,
+    "shop/menu_items/move_succeeded": PlatformCommandEventPayload,
+    "shop/menu_items/remove_failed": PlatformCommandEventPayload,
+    "shop/menu_items/remove_requested": PlatformCommandEventPayload,
+    "shop/menu_items/remove_succeeded": PlatformCommandEventPayload,
+    "shop/menu_items/reorder_failed": PlatformCommandEventPayload,
+    "shop/menu_items/reorder_requested": PlatformCommandEventPayload,
+    "shop/menu_items/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/menu_items/update_failed": PlatformCommandEventPayload,
+    "shop/menu_items/update_requested": PlatformCommandEventPayload,
+    "shop/menu_items/update_succeeded": PlatformCommandEventPayload,
+    "shop/menu_sections/create_failed": PlatformCommandEventPayload,
+    "shop/menu_sections/create_requested": PlatformCommandEventPayload,
+    "shop/menu_sections/create_succeeded": PlatformCommandEventPayload,
+    "shop/menu_sections/remove_failed": PlatformCommandEventPayload,
+    "shop/menu_sections/remove_requested": PlatformCommandEventPayload,
+    "shop/menu_sections/remove_succeeded": PlatformCommandEventPayload,
+    "shop/menu_sections/reorder_failed": PlatformCommandEventPayload,
+    "shop/menu_sections/reorder_requested": PlatformCommandEventPayload,
+    "shop/menu_sections/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/menu_sections/update_failed": PlatformCommandEventPayload,
+    "shop/menu_sections/update_requested": PlatformCommandEventPayload,
+    "shop/menu_sections/update_succeeded": PlatformCommandEventPayload,
+    "shop/menu_templates/build_failed": PlatformCommandEventPayload,
+    "shop/menu_templates/build_requested": PlatformCommandEventPayload,
+    "shop/menu_templates/build_succeeded": PlatformCommandEventPayload,
+    "shop/menus/create_failed": PlatformCommandEventPayload,
+    "shop/menus/create_requested": PlatformCommandEventPayload,
+    "shop/menus/create_succeeded": PlatformCommandEventPayload,
+    "shop/menus/list_failed": PlatformCommandEventPayload,
+    "shop/menus/list_requested": PlatformCommandEventPayload,
+    "shop/menus/list_succeeded": PlatformCommandEventPayload,
+    "shop/menus/remove_failed": PlatformCommandEventPayload,
+    "shop/menus/remove_requested": PlatformCommandEventPayload,
+    "shop/menus/remove_succeeded": PlatformCommandEventPayload,
+    "shop/menus/reorder_failed": PlatformCommandEventPayload,
+    "shop/menus/reorder_requested": PlatformCommandEventPayload,
+    "shop/menus/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/menus/set_status_failed": PlatformCommandEventPayload,
+    "shop/menus/set_status_requested": PlatformCommandEventPayload,
+    "shop/menus/set_status_succeeded": PlatformCommandEventPayload,
+    "shop/menus/update_failed": PlatformCommandEventPayload,
+    "shop/menus/update_requested": PlatformCommandEventPayload,
+    "shop/menus/update_succeeded": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_failed": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_requested": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_succeeded": PlatformCommandEventPayload,
@@ -1119,12 +1832,21 @@ export interface ShopEventMap {
     "shop/products/create_failed": PlatformCommandEventPayload,
     "shop/products/create_requested": PlatformCommandEventPayload,
     "shop/products/create_succeeded": PlatformCommandEventPayload,
-    "shop/products/import_failed": PlatformCommandEventPayload,
-    "shop/products/import_requested": PlatformCommandEventPayload,
-    "shop/products/import_succeeded": PlatformCommandEventPayload,
+    "shop/products/dismiss_similar_failed": PlatformCommandEventPayload,
+    "shop/products/dismiss_similar_requested": PlatformCommandEventPayload,
+    "shop/products/dismiss_similar_succeeded": PlatformCommandEventPayload,
+    "shop/products/enrich_apply_failed": PlatformCommandEventPayload,
+    "shop/products/enrich_apply_requested": PlatformCommandEventPayload,
+    "shop/products/enrich_apply_succeeded": PlatformCommandEventPayload,
+    "shop/products/enrich_failed": PlatformCommandEventPayload,
+    "shop/products/enrich_requested": PlatformCommandEventPayload,
+    "shop/products/enrich_succeeded": PlatformCommandEventPayload,
     "shop/products/list_failed": PlatformCommandEventPayload,
     "shop/products/list_requested": PlatformCommandEventPayload,
     "shop/products/list_succeeded": PlatformCommandEventPayload,
+    "shop/products/merge_failed": PlatformCommandEventPayload,
+    "shop/products/merge_requested": PlatformCommandEventPayload,
+    "shop/products/merge_succeeded": PlatformCommandEventPayload,
     "shop/products/modifiers/attach_failed": PlatformCommandEventPayload,
     "shop/products/modifiers/attach_requested": PlatformCommandEventPayload,
     "shop/products/modifiers/attach_succeeded": PlatformCommandEventPayload,
@@ -1137,9 +1859,15 @@ export interface ShopEventMap {
     "shop/products/reorder_failed": PlatformCommandEventPayload,
     "shop/products/reorder_requested": PlatformCommandEventPayload,
     "shop/products/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/products/similar_list_failed": PlatformCommandEventPayload,
+    "shop/products/similar_list_requested": PlatformCommandEventPayload,
+    "shop/products/similar_list_succeeded": PlatformCommandEventPayload,
     "shop/products/update_failed": PlatformCommandEventPayload,
     "shop/products/update_requested": PlatformCommandEventPayload,
     "shop/products/update_succeeded": PlatformCommandEventPayload,
+    "shop/products/verify_failed": PlatformCommandEventPayload,
+    "shop/products/verify_requested": PlatformCommandEventPayload,
+    "shop/products/verify_succeeded": PlatformCommandEventPayload,
     "shop/promos/create_failed": PlatformCommandEventPayload,
     "shop/promos/create_requested": PlatformCommandEventPayload,
     "shop/promos/create_succeeded": PlatformCommandEventPayload,

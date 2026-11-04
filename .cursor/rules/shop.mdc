@@ -1,0 +1,73 @@
+---
+description: "Shop (apps/shop): каталог блюд, меню с разделами и позициями, витрина, заказы, файловый и агентный импорт. Читать при правке apps/shop"
+globs:
+  - "apps/shop/**"
+  - "core/clients/shop_client.py"
+  - "core/clients/shop_models.py"
+  - "apps/flows/tools/shop/**"
+  - "apps/flows/bundles/shop*/**"
+  - "tests/shop/**"
+alwaysApply: false
+---
+
+# Shop
+
+Витрины заведений: каталог блюд компании, несколько меню на заведение, публичная витрина и заказы. REST — `/shop/api/v1/`, SPA — `/shop`, команды — `SHOP_OPERATIONS`, DI — `ShopDi`, порт 8027, база `platform_shop`. Не владеет: WorkItem агента → `worktracker.mdc`; исполнение flow → `flows_runtime.mdc`; файлы фото → `files.mdc`.
+
+## Модель
+
+- `Shop` (`apps/shop/models/shop.py`, `shop_id`): заведение, slug, тема, статусы `draft`/`published`/`suspended`.
+- `ShopProduct` (`apps/shop/models/product.py`, `shop_product_id`): каталог блюд заведения. Поля: `name`, `description`, `measure`/`measure_unit` (`g`/`ml`/`pcs`), `ingredients`, `nutrition` (`ShopNutrition`: ккал/Б/Ж/У на 100 г), `allergens` (`ShopAllergen`), `badges`, `price_minor`, `photo_file_id`, `is_available`, `ai_unverified`, `similar_shop_product_id`, `sort`. `find_similar_by_name_by_score_desc(shop_id, name, *, exclude_shop_product_id, threshold)` — pg_trgm `similarity` по GIN `name`. Удаление при наличии `ShopMenuItem` — `PlatformConflictError` `product_in_menu`.
+- `ShopMenu` (`apps/shop/models/menu.py`, `shop_menu_id`): `shop_id`, `name`, `status` (`draft`/`active`/`archived`), `sort`.
+- `ShopMenuSection` (`apps/shop/models/menu_section.py`, `shop_menu_section_id`): дерево разделов меню (`parent_id`, `name`, `sort`).
+- `ShopMenuItem` (`apps/shop/models/menu_item.py`, `shop_menu_item_id`): позиция меню → `shop_product_id`; `price_minor_override`, `is_available`, `sort`; `unique_together (shop_menu_id, shop_product_id)`.
+- `ShopOrderItem.shop_menu_item_id` — меню, из которого взята цена.
+- Акция `section_qty` в `ShopPromo.condition` ссылается на `shop_menu_section_id`.
+- WorkItem link `ShopLink(shop_id)` (`link_kind=shop`) → `worktracker.mdc`.
+
+## Инварианты
+
+1. Каталог принадлежит заведению; меню ссылается на блюда. Одно блюдо — в нескольких меню; цена и доступность переопределяются в `ShopMenuItem`.
+2. Статусы меню: архив → draft; active редактируется вживую; удаление меню не трогает каталог; блюдо в меню нельзя удалить; activate — только меню с ≥1 позицией.
+3. Импорт (фото/агент и файл) всегда создаёт новое блюдо; похожее имя (порог `similar_name_threshold`) ставит `similar_shop_product_id`. Merge переносит поля и позиции, dismiss снимает пометку.
+4. AI-поля помечаются `ai_unverified`; витрина показывает КБЖУ с пометкой «ориентировочно».
+5. Write-back агента (`menu_imports/apply`, `products/enrich_apply`) идемпотентен по `work_item_id`.
+6. Снапшот витрины — активные меню по `sort` → разделы → позиции с итоговой ценой.
+
+## Контракты
+
+- Меню: `shop/menus/{list,create,update,reorder,set_status,remove}_requested`.
+- Разделы: `shop/menu_sections/{create,update,remove,reorder}_requested`.
+- Позиции: `shop/menu_items/{add,update,move,remove,reorder}_requested`.
+- Каталог: `shop/products/{list,create,update,remove,verify,similar_list,merge,dismiss_similar,enrich}_requested`.
+- Агент: `shop/menu_imports/{start,list,apply}_requested`, `shop/menu_templates/build_requested`, `shop/products/enrich_apply_requested`.
+- Файл: `shop/menu_file_imports/run_requested` (`xlsx`/`yandex_json`).
+- Push: `shop/menu/updated`, `shop/catalog/changed`.
+
+## Интеграции
+
+- Агент `shop_menu_agent` (`apps/flows/bundles/shop_menu_agent/`, `employee.enabled` + куратор `$company_owner`): старт (`MenuImportService.start_import`/`start_template`/`start_enrich`) идемпотентно `ensure_flow_employee` и создаёт `WorkItem(kind=agent_job)` на `flow_employee_shop_menu_agent` со связью `ShopLink`, вложениями `FileRef` и `variables`: `mode` (`import`/`template`/`enrich`), `shop_id`, `target` (`catalog`/`new_menu`/`into_menu`), `shop_menu_id`, `menu_name`, `brief`, `shop_product_ids`; итог write-back — `variables.apply_result`, WorkItem закрывается. Company init / reload бандла провижинит сотрудника через `FlowsLoader` → `sync_flow_employee`; если бандл ещё не в компании — `EmployeeInboxService` лениво зовёт `materialize_public_bundle`. Builtins `shop_catalog_list` / `shop_menu_import_apply` / `shop_products_enrich_apply` (`apps/flows/tools/shop/menu_tools.py`, tag `shop`) — через `ShopClient`. Import-режим кладёт в `state.files` вложения `image/*` и `application/pdf`; `llm_vision` рендерит PDF в PNG (`core/files/pdf_render.py`); выдуманный `photo.file_id` вне вложений WorkItem перед apply обнуляется.
+- Права: своей FGA-модели у shop нет. Старт импорта, шаблона, обогащения и файловый импорт — `require_company_admin` + `require_namespace`; write-back — `require_company_viewer`, сервис пускает только исполнителя WorkItem (сотрудник своим SESSION JWT через `ShopClient`) или админа компании, иначе `shop_menu_import_forbidden`.
+- Id блюд, меню, разделов и позиций агентного write-back выводятся из `work_item_id` (`derived_id`): прерванный apply доигрывается без дублей.
+- Кроп фото меню — `apps/shop/services/menu_photo_crop.py` (PIL, PDF — pymupdf): источник — только вложение WorkItem, координаты — доли страницы; JPEG → `FilesService` (`FileSourceKind.SHOP_PRODUCT`, публичный).
+- Peer `ServiceClientError` из thin `@tool` в tool-runtime мапится в `raise_*` (`apps/flows/realtime/tool_runtime_operations.py`), иначе capability видит голый 500.
+- Файловый импорт — `MenuFileImportService` (`apps/shop/services/menu_file_import_service.py`), парсеры — `apps/shop/services/menu_file_parsers.py`: `yandex_json` — ответ `GET /menu/{restaurantId}/composition` Яндекс Еды (composition v2: `categories` с `parentId` → дерево разделов, `items` с `price` в рублях, `measure`/`measureUnit`, `nutrients`, `modifierGroups`, `images`); `xlsx` — первый лист, заголовок по синонимам колонок (`Название` и `Цена` обязательны), путь раздела `Горячее/Мясо`, модификаторы `Группа [N]: опция +цена; опция`. Строка без блюда → `errors[{row, error_code}]` отчёта; модификаторы → `ShopModifierGroup`/`ShopModifierOption` (`external_id` — id Яндекса); блюдо без категории — раздел «Меню».
+- Фото по URL файла — задача `shop_menu_photo_download` (`apps/shop/tasks/menu_photo_tasks.py`) от имени запустившего в его namespace; URL только публичный http(s) (адреса кластера и приватных сетей — отказ), не больше 24 MiB.
+
+## UI
+
+- Маршруты: `shop_catalog`, `shop_menus`, `shop_menu` (`:shopId/menus/:menuId`), плюс home/orders/settings/promos/builder.
+- Модалки: импорт, шаблон из каталога, merge похожих, карточка блюда с подсказкой similar.
+- Плашка `shop-agent-jobs-banner` — активные WorkItem заведения.
+
+## Запреты
+
+1. `ShopCategory` и команды `shop/categories/*`.
+2. Текстовый CSV-импорт, `op_ai_parse_menu`, синхронный `op_ai_describe_batch`, ветка `parse_menu`.
+3. Перенос меню между заведениями.
+
+## Гейты
+
+- `scripts/gates/backend/model_files.py` (`make lint`) — одна таблица shop на файл `apps/shop/models/`.
+- `tests/realtime/test_shop_commands.py` — WS ≡ REST.
+- `tests/shop/` — статусы меню, merge/similar, apply идемпотентность, парсеры, снапшот витрины.

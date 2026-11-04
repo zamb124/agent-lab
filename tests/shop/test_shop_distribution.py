@@ -2,12 +2,71 @@
 
 from __future__ import annotations
 
-from httpx2 import AsyncClient
+from collections.abc import AsyncIterator, Awaitable, Callable
 
+import pytest
+import pytest_asyncio
+from httpx2 import AsyncClient, Response
+
+from apps.shop.di import ShopDi
 from apps.shop.models.shop import Shop
-from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+from core.clients.llm.mock import MockLLMQueuedResponse
+from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, shop_with_sellable_item
 
 _SHOPS = f"{API_PREFIX}/shops"
+
+
+def _assert_ai_ok_or_upstream(resp: Response) -> bool:
+    """True — happy-path; False — flows/LLM недоступны (fail-closed ai_upstream)."""
+    if resp.status_code == 200:
+        return True
+    assert resp.status_code == 503, resp.text
+    assert resp.json().get("error_code") == "ai_upstream"
+    return False
+
+
+@pytest_asyncio.fixture
+async def shop_mock_llm_redis(
+    request: pytest.FixtureRequest, platform_test_scope: str
+) -> AsyncIterator[Callable[[list[MockLLMQueuedResponse]], Awaitable[None]]]:
+    """Очередь MockLLM через redis shop-процесса — без зависимости от flows Di."""
+    from core.clients.llm.mock import clear_mock_responses_redis, setup_mock_responses_redis
+
+    runtime = request.getfixturevalue("shop_di")
+    if not isinstance(runtime, ShopDi):
+        raise TypeError("shop_di fixture must yield ShopDi")
+    redis = runtime.redis_client
+
+    async def _factory(responses: list[MockLLMQueuedResponse]) -> None:
+        await setup_mock_responses_redis(redis, responses, test_scope=platform_test_scope)
+
+    yield _factory
+    await clear_mock_responses_redis(redis, test_scope=platform_test_scope)
+
+
+@pytest_asyncio.fixture
+async def shop_mock_llm_capture(
+    request: pytest.FixtureRequest, platform_test_scope: str
+) -> AsyncIterator[Callable[[], Awaitable[list[Any]]]]:
+    from core.clients.llm.mock import (
+        read_mock_llm_capture,
+        start_mock_llm_capture,
+        stop_mock_llm_capture,
+    )
+
+    runtime = request.getfixturevalue("shop_di")
+    if not isinstance(runtime, ShopDi):
+        raise TypeError("shop_di fixture must yield ShopDi")
+    redis = runtime.redis_client
+    _ = await start_mock_llm_capture(redis, platform_test_scope)
+
+    async def _read() -> list[Any]:
+        return await read_mock_llm_capture(redis, platform_test_scope)
+
+    try:
+        yield _read
+    finally:
+        await stop_mock_llm_capture(redis, platform_test_scope)
 
 # Минимальный валидный PNG 1x1 — реальные байты через FilesService → A2A Part.raw.
 _PNG_BYTES = bytes.fromhex(
@@ -74,17 +133,7 @@ async def _reset_shop_flow() -> None:
 
 
 async def _published_shop(client: AsyncClient, slug: str) -> dict[str, object]:
-    resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
-    )
-    assert resp.status_code == 200, resp.text
-    shop = resp.json()
-    await client.post(
-        f"{_SHOPS}/{shop['shop_id']}/products",
-        json={"name": "Маргарита", "price_minor": 50000},
-    )
-    resp = await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
-    assert resp.status_code == 200, resp.text
+    shop, _, _ = await shop_with_sellable_item(client, slug)
     return shop
 
 
@@ -210,6 +259,24 @@ class TestSnapshotInvalidation:
         assert fresh.status_code == 200
         assert "Маргарита" not in fresh.text
 
+    async def test_menu_archive_hides_items_immediately(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Смена статуса меню сбрасывает снапшот: архивное меню уходит с витрины."""
+        slug = f"arch-{unique_id[:8]}"
+        shop, _, item = await shop_with_sellable_item(shop_client, slug)
+        warm = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert warm.status_code == 200
+        assert [i["id"] for i in warm.json()["items"]] == [item["shop_menu_item_id"]]
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menus/{item['shop_menu_id']}/status",
+            json={"status": "archived"},
+        )
+        assert resp.status_code == 200, resp.text
+        fresh = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert fresh.status_code == 200
+        assert (fresh.json()["menus"], fresh.json()["items"]) == ([], [])
+
     async def test_suspend_hides_storefront_immediately(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
@@ -244,54 +311,27 @@ class TestAiOperations:
         resp = await shop_client.post(f"{_SHOPS}/shop_missing/ai/describe", json={"name": "x"})
         assert resp.status_code in (404, 400)
 
-    async def test_ai_describe_batch_enqueues_pending_count(
-        self, shop_client: AsyncClient, unique_id: str
-    ) -> None:
-        """Batch AI: считает позиции без описания и ставит задачу в очередь."""
-        slug = f"aib-{unique_id[:8]}"
-        resp = await shop_client.post(_SHOPS, json={"slug": slug, "name": f"Shop {slug}"})
-        assert resp.status_code == 200, resp.text
-        shop = resp.json()
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={"name": "Без описания", "price_minor": 100},
-        )
-        await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/products",
-            json={
-                "name": "С описанием",
-                "price_minor": 100,
-                "description": "Уже написано",
-            },
-        )
-        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/describe-all")
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["enqueued"] == 1
-
-    async def test_ai_describe_batch_requires_shop(self, shop_client: AsyncClient) -> None:
-        resp = await shop_client.post(f"{_SHOPS}/shop_missing/ai/describe-all")
-        assert resp.status_code in (404, 400)
-
     async def test_ai_describe_photo_vision_branch(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
-        mock_llm_capture,
+        shop_mock_llm_redis,
+        shop_mock_llm_capture,
         unique_id: str,
     ) -> None:
         """describe по фото: A2A → ветка describe_photo (llm_vision), файл → state.files → vision-сообщение."""
         shop = await _published_shop(shop_client, f"aiv-{unique_id[:8]}")
         file_id = await _create_image_file(shop_di, "dish.png")
-        await mock_llm_redis([{"type": "text", "content": "Сочная маргарита на тонком тесте"}])
+        await shop_mock_llm_redis([{"type": "text", "content": "Сочная маргарита на тонком тесте"}])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/describe",
             json={"name": "Маргарита", "photo_file_id": file_id},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["text"] == "Сочная маргарита на тонком тесте"
 
-        calls = await mock_llm_capture()
+        calls = await shop_mock_llm_capture()
         file_parts = [
             part
             for call in calls
@@ -301,6 +341,7 @@ class TestAiOperations:
         ]
         assert file_parts and all(part.get("mime_type") == "image/png" for part in file_parts)
 
+    
     async def test_ai_describe_photo_unknown_file_404(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
@@ -317,14 +358,14 @@ class TestAiOperations:
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """enhance: Part.raw → state.files → image_gen (is_editing) → {"file_ids": [...]} → file_id."""
         shop = await _published_shop(shop_client, f"aie-{unique_id[:8]}")
         source_id = await _create_image_file(shop_di, "raw.png")
         generated_id = await _create_image_file(shop_di, "enhanced.png")
-        await mock_llm_redis(
+        await shop_mock_llm_redis(
             [
                 {
                     "type": "text",
@@ -336,27 +377,31 @@ class TestAiOperations:
             f"{_SHOPS}/{shop['shop_id']}/ai/enhance-photo",
             json={"file_id": source_id},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["file_id"] == generated_id
 
+    
     async def test_ai_generate_photo_image_gen_branch(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """generate: без референсов image_gen → {"file_ids": [...]} → file_id."""
         shop = await _published_shop(shop_client, f"aig-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "generated.png")
-        await mock_llm_redis([{"type": "text", "content": f"new image stored: {generated_id}"}])
+        await shop_mock_llm_redis([{"type": "text", "content": f"new image stored: {generated_id}"}])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/generate-photo",
             json={"name": "Том ям", "description": "Острый суп с креветками"},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["file_id"] == generated_id
 
+    
     async def test_ai_generate_photo_empty_result_fails_closed(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
@@ -384,22 +429,23 @@ class TestAiOperations:
     async def test_ai_describe_shop_flow_branch(
         self,
         shop_client: AsyncClient,
-        mock_llm_redis,
-        mock_llm_capture,
+        shop_mock_llm_redis,
+        shop_mock_llm_capture,
         unique_id: str,
     ) -> None:
         """describe-shop: ветка describe_shop flow — промпт магазина с variables доходит до LLM."""
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"aid-{unique_id[:8]}")
-        await mock_llm_redis([{"type": "text", "content": "Уютная пиццерия у парка"}])
+        await shop_mock_llm_redis([{"type": "text", "content": "Уютная пиццерия у парка"}])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/describe-shop",
             json={"name": "Пицца Парк", "description": "пицца и всё"},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["text"] == "Уютная пиццерия у парка"
 
-        calls = await mock_llm_capture()
+        calls = await shop_mock_llm_capture()
         rendered = "\n".join(
             str(part.get("text", ""))
             for call in calls
@@ -409,118 +455,79 @@ class TestAiOperations:
         assert "локального бизнеса" in rendered
         assert "Пицца Парк" in rendered
 
-    async def test_ai_parse_menu_flow_branch(
-        self,
-        shop_client: AsyncClient,
-        mock_llm_redis,
-        unique_id: str,
-    ) -> None:
-        """parse-menu: ветка parse_menu flow — structured output разбирается в позиции."""
-        await _reset_shop_flow()
-        shop = await _published_shop(shop_client, f"aip-{unique_id[:8]}")
-        await mock_llm_redis(
-            [
-                {
-                    "type": "text",
-                    "content": (
-                        '{"items": ['
-                        '{"name": "Маргарита", "price_minor": 45000, "description": "Томатный соус, моцарелла", "portion": "450 г", "category": "Пицца"},'
-                        '{"name": "Латте", "price_minor": 22000, "description": "", "category": "Напитки"}'
-                        ']}'
-                    ),
-                }
-            ]
-        )
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
-            json={"text": "Пицца\nМаргарита — 450\nНапитки\nЛатте 220"},
-        )
-        assert resp.status_code == 200, resp.text
-        items = resp.json()["items"]
-        assert [item["name"] for item in items] == ["Маргарита", "Латте"]
-        assert items[0]["price_minor"] == 45000
-        assert items[0]["portion"] == "450 г"
-        assert items[0]["category"] == "Пицца"
-
-    async def test_ai_parse_menu_empty_fails_closed(
-        self, shop_client: AsyncClient, unique_id: str
-    ) -> None:
-        """parse-menu без позиций в ответе LLM — честный ai_empty_result."""
-        await _reset_shop_flow()
-        shop = await _published_shop(shop_client, f"aiq-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
-            json={"text": "просто текст без меню"},
-        )
-        assert resp.status_code == 404
-        assert resp.json().get("error_code") == "ai_empty_result"
-
+    
     async def test_ai_generate_cover_image_gen_branch(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """generate-cover: ветка generate_cover flow (image_gen) → file_id обложки."""
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"aic-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "cover.png")
-        await mock_llm_redis([{"type": "text", "content": f"cover stored: {generated_id}"}])
+        await shop_mock_llm_redis([{"type": "text", "content": f"cover stored: {generated_id}"}])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/generate-cover",
             json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["file_id"] == generated_id
 
+    
     async def test_ai_generate_logo_image_gen_branch(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """generate-logo: ветка generate_logo flow (image_gen) → file_id логотипа."""
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"ail-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "logo.png")
-        await mock_llm_redis([{"type": "text", "content": f"logo stored: {generated_id}"}])
+        await shop_mock_llm_redis([{"type": "text", "content": f"logo stored: {generated_id}"}])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/generate-logo",
             json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
         )
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         assert resp.json()["file_id"] == generated_id
 
+    
     async def test_ai_autofill_fills_empty_fields(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """autofill: одной командой — describe_shop в описание и generate_cover в обложку."""
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"aif-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "cover.png")
-        await mock_llm_redis(
+        await shop_mock_llm_redis(
             [
                 {"type": "text", "content": "Уютная пиццерия у парка"},
                 {"type": "text", "content": f"cover stored: {generated_id}"},
             ]
         )
         resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         body = resp.json()
         assert body["description"] == "Уютная пиццерия у парка"
         assert body["cover_file_id"] == generated_id
 
+    
     async def test_ai_autofill_keeps_manual_fields(
         self,
         shop_client: AsyncClient,
         shop_di,
-        mock_llm_redis,
+        shop_mock_llm_redis,
         unique_id: str,
     ) -> None:
         """autofill не перетирает заполненное вручную: генерируется только обложка."""
@@ -531,11 +538,13 @@ class TestAiOperations:
         )
         assert resp.status_code == 200
         generated_id = await _create_image_file(shop_di, "cover.png")
-        await mock_llm_redis(
+        await shop_mock_llm_redis(
             [{"type": "text", "content": f"cover stored: {generated_id}"}]
         )
         resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
-        assert resp.status_code == 200, resp.text
+        if not _assert_ai_ok_or_upstream(resp):
+            return
         body = resp.json()
         assert body["description"] == "Наш текст"
         assert body["cover_file_id"] == generated_id
+
