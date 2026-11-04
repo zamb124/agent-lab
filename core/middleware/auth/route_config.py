@@ -511,6 +511,9 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/shop/", auth_required=False, context_type="anonymous"),
     RouteRule("/shop/*", auth_required=False, context_type="anonymous"),
 
+    # Geo Service: справочник и роутинг — только сервисные/internal-вызовы
+    RouteRule("/geo/api/v1/*", context_type="api", auth_required=True),
+
     # Secrets Service
     RouteRule("/secrets/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/secrets/api/auth/*", context_type="api", auth_required=True),

@@ -8,16 +8,21 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx2
 import pytest
 from httpx2 import AsyncClient
+from oxyde import execute_raw
 
+from apps.geo.models.geo_import_state import GeoImportState
 from apps.shop.di import ShopDi
 from apps.shop.models.shop import Shop
 from apps.shop.services.order_service import ShopOrderService
+from core.clients.geocoding.base import GeocodedAddress
 from core.clients.geocoding.nominatim import NominatimGeocoder
+from core.clients.service_client import ServiceClient
 from core.config.models import GeocodingConfig
 from core.customers.address_service import CustomerAddressService
 from core.customers.contracts import new_id
@@ -695,3 +700,151 @@ class TestDeliveryZoneValidation:
         }
         resp = await self._patch(shop_client, f"zv-mp2-{unique_id[:8]}", zone)
         assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.xdist_group("geo")
+class TestCourierEta:
+    """ETA курьера: ``prep_minutes`` + дорога по живому графу geo на 9028.
+
+    Сервисный слой со stub-геокодером (тестовый ``GEOCODING__ENABLED=false``)
+    и реальным ``GeoClient``/``ServiceClient`` → granian geo. Граф — своё
+    поколение ``_ETA_GEN``, опубликованное строкой ``geo_import_state``;
+    синглтон сериализован общей группой ``xdist_group("geo")``.
+    """
+
+    _ETA_GEN = 880_000_001
+    _SHOP_POINT = (55.75000, 37.61700)
+    _CUST_POINT = (55.75030, 37.61840)
+    _TRAVEL_S = 40.0
+
+    class _StubGeocoder:
+        """Детерминированные координаты: адрес склада vs адрес покупателя."""
+
+        def __init__(self, answers: dict[str, tuple[float, float]]) -> None:
+            self._answers = answers
+
+        async def geocode(self, query: str) -> Any:
+            point = self._answers.get(query)
+            if point is None:
+                return None
+            return GeocodedAddress(lat=point[0], lng=point[1], normalized_address=query)
+
+    async def _seed_graph(self) -> int:
+        gen = self._ETA_GEN
+        for table in ("geo_road_edges", "geo_road_vertices"):
+            _ = await execute_raw(
+                f"DELETE FROM {table} WHERE generation = $1", [gen], using="geo"
+            )
+        _ = await execute_raw(
+            """
+            INSERT INTO geo_road_vertices (node_id, lat, lng, generation)
+            SELECT node_id, lat, lng, $1
+            FROM (VALUES (1,55.75000,37.61700),(2,55.75030,37.61840)) AS v(node_id, lat, lng)
+            """,
+            [gen],
+            using="geo",
+        )
+        _ = await execute_raw(
+            """
+            INSERT INTO geo_road_edges (
+                source, target, src_lat, src_lng, dst_lat, dst_lng, length_m,
+                car_cost, car_reverse_cost, foot_cost, foot_reverse_cost,
+                bike_cost, bike_reverse_cost, scooter_cost, scooter_reverse_cost,
+                oneway, highway, name, osm_way_id, generation
+            ) VALUES (
+                1,2,55.75000,37.61700,55.75030,37.61840,100.0,
+                60,60,90,90,45,45,40,40, 0,'residential','тест',0,$1
+            )
+            """,
+            [gen],
+            using="geo",
+        )
+        state = await GeoImportState.get_state()
+        previous = state.current_generation if state is not None else 0
+        _ = await execute_raw(
+            """
+            INSERT INTO geo_import_state (id, current_generation, status, updated_at)
+            VALUES (1, $1, 'idle', $2)
+            ON CONFLICT (id) DO UPDATE SET current_generation = $1, updated_at = $2
+            """,
+            [gen, datetime.now(UTC)],
+            using="geo",
+        )
+        return previous
+
+    async def test_check_delivery_eta(
+        self, geo_service: None, unique_id: str
+    ) -> None:
+        previous = await self._seed_graph()
+        try:
+            geocoder = self._StubGeocoder(
+                {
+                    "Склад, тест": self._SHOP_POINT,
+                    "Клиент, тест": self._CUST_POINT,
+                }
+            )
+            svc = ShopOrderService(geocoder=geocoder, service_client=ServiceClient())
+            shop = Shop(
+                shop_id=f"eta-{unique_id[:8]}",
+                company_id="system",
+                slug=f"eta-{unique_id[:8]}",
+                created_by_user_id="test",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                address="Склад, тест",
+                prep_minutes=20,
+                courier_mode="scooter",
+            )
+            result = await svc.check_delivery(shop, "Клиент, тест")
+            assert result["ok"] is True
+            assert result["courier_mode"] == "scooter"
+            assert result["prep_minutes"] == 20
+            assert result["duration_s"] == pytest.approx(self._TRAVEL_S)
+            # ETA = ceil((20*60 + 40) / 60) = 21 минута.
+            assert result["eta_minutes"] == 21
+        finally:
+            _ = await execute_raw(
+                "UPDATE geo_import_state SET current_generation = $1, updated_at = $2"
+                " WHERE id = 1",
+                [previous, datetime.now(UTC)],
+                using="geo",
+            )
+
+    async def test_check_delivery_geo_down_graceful(
+        self, geo_service: None, unique_id: str
+    ) -> None:
+        """Без опубликованного поколения метрик нет, но чек жив (degrade)."""
+        previous = await self._seed_graph()
+        try:
+            _ = await execute_raw(
+                "UPDATE geo_import_state SET current_generation = 0, updated_at = $1"
+                " WHERE id = 1",
+                [datetime.now(UTC)],
+                using="geo",
+            )
+            geocoder = self._StubGeocoder(
+                {
+                    "Склад, тест": self._SHOP_POINT,
+                    "Клиент, тест": self._CUST_POINT,
+                }
+            )
+            svc = ShopOrderService(geocoder=geocoder, service_client=ServiceClient())
+            shop = Shop(
+                shop_id=f"etad-{unique_id[:8]}",
+                company_id="system",
+                slug=f"etad-{unique_id[:8]}",
+                created_by_user_id="test",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                address="Склад, тест",
+            )
+            result = await svc.check_delivery(shop, "Клиент, тест")
+            assert result["ok"] is True
+            assert "eta_minutes" not in result
+        finally:
+            _ = await execute_raw(
+                "UPDATE geo_import_state SET current_generation = $1, updated_at = $2"
+                " WHERE id = 1",
+                [previous, datetime.now(UTC)],
+                using="geo",
+            )

@@ -406,6 +406,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             # зеркало продового <slug>.linnex.io без правки /etc/hosts.
             "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
             "AGGREGATOR_HOST": "shop.lvh.me",
+            "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
         },
     ),
     GranianService(

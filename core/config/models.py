@@ -347,6 +347,7 @@ class ServerConfig(BaseModel):
     wiki_service_url: str | None = None
     stock_service_url: str | None = None
     shop_service_url: str | None = None
+    geo_service_url: str | None = None
     guest_runtime_service_url: str | None = None
     realtime_service_url: str | None = None
     provider_litserve_service_url: str | None = None
@@ -449,6 +450,8 @@ class ServerConfig(BaseModel):
                 return self.stock_service_url
             case "shop":
                 return self.shop_service_url
+            case "geo":
+                return self.geo_service_url
             case "guest_runtime":
                 return self.guest_runtime_service_url
             case "realtime":

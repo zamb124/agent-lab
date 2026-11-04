@@ -220,6 +220,13 @@ def shop_service(setup_database_before_tests):
 
 
 @pytest.fixture(scope="session")
+def geo_service(setup_database_before_tests):
+    """Geo на 9028 (PostGIS+pgRouting; shop дёргает его за маршрутами)."""
+    _ = setup_database_before_tests
+    require_http_service("geo", 9028)
+
+
+@pytest.fixture(scope="session")
 def all_services(
     flows_service,
     rag_service,

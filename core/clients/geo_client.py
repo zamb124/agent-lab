@@ -20,7 +20,7 @@ from core.clients.service_client import ServiceClient
 from core.internal_context_headers import build_internal_context_headers
 from core.types import JsonObject, require_json_object
 
-GEO_API_V1_PREFIX = "/api/v1"
+GEO_API_V1_PREFIX = "/geo/api/v1"
 # Runtime-идентичность сервисных вызовов без пользовательского контекста
 # (витринные запросы анонима): middleware geo создаёт её при первом обращении.
 GEO_CALLER_USER_ID = "platform.service.geo_client"

@@ -33,7 +33,7 @@ from apps.geo.realtime.operations import (
 from core.context import require_context
 from core.websocket import EmptyPayload
 
-router = APIRouter(prefix="/api/v1", tags=["geo"])
+router = APIRouter(tags=["geo"])
 
 
 @router.post("/addresses/in-zone", response_model=GeoAddressListResponse)

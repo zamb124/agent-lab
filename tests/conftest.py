@@ -90,6 +90,7 @@ os.environ["SERVER__WORKTRACKER_SERVICE_URL"] = "http://localhost:9021"
 os.environ["SERVER__WIKI_SERVICE_URL"] = "http://localhost:9023"
 os.environ["SERVER__GUEST_RUNTIME_SERVICE_URL"] = "http://localhost:9024"
 os.environ["SERVER__REALTIME_SERVICE_URL"] = "http://localhost:9025"
+os.environ["SERVER__GEO_SERVICE_URL"] = "http://localhost:9028"
 os.environ.setdefault("REALTIME__CENTRIFUGO_API_URL", "http://127.0.0.1:19000/api")
 os.environ.setdefault("REALTIME__CENTRIFUGO_API_KEY", "platform-test-centrifugo-http-api-key")
 os.environ.setdefault("CENTRIFUGO_WS_URL", "ws://127.0.0.1:19000/connection/websocket")
