@@ -14,11 +14,12 @@ import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import {
     shopShopsResource,
     shopGeocodeOp,
+    shopZoneAddressesOp,
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '../../../../apps/shop/ui/modals/shop-zone-editor-modal.js';
 
-const FACTORIES = [shopShopsResource, shopGeocodeOp];
+const FACTORIES = [shopShopsResource, shopGeocodeOp, shopZoneAddressesOp];
 const TAG = 'shop-zone-editor-modal';
 
 const ZONE = {
@@ -87,10 +88,28 @@ async function seedI18n() {
     );
     const response = await fetch('/core/i18n/generated/ru.json');
     if (!response.ok) throw new Error(`seedI18n: ${response.status}`);
-    const bundle = (await response.json()) as { shop: Record<string, unknown> };
+    const bundle = (await response.json()) as { shop: Record<string, unknown>; geo: Record<string, unknown> };
     const prev = bus.getState().i18n.translations.ru;
-    bus.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale: 'ru', bundle: { ...prev, shop: bundle.shop } });
+    bus.dispatch(CoreEvents.I18N_LOCALE_LOADED, {
+        locale: 'ru',
+        bundle: { ...prev, shop: bundle.shop, geo: bundle.geo },
+    });
     bus.dispatch(CoreEvents.I18N_LOCALE_CHANGED, { locale: 'ru' });
+}
+
+/** Ответить на shop/zone_addresses_requested списком адресов (боевой контракт). */
+function answerZoneAddresses(items: Array<Record<string, unknown>>, total = items.length): void {
+    getPlatformBus().subscribeType(shopZoneAddressesOp.events.REQUESTED, (event) => {
+        // Ответ обязан быть асинхронным: run() подписывается на SUCCEEDED
+        // только после того, как dispatch(REQUESTED) вернулся.
+        queueMicrotask(() => {
+            getPlatformBus().dispatch(
+                shopZoneAddressesOp.events.SUCCEEDED,
+                { result: { items, total } },
+                { causation_id: event.id, source: 'http' },
+            );
+        });
+    });
 }
 
 async function openModal(props: Record<string, unknown>): Promise<TestEl> {
@@ -331,5 +350,83 @@ describe('shop-zone-editor-modal', function () {
         await aTimeout(30);
         expect(applied.length).to.equal(0);
         expect(closes.length).to.equal(1);
+    });
+
+    it('панель адресов: зона → zone_addresses_requested с GeoJSON и счётчик', async () => {
+        const items = [
+            { id: 1, osm_type: 'node', osm_id: 11, display_name: 'Москва, Тверская, 1', city: 'Москва', street: 'Тверская', housenumber: '1', postcode: '', lat: 55.75, lng: 37.6 },
+            { id: 2, osm_type: 'way', osm_id: 22, display_name: 'Москва, Тверская, 3', city: 'Москва', street: 'Тверская', housenumber: '3', postcode: '', lat: 55.76, lng: 37.65 },
+        ];
+        answerZoneAddresses(items, 137);
+        const payloads: Array<Record<string, unknown>> = [];
+        getPlatformBus().subscribeType(shopZoneAddressesOp.events.REQUESTED, (event) =>
+            payloads.push(event.payload as Record<string, unknown>),
+        );
+        const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
+        await mapReady(modal);
+        await elementUpdated(modal);
+        // Debounce 300мс requery панели после первичной зоны.
+        await waitUntil(() => payloads.length > 0, 'zone_addresses_requested', { timeout: 5_000 });
+        expect(payloads[0]!['zone']).to.deep.equal(ZONE);
+        expect(payloads[0]!['limit']).to.be.a('number');
+        expect(payloads[0]!['offset']).to.equal(0);
+
+        const panel = modal.shadowRoot.querySelector('platform-zone-address-panel')!;
+        expect(panel, 'панель адресов справа от карты').to.exist;
+        await waitUntil(
+            () => panel.shadowRoot!.querySelectorAll('.row').length === 2,
+            'строки адресов отрисованы',
+            { timeout: 5_000 },
+        );
+        expect(panel.shadowRoot!.querySelector('.count')!.textContent).to.include('137');
+        // Маркеры адресов — на карте, по одному на строку.
+        expect((modal as unknown as { _addressMarkers: Map<number, unknown> })._addressMarkers.size).to.equal(2);
+    });
+
+    it('поиск в панели → повторный запрос с q и offset=0', async () => {
+        answerZoneAddresses([], 0);
+        const payloads: Array<Record<string, unknown>> = [];
+        getPlatformBus().subscribeType(shopZoneAddressesOp.events.REQUESTED, (event) =>
+            payloads.push(event.payload as Record<string, unknown>),
+        );
+        const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
+        await mapReady(modal);
+        await waitUntil(() => payloads.length > 0, 'первичный запрос', { timeout: 5_000 });
+
+        const panel = modal.shadowRoot.querySelector('platform-zone-address-panel')!;
+        const input = panel.shadowRoot!.querySelector('input[type="search"]')!;
+        expect(input, 'поле поиска наверху панели').to.exist;
+        (input as HTMLInputElement).value = 'Тверская';
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+        await waitUntil(() => payloads.length > 1, 'запрос с q', { timeout: 5_000 });
+        expect(payloads.at(-1)!['q']).to.equal('Тверская');
+        expect(payloads.at(-1)!['offset']).to.equal(0);
+    });
+
+    it('hover строки → address-hover и подсветка маркера на карте', async () => {
+        const items = [
+            { id: 7, osm_type: 'node', osm_id: 70, display_name: 'Москва, Арбат, 5', city: '', street: '', housenumber: '', postcode: '', lat: 55.75, lng: 37.6 },
+        ];
+        answerZoneAddresses(items);
+        const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
+        await mapReady(modal);
+        const panel = modal.shadowRoot.querySelector('platform-zone-address-panel')!;
+        await waitUntil(
+            () => panel.shadowRoot!.querySelectorAll('.row').length === 1,
+            'строка адреса',
+            { timeout: 5_000 },
+        );
+        const row = panel.shadowRoot!.querySelector('.row') as HTMLElement;
+        row.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, composed: true }));
+        await aTimeout(30);
+        const markers = (modal as unknown as {
+            _addressMarkers: Map<number, { options: { radius: number; fillColor: string } }>;
+        })._addressMarkers;
+        const marker = markers.get(7)!;
+        expect(marker.options.radius, 'маркер увеличен на hover').to.equal(8);
+        expect(marker.options.fillColor, 'маркер подсвечен синим').to.equal('#155dfc');
+        row.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, composed: true }));
+        await aTimeout(30);
+        expect(marker.options.radius, 'маркер вернулся').to.equal(5);
     });
 });

@@ -1,0 +1,13 @@
+{
+  "zone_panel": {
+    "search_placeholder": "Search addresses in zone…",
+    "loading": "Loading addresses…",
+    "count_suffix": "addresses in zone",
+    "draw_first": "Draw a zone on the map",
+    "error": "— failed to load",
+    "empty_no_zone": "The address list will appear once the zone is drawn.",
+    "empty_no_hits": "No directory addresses fall inside the zone.",
+    "prev": "Prev",
+    "next": "Next"
+  }
+}

@@ -934,11 +934,21 @@ export class GlassModal extends PlatformElement {
         };
 
         this._dragUnsubs = [this.useDomEvent(document, 'mousemove', this._boundMouseMove),
-        this.useDomEvent(document, 'mouseup', this._boundMouseUp)];
+        this.useDomEvent(document, 'mouseup', this._boundMouseUp),
+        this.useDomEvent(window, 'blur', this._boundMouseUp)];
     }
 
     _handleMouseMove(e: MouseEvent): void {
         if (!this._isDragging) return;
+        /*
+         * mouseup может не дойти до document (отпуск за краем окна, над iframe,
+         * после blur). Без проверки buttons drag «застревает»: панель следует за
+         * курсором и клики не попадают по кнопкам. Отпущенная кнопка = конец жеста.
+         */
+        if ((e.buttons & 1) === 0) {
+            this._handleMouseUp();
+            return;
+        }
 
         this._position = {
             x: e.clientX - this._dragStart.x,

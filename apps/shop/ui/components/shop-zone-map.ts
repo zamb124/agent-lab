@@ -18,8 +18,8 @@ import type { PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { loadLeaflet, leafletCssLinks } from '../_helpers/leaflet.js';
-import type { LeafletModule } from '../_helpers/leaflet.js';
+import { loadLeaflet, leafletCssLinks } from '@platform/lib/map/leaflet.js';
+import type { LeafletModule } from '@platform/lib/map/leaflet.js';
 
 type LeafletMap = import('leaflet').Map;
 type LeafletPolygon = import('leaflet').Polygon;

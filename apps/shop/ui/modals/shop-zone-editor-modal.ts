@@ -20,14 +20,18 @@ import type { OpController } from '@platform/lib/base/use-resource.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { loadGeoman, leafletCssLinks } from '../_helpers/leaflet.js';
-import type { LeafletModule } from '../_helpers/leaflet.js';
+import '@platform/lib/components/platform-zone-address-panel.js';
+import type { GeoAddressItem } from '@platform/lib/components/platform-zone-address-panel.js';
+import { loadGeoman, leafletCssLinks } from '@platform/lib/map/leaflet.js';
+import type { LeafletModule } from '@platform/lib/map/leaflet.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 type LeafletMap = import('leaflet').Map;
 type LeafletPolygon = import('leaflet').Polygon;
 type LeafletMarker = import('leaflet').Marker;
 type LeafletTileLayer = import('leaflet').TileLayer;
+type LeafletLayerGroup = import('leaflet').LayerGroup;
+type LeafletCircleMarker = import('leaflet').CircleMarker;
 type LatLngTuple = [number, number];
 type LeafletLatLng = import('leaflet').LatLng;
 
@@ -80,6 +84,7 @@ export class ShopZoneEditorModal extends PlatformModal {
     declare _perimM: number;
     declare _points: number;
     declare _selfIntersect: boolean;
+    declare _zoneGeoJson: Record<string, unknown> | null;
 
     static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
@@ -95,6 +100,7 @@ export class ShopZoneEditorModal extends PlatformModal {
         _perimM: { state: true },
         _points: { state: true },
         _selfIntersect: { state: true },
+        _zoneGeoJson: { state: true },
     };
 
     static override styles = [
@@ -110,8 +116,14 @@ export class ShopZoneEditorModal extends PlatformModal {
                 border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
                 background: var(--bg-secondary, #f2f0ec);
             }
+            .zbody { position: relative; flex: 1; min-width: 0; }
             .zmap { position: absolute; inset: 0; }
             .zmap.drawing { cursor: crosshair; }
+            platform-zone-address-panel {
+                flex: none;
+                width: clamp(300px, 26vw, 380px);
+                border-left: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+            }
 
             .ztools {
                 position: absolute;
@@ -201,6 +213,7 @@ export class ShopZoneEditorModal extends PlatformModal {
             @media (max-width: 720px) {
                 .zstats { display: none; }
                 .ztool span { display: none; }
+                platform-zone-address-panel { display: none; }
             }
         `,
     ];
@@ -210,6 +223,8 @@ export class ShopZoneEditorModal extends PlatformModal {
     private _tiles: LeafletTileLayer | null = null;
     private _polygon: PmPolygon | null = null;
     private _marker: LeafletMarker | null = null;
+    private _addressLayer: LeafletLayerGroup | null = null;
+    private _addressMarkers = new Map<number, LeafletCircleMarker>();
     private _ro: ResizeObserver | null = null;
     private _geocodeOp: OpController;
     private _localeSel: SelectController<string>;
@@ -230,6 +245,7 @@ export class ShopZoneEditorModal extends PlatformModal {
         this._perimM = 0;
         this._points = 0;
         this._selfIntersect = false;
+        this._zoneGeoJson = null;
         this._geocodeOp = this.useOp('shop/shop_geocode');
         this._localeSel = this.select((s) => s.i18n.locale);
     }
@@ -257,6 +273,8 @@ export class ShopZoneEditorModal extends PlatformModal {
         this._tiles = null;
         this._polygon = null;
         this._marker = null;
+        this._addressLayer = null;
+        this._addressMarkers.clear();
         this._initStarted = false;
     }
 
@@ -417,6 +435,7 @@ export class ShopZoneEditorModal extends PlatformModal {
             this._perimM = 0;
             this._points = 0;
             this._selfIntersect = false;
+            this._zoneGeoJson = null;
             this._updateHint();
             return;
         }
@@ -429,6 +448,8 @@ export class ShopZoneEditorModal extends PlatformModal {
         this._perimM = perim;
         this._areaM2 = _ringAreaM2(ring.map((p) => [p.lat, p.lng] as LatLngTuple));
         this._selfIntersect = poly.pm.hasSelfIntersection();
+        const gj = this._zoneFromPolygon();
+        this._zoneGeoJson = gj['type'] === 'Polygon' ? gj : null;
         this._updateHint();
     }
 
@@ -520,6 +541,46 @@ export class ShopZoneEditorModal extends PlatformModal {
         return { type: 'Polygon', coordinates: [ring] };
     }
 
+    /** Маркеры адресов из панели — точки справочника, попавшие в зону. */
+    private _renderAddressMarkers(items: GeoAddressItem[]): void {
+        if (!this._map || !this._L) return;
+        if (!this._addressLayer) {
+            this._addressLayer = this._L.layerGroup(undefined, { pmIgnore: true }).addTo(this._map);
+        }
+        this._addressLayer.clearLayers();
+        this._addressMarkers.clear();
+        for (const item of items) {
+            const marker = this._L.circleMarker([item.lat, item.lng], {
+                pmIgnore: true,
+                radius: 5,
+                color: '#ffffff',
+                weight: 1.5,
+                fillColor: ACCENT,
+                fillOpacity: 0.9,
+            }).addTo(this._addressLayer);
+            marker.bindTooltip(item.display_name, { direction: 'top', offset: [0, -7] });
+            this._addressMarkers.set(item.id, marker);
+        }
+    }
+
+    private _onAddressesChanged(e: Event): void {
+        const { items } = (e as CustomEvent<{ items: GeoAddressItem[] }>).detail;
+        this._renderAddressMarkers(items);
+    }
+
+    /** Hover строки панели → подсветка точки на карте. */
+    private _onAddressHover(e: Event): void {
+        const { id, lat, lng } = (e as CustomEvent<{ id: number | null; lat: number | null; lng: number | null }>).detail;
+        for (const [mid, marker] of this._addressMarkers) {
+            const on = mid === id;
+            marker.setStyle({ fillColor: on ? '#155dfc' : ACCENT, weight: on ? 2 : 1.5 });
+            marker.setRadius(on ? 8 : 5);
+        }
+        if (id !== null && lat !== null && lng !== null && this._map && !this._map.getBounds().contains([lat, lng])) {
+            this._map.panInside([lat, lng], { padding: [48, 48], animate: true });
+        }
+    }
+
     private _canApply(): boolean {
         if (this._drawing || this._selfIntersect || this._mapError) return false;
         return this._points <= ZONE_MAX_POINTS;
@@ -547,6 +608,7 @@ export class ShopZoneEditorModal extends PlatformModal {
         return html`
             ${leafletCssLinks({ geoman: true })}
             <div class="zwrap">
+                <div class="zbody">
                 <div class="zmap ${this._drawing ? 'drawing' : ''}"></div>
                 <div class="ztools">
                     <button type="button" class="ztool ${this._drawing ? 'on' : ''}"
@@ -600,6 +662,13 @@ export class ShopZoneEditorModal extends PlatformModal {
                             </platform-button>
                         </div>`
                     : nothing}
+                </div>
+                <platform-zone-address-panel
+                    addresses-op-name="shop/zone_addresses"
+                    .zone=${this._zoneGeoJson}
+                    @addresses-changed=${this._onAddressesChanged}
+                    @address-hover=${this._onAddressHover}
+                ></platform-zone-address-panel>
             </div>
         `;
     }

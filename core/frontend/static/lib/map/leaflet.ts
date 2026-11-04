@@ -6,12 +6,16 @@
  * читает глобал window.L и вешает L.PM + initHook: `map.pm` появляется на
  * каждой карте, созданной ПОСЛЕ загрузки geoman. Поэтому порядок строгий:
  * loadLeaflet() → window.L → loadGeoman() → L.map().
+ *
+ * Vendor-ассеты лежат в core: `/static/core/lib/vendor/*` отдаётся любым
+ * сервисом (mount `/static/core/lib` → embed-dist), поэтому компоненты карт
+ * переиспользуются продуктами без копии ассетов в каждом ui/.
  */
 
 export type LeafletModule = typeof import('leaflet');
 
-export const LEAFLET_CSS = '/shop/ui/static/vendor/leaflet/leaflet.css';
-export const GEOMAN_CSS = '/shop/ui/static/vendor/geoman/leaflet-geoman.css';
+export const LEAFLET_CSS = '/static/core/lib/vendor/leaflet/leaflet.css';
+export const GEOMAN_CSS = '/static/core/lib/vendor/geoman/leaflet-geoman.css';
 
 let _leafletPromise: Promise<LeafletModule> | null = null;
 let _geomanPromise: Promise<LeafletModule> | null = null;
