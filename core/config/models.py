@@ -2497,7 +2497,7 @@ class CustomerAuthMaxBotConfig(BaseModel):
     access_token: str = ""
     bot_name: str = ""
     webhook_secret: str = ""
-    api_base_url: str = "https://platform-api2.max.ru"
+    api_base_url: str = "https://botapi.max.ru"
 
 
 class CustomerAuthOAuthClientConfig(BaseModel):

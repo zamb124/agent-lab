@@ -598,7 +598,7 @@
           "access_token": "YOUR_MAX_BOT_TOKEN",
           "bot_name": "YOUR_MAX_BOT_NAME",
           "webhook_secret": "YOUR_MAX_WEBHOOK_SECRET",
-          "api_base_url": "https://platform-api2.max.ru"
+          "api_base_url": "https://botapi.max.ru"
         },
         "yandex": {
           "enabled": true,
