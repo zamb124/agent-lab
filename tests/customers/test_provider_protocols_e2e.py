@@ -821,8 +821,14 @@ class TestOAuth:
         assert q["state"] and q["redirect_uri"]
         assert q["code_challenge"] and q["code_challenge_method"] == ["S256"]
         resp = await self._callback_from_oauth_url(emu_client, url)
-        assert resp.status_code == 302, resp.text
-        assert resp.headers["location"] == "https://linnex.io/back"
+        # Колбэк возвращает closer-страницу: postMessage opener'у (popup) либо
+        # JS-redirect на return_url — cookie ставится на оба пути.
+        assert resp.status_code == 200, resp.text
+        assert 'var RET = "https:\\/\\/linnex.io\\/back"' in resp.text or (
+            'var RET = "https://linnex.io/back"' in resp.text
+        )
+        assert "customer-auth-done" in resp.text
+        assert "location.replace" in resp.text
         assert "customer_token" in resp.cookies
         # Token exchange пошёл в эмулятор по официальному контракту.
         token_req = phone_verification_emulator.store.token_requests[provider][-1]
