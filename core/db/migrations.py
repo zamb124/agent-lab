@@ -241,9 +241,18 @@ async def _has_tables(db_url: str) -> bool:
     try:
         count = await connection.fetchval(
             """
-            SELECT COUNT(*)::int FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-            AND table_name <> 'oxyde_migrations'
+            SELECT COUNT(*)::int FROM information_schema.tables t
+            WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+            AND t.table_name <> 'oxyde_migrations'
+            AND NOT EXISTS (
+                SELECT 1 FROM pg_depend d
+                JOIN pg_extension e ON e.oid = d.refobjid
+                JOIN pg_class c ON c.oid = d.objid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.relname = t.table_name AND n.nspname = t.table_schema
+                  AND d.classid = 'pg_class'::regclass
+                  AND d.refclassid = 'pg_extension'::regclass
+            )
             """,
         )
     finally:

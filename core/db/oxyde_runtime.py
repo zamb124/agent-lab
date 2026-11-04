@@ -84,6 +84,7 @@ async def init_oxyde_databases(
     sync_url = settings.database.sync_url
     stock_url = settings.database.stock_url
     shop_url = settings.database.shop_url
+    geo_url = settings.database.geo_url
     named_urls = {
         "flows": flows_url,
         "tracing": tracing_url,
@@ -98,6 +99,7 @@ async def init_oxyde_databases(
         "sync": sync_url,
         "stock": stock_url,
         "shop": shop_url,
+        "geo": geo_url,
     }
     configured_urls: dict[str, str] = {"shared": shared_url}
     for alias, alias_url in named_urls.items():

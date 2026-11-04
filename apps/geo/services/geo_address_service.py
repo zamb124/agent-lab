@@ -87,7 +87,7 @@ class GeoAddressService:
                      similarity(display_name, $3) DESC,
                      CASE WHEN $4::float IS NULL
                           THEN 0::float
-                          ELSE geom <-> ST_SetSRID(ST_MakePoint($5, $4), 4326)
+                          ELSE geom <-> ST_SetSRID(ST_MakePoint($5::float, $4::float), 4326)
                      END,
                      display_name
             LIMIT $6

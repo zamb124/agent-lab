@@ -351,16 +351,17 @@ class OsmImportService:
         _ = await state.save()
 
         try:
-            paths, source_modified = await self._download_if_newer(state)
-            if paths is None:
+            downloaded = await self._download_if_newer(state)
+            if downloaded is None:
                 state.status = GeoImportStatus.IDLE
                 state.updated_at = datetime.now(UTC)
                 _ = await state.save()
                 return {"skipped": True, "reason": "not_modified"}
+            paths, cleanup_paths, source_modified = downloaded
             try:
                 counts = await self._import(paths, generation=state.current_generation + 1)
             finally:
-                for p in paths:
+                for p in cleanup_paths:
                     Path(p).unlink(missing_ok=True)
             await self._publish(state, source_modified, counts)
             return {"imported": True, **counts}
@@ -375,13 +376,17 @@ class OsmImportService:
         state = await GeoImportState.get_state()
         if state is None:
             state = GeoImportState(id=1, updated_at=datetime.now(UTC))
-            _ = await state.save()
+            _ = await GeoImportState.objects.create(instance=state)
         return state
 
     async def _download_if_newer(
         self, state: GeoImportState
-    ) -> tuple[list[str] | None, datetime | None]:
-        """HEAD по всем экстрактам; свежих нет → ``(None, None)``."""
+    ) -> tuple[list[str], list[str], datetime | None] | None:
+        """HEAD по всем экстрактам; свежих нет → ``None``.
+
+        Возвращает ``(paths, cleanup_paths, newest)``: ``cleanup_paths`` —
+        только скачанные tmp-файлы; ``file://``-источники не удаляются.
+        """
         newest: datetime | None = None
         async with get_httpx_client(
             timeout=self._settings.osm_http_timeout_seconds
@@ -411,9 +416,10 @@ class OsmImportService:
                 and newest <= state.source_modified_at
                 and state.current_generation > 0
             ):
-                return None, None
+                return None
 
             paths: list[str] = []
+            cleanup_paths: list[str] = []
             for url in self._settings.osm_extract_urls:
                 if url.startswith("file://"):
                     paths.append(url.removeprefix("file://"))
@@ -429,7 +435,8 @@ class OsmImportService:
                             _ = tmp.write(chunk)
                 assert tmp_path is not None
                 paths.append(tmp_path)
-        return paths, newest
+                cleanup_paths.append(tmp_path)
+        return paths, cleanup_paths, newest
 
     async def _import(self, paths: list[str], *, generation: int) -> dict[str, int]:
         """Парсинг всех экстрактов и заливка в новое поколение."""

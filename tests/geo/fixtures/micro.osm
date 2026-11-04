@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="geo-test">
+  <!-- Адресные ноды: три внутри тестовой зоны, одна снаружи -->
+  <node id="1001" lat="55.75010" lon="37.61730">
+    <tag k="addr:city" v="Москва"/><tag k="addr:street" v="Тверская улица"/><tag k="addr:housenumber" v="1"/><tag k="addr:postcode" v="125009"/>
+  </node>
+  <node id="1002" lat="55.75030" lon="37.61780">
+    <tag k="addr:city" v="Москва"/><tag k="addr:street" v="Тверская улица"/><tag k="addr:housenumber" v="3"/>
+  </node>
+  <node id="1003" lat="55.75060" lon="37.61840">
+    <tag k="addr:city" v="Москва"/><tag k="addr:street" v="Никольская улица"/><tag k="addr:housenumber" v="10"/>
+  </node>
+  <node id="1004" lat="55.74900" lon="37.59200">
+    <tag k="addr:city" v="Москва"/><tag k="addr:street" v="Арбат"/><tag k="addr:housenumber" v="5"/>
+  </node>
+  <!-- Дорожные ноды: сетка 2x3 + изолированный motorway-сегмент -->
+  <node id="1" lat="55.75000" lon="37.61700"/>
+  <node id="2" lat="55.75000" lon="37.61800"/>
+  <node id="3" lat="55.75000" lon="37.61900"/>
+  <node id="4" lat="55.75100" lon="37.61700"/>
+  <node id="5" lat="55.75100" lon="37.61800"/>
+  <node id="6" lat="55.75100" lon="37.61900"/>
+  <node id="7" lat="55.76000" lon="37.61700"/>
+  <node id="8" lat="55.76000" lon="37.61900"/>
+  <!-- Residential двусторонние -->
+  <way id="10"><nd ref="1"/><nd ref="2"/><tag k="highway" v="residential"/><tag k="name" v="Первая улица"/></way>
+  <!-- Oneway: только прямое направление car/bike/scooter -->
+  <way id="11"><nd ref="2"/><nd ref="3"/><tag k="highway" v="residential"/><tag k="oneway" v="yes"/><tag k="name" v="Вторая улица"/></way>
+  <way id="12"><nd ref="1"/><nd ref="4"/><tag k="highway" v="residential"/><tag k="name" v="Северная улица"/></way>
+  <way id="15"><nd ref="4"/><nd ref="5"/><tag k="highway" v="residential"/><tag k="name" v="Восточная улица"/></way>
+  <way id="16"><nd ref="2"/><nd ref="5"/><tag k="highway" v="residential"/><tag k="name" v="Средняя улица"/></way>
+  <way id="17"><nd ref="5"/><nd ref="6"/><tag k="highway" v="residential"/><tag k="name" v="Южная улица"/></way>
+  <way id="18"><nd ref="6"/><nd ref="3"/><tag k="highway" v="residential"/><tag k="name" v="Западная улица"/></way>
+  <!-- Footway: car непроходим, foot/bike/scooter проходимы -->
+  <way id="13"><nd ref="4"/><nd ref="5"/><tag k="highway" v="footway"/><tag k="name" v="Тропинка"/></way>
+  <!-- Motorway: только car -->
+  <way id="14"><nd ref="7"/><nd ref="8"/><tag k="highway" v="motorway"/><tag k="name" v="Тестовая магистраль"/></way>
+</osm>

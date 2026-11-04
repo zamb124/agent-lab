@@ -222,19 +222,23 @@ class GeoRoutingService:
             )
         else:
             edges_sql = _edges_sql(cost_col, rcost_col, generation)
+        vids = "{" + ",".join(str(v) for v in sorted({*src_vids, *dst_vids})) + "}"
         rows = await execute_raw(
             """
             SELECT start_vid, end_vid, agg_cost
-            FROM pgr_dijkstraCostMatrix($1, $2::bigint[], $3::bigint[])
+            FROM pgr_dijkstraCostMatrix($1, $2::bigint[], true)
             """,
-            [edges_sql, src_vids, dst_vids],
+            [edges_sql, vids],
             using="geo",
         )
         table: dict[tuple[int, int], float] = {
             (int(r["start_vid"]), int(r["end_vid"])): float(r["agg_cost"])
             for r in rows
         }
-        return [[table.get((sv, dv)) for dv in dst_vids] for sv in src_vids]
+        return [
+            [0.0 if sv == dv else table.get((sv, dv)) for dv in dst_vids]
+            for sv in src_vids
+        ]
 
     async def optimal_order(
         self,
