@@ -119,6 +119,7 @@ CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events
 # Фабрики core: файл → сервис, в чьём прогоне он проверяется; REST-зеркало ищется у владельца из имени фабрики.
 CORE_FACTORY_FILE_SERVICE: dict[str, str] = {
     "flows-flows-list.resource.ts": "flows",
+    "geo-addresses.resource.ts": "geo",
     "geo-coverage.resource.ts": "geo",
     "geo-layers.resource.ts": "geo",
     "geo-route.resource.ts": "geo",

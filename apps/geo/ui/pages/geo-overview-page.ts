@@ -1,8 +1,8 @@
 /**
  * GeoOverviewPage — карта канонических слоёв Geo.
  *
- * `<geo-map>` рисует фичи из `geo/layers/features` по рамке и зуму;
- * `<geo-layer-panel>` переключает видимость слоёв через slice `geo/map`.
+ * `<platform-map>` рисует фичи из `geo/layers/features` по рамке и зуму,
+ * контрол слоёв переключает видимость через slice `geo/map`.
  * Строка статуса — поколение импорта (`geo/import/status`).
  */
 
@@ -10,8 +10,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpControllerOf } from '@platform/lib/base/use-resource.js';
 import type { geoImportStatusOp } from '@platform/lib/events/resources/geo-coverage.resource.js';
-import '@platform/lib/components/geo-map.js';
-import '@platform/lib/components/geo-layer-panel.js';
+import '@platform/lib/components/platform-map.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 
@@ -39,7 +38,7 @@ export class GeoOverviewPage extends PlatformPage {
                 font-size: var(--text-sm);
             }
             .status-row strong { color: var(--text-primary); font-weight: var(--font-semibold); }
-            geo-map { flex: 1; min-height: 0; }
+            platform-map { flex: 1; min-height: 0; }
         `,
     ];
 
@@ -67,9 +66,14 @@ export class GeoOverviewPage extends PlatformPage {
                     <strong>${status ? (status.rows_addresses ?? 0) + (status.rows_edges ?? 0) : '—'}</strong>
                 </span>
             </div>
-            <geo-map>
-                <geo-layer-panel slot="panel"></geo-layer-panel>
-            </geo-map>
+            <platform-map
+                .config=${{
+                    interactive: true,
+                    controls: { zoom: true, layers: true, locate: true },
+                    layers: { fetch: true },
+                    featureCards: { hover: true, click: true },
+                }}
+            ></platform-map>
         `;
     }
 }

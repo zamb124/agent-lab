@@ -22,8 +22,6 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
-    ShopGeocodeRequest,
-    ShopGeocodeResponse,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -49,7 +47,6 @@ from apps.shop.models.api import (
     ShopTableUpdateRequest,
     ShopTelegramConnectRequest,
     ShopUpdateRequest,
-    ShopZoneAddressesRequest,
 )
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
@@ -69,7 +66,6 @@ from apps.shop.realtime.operations import (
     ShopCategoryUpdatePayload,
     ShopDomainAddPayload,
     ShopDomainIdPayload,
-    ShopGeocodePayload,
     ShopIdPayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
@@ -136,8 +132,6 @@ from apps.shop.realtime.operations import (
     op_promos_list,
     op_promos_remove,
     op_promos_update,
-    op_shop_geocode,
-    op_shop_zone_addresses,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -152,7 +146,6 @@ from apps.shop.realtime.operations import (
     op_telegram_connect,
     op_telegram_disconnect,
 )
-from core.clients.geo_models import GeoAddressListResult
 from core.context import require_context
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import EmptyPayload
@@ -168,11 +161,6 @@ async def list_shops(di: Di) -> ListResponse[ShopResponse]:
 @router.get("/badge-icons", response_model=ShopBadgeIconsResponse)
 async def list_badge_icons(di: Di) -> ShopBadgeIconsResponse:
     return await op_badge_icons_list(EmptyPayload(), user=require_context().user, di=di)
-
-
-@router.post("/zone/addresses", response_model=GeoAddressListResult)
-async def zone_addresses(payload: ShopZoneAddressesRequest, di: Di) -> GeoAddressListResult:
-    return await op_shop_zone_addresses(payload, user=require_context().user, di=di)
 
 
 @router.post("", response_model=ShopResponse)
@@ -191,17 +179,6 @@ async def update_shop(shop_id: str, payload: ShopUpdateRequest, di: Di) -> ShopR
         ShopUpdatePayload.model_validate(
             {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
-        user=require_context().user,
-        di=di,
-    )
-
-
-@router.post("/{shop_id}/geocode", response_model=ShopGeocodeResponse)
-async def geocode_shop_address(
-    shop_id: str, payload: ShopGeocodeRequest, di: Di
-) -> ShopGeocodeResponse:
-    return await op_shop_geocode(
-        ShopGeocodePayload.model_validate({"shop_id": shop_id, **payload.model_dump()}),
         user=require_context().user,
         di=di,
     )

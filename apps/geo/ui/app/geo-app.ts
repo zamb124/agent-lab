@@ -25,6 +25,11 @@ import '@platform/lib/events/resources/geo-coverage.resource.js';
 import '@platform/lib/events/resources/geo-route.resource.js';
 import { geoLayersOp, geoLayerFeaturesOp, geoMapSlice } from '@platform/lib/events/resources/geo-layers.resource.js';
 import {
+    geoAddressSuggestOp,
+    geoAddressNearestOp,
+    geoAddressesInZoneOp,
+} from '@platform/lib/events/resources/geo-addresses.resource.js';
+import {
     geoRegionsResource,
     geoSourcesOp,
     geoStatsOp,
@@ -80,6 +85,9 @@ export class GeoApp extends PlatformApp {
         geoLayersOp,
         geoLayerFeaturesOp,
         geoMapSlice,
+        geoAddressSuggestOp,
+        geoAddressNearestOp,
+        geoAddressesInZoneOp,
         geoRegionsResource,
         geoSourcesOp,
         geoStatsOp,

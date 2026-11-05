@@ -2,7 +2,7 @@
  * <platform-zone-address-panel> — панель «какие адреса попали в зону».
  *
  * Провайдер-агностична: запрос идёт через op фабрики хоста
- * (`addressesOpName` — например 'shop/zone_addresses'), зона — GeoJSON
+ * (`addressesOpName` — канонический 'geo/addresses_in_zone'), зона — GeoJSON
  * полигона прямо из редактора. Контракт ответа — geo wire:
  * `{items: GeoAddressItem[], total}`.
  *

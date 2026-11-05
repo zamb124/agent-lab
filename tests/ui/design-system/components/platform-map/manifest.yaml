@@ -1,0 +1,13 @@
+component: platform-map
+doc_slug: platform-map
+tier: T0
+title_ru: Виджет карты
+title_en: Platform map widget
+import: "@platform/lib/components/platform-map.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

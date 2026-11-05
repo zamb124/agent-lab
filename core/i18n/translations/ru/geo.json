@@ -11,7 +11,9 @@
     "route_lab": "Маршрутная лаборатория"
   },
   "map": {
-    "loading": "Загружаем слои…"
+    "loading": "Загружаем слои…",
+    "locate": "Моё местоположение",
+    "addresses_title": "Адреса в зоне"
   },
   "layers": {
     "title": "Слои",
@@ -73,6 +75,23 @@
     "region_update_failed": "Не удалось обновить регион",
     "region_removed": "Регион удалён",
     "region_remove_failed": "Не удалось удалить регион"
+  },
+  "zone_editor": {
+    "title": "Редактор зоны",
+    "draw": "Рисовать зону",
+    "draw_stop": "Завершить",
+    "fit": "К зоне",
+    "clear": "Очистить",
+    "locate": "К адресу",
+    "area": "Площадь",
+    "perimeter": "Периметр",
+    "points": "Точек",
+    "km": "км",
+    "km2": "км²",
+    "self_intersection": "Самопересечение контура",
+    "too_many_points": "Слишком много точек",
+    "cancel": "Отмена",
+    "apply": "Применить"
   },
   "zone_panel": {
     "search_placeholder": "Поиск по адресам в зоне…",

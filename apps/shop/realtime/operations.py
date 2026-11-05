@@ -38,8 +38,6 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
-    ShopGeocodeRequest,
-    ShopGeocodeResponse,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -67,7 +65,6 @@ from apps.shop.models.api import (
     ShopTableUpdateRequest,
     ShopTheme,
     ShopUpdateRequest,
-    ShopZoneAddressesRequest,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
@@ -77,8 +74,6 @@ from apps.shop.tasks.task_names import (
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
 )
-from core.clients.geo_models import GeoAddressListResult
-from core.clients.service_client import ServiceClientError
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformBoundaryError,
@@ -480,54 +475,6 @@ async def op_shops_update(payload: ShopUpdatePayload, *, user: User, di: Di) -> 
     )
     await _enqueue_rebuild(di, shop.shop_id, shop.slug)
     return await _shop_response(shop, di)
-
-
-class ShopGeocodePayload(ShopGeocodeRequest):
-    """Геокод адреса магазина для центрирования карты зоны доставки."""
-
-    shop_id: str = Field(min_length=1)
-
-
-async def op_shop_geocode(
-    payload: ShopGeocodePayload, *, user: User, di: Di
-) -> ShopGeocodeResponse:
-    scope = await require_company_viewer(di.authz_service)
-    _ = user
-    try:
-        _shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    geo = await di.geocoder.geocode(payload.address)
-    if geo is None:
-        raise_not_found(
-            PlatformNotFoundError("Address could not be geocoded"),
-            error_code="address_unverifiable",
-        )
-    return ShopGeocodeResponse(lat=geo.lat, lng=geo.lng, normalized=geo.normalized_address)
-
-
-async def op_shop_zone_addresses(
-    payload: ShopZoneAddressesRequest, *, user: User, di: Di
-) -> GeoAddressListResult:
-    """Адреса справочника geo внутри редактируемой зоны — для панели редактора.
-
-    Зона приходит из payload (ещё не сохранена на сервере), поэтому
-    валидируется здесь. Контекст компании ServiceClient прокидывает сам.
-    """
-    scope = await require_company_viewer(di.authz_service)
-    _ = user
-    _ = scope
-    if not is_valid_delivery_zone(payload.zone):
-        raise_invalid(
-            ValueError("delivery_zone is not a valid single-ring GeoJSON Polygon"),
-            error_code="invalid_delivery_zone",
-        )
-    try:
-        return await di.geo_client.addresses_in_zone(
-            zone=payload.zone, q=payload.q, limit=payload.limit, offset=payload.offset
-        )
-    except ServiceClientError as exc:
-        raise_unavailable(exc, error_code="geo_unavailable")
 
 
 async def op_shops_publish(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:

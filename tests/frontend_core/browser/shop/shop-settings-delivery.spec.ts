@@ -23,6 +23,16 @@ import {
     shopTableRemoveOp,
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '../../../../apps/shop/ui/pages/shop-settings-page.js';
+import {
+    geoAddressSuggestOp,
+    geoAddressNearestOp,
+    geoAddressesInZoneOp,
+} from '@platform/lib/events/resources/geo-addresses.resource.js';
+import {
+    geoLayersOp,
+    geoLayerFeaturesOp,
+    geoMapSlice,
+} from '@platform/lib/events/resources/geo-layers.resource.js';
 
 const FACTORIES = [
     shopShopsResource,
@@ -37,6 +47,12 @@ const FACTORIES = [
     shopTableCreateOp,
     shopTableUpdateOp,
     shopTableRemoveOp,
+    geoLayersOp,
+    geoLayerFeaturesOp,
+    geoMapSlice,
+    geoAddressSuggestOp,
+    geoAddressNearestOp,
+    geoAddressesInZoneOp,
 ];
 
 const SHOP_ROUTES = [
@@ -178,26 +194,35 @@ describe('shop-settings-page: раздел «Выдача заказов»', () 
         expect(shadow(el).querySelector('shop-tables-editor')).to.equal(null);
     });
 
-    it('доставка включена → shop-zone-map; zone-changed → dirty → save с delivery_zone', async () => {
+    it('доставка включена → platform-map; «Изменить» → platform.zone_editor → onApply → dirty → save с delivery_zone', async () => {
         const events: Array<{ type: string; payload: unknown }> = [];
         getPlatformBus().subscribeType(shopUpdateOp.events.REQUESTED, (event) => events.push(event));
+        const modalEvents: Array<{ type: string; payload: unknown }> = [];
+        getPlatformBus().subscribeType(CoreEvents.UI_MODAL_OPEN, (event) => modalEvents.push(event));
         const el = await deliveryPage(SHOP);
 
-        const map = shadow(el).querySelector('shop-zone-map') as TestEl | null;
-        expect(map, 'редактор зоны в секции доставки').to.exist;
-        expect((map as Record<string, unknown>).shopId).to.equal('shop_test');
+        const map = shadow(el).querySelector('platform-map') as TestEl | null;
+        expect(map, 'карта зоны в секции доставки').to.exist;
+        expect((map as Record<string, unknown>).config, 'config-driven виджет').to.exist;
+
+        const editBtn = shadow(el).querySelector('.open-editor') as HTMLButtonElement;
+        expect(editBtn, 'кнопка редактора зоны').to.exist;
+        editBtn.click();
+        const opened = modalEvents.find((e) => e.type === CoreEvents.UI_MODAL_OPEN);
+        expect(opened, 'открытие platform.zone_editor').to.exist;
+        const props = opened!.payload as { kind: string; props: Record<string, unknown> };
+        expect(props.kind).to.equal('platform.zone_editor');
+        expect(typeof props.props['onApply']).to.equal('function');
 
         const zone = {
             type: 'Polygon',
             coordinates: [[[37.5, 55.7], [37.7, 55.7], [37.7, 55.8], [37.5, 55.8], [37.5, 55.7]]],
         };
-        map!.dispatchEvent(new CustomEvent('zone-changed', {
-            detail: { zone }, bubbles: true, composed: true,
-        }));
+        (props.props['onApply'] as (z: unknown) => void)(zone);
         await elementUpdated(el);
 
         const savebar = shadow(el).querySelector('.savebar');
-        expect(savebar, 'zone-changed → dirty-сейв').to.exist;
+        expect(savebar, 'onApply → dirty-сейв').to.exist;
         const saveBtn = [...savebar!.querySelectorAll('platform-button')]
             .find((b) => b.textContent!.includes('Сохранить')) as TestEl;
         saveBtn.click();
@@ -207,9 +232,9 @@ describe('shop-settings-page: раздел «Выдача заказов»', () 
             .to.deep.equal(zone);
     });
 
-    it('доставка выключена → shop-zone-map не рендерится', async () => {
+    it('доставка выключена → platform-map не рендерится', async () => {
         const el = await deliveryPage({ ...SHOP, delivery_enabled: false });
-        expect(shadow(el).querySelector('shop-zone-map')).to.equal(null);
+        expect(shadow(el).querySelector('platform-map')).to.equal(null);
     });
 
     it('чеклист «Способ выдачи» засчитывает onsite', async () => {

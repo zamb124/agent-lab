@@ -92,24 +92,6 @@ export const shopPublishOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/publish' },
 });
 
-export const shopGeocodeOp = createAsyncOp({
-    name: 'shop/shop_geocode',
-    silent: true,
-    commandType: 'shop/shops/geocode_requested',
-    transport: 'ws',
-    wsTimeoutMs: 15_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/geocode' },
-});
-
-export const shopZoneAddressesOp = createAsyncOp({
-    name: 'shop/zone_addresses',
-    silent: true,
-    commandType: 'shop/shops/zone_addresses_requested',
-    transport: 'ws',
-    wsTimeoutMs: 15_000,
-    restMirror: { method: 'POST', path: '/shop/api/v1/shops/zone/addresses' },
-});
-
 export const shopBadgeIconsListOp = createAsyncOp({
     name: 'shop/badge_icons_list',
     silent: true,
@@ -626,8 +608,6 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/shop_publish': typeof shopPublishOp;
         'shop/shop_suspend': typeof shopSuspendOp;
         'shop/badge_icons_list': typeof shopBadgeIconsListOp;
-        'shop/shop_geocode': typeof shopGeocodeOp;
-        'shop/zone_addresses': typeof shopZoneAddressesOp;
         'shop/categories_list': typeof shopCategoriesListOp;
         'shop/category_create': typeof shopCategoryCreateOp;
         'shop/category_update': typeof shopCategoryUpdateOp;

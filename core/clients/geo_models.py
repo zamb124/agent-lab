@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from core.models import StrictBaseModel
 from core.types import JsonObject
 
@@ -30,6 +32,8 @@ class GeoRouteResult(StrictBaseModel):
     distance_m: float
     duration_s: float
     geometry: JsonObject | None = None
+    # Сторона улицы точки прибытия — см. GeoRouteResponse в apps/geo.
+    arrival_side: Literal["left", "right"] | None = None
 
 
 class GeoMatrixResult(StrictBaseModel):

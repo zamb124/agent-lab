@@ -7,7 +7,7 @@
 import { html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, OpControllerOf, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
@@ -20,7 +20,12 @@ import '../components/shop-hours-editor.js';
 import type { ShopDayHours } from '../components/shop-hours-editor.js';
 import '../components/shop-brand-editor.js';
 import '../components/shop-tables-editor.js';
-import '../components/shop-zone-map.js';
+import '@platform/lib/components/platform-map.js';
+import type { PlatformMapConfig, LngLat } from '@platform/lib/components/platform-map.js';
+import '@platform/lib/modals/platform-zone-editor-modal.js';
+import '@platform/lib/events/resources/geo-addresses.resource.js';
+import type { geoAddressSuggestOp } from '@platform/lib/events/resources/geo-addresses.resource.js';
+import type { Polygon, MultiPolygon } from 'geojson';
 
 const SECTIONS = ['storefront', 'profile', 'hours', 'delivery', 'notifications'] as const;
 type SettingsSection = (typeof SECTIONS)[number];
@@ -76,6 +81,7 @@ export class ShopSettingsPage extends PlatformPage {
     private _telegramConnectOp: OpController;
     private _telegramDisconnectOp: OpController;
     private _aiDescribeShopOp: OpController;
+    private _addressSuggestOp: OpControllerOf<typeof geoAddressSuggestOp>;
     private _searchSel: SelectController<unknown>;
 
     declare _name: string;
@@ -91,6 +97,8 @@ export class ShopSettingsPage extends PlatformPage {
     declare _prepMinutes: string;
     declare _courierMode: string;
     declare _deliveryZone: Record<string, unknown>;
+    declare _shopPoint: LngLat | null;
+    declare _zoneLocating: boolean;
     declare _newDomain: string;
     declare _botToken: string;
     declare _hours: ShopDayHours[];
@@ -114,6 +122,8 @@ export class ShopSettingsPage extends PlatformPage {
         _prepMinutes: { state: true },
         _courierMode: { state: true },
         _deliveryZone: { state: true },
+        _shopPoint: { state: true },
+        _zoneLocating: { state: true },
         _newDomain: { state: true },
         _botToken: { state: true },
         _hours: { state: true },
@@ -196,6 +206,49 @@ export class ShopSettingsPage extends PlatformPage {
                 flex-direction: column;
                 gap: var(--space-3);
             }
+            .zone-map-wrap {
+                position: relative;
+                height: 300px;
+                border-radius: var(--radius-m, 12px);
+                overflow: hidden;
+                border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+            }
+            .zone-map-wrap platform-map { position: absolute; inset: 0; }
+            .zone-map-wrap .empty-badge {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 7;
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-full, 999px);
+                background: color-mix(in srgb, var(--bg-primary, #fff) 92%, transparent);
+                backdrop-filter: blur(12px);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                pointer-events: none;
+            }
+            .zone-map-wrap .open-editor {
+                position: absolute;
+                right: var(--space-3);
+                bottom: var(--space-3);
+                z-index: 7;
+                border: none;
+                border-radius: var(--radius-full, 999px);
+                padding: var(--space-2) var(--space-4);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                background: color-mix(in srgb, var(--bg-primary, #fff) 94%, transparent);
+                backdrop-filter: blur(12px);
+                box-shadow: 0 6px 22px color-mix(in srgb, var(--text-primary) 18%, transparent);
+                color: var(--accent);
+                font: inherit;
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+            .zone-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
             .hero {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
@@ -440,6 +493,8 @@ export class ShopSettingsPage extends PlatformPage {
         this._prepMinutes = '';
         this._courierMode = 'scooter';
         this._deliveryZone = {};
+        this._shopPoint = null;
+        this._zoneLocating = false;
         this._newDomain = '';
         this._botToken = '';
         this._hours = [];
@@ -451,6 +506,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._telegramConnectOp = this.useOp('shop/telegram_connect');
         this._telegramDisconnectOp = this.useOp('shop/telegram_disconnect');
         this._aiDescribeShopOp = this.useOp('shop/ai_describe_shop');
+        this._addressSuggestOp = this.useOp('geo/addresses_suggest');
         this._searchSel = this.select((s) => s.router.search);
     }
 
@@ -676,6 +732,62 @@ export class ShopSettingsPage extends PlatformPage {
         if (result !== null && typeof result === 'object') {
             const text = (result as { text?: unknown }).text;
             if (typeof text === 'string' && text !== '') this._description = text;
+        }
+    }
+
+    private _zoneGeometry(): Polygon | MultiPolygon | null {
+        const zone = this._deliveryZone;
+        const type = zone['type'];
+        if (type !== 'Polygon' && type !== 'MultiPolygon') return null;
+        return zone as unknown as Polygon | MultiPolygon;
+    }
+
+    private _zoneMapConfig(): PlatformMapConfig {
+        const zone = this._zoneGeometry();
+        const overlays: NonNullable<PlatformMapConfig['overlays']> = [];
+        if (zone) {
+            overlays.push({
+                name: 'zone',
+                data: { type: 'Feature', geometry: zone, properties: {} },
+                color: '#f2542d',
+                fit: true,
+            });
+        }
+        const markers: NonNullable<PlatformMapConfig['markers']> = [];
+        if (this._shopPoint) {
+            markers.push({ key: 'shop', lngLat: this._shopPoint, color: '#f2542d' });
+        }
+        return {
+            interactive: true,
+            controls: { zoom: true },
+            layers: { fetch: true },
+            featureCards: { hover: true, click: true },
+            markers,
+            overlays,
+        };
+    }
+
+    private _openZoneEditor(): void {
+        const address = [this._city, this._address].filter(Boolean).join(', ');
+        this.openModal('platform.zone_editor', {
+            zone: this._zoneGeometry(),
+            address,
+            onApply: (zone: Polygon | MultiPolygon | null) => {
+                this._deliveryZone = (zone ?? {}) as Record<string, unknown>;
+            },
+        });
+    }
+
+    private async _locateShopAddress(): Promise<void> {
+        const q = [this._city, this._address].filter(Boolean).join(', ').trim();
+        if (q === '' || this._zoneLocating) return;
+        this._zoneLocating = true;
+        try {
+            const res = await this._addressSuggestOp.run({ q, limit: 1 });
+            const hit = res?.items?.[0];
+            if (hit) this._shopPoint = [hit.lng, hit.lat];
+        } finally {
+            this._zoneLocating = false;
         }
     }
 
@@ -956,12 +1068,27 @@ export class ShopSettingsPage extends PlatformPage {
                     <div class="card">
                         <div class="option-title" style="margin-bottom: var(--space-1)">${this.t('settings.zone_title')}</div>
                         <div class="option-desc" style="margin-bottom: var(--space-3)">${this.t('settings.zone_desc')}</div>
-                        <shop-zone-map
-                            .zone=${this._deliveryZone}
-                            .address=${[this._city, this._address].filter(Boolean).join(', ')}
-                            .shopId=${this.shopId}
-                            @zone-changed=${(e: CustomEvent<{ zone: Record<string, unknown> }>) => { this._deliveryZone = e.detail.zone; }}
-                        ></shop-zone-map>
+                        <div class="zone-map-wrap">
+                            <platform-map .config=${this._zoneMapConfig()}></platform-map>
+                            ${!this._zoneGeometry()
+                                ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>`
+                                : nothing}
+                            <button type="button" class="open-editor" @click=${() => this._openZoneEditor()}>
+                                <platform-icon name="edit" size="14"></platform-icon>
+                                ${this._zoneGeometry() ? this.t('settings.zone_edit') : this.t('settings.zone_set')}
+                            </button>
+                        </div>
+                        <div class="zone-toolbar">
+                            ${[this._city, this._address].filter(Boolean).join(', ').trim()
+                                ? html`
+                                    <platform-button size="sm" variant="secondary"
+                                        ?busy=${this._zoneLocating}
+                                        @click=${() => this._locateShopAddress()}>
+                                        <platform-icon name="pin" size="14"></platform-icon>
+                                        ${this.t('settings.zone_locate')}
+                                    </platform-button>`
+                                : nothing}
+                        </div>
                     </div>`
                 : nothing}
         `;

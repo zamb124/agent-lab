@@ -456,20 +456,6 @@ class TestGeocodeEndpoints:
         assert resp.status_code == 404
         assert resp.json()["error_code"] == "address_unverifiable"
 
-    async def test_shop_geocode_op_unverifiable(
-        self, shop_client: AsyncClient, unique_id: str
-    ) -> None:
-        resp = await shop_client.post(
-            _SHOPS, json={"slug": f"geo-{unique_id[:8]}", "name": "G"}
-        )
-        shop: dict[str, Any] = resp.json()
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/geocode",
-            json={"address": "Москва, Тверская 1"},
-        )
-        assert resp.status_code == 404
-        assert resp.json()["error_code"] == "address_unverifiable"
-
     async def test_snapshot_contains_delivery_zone(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:

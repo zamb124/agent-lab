@@ -9,6 +9,16 @@ import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+import {
+    geoLayersOp,
+    geoLayerFeaturesOp,
+    geoMapSlice,
+} from '@platform/lib/events/resources/geo-layers.resource.js';
+import {
+    geoAddressSuggestOp,
+    geoAddressNearestOp,
+    geoAddressesInZoneOp,
+} from '@platform/lib/events/resources/geo-addresses.resource.js';
 
 import {
     shopShopsResource,
@@ -17,8 +27,6 @@ import {
     shopPublishOp,
     shopSuspendOp,
     shopBadgeIconsListOp,
-    shopGeocodeOp,
-    shopZoneAddressesOp,
     shopCategoriesListOp,
     shopCategoriesReorderOp,
     shopCategoryCreateOp,
@@ -75,7 +83,6 @@ import '../pages/shop-promos-page.js';
 import '../pages/shop-settings-page.js';
 import '../modals/shop-modifiers-modal.js';
 import '../modals/shop-product-modal.js';
-import '../modals/shop-zone-editor-modal.js';
 
 const SHOP_ROUTES = [
     { key: 'shop_home',      path: '',                  titleKey: 'routes.shop_home' },
@@ -103,14 +110,18 @@ export class ShopApp extends PlatformApp {
     };
 
     static factories = [
+        geoLayersOp,
+        geoLayerFeaturesOp,
+        geoMapSlice,
+        geoAddressSuggestOp,
+        geoAddressNearestOp,
+        geoAddressesInZoneOp,
         shopShopsResource,
         shopCreateOp,
         shopUpdateOp,
         shopPublishOp,
         shopSuspendOp,
         shopBadgeIconsListOp,
-        shopGeocodeOp,
-        shopZoneAddressesOp,
         shopCategoriesListOp,
         shopCategoryCreateOp,
         shopCategoryUpdateOp,

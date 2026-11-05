@@ -522,6 +522,11 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-map
+  doc_slug: platform-map
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-zone-address-panel
   doc_slug: platform-zone-address-panel
   status: backlog

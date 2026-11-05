@@ -11,7 +11,9 @@
     "route_lab": "Route lab"
   },
   "map": {
-    "loading": "Loading layers…"
+    "loading": "Loading layers…",
+    "locate": "My location",
+    "addresses_title": "Addresses in zone"
   },
   "layers": {
     "title": "Layers",
@@ -73,6 +75,23 @@
     "region_update_failed": "Failed to update region",
     "region_removed": "Region removed",
     "region_remove_failed": "Failed to remove region"
+  },
+  "zone_editor": {
+    "title": "Zone editor",
+    "draw": "Draw zone",
+    "draw_stop": "Finish",
+    "fit": "Fit zone",
+    "clear": "Clear",
+    "locate": "Go to address",
+    "area": "Area",
+    "perimeter": "Perimeter",
+    "points": "Points",
+    "km": "km",
+    "km2": "km²",
+    "self_intersection": "Ring self-intersects",
+    "too_many_points": "Too many points",
+    "cancel": "Cancel",
+    "apply": "Apply"
   },
   "zone_panel": {
     "search_placeholder": "Search addresses in zone…",
