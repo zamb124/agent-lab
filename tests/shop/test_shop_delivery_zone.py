@@ -654,7 +654,7 @@ class TestDeliveryZoneValidation:
     async def test_collinear_midpoint_accepted(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        # Точка на собственном ребре (как midpoint-вставка geoman) — легально.
+        # Точка на собственном ребре (как midpoint-вставка terra-draw) — легально.
         zone = {
             "type": "Polygon",
             "coordinates": [

@@ -43,7 +43,7 @@ alwaysApply: false
 ## Исключения
 
 - Исключение: `logging.getLogger` в `core/logging/setup.py`, `core/logging/processors.py`, `core/logging/__init__.py`, `core/tracing/tracer.py`; allowlist `scripts/gates/backend/logging_canon.sh`.
-- Исключение: TaskIQ-запись без labels (старый stream) — `pre_execute` восстанавливает контекст `build_log_labels(background_kind='taskiq_recover')` + WARN `task.execute_log_labels_recovered`. `[без гейта]`
+- Исключение: TaskIQ-запись без labels — `pre_execute` восстанавливает контекст `build_log_labels(background_kind='taskiq_recover')` + WARN `task.execute_log_labels_recovered`. `[без гейта]`
 
 ## Гейты
 

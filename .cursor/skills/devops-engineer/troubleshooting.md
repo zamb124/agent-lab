@@ -55,12 +55,12 @@ kubectl logs -n cert-manager deployment/cert-manager-webhook-regru --tail=200
 **Причины:**
 - DNS-01 webhook (`cert-manager-webhook-regru`) не отвечает → `kubectl get pods -n cert-manager`, `kubectl logs -n cert-manager deployment/regru-webhook`.
 - IP master-ноды не в whitelist Reg.ru API (Настройки → API в личном кабинете) → webhook возвращает `ACCESS_DENIED_FROM_IP`.
-- Reg.ru-credentials Secret устарел → `kubectl delete secret regru-credentials -n cert-manager` и `bash deploy/scripts/setup-wildcard-tls.sh`.
+- Reg.ru-credentials Secret неактуален → `kubectl delete secret regru-credentials -n cert-manager` и `bash deploy/scripts/setup-wildcard-tls.sh`.
 - Rate limit Let's Encrypt (5 за неделю на один домен) → подождать или использовать staging issuer.
-- **Сертификат создан Ingress-shim'ом** с аннотации `cert-manager.io/cluster-issuer: letsencrypt-prod` (HTTP-01) → `Owner: Ingress`, `issuerRef: letsencrypt-prod`, такого ClusterIssuer в кластере нет → бесконечный `Issuing`. Признак: `kubectl describe certificate platform-tls -n platform | grep -E 'Issuer Ref|Owner'` показывает не `letsencrypt-prod-dns01`. `kubectl apply` поверх НЕ переопределяет ownerReferences/issuerRef. Решение: `setup-wildcard-tls.sh` сам убирает аннотацию и удаляет orphan-Certificate (step 5b) — повторный запуск починит.
+- **Сертификат создан по ingress-аннотации** `cert-manager.io/cluster-issuer: letsencrypt-prod` (HTTP-01) → `Owner: Ingress`, `issuerRef: letsencrypt-prod`, такого ClusterIssuer в кластере нет → бесконечный `Issuing`. Признак: `kubectl describe certificate platform-tls -n platform | grep -E 'Issuer Ref|Owner'` показывает не `letsencrypt-prod-dns01`. `kubectl apply` поверх НЕ переопределяет ownerReferences/issuerRef. Решение: `setup-wildcard-tls.sh` сам убирает аннотацию и удаляет orphan-Certificate (step 5b) — повторный запуск починит.
 
 **Решение:**
-- `bash deploy/scripts/setup-wildcard-tls.sh` (идемпотентно — снимает старые аннотации, удаляет orphan-Certificates, пересоздаёт Issuer и Certificate).
+- `bash deploy/scripts/setup-wildcard-tls.sh` (идемпотентно — снимает чужие аннотации, убирает orphan-Certificates, пересоздаёт Issuer и Certificate).
 - Принудительный перевыпуск: `kubectl delete certificate platform-tls -n platform` → скрипт пересоздаст.
 
 ## 4. Postgres под `Pending` / не Running
@@ -80,7 +80,7 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30
 - init.sql упал → `kubectl logs postgres-0 -n platform`. Часто из-за прав на ConfigMap или дубликата в init.sql.
 
 **Решение:**
-- При нехватке места: cleanup старых snap revisions: `ssh root@77.91.94.127 'snap set system refresh.retain=2 && snap refresh'`.
+- При нехватке места: cleanup накопленных snap revisions: `ssh root@77.91.94.127 'snap set system refresh.retain=2 && snap refresh'`.
 - При проблемах с init.sql: правка `deploy/helm/agent-lab/files/postgres-init.sql` + `make k8s-deploy`. Если PVC уже инициализирован старой версией — init.sql НЕ перезапустится. Решение: `kubectl exec postgres-0 -- psql ...` для миграции вручную или пересоздание PVC (с потерей данных — нужен backup).
 
 ## 5. LitServe не стартует на GPU / без GPU
@@ -187,7 +187,7 @@ kubectl exec -n platform deployment/alloy -c alloy -- env | grep OTEL
 
 **Симптомы:** helm upgrade/install падает: нет `app.kubernetes.io/managed-by: Helm` и `meta.helm.sh/release-name` у Secret.
 
-**Причина:** **`platform-secrets`** создан не Helm (kubectl apply / импорт при переезде), а чарт включает **`platformSecrets.create: true`**. Precheck раньше пропускал случай «релиз уже есть».
+**Причина:** **`platform-secrets`** создан не Helm (kubectl apply / импорт при переезде), а чарт включает **`platformSecrets.create: true`**. Precheck пропускал случай «релиз уже есть».
 
 **Решение:**
 - Релиз есть: `make k8s-helm-adopt-orphans ORPHANS="secret/platform-secrets"` (CI precheck делает то же сам).
@@ -254,7 +254,7 @@ kubectl get sc microk8s-hostpath -o yaml | grep allowVolumeExpansion
 ```
 
 **Причины:**
-- StorageClass `microk8s-hostpath` обычно не поддерживает онлайн-расширение → `allowVolumeExpansion: false`.
+- StorageClass `microk8s-hostpath` не поддерживает онлайн-расширение → `allowVolumeExpansion: false`.
 
 **Решение:**
 - Backup → удалить PVC → пересоздать с большим размером → restore.
@@ -313,13 +313,13 @@ du -sh /var/lib/snapd/* | sort -h | tail
 
 **Причины:**
 - Loki/Tempo переполнили PVC.
-- Старые snap revisions.
+- Накопленные snap revisions.
 - Docker images cache (если оставались от docker compose).
 
 **Решение:**
 - `snap set system refresh.retain=2 && snap refresh`.
 - Уменьшить `retention_period` в `files/loki.yaml`.
-- Если на ноде остались docker volumes старого compose: `docker volume ls`, `docker volume prune` (ОПАСНО если волюм нужен).
+- Если на ноде остались docker volumes от compose-стека: `docker volume ls`, `docker volume prune` (ОПАСНО если волюм нужен).
 
 ## 16. Sync (WebSocket) не подключается
 

@@ -10,6 +10,12 @@ variants:
       api-base: /customer-auth-emu
       company-id: cmp_emu
     scenarios: [render, interaction]
+  - id: dark
+    props:
+      api-base: /customer-auth-emu
+      company-id: cmp_emu
+      theme: dark
+    scenarios: [render]
 playwright:
   min_steps: 2
   min_screenshots: 1

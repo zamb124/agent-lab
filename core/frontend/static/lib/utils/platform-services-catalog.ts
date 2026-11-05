@@ -108,6 +108,16 @@ export const PLATFORM_SERVICES: readonly PlatformServiceEntry[] = Object.freeze(
         metricKey: null,
     }),
     Object.freeze({
+        id: 'geo',
+        nameKey: 'apps.geo.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/geo_logo.svg`,
+        brandFrom: '#0ea5e9',
+        brandTo: '#22c55e',
+        healthName: 'geo',
+        metricField: null,
+        metricKey: null,
+    }),
+    Object.freeze({
         id: 'frontend',
         nameKey: 'apps.frontend.name',
         logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,

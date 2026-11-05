@@ -12,6 +12,32 @@ export type EmptyPayload = {
     [key: string]: unknown;
 };
 
+/**
+ * Адрес из справочника geo.
+ */
+export interface GeoAddressHit {
+    "id": number;
+    "osm_type": string;
+    "osm_id": number;
+    "display_name": string;
+    "city"?: string | undefined;
+    "street"?: string | undefined;
+    "housenumber"?: string | undefined;
+    "postcode"?: string | undefined;
+    "lat": number;
+    "lng": number;
+    [key: string]: unknown;
+}
+
+/**
+ * GeoAddressListResult
+ */
+export interface GeoAddressListResult {
+    "items": GeoAddressHit[];
+    "total": number;
+    [key: string]: unknown;
+}
+
 export type JsonValue = unknown;
 
 /**
@@ -391,6 +417,25 @@ export interface ShopDomainIdPayload {
 export type ShopDomainStatus = "pending_dns" | "awaiting_dns" | "provisioning" | "active" | "failed";
 
 /**
+ * Геокод адреса магазина для центрирования карты зоны доставки.
+ */
+export interface ShopGeocodePayload {
+    "address": string;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopGeocodeResponse
+ */
+export interface ShopGeocodeResponse {
+    "lat": number;
+    "lng": number;
+    "normalized"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * ShopIdPayload
  */
 export interface ShopIdPayload {
@@ -532,9 +577,9 @@ export interface ShopModifierOptionUpdatePayload {
 export interface ShopOrderCreatePayload {
     "items": ShopOrderItemRequest[];
     "customer_name": string;
-    "customer_phone"?: string | undefined;
     "delivery_type": ShopDeliveryType;
     "address"?: string | undefined;
+    "customer_address_id"?: string | undefined;
     "table_id"?: string | null | undefined;
     "comment"?: string | undefined;
     "source"?: ShopOrderSource | undefined;
@@ -639,10 +684,12 @@ export interface ShopOrderResponse {
     "shop_id": string;
     "public_code": string;
     "status": ShopOrderStatus;
+    "customer_id"?: string | undefined;
     "customer_name": string;
     "customer_phone": string;
     "delivery_type": ShopDeliveryType;
     "address": string;
+    "delivery_eta_minutes"?: number | null | undefined;
     "table_id": string;
     "table_label": string;
     "comment": string;
@@ -916,8 +963,11 @@ export interface ShopResponse {
     "delivery_enabled": boolean;
     "pickup_enabled": boolean;
     "onsite_enabled": boolean;
+    "delivery_zone": Record<string, JsonValue>;
     "delivery_fee_minor": number;
     "min_order_minor": number;
+    "prep_minutes": number;
+    "courier_mode": string;
     "currency": string;
     "theme": ShopTheme;
     "badges": ShopBadgeResponse[];
@@ -1019,11 +1069,28 @@ export interface ShopUpdatePayload {
     "delivery_enabled"?: boolean | null | undefined;
     "pickup_enabled"?: boolean | null | undefined;
     "onsite_enabled"?: boolean | null | undefined;
+    "delivery_zone"?: Record<string, JsonValue> | null | undefined;
     "delivery_fee_minor"?: number | null | undefined;
     "min_order_minor"?: number | null | undefined;
+    "prep_minutes"?: number | null | undefined;
+    "courier_mode"?: "car" | "foot" | "bike" | "scooter" | null | undefined;
     "theme"?: ShopTheme | null | undefined;
     "badges"?: ShopBadge[] | null | undefined;
     "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Адреса geo-справочника внутри редактируемой зоны доставки.
+ * 
+ * ``zone`` — GeoJSON-полигон прямо из редактора (ещё не сохранён),
+ * поэтому оп валидирует его сам.
+ */
+export interface ShopZoneAddressesRequest {
+    "zone": Record<string, JsonValue>;
+    "q"?: string | null | undefined;
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
     [key: string]: unknown;
 }
 
@@ -1077,12 +1144,14 @@ export interface ShopCommandMap {
     "shop/public/order_create_requested": { payload: ShopOrderCreatePayload; result: ShopOrderCreatedResponse },
     "shop/public/order_status_requested": { payload: ShopPublicOrderStatusPayload; result: ShopOrderStatusResponse },
     "shop/shops/create_requested": { payload: ShopCreateRequest; result: ShopResponse },
+    "shop/shops/geocode_requested": { payload: ShopGeocodePayload; result: ShopGeocodeResponse },
     "shop/shops/item_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/list_requested": { payload: EmptyPayload; result: ListResponse_ShopResponse_ },
     "shop/shops/publish_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/remove_requested": { payload: ShopIdPayload; result: EmptyPayload },
     "shop/shops/suspend_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/update_requested": { payload: ShopUpdatePayload; result: ShopResponse },
+    "shop/shops/zone_addresses_requested": { payload: ShopZoneAddressesRequest; result: GeoAddressListResult },
     "shop/tables/create_requested": { payload: ShopTableCreatePayload; result: ShopTableResponse },
     "shop/tables/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopTableResponse_ },
     "shop/tables/remove_requested": { payload: ShopTableIdPayload; result: EmptyPayload },
@@ -1236,6 +1305,9 @@ export interface ShopEventMap {
     "shop/shops/create_failed": PlatformCommandEventPayload,
     "shop/shops/create_requested": PlatformCommandEventPayload,
     "shop/shops/create_succeeded": PlatformCommandEventPayload,
+    "shop/shops/geocode_failed": PlatformCommandEventPayload,
+    "shop/shops/geocode_requested": PlatformCommandEventPayload,
+    "shop/shops/geocode_succeeded": PlatformCommandEventPayload,
     "shop/shops/item_failed": PlatformCommandEventPayload,
     "shop/shops/item_requested": PlatformCommandEventPayload,
     "shop/shops/item_succeeded": PlatformCommandEventPayload,
@@ -1254,6 +1326,9 @@ export interface ShopEventMap {
     "shop/shops/update_failed": PlatformCommandEventPayload,
     "shop/shops/update_requested": PlatformCommandEventPayload,
     "shop/shops/update_succeeded": PlatformCommandEventPayload,
+    "shop/shops/zone_addresses_failed": PlatformCommandEventPayload,
+    "shop/shops/zone_addresses_requested": PlatformCommandEventPayload,
+    "shop/shops/zone_addresses_succeeded": PlatformCommandEventPayload,
     "shop/tables/create_failed": PlatformCommandEventPayload,
     "shop/tables/create_requested": PlatformCommandEventPayload,
     "shop/tables/create_succeeded": PlatformCommandEventPayload,

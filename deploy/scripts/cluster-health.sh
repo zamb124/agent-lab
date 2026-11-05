@@ -53,8 +53,8 @@ fi
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync worktracker office wiki guest-runtime realtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp shop
-  flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker shop-worker
+  flows frontend crm rag sync worktracker office wiki guest-runtime realtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp shop geo
+  flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker shop-worker geo-worker
   livekit livekit-egress onlyoffice grafana provider-litserve openfga centrifugo
 )
 EXPECTED_STATEFULSETS=(postgres redis redis-realtime loki tempo seaweedfs)

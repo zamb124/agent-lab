@@ -34,7 +34,7 @@ alwaysApply: false
 1. Один код обслуживает несколько apex-доменов: `platform_brands.<apex>` в `conf.json`, резолв — `resolve_brand(host)` / `resolve_brand_domain` (`core/platform_brand/resolver.py`). Бренд определяется по `Host`; хардкод домена или имени бренда в сервисах запрещён.
 2. `primary_platform_domain` — primary apex `linnex.io` для дефолтных публичных URL и OAuth callback; второй apex — `humanitec.ru`.
 3. Имена в тексте: продукт — «Платформа»; подписи UI по бренду — поля `platform_brands.*`.
-4. Технические идентификаторы не переименовываются: `humanitec_llm`, pronunciation seed «Humanitec → хуманитэк».
+4. Технические идентификаторы не переименовываются: `linnex_llm`, pronunciation seed «Linnex → линнэкс».
 5. Реквизиты `legal` — общий слой; бренд переопределяет `platform_brands.<apex>.legal`.
 
 ### Секреты и переменные
@@ -64,5 +64,5 @@ alwaysApply: false
 - `scripts/gates/repo/conf_keys_declared.py` (`make lint`) — каждый ключ `conf.json` объявлен в Settings.
 - `scripts/gates/repo/repo_hygiene.py` (`make lint`) — корень репозитория без дампов, ключей и документов.
 - `scripts/gates/repo/platform_brand_hardcode.py` (`make lint`) — нет хардкода apex-домена.
-- `scripts/gates/repo/variables_legacy.sh` (`make lint`) — нет старого API переменных.
+- `scripts/gates/repo/variables_legacy.sh` (`make lint`) — второй API переменных запрещён.
 - `scripts/gates/backend/ratchet_counts.py` (`make lint`) — ratchet `os_environ`.

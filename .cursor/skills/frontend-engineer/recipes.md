@@ -1,6 +1,6 @@
 # Frontend Recipes — пошаговые сценарии на TS
 
-Рецепт — путь от фабрики до компонента. Нормы — `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`, `frontend.mdc`; после любого рецепта — гейты `SKILL.md` § Гейты перед «готово». Живые файлы фабрик и страниц содержат долг (`.cursor/skills/frontend-engineer/scripts/ui_audit.py`): форма берётся из рецепта, живой файл — только пример API.
+Рецепт — путь от фабрики до компонента. Нормы — `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`, `frontend.mdc`; после любого рецепта — гейты `SKILL.md` § Гейты перед «готово». Живые файлы фабрик и страниц содержат остаток (`.cursor/skills/frontend-engineer/scripts/ui_audit.py`): форма берётся из рецепта, живой файл — только пример API.
 
 ## Типизация во всех рецептах
 
@@ -347,6 +347,6 @@ declare count: number;
 3. `import type` для типов (`verbatimModuleSyntax`); смешанный импорт — `import { foo, type Bar }`.
 4. JSDoc-типы → настоящие типы; typedef → `interface`/`type` рядом с фабрикой или в wire-модуле.
 5. DOM: `this.renderRoot.querySelector<HTMLInputElement>('…')` с `throw` на `null`; `event.target` — `instanceof`-проверка; событие kit — его экспортированный тип.
-6. Тест: `*.spec.js` → `*.spec.ts`, фикстуры и helpers — тоже `.ts`.
+6. Тест — `*.spec.ts`, фикстуры и helpers — тоже `.ts`.
 7. Запрещено: `any`, `as unknown as`, non-null без контракта, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`. Не типизируется честно — корень в kit или фабрике, рекурсия (`SKILL.md` § Рекурсия).
 8. Прогон: `npm run build:ui -- --apps=<svc>`, `npx tsc -p tsconfig.json`, затронутые specs.

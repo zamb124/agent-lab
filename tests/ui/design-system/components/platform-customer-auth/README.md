@@ -6,6 +6,11 @@
 
 Статус документации: **production**.
 
+Тема листа: атрибут `theme="light|dark|auto"` (default `auto`). `auto` берёт
+унаследованный `color-scheme` витрины (forced-тема страницы), иначе
+`prefers-color-scheme`. Акцент — `--accent`/`--on-accent` хост-страницы,
+палитра переопределяется custom properties `--pca-*`.
+
 ## Запуск тестов
 
 ```bash

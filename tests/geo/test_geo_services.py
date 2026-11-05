@@ -20,6 +20,7 @@ from apps.geo.config import GeoSettings
 from apps.geo.models.geo_address import GeoAddress
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.services.geo_address_service import GeoAddressService
+from apps.geo.services.geo_coverage_service import GeoCoverageService
 from apps.geo.services.geo_routing_service import GeoRoutingError, GeoRoutingService
 from apps.geo.services.osm_import_service import OsmImportService
 
@@ -88,10 +89,29 @@ def _test_generation(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(GeoImportState, "active_generation", classmethod(_gen))
 
 
+@pytest.fixture(autouse=True)
+async def _clean_coverage_registry() -> None:
+    """«Пустая директория» покрытия: сид региона — заново от настроек теста."""
+    for table in (
+        "geo_regions",
+        "geo_stats",
+        "geo_source_cursors",
+        "geo_enrich_queue",
+    ):
+        _ = await execute_raw(f"DELETE FROM {table}", using="geo")
+
+
 @pytest.fixture(scope="module")
 async def geo_seed():
     """Поколение _GEN: детерминированный граф и справочник адресов."""
-    for table in ("geo_road_edges", "geo_road_vertices", "geo_addresses"):
+    for table in (
+        "geo_road_edges",
+        "geo_road_vertices",
+        "geo_addresses",
+        "geo_turn_restrictions",
+        "geo_barriers",
+        "geo_traffic_signals",
+    ):
         _ = await execute_raw(
             f"DELETE FROM {table} WHERE generation = $1", [_GEN], using="geo"
         )
@@ -249,6 +269,239 @@ async def test_mode_aware_snap(geo_seed, routing: GeoRoutingService) -> None:
     assert exc.value.code == "point_too_far_from_road"
 
 
+async def test_car_route_honors_no_turn_restriction(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """no_*: прямой заезд запрещён — TRSP объезжает (40s против 20s).
+
+    Сид-граф: way1 = (1,2), way2 = (2,3); рестрикция from=1 via=2 to=2 —
+    прямо по B→C под запретом, объезд B-D-E-C-B-? нет: B→A? Нет — легальный
+    объезд 1→4→5→2→3 (ребро 2→5 проходимо в реверсе для car).
+    Пешехода рестрикции не касаются — foot-граф идёт dijkstra без таблицы.
+    """
+    _ = await execute_raw(
+        """
+        INSERT INTO geo_turn_restrictions
+            (osm_relation_id, restriction, from_way, to_way, via_node,
+             region, generation, created_at)
+        VALUES (9001, 'no_straight_on', 1, 2, 2, 'test', $1, now())
+        """,
+        [_GEN],
+        using="geo",
+    )
+    try:
+        car = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="car",
+        )
+        assert car.duration_s == pytest.approx(40.0)
+        foot = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="foot",
+        )
+        assert foot.duration_s == pytest.approx(180.0)
+    finally:
+        _ = await execute_raw(
+            "DELETE FROM geo_turn_restrictions WHERE generation = $1",
+            [_GEN],
+            using="geo",
+        )
+
+
+async def test_car_route_honors_only_turn_restriction(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """only_*: единственный разрешённый выезд — на way6 (2→5)."""
+    _ = await execute_raw(
+        """
+        INSERT INTO geo_turn_restrictions
+            (osm_relation_id, restriction, from_way, to_way, via_node,
+             region, generation, created_at)
+        VALUES (9002, 'only_left_turn', 1, 6, 2, 'test', $1, now())
+        """,
+        [_GEN],
+        using="geo",
+    )
+    try:
+        car = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="car",
+        )
+        # 1→2→5→6→3 = 40s; прямой 2→3 и U-turn на 2→1 под запретом.
+        assert car.duration_s == pytest.approx(40.0)
+    finally:
+        _ = await execute_raw(
+            "DELETE FROM geo_turn_restrictions WHERE generation = $1",
+            [_GEN],
+            using="geo",
+        )
+
+
+async def test_car_route_detours_blocked_barrier(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Барьер на узле 2 блокирует car-транзит: прямой 1→2→3 под запретом,
+    объезд 1→4→5→6→3 = 40s. Foot барьер не держит — 180s по прямой."""
+    _ = await execute_raw(
+        """
+        INSERT INTO geo_barriers
+            (osm_node_id, barrier, block_car, block_foot, block_bike,
+             block_scooter, lat, lng, region, generation, created_at)
+        VALUES (2, 'bollard', true, false, false, false,
+                55.75, 37.618, 'test', $1, now())
+        """,
+        [_GEN],
+        using="geo",
+    )
+    try:
+        car = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="car",
+        )
+        assert car.duration_s == pytest.approx(40.0)
+        foot = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="foot",
+        )
+        assert foot.duration_s == pytest.approx(180.0)
+    finally:
+        _ = await execute_raw(
+            "DELETE FROM geo_barriers WHERE generation = $1",
+            [_GEN],
+            using="geo",
+        )
+
+
+async def test_gate_blocks_all_modes(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """gate на узле 5 закрыт всем: car 1→6 идёт через 3 (30s),
+    foot — тем же объездом по residential (270s)."""
+    _ = await execute_raw(
+        """
+        INSERT INTO geo_barriers
+            (osm_node_id, barrier, block_car, block_foot, block_bike,
+             block_scooter, lat, lng, region, generation, created_at)
+        VALUES (5, 'gate', true, true, true, true,
+                55.751, 37.618, 'test', $1, now())
+        """,
+        [_GEN],
+        using="geo",
+    )
+    try:
+        car = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75100, to_lng=37.61900, mode="car",
+        )
+        assert car.duration_s == pytest.approx(30.0)
+        foot = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75100, to_lng=37.61900, mode="foot",
+        )
+        assert foot.duration_s == pytest.approx(270.0)
+    finally:
+        _ = await execute_raw(
+            "DELETE FROM geo_barriers WHERE generation = $1",
+            [_GEN],
+            using="geo",
+        )
+
+
+async def test_fractional_snap_mid_edge_start(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Старт в середине ребра 1→2 (fraction 0.5): плаваем 5s, не 10s
+    от вершины; геометрия начинается ровно в точке привязки."""
+    route = await routing.calculate(
+        from_lat=55.75000, from_lng=37.61750,
+        to_lat=55.75000, to_lng=37.61900, mode="car",
+    )
+    assert route.duration_s == pytest.approx(15.0)
+    assert route.distance_m == pytest.approx(150.0)
+    assert route.geometry is not None
+    coords = route.geometry["coordinates"]
+    assert isinstance(coords, list)
+    first = coords[0]
+    assert isinstance(first, list)
+    assert first[0] == pytest.approx(37.61750, abs=1e-4)
+    assert first[1] == pytest.approx(55.75000, abs=1e-4)
+
+
+async def test_fractional_snap_same_edge(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Обе точки на одном ребре: проезд доли (0.25→0.75) = 5s, без заезда в вершину."""
+    route = await routing.calculate(
+        from_lat=55.75000, from_lng=37.61725,
+        to_lat=55.75000, to_lng=37.61775, mode="car",
+    )
+    assert route.duration_s == pytest.approx(5.0)
+    assert route.distance_m == pytest.approx(50.0)
+
+
+async def test_fractional_snap_reverse_on_same_edge(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Назад по тому же ребру (0.75→0.25): foot идёт по reverse_cost=90."""
+    route = await routing.calculate(
+        from_lat=55.75000, from_lng=37.61775,
+        to_lat=55.75000, to_lng=37.61725, mode="foot",
+    )
+    assert route.duration_s == pytest.approx(45.0)
+
+
+async def test_arrival_side_left_and_right(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Едем 1→2 на восток: точка севернее ребра — слева, южнее — справа.
+
+    Смещение 0.0002° ближе к ребру 1→2, чем к параллельному 4→5, —
+    привязка однозначна."""
+    north = await routing.calculate(
+        from_lat=55.75000, from_lng=37.61700,
+        to_lat=55.75020, to_lng=37.61750, mode="car",
+    )
+    assert north.arrival_side == "left"
+    south = await routing.calculate(
+        from_lat=55.75000, from_lng=37.61700,
+        to_lat=55.74980, to_lng=37.61750, mode="car",
+    )
+    assert south.arrival_side == "right"
+
+
+async def test_traffic_signal_adds_delay(
+    geo_seed, routing: GeoRoutingService
+) -> None:
+    """Светофор на узле 2: транзит car 1→2→3 дорожает на signal_delay_s.car
+    (20s + 15s = 35s); foot-штраф 0 — 180s без изменений."""
+    _ = await execute_raw(
+        """
+        INSERT INTO geo_traffic_signals
+            (osm_node_id, lat, lng, region, generation, created_at)
+        VALUES (2, 55.75, 37.618, 'test', $1, now())
+        """,
+        [_GEN],
+        using="geo",
+    )
+    try:
+        car = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="car",
+        )
+        assert car.duration_s == pytest.approx(35.0)
+        foot = await routing.calculate(
+            from_lat=55.75000, from_lng=37.61700,
+            to_lat=55.75000, to_lng=37.61900, mode="foot",
+        )
+        assert foot.duration_s == pytest.approx(180.0)
+    finally:
+        _ = await execute_raw(
+            "DELETE FROM geo_traffic_signals WHERE generation = $1",
+            [_GEN],
+            using="geo",
+        )
+
+
 async def test_route_not_found_is_domain_error(
     geo_seed, routing: GeoRoutingService
 ) -> None:
@@ -298,11 +551,15 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     settings = GeoSettings(
         osm_extract_urls=[f"file://{_FIXTURE}"],
     )
-    result = await OsmImportService(settings).run_sync()
+    result = await OsmImportService(
+        settings, GeoCoverageService(settings)
+    ).run_sync()
     assert result["imported"] is True
     assert result["rows_addresses"] == 4
     assert result["rows_vertices"] == 8
     assert result["rows_edges"] == 9
+    assert result["rows_barriers"] == 1
+    assert result["rows_signals"] == 1
     assert _FIXTURE.is_file()  # file://-источник не удаляется
 
     state = await GeoImportState.get_state()
@@ -345,13 +602,34 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     )
     assert footway and footway[0]["car_cost"] == -1
     assert footway[0]["foot_cost"] > 0
+    # maxspeed=20 на way 10 ниже residential-дефолта 25км/ч:
+    # car_cost = length / (20/3.6); way 12 без лимита — по дефолту.
+    limited = await execute_raw(
+        "SELECT length_m, car_cost FROM geo_road_edges"
+        " WHERE generation = $1 AND osm_way_id = 10",
+        [gen],
+        using="geo",
+    )
+    assert limited
+    for e in limited:
+        assert e["car_cost"] == pytest.approx(e["length_m"] * 3.6 / 20.0)
+    plain = await execute_raw(
+        "SELECT length_m, car_cost FROM geo_road_edges"
+        " WHERE generation = $1 AND osm_way_id = 12",
+        [gen],
+        using="geo",
+    )
+    assert plain
+    for e in plain:
+        assert e["car_cost"] == pytest.approx(e["length_m"] * 3.6 / 25.0)
 
 
 async def test_import_rerun_is_idempotent() -> None:
     """Повторный run_sync без смены mtime → not_modified, второго поколения нет."""
     before = await GeoImportState.get_state()
     assert before is not None and before.current_generation > 0
+    settings = GeoSettings(osm_extract_urls=[f"file://{_FIXTURE}"])
     result = await OsmImportService(
-        GeoSettings(osm_extract_urls=[f"file://{_FIXTURE}"])
+        settings, GeoCoverageService(settings)
     ).run_sync()
     assert result == {"skipped": True, "reason": "not_modified"}

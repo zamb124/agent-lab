@@ -1,4 +1,78 @@
 {
+  "sidebar": {
+    "title": "Geo",
+    "menu_overview": "Карта",
+    "menu_sources": "Покрытие",
+    "menu_route_lab": "Маршруты"
+  },
+  "routes": {
+    "overview": "Карта",
+    "sources": "Покрытие",
+    "route_lab": "Маршрутная лаборатория"
+  },
+  "map": {
+    "loading": "Загружаем слои…"
+  },
+  "layers": {
+    "title": "Слои",
+    "regions": "Регионы",
+    "roads": "Дороги",
+    "addresses": "Адреса",
+    "restrictions": "Запреты поворотов",
+    "barriers": "Барьеры"
+  },
+  "overview": {
+    "header_title": "Карта данных Geo",
+    "header_subtitle": "Канонические слои: регионы, дорожный граф, адреса",
+    "generation": "Поколение",
+    "status": "Статус",
+    "rows": "Строк данных"
+  },
+  "sources": {
+    "header_title": "Покрытие и источники",
+    "header_subtitle": "Регионы импорта, allowlist источников и статистика поколения",
+    "import_title": "Конвейер импорта",
+    "import_run": "Запустить синк",
+    "totals": "Итого по сущностям",
+    "regions_title": "Регионы",
+    "sources_title": "Источники",
+    "col_name": "Имя",
+    "col_kind": "Тип",
+    "col_rows": "Строк",
+    "col_imported": "Импорт",
+    "col_license": "Лицензия",
+    "col_enabled": "Статус",
+    "kind_city": "Город",
+    "kind_region": "Регион",
+    "kind_country": "Страна",
+    "on": "Вкл",
+    "off": "Выкл"
+  },
+  "route_lab": {
+    "header_title": "Маршрутная лаборатория",
+    "header_subtitle": "Проверка маршрутизации по каноническому графу",
+    "modes": "Режим",
+    "mode_car": "Авто",
+    "mode_foot": "Пешком",
+    "mode_bike": "Вело",
+    "mode_scooter": "Самокат",
+    "click_hint": "Клик по карте — точка A, второй — точка B",
+    "distance": "Дистанция",
+    "duration": "Время",
+    "km": "км",
+    "min": "мин",
+    "failed": "Маршрут не построен"
+  },
+  "toast": {
+    "import_enqueued": "Синхронизация поставлена в очередь",
+    "import_enqueue_failed": "Не удалось запустить синхронизацию",
+    "region_created": "Регион создан",
+    "region_create_failed": "Не удалось создать регион",
+    "region_updated": "Регион обновлён",
+    "region_update_failed": "Не удалось обновить регион",
+    "region_removed": "Регион удалён",
+    "region_remove_failed": "Не удалось удалить регион"
+  },
   "zone_panel": {
     "search_placeholder": "Поиск по адресам в зоне…",
     "loading": "Загружаем адреса…",

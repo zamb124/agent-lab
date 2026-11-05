@@ -511,7 +511,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/shop/", auth_required=False, context_type="anonymous"),
     RouteRule("/shop/*", auth_required=False, context_type="anonymous"),
 
-    # Geo Service: справочник и роутинг — только сервисные/internal-вызовы
+    # Geo Service: справочник и роутинг — только сервисные/internal-вызовы;
+    # tiles — статические ассеты векторной карты (pmtiles/fonts/sprites/style),
+    # браузер тянет их без сессии как /static.
+    RouteRule("/geo/api/v1/tiles/*", auth_required=False, context_type="anonymous"),
     RouteRule("/geo/api/v1/*", context_type="api", auth_required=True),
 
     # Secrets Service

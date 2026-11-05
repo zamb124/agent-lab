@@ -1,10 +1,12 @@
 /**
- * shop-zone-editor-modal — полноэкранный редактор зоны на Leaflet + Geoman.
+ * shop-zone-editor-modal — полноэкранный редактор зоны на MapLibre + terra-draw.
  *
- * Реальный браузер: настоящий Leaflet и настоящий Geoman (оба динамических
- * import резолвятся сборкой). Рисование идёт через боевой путь Geoman —
- * enableDraw('Polygon') → click-события карты → pm:create → слой принят
- * редактором. Применение отдаёт GeoJSON в onApply и закрывает модалку.
+ * Реальный браузер: настоящий MapLibre и настоящий terra-draw (динамические
+ * import резолвятся сборкой), стиль базы — WTR-стаб по боевому URL
+ * /geo/api/v1/tiles/style.json. Рисование идёт боевым путём terra-draw:
+ * setMode('polygon') → pointer-события на canvas карты → keyup Enter →
+ * finish → полигон в store. Применение отдаёт GeoJSON в onApply и закрывает
+ * модалку.
  */
 
 import { fixture, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
@@ -35,14 +37,22 @@ const ZONE = {
     ],
 };
 
-type PmMap = {
-    _loaded: boolean;
-    pm: {
-        enableDraw(shape: string, options?: Record<string, unknown>): void;
-        disableDraw(): void;
-        globalDrawModeEnabled(): boolean;
-    };
-    fire(type: string, ev: unknown): void;
+type StoreFeature = {
+    geometry: { type: string; coordinates: number[][][] };
+    properties?: Record<string, unknown>;
+};
+
+type TestDraw = {
+    getMode(): string;
+    getSnapshot(): StoreFeature[];
+};
+
+type TestMap = {
+    isStyleLoaded(): boolean;
+    getCanvas(): HTMLCanvasElement;
+    project(lngLat: [number, number]): { x: number; y: number };
+    fire(type: string, ev?: unknown): void;
+    getSource(id: string): { _data?: { geojson?: { features?: unknown[] } } } | undefined;
 };
 
 type TestEl = HTMLElement & {
@@ -51,11 +61,8 @@ type TestEl = HTMLElement & {
     address: string;
     shopId: string;
     onApply: ((zone: Record<string, unknown>) => void) | null;
-    _map: PmMap | null;
-    _polygon: {
-        getLatLngs(): Array<Array<{ lat: number; lng: number }>>;
-        pm: { enabled(): boolean; hasSelfIntersection(): boolean };
-    } | null;
+    _map: TestMap | null;
+    _draw: TestDraw | null;
     _drawing: boolean;
     _mapError: boolean;
     _points: number;
@@ -67,7 +74,7 @@ type TestEl = HTMLElement & {
     close(): void;
     _retryMap(): void;
     _updateHint(): void;
-    _tiles: { fire(t: string, ev?: unknown): void; remove(): void } | null;
+    _addressFeatures: Map<number, StoreFeature>;
 };
 
 async function seedI18n() {
@@ -122,10 +129,11 @@ async function openModal(props: Record<string, unknown>): Promise<TestEl> {
 }
 
 async function mapReady(el: TestEl): Promise<void> {
-    // Leaflet + Geoman грузятся динамическими import'ами — ждём реальный init.
-    for (let i = 0; i < 100 && !el._map?._loaded; i++) await aTimeout(30);
+    // MapLibre + terra-draw грузятся динамическими import'ами — ждём
+    // реальный init (draw создаётся по load-хуку карты).
+    for (let i = 0; i < 200 && !(el._map && el._draw); i++) await aTimeout(30);
     expect(el._map, 'карта редактора инициализирована').to.exist;
-    expect(el._map!.pm, 'geoman активен на карте').to.exist;
+    expect(el._draw, 'terra-draw активен на карте').to.exist;
 }
 
 function ztool(el: TestEl, text: string): HTMLButtonElement {
@@ -144,9 +152,35 @@ function applyBtn(el: TestEl): HTMLElement {
     return found!;
 }
 
-async function clickMap(el: TestEl, lat: number, lng: number): Promise<void> {
-    el._map!.fire('click', { latlng: { lat, lng } });
-    await aTimeout(20);
+/**
+ * Клик по карте боевым путём terra-draw: адаптер слушает pointerdown/
+ * pointerup на canvas и переводит clientX/clientY в lng/lat через unproject.
+ */
+async function clickMap(el: TestEl, lng: number, lat: number): Promise<void> {
+    const canvas = el._map!.getCanvas();
+    const rect = canvas.getBoundingClientRect();
+    const point = el._map!.project([lng, lat]);
+    const init = {
+        clientX: rect.left + point.x,
+        clientY: rect.top + point.y,
+        bubbles: true,
+        composed: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+    };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', init));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0 }));
+    await aTimeout(30);
+}
+
+/** Finish боевым путём: polygon-режим завершает по keyup Enter на canvas. */
+async function finishDraw(el: TestEl): Promise<void> {
+    el._map!.getCanvas().dispatchEvent(
+        new KeyboardEvent('keyup', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    await aTimeout(80);
 }
 
 describe('shop-zone-editor-modal', function () {
@@ -159,7 +193,7 @@ describe('shop-zone-editor-modal', function () {
         await seedI18n();
     });
 
-    it('открытие без зоны → карта с geoman, пустые метрики, «Применить» активна', async () => {
+    it('открытие без зоны → карта с terra-draw, пустые метрики, «Применить» активна', async () => {
         const applied: Array<Record<string, unknown>> = [];
         const modal = await openModal({
             zone: {},
@@ -169,20 +203,18 @@ describe('shop-zone-editor-modal', function () {
         });
         await mapReady(modal);
         await elementUpdated(modal);
-        // leaflet.css/geoman.css обязаны жить в shadow root: стили из head
-        // не проходят сквозь shadow boundary — без них тайлы «пазлом».
+        // maplibre-gl.css обязана жить в shadow root: стили из head
+        // не проходят сквозь shadow boundary.
         const links = [...modal.shadowRoot.querySelectorAll('link[rel="stylesheet"]')].map((l) =>
             (l as HTMLLinkElement).href,
         );
-        expect(links.some((h) => h.includes('leaflet.css')), 'leaflet.css в shadow root').to.equal(true);
-        expect(links.some((h) => h.includes('geoman')), 'geoman css в shadow root').to.equal(true);
-        const tile = modal.shadowRoot.querySelector<HTMLElement>('.leaflet-tile');
-        expect(tile, 'тайл загружен').to.exist;
-        expect(getComputedStyle(tile!).position, 'тайл позиционируется абсолютно').to.equal('absolute');
-        const attribution = modal.shadowRoot.querySelector('.leaflet-control-attribution');
-        expect(attribution?.textContent ?? '', 'префикс Leaflet с флагом убран').to.not.include('Leaflet');
-        expect(attribution?.textContent ?? '', 'атрибуция OSM на месте').to.include('OpenStreetMap');
-        expect(modal._polygon).to.equal(null);
+        expect(links.some((h) => h.includes('maplibre-gl.css')), 'maplibre-gl.css в shadow root').to.equal(true);
+        const canvas = modal.shadowRoot.querySelector<HTMLElement>('canvas.maplibregl-canvas');
+        expect(canvas, 'canvas карты смонтирован').to.exist;
+        const attribution = modal.shadowRoot.querySelector('.maplibregl-ctrl-attrib');
+        expect(attribution, 'атрибуция MapLibre на месте').to.exist;
+        expect(modal._draw!.getSnapshot().filter((f) => f.geometry.type === 'Polygon').length)
+            .to.equal(0);
         expect(modal._points).to.equal(0);
         expect(modal.shadowRoot.querySelector('.ztools'), 'панель инструментов').to.exist;
         expect(modal.shadowRoot.querySelector('.zstats')).to.equal(null);
@@ -192,14 +224,14 @@ describe('shop-zone-editor-modal', function () {
         expect(applied[0]).to.deep.equal({});
     });
 
-    it('существующая зона → полигон с pm.enable + метрики площади/периметра/точек', async () => {
+    it('существующая зона → полигон в terra-draw + метрики площади/периметра/точек', async () => {
         const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
         await mapReady(modal);
         await elementUpdated(modal);
-        const poly = modal._polygon;
-        expect(poly, 'полигон на карте').to.exist;
-        expect(poly!.pm.enabled(), 'geoman edit-режим включён').to.equal(true);
-        expect(modal._points).to.equal(4); // Leaflet хранит кольцо без дубля замыкающей точки
+        const polygons = modal._draw!.getSnapshot().filter((f) => f.geometry.type === 'Polygon');
+        expect(polygons.length, 'полигон в terra-draw store').to.equal(1);
+        expect(modal._draw!.getMode(), 'select-режим после загрузки зоны').to.equal('select');
+        expect(modal._points).to.equal(4);
         expect(modal._areaM2, 'площадь > 0').to.be.greaterThan(0);
         expect(modal._perimM, 'периметр > 0').to.be.greaterThan(0);
         const stats = modal.shadowRoot.querySelector('.zstats');
@@ -207,7 +239,7 @@ describe('shop-zone-editor-modal', function () {
         expect(stats!.textContent).to.include('км²');
     });
 
-    it('рисование через Geoman: enableDraw → 3 клика → dblclick → pm:create → полигон', async () => {
+    it('рисование через terra-draw: polygon-режим → 3 клика → Enter → полигон', async () => {
         const applied: Array<Record<string, unknown>> = [];
         const modal = await openModal({
             zone: {},
@@ -219,19 +251,18 @@ describe('shop-zone-editor-modal', function () {
         ztool(modal, 'Рисовать зону').click();
         await elementUpdated(modal);
         expect(modal._drawing).to.equal(true);
-        expect(modal._map!.pm.globalDrawModeEnabled(), 'geoman draw-режим').to.equal(true);
+        expect(modal._draw!.getMode(), 'terra-draw polygon-режим').to.equal('polygon');
 
-        await clickMap(modal, 55.7, 37.5);
-        await clickMap(modal, 55.7, 37.7);
-        await clickMap(modal, 55.8, 37.6);
-        modal._map!.fire('dblclick', { latlng: { lat: 55.8, lng: 37.6 } });
-        await aTimeout(80);
+        await clickMap(modal, 37.5, 55.7);
+        await clickMap(modal, 37.7, 55.7);
+        await clickMap(modal, 37.6, 55.8);
+        await finishDraw(modal);
 
         expect(modal._drawing).to.equal(false);
-        const poly = modal._polygon;
-        expect(poly, 'полигон создан Geoman').to.exist;
+        const polygons = modal._draw!.getSnapshot().filter((f) => f.geometry.type === 'Polygon');
+        expect(polygons.length, 'полигон создан terra-draw').to.equal(1);
         expect(modal._points, 'вершин на слое').to.be.greaterThanOrEqual(3);
-        expect(poly!.pm.enabled(), 'свежий слой в edit-режиме').to.equal(true);
+        expect(modal._draw!.getMode(), 'назад в select-режим после finish').to.equal('select');
 
         applyBtn(modal).click();
         await aTimeout(30);
@@ -240,7 +271,8 @@ describe('shop-zone-editor-modal', function () {
         expect(zone.type).to.equal('Polygon');
         const ring = zone.coordinates[0]!;
         expect(ring[0]).to.deep.equal(ring[ring.length - 1]);
-        expect(ring[0]).to.deep.equal([37.5, 55.7]); // GeoJSON [lng, lat]
+        expect(ring[0]![0]).to.be.closeTo(37.5, 0.01); // GeoJSON [lng, lat]
+        expect(ring[0]![1]).to.be.closeTo(55.7, 0.01);
     });
 
     it('«Очистить» удаляет полигон; «Применить» отдаёт {} и модалка закрывается', async () => {
@@ -253,11 +285,13 @@ describe('shop-zone-editor-modal', function () {
         });
         await mapReady(modal);
         await elementUpdated(modal);
-        expect(modal._polygon).to.exist;
+        expect(modal._draw!.getSnapshot().filter((f) => f.geometry.type === 'Polygon').length)
+            .to.equal(1);
 
         ztool(modal, 'Очистить').click();
         await elementUpdated(modal);
-        expect(modal._polygon).to.equal(null);
+        expect(modal._draw!.getSnapshot().filter((f) => f.geometry.type === 'Polygon').length)
+            .to.equal(0);
         expect(modal._points).to.equal(0);
 
         const closes: unknown[] = [];
@@ -291,14 +325,12 @@ describe('shop-zone-editor-modal', function () {
         expect((requested!.payload as Record<string, unknown>)['shop_id']).to.equal('shop_test');
     });
 
-    it('tileerror → error-state + «Повторить» пересоздаёт tile-слой', async () => {
+    it('error карты → error-state + «Повторить» пересоздаёт карту', async () => {
         const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
         await mapReady(modal);
         await elementUpdated(modal);
-        const tiles = modal._tiles;
-        expect(tiles, 'tile-слой поднят').to.exist;
 
-        tiles!.fire('tileerror', { coords: { x: 0, y: 0, z: 1 } });
+        modal._map!.fire('error', { error: new Error('boom') });
         await elementUpdated(modal);
         expect(modal._mapError).to.equal(true);
         expect(modal.shadowRoot.querySelector('.zerror'), 'error-overlay').to.exist;
@@ -316,12 +348,13 @@ describe('shop-zone-editor-modal', function () {
         expect(modal.shadowRoot.querySelector('.zerror')).to.equal(null);
     });
 
-    it('hasSelfIntersection → «Применить» заблокирована и warn-хинт', async () => {
+    it('self-intersection → «Применить» заблокирована и warn-хинт', async () => {
         const modal = await openModal({ zone: ZONE, address: '', shopId: 'shop_test', onApply: null });
         await mapReady(modal);
         await elementUpdated(modal);
-        // Боевой путь: Geoman сам не даст сделать self-intersection (allowSelfIntersection:false),
-        // но hasSelfIntersection перечитывается на каждом событии — проверяем реакцию.
+        // Боевой путь: terra-draw не даёт сделать self-intersection
+        // (ValidateNotSelfIntersecting на draw и select), но флаг
+        // перечитывается на каждом событии — проверяем реакцию UI.
         modal._selfIntersect = true;
         modal._updateHint();
         await elementUpdated(modal);
@@ -379,8 +412,8 @@ describe('shop-zone-editor-modal', function () {
             { timeout: 5_000 },
         );
         expect(panel.shadowRoot!.querySelector('.count')!.textContent).to.include('137');
-        // Маркеры адресов — на карте, по одному на строку.
-        expect((modal as unknown as { _addressMarkers: Map<number, unknown> })._addressMarkers.size).to.equal(2);
+        // Точки адресов — в geojson-source на карте, по одной на строку.
+        expect(modal._addressFeatures.size).to.equal(2);
     });
 
     it('поиск в панели → повторный запрос с q и offset=0', async () => {
@@ -403,7 +436,7 @@ describe('shop-zone-editor-modal', function () {
         expect(payloads.at(-1)!['offset']).to.equal(0);
     });
 
-    it('hover строки → address-hover и подсветка маркера на карте', async () => {
+    it('hover строки → address-hover и подсветка точки на карте', async () => {
         const items = [
             { id: 7, osm_type: 'node', osm_id: 70, display_name: 'Москва, Арбат, 5', city: '', street: '', housenumber: '', postcode: '', lat: 55.75, lng: 37.6 },
         ];
@@ -419,14 +452,13 @@ describe('shop-zone-editor-modal', function () {
         const row = panel.shadowRoot!.querySelector('.row') as HTMLElement;
         row.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, composed: true }));
         await aTimeout(30);
-        const markers = (modal as unknown as {
-            _addressMarkers: Map<number, { options: { radius: number; fillColor: string } }>;
-        })._addressMarkers;
-        const marker = markers.get(7)!;
-        expect(marker.options.radius, 'маркер увеличен на hover').to.equal(8);
-        expect(marker.options.fillColor, 'маркер подсвечен синим').to.equal('#155dfc');
+        const feature = modal._addressFeatures.get(7)!;
+        expect(feature.properties?.['hi'], 'точка подсвечена на hover').to.equal(true);
+        const source = modal._map!.getSource('zone-addresses');
+        const painted = source?._data?.geojson?.features?.[0] as StoreFeature | undefined;
+        expect(painted?.properties?.['hi'], 'hi-флаг ушёл в geojson-source').to.equal(true);
         row.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, composed: true }));
         await aTimeout(30);
-        expect(marker.options.radius, 'маркер вернулся').to.equal(5);
+        expect(modal._addressFeatures.get(7)!.properties?.['hi'], 'подсветка снята').to.equal(false);
     });
 });

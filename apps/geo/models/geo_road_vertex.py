@@ -29,4 +29,5 @@ class GeoRoadVertex(PlatformModel):
     node_id: int = DbField(db_type="BIGINT")
     lat: float = DbField()
     lng: float = DbField()
+    region: str = DbField(default="", max_length=64)
     generation: int = DbField(default=0)

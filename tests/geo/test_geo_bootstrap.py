@@ -30,12 +30,23 @@ import pytest
 from oxyde import execute_raw
 
 from apps.geo.config import GeoSettings
+from apps.geo.models.api import GeoBbox, GeoRegionUpsertRequest
+from apps.geo.models.geo_enrich_item import GeoEnrichItem
 from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
+from apps.geo.models.geo_region import GeoRegion, GeoRegionKind
+from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
+from apps.geo.models.geo_stats import GeoStats
+from apps.geo.services.geo_coverage_service import (
+    GeoCoverageError,
+    GeoCoverageService,
+)
+from apps.geo.services.geo_layer_service import GeoLayerService
 from apps.geo.services.osm_import_service import OsmImportService
 from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from apps.geo.worker import ensure_import_bootstrapped
 from apps.scheduler.dispatch import require_scheduled_tasks_registered
 from apps.worker_manifest import wire_all
+from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.tasks import enqueue
 from core.tasks.registry import registered_queue_brokers, scheduled_task_specs
 
@@ -52,14 +63,33 @@ pytestmark = pytest.mark.xdist_group("geo")
 _SEED_FLOOR = 500_000_000
 
 
+def _import_svc(settings: GeoSettings) -> OsmImportService:
+    """Прод-конструктор импортёра: настройки + реестр покрытия."""
+    return OsmImportService(settings, GeoCoverageService(settings))
+
+
 @pytest.fixture(autouse=True)
 async def _clean_import_generations() -> None:
-    for table in ("geo_addresses", "geo_road_vertices", "geo_road_edges"):
+    for table in (
+        "geo_addresses",
+        "geo_road_vertices",
+        "geo_road_edges",
+        "geo_turn_restrictions",
+        "geo_barriers",
+        "geo_traffic_signals",
+    ):
         _ = await execute_raw(
             f"DELETE FROM {table} WHERE generation < $1",
             [_SEED_FLOOR],
             using="geo",
         )
+    for table in (
+        "geo_regions",
+        "geo_stats",
+        "geo_source_cursors",
+        "geo_enrich_queue",
+    ):
+        _ = await execute_raw(f"DELETE FROM {table}", using="geo")
 
 
 async def _set_state(
@@ -175,7 +205,7 @@ class TestEnsureBootstrapped:
         """Lifecycle воркера: поколение 0 → enqueue → живой импорт → publish."""
         _ = geo_worker
         await _set_state(generation=0, source_modified_at=None)
-        svc = OsmImportService(GeoSettings())
+        svc = _import_svc(GeoSettings())
         # Сама рецепт-функция из worker.py — ровно то, что зовёт startup.
         await ensure_import_bootstrapped(svc)
 
@@ -184,6 +214,9 @@ class TestEnsureBootstrapped:
         assert state.rows_addresses == 4
         assert state.rows_vertices == 8
         assert state.rows_edges == 9
+        assert state.rows_restrictions == 2
+        assert state.rows_barriers == 1
+        assert state.rows_signals == 1
         assert state.source_modified_at is not None
         assert state.last_error == ""
         gen = state.current_generation
@@ -197,7 +230,7 @@ class TestEnsureBootstrapped:
         snapshot = await _snapshot_state()
         _ = await execute_raw("DELETE FROM geo_import_state WHERE id = 1", using="geo")
         try:
-            svc = OsmImportService(GeoSettings())
+            svc = _import_svc(GeoSettings())
             assert await svc.ensure_bootstrapped() is True
             state = await _wait_generation_at_least(1)
             assert state.rows_addresses == 4
@@ -210,7 +243,7 @@ class TestEnsureBootstrapped:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=max(snapshot[0], 5))
-            svc = OsmImportService(GeoSettings())
+            svc = _import_svc(GeoSettings())
             assert await svc.ensure_bootstrapped() is False
             # Состояние не тронуто — enqueue не произошёл.
             assert (await _state()).current_generation == max(snapshot[0], 5)
@@ -225,8 +258,8 @@ class TestEnsureBootstrapped:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            disabled = OsmImportService(GeoSettings(sync_enabled=False))
-            no_urls = OsmImportService(GeoSettings(osm_extract_urls=[]))
+            disabled = _import_svc(GeoSettings(sync_enabled=False))
+            no_urls = _import_svc(GeoSettings(osm_extract_urls=[]))
             assert await disabled.ensure_bootstrapped() is False
             assert await no_urls.ensure_bootstrapped() is False
             assert (await _state()).current_generation == 0
@@ -247,7 +280,7 @@ class TestRunSyncFile:
         _ = src.write_bytes(_MICRO.read_bytes())
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{src}"])
             )
             result = await svc.run_sync()
@@ -255,6 +288,9 @@ class TestRunSyncFile:
             assert result["rows_addresses"] == 4
             assert result["rows_vertices"] == 8
             assert result["rows_edges"] == 9
+            assert result["rows_restrictions"] == 2
+            assert result["rows_barriers"] == 1
+            assert result["rows_signals"] == 1
             assert src.is_file()
 
             state = await _state()
@@ -272,13 +308,16 @@ class TestRunSyncFile:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{_MICRO_PBF}"])
             )
             result = await svc.run_sync()
             assert result["imported"] is True
             assert result["rows_addresses"] == 4
             assert result["rows_edges"] == 9
+            assert result["rows_restrictions"] == 2
+            assert result["rows_barriers"] == 1
+            assert result["rows_signals"] == 1
             assert _MICRO_PBF.is_file()
         finally:
             await _restore_state(snapshot)
@@ -289,7 +328,7 @@ class TestRunSyncFile:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{_MICRO}"])
             )
             first = await svc.run_sync()
@@ -310,7 +349,7 @@ class TestRunSyncFile:
         _ = src.write_bytes(_MICRO.read_bytes())
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{src}"])
             )
             _ = await svc.run_sync()
@@ -340,7 +379,7 @@ class TestRunSyncFile:
         _ = src.write_bytes(_MICRO.read_bytes())
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{src}"])
             )
             _ = await svc.run_sync()
@@ -371,7 +410,7 @@ class TestRunSyncFile:
         _ = bad.write_text("<osm><node", encoding="utf-8")
         try:
             await _set_state(generation=7, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{bad}"])
             )
             with pytest.raises(Exception):
@@ -396,7 +435,7 @@ class TestRunSyncFile:
         )
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{empty}"])
             )
             result = await svc.run_sync()
@@ -416,7 +455,7 @@ class TestRunSyncFile:
         _ = big.write_text(_osm_with_addresses(150), encoding="utf-8")
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(
                     osm_extract_urls=[f"file://{big}"],
                     import_batch_size=100,
@@ -438,7 +477,7 @@ class TestRunSyncFile:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[f"file://{_MICRO}"])
             )
             _ = await svc.run_sync()
@@ -460,7 +499,7 @@ class TestRunSyncFile:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=3, source_modified_at=None)
-            svc = OsmImportService(GeoSettings(sync_enabled=False))
+            svc = _import_svc(GeoSettings(sync_enabled=False))
             result = await svc.run_sync()
             assert result == {"skipped": True, "reason": "sync_disabled"}
             state = await _state()
@@ -481,20 +520,22 @@ class TestRunSyncHttp:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[_EMU_URL])
             )
-            tmp_glob = Path(tempfile.gettempdir()).glob("tmp*.osm.pbf")
-            before_tmps = set(tmp_glob)
+            before_tmps = set(Path(tempfile.gettempdir()).glob("tmp*.osm.pbf"))
             result = await svc.run_sync()
             assert result["imported"] is True
             assert result["rows_addresses"] == 4
             assert result["rows_edges"] == 9
+            assert result["rows_restrictions"] == 2
+            assert result["rows_barriers"] == 1
+            assert result["rows_signals"] == 1
             state = await _state()
             assert state.current_generation == 1
             assert state.source_modified_at is not None
             # Скачанный tmp-файл удалён после парсинга.
-            assert set(tmp_glob) == before_tmps
+            assert set(Path(tempfile.gettempdir()).glob("tmp*.osm.pbf")) == before_tmps
 
             second = await svc.run_sync()
             assert second == {"skipped": True, "reason": "not_modified"}
@@ -510,7 +551,7 @@ class TestRunSyncHttp:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=0, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(osm_extract_urls=[_EMU_NO_LM_URL])
             )
             first = await svc.run_sync()
@@ -530,7 +571,7 @@ class TestRunSyncHttp:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=5, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(
                     osm_extract_urls=[
                         "http://127.0.0.1:18099/extracts/missing.osm.pbf"
@@ -552,7 +593,7 @@ class TestRunSyncHttp:
         snapshot = await _snapshot_state()
         try:
             await _set_state(generation=6, source_modified_at=None)
-            svc = OsmImportService(
+            svc = _import_svc(
                 GeoSettings(
                     osm_extract_urls=[
                         "http://127.0.0.1:19999/extracts/x.osm.pbf"
@@ -598,6 +639,9 @@ class TestTickAndRegistration:
             "rows_addresses": 4,
             "rows_vertices": 8,
             "rows_edges": 9,
+            "rows_restrictions": 2,
+            "rows_barriers": 1,
+            "rows_signals": 1,
         }
         state = await _state()
         assert state.current_generation == 1
@@ -619,3 +663,276 @@ class TestTickAndRegistration:
         assert any(isinstance(o, dict) and o.get("skipped") for o in outcomes)
         # Если оба прошли — импорт ровно один, второго поколения нет.
         assert (await _state()).current_generation == 1
+
+
+class TestCoverageRegistry:
+    """Реестр покрытия: сид дефолтного региона, per-регион счётчики,
+    источники, курсоры и очередь обогащения."""
+
+    async def test_import_seeds_region_stats_and_marks_rows(
+        self, geo_service: None
+    ) -> None:
+        """Первый импорт сидит регион: строки данных и geo_stats его помечены."""
+        _ = geo_service
+        snapshot = await _snapshot_state()
+        try:
+            await _set_state(generation=0, source_modified_at=None)
+            svc = _import_svc(GeoSettings(osm_extract_urls=[f"file://{_MICRO}"]))
+            result = await svc.run_sync()
+            assert result["imported"] is True
+            gen = (await _state()).current_generation
+
+            region = await GeoRegion.by_name("moscow")
+            assert region is not None
+            assert region.extract_urls == [f"file://{_MICRO}"]
+            assert region.last_imported_at is not None
+
+            rows = await execute_raw(
+                "SELECT DISTINCT region FROM geo_addresses WHERE generation = $1",
+                [gen],
+                using="geo",
+            )
+            assert [r["region"] for r in rows] == ["moscow"]
+
+            stats = await GeoStats.list_for_generation(gen)
+            assert {s.entity: s.rows for s in stats} == {
+                "addresses": 4,
+                "vertices": 8,
+                "edges": 9,
+                "restrictions": 2,
+                "barriers": 1,
+                "signals": 1,
+            }
+            assert {s.source for s in stats} == {"osm"}
+
+            coverage = GeoCoverageService(GeoSettings())
+            overview = await coverage.stats_overview()
+            assert overview.generation == gen
+            assert overview.totals["addresses"] == 4
+            regions = await coverage.regions_response()
+            assert regions.generation == gen
+            assert regions.items[0].addresses == 4
+        finally:
+            await _restore_state(snapshot)
+
+    async def test_registry_overrides_settings(
+        self, geo_service: None, tmp_path: Path
+    ) -> None:
+        """Непустой ``geo_regions`` — источник истины: настройки не сидятся."""
+        _ = geo_service
+        snapshot = await _snapshot_state()
+        src = tmp_path / "town.osm"
+        _ = src.write_bytes(_MICRO.read_bytes())
+        try:
+            await _set_state(generation=0, source_modified_at=None)
+            now = datetime.now(UTC)
+            _ = await GeoRegion.objects.create(
+                instance=GeoRegion(
+                    name="town",
+                    title="Городок",
+                    kind=GeoRegionKind.CITY,
+                    bbox_south=54.0,
+                    bbox_west=35.0,
+                    bbox_north=57.0,
+                    bbox_east=41.0,
+                    extract_urls=[f"file://{src}"],
+                    enabled=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            # Настройки указывают на несуществующий файл — он не должен читаться.
+            svc = _import_svc(GeoSettings(osm_extract_urls=["file:///absent.osm"]))
+            result = await svc.run_sync()
+            assert result["imported"] is True
+            assert result["rows_addresses"] == 4
+            assert await GeoRegion.count_all() == 1
+            stats = await GeoStats.list_for_generation(
+                (await _state()).current_generation
+            )
+            assert {s.region for s in stats} == {"town"}
+        finally:
+            await _restore_state(snapshot)
+
+    async def test_region_crud_and_errors(self) -> None:
+        """create/update/delete + конфликт, отсутствие и невалидный bbox."""
+        svc = GeoCoverageService(GeoSettings())
+        payload = GeoRegionUpsertRequest(
+            name="spb",
+            title="Санкт-Петербург",
+            bbox=GeoBbox(south=59.6, west=29.4, north=60.3, east=31.0),
+            extract_urls=["file:///tmp/spb.osm"],
+        )
+        item = await svc.create_region(payload)
+        assert item.name == "spb"
+        with pytest.raises(PlatformConflictError):
+            _ = await svc.create_region(payload)
+
+        updated = await svc.update_region(
+            GeoRegionUpsertRequest(
+                name="spb",
+                title="Питер",
+                bbox=payload.bbox,
+                extract_urls=payload.extract_urls,
+            )
+        )
+        assert updated.title == "Питер"
+
+        await svc.delete_region("spb")
+        with pytest.raises(PlatformNotFoundError):
+            _ = await svc.delete_region("spb")
+
+        with pytest.raises(GeoCoverageError):
+            _ = await svc.create_region(
+                GeoRegionUpsertRequest(
+                    name="bad",
+                    bbox=GeoBbox(south=60.0, west=29.0, north=59.0, east=31.0),
+                )
+            )
+
+    async def test_sources_cursors_and_enrich_views(self) -> None:
+        """Allowlist источников, курсоры потоков и очередь обогащения."""
+        svc = GeoCoverageService(GeoSettings())
+        await svc.ensure_seeded()
+        sources = await svc.sources_response()
+        assert {"osm", "manual"} <= {s.name for s in sources.items}
+        osm = next(s for s in sources.items if s.name == "osm")
+        assert osm.enabled and "ODbL" in osm.license
+
+        now = datetime.now(UTC)
+        _ = await GeoSourceCursor.objects.create(
+            instance=GeoSourceCursor(
+                source="nspd",
+                region="moscow",
+                cursor="page:7",
+                status=GeoCursorStatus.RUNNING,
+                rows_done=42,
+                updated_at=now,
+            )
+        )
+        cursors = await svc.cursors_response()
+        assert [(c.source, c.rows_done) for c in cursors.items] == [("nspd", 42)]
+
+        _ = await GeoEnrichItem.objects.create(
+            instance=GeoEnrichItem(
+                kind="building_nspd",
+                payload={"source_ref": "77:01:0001001:1234"},
+                priority=5,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        enrich = await svc.enrich_list_response(status=None, limit=10, offset=0)
+        assert enrich.pending == 1
+        assert enrich.items[0].kind == "building_nspd"
+
+
+class TestLayers:
+    """Канонические слои карты: реестр, счётчики и фичи по рамке."""
+
+    async def test_layers_counts_and_bbox_features(
+        self, geo_service: None
+    ) -> None:
+        """Импорт наполняет слои: счётчики, зум-фильтры, GeoJSON-фичи."""
+        _ = geo_service
+        snapshot = await _snapshot_state()
+        try:
+            await _set_state(generation=0, source_modified_at=None)
+            svc = _import_svc(GeoSettings(osm_extract_urls=[f"file://{_MICRO}"]))
+            result = await svc.run_sync()
+            assert result["imported"] is True
+
+            layers_svc = GeoLayerService()
+            listed = await layers_svc.layers_response()
+            counts = {layer.name: layer.features for layer in listed.layers}
+            assert counts == {
+                "regions": 1,
+                "roads": 9,
+                "addresses": 4,
+                "restrictions": 2,
+                "barriers": 1,
+                "signals": 1,
+            }
+            by_name = {layer.name: layer for layer in listed.layers}
+            assert by_name["roads"].min_zoom < by_name["addresses"].min_zoom
+
+            features = await layers_svc.features_response(
+                south=54.0, west=35.0, north=57.0, east=41.0, zoom=15,
+                layer_names=[],
+            )
+            per_layer = {f.layer for f in features.features}
+            assert per_layer == {
+                "regions", "roads", "addresses",
+                "restrictions", "barriers", "signals",
+            }
+            roads = [f for f in features.features if f.layer == "roads"]
+            assert roads[0].geometry["type"] == "LineString"
+            assert "highway" in roads[0].properties
+            # via-node рестрикция резолвит координаты; via-way — без geom,
+            # слой её не рендерит.
+            restrictions = [
+                f for f in features.features if f.layer == "restrictions"
+            ]
+            assert len(restrictions) == 1
+            assert restrictions[0].geometry["type"] == "Point"
+            assert restrictions[0].properties["restriction"] == "no_left_turn"
+            barriers = [
+                f for f in features.features if f.layer == "barriers"
+            ]
+            assert len(barriers) == 1
+            assert barriers[0].properties["barrier"] == "bollard"
+            assert barriers[0].properties["block_car"] is True
+            assert barriers[0].properties["block_foot"] is False
+            signals = [
+                f for f in features.features if f.layer == "signals"
+            ]
+            assert len(signals) == 1
+            assert signals[0].properties["osm_node_id"] == 2
+            assert features.truncated is False
+
+            # Сырые ссылки отношений: from/to way, via node/way.
+            rel_rows = await execute_raw(
+                "SELECT restriction, via_node, via_way, via_lat IS NOT NULL"
+                + " AS has_coords FROM geo_turn_restrictions"
+                + " WHERE generation = $1 ORDER BY osm_relation_id",
+                [(await _state()).current_generation],
+                using="geo",
+            )
+            assert [
+                (r["restriction"], r["via_node"], r["via_way"], r["has_coords"])
+                for r in rel_rows
+            ] == [
+                ("no_left_turn", 2, None, True),
+                ("no_u_turn", None, 16, False),
+            ]
+
+            # Под min_zoom адресного слоя — дороги видны, адреса нет.
+            low_zoom = await layers_svc.features_response(
+                south=54.0, west=35.0, north=57.0, east=41.0, zoom=12,
+                layer_names=[],
+            )
+            assert {f.layer for f in low_zoom.features} == {"regions", "roads"}
+
+            only_roads = await layers_svc.features_response(
+                south=54.0, west=35.0, north=57.0, east=41.0, zoom=15,
+                layer_names=["roads"],
+            )
+            assert {f.layer for f in only_roads.features} == {"roads"}
+        finally:
+            await _restore_state(snapshot)
+
+    async def test_features_errors(self) -> None:
+        """Невалидная рамка и неизвестный слой — доменные ошибки."""
+        svc = GeoLayerService()
+        with pytest.raises(GeoCoverageError) as bad_bbox:
+            _ = await svc.features_response(
+                south=57.0, west=35.0, north=54.0, east=41.0, zoom=15,
+                layer_names=[],
+            )
+        assert bad_bbox.value.code == "geo_bbox_invalid"
+        with pytest.raises(GeoCoverageError) as unknown:
+            _ = await svc.features_response(
+                south=54.0, west=35.0, north=57.0, east=41.0, zoom=15,
+                layer_names=["moon"],
+            )
+        assert unknown.value.code == "geo_layer_unknown"

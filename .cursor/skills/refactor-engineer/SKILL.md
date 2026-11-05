@@ -66,7 +66,7 @@ description: "Автономный рефакторинг Платформы п�
 
 - Гейт есть — запустить, зафиксировать N.
 - Гейта нет — добавить проверку в существующий скрипт `scripts/` того же канона; новый скрипт — только если подходящего нет, тогда он регистрируется в `mk/lint.mk` (`_lint-py`) или в `check-events-canon` (`Makefile`). Детектор обязан упасть на текущем коде в границе среза — иначе он ничего не ловит.
-- Долг больше одного среза — ratchet-метрика в `scripts/gates/backend/ratchet_counts.py` (`METRICS`) с текущим числом в `scripts/gates/backend/ratchet_baseline.json`; срез снижает число.
+- Остаток больше одного среза — ratchet-метрика в `scripts/gates/backend/ratchet_counts.py` (`METRICS`) с текущим числом в `scripts/gates/backend/ratchet_baseline.json`; срез снижает число.
 - Allowlist — только принципиальные исключения, каждое оформлено `Исключение:` в правиле-владельце.
 - В правиле-владельце снять метку `[без гейта]` и вписать гейт в раздел «Гейты».
 
@@ -77,12 +77,12 @@ description: "Автономный рефакторинг Платформы п�
 - Playbook класса — `references/playbooks.md`.
 - Место кода — по тесту `main.mdc` § Куда писать код.
 - Контракт меняется целиком: сигнатура, payload, response, события, UI-фабрики, тесты, фикстуры, документация.
-- Старый путь удаляется: wrapper, alias, re-export, compat, deprecated-метод не остаются.
+- Заменяемый путь убирается целиком: wrapper, alias, re-export, слой совместимости и методы-заглушки не остаются.
 - Новый код — только в каноническом месте: `models/<entity>.py`, `services/`, `realtime/`, `api/`, `core/clients/`, `core/<domain>/`.
 
 ### 7. Проверка
 
-- Детектор среза: 0 в границе. Повторный discovery границы не находит старое имя или путь.
+- Детектор среза: 0 в границе. Повторный discovery границы не находит заменённое имя или путь.
 - `uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py /tmp/refactor_gates_after` — новых падений относительно baseline нет; `make lint` зелёный, если baseline был зелёным.
 - Ratchet снизился — `uv run python -m scripts.gates.backend.ratchet_counts --update` (только вниз).
 - Тесты: `make test-up` один раз, затем `uv run pytest tests/<домен>/ -q` и архитектурные тесты (`tests/core/di/test_service_kit.py`, `tests/core/realtime/test_command_owners.py`, `tests/realtime/test_<svc>_commands.py`); UI — `make ui`.
@@ -98,7 +98,7 @@ description: "Автономный рефакторинг Платформы п�
 
 - срез, инвариант, норма-владелец;
 - детектор: был или добавлен; находил N → 0;
-- что перенесено и удалено (старые пути и имена);
+- что перенесено и убрано (заменённые пути и имена);
 - проверки: шаги lint до/после, тесты; pre-existing падения отдельно;
 - ratchet до → после;
 - следующий срез из свежего discovery.
@@ -119,7 +119,7 @@ description: "Автономный рефакторинг Платформы п�
 
 ## Запреты процесса
 
-- `cast`, `# type: ignore`, `Any`, `object`, `getattr(..., default)`, `or`-фолбек, локальный импорт, wrapper, alias, shim, compat-слой ради зелёного прогона.
+- `cast`, `# type: ignore`, `Any`, `object`, `getattr(..., default)`, `or`-фолбек, локальный импорт, wrapper, alias, заглушка, слой совместимости ради зелёного прогона.
 - Ослабление гейта, расширение allowlist ради прохождения, `--update` ratchet вверх, `pytest.skip`, `AsyncMock`, `monkeypatch` внутренних компонентов.
 - Правки вне границы среза, попутный cleanup несвязанного кода, форматирование чужих файлов.
 - Новый канон без правки правила-владельца.

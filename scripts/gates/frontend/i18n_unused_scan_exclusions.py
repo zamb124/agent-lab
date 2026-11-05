@@ -46,6 +46,7 @@ _SCAN_EXCLUDED_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"^flows\.operator\.status_"),
     re.compile(r"^flows\.canvas\.context_menu\."),
     re.compile(r"^documents\.list\.docType\."),
+    re.compile(r"^geo\.(layers\.\w+|route_lab\.mode_\w+|sources\.kind_\w+)$"),
     re.compile(r"^platform\.errors\."),
 )
 

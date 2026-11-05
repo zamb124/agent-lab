@@ -186,9 +186,9 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awai
             try:
                 consumers = await r.xinfo_consumers(queue_name, queue_name)
             except Exception as exc:
-                if (
-                    isinstance(exc, RedisResponseError)
-                    and "NOGROUP" in str(exc).upper()
+                msg = str(exc).upper()
+                if isinstance(exc, RedisResponseError) and (
+                    "NOGROUP" in msg or "NO SUCH KEY" in msg
                 ):
                     logger.info(
                         "task.stale_recover_skipped",

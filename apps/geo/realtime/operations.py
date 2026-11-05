@@ -11,25 +11,46 @@ from apps.geo.models.api import (
     GeoAddressListResponse,
     GeoAddressNearestRequest,
     GeoAddressSuggestRequest,
+    GeoCursorListResponse,
+    GeoEnrichListRequest,
+    GeoEnrichListResponse,
+    GeoFeatureCollectionResponse,
+    GeoFeaturesRequest,
+    GeoImportRunResponse,
     GeoImportStatusResponse,
     GeoIsochroneRequest,
     GeoIsochroneResponse,
+    GeoLayerListResponse,
+    GeoRegionItem,
+    GeoRegionListResponse,
+    GeoRegionNameRequest,
+    GeoRegionUpsertRequest,
     GeoRouteCalculateRequest,
     GeoRouteMatrixRequest,
     GeoRouteMatrixResponse,
     GeoRouteOrderRequest,
     GeoRouteOrderResponse,
     GeoRouteResponse,
+    GeoSourceListResponse,
+    GeoStatsOverview,
 )
 from apps.geo.models.geo_import_state import GeoImportState
+from apps.geo.services.geo_coverage_service import GeoCoverageError
 from apps.geo.services.geo_routing_service import GeoRoutingError
-from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
+from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
+from core.errors.boundary import (
+    PlatformConflictError,
+    PlatformNotFoundError,
+    PlatformUnavailableError,
+)
 from core.models.identity_models import User
 from core.request_scope import require_company, require_company_admin
+from core.tasks import enqueue
 from core.types import JsonObject
 from core.utils.geo import is_valid_delivery_zone
 from core.websocket import EmptyPayload
 from core.websocket.operation import (
+    raise_conflict,
     raise_invalid,
     raise_not_found,
     raise_unavailable,
@@ -55,6 +76,18 @@ async def _routing[T](call: Awaitable[T]) -> T:
         raise_not_found(exc)
     except PlatformUnavailableError as exc:
         raise_unavailable(exc)
+
+
+async def _coverage[T](call: Awaitable[T]) -> T:
+    """Граница ошибок реестра покрытия: доменные исключения → коды транспорта."""
+    try:
+        return await call
+    except GeoCoverageError as exc:
+        raise_invalid(exc, error_code=exc.code)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
 
 
 async def op_geo_addresses_in_zone(
@@ -177,6 +210,114 @@ async def op_geo_import_status(
         rows_addresses=state.rows_addresses,
         rows_vertices=state.rows_vertices,
         rows_edges=state.rows_edges,
+        rows_restrictions=state.rows_restrictions,
         last_error=state.last_error,
         finished_at=state.finished_at.isoformat() if state.finished_at else None,
+    )
+
+
+async def op_geo_import_run(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoImportRunResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    _ = payload
+    _ = await enqueue(GEO_OSM_SYNC_TICK)
+    return GeoImportRunResponse(enqueued=True)
+
+
+async def op_geo_regions_list(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoRegionListResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    _ = payload
+    return await di.geo_coverage_service.regions_response()
+
+
+async def op_geo_regions_create(
+    payload: GeoRegionUpsertRequest, *, user: User, di: Di
+) -> GeoRegionItem:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await _coverage(di.geo_coverage_service.create_region(payload))
+
+
+async def op_geo_regions_update(
+    payload: GeoRegionUpsertRequest, *, user: User, di: Di
+) -> GeoRegionItem:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await _coverage(di.geo_coverage_service.update_region(payload))
+
+
+async def op_geo_regions_remove(
+    payload: GeoRegionNameRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    await _coverage(di.geo_coverage_service.delete_region(payload.name))
+    return EmptyPayload()
+
+
+async def op_geo_sources_list(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoSourceListResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    _ = payload
+    return await di.geo_coverage_service.sources_response()
+
+
+async def op_geo_stats_overview(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoStatsOverview:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    _ = payload
+    return await di.geo_coverage_service.stats_overview()
+
+
+async def op_geo_cursors_list(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoCursorListResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    _ = payload
+    return await di.geo_coverage_service.cursors_response()
+
+
+async def op_geo_enrich_list(
+    payload: GeoEnrichListRequest, *, user: User, di: Di
+) -> GeoEnrichListResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await di.geo_coverage_service.enrich_list_response(
+        status=payload.status, limit=payload.limit, offset=payload.offset
+    )
+
+
+async def op_geo_layers_list(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> GeoLayerListResponse:
+    _ = require_company()
+    _ = user
+    _ = payload
+    return await di.geo_layer_service.layers_response()
+
+
+async def op_geo_layers_features(
+    payload: GeoFeaturesRequest, *, user: User, di: Di
+) -> GeoFeatureCollectionResponse:
+    _ = require_company()
+    _ = user
+    return await _coverage(
+        di.geo_layer_service.features_response(
+            south=payload.south,
+            west=payload.west,
+            north=payload.north,
+            east=payload.east,
+            zoom=payload.zoom,
+            layer_names=payload.layers,
+        )
     )

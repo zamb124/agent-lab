@@ -30,7 +30,7 @@
 Когда: M1, M2 — таблица в `db/models.py`, несколько таблиц в одном файле, `apps/<svc>/db/`.
 
 1. Одна таблица — один файл `apps/<svc>/models/<entity>.py` (flows — `apps/flows/src/models/`, домен в `core` — `core/<domain>/models/<entity>.py`), класс и его `@classmethod`-запросы переносятся без изменения поведения.
-2. Импорты всех потребителей (сервисы, api, realtime, tests, backfill, scripts) — на новый путь; re-export из старого модуля не оставлять.
+2. Импорты всех потребителей (сервисы, api, realtime, tests, backfill, scripts) — на новый путь; re-export из заменённого модуля не оставлять.
 3. `migrations/services.json`: `models_module` указывает на пакет с моделями; `uv run python -m scripts.db.migrate --help` и тесты миграций подтверждают discovery.
 4. `scripts/gates/backend/cross_service_imports.py` разрешает `apps.<svc>.models.*` — импорт peer-моделей из `db` заменяется на `models`.
 5. Непустой `apps/<svc>/db/` после переноса — только DB-примитивы; они переезжают в `core/db/`, каталог удаляется.
@@ -53,8 +53,8 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 3. Имя — по `database.mdc` § Имена методов. Смысл не установлен по телу и вызывающим — метод не переименовывается.
 4. Приоритет: override generic-имени с другой семантикой → один смысл с разными return/error → два публичных имени одного запроса → синонимы PK CRUD → natural/composite key → list/transition/append/delete.
 5. В одном срезе не смешивать: optional → required и удаление PK-override; hard delete и soft delete/revoke; PK upsert и append/version; tenant-scope и naming.
-6. Сменить имя и сигнатуру, обновить всех вызывающих, тесты, фикстуры; удалить старое имя, re-export, `__all__`. `0 rows` не превращается в ошибку и обратно без полной миграции контракта.
-7. Тесты по контракту: optional — найдено/нет; required — найдено/точный not-found; create — успех/конфликт; insert-once — вставлено/уже есть; upsert — вставка/обновление; transition — разрешённый/отклонённый переход; list — фильтр/порядок/границы; delete — удалено/нет/тип возврата; `__global_model__` — своя/чужая компания; composite key — совпадение всех частей/одной нет.
+6. Сменить имя и сигнатуру, обновить всех вызывающих, тесты, фикстуры; убрать заменённое имя, re-export, `__all__`. `0 rows` не превращается в ошибку и обратно без полной миграции контракта.
+7. Тесты по контракту: optional — найдено/нет; required — найдено/точный not-found; create — успех/конфликт; insert-once — вставлено/уже есть; upsert — вставка/обновление; transition — разрешённый/отклонённый переход; list — фильтр/порядок/границы; delete — убрано/нет/тип возврата; `__global_model__` — своя/чужая компания; composite key — совпадение всех частей/одной нет.
 
 ## Первопричина потери типа
 
@@ -91,7 +91,7 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 
 1. Существующий клиент того же сервиса в `core/clients/` — использовать его; нет — перенести класс в `core/clients/<service>_client.py` поверх `ServiceClient`.
 2. Модель владельца доступна процессу (общая БД) — клиент не нужен: чтение через `await Model.method(...)` (`architecture.mdc` § Межсервисный доступ).
-3. Все импорты — на новый путь; старый модуль удаляется. Tools вызывают клиент тонким `@tool` (`tools.mdc`).
+3. Все импорты — на новый путь; заменённый модуль убирается. Tools вызывают клиент тонким `@tool` (`tools.mdc`).
 4. Прямой `httpx2.AsyncClient` к внешнему API — через `core/clients/` и `get_httpx_client` (`integrations.mdc`).
 
 ## Копипаста → `core`
@@ -132,4 +132,4 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 4. Нарушений больше одного среза — ratchet-метрика: `RatchetMetric` в `scripts/gates/backend/ratchet_counts.py` и текущее число в `scripts/gates/backend/ratchet_baseline.json` (`--update`).
 5. Новый скрипт — строка в `mk/lint.mk` (`_lint-py`) или зависимость `check-events-canon` в `Makefile`.
 6. Правило-владелец: снять `[без гейта]`, добавить гейт в «Гейты»; allowlist — только пункты `Исключение:`.
-7. Проверка: `gates_report.py` показывает новый шаг; `make lint` проходит, если долг оформлен ratchet.
+7. Проверка: `gates_report.py` показывает новый шаг; `make lint` проходит, если остаток оформлен ratchet.

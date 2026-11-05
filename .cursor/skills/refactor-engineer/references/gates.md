@@ -7,7 +7,7 @@
 - `make lint` = `_lint-py` + `lint-ts` (`mk/lint.mk`). `make lint <path>` — ruff + basedpyright на файл (`.py`) или `lint-ts` (`.js`, `.ts`).
 - `_lint-py` = `ruff check apps core` + `python -m scripts.gates --suite lint` + basedpyright + `analyze_imports.py`.
 - `lint-ts` = `tsc -p tsconfig.json` + `python -m scripts.gates --suite lint_ts`.
-- Сьют `lint_ts` включает бывший `check-events-canon`, кроме гейтов, которые уже в `lint` (файлы, MCP branding), плюс UI Kit, field canon и logging.
+- Сьют `lint_ts` покрывает канон событий, кроме гейтов уже в `lint` (файлы, MCP branding), плюс UI Kit, field canon и logging.
 - `make test-static` = `_lint-py` + `python -m scripts.gates --suite static` + `tests/core/ai/test_platform_model_scoring_fixtures.py`. Сьют `static` — `scripts/generate/a2a_fixtures.py --check`.
 - Сьют `network` — `scripts/gates/repo/ft_wheels.sh` и `scripts/generate/a2a_fixtures.py --check-remote`. Цель `make check-gpu-dockerfile-llm-model` — `scripts/gates/repo/gpu_dockerfile_llm_model.sh`. Документация — `scripts/gates/repo/docs_locale_parity.py`, `scripts/gates/repo/scenario_docs_quality.py`.
 - Отчёты без fail: `scripts/tools/report_ui_i18n_gaps.py`, `scripts/tools/report_ui_kostyli.py`.
@@ -23,7 +23,7 @@
 | `files/` | Files API, object store, `FileReader`, `file_id`, корпус, UI upload |
 | `voice/` | `voice_resolver`, speakable, один apply TTS-пайплайна |
 | `ai/` | модели только через `core.ai`, один реранк |
-| `flows/` | tags и контракты tools, MCP branding, Flow UI hard cut |
+| `flows/` | tags и контракты tools, MCP branding, канон Flow UI |
 | `sync/` | `op_adapters.py` — `op_*` зовут сервис |
 | `frontend/` | UI canon, field canon, фабрики, UI Kit, core frontend, embed ESM, i18n |
 | `repo/` | гигиена корня, `conf.json`, бренд, переменные, колёса, layout скриптов, документация |
@@ -38,8 +38,8 @@
 - Ratchet: рост — FAIL; снижение — OK и подсказка `--update`. Файлы по метрике — `.cursor/skills/refactor-engineer/scripts/ratchet_list.py <metric>`. Текущее число ниже baseline — `uv run python -m scripts.gates.backend.ratchet_counts --update`.
 - `analyze_imports.py`: читать `Total local imports`, а не код выхода.
 
-## Allowlist: принцип или долг
+## Allowlist: принцип или остаток
 
 - Принцип (не сокращается срезом): `PROTOCOL_HANDLERS`, `COMMAND_WS_HTTP_ALLOWLIST`, инфраструктурные точки Redis/TaskIQ, billing entrypoints, allowlist корня репозитория, `FGA_ONLY_*`. Каждый пункт — `Исключение:` в правиле-владельце.
-- Долг (сокращается срезами до 0): ratchet-baseline, `scripts/gates/backend/backend_error_i18n_baseline.json`, пути в `ALLOWLIST_PATHS`, не оформленные `Исключение:` в правиле.
+- Остаток (сокращается срезами до 0): ratchet-baseline, `scripts/gates/backend/backend_error_i18n_baseline.json`, пути в `ALLOWLIST_PATHS`, не оформленные `Исключение:` в правиле.
 - Новый пункт allowlist ради зелёного прогона запрещён; принципиальный — только вместе с `Исключение:` в правиле-владельце.

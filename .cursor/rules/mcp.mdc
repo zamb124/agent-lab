@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## Инварианты
 
-1. Platform defaults (Browser, Search, `source=platform`) создаёт `ensure_default_mcp_servers`; через Store они не удаляются.
+1. Platform defaults (Browser, Search, `source=platform`) создаёт `ensure_default_mcp_servers_for_company`; через Store они не удаляются.
 2. MCP Store: `GET /flows/api/v1/mcp/catalog?tier=store` (неизвестный `tier` — 400), `POST/DELETE .../mcp/catalog/{catalog_id}/install`; install идемпотентен (тот же `server_id`) и завершается sync tools; uninstall — любой `source=catalog` install компании.
 3. Политика `settings.mcp_catalog.auto_provision` — `disabled` (по умолчанию), `approved_only`, `all_verified`; provisioner (`provision_mcp_catalog_for_company`) добавляет, обновляет при смене hash без `override_locked`, деактивирует только `catalog_auto_provisioned=true`; `platform`, `manual` и opt-in installs не трогает.
 4. Правка managed-поля catalog-сервера (`PUT .../mcp/servers/{server_id}`) ставит `override_locked=true`; `POST .../reset_catalog_defaults` возвращает значения каталога и снимает lock.

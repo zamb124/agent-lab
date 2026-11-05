@@ -58,7 +58,7 @@ alwaysApply: false
 
 ## Запреты
 
-- Имена `task`, `task_id`, `operator_task_id`, `queue_id` и голый `id` для сущностей worktracker: `task_id` — id A2A и runtime, `core/tasks/` — TaskIQ. `[без гейта]`
+- Имена `task`, `task_id`, `queue_id` и голый `id` для сущностей worktracker: `task_id` — id A2A и runtime, `core/tasks/` — TaskIQ. `[без гейта]`
 - Таблицы `operator_*`, собственные таблицы задач и work-поля в CRM и flows. `[без гейта]`
 - Межсервисный HTTP и импорт `apps/` из `core/worktracker`. `[без гейта]`
 - Resume flow иначе чем по `worktracker/work_item/completed`. `[без гейта]`

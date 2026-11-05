@@ -1,8 +1,8 @@
 /**
- * ShopZoneMap — превью зоны доставки на карте (Leaflet + OSM).
+ * ShopZoneMap — превью зоны доставки на векторной карте (MapLibre).
  *
  * Только просмотр: полигон, центровка по магазину. Редактирование —
- * полноэкранная модалка `shop.zone_editor` (Geoman) по кнопке «Изменить»:
+ * полноэкранная модалка `shop.zone_editor` (terra-draw) по кнопке «Изменить»:
  * openModal с onApply → GeoJSON Polygon в событии `zone-changed`
  * (`detail.zone`, пустой объект — зоны нет), родитель сохраняет его в
  * `shop.delivery_zone` обычным `shop/shop_update`.
@@ -18,13 +18,14 @@ import type { PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { loadLeaflet, leafletCssLinks } from '@platform/lib/map/leaflet.js';
-import type { LeafletModule } from '@platform/lib/map/leaflet.js';
+import { loadMapLibre, maplibreCssLink } from '@platform/lib/map/maplibre.js';
+import type { MapLibreModule } from '@platform/lib/map/maplibre.js';
+import { createBasemap } from '@platform/lib/map/basemap.js';
+import type { PlatformMap } from '@platform/lib/map/basemap.js';
 
-type LeafletMap = import('leaflet').Map;
-type LeafletPolygon = import('leaflet').Polygon;
-type LeafletMarker = import('leaflet').Marker;
-type LatLngTuple = [number, number];
+type MapLibreMarker = import('maplibre-gl').Marker;
+
+type LngLatRing = [number, number][];
 
 interface ZoneChangedDetail {
     zone: Record<string, unknown>;
@@ -45,10 +46,9 @@ export class ShopZoneMap extends PlatformElement {
     declare shopId: string;
     declare _locating: boolean;
 
-    private _L: LeafletModule | null = null;
-    private _map: LeafletMap | null = null;
-    private _polygon: LeafletPolygon | null = null;
-    private _marker: LeafletMarker | null = null;
+    private _maplibre: MapLibreModule | null = null;
+    private _map: PlatformMap | null = null;
+    private _marker: MapLibreMarker | null = null;
     private _ro: ResizeObserver | null = null;
     private _mapSized = false;
 
@@ -120,6 +120,8 @@ export class ShopZoneMap extends PlatformElement {
         this._ro?.disconnect();
         this._ro = null;
         this._mapSized = false;
+        this._marker?.remove();
+        this._marker = null;
         this._map?.remove();
         this._map = null;
         super.disconnectedCallback();
@@ -131,50 +133,52 @@ export class ShopZoneMap extends PlatformElement {
     }
 
     private async _initMap(): Promise<void> {
-        const L = (this._L = await loadLeaflet());
+        this._maplibre = await loadMapLibre();
         const el = this.renderRoot.querySelector<HTMLElement>('.map');
         if (!el || this._map) return;
-        const map = (this._map = L.map(el, {
-            center: [55.7512, 37.6184],
+        const map = (this._map = await createBasemap(el, {
+            center: [37.6184, 55.7512],
             zoom: 11,
-            scrollWheelZoom: false,
-            zoomControl: false,
+            interactive: false,
         }));
-        map.attributionControl.setPrefix('');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap',
-            maxZoom: 19,
-        }).addTo(map);
-        // Контейнер мог быть display:none/0×0 при init (ленивые секции
-        // настроек) — Leaflet кэширует размер и рисует «уголки» тайлов.
-        // invalidateSize на реальный resize возвращает карту в норму, первый
-        // ненулевой размер — повод заново подогнать полигон под вьюпорт.
         this._ro = new ResizeObserver(() => {
             if (!this._map || !el.offsetWidth || !el.offsetHeight) return;
-            this._map.invalidateSize();
+            this._map.resize();
             if (!this._mapSized) {
                 this._mapSized = true;
-                if (this._polygon) {
-                    this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24], animate: false });
-                }
+                this._fitZone(false);
             }
         });
         this._ro.observe(el);
-        requestAnimationFrame(() => this._map?.invalidateSize());
-        this._renderZone();
+        map.once('load', () => {
+            map.addSource('zone', { type: 'geojson', data: this._zoneData() });
+            map.addLayer({
+                id: 'zone-fill',
+                type: 'fill',
+                source: 'zone',
+                paint: { 'fill-color': '#f2542d', 'fill-opacity': 0.12 },
+            });
+            map.addLayer({
+                id: 'zone-line',
+                type: 'line',
+                source: 'zone',
+                paint: { 'line-color': '#f2542d', 'line-width': 2.5 },
+            });
+            this._renderZone();
+        });
     }
 
-    private _ringLatLngs(): LatLngTuple[] | null {
+    private _ring(): LngLatRing | null {
         const z = this.zone;
         if (!z || z['type'] !== 'Polygon') return null;
         const coords = z['coordinates'];
         if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 4) {
             return null;
         }
-        const ring: LatLngTuple[] = [];
+        const ring: LngLatRing = [];
         for (const pt of coords[0] as Array<unknown>) {
             if (Array.isArray(pt) && typeof pt[0] === 'number' && typeof pt[1] === 'number') {
-                ring.push([pt[1], pt[0]]); // GeoJSON [lng,lat] → Leaflet [lat,lng]
+                ring.push([pt[0], pt[1]]);
             } else {
                 return null;
             }
@@ -182,22 +186,46 @@ export class ShopZoneMap extends PlatformElement {
         return ring.length >= 4 ? ring : null;
     }
 
+    private _zoneData() {
+        const ring = this._ring();
+        return {
+            type: 'FeatureCollection' as const,
+            features: ring
+                ? [
+                      {
+                          type: 'Feature' as const,
+                          geometry: { type: 'Polygon' as const, coordinates: [ring] },
+                          properties: {},
+                      },
+                  ]
+                : [],
+        };
+    }
+
+    private _fitZone(animate = true): void {
+        const map = this._map;
+        const ring = this._ring();
+        if (!map || !ring) return;
+        const lngs = ring.map((c) => c[0]);
+        const lats = ring.map((c) => c[1]);
+        map.fitBounds(
+            [
+                [Math.min(...lngs), Math.min(...lats)],
+                [Math.max(...lngs), Math.max(...lats)],
+            ],
+            { padding: 24, animate },
+        );
+    }
+
     private _renderZone(): void {
-        if (!this._map || !this._L) return;
-        const ring = this._ringLatLngs();
-        if (this._polygon) {
-            this._polygon.remove();
-            this._polygon = null;
-        }
-        if (ring) {
-            this._polygon = this._L.polygon(ring, {
-                color: '#f2542d',
-                weight: 2.5,
-                fillOpacity: 0.12,
-                interactive: false,
-            }).addTo(this._map);
-            this._map.fitBounds(this._polygon.getBounds(), { padding: [24, 24], animate: false });
-        }
+        const map = this._map;
+        if (!map || !map.isStyleLoaded()) return;
+        const source = map.getSource('zone') as
+            | { setData(d: unknown): void }
+            | undefined;
+        if (!source) return;
+        source.setData(this._zoneData());
+        if (this._ring()) this._fitZone();
     }
 
     private _emitZone(zone: Record<string, unknown>): void {
@@ -225,7 +253,7 @@ export class ShopZoneMap extends PlatformElement {
 
     private async _locate(): Promise<void> {
         const q = this.address.trim();
-        if (!q || !this._map || !this._L || !this.shopId) return;
+        if (!q || !this._map || !this._maplibre || !this.shopId) return;
         this._locating = true;
         try {
             const data = (await this.useOp('shop/shop_geocode').run({
@@ -233,9 +261,11 @@ export class ShopZoneMap extends PlatformElement {
                 address: q,
             })) as { lat: number; lng: number } | null;
             if (data) {
-                this._map.setView([data.lat, data.lng], 14, { animate: false });
-                if (this._marker) this._marker.remove();
-                this._marker = this._L.marker([data.lat, data.lng]).addTo(this._map);
+                this._map.jumpTo({ center: [data.lng, data.lat], zoom: 14 });
+                this._marker?.remove();
+                this._marker = new this._maplibre.Marker()
+                    .setLngLat([data.lng, data.lat])
+                    .addTo(this._map);
             }
         } finally {
             this._locating = false;
@@ -243,9 +273,9 @@ export class ShopZoneMap extends PlatformElement {
     }
 
     protected override render(): TemplateResult {
-        const hasZone = this._ringLatLngs() !== null;
+        const hasZone = this._ring() !== null;
         return html`
-            ${leafletCssLinks()}
+            ${maplibreCssLink()}
             <div class="mapwrap">
                 <div class="map"></div>
                 ${!hasZone ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>` : nothing}

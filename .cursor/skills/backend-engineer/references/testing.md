@@ -156,7 +156,7 @@ DB_PROFILE=0 PYTEST_WORKERS_PROFILE=0 TEST_COVERAGE=0 make test   # без пр�
 - **Фикстуры LLM scoring** (`tests/core/ai/fixtures/scoring/`): обновление с реальными ключами — `uv run python -m scripts.generate.llm_scoring_fixtures`, drift — `--check`; live-smoke — `tests/core/ai/test_platform_model_scoring_live.py` (`make test-network`).
 - **Сетевые тесты** (`integration`, `network`, пример `tests/core/files/test_file_writer_network.py`): вне дефолтного прогона — `pytest -m "not integration and not network"`, отдельно — `make test-network`.
 - **Browser runtime** (`tests/browser/`): интеграция — `@pytest.mark.integration` с `BROWSER__CDP_URL`; E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1` и `BROWSER__E2E_LIGHTPANDA_CDP_URL` (или `BROWSER__CDP_URL`).
-- **Property-based**: `uv run pytest -q tests/core/variables/test_template_scan_fuzz.py tests/core/code_contract/test_scanner_fuzz.py tests/flows/unit/test_flow_dataflow_inspector_fuzz.py`; JS `*.fuzz.spec.js` входит в `make test-frontend-core-unit`; воспроизводимая регрессия — `@seed(...)` Hypothesis.
+- **Property-based**: `uv run pytest -q tests/core/variables/test_template_scan_fuzz.py tests/core/code_contract/test_scanner_fuzz.py tests/flows/unit/test_flow_dataflow_inspector_fuzz.py`; frontend `*.fuzz.spec.ts` входит в `make test-frontend-core-unit`; воспроизводимая регрессия — `@seed(...)` Hypothesis.
 - **`PytestCollectionWarning`** на доменном классе `Test*` (`cannot collect test class ... because it has a __init__`): `__test__ = False`, в Pydantic — `__test__: ClassVar[bool] = False`.
 - **localhost на macOS**: granian стека слушает IPv4, `localhost` может резолвиться в `::1` — readiness и наборы URL используют `127.0.0.1`.
 

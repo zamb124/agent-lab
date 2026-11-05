@@ -36,5 +36,6 @@ class GeoAddress(PlatformModel):
     postcode: str = DbField(default="", db_type="TEXT")
     lat: float = DbField()
     lng: float = DbField()
+    region: str = DbField(default="", max_length=64)
     generation: int = DbField(default=0)
     created_at: datetime = DbField()

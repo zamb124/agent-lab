@@ -35,10 +35,10 @@ alwaysApply: false
 9. GC образов — refcount `image_digest`, `docker rmi -f` при нуле; `guest-base` и `docker system prune -a` не трогаются.
 10. Env гостя — whitelist платформы (`PATH`, `OPENAI_*`, `CAPABILITY_GATEWAY_URL`, `PLATFORM_*`, `HOME=/tmp`, `XDG_CACHE_HOME=/tmp`) + overlay `guest_env` и uppercase-ключи `input_mapping`; платформенные ключи пользователь не перекрывает; пересечение `guest_env` и `input_mapping` — `raise`; loopback URL переписываются `rewrite_loopback_url`; `egress_hosts` — только `--add-host` после DNS resolve. inprocess копирует `PATH` (обязателен) и непустые `HOME`/`LANG` процесса фермы (`apply_inprocess_host_env`); docker задаёт `PATH` образа, `HOME=/tmp`, `XDG_CACHE_HOME=/tmp`.
 11. Metadata: прочие ключи `input_mapping` и `metadata_template` (`@state` без пути — весь state) → A2A `params.metadata`; CLI получает её в `PLATFORM_A2A_METADATA`; ответ гостя — JSON `{text, ...}` и/или `state` → артефакт `state` → dict ноды для `output_mapping`; frozen-поля гость не перекрывает.
-12. Hop: `CodeAgentNode` → `ensure_lease` → A2A `POST /guest-runtime/api/v1/a2a/{flow_id}/{node_id}`; flows не ходит на IP пода; PID1 shim: `POST /context`, затем `POST /invoke`.
+12. Hop: `CodeAgentNode` → `ensure_lease` → A2A `POST /guest-runtime/api/v1/a2a/{flow_id}/{node_id}`; flows не ходит на IP пода; PID1-обёртка `apps/guest_runtime/shim`: `POST /context`, затем `POST /invoke`.
 13. LLM гостя — `/flows/api/v1/llm/v1` с execution token (`OPENAI_BASE_URL`, `OPENAI_API_KEY`); capabilities — только capability-gateway; эффекты применяет `CodeAgentNode` (`apply_capability_platform_effects`).
 14. Биллинг: `guest_runtime.start` (`guest:start`), `guest_runtime.session_usage` (`guest:runtime_second`, любой `_stop_lease`), `guest_runtime.build_usage` (`guest:build_second`, только реальная сборка); pre-flight `BALANCE_BLOCK_OPERATION_GUEST_RUNTIME` → `billing.mdc`.
-15. Логи гостя — stdout shim → logger + Redis `guest:logs:{flow_id}:{node_id}` (TTL); REST `GET /flows/api/v1/flows/{flow_id}/nodes/{node_id}/code-agent/logs`; UI — `openModal('flows.logs', {flowId, nodeId})`.
+15. Логи гостя — stdout процесса `apps/guest_runtime/shim` → logger + Redis `guest:logs:{flow_id}:{node_id}` (TTL); REST `GET /flows/api/v1/flows/{flow_id}/nodes/{node_id}/code-agent/logs`; UI — `openModal('flows.logs', {flowId, nodeId})`.
 
 ## UI
 

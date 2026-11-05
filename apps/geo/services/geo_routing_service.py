@@ -15,6 +15,8 @@ Snap идёт к ближайшему ПРОХОДИМОМУ для режима
 from __future__ import annotations
 
 import json
+import math
+from typing import Literal
 
 from oxyde import execute_raw
 from pydantic import BaseModel
@@ -64,6 +66,128 @@ def _edges_sql(cost_col: str, rcost_col: str, generation: int) -> str:
     )
 
 
+_FORBIDDEN = "1e12::float8"
+
+
+def _turn_restrictions_sql(generation: int) -> str:
+    """SQL-набор запретов поворотов (pgRouting 4.0: ``path`` + ``cost``).
+
+    Сырые ссылки ``geo_turn_restrictions`` резолвятся в id ребёр джойном
+    к ``geo_road_edges`` того же поколения: ``via``-узел — пересечение
+    ``from``-way и ``to``-way. Ребро участвует в обеих ролях прохода
+    (подъезд к via вперёд по cost или назад по reverse_cost, выезд — то
+    же), поэтому односторонние направления не теряются. ``no_*``/
+    ``no_entry``/``no_exit`` — запрет ``[from_edge, to_edge]``;
+    ``only_*`` — запрет всех выездов с via, кроме ``to_way``. Через-way
+    рестрикции (``via_way``) пока не резолвятся — в выборку не попадают.
+    """
+    # pgRouting 4.0: ``cost`` рестрикции — штраф к стоимости пути, а не
+    # булев запрет; -1 сделал бы запрещённый поворот дешевле. Огромный
+    # штраф ≈ запрет: объезд выбирается всегда, но если объезда нет,
+    # маршрут всё же находится (лучше гигантского ETA, чем route_not_found).
+    fwd = (
+        "((f.target = r.via_node AND f.car_cost > 0)"
+        + " OR (f.source = r.via_node AND f.car_reverse_cost > 0))"
+    )
+    dep = (
+        "((t.source = r.via_node AND t.car_cost > 0)"
+        + " OR (t.target = r.via_node AND t.car_reverse_cost > 0))"
+    )
+    join_from = (
+        "JOIN geo_road_edges f ON f.generation = r.generation"
+        + " AND f.osm_way_id = r.from_way AND " + fwd
+    )
+    join_to = (
+        "JOIN geo_road_edges t ON t.generation = r.generation"
+        + " AND t.osm_way_id = r.to_way AND " + dep
+    )
+    join_to_others = join_to.replace(
+        "t.osm_way_id = r.to_way", "t.osm_way_id <> r.to_way"
+    )
+    where = f"r.generation = {generation} AND r.via_node IS NOT NULL"
+    select = (
+        f"SELECT ARRAY[f.id, t.id]::bigint[] AS path, {_FORBIDDEN} AS cost"
+        + " FROM geo_turn_restrictions r "
+        + join_from
+        + " "
+    )
+    return (
+        select
+        + join_to
+        + f" WHERE {where} AND r.restriction NOT LIKE 'only\\_%'"
+        + " UNION ALL "
+        + select
+        + join_to_others
+        + f" WHERE {where} AND r.restriction LIKE 'only\\_%'"
+    )
+
+
+def _barriers_sql(generation: int, mode: str) -> str:
+    """SQL-набор запрещённых проходов сквозь барьеры для режима.
+
+    Барьер закрывает транзит через свой узел: пары [въезжающее ребро,
+    выезжающее ребро] со штрафом. Въезд/выезд считаются по обеим
+    ориентациям ребра (cost/reverse_cost режима). Разворот на том же
+    ребре (``t.id <> f.id``) не запрещается — до шлагбаума-тупика
+    доехать и развернуться можно.
+    """
+    cost_col, rcost_col = _mode_columns(mode)
+    inc = (
+        f"((f.target = b.osm_node_id AND f.{cost_col} > 0)"
+        + f" OR (f.source = b.osm_node_id AND f.{rcost_col} > 0))"
+    )
+    out = (
+        f"((t.source = b.osm_node_id AND t.{cost_col} > 0)"
+        + f" OR (t.target = b.osm_node_id AND t.{rcost_col} > 0))"
+    )
+    return (
+        f"SELECT ARRAY[f.id, t.id]::bigint[] AS path, {_FORBIDDEN} AS cost"
+        + " FROM geo_barriers b"
+        + " JOIN geo_road_edges f ON f.generation = b.generation AND " + inc
+        + " JOIN geo_road_edges t ON t.generation = b.generation"
+        + " AND t.id <> f.id AND " + out
+        + f" WHERE b.generation = {generation} AND b.block_{mode}"
+    )
+
+
+def _signals_sql(generation: int, mode: str, delay: float) -> str:
+    """SQL-набор штрафов за проезд светофора — транзитные пары [въезд, выезд].
+
+    Механика та же, что у барьеров, но ``cost`` — задержка в секундах
+    (``signal_delay_s[mode]``), а не запрет: светофор делает поворот
+    дороже, объезд без сигнала может оказаться быстрее.
+    """
+    cost_col, rcost_col = _mode_columns(mode)
+    inc = (
+        f"((f.target = s.osm_node_id AND f.{cost_col} > 0)"
+        + f" OR (f.source = s.osm_node_id AND f.{rcost_col} > 0))"
+    )
+    out = (
+        f"((t.source = s.osm_node_id AND t.{cost_col} > 0)"
+        + f" OR (t.target = s.osm_node_id AND t.{rcost_col} > 0))"
+    )
+    return (
+        f"SELECT ARRAY[f.id, t.id]::bigint[] AS path, {delay}::float8 AS cost"
+        + " FROM geo_traffic_signals s"
+        + " JOIN geo_road_edges f ON f.generation = s.generation AND " + inc
+        + " JOIN geo_road_edges t ON t.generation = s.generation"
+        + " AND t.id <> f.id AND " + out
+        + f" WHERE s.generation = {generation}"
+    )
+
+
+def _restrictions_sql(generation: int, mode: str, signal_delay: float) -> str:
+    """TRSP-ограничения режима: повороты (car), барьеры, штрафы светофоров."""
+    union = _barriers_sql(generation, mode)
+    if signal_delay > 0:
+        union += " UNION ALL " + _signals_sql(generation, mode, signal_delay)
+    if mode == "car":
+        union = _turn_restrictions_sql(generation) + " UNION ALL " + union
+    # Единый внешний вид restrictions_sql: (id, path, cost) —
+    # требование и pgr_trsp, и pgr_trsp_withPoints.
+    return f"SELECT ROW_NUMBER() OVER () AS id, u.path, u.cost FROM ({union}) u"
+
+
 _MODE_COLUMNS: dict[str, tuple[str, str]] = {
     "car": ("car_cost", "car_reverse_cost"),
     "foot": ("foot_cost", "foot_reverse_cost"),
@@ -79,18 +203,64 @@ def _mode_columns(mode: str) -> tuple[str, str]:
     return cols
 
 
-_ROUTE_SQL = """
+# Точечный маршрут идёт через TRSP-withPoints: концы привязываются к доле
+# вдоль ближайшего ребра (fraction), а не к вершине — и стоимость, и
+# геометрия учитывают только пройденную часть крайних рёбер. Запреты
+# поворотов и барьеры — часть стоимости маршрута. ``path`` pgr возвращает
+# реальные edge id даже для частичных ног; граничные ряды имеют
+# node = -1/-2 (точки из points_sql, pgRouting 4.0: vid = -pid).
+# Матрица/изохроны остаются на dijkstra-семействе и vertex-snap — пакетные
+# запросы без учёта поворотов, барьеров и долей ребра.
+#
+# legs: frac_from/frac_to — доли ребра, пройденные ногой; backward — езда
+# против направления геометрии (reverse_cost и/или точка слева/справа).
+_ROUTE_SQL_WP = """
     WITH path AS (
-        SELECT * FROM pgr_dijkstra($1, $2::bigint, $3::bigint, directed => true)
+        SELECT path_seq, node, edge, cost,
+               LEAD(node) OVER (ORDER BY path_seq) AS next_node
+        FROM pgr_trsp_withPoints($1, $2, $3, -1, -2, 'b', directed => true)
+    ),
+    legs AS (
+        SELECT p.path_seq, e.geom, e.length_m,
+            CASE
+                WHEN p.node = -1 AND p.next_node = -2
+                    THEN LEAST($5::float8, $6::float8)
+                WHEN p.node = -1 AND p.next_node = e.target THEN $5::float8
+                WHEN p.next_node = -2 AND p.node = e.target THEN $6::float8
+                ELSE 0.0
+            END AS frac_from,
+            CASE
+                WHEN p.node = -1 AND p.next_node = -2
+                    THEN GREATEST($5::float8, $6::float8)
+                WHEN p.node = -1 AND p.next_node = e.source THEN $5::float8
+                WHEN p.next_node = -2 AND p.node = e.source THEN $6::float8
+                ELSE 1.0
+            END AS frac_to,
+            CASE
+                WHEN p.node = -1 AND p.next_node = -2 THEN $5::float8 > $6::float8
+                WHEN p.node = -1 THEN p.next_node <> e.target
+                ELSE p.node = e.target
+            END AS backward
+        FROM path p
+        JOIN geo_road_edges e ON e.id = p.edge AND e.generation = $4
+        WHERE p.edge > 0
     )
     SELECT COUNT(*) AS legs,
-           COALESCE(SUM(e.length_m), 0) AS distance_m,
-           COALESCE(SUM(p.cost), 0) AS duration_s,
+           COALESCE(SUM(l.length_m * (l.frac_to - l.frac_from)), 0) AS distance_m,
+           COALESCE((SELECT SUM(cost) FROM path), 0) AS duration_s,
            ST_AsGeoJSON(
-               ST_LineMerge(ST_Collect(e.geom ORDER BY p.path_seq))
-           )::text AS geometry
-    FROM path p
-    LEFT JOIN geo_road_edges e ON e.id = p.edge
+               ST_LineMerge(ST_Collect(
+                   CASE WHEN l.backward
+                        THEN ST_Reverse(ST_LineSubstring(l.geom, l.frac_from, l.frac_to))
+                        ELSE ST_LineSubstring(l.geom, l.frac_from, l.frac_to)
+                   END ORDER BY l.path_seq
+               ))
+           )::text AS geometry,
+           COALESCE(
+               (SELECT l2.backward FROM legs l2 ORDER BY l2.path_seq DESC LIMIT 1),
+               false
+           ) AS arrival_backward
+    FROM legs l
 """
 
 
@@ -104,11 +274,26 @@ class _SnapRow(BaseModel):
     dist_m: float
 
 
+class _EdgeSnap(BaseModel):
+    """Привязка точки к доле вдоль ребра + касательная у точки привязки."""
+
+    edge_id: int
+    source: int
+    target: int
+    fraction: float
+    dist_m: float
+    sx: float  # координаты точки привязки на ребре
+    sy: float
+    tx: float  # касательная ребра (направление source→target) у точки привязки
+    ty: float
+
+
 class _RouteRow(BaseModel):
     legs: int
     distance_m: float
     duration_s: float
     geometry: str | None
+    arrival_backward: bool = False
 
 
 class _CostRow(BaseModel):
@@ -168,6 +353,77 @@ class GeoRoutingService:
         dst_d = _haversine_m(lat, lng, edge.dst_lat, edge.dst_lng)
         return edge.source if src_d <= dst_d else edge.target
 
+    async def _snap_edge(
+        self, lat: float, lng: float, *, mode: str, generation: int
+    ) -> _EdgeSnap:
+        """Ближайшее проходимое ребро + доля вдоль геометрии (fraction).
+
+        Касательная ``tx/ty`` — локальное направление source→target у точки
+        привязки (интерполяция до/после fraction); нужна для стороны улицы.
+        """
+        cost_col, rcost_col = _mode_columns(mode)
+        rows = await execute_raw(
+            f"""
+            SELECT id AS edge_id, source, target, fraction, dist_m,
+                   ST_X(snap_pt) AS sx, ST_Y(snap_pt) AS sy,
+                   ST_X(to_pt) - ST_X(snap_pt) AS tx,
+                   ST_Y(to_pt) - ST_Y(snap_pt) AS ty
+            FROM (
+                SELECT e.id, e.source, e.target, e.geom,
+                       ST_LineLocatePoint(e.geom, q.g) AS fraction,
+                       ST_Distance(e.geom::geography, q.g::geography) AS dist_m,
+                       ST_LineInterpolatePoint(e.geom,
+                           GREATEST(ST_LineLocatePoint(e.geom, q.g) - 0.001, 0.0)
+                       ) AS snap_pt,
+                       ST_LineInterpolatePoint(e.geom,
+                           LEAST(ST_LineLocatePoint(e.geom, q.g) + 0.001, 1.0)
+                       ) AS to_pt
+                FROM geo_road_edges e,
+                     (SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326) AS g) q
+                WHERE e.generation = $3 AND ({cost_col} > 0 OR {rcost_col} > 0)
+                ORDER BY e.geom <-> q.g
+                LIMIT 1
+            ) s
+            """,
+            [lng, lat, generation],
+            using="geo",
+        )
+        if not rows:
+            raise PlatformUnavailableError(
+                f"Road graph has no {mode}-passable edges — run OSM import",
+                error_code="geo_import_unavailable",
+            )
+        snap = _EdgeSnap.model_validate(rows[0])
+        if snap.dist_m > self._settings.snap_max_distance_m:
+            raise GeoRoutingError(
+                "point_too_far_from_road",
+                f"Point is {snap.dist_m:.0f}m from the {mode} road graph",
+            )
+        return snap
+
+    @staticmethod
+    def _side_of_street(
+        snap: _EdgeSnap, lat: float, lng: float, *, backward: bool
+    ) -> Literal["left", "right"] | None:
+        """Сторона улицы точки относительно направления движения в конце пути.
+
+        cross>0 — точка слева от касательной source→target; при езде против
+        направления ребра сторона зеркалится. Вырожденная касательная
+        (привязка точно к вершине) → None.
+        """
+        norm = math.hypot(snap.tx, snap.ty)
+        if norm == 0.0:
+            return None
+        # Нормированный cross — расстояние точки от касательной в градусах
+        # (~1e-8 ≈ миллиметр): порог отсеивает только вырожденные привязки.
+        cross = (snap.tx * (lat - snap.sy) - snap.ty * (lng - snap.sx)) / norm
+        if abs(cross) < 1e-8:
+            return None
+        left = cross > 0
+        if backward:
+            left = not left
+        return "left" if left else "right"
+
     async def calculate(
         self,
         *,
@@ -179,15 +435,31 @@ class GeoRoutingService:
     ) -> GeoRouteResponse:
         """Кратчайший путь: дистанция, длительность, геометрия LineString."""
         generation = await GeoImportState.active_generation()
-        start_vid = await self._snap_vertex(
+        start = await self._snap_edge(
             from_lat, from_lng, mode=mode, generation=generation
         )
-        end_vid = await self._snap_vertex(to_lat, to_lng, mode=mode, generation=generation)
+        end = await self._snap_edge(to_lat, to_lng, mode=mode, generation=generation)
         cost_col, rcost_col = _mode_columns(mode)
         edges_sql = _edges_sql(cost_col, rcost_col, generation)
+        # pgRouting 4.0: точки объявляются в points_sql с положительным pid,
+        # а vid = -pid; side='b' — точка доступна с обеих сторон.
+        points_sql = (
+            f"SELECT 1::bigint AS pid, {start.edge_id}::bigint AS edge_id,"
+            f" {start.fraction}::float8 AS fraction, 'b'::char AS side"
+            f" UNION ALL SELECT 2, {end.edge_id}, {end.fraction}, 'b'"
+        )
         rows = await execute_raw(
-            _ROUTE_SQL,
-            [edges_sql, start_vid, end_vid],
+            _ROUTE_SQL_WP,
+            [
+                edges_sql,
+                _restrictions_sql(
+                    generation, mode, self._settings.signal_delay_s.get(mode, 0.0)
+                ),
+                points_sql,
+                generation,
+                start.fraction,
+                end.fraction,
+            ],
             using="geo",
         )
         row = _RouteRow.model_validate(rows[0])
@@ -199,6 +471,9 @@ class GeoRoutingService:
             distance_m=row.distance_m,
             duration_s=row.duration_s,
             geometry=json.loads(row.geometry) if row.geometry else None,
+            arrival_side=self._side_of_street(
+                end, to_lat, to_lng, backward=row.arrival_backward
+            ),
         )
 
     async def matrix(

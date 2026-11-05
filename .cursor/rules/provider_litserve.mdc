@@ -1,5 +1,5 @@
 ---
-description: "provider_litserve — локальный не-LLM инференс (embedding/rerank/STT/TTS/VAD): Postgres-каталог моделей, LitServe spawn-воркеры, ops-цикл, canonical URL и auth. Читать при правке apps/provider_litserve, litserve_catalog_entries и /v1/* инференса"
+description: "provider_litserve — локальный не-LLM инференс (embedding/rerank/STT/TTS/VAD): Postgres-каталог, LitServe spawn-воркеры, ops-цикл, URL и auth. Читать при правке apps/provider_litserve"
 globs:
   - "apps/provider_litserve/**"
   - "core/models/provider_litserve_model.py"
@@ -23,7 +23,7 @@ alwaysApply: false
 
 ### Каталог
 
-- Desired-state — только Postgres. Pod-local SQLite/файловый реестр как источник запрещён; conf `infra.*_models` — только seed при старте (`sync_seed_entries`); дефолт kind — самая старая ready-запись, tombstone `deleted` не воскрешается.
+- Desired-state — только Postgres. Pod-local SQLite/файловый реестр как источник запрещён; conf `infra.*_models` — только seed при старте (`sync_seed_entries`); дефолт kind — первая ready-запись по `created_at`, tombstone `deleted` не воскрешается.
 - `/v1/models` — проекция каталога (`build_provider_litserve_v1_models_response` от записей `ModelCatalog`), не самостоятельный реестр.
 - LitServe spawn-воркеры получают `ModelCatalog` конструктором LitAPI через pickle — модели, ставшие `ready` после старта пода, обслуживаются после рестарта. Module-state каталог воркерам недоступен.
 - Резолверы платформы (`voice_resolver`, `voice_providers_catalog`, `apps/voice`, `apps/frontend`, `core.ai` catalog probe) читают только `litserve_catalog_entries()` — не `infra.*_models`.

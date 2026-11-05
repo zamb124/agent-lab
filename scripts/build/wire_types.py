@@ -35,6 +35,7 @@ SERVICES: dict[str, str] = {
     "crm": "apps.crm.main:app",
     "flows": "apps.flows.main:app",
     "frontend": "apps.frontend.main:app",
+    "geo": "apps.geo.main:app",
     "office": "apps.office.main:app",
     "rag": "apps.rag.main:app",
     "scheduler": "apps.scheduler.main:app",

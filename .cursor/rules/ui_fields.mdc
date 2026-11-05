@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Модель
 
-- Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.js` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.ts`. Импорт `@platform/lib/components/fields/platform-field.ts` подключает все подкомпоненты.
+- Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.ts` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.ts`. Импорт `@platform/lib/components/fields/platform-field.ts` подключает все подкомпоненты.
 - Props, слоты (`prefix`, `suffix`) и события (`change`, `platform-field-managed-focus-in|out`) — файл компонента и UIKDS-карточки `tests/ui/design-system/components/platform-field*/`.
 - `@change` отдаёт типизированный `detail.value`: `number` для `number`/`integer`, `boolean`, `Array` для `array`.
 - `mode="edit"` — ввод, `mode="view"` — показ. Диспетчер рендерит подкомпонент внутри `<platform-field-shell>`; `pill-embed` убирает вторую плашку внутри `.form-group` или карточки.
@@ -70,7 +70,7 @@ alwaysApply: false
 
 ### Новый тип данных
 
-1. Подкомпонент `platform-field-<type>.js` в `core/frontend/static/lib/components/fields/` и ключ в `FIELD_TYPE_MAP`.
+1. Подкомпонент `platform-field-<type>.ts` в `core/frontend/static/lib/components/fields/` и ключ в `FIELD_TYPE_MAP`.
 2. Подписи — `platform:platform_field.*` в ru и en → `frontend.mdc` § i18n.
 3. Тип атрибута CRM — каталог типов и серверная проверка значения → `crm.mdc` § Модель.
 4. UIKDS-карточка `tests/ui/design-system/components/platform-field-<type>/` → `ui_components.mdc` § UI Kit Documentation System.

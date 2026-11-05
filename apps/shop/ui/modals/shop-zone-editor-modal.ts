@@ -1,12 +1,12 @@
 /**
- * ShopZoneEditorModal — полноэкранный редактор зоны доставки (Leaflet + Geoman).
+ * ShopZoneEditorModal — полноэкранный редактор зоны доставки (MapLibre + terra-draw).
  *
  * Открывается из <shop-zone-map> (превью в настройках) через
  * openModal('shop.zone_editor', { zone, address, shopId, onApply }).
  * Полигон редактируется профессионально: вершины и midpoints тянутся,
- * правая кнопка/двойной клик удаляет вершину, зона целиком draggable,
- * snapping к краю, самопересечения запрещены (allowSelfIntersection:false)
- * и дополнительно проверяются hasSelfIntersection() перед «Применить».
+ * зона целиком draggable, самопересечения запрещены
+ * (ValidateNotSelfIntersecting на draw и select) и дополнительно
+ * проверяются перед «Применить».
  *
  * Результат не сохраняется сам — onApply(zone) отдаёт GeoJSON Polygon в
  * родителя, сохранение идёт общим savebar настроек (shop/shop_update).
@@ -22,41 +22,43 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-zone-address-panel.js';
 import type { GeoAddressItem } from '@platform/lib/components/platform-zone-address-panel.js';
-import { loadGeoman, leafletCssLinks } from '@platform/lib/map/leaflet.js';
-import type { LeafletModule } from '@platform/lib/map/leaflet.js';
-import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { loadMapLibre, maplibreCssLink } from '@platform/lib/map/maplibre.js';
+import type { MapLibreModule } from '@platform/lib/map/maplibre.js';
+import { createBasemap } from '@platform/lib/map/basemap.js';
+import type { PlatformMap } from '@platform/lib/map/basemap.js';
 
-type LeafletMap = import('leaflet').Map;
-type LeafletPolygon = import('leaflet').Polygon;
-type LeafletMarker = import('leaflet').Marker;
-type LeafletTileLayer = import('leaflet').TileLayer;
-type LeafletLayerGroup = import('leaflet').LayerGroup;
-type LeafletCircleMarker = import('leaflet').CircleMarker;
-type LatLngTuple = [number, number];
-type LeafletLatLng = import('leaflet').LatLng;
+import type { Feature, FeatureCollection, Position } from 'geojson';
 
-type PmPolygon = LeafletPolygon & {
-    pm: {
-        enable(options?: Record<string, unknown>): void;
-        disable(): void;
-        hasSelfIntersection(): boolean;
-    };
-};
+type TerraDrawInstance = import('terra-draw').TerraDraw;
+type MapLibreMarker = import('maplibre-gl').Marker;
+type MapLibrePopup = import('maplibre-gl').Popup;
+type LngLatRing = [number, number][];
+type StoreFeature = Parameters<TerraDrawInstance['addFeatures']>[0][number];
 
 const ACCENT = '#f2542d';
 const ZONE_MAX_POINTS = 256;
 const R_EARTH = 6_371_008.8;
+const _EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-function _ringAreaM2(ring: LatLngTuple[]): number {
+function _ringAreaM2(ring: LngLatRing): number {
     // Сферическая площадь полигона (формула Льюилье/Чемберлена) — достаточна
     // для метрик директору; на зонах городского масштаба погрешность <0.5%.
     let sum = 0;
     for (let i = 0; i < ring.length; i++) {
-        const [lat1, lng1] = ring[i]!;
-        const [lat2, lng2] = ring[(i + 1) % ring.length]!;
+        const [lng1, lat1] = ring[i]!;
+        const [lng2, lat2] = ring[(i + 1) % ring.length]!;
         sum += (lng2 - lng1) * (Math.PI / 180) * (2 + Math.sin(lat1 * Math.PI / 180) + Math.sin(lat2 * Math.PI / 180));
     }
     return Math.abs(sum * R_EARTH * R_EARTH / 2);
+}
+
+function _haversineM(a: [number, number], b: [number, number]): number {
+    const dLat = ((b[1] - a[1]) * Math.PI) / 180;
+    const dLng = ((b[0] - a[0]) * Math.PI) / 180;
+    const s =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
 function _fmtKm(m: number): string {
@@ -218,17 +220,16 @@ export class ShopZoneEditorModal extends PlatformModal {
         `,
     ];
 
-    private _L: LeafletModule | null = null;
-    private _map: LeafletMap | null = null;
-    private _tiles: LeafletTileLayer | null = null;
-    private _polygon: PmPolygon | null = null;
-    private _marker: LeafletMarker | null = null;
-    private _addressLayer: LeafletLayerGroup | null = null;
-    private _addressMarkers = new Map<number, LeafletCircleMarker>();
+    private _maplibre: MapLibreModule | null = null;
+    private _map: PlatformMap | null = null;
+    private _draw: TerraDrawInstance | null = null;
+    private _marker: MapLibreMarker | null = null;
+    private _popup: MapLibrePopup | null = null;
+    private _addressFeatures = new Map<number, Feature>();
     private _ro: ResizeObserver | null = null;
     private _geocodeOp: OpController;
-    private _localeSel: SelectController<string>;
     private _initStarted = false;
+    private _zoneImported = false;
 
     constructor() {
         super();
@@ -247,7 +248,6 @@ export class ShopZoneEditorModal extends PlatformModal {
         this._selfIntersect = false;
         this._zoneGeoJson = null;
         this._geocodeOp = this.useOp('shop/shop_geocode');
-        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     protected override updated(changed: Map<string, unknown>): void {
@@ -268,14 +268,17 @@ export class ShopZoneEditorModal extends PlatformModal {
     private _teardownMap(): void {
         this._ro?.disconnect();
         this._ro = null;
+        this._draw?.stop();
+        this._draw = null;
+        this._popup?.remove();
+        this._popup = null;
+        this._marker?.remove();
+        this._marker = null;
         this._map?.remove();
         this._map = null;
-        this._tiles = null;
-        this._polygon = null;
-        this._marker = null;
-        this._addressLayer = null;
-        this._addressMarkers.clear();
+        this._addressFeatures.clear();
         this._initStarted = false;
+        this._zoneImported = false;
     }
 
     private _scheduleInit(): void {
@@ -292,82 +295,171 @@ export class ShopZoneEditorModal extends PlatformModal {
     private async _initMap(): Promise<void> {
         const el = this._mapEl();
         if (!el || this._map || this._initStarted) return;
-        // Контейнер должен иметь реальный размер — Leaflet кэширует его при
-        // init и без размера рисует «уголки» тайлов.
+        // Контейнер должен иметь реальный размер — без него карта и
+        // terra-draw отрисуются в неверном вьюпорте.
         if (!el.offsetWidth || !el.offsetHeight) {
             requestAnimationFrame(() => this._scheduleInit());
             return;
         }
         this._initStarted = true;
-        const L = (this._L = await loadGeoman());
+        const [maplibre, terraDraw, adapterMod] = await Promise.all([
+            loadMapLibre(),
+            import('terra-draw'),
+            import('terra-draw-maplibre-gl-adapter'),
+        ]);
+        this._maplibre = maplibre;
         if (!this.isConnected || !this.open) {
             this._initStarted = false;
             return;
         }
-        const map = (this._map = L.map(el, {
-            center: [55.7512, 37.6184],
+        const map = (this._map = await createBasemap(el, {
+            center: [37.6184, 55.7512],
             zoom: 11,
-            scrollWheelZoom: true,
         }));
-        // Префикс Leaflet с флагом не показываем; «© OpenStreetMap» остаётся
-        // (ODbL требует атрибуцию данных).
-        map.attributionControl.setPrefix('');
-        // Zoom — справа снизу (колонка с атрибуцией): дефолтный topleft
-        // наезжает на панель инструментов.
-        map.zoomControl.setPosition('bottomright');
-        map.pm.setLang(this._localeSel.value === 'ru' ? 'ru' : 'en');
-        this._addTiles();
-        map.on('pm:create', (e: { layer: LeafletPolygon }) => {
-            this._adoptPolygon(e.layer as PmPolygon);
-            this._drawing = false;
-            this._updateHint();
+        map.on('error', () => {
+            this._mapError = true;
         });
         this._ro = new ResizeObserver(() => {
             if (!this._map || !el.offsetWidth || !el.offsetHeight) return;
-            this._map.invalidateSize();
+            this._map.resize();
         });
         this._ro.observe(el);
-        requestAnimationFrame(() => this._map?.invalidateSize());
-        this._renderZone();
-        this._updateHint();
+        map.once('load', () => {
+            this._initDraw(terraDraw, adapterMod, map);
+            this._initAddressLayers(map);
+            this._renderZone();
+            this._updateHint();
+        });
     }
 
-    private _addTiles(): void {
-        if (!this._map || !this._L) return;
-        const tiles = (this._tiles = this._L.tileLayer(
-            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            { attribution: '© OpenStreetMap', maxZoom: 19 },
-        ));
-        tiles.on('tileerror', () => {
-            if (this._mapError) return;
-            this._mapError = true;
+    private _initDraw(
+        td: typeof import('terra-draw'),
+        adapterMod: typeof import('terra-draw-maplibre-gl-adapter'),
+        map: PlatformMap,
+    ): void {
+        this._validateFeature = td.ValidateNotSelfIntersecting;
+        const draw = (this._draw = new td.TerraDraw({
+            adapter: new adapterMod.TerraDrawMapLibreGLAdapter({ map }),
+            modes: [
+                new td.TerraDrawSelectMode({
+                    flags: {
+                        polygon: {
+                            feature: {
+                                draggable: true,
+                                selfIntersectable: false,
+                                validation: td.ValidateNotSelfIntersecting,
+                                coordinates: {
+                                    snappable: true,
+                                    midpoints: { draggable: true },
+                                    draggable: true,
+                                    deletable: true,
+                                },
+                            },
+                        },
+                    },
+                }),
+                new td.TerraDrawPolygonMode({
+                    editable: true,
+                    validation: td.ValidateNotSelfIntersecting,
+                    styles: {
+                        fillColor: ACCENT,
+                        fillOpacity: 0.12,
+                        outlineColor: ACCENT,
+                        outlineWidth: 2.5,
+                        coordinatePointColor: ACCENT,
+                        editedPointColor: '#155dfc',
+                    },
+                }),
+            ],
+        }));
+        draw.start();
+        draw.setMode('select');
+        draw.on('change', () => this._syncMetrics());
+        draw.on('finish', () => {
+            draw.setMode('select');
+            this._drawing = false;
+            this._syncMetrics();
         });
-        tiles.addTo(this._map);
+    }
+
+    private _initAddressLayers(map: PlatformMap): void {
+        map.addSource('zone-addresses', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'zone-addresses-pts',
+            type: 'circle',
+            source: 'zone-addresses',
+            paint: {
+                'circle-radius': ['case', ['get', 'hi'], 8, 5],
+                'circle-color': ['case', ['get', 'hi'], '#155dfc', ACCENT],
+                'circle-opacity': 0.9,
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': ['case', ['get', 'hi'], 2, 1.5],
+            },
+        });
+        map.on('mousemove', 'zone-addresses-pts', (e) => {
+            const feature = e.features?.[0];
+            const name = feature?.properties?.['name'] as string | undefined;
+            const geometry = feature?.geometry as
+                | { coordinates: [number, number] }
+                | undefined;
+            if (!name || !geometry || !this._maplibre || !this._map) return;
+            const point = geometry.coordinates;
+            if (!this._popup) {
+                this._popup = new this._maplibre.Popup({
+                    closeButton: false,
+                    closeOnClick: false,
+                    offset: 12,
+                });
+            }
+            this._popup.setLngLat(point).setText(name).addTo(this._map);
+        });
+        map.on('mouseleave', 'zone-addresses-pts', () => {
+            this._popup?.remove();
+        });
     }
 
     private _retryMap(): void {
         this._mapError = false;
         if (!this._map) {
+            this._initStarted = false;
             this._scheduleInit();
             return;
         }
-        this._tiles?.remove();
-        this._tiles = null;
-        this._addTiles();
-        this._map.invalidateSize();
+        // Перезагрузка стиля: источники персоздаются в load-хуке заново —
+        // стираем весь инстанс и строим карту с нуля.
+        const el = this._mapEl();
+        this._draw?.stop();
+        this._draw = null;
+        this._map.remove();
+        this._map = null;
+        this._initStarted = false;
+        if (el) this._scheduleInit();
     }
 
-    private _ringLatLngs(): LatLngTuple[] | null {
+    private _zoneRing(): LngLatRing | null {
+        const draw = this._draw;
+        if (!draw) return this._zoneRingFromProps();
+        for (const feature of draw.getSnapshot()) {
+            if (feature.geometry.type !== 'Polygon') continue;
+            const ring = feature.geometry.coordinates[0] as LngLatRing | undefined;
+            if (ring && ring.length >= 4) return ring;
+        }
+        // Пустой store — ещё не импортированная props-зона; после импорта
+        // (или очистки пользователем) store — единственный источник правды.
+        return this._zoneImported ? null : this._zoneRingFromProps();
+    }
+
+    private _zoneRingFromProps(): LngLatRing | null {
         const z = this.zone;
         if (!z || z['type'] !== 'Polygon') return null;
         const coords = z['coordinates'];
         if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 4) {
             return null;
         }
-        const ring: LatLngTuple[] = [];
+        const ring: LngLatRing = [];
         for (const pt of coords[0] as Array<unknown>) {
             if (Array.isArray(pt) && typeof pt[0] === 'number' && typeof pt[1] === 'number') {
-                ring.push([pt[1], pt[0]]); // GeoJSON [lng,lat] → Leaflet [lat,lng]
+                ring.push([pt[0], pt[1]]);
             } else {
                 return null;
             }
@@ -375,62 +467,42 @@ export class ShopZoneEditorModal extends PlatformModal {
         return ring.length >= 4 ? ring : null;
     }
 
-    private _editOptions(): Record<string, unknown> {
+    private _zoneFeature(): StoreFeature | null {
+        const ring = this._zoneRing();
+        if (!ring) return null;
         return {
-            allowSelfIntersection: false,
-            allowSelfIntersectionEdit: false,
-            draggable: true,
-            snappable: true,
-            snapDistance: 20,
-            removeVertexOn: 'contextmenu',
-            limitMarkersToCount: ZONE_MAX_POINTS,
-            markerEditable: true,
-            preventMarkerRemoval: false,
-            removeLayerBelowMinVertexCount: false,
-        };
-    }
-
-    private _watchLayer(layer: PmPolygon): void {
-        const sync = () => this._syncMetrics();
-        layer.on('pm:edit', sync);
-        layer.on('pm:update', sync);
-        layer.on('pm:vertexadded', sync);
-        layer.on('pm:vertexremoved', sync);
-        layer.on('pm:markerdragend', sync);
-        layer.on('pm:dragend', sync);
-    }
-
-    private _adoptPolygon(layer: PmPolygon): void {
-        if (!this._map) return;
-        this._polygon?.remove();
-        this._polygon = layer;
-        layer.setStyle({ color: ACCENT, weight: 2.5, fillOpacity: 0.12 });
-        layer.pm.enable(this._editOptions());
-        this._watchLayer(layer);
-        this._syncMetrics();
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [ring.map((c) => [c[0]!, c[1]!])],
+            },
+            properties: { mode: 'polygon' },
+        } as StoreFeature;
     }
 
     private _renderZone(): void {
-        if (!this._map || !this._L) return;
-        const ring = this._ringLatLngs();
-        if (this._polygon) {
-            this._polygon.remove();
-            this._polygon = null;
+        const draw = this._draw;
+        const map = this._map;
+        if (!draw || !map) return;
+        const ring = this._zoneRing();
+        if (!ring) {
+            this._syncMetrics();
+            return;
         }
-        if (ring) {
-            this._adoptPolygon(this._L.polygon(ring, {
-                color: ACCENT,
-                weight: 2.5,
-                fillOpacity: 0.12,
-            }).addTo(this._map) as PmPolygon);
-            this._map.fitBounds(this._polygon!.getBounds(), { padding: [48, 48], animate: false });
+        // Полигона в store ещё нет (зона пришла пропсом) — кладём через
+        // addFeatures; mode:'polygon' в properties нужен select-флагам.
+        if (!draw.getSnapshot().some((f) => f.geometry.type === 'Polygon')) {
+            const feature = this._zoneFeature();
+            if (feature) draw.addFeatures([feature]);
+            this._zoneImported = true;
         }
+        this._fitZone();
         this._syncMetrics();
     }
 
     private _syncMetrics(): void {
-        const poly = this._polygon;
-        if (!poly) {
+        const ring = this._zoneRing();
+        if (!ring || !this._draw) {
             this._areaM2 = 0;
             this._perimM = 0;
             this._points = 0;
@@ -439,19 +511,28 @@ export class ShopZoneEditorModal extends PlatformModal {
             this._updateHint();
             return;
         }
-        const ring = (poly.getLatLngs() as LeafletLatLng[][])[0] ?? [];
-        this._points = ring.length;
+        this._points = Math.max(0, ring.length - 1);
         let perim = 0;
-        for (let i = 0; i < ring.length; i++) {
-            perim += ring[i]!.distanceTo(ring[(i + 1) % ring.length]!);
+        for (let i = 0; i < ring.length - 1; i++) {
+            perim += _haversineM(ring[i]!, ring[i + 1]!);
         }
         this._perimM = perim;
-        this._areaM2 = _ringAreaM2(ring.map((p) => [p.lat, p.lng] as LatLngTuple));
-        this._selfIntersect = poly.pm.hasSelfIntersection();
-        const gj = this._zoneFromPolygon();
-        this._zoneGeoJson = gj['type'] === 'Polygon' ? gj : null;
+        this._areaM2 = _ringAreaM2(ring);
+        const feature = this._zoneFeature();
+        this._selfIntersect = feature ? !this._validate(feature) : false;
+        this._zoneGeoJson = feature ? feature.geometry as unknown as Record<string, unknown> : null;
         this._updateHint();
     }
+
+    /** pre-apply проверка: та же ValidateNotSelfIntersecting, что и в режимах. */
+    private _validate(feature: StoreFeature): boolean {
+        if (!this._validateFeature) return true;
+        return this._validateFeature(feature).valid;
+    }
+
+    private _validateFeature:
+        | ((f: StoreFeature) => { valid: boolean })
+        | null = null;
 
     private _updateHint(): void {
         if (this._selfIntersect) {
@@ -462,7 +543,7 @@ export class ShopZoneEditorModal extends PlatformModal {
             this._hint = this.t('settings.zone_hint_draw');
             return;
         }
-        if (this._polygon) {
+        if (this._zoneRing()) {
             this._hint = this._points > ZONE_MAX_POINTS
                 ? this.t('settings.zone_hint_toomany')
                 : this.t('settings.zone_hint_edit');
@@ -472,47 +553,45 @@ export class ShopZoneEditorModal extends PlatformModal {
     }
 
     private _startDraw(): void {
-        if (!this._map) return;
+        const draw = this._draw;
+        if (!draw) return;
         this._drawing = true;
-        this._map.pm.enableDraw('Polygon', {
-            allowSelfIntersection: false,
-            finishOn: 'dblclick',
-            snappable: true,
-            snapDistance: 20,
-            tooltips: true,
-            continueDrawing: false,
-            templineStyle: { color: ACCENT, weight: 2.5 },
-            hintlineStyle: { color: ACCENT, weight: 2, dashArray: '6 6' },
-            pathOptions: { color: ACCENT, weight: 2.5, fillOpacity: 0.12 },
-        });
+        draw.setMode('polygon');
         this._updateHint();
     }
 
     private _stopDraw(): void {
-        this._map?.pm.disableDraw();
+        const draw = this._draw;
+        if (!draw) return;
+        draw.setMode('select');
         this._drawing = false;
         this._updateHint();
     }
 
     private _clearZone(): void {
         this._stopDraw();
-        if (this._polygon) {
-            this._polygon.remove();
-            this._polygon = null;
-        }
+        this._draw?.clear();
         this._syncMetrics();
-        this._updateHint();
     }
 
     private _fitZone(): void {
-        if (this._map && this._polygon) {
-            this._map.fitBounds(this._polygon.getBounds(), { padding: [48, 48], animate: false });
-        }
+        const map = this._map;
+        const ring = this._zoneRing();
+        if (!map || !ring) return;
+        const lngs = ring.map((c) => c[0]);
+        const lats = ring.map((c) => c[1]);
+        map.fitBounds(
+            [
+                [Math.min(...lngs), Math.min(...lats)],
+                [Math.max(...lngs), Math.max(...lats)],
+            ],
+            { padding: 48, animate: false },
+        );
     }
 
     private async _locate(): Promise<void> {
         const q = this.address.trim();
-        if (!q || !this._map || !this._L || !this.shopId) return;
+        if (!q || !this._map || !this._maplibre || !this.shopId) return;
         this._locating = true;
         try {
             const data = (await this._geocodeOp.run({
@@ -520,47 +599,42 @@ export class ShopZoneEditorModal extends PlatformModal {
                 address: q,
             })) as { lat: number; lng: number } | null;
             if (data && this._map) {
-                this._map.setView([data.lat, data.lng], 14, { animate: false });
-                if (this._marker) this._marker.remove();
-                this._marker = this._L.marker([data.lat, data.lng], { pmIgnore: true }).addTo(this._map);
+                this._map.jumpTo({ center: [data.lng, data.lat], zoom: 14 });
+                this._marker?.remove();
+                this._marker = new this._maplibre.Marker()
+                    .setLngLat([data.lng, data.lat])
+                    .addTo(this._map);
             }
         } finally {
             this._locating = false;
         }
     }
 
-    private _zoneFromPolygon(): Record<string, unknown> {
-        const poly = this._polygon;
-        if (!poly) return {};
-        const ll = (poly.getLatLngs() as LeafletLatLng[][])[0] ?? [];
-        if (ll.length < 3) return {};
-        const ring = ll.map((p) => [p.lng, p.lat]);
-        const first = ring[0]!;
-        const last = ring[ring.length - 1]!;
-        if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0]!, first[1]!]);
-        return { type: 'Polygon', coordinates: [ring] };
+    private _zoneFromDraw(): Record<string, unknown> {
+        const feature = this._zoneFeature();
+        if (!feature) return {};
+        const ring = (feature.geometry as { coordinates: Position[][] })
+            .coordinates[0]!;
+        return ring.length < 4 ? {} : { type: 'Polygon', coordinates: [ring] };
     }
 
     /** Маркеры адресов из панели — точки справочника, попавшие в зону. */
     private _renderAddressMarkers(items: GeoAddressItem[]): void {
-        if (!this._map || !this._L) return;
-        if (!this._addressLayer) {
-            this._addressLayer = this._L.layerGroup(undefined, { pmIgnore: true }).addTo(this._map);
-        }
-        this._addressLayer.clearLayers();
-        this._addressMarkers.clear();
-        for (const item of items) {
-            const marker = this._L.circleMarker([item.lat, item.lng], {
-                pmIgnore: true,
-                radius: 5,
-                color: '#ffffff',
-                weight: 1.5,
-                fillColor: ACCENT,
-                fillOpacity: 0.9,
-            }).addTo(this._addressLayer);
-            marker.bindTooltip(item.display_name, { direction: 'top', offset: [0, -7] });
-            this._addressMarkers.set(item.id, marker);
-        }
+        this._addressFeatures.clear();
+        const features = items.map((item) => {
+            const feature = {
+                type: 'Feature' as const,
+                id: item.id,
+                geometry: { type: 'Point' as const, coordinates: [item.lng, item.lat] },
+                properties: { name: item.display_name, hi: false },
+            };
+            this._addressFeatures.set(item.id, feature);
+            return feature;
+        });
+        const source = this._map?.getSource('zone-addresses') as
+            | { setData(d: unknown): void }
+            | undefined;
+        source?.setData({ type: 'FeatureCollection', features });
     }
 
     private _onAddressesChanged(e: Event): void {
@@ -571,13 +645,21 @@ export class ShopZoneEditorModal extends PlatformModal {
     /** Hover строки панели → подсветка точки на карте. */
     private _onAddressHover(e: Event): void {
         const { id, lat, lng } = (e as CustomEvent<{ id: number | null; lat: number | null; lng: number | null }>).detail;
-        for (const [mid, marker] of this._addressMarkers) {
-            const on = mid === id;
-            marker.setStyle({ fillColor: on ? '#155dfc' : ACCENT, weight: on ? 2 : 1.5 });
-            marker.setRadius(on ? 8 : 5);
+        for (const [mid, feature] of this._addressFeatures) {
+            if (feature.properties) feature.properties['hi'] = mid === id;
         }
-        if (id !== null && lat !== null && lng !== null && this._map && !this._map.getBounds().contains([lat, lng])) {
-            this._map.panInside([lat, lng], { padding: [48, 48], animate: true });
+        const source = this._map?.getSource('zone-addresses') as
+            | { setData(d: unknown): void }
+            | undefined;
+        source?.setData({
+            type: 'FeatureCollection',
+            features: [...this._addressFeatures.values()],
+        });
+        if (id !== null && lat !== null && lng !== null && this._map) {
+            const b = this._map.getBounds();
+            if (lng < b.getWest() || lng > b.getEast() || lat < b.getSouth() || lat > b.getNorth()) {
+                this._map.easeTo({ center: [lng, lat] });
+            }
         }
     }
 
@@ -588,12 +670,13 @@ export class ShopZoneEditorModal extends PlatformModal {
 
     private _apply(): void {
         if (!this._canApply()) return;
-        if (this._polygon && this._polygon.pm.hasSelfIntersection()) {
+        const feature = this._zoneFeature();
+        if (feature && !this._validate(feature)) {
             this._selfIntersect = true;
             this._updateHint();
             return;
         }
-        this.onApply?.(this._zoneFromPolygon());
+        this.onApply?.(this._zoneFromDraw());
         this.close();
     }
 
@@ -605,8 +688,9 @@ export class ShopZoneEditorModal extends PlatformModal {
         const km2 = _fmtArea(this._areaM2);
         const perim = _fmtKm(this._perimM);
         const perimUnit = this._perimM >= 1000 ? this.t('settings.zone_unit_km') : this.t('settings.zone_unit_m');
+        const hasZone = this._zoneRing() !== null;
         return html`
-            ${leafletCssLinks({ geoman: true })}
+            ${maplibreCssLink()}
             <div class="zwrap">
                 <div class="zbody">
                 <div class="zmap ${this._drawing ? 'drawing' : ''}"></div>
@@ -618,7 +702,7 @@ export class ShopZoneEditorModal extends PlatformModal {
                         <platform-icon name="edit" size="16"></platform-icon>
                         <span>${this._drawing ? this.t('settings.zone_draw_stop') : this.t('settings.zone_draw')}</span>
                     </button>
-                    ${this._polygon
+                    ${hasZone
                         ? html`
                             <button type="button" class="ztool" title=${this.t('settings.zone_fit')}
                                 @click=${() => this._fitZone()}>
@@ -641,7 +725,7 @@ export class ShopZoneEditorModal extends PlatformModal {
                             </button>`
                         : nothing}
                 </div>
-                ${this._polygon
+                ${hasZone
                     ? html`
                         <div class="zstats">
                             <span>${this.t('settings.zone_area')}: <b>${km2} ${this.t('settings.zone_unit_km2')}</b></span>

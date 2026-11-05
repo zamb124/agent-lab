@@ -10,7 +10,7 @@ alwaysApply: false
 
 # Stock
 
-Складской учёт компании по модели Odoo `stock` + `stock_account` + элементы WMS (SAP EWM): любое изменение количества — `StockMove` из локации A в локацию B, стоимость — отдельный append-only журнал `StockValueLayer`. Таблица — свой модуль `apps/stock/models/`. REST — `/stock/api/v1/`, SPA — `/stock`, команды — `STOCK_OPERATIONS`, DI — `StockDi`.
+Складской учёт компании по модели Odoo stock и stock_account + элементы WMS (SAP EWM): любое изменение количества — `StockMove` из локации A в локацию B, стоимость — отдельный append-only журнал `StockValueLayer`. Таблица — свой модуль `apps/stock/models/`. REST — `/stock/api/v1/`, SPA — `/stock`, команды — `STOCK_OPERATIONS`, DI — `StockDi`.
 
 ## Модель
 
@@ -53,7 +53,7 @@ alwaysApply: false
 
 Каждая мутация леджера — одна `run_in_lanes` в полосе склада `stock_wh:<company>:<warehouse_id>` (без склада — `stock_company:<company>:ledger`, см. `database.mdc` § Полосы):
 
-1. Граница транзакции — `*_in_lane` classmethod модели (`create_in_lane`/`confirm_in_lane`/`assign_in_lane`/`validate_in_lane`/`cancel_in_lane`/`return_in_lane`/`unreserve_move_in_lane` на `StockTransfer`, `release_in_lane`/`update_line_in_lane`/`apply_inventory_in_lane`/`move_container_in_lane`/`post_lines_in_lane`/`activate_in_lane` на `StockMove`, `claim_in_lane`/`release_in_lane`/`report_exception_in_lane` на `StockMoveLine`, `create/release/assign_in_lane` на `StockWave`, `set_inventory_in_lane` на `StockQuant`, `login_in_lane`/`logout_in_lane` на `StockResource`, `apply_in_lane` на `StockDecision`, `adjust_in_lane` на `StockValueLayer`). Внутри — только tx-free шаги `confirm_step`/`reserve_step`/`post_step`/`release_step`/`cancel_step`; свой `atomic` им запрещён.
+1. Граница транзакции — `*_in_lane` classmethod модели (`create_in_lane`/`confirm_in_lane`/`assign_in_lane`/`validate_in_lane`/`cancel_in_lane`/`return_in_lane`/`unreserve_move_in_lane` на `StockTransfer`, `release_in_lane`/`update_line_in_lane`/`apply_inventory_in_lane`/`move_container_in_lane`/`post_lines_in_lane`/`activate_in_lane` на `StockMove`, `claim_in_lane`/`release_in_lane`/`report_exception_in_lane` на `StockMoveLine`, `create/release/assign_in_lane` на `StockWave`, `update_inventory_quantity_in_lane` на `StockQuant`, `login_in_lane`/`logout_in_lane` на `StockResource`, `apply_in_lane` на `StockDecision`, `adjust_in_lane` на `StockValueLayer`). Внутри — только tx-free шаги `confirm_step`/`reserve_step`/`post_step`/`release_step`/`cancel_step`; свой `atomic` им запрещён.
 2. Сервис (`move_engine`, `warehouse_service` — склады/типы операций/накладные, `catalog_service` — товары/ЕИ/партии/упаковки, `topology_service` — локации/типы/тара/ресурсы, `placement_service` — putaway+removal+quants, `rule_service` — putaway/reorder-правила/маршруты, `task_service` — очередь заданий + `update_move_line`, `wave_service`, `valuation_service`, `barcode_service`) строит план вне транзакции (проверки, putaway-рефлекс с A2A), зовёт один `*_in_lane`, затем `publish_lane_run`. Прямой `publish_*` из сервиса запрещён — события едут в `LaneCommit.events` (`company_event` в `models/events.py`).
 3. `idempotency_key`: явный из payload → `command_event_id` WS-команды (`core.context.command`, ставится в `execute_realtime_command`) → uuid7; helper — `command_idempotency_key()` (`core/request_scope.py`). Replay по ключу возвращает сохранённый результат без повторной мутации.
 4. Имя документа `WH/IN/00001` — `LaneScope.next_value("stock_transfer_name:<prefix>")` (no-gap курсор в той же tx).
@@ -89,7 +89,7 @@ alwaysApply: false
 
 ## Интеграции
 
-- WorkItem links `stock_transfer`, `stock_location` (`core/worktracker/models/work_item.py`).
+- WorkItem links — `WorkItemLinkKind.STOCK_TRANSFER`/`STOCK_LOCATION` (`core/worktracker/models/types.py`).
 - Tools `stock_*` (`apps/flows/tools/stock/`) — тонкие над `core/clients/stock_client.py`, без записи quant и слоёв.
 
 ## Запреты

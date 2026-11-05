@@ -16,7 +16,7 @@ Playbook устраняет класс находок целиком, а не о
 
 ## Метрика → ratchet
 
-Признак: soft-правило `ts_*` или другая метрика долга растёт без гейта.
+Признак: soft-правило `ts_*` или другая метрика остатка растёт без гейта.
 
 1. Сигнатура точная: выборка из 20 находок без ложных; неточная — сначала уточняется.
 2. `severity="hard"` в `scripts/gates/frontend/ui_canon_rules.py`; `uv run python -m scripts.gates.frontend.ui_kit_canon --update` фиксирует текущее число.
@@ -45,9 +45,9 @@ Playbook устраняет класс находок целиком, а не о
 
 ## Один Lit
 
-Признак: § Мосты — «shim Lit», «импорт vendored-копии npm-пакета», «import map при бандле», «переписывание vendored-путей при сборке»; WTR печатает `Multiple versions of Lit loaded`.
+Признак: § Мосты — `lit-shim`, «импорт vendored-копии npm-пакета», «import map при бандле», «переписывание vendored-путей при сборке»; WTR печатает `Multiple versions of Lit loaded`.
 
-1. Импорты Lit — `from 'lit'` и `from 'lit/directives/<name>.js'`; `lit-shim` удаляется вместе со всеми импортами на него.
+1. Импорты Lit — `from 'lit'` и `from 'lit/directives/<name>.js'`; `lit-shim` снимается вместе со всеми импортами на него.
 2. Embed-автолоады собираются самодостаточно в `core/frontend/embed-dist/`: проверка, требовавшая относительных vendored-путей в замыкании embed, и `exempt_in_embed_closure` удаляются; вместо них — проверка собранного embed-бандла на отсутствие голых спецификаторов.
 3. Import map в `apps/*/ui/index.html`, в HTML, который отдаёт `core/app`, и в `web-test-runner.config.ts` удаляется; WTR резолвит npm `lit`.
 4. Переписывание vendored-путей в `scripts/build/ui.ts`, vendored-копии Lit, `marked`, `centrifuge` и их записи в precache `core/frontend/static/lib/pwa/sw.ts` удаляются; DOMPurify и прочие — тем же шагом, если пакет есть в npm.
@@ -104,7 +104,7 @@ Playbook устраняет класс находок целиком, а не о
 
 Признак: `ui_js_files` в `tests/**`; § Мосты — «мост резолва тестового раннера», «подмена внутренностей плагина».
 
-1. Конверсия по `../recipes.md` § 16: `*.spec.js` → `*.spec.ts`, `tests/frontend_core/helpers/**` → `.ts`.
+1. Конверсия по `../recipes.md` § 16: спеки — `*.spec.ts`, `tests/frontend_core/helpers/**` — `.ts`.
 2. `web-test-runner.config.ts`, `vitest.config.ts`, `package.json`: маски `.spec.ts`; мосты резолва удаляются.
 3. `scripts/gates/frontend/ui_kit_docs.py` и `ui_components.mdc` § UI Kit Documentation System — `contract.spec.ts`; `testing.mdc` § UI-тесты — as-is.
 4. Тесты исполняются на npm `lit` (§ Один Lit).

@@ -31,7 +31,7 @@ alwaysApply: false
 8. Ошибка после `complete_oauth` (`GuidedIntegrationError`, `ValueError`) — JSON (`detail`, `code`, `guided`) или HTML (`oauth_callback_prefers_html_response`); локаль — `oauth_ui_locale` из state, затем cookie/`Accept-Language`.
 9. Команды credentials и Google Workspace company SA — `op_integrations_*` (`core/integrations/operations.py`) + REST `core/api/integrations.py`.
 10. `company_id` credentials — только из `get_context().active_company`; flow не подменяет его через `input_mapping` или `state.variables`.
-11. Google Docs/Sheets — один Connect `service=workspace`; auth — только `GoogleWorkspaceClient().resolve_auth(state)`: `state.variables` (`google_service_account`, `google_access_token`, `google_impersonate_email`) → per-user OAuth `workspace` (затем старые `docs`/`sheets`) → company SA → `FlowInterrupt(body=OAuthInterrupt(..., service=workspace))`.
+11. Google Docs/Sheets — один Connect `service=workspace`; auth — только `GoogleWorkspaceClient().resolve_auth(state)`: `state.variables` (`google_service_account`, `google_access_token`, `google_impersonate_email`) → per-user OAuth `workspace` → `docs`/`sheets` → company SA → `FlowInterrupt(body=OAuthInterrupt(..., service=workspace))`.
 
 ### DevInterServiceProxy
 
@@ -50,7 +50,7 @@ alwaysApply: false
 ## Исключения
 
 - Исключение: почта — свои `CompanyMailConnection` и `MailboxBinding` (IMAP/SMTP домен) → `mail.mdc`. `[без гейта]`
-- Исключение: чтение старых credentials `service=docs`/`sheets` в цепочке Google Workspace; новые пишутся только `workspace`. `[без гейта]`
+- Исключение: credentials `service=docs`/`sheets` читаются в цепочке Google Workspace; новые пишутся только `workspace`. `[без гейта]`
 - Исключение: `google_workspace.api_bases` — override URL Google только для test/dev (эмулятор). `[без гейта]`
 
 ## Гейты

@@ -21,12 +21,12 @@ uv run python -m scripts.gates.repo.rules_drift
 |---|---|---|
 | tsc | ошибка компиляции | P0 |
 | Конвейер | звено toolchain вне эталона (`target-architecture.md` § Toolchain) | P0 |
-| Сигнатуры `hard` | рост — красный `scripts/gates/frontend/ui_kit_canon.py`; остаток — долг слоя | рост P0, остаток P4 (`ui_js_files` в `tests/` — P5) |
-| Сигнатуры `soft` `ts_*` | долг типов и замалчивания без ratchet | перевод в ratchet — P0; находки — P1 (`ts_silent_catch`, `ts_console`, `ts_literal_fallback`), P2 (`ts_explicit_any`, `ts_type_assertion`, `ts_double_cast`, `ts_non_null_assertion`) |
+| Сигнатуры `hard` | рост — красный `scripts/gates/frontend/ui_kit_canon.py`; остаток — хвост слоя | рост P0, остаток P4 (`ui_js_files` в `tests/` — P5) |
+| Сигнатуры `soft` `ts_*` | остаток типов и замалчивания без ratchet | перевод в ratchet — P0; находки — P1 (`ts_silent_catch`, `ts_console`, `ts_literal_fallback`), P2 (`ts_explicit_any`, `ts_type_assertion`, `ts_double_cast`, `ts_non_null_assertion`) |
 | Сигнатуры `soft` прочие | визуал и мелкие отступления канона | P6 |
 | Скрытое | exemption или pragma прячет находку | P0 |
 | Слепота | гейт, конфиг, правило или скил ссылается на `.js`, которого нет; набор суффиксов без `.ts` | P0 |
-| Мосты | переходный резолвер, shim, import map, vendored npm; мост внутри гейта | P3; в гейте — P0 |
+| Мосты | второй резолвер, прослойка-заглушка, import map, vendored npm; мост внутри гейта | P3; в гейте — P0 |
 | Без гейта | норма без детектора | P6; норма о замалчивании или типах — P1 |
 
 Находка — кандидат, а не приговор: открыть код, вызывающих (граф `codebase-memory-mcp`: `search_graph` → `trace_path`; без MCP — `rg`), правило-владельца. В zsh переменная со списком путей не разбивается на слова: пути — явными аргументами или через `bash -c`.
@@ -52,14 +52,14 @@ rg -n "\[(key|action|methodName): string\]: unknown" core/frontend/static/lib -g
 | в kit замены нет | срез корня в core: компонент, тип, возможность контроллера; `kit_gap` — только при ограниченной пользователем границе |
 | ложное срабатывание | исправить сигнатуру детектора; exemption, pragma и allowlist ради тишины запрещены |
 | новый класс | запись в `../anti-patterns.md` + детектор |
-| правило устарело | режим `rules`: правило as-is; правка правила, узаконивающая нарушение, запрещена |
+| правило расходится с кодом | режим `rules`: правило as-is; правка правила, узаконивающая нарушение, запрещена |
 
 ## Детектор
 
 - Сигнатура по содержимому файла — правило `scripts/gates/frontend/ui_canon_rules.py`: `soft` — только отчёт `scripts/tools/report_ui_kostyli.py`; `hard` — ratchet `scripts/gates/frontend/ui_kit_canon.py` с baseline `scripts/gates/frontend/ui_canon_baseline.json`.
 - Структурная норма — гейт-владелец: `scripts/gates/frontend/ui_canon.sh`, `scripts/gates/frontend/core_frontend_canon.py`, `scripts/gates/frontend/ui_factories.py`, `scripts/gates/backend/command_rest_mirror.py`, `scripts/gates/frontend/field_canon.sh`, `scripts/gates/backend/platform_events.py`.
 - Детектор падает на текущем нарушении в границе — иначе он ничего не ловит; пустой набор сканируемых файлов и отсутствующий ожидаемый файл — падение, а не «OK».
-- Долг больше одного среза — hard-правило с текущим числом; срез снижает число, `--update` фиксирует только снижение.
+- Остаток больше одного среза — hard-правило с текущим числом; срез снижает число, `--update` фиксирует только снижение.
 - В правиле-владельце снять `[без гейта]` и вписать гейт в раздел «Гейты».
 
 ## Правка и рекурсия
@@ -70,7 +70,7 @@ rg -n "\[(key|action|methodName): string\]: unknown" core/frontend/static/lib -g
 
 ## Проверка
 
-1. Детектор среза — 0 в границе; повторный `ui_audit.py` не находит старого имени, пути, моста или исключения.
+1. Детектор среза — 0 в границе; повторный `ui_audit.py` не находит заменённого имени, пути, моста или исключения.
 2. `make ui`; затронуты Python, гейты или правила — `make lint` или `gates_report.py` без новых падений относительно preflight.
 3. Ratchet снизился — `uv run python -m scripts.gates.frontend.ui_kit_canon --update`.
 4. Затронут экран — визуальная проверка (`../SKILL.md` § Визуальная проверка).
@@ -78,11 +78,11 @@ rg -n "\[(key|action|methodName): string\]: unknown" core/frontend/static/lib -g
 
 ## Отчёт итерации
 
-По-русски, кратко, результат раньше процесса:
+По-русски, кратко, результат до процесса:
 
 - срез, корень, инвариант, эталон и норма-владелец; стек рекурсии, если был;
 - детектор: был или добавлен; N → 0;
-- удалено: старые пути, мосты, исключения, мёртвые артефакты;
+- убрано: заменённые пути, мосты, исключения, мёртвые артефакты;
 - гейты до и после, тесты, ratchet до → после, дельта `ui_audit.py` по секциям;
 - **Найдено и не исправлено** — каждая открытая находка с приоритетом и предлагаемым срезом; пустой раздел — «нет»;
 - следующий срез из свежего discovery.

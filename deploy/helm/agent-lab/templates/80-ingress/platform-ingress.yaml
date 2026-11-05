@@ -188,6 +188,17 @@ spec:
                   number: {{ $shop.port }}
           {{- end }}
 
+          {{- $geo := index $.Values.applications "geo" }}
+          {{- if and $geo $geo.enabled }}
+          - path: /geo
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $geo.serviceName }}
+                port:
+                  number: {{ $geo.port }}
+          {{- end }}
+
           {{- $sched := index $.Values.applications "scheduler-api" }}
           {{- if $sched.enabled }}
           - path: /scheduler

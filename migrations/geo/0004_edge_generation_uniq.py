@@ -6,7 +6,7 @@
 ``ON CONFLICT DO NOTHING`` на вставке.
 """
 
-depends_on = "0002_light_modes"
+depends_on = "0003_import_status_enum"
 
 
 def upgrade(ctx):

@@ -86,6 +86,12 @@ RUN set -eux; \
     node --version; \
     go version
 
+# pmtiles CLI: geo_tiles_sync режет региональный векторный extract из
+# Protomaps daily build (`pmtiles extract` — подпроцесс GeoTilesService).
+ARG PMTILES_VERSION=v1.31.2
+RUN GOBIN=/usr/local/bin go install "github.com/protomaps/go-pmtiles/pmtiles@${PMTILES_VERSION}" && \
+    pmtiles version
+
 ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="${DOTNET_ROOT}:${PATH}"
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \

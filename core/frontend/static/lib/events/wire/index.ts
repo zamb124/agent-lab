@@ -7,6 +7,7 @@
 import type { CrmCommandMap, CrmEventMap } from './crm.gen.js';
 import type { FlowsCommandMap, FlowsEventMap } from './flows.gen.js';
 import type { FrontendCommandMap, FrontendEventMap } from './frontend.gen.js';
+import type { GeoCommandMap, GeoEventMap } from './geo.gen.js';
 import type { OfficeCommandMap, OfficeEventMap } from './office.gen.js';
 import type { RagCommandMap, RagEventMap } from './rag.gen.js';
 import type { SchedulerCommandMap, SchedulerEventMap } from './scheduler.gen.js';
@@ -22,6 +23,7 @@ export interface PlatformCommandMap extends
     CrmCommandMap,
     FlowsCommandMap,
     FrontendCommandMap,
+    GeoCommandMap,
     OfficeCommandMap,
     RagCommandMap,
     SchedulerCommandMap,
@@ -37,6 +39,7 @@ export interface PlatformEventMap extends
     CrmEventMap,
     FlowsEventMap,
     FrontendEventMap,
+    GeoEventMap,
     OfficeEventMap,
     RagEventMap,
     SchedulerEventMap,

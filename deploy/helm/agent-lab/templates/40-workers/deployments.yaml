@@ -39,6 +39,11 @@ spec:
             {{- include "agentlab.appEnv" $ | nindent 12 }}
           volumeMounts:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
+            {{- if eq $name "geo-worker" }}
+            # Общий том с geo-app: sync пишет basemap.pmtiles + ассеты сюда.
+            - name: geo-tiles
+              mountPath: /app/.data/tiles
+            {{- end }}
           resources:
             {{- toYaml $worker.resources | nindent 12 }}
           # Воркеры не слушают HTTP; проверяем, жив ли главный процесс контейнера.
@@ -54,5 +59,10 @@ spec:
             failureThreshold: 3
       volumes:
         {{- include "agentlab.confVolume" $ | nindent 8 }}
+        {{- if eq $name "geo-worker" }}
+        - name: geo-tiles
+          persistentVolumeClaim:
+            claimName: geo-tiles
+        {{- end }}
 {{- end }}
 {{- end }}

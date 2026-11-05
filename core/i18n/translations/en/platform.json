@@ -145,6 +145,11 @@
       "name": "Console",
       "menu_description": "Company, billing, app hub",
       "description": "Your platform home: company settings, billing, and one-click access to every product"
+    },
+    "geo": {
+      "name": "Geo",
+      "menu_description": "Maps, addresses and routing",
+      "description": "Platform geo engine: address directory, road graph, routing and data layers on the map"
     }
   },
   "file_preview_modal": {
@@ -1088,6 +1093,16 @@
     "address_not_found": "Address not found",
     "deeplink_not_allowed": "Deeplink is not allowed",
     "shop_closed": "We are closed — ordering opens {next_open}",
-    "invalid_delivery_zone": "Invalid delivery zone: expected GeoJSON Polygon with a single closed ring"
+    "invalid_delivery_zone": "Invalid delivery zone: expected GeoJSON Polygon with a single closed ring",
+    "geo_import_unavailable": "Road graph is not loaded — wait for the OSM import",
+    "point_too_far_from_road": "Point is too far from the road network",
+    "route_mode_unknown": "Unknown route mode",
+    "matrix_limit_exceeded": "Route matrix cell limit exceeded",
+    "tsp_limit_exceeded": "Waypoint limit exceeded",
+    "isochrone_limit_exceeded": "Isochrone range limit exceeded",
+    "geo_bbox_invalid": "Invalid region bbox: south/west must be less than north/east",
+    "geo_layer_unknown": "Unknown map layer",
+    "geo_region_exists": "Region with this name already exists",
+    "geo_region_not_found": "Region not found"
   }
 }

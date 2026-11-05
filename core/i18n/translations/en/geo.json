@@ -1,4 +1,78 @@
 {
+  "sidebar": {
+    "title": "Geo",
+    "menu_overview": "Map",
+    "menu_sources": "Coverage",
+    "menu_route_lab": "Routes"
+  },
+  "routes": {
+    "overview": "Map",
+    "sources": "Coverage",
+    "route_lab": "Route lab"
+  },
+  "map": {
+    "loading": "Loading layers…"
+  },
+  "layers": {
+    "title": "Layers",
+    "regions": "Regions",
+    "roads": "Roads",
+    "addresses": "Addresses",
+    "restrictions": "Turn restrictions",
+    "barriers": "Barriers"
+  },
+  "overview": {
+    "header_title": "Geo data map",
+    "header_subtitle": "Canonical layers: regions, road graph, addresses",
+    "generation": "Generation",
+    "status": "Status",
+    "rows": "Rows"
+  },
+  "sources": {
+    "header_title": "Coverage and sources",
+    "header_subtitle": "Import regions, source allowlist and generation statistics",
+    "import_title": "Import pipeline",
+    "import_run": "Run sync",
+    "totals": "Totals by entity",
+    "regions_title": "Regions",
+    "sources_title": "Sources",
+    "col_name": "Name",
+    "col_kind": "Kind",
+    "col_rows": "Rows",
+    "col_imported": "Imported",
+    "col_license": "License",
+    "col_enabled": "Status",
+    "kind_city": "City",
+    "kind_region": "Region",
+    "kind_country": "Country",
+    "on": "On",
+    "off": "Off"
+  },
+  "route_lab": {
+    "header_title": "Route lab",
+    "header_subtitle": "Routing checks against the canonical graph",
+    "modes": "Mode",
+    "mode_car": "Car",
+    "mode_foot": "Foot",
+    "mode_bike": "Bike",
+    "mode_scooter": "Scooter",
+    "click_hint": "Click the map for point A, click again for point B",
+    "distance": "Distance",
+    "duration": "Duration",
+    "km": "km",
+    "min": "min",
+    "failed": "Route failed"
+  },
+  "toast": {
+    "import_enqueued": "Sync enqueued",
+    "import_enqueue_failed": "Failed to enqueue sync",
+    "region_created": "Region created",
+    "region_create_failed": "Failed to create region",
+    "region_updated": "Region updated",
+    "region_update_failed": "Failed to update region",
+    "region_removed": "Region removed",
+    "region_remove_failed": "Failed to remove region"
+  },
   "zone_panel": {
     "search_placeholder": "Search addresses in zone…",
     "loading": "Loading addresses…",

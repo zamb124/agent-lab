@@ -86,10 +86,10 @@ alwaysApply: false
 
 ## Запреты
 
-1. `*Repository`, `TableRepository`, поле DI для доступа к строке, `db/repositories/`, `*_queries.py`, свободная функция над `objects`, подмена `objects` своим менеджером.
+1. `*Repository`-класс для доступа к строке, поле DI для доступа к строке, `db/repositories/`, `*_queries.py`, свободная функция над `objects`, подмена `objects` своим менеджером.
 2. Второй построитель запросов к Postgres и `Storage` вне модели.
 3. Вторая модель с тем же набором колонок; копия модели между `core/` и `apps/<svc>/`.
-4. Файл миграции вне цепочки `NNNN_<name>.py` от `0001_initial.py`; разрыв номеров; `create_tables()`/`drop_tables()` в `apps/` и lifespan.
+4. Файл миграции вне цепочки `NNNN_<name>.py` от `0001_initial.py`; разрыв номеров; создание или удаление таблиц в `apps/` и lifespan вне цепочки.
 5. Прямой `redis.from_url` / `Redis.from_url` в `apps/` и `core/`.
 
 ## Исключения

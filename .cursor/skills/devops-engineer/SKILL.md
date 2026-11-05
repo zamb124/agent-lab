@@ -7,7 +7,7 @@ description: DevOps инженер Платформы. Знает SSH-досту
 
 ## Идентичность
 
-Я DevOps инженер Платформы. У меня root SSH к единственной ноде кластера (`77.91.94.127`), я знаю всё, что туда смонтировано, как развёрнут Helm-чарт, какой компонент за что отвечает, и как восстановить любой компонент при сбое. Primary apex — **linnex.io**; **humanitec.ru** — legacy brand (multi-brand smoke: `deploy/docs/multi-brand-prod-smoke.md`). `ytai.tech` — на `84.38.184.105`, не трогать.
+Я DevOps инженер Платформы. У меня root SSH к единственной ноде кластера (`77.91.94.127`), я знаю всё, что туда смонтировано, как развёрнут Helm-чарт, какой компонент за что отвечает, и как восстановить любой компонент при сбое. Primary apex — **linnex.io**; **humanitec.ru** — второй apex (multi-brand smoke: `deploy/docs/multi-brand-prod-smoke.md`). `ytai.tech` — на `84.38.184.105`, не трогать.
 
 ## Главный принцип: идемпотентность
 
@@ -110,7 +110,7 @@ make k8s-template > /tmp/r.yaml      # рендер всех манифесто�
 make render-helm-app-conf            # conf.json + overlay -> files/app-conf.json
 make k8s-lint                        # helm lint (сначала рендер app-conf)
 make k8s-uninstall                   # helm uninstall (PVC сохраняются)
-make k8s-decommission-compose        # снос legacy docker compose на хосте (dry-run; CONFIRM=1 — реально)
+make k8s-decommission-compose        # снос compose-стека деплоя на хосте (dry-run; CONFIRM=1 — реально)
 make k8s-cluster-reset CONFIRM=1     # полный reset MicroK8s на master (не на 84.38 — ytai)
 ```
 
@@ -168,7 +168,7 @@ helm rollback agent-lab <REV> -n platform
 | `rebind-public-node.sh` | Обновляет DNS A-записи apex-доменов (`linnex.io`, `humanitec.ru`) через Reg.ru API и переносит hostNetwork-сервисы (livekit/coturn) на новую ноду. `bash rebind-public-node.sh <node> <ip>` | локально / master |
 | `helm_clear_pending_release.sh` | Снять блокировку Helm `another operation is in progress` (удалить только pending-* release Secret) | локально / master; **`make k8s-helm-clear-pending`** |
 | `helm_precheck_install_secret_conflict.sh` | Orphan `platform-secrets`: adopt при существующем релизе, иначе ошибка или delete | CI |
-| `decommission-compose.sh` | Полный снос legacy docker compose стека на хосте; dry-run по default, реально — `CONFIRM=1` | локально, **`make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]`** |
+| `decommission-compose.sh` | Полный снос compose-стека деплоя на хосте; dry-run по default, реально — `CONFIRM=1` | локально, **`make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]`** |
 | `cluster-reset.sh` | Полный reset MicroK8s на master; dry-run по default, `CONFIRM=1` реально. Не запускать на `84.38.184.105` (ytai). | локально, **`make k8s-cluster-reset [CONFIRM=1]`** |
 | `backup-postgres.sh` / `restore-postgres.sh` | pg_dumpall через kubectl exec | локально / master |
 

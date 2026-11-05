@@ -21,7 +21,15 @@ class GeoSettings(BaseSettings):
     )
     coverage_bbox: tuple[float, float, float, float] = Field(
         default=(54.2, 35.1, 56.9, 40.4),
-        description="BBox покрытия (lat_min, lng_min, lat_max, lng_max): Москва и Московская область.",
+        description="BBox покрытия (lat_min, lng_min, lat_max, lng_max): Москва и Московская область. Сидит дефолтный geo_regions.",
+    )
+    default_region_name: str = Field(
+        default="moscow",
+        description="Slug дефолтного региона, сидящегося из coverage_bbox/osm_extract_urls при пустом geo_regions.",
+    )
+    default_region_title: str = Field(
+        default="Москва и Московская область",
+        description="Название дефолтного региона покрытия.",
     )
     import_batch_size: int = Field(
         default=5000,
@@ -110,6 +118,19 @@ class GeoSettings(BaseSettings):
         default_factory=lambda: {"bike": 9, "scooter": 9},
         description="Скорость bike/scooter на неизвестном пешем классе (км/ч).",
     )
+    signal_delay_s: dict[str, float] = Field(
+        default_factory=lambda: {
+            "car": 15.0,
+            "bike": 8.0,
+            "scooter": 8.0,
+            "foot": 0.0,
+        },
+        description=(
+            "Штраф (сек) за транзит через вершину highway=traffic_signals "
+            "по режиму — среднее ожидание зелёного. Пешеходных сигналов на "
+            "проезжей части у узла нет: foot-штраф 0."
+        ),
+    )
     matrix_max_cells: int = Field(
         default=10_000,
         ge=1,
@@ -148,4 +169,35 @@ class GeoSettings(BaseSettings):
     sync_enabled: bool = Field(
         default=True,
         description="Разрешить фактический импорт в geo_osm_sync_tick (False — тик завершается no-op).",
+    )
+    tiles_dir: str = Field(
+        default=".data/tiles",
+        description=(
+            "Директория векторной базовой карты: basemap.pmtiles + "
+            "fonts/{Fontstack}/{range}.pbf + sprites/{flavor}.*. Наполняется "
+            "geo_tiles_sync или scripts/geo/fetch_basemap.py."
+        ),
+    )
+    tiles_pmtiles_source: str = Field(
+        default="https://build.protomaps.com/20251027.pmtiles",
+        description=(
+            "Источник planet.pmtiles (Protomaps daily build, pinned датой) для "
+            "geo_tiles_sync — extract режется по coverage_bbox."
+        ),
+    )
+    tiles_pmtiles_bin: str = Field(
+        default="pmtiles",
+        description="Путь к pmtiles CLI (extract) для geo_tiles_sync.",
+    )
+    tiles_assets_url: str = Field(
+        default="https://github.com/protomaps/basemaps-assets/archive/refs/heads/main.tar.gz",
+        description=(
+            "Tarball с glyphs-шрифтами и sprites стилей (protomaps/basemaps-assets) "
+            "для geo_tiles_sync."
+        ),
+    )
+    tiles_cache_seconds: int = Field(
+        default=86400,
+        ge=0,
+        description="Cache-Control max-age для /tiles/* (ассеты версионируются синком).",
     )

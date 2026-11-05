@@ -39,7 +39,7 @@ alwaysApply: false
 ### Сообщения
 
 - Лента канала — корневые сообщения (`thread_id IS NULL`, `deleted_at IS NULL`), страница `CursorPage` (`next_cursor` старше, `prev_cursor` новее) → `architecture.mdc § Пагинация`; ответ в ленте (`parent_message_id`) остаётся в ленте. `[без гейта]`
-- `unread_count` и `mention_unread_count` считаются только по корневой ленте после `last_read_at` (`SyncMessage.channel_lane_summaries`); `mark_read` двигает `last_read_at` до последнего `sent_at` корневой ленты. `[без гейта]`
+- `unread_count` и `mention_unread_count` считаются только по корневой ленте после `last_read_at` (`SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc`); `mark_read` двигает `last_read_at` до последнего `sent_at` корневой ленты. `[без гейта]`
 - Длина `text/plain` — до `SYNC_MESSAGE_TEXT_MAX_CHARS`, тот же лимит в `apps/sync/ui/components/_helpers/sync-limits.ts`. `[без гейта]`
 - Упоминания — `MessageCreate.mentioned_user_ids`: сервер проверяет членство и пишет их в первый `text/plain`. `[без гейта]`
 - Байты вложений — только chunked Files API `/sync/api/v1/files/uploads*` с `FileSourceKind.SYNC_*`; после complete `sync/files/upload_completed_requested` отдаёт `FileRef`, блок сообщения хранит `file_id` → `files.mdc § Инварианты`.

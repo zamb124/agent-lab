@@ -46,4 +46,5 @@ class GeoRoadEdge(PlatformModel):
     highway: str = DbField(default="", db_type="TEXT")
     name: str = DbField(default="", db_type="TEXT")
     osm_way_id: int = DbField(db_type="BIGINT")
+    region: str = DbField(default="", max_length=64)
     generation: int = DbField(default=0)

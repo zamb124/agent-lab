@@ -73,7 +73,7 @@ alwaysApply: false
 - Чтение писем и папок в UI и HTTP напрямую из IMAP в обход локальной копии. `[без гейта]`
 - События календаря через IMAP и SMTP. `[без гейта]`
 - Пароли и ключи ящиков в JSON-ответах и в git. `[без гейта]`
-- Голый `id` и `mailbox_id` вместо `mailbox_binding_id`; `provider` вместо `source` у `CalendarEvent`. `[без гейта]`
+- Голый `id` вместо `mailbox_binding_id`; `provider` вместо `source` у `CalendarEvent`. `[без гейта]`
 
 ## Гейты
 

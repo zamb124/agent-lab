@@ -68,6 +68,10 @@ STACK_LOG_DIR = Path("/tmp/platform_test_stack")
 _MICRO_OSM_FIXTURE = (
     Path(__file__).resolve().parents[2] / "tests" / "geo" / "fixtures" / "micro.osm"
 )
+# Vector-tiles ассеты тестового стека: basemap.pmtiles + fonts/ + sprites/.
+_TILES_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "tests" / "geo" / "fixtures" / "tiles"
+)
 BASELINE_PYTEST_WORKERS = 10
 # Parallel spawn of granian + TaskIQ: import under ~100 processes takes ~2 min.
 # 90–120 s expire while late processes are still importing.
@@ -428,6 +432,11 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         app_path="apps.geo.main:app",
         port=9028,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+        env={
+            # Векторные тайлы тестового стека — коммиченные фикстуры
+            # (синтетический pmtiles + glyph/sprite), без внешних загрузок.
+            "TILES_DIR": str(_TILES_FIXTURE),
+        },
     ),
     GranianService(
         name="nominatim",

@@ -42,7 +42,7 @@ alwaysApply: false
 
 ## Запреты
 
-1. `AgentActor`, `AgentAssignment`, `platform-agent:*`, отдельная таблица агентов.
+1. Свои типы актора и назначения, `platform-agent:*`, отдельная таблица агентов.
 2. Сотрудник без куратора; сотрудник как оператор HITL.
 3. Автопост ответа LLM в Sync без tool.
 

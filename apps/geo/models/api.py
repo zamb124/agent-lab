@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import Field
 
+from apps.geo.models.geo_enrich_item import GeoEnrichStatus
+from apps.geo.models.geo_region import GeoRegionKind
 from core.models import StrictBaseModel
 from core.types import JsonObject
 
@@ -78,6 +80,9 @@ class GeoRouteResponse(StrictBaseModel):
     distance_m: float
     duration_s: float
     geometry: JsonObject | None = None
+    # Сторона улицы точки прибытия относительно направления движения —
+    # подсказка курьеру, с какой стороны дом; None — привязка в вершину.
+    arrival_side: Literal["left", "right"] | None = None
 
 
 class GeoRouteMatrixRequest(StrictBaseModel):
@@ -144,5 +149,179 @@ class GeoImportStatusResponse(StrictBaseModel):
     rows_addresses: int = 0
     rows_vertices: int = 0
     rows_edges: int = 0
+    rows_restrictions: int = 0
+    rows_barriers: int = 0
+    rows_signals: int = 0
     last_error: str = ""
     finished_at: str | None = None
+
+
+class GeoBbox(StrictBaseModel):
+    """Прямоугольная рамка WGS84: south/west — минимальный угол."""
+
+    south: float = Field(ge=-90, le=90)
+    west: float = Field(ge=-180, le=180)
+    north: float = Field(ge=-90, le=90)
+    east: float = Field(ge=-180, le=180)
+
+
+class GeoRegionUpsertRequest(StrictBaseModel):
+    """Полная форма региона покрытия; ``name`` — slug-ключ."""
+
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    title: str = Field(default="", max_length=255)
+    kind: GeoRegionKind = GeoRegionKind.CITY
+    bbox: GeoBbox
+    extract_urls: list[str] = Field(default_factory=list, max_length=20)
+    replication_url: str = Field(default="", max_length=2048)
+    enabled: bool = True
+
+
+class GeoRegionItem(StrictBaseModel):
+    """Регион покрытия со счётчиками активного поколения."""
+
+    id: int
+    name: str
+    title: str
+    kind: str
+    bbox: GeoBbox
+    extract_urls: list[str]
+    replication_url: str
+    enabled: bool
+    last_imported_at: str | None = None
+    addresses: int = 0
+    vertices: int = 0
+    edges: int = 0
+
+
+class GeoRegionListResponse(StrictBaseModel):
+    items: list[GeoRegionItem]
+    generation: int
+
+
+class GeoRegionNameRequest(StrictBaseModel):
+    """Операция над регионом по slug-имени."""
+
+    name: str = Field(min_length=1, max_length=64)
+
+
+class GeoSourceItem(StrictBaseModel):
+    """Источник из allowlist-реестра с лицензией."""
+
+    id: int
+    name: str
+    title: str
+    kind: str
+    license: str
+    attribution: str
+    url: str
+    enabled: bool
+
+
+class GeoSourceListResponse(StrictBaseModel):
+    items: list[GeoSourceItem]
+
+
+class GeoStatsRow(StrictBaseModel):
+    """Счётчик сущности в поколении по источнику и региону."""
+
+    source: str
+    region: str
+    entity: str
+    rows: int
+
+
+class GeoStatsOverview(StrictBaseModel):
+    """Сводка загруженных данных активного поколения."""
+
+    generation: int
+    rows: list[GeoStatsRow]
+    totals: dict[str, int]
+
+
+class GeoCursorItem(StrictBaseModel):
+    """Позиция чанкового потока источника."""
+
+    source: str
+    region: str
+    cursor: str
+    status: str
+    rows_done: int
+    last_error: str
+    updated_at: str
+
+
+class GeoCursorListResponse(StrictBaseModel):
+    items: list[GeoCursorItem]
+
+
+class GeoEnrichListRequest(StrictBaseModel):
+    """Страница очереди обогащения; ``status`` — необязательный фильтр."""
+
+    status: GeoEnrichStatus | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class GeoEnrichItemResponse(StrictBaseModel):
+    id: int
+    kind: str
+    payload: JsonObject
+    priority: int
+    status: str
+    attempts: int
+    last_error: str
+    created_at: str
+    done_at: str | None = None
+
+
+class GeoEnrichListResponse(StrictBaseModel):
+    items: list[GeoEnrichItemResponse]
+    pending: int
+
+
+class GeoImportRunResponse(StrictBaseModel):
+    """Постановка внеочередного тика синхронизации."""
+
+    enqueued: bool
+
+
+class GeoLayerInfo(StrictBaseModel):
+    """Канонический слой карты: метаданные и число фич активного поколения."""
+
+    name: str
+    geometry: str
+    min_zoom: int
+    max_features: int
+    color: str
+    features: int = 0
+
+
+class GeoLayerListResponse(StrictBaseModel):
+    layers: list[GeoLayerInfo]
+    generation: int
+
+
+class GeoFeaturesRequest(StrictBaseModel):
+    """Фичи слоёв в рамке карты; ``layers`` пуст — все слои реестра."""
+
+    south: float = Field(ge=-90, le=90)
+    west: float = Field(ge=-180, le=180)
+    north: float = Field(ge=-90, le=90)
+    east: float = Field(ge=-180, le=180)
+    zoom: int = Field(ge=0, le=22)
+    layers: list[str] = Field(default_factory=list, max_length=16)
+
+
+class GeoFeature(StrictBaseModel):
+    """GeoJSON-фича канонического слоя."""
+
+    layer: str
+    id: str
+    geometry: JsonObject
+    properties: JsonObject
+
+
+class GeoFeatureCollectionResponse(StrictBaseModel):
+    features: list[GeoFeature]
+    truncated: bool = False

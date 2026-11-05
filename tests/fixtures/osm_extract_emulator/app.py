@@ -7,6 +7,8 @@ wire-путь ``OsmImportService._download_if_newer`` (HEAD → If-Modified-Sinc
 стриминг в tmp → pyosmium-парс), а не ``file://``.
 """
 
+import io
+import tarfile
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from pathlib import Path
@@ -64,6 +66,31 @@ async def head_extract_no_lm() -> Response:
 @app.get("/extracts/no-last-modified.osm.pbf")
 async def get_extract_no_lm() -> Response:
     return Response(content=_body(), media_type="application/octet-stream")
+
+
+def _assets_tarball() -> bytes:
+    """Синтетический basemaps-assets tar.gz: fonts/ + sprites/ внутри
+    корневой директории архива (как у protomaps/basemaps-assets)."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        def _add(name: str, payload: bytes) -> None:
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            tar.addfile(info, io.BytesIO(payload))
+
+        _add("basemaps-assets/fonts/Noto Sans Regular/0-255.pbf", b"glyphs-synced")
+        _add("basemaps-assets/sprites/v4/light.json", b'{"synced":true}')
+        _add("basemaps-assets/sprites/v4/light.png", b"\x89PNG-synced")
+    return buf.getvalue()
+
+
+@app.get("/tiles-assets/basemaps-assets.tar.gz")
+async def get_tiles_assets() -> Response:
+    """Зеркало ``tiles_assets_url`` для ``GeoTilesService._sync_assets``."""
+    return Response(
+        content=_assets_tarball(),
+        media_type="application/gzip",
+    )
 
 
 @app.get("/health")

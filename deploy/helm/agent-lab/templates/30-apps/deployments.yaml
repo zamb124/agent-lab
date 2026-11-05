@@ -114,6 +114,13 @@ spec:
             {{- if eq $name "browser" }}
             - name: BROWSER__CDP_ENDPOINTS__CHROMIUM
               value: "http://127.0.0.1:9222"
+            # pymalloc не возвращает heap ОС: после серии crawl-сессий RSS
+            # остаётся ~1.7Gi при нуле активных контекстов. glibc malloc
+            # отдаёт память через trim; порог понижен под бурст-нагрузку.
+            - name: PYTHONMALLOC
+              value: malloc
+            - name: MALLOC_TRIM_THRESHOLD_
+              value: "65536"
             {{- end }}
             {{- if eq $name "code-runner-python" }}
             - name: CODE_RUNNER__PYTHON_WORKERS
@@ -140,6 +147,12 @@ spec:
               containerPort: {{ $app.port }}
           volumeMounts:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
+            {{- if eq $name "geo" }}
+            # Общий том с geo-worker: geo_tiles_sync пишет basemap.pmtiles,
+            # geo отдаёт /geo/api/v1/tiles/* с этого же PVC.
+            - name: geo-tiles
+              mountPath: /app/.data/tiles
+            {{- end }}
             {{- if eq $name "guest-runtime" }}
             - name: guest-runtime-registry
               mountPath: /var/lib/guest-runtime
@@ -201,6 +214,11 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 1Gi
+        {{- end }}
+        {{- if eq $name "geo" }}
+        - name: geo-tiles
+          persistentVolumeClaim:
+            claimName: geo-tiles
         {{- end }}
         {{- if eq $name "guest-runtime" }}
         - name: guest-runtime-registry

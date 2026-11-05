@@ -47,8 +47,8 @@ postgres:
     limits:
       cpu: "2"
       memory: 4Gi
-  maxConnections: 1000
-  sharedBuffers: 2GB
+  maxConnections: 256
+  sharedBuffers: 512MB
 
 openfga:
   enabled: true
@@ -474,6 +474,10 @@ applications:
     port: 8028
     replicas: 1
     serviceName: geo
+    # Векторная базовая карта (PMTiles + glyphs/sprites) — разделяемый том между
+    # geo (отдаёт /tiles/*) и geo-worker (geo_tiles_sync скачивает).
+    tiles:
+      size: 4Gi
     command:
       - granian
       - --interface

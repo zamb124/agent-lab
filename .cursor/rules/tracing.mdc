@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## Канон
 
-1. Значимая операция — `traced_operation(...)` (`core/tracing/operation_span.py`) с `operation_name` вида `service.area.action` и `platform.operation.category` (`llm`, `embedding`, `stt`, `livekit`, `livekit_egress`, `flow_run`, `sync_command`, `rag_ingest`, `crm_search`, `storage`, `office_document`, `mcp`).
+1. Значимая операция — `traced_operation(...)` (`core/tracing/operation_span.py`) с `operation_name` вида `service.area.action` и `platform.operation.category` (`llm`, `embedding`, `stt`, `speech`, `livekit`, `livekit_egress`, `sync_command`, `rag_ingest`, `rag_search`, `rag_rerank`, `stock_mutation`, `mcp`, `handoff`, `guest`, `code_runner`, `platform_tools`, `reflection`).
 2. Биллинг — атрибуты `platform.billing.usage_type` (`UsageType`), `platform.billing.resource_name` (`category:resource`), `platform.billing.quantity`, `platform.billing.pending_settlement=true`; списание делает фоновый settlement → `billing.mdc`.
 3. Каждый span несёт `platform.tenant.company_id` и `platform.user.id`; без HTTP-контекста (воркер, LiveKit) оба передаются явно в `extra_attributes`; непустые `platform.tenant.*` задают колонки `company_id`/`namespace` поверх контекста.
 4. `extra_attributes` — только `core.types.OtelAttributes` (скаляры и последовательности OTel); внешний JSON валидируется на границе, иначе `raise`.

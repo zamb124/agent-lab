@@ -1,10 +1,11 @@
 /**
- * shop-zone-map — превью зоны доставки на Leaflet/OSM + открытие редактора.
+ * shop-zone-map — превью зоны доставки на MapLibre + открытие редактора.
  *
- * Реальный браузер: Leaflet монтируется настоящий (динамический import
- * резолвится сборкой), полигон — настоящий слой на карте. Клик «Изменить» —
- * настоящий openModal('shop.zone_editor') через UI_MODAL_OPEN; результат
- * редактора приходит в onApply → zone-changed.
+ * Реальный браузер: MapLibre монтируется настоящий (динамический import
+ * резолвится сборкой), стиль базы — WTR-стаб по боевому URL
+ * /geo/api/v1/tiles/style.json, полигон зоны — настоящий geojson-source
+ * на карте. Клик «Изменить» — настоящий openModal('shop.zone_editor')
+ * через UI_MODAL_OPEN; результат редактора приходит в onApply → zone-changed.
  */
 
 import { fixture, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
@@ -33,12 +34,18 @@ const ZONE = {
     ],
 };
 
+type TestMap = {
+    isStyleLoaded(): boolean;
+    getSource(id: string): { _data?: { geojson?: { features?: unknown[] } } } | undefined;
+    getLayer(id: string): unknown;
+};
+
 type TestEl = HTMLElement & {
     shadowRoot: ShadowRoot;
     zone: Record<string, unknown> | null;
     address: string;
     shopId: string;
-    _map: { _loaded: boolean } | null;
+    _map: TestMap | null;
 };
 
 async function seedI18n() {
@@ -70,9 +77,16 @@ function openBtn(el: TestEl): HTMLButtonElement {
 }
 
 async function mapReady(el: TestEl): Promise<void> {
-    // Leaflet грузится динамическим импортом — ждём реальный init.
-    for (let i = 0; i < 50 && !el._map?._loaded; i++) await aTimeout(20);
+    // MapLibre грузится динамическим импортом — ждём карту и стиль.
+    for (let i = 0; i < 100 && !(el._map && el._map.isStyleLoaded()); i++) await aTimeout(30);
     expect(el._map, 'карта инициализирована').to.exist;
+    expect(el._map!.isStyleLoaded(), 'стиль базы загружен').to.equal(true);
+}
+
+/** Число фич в geojson-source зоны на карте. */
+function zoneFeatureCount(el: TestEl): number {
+    const source = el._map!.getSource('zone');
+    return source?._data?.geojson?.features?.length ?? 0;
 }
 
 describe('shop-zone-map', () => {
@@ -87,25 +101,23 @@ describe('shop-zone-map', () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         await mapReady(el);
         await elementUpdated(el);
-        // leaflet.css обязан жить в shadow root — head-стили сквозь boundary не идут.
-        const link = el.shadowRoot.querySelector<HTMLLinkElement>('link[href*="leaflet.css"]');
-        expect(link, 'leaflet.css в shadow root').to.exist;
-        const tile = el.shadowRoot.querySelector<HTMLElement>('.leaflet-tile');
-        expect(tile, 'тайл загружен').to.exist;
-        expect(getComputedStyle(tile!).position, 'тайл позиционируется абсолютно').to.equal('absolute');
+        // maplibre-gl.css обязан жить в shadow root — head-стили сквозь boundary не идут.
+        const link = el.shadowRoot.querySelector<HTMLLinkElement>('link[href*="maplibre-gl.css"]');
+        expect(link, 'maplibre-gl.css в shadow root').to.exist;
+        const canvas = el.shadowRoot.querySelector<HTMLElement>('canvas.maplibregl-canvas');
+        expect(canvas, 'canvas карты смонтирован').to.exist;
         expect(el.shadowRoot.querySelector('.empty-badge'), 'бейдж пустой зоны').to.exist;
         expect(openBtn(el).textContent).to.include('Задать зону');
     });
 
-    it('готовый полигон → слой на карте + «Изменить зону», без бейджа', async () => {
+    it('готовый полигон → geojson-слой на карте + «Изменить зону», без бейджа', async () => {
         const el = await fixture<TestEl>(html`<shop-zone-map></shop-zone-map>`);
         el.zone = ZONE;
         await mapReady(el);
         await elementUpdated(el);
-        const polygon = (el as unknown as { _polygon: { _latlngs: unknown[] } })._polygon;
-        expect(polygon, 'полигон добавлен слоем на карту').to.exist;
-        const ring = polygon._latlngs[0] as unknown[];
-        expect(ring.length, 'кольцо полигона на карте').to.be.greaterThanOrEqual(4);
+        expect(zoneFeatureCount(el), 'полигон в geojson-source карты').to.equal(1);
+        expect(el._map!.getLayer('zone-fill'), 'fill-слой зоны').to.exist;
+        expect(el._map!.getLayer('zone-line'), 'outline-слой зоны').to.exist;
         expect(el.shadowRoot.querySelector('.empty-badge')).to.equal(null);
         expect(openBtn(el).textContent).to.include('Изменить зону');
     });
@@ -156,8 +168,7 @@ describe('shop-zone-map', () => {
         expect(events.length).to.equal(1);
         expect(events[0]!['zone']).to.deep.equal(ZONE);
         expect(el.zone).to.deep.equal(ZONE);
-        const polygon = (el as unknown as { _polygon: unknown })._polygon;
-        expect(polygon, 'полигон перерисован после onApply').to.exist;
+        expect(zoneFeatureCount(el), 'полигон перерисован после onApply').to.equal(1);
     });
 
     it('onApply с {} → zone-changed с пустым объектом, полигон снят', async () => {
@@ -181,7 +192,7 @@ describe('shop-zone-map', () => {
         await elementUpdated(el);
 
         expect(events[0]!['zone']).to.deep.equal({});
-        expect((el as unknown as { _polygon: unknown })._polygon).to.equal(null);
+        expect(zoneFeatureCount(el), 'geojson-source очищен').to.equal(0);
     });
 
     it('«Найти магазин на карте» → shop/shop_geocode_requested с адресом', async () => {

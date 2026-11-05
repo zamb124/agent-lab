@@ -80,12 +80,12 @@ if (this._wsState === 'open') this._ws.close(1000, 'client_close');
 
 | Плохо | Хорошо | Детектор |
 |---|---|---|
-| гейт ищет маску `*.<kind>.js`, на диске `*.<kind>.ts` | маска на `.ts` + падение при пустом наборе | проба «Слепота» |
+| гейт ищет маску `.js`-файлов, на диске `*.<kind>.ts` | маска на `.ts` + падение при пустом наборе | проба «Слепота» |
 | `if path.suffix not in {".py", ".js", ".md"}` | набор с `.ts` | проба «Слепота» |
-| `FILES = ("<entity>.resource.js", …)` → пустой `glob` → `continue` | фактические имена; пустой набор — падение | проба «Слепота» |
-| гейт требует `apps/<svc>/ui/pages/<page>.js`, файл — `.ts` | путь `.ts` | проба «Слепота» |
+| `FILES` с маской `.resource` на `.js` → пустой `glob` → `continue` | фактические имена; пустой набор — падение | проба «Слепота» |
+| гейт требует страницу `.js`, файл — `.ts` | путь `.ts` | проба «Слепота» |
 | `js_or_ts(path)`: «есть `.js` — он, иначе `.ts`» | путь как есть | проба «Мосты» |
-| метрика долга только в отчёте | hard-правило + baseline (`references/playbooks.md` § Метрика → ratchet) | — |
+| метрика остатка только в отчёте | hard-правило + baseline (`references/playbooks.md` § Метрика → ratchet) | — |
 | `tsc` только в `make ui` | `tsc` в `make lint-ts` и в Docker `ui-builder` | проба «Конвейер» |
 | правило или скил ссылается на `….js`, которого нет | путь as-is | проба «Слепота», `rules_drift.py` |
 
@@ -94,12 +94,12 @@ if (this._wsState === 'open') this._ws.close(1000, 'client_close');
 | Плохо | Хорошо | Детектор |
 |---|---|---|
 | `import { LitElement } from '../../assets/js/lit/lit.min.js'`, реэкспорт через `lit-shim.ts` | `import { LitElement } from 'lit'` | `vendored_lit_path`, проба «Мосты» |
-| плагин сборки переписывает vendored-пути на npm | импорт npm напрямую, плагин удалён | проба «Мосты» |
-| `<script type="importmap">` в `index.html` при бандле | удалён | проба «Мосты» |
+| плагин сборки переписывает vendored-пути на npm | импорт npm напрямую, плагин снят | проба «Мосты» |
+| `<script type="importmap">` в `index.html` при бандле | нет | проба «Мосты» |
 | WTR грузит vendored `lit.min.js`, прод — npm `lit` | один npm `lit` | лог WTR `Multiple versions of Lit loaded` |
 | `tsSiblingMiddleware`, `plugin.resolveImport = undefined`, `jsToTsSibling` | тесты на `.ts`, штатный резолв раннера | проба «Мосты» |
 | фолбек точки входа `index.ts \| index.js` | одна точка входа `index.ts` | проба «Мосты» |
-| codemod миграции остался в `scripts/` после миграции | удалён | нет |
+| codemod остался в `scripts/` после внедрения | снят | нет |
 
 ## 5. TS и Lit
 
@@ -337,7 +337,7 @@ extraReducer: (state, event) => (event.type === CRM_NOTE_UPDATED ? upsertItem(st
 | своя модалка профиля | `this.openModal('platform.user_info', { userId })` | нет |
 | `user.companies[0].roles.includes('admin')` | `state.auth.user.canAdmin` из `GET /auth/me` | нет |
 | hero-секция на рабочей странице | workspace: `<page-header>`, фильтры, список, панель действий | нет |
-| `<svg>` inline в странице | `<platform-icon name="…">`; бренд — `colored` | `tests/frontend_core/unit/utils/ui-icon-assets.spec.js` |
+| `<svg>` inline в странице | `<platform-icon name="…">`; бренд — `colored` | `tests/frontend_core/unit/utils/ui-icon-assets.spec.ts` |
 | `element.innerHTML = html` | `html```, `unsafeHTML` после DOMPurify с причиной в коде | `innerhtml_raw` |
 | локальный provider allowlist, `fallback_models: string[]` | typed catalog backend, `LLMCallConfig[]` в том же редакторе (`ai_models.mdc` § UI) | нет |
 
@@ -345,7 +345,7 @@ extraReducer: (state, event) => (event.type === CRM_NOTE_UPDATED ? upsertItem(st
 
 | Плохо | Хорошо | Детектор |
 |---|---|---|
-| `*.spec.js` | `*.spec.ts` (`references/playbooks.md` § Тесты на TS) | `ui_js_files` |
+| spec-файл с расширением `.js` | `*.spec.ts` (`references/playbooks.md` § Тесты на TS) | `ui_js_files` |
 | второй тест падает `registerFactory: … already registered` | `beforeEach`: `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()` | нет |
 | `vi.spyOn(factory, 'reducer')` | reducer — чистая `(state, event) => state`; effect — фейковый `ctx` | нет |
 | `document.body.appendChild(el)` без очистки | `fixture` из `@open-wc/testing` | нет |

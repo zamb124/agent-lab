@@ -339,6 +339,23 @@ export const browserTestDevMiddleware: Middleware = async (context, next) => {
         if (await _emuHandle(context, method, pathname, _search(context))) return;
     }
 
+    // Geo basemap style: в WTR нет geo-сервиса, MapLibre ждёт валидный
+    // style JSON — без него 'load' не наступает и редактор не инициализирует
+    // terra-draw. Без sources карта грузится полностью офлайн.
+    if (method === 'GET' && pathname === '/geo/api/v1/tiles/style.json') {
+        context.status = 200;
+        context.body = JSON.stringify({
+            version: 8,
+            name: 'test-basemap',
+            sources: {},
+            layers: [
+                { id: 'background', type: 'background', paint: { 'background-color': '#ece9e2' } },
+            ],
+        });
+        context.set('content-type', 'application/json; charset=utf-8');
+        return;
+    }
+
     if (pathname.startsWith('/static/core/')) {
         const rest = pathname.slice('/static/core/'.length);
         context.url = `/core/frontend/static/${rest}${_search(context)}`;

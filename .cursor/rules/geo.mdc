@@ -61,13 +61,15 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 
 ## UI
 
-- Loader `core/frontend/static/lib/map/leaflet.ts` (vendor в `lib/map/vendor/`), `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны.
+- Базовая карта — MapLibre GL + векторные PMTiles: loader `core/frontend/static/lib/map/maplibre.ts` (`loadMapLibre`, `maplibreCssLink`, `pmtiles://`-протокол) и фабрика `lib/map/basemap.ts` (`createBasemap`, style — `GET /geo/api/v1/tiles/style.json`). Vendor — `lib/vendor/maplibre/maplibre-gl.css`.
+- Тайл-сервис geo — `apps/geo/api/tiles.py` (анонимный): `tiles/basemap.pmtiles` (HTTP Range, читает pmtiles.js), `tiles/fonts/*`, `tiles/sprites/*`, `tiles/style.json`. Ассеты живут в `GeoSettings.tiles_dir` и наполняются таской `geo_tiles_sync` (`GeoTilesService`: `pmtiles extract` по `coverage_bbox` + basemaps-assets tar.gz) либо `python -m scripts.geo.fetch_basemap` в dev.
+- `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны; редактирование полигона — terra-draw (MapLibre-адаптер), валидация `ValidateNotSelfIntersecting`.
 
 ## Запреты
 
 1. Свои таблицы адресов/дорог, spatial-запросы, OSM-парсинг, PostGIS и pgRouting вне `apps/geo` — доступ только через `GeoClient`. `[без гейта]`
 2. `execute_raw` с nullable-параметрами в geo — баг биндингов oxyde-core 0.7.1 (NULL→non-NULL в переиспользованном prepared statement сдвигает параметры); публикация состояния — `GeoImportState.save()`. `[без гейта]`
-3. Leaflet — только через loader `lib/map/leaflet.ts`; свои копии vendor в сервисах запрещены. `[без гейта]`
+3. MapLibre — только через loader `lib/map/maplibre.ts` и `createBasemap` из `lib/map/basemap.ts`; свои копии vendor/стиля, Leaflet и растровые тайлы в сервисах запрещены. `[без гейта]`
 
 ## Гейты
 
