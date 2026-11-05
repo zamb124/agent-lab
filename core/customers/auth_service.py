@@ -538,14 +538,16 @@ class CustomerAuthService:
 
     async def poll_telegram_updates(
         self, *, budget_seconds: float = _TG_POLL_BUDGET_S
-    ) -> int:
+    ) -> int | None:
         """Цикл `getUpdates` по брендам с `telegram.polling_enabled`.
 
         Хост без входящего соединения от api.telegram.org не получает webhook —
         контракт тот же, что `handle_contact_update`, транспорт long-poll:
         offset живёт в Redis, активный экземпляр один на кластер (SET NX lock).
         `budget_seconds` ограничивает длину цикла — тик задачи должен укладываться
-        между cron-вызовами. Возвращает число обработанных updates.
+        между cron-вызовами. Возвращает число обработанных updates; `None` —
+        полл не выполнялся (нет брендов или лок занят другим владельцем), тогда
+        задача не должна цеплять следующий тик.
         """
         brands = [
             apex
@@ -555,7 +557,7 @@ class CustomerAuthService:
             and brand.telegram.polling_enabled
         ]
         if not brands:
-            return 0
+            return None
         providers: dict[str, TelegramContactProvider] = {}
         for apex in brands:
             verifier = self._registry(apex).contact_share.get(
@@ -566,7 +568,7 @@ class CustomerAuthService:
         if not providers or not await self._redis.set_nx(
             _TG_POLL_LOCK, "1", _TG_POLL_LOCK_TTL_S
         ):
-            return 0
+            return None
         try:
             # getUpdates при активном webhook отвечает 409 Conflict — снимаем его.
             for provider in providers.values():
