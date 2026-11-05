@@ -114,13 +114,9 @@ spec:
             {{- if eq $name "browser" }}
             - name: BROWSER__CDP_ENDPOINTS__CHROMIUM
               value: "http://127.0.0.1:9222"
-            # pymalloc не возвращает heap ОС: после серии crawl-сессий RSS
-            # остаётся ~1.7Gi при нуле активных контекстов. glibc malloc
-            # отдаёт память через trim; порог понижен под бурст-нагрузку.
-            - name: PYTHONMALLOC
-              value: malloc
-            - name: MALLOC_TRIM_THRESHOLD_
-              value: "65536"
+            # На 3.14t PYTHONMALLOC=malloc — fatal "unknown allocator":
+            # free-threaded build держит только mimalloc, который сам
+            # отдаёт RSS через purge (глоба glibc-trim не нужна).
             {{- end }}
             {{- if eq $name "code-runner-python" }}
             - name: CODE_RUNNER__PYTHON_WORKERS
