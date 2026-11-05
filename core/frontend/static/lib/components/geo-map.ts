@@ -23,7 +23,8 @@ import { html, css, nothing } from 'lit';
 import type { PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { SliceControllerOf } from '@platform/lib/base/use-resource.js';
-import { maplibreCssLink } from '@platform/lib/map/maplibre.js';
+import { maplibreCssLink, loadMapLibre } from '@platform/lib/map/maplibre.js';
+import type { MapLibreModule } from '@platform/lib/map/maplibre.js';
 import { createBasemap } from '@platform/lib/map/basemap.js';
 import type { PlatformMap } from '@platform/lib/map/basemap.js';
 import type { OpControllerOf } from '../base/use-resource.js';
@@ -71,6 +72,7 @@ export class GeoMap extends PlatformElement {
     declare _loading: boolean;
 
     private _map: PlatformMap | null = null;
+    private _maplibre: MapLibreModule | null = null;
     private _markerFeatures: Feature[] = [];
     private _ro: ResizeObserver | null = null;
     private _debounce: number | null = null;
@@ -126,6 +128,22 @@ export class GeoMap extends PlatformElement {
                 left: var(--space-3);
                 z-index: 600;
             }
+            .geo-popup-title {
+                font-weight: var(--font-semibold, 600);
+                margin-bottom: var(--space-1, 4px);
+                color: var(--text-primary, #1f2937);
+            }
+            .geo-popup-row {
+                font-size: var(--text-xs, 12px);
+                color: var(--text-secondary, #4b5563);
+                word-break: break-word;
+            }
+            .geo-popup-row span { color: var(--text-tertiary, #6b7280); }
+            .geo-popup + .geo-popup {
+                border-top: 1px solid color-mix(in srgb, var(--text-primary, #000) 12%, transparent);
+                margin-top: var(--space-2, 8px);
+                padding-top: var(--space-2, 8px);
+            }
         `,
     ];
 
@@ -178,6 +196,7 @@ export class GeoMap extends PlatformElement {
     private async _init(): Promise<void> {
         const el = this.renderRoot.querySelector<HTMLElement>('.map');
         if (!el || this._map) return;
+        this._maplibre = await loadMapLibre();
         const map = (this._map = await createBasemap(el, {
             center: [this.center[1], this.center[0]],
             zoom: this.zoom,
@@ -186,6 +205,8 @@ export class GeoMap extends PlatformElement {
         map.on('moveend', () => this._scheduleRefresh());
         map.on('click', (e) => {
             if (!this.interactive) return;
+            const hits = this._featuresAt(e.point);
+            if (hits.length > 0) this._showFeaturesPopup(e.lngLat, hits);
             this.dispatchEvent(
                 new CustomEvent('geo-map-click', {
                     detail: { lat: e.lngLat.lat, lng: e.lngLat.lng },
@@ -277,6 +298,65 @@ export class GeoMap extends PlatformElement {
                 'circle-stroke-width': 1.5,
             },
         });
+        for (const kind of ['fill', 'line', 'point']) {
+            const id = `geo-lyr-${name}-${kind}`;
+            map.on('mouseenter', id, () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', id, () => {
+                map.getCanvas().style.cursor = '';
+            });
+        }
+    }
+
+    /** Фичи слоёв реестра под точкой клика (только существующие style-layer'ы). */
+    private _featuresAt(point: import('maplibre-gl').Point): { layer: string; properties: Record<string, unknown> }[] {
+        const map = this._map;
+        if (!map) return [];
+        const layerIds: string[] = [];
+        for (const name of this._mapLayers) {
+            for (const kind of ['fill', 'line', 'point']) {
+                const id = `geo-lyr-${name}-${kind}`;
+                if (map.getLayer(id)) layerIds.push(id);
+            }
+        }
+        if (layerIds.length === 0) return [];
+        const hits = map.queryRenderedFeatures(point, { layers: layerIds });
+        const out: { layer: string; properties: Record<string, unknown> }[] = [];
+        for (const hit of hits.slice(0, 8)) {
+            const props = (hit.properties ?? {}) as Record<string, unknown>;
+            out.push({ layer: String(props.layer ?? ''), properties: props });
+        }
+        return out;
+    }
+
+    /** Inspect-попап со свойствами фич под курсором. */
+    private _showFeaturesPopup(
+        lngLat: { lat: number; lng: number },
+        hits: readonly { layer: string; properties: Record<string, unknown> }[],
+    ): void {
+        const maplibre = this._maplibre;
+        const map = this._map;
+        if (!maplibre || !map) return;
+        const esc = (v: unknown): string =>
+            String(v ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        const blocks = hits.map(({ layer, properties }) => {
+            const rows = Object.entries(properties)
+                .filter(([key]) => key !== 'layer')
+                .slice(0, 10)
+                .map(([key, value]) => `<div class="geo-popup-row"><span>${esc(key)}</span>: ${esc(value)}</div>`)
+                .join('');
+            const title = layer ? esc(this.t(`layers.${layer}`)) : '';
+            return `<div class="geo-popup"><div class="geo-popup-title">${title}</div>${rows}</div>`;
+        });
+        new maplibre.Popup({ closeButton: true, maxWidth: '300px' })
+            .setLngLat([lngLat.lng, lngLat.lat])
+            .setHTML(blocks.join(''))
+            .addTo(map);
     }
 
     private _applyVisibility(): void {
@@ -311,7 +391,7 @@ export class GeoMap extends PlatformElement {
                 const geoFeature: Feature = {
                     type: 'Feature',
                     geometry: feature.geometry as unknown as Geometry,
-                    properties: { layer: feature.layer },
+                    properties: { layer: feature.layer, ...feature.properties },
                 };
                 const bucket = perLayer.get(feature.layer);
                 if (bucket) bucket.push(geoFeature);

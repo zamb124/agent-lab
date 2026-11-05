@@ -19,7 +19,8 @@
     "roads": "Дороги",
     "addresses": "Адреса",
     "restrictions": "Запреты поворотов",
-    "barriers": "Барьеры"
+    "barriers": "Барьеры",
+    "signals": "Светофоры"
   },
   "overview": {
     "header_title": "Карта данных Geo",

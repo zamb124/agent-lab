@@ -19,7 +19,8 @@
     "roads": "Roads",
     "addresses": "Addresses",
     "restrictions": "Turn restrictions",
-    "barriers": "Barriers"
+    "barriers": "Barriers",
+    "signals": "Traffic signals"
   },
   "overview": {
     "header_title": "Geo data map",
