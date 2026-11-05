@@ -343,6 +343,7 @@
   "table_removed": "Table removed",
   "table_failed": "Could not save the table: {detail}",
   "order_status_updated": "Order status updated",
+  "order_arrived": "New order {code}",
   "domain_provisioned": "Domain verified",
   "ai_describe_done": "Description ready",
   "ai_photo_enhanced": "Photo enhanced",

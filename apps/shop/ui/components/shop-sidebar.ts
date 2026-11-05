@@ -5,8 +5,10 @@
  * выбран — активен только «Магазины».
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
@@ -46,12 +48,35 @@ export class ShopSidebar extends PlatformElement {
                 opacity: 0.4;
                 pointer-events: none;
             }
+            .nav-badge {
+                margin-left: auto;
+                min-width: 20px;
+                height: 20px;
+                padding: 0 var(--space-1);
+                border-radius: var(--radius-full, 10px);
+                background: var(--color-primary, var(--text-secondary));
+                color: var(--text-on-primary, var(--bg-surface));
+                font-size: var(--text-2xs, 10px);
+                font-weight: var(--font-semibold);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            platform-service-sidebar[collapsed] .nav-badge {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                margin-left: 0;
+            }
+            platform-service-sidebar[collapsed] .nav-item { position: relative; }
         `,
     ];
     declare collapsed: boolean;
     declare mobileOpen: boolean;
     private _routeKeySel: SelectController<unknown>;
     private _routeParamsSel: SelectController<unknown>;
+    private _ordersOp: OpController;
+    private _ordersShopId = '';
 
     static override properties = {
         collapsed: { type: Boolean, reflect: true },
@@ -64,6 +89,24 @@ export class ShopSidebar extends PlatformElement {
         this.mobileOpen = false;
         this._routeKeySel = this.select((s) => s.router.routeKey);
         this._routeParamsSel = this.select((s) => s.router.params);
+        this._ordersOp = this.useOp('shop/orders_list');
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        const shopId = this._shopId();
+        // Бейдж активных заказов держится на том же op — push shop/order/*
+        // перезапускает его в фабрике, счётчик живой на любом маршруте.
+        if (shopId !== '' && shopId !== this._ordersShopId) {
+            this._ordersShopId = shopId;
+            void this._ordersOp.run({ shop_id: shopId, limit: 200 });
+        }
+    }
+
+    private _activeOrderCount(): number {
+        const result = this._ordersOp.lastResult as { items?: { status?: string }[] } | null;
+        const items = result !== null && result !== undefined && Array.isArray(result.items) ? result.items : [];
+        return items.filter((o) => o.status === 'new' || o.status === 'accepted' || o.status === 'preparing' || o.status === 'delivering').length;
     }
 
     private _shell(): PlatformServiceSidebar | null {
@@ -110,6 +153,7 @@ export class ShopSidebar extends PlatformElement {
                     ${NAV_ITEMS.map((item) => {
                         const needsShop = item.route !== 'shop_home';
                         const disabled = needsShop && shopId === '';
+                        const badge = item.route === 'shop_orders' && !disabled ? this._activeOrderCount() : 0;
                         return html`
                             <button
                                 class="nav-item ${this._isActive(item.route) ? 'active' : ''} ${disabled ? 'disabled' : ''}"
@@ -117,6 +161,7 @@ export class ShopSidebar extends PlatformElement {
                             >
                                 <platform-icon name=${item.icon}></platform-icon>
                                 <span class="nav-label">${this.t(item.label_key)}</span>
+                                ${badge > 0 ? html`<span class="nav-badge">${badge}</span>` : nothing}
                             </button>
                         `;
                     })}

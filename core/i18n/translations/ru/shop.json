@@ -343,6 +343,7 @@
   "table_removed": "Стол удалён",
   "table_failed": "Не удалось сохранить стол: {detail}",
   "order_status_updated": "Статус заказа обновлён",
+  "order_arrived": "Новый заказ {code}",
   "domain_provisioned": "Домен проверен",
   "ai_describe_done": "Описание готово",
   "ai_photo_enhanced": "Фото улучшено",

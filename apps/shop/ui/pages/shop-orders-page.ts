@@ -64,6 +64,12 @@ export class ShopOrdersPage extends PlatformPage {
     private _listOp: OpController;
     private _statusOp: OpController;
     private _locale: SelectController<string>;
+    private _prevStatus = new Map<string, string>();
+    private _moved = new Set<string>();
+    private _primed = false;
+    private _movedTimer: number | undefined;
+    private _collapsed = new Set<string>(['done', 'cancelled']);
+    private _staleResult: unknown = undefined;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -77,13 +83,14 @@ export class ShopOrdersPage extends PlatformPage {
             .board {
                 flex: 1;
                 min-height: 0;
-                display: grid;
-                grid-template-columns: repeat(6, minmax(210px, 1fr));
+                display: flex;
                 gap: var(--space-3);
                 overflow-x: auto;
                 padding-bottom: var(--space-6);
             }
             .col {
+                flex: 1 1 0;
+                min-width: 200px;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
@@ -92,13 +99,31 @@ export class ShopOrdersPage extends PlatformPage {
                 background: color-mix(in srgb, var(--text-primary) 3%, transparent);
                 padding: var(--space-2);
             }
-            .col-title {
+            .col.collapsed {
+                flex: 0 0 48px;
+                min-width: 0;
+                align-items: center;
+                padding: var(--space-2) 0;
+            }
+            .col.collapsed .col-title {
+                writing-mode: vertical-rl;
+                transform: rotate(180deg);
+                white-space: nowrap;
+                flex: 1;
+            }
+            button.col-title {
+                appearance: none;
+                background: none;
+                border: 0;
+                font: inherit;
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
                 color: var(--text-tertiary);
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
                 padding: var(--space-1) var(--space-2);
+                cursor: pointer;
+                text-align: left;
             }
             .col-title.new { color: var(--color-primary, var(--text-secondary)); }
             .card {
@@ -111,20 +136,35 @@ export class ShopOrdersPage extends PlatformPage {
                 gap: var(--space-2);
                 box-shadow: var(--shadow-xs, 0 1px 2px rgb(0 0 0 / 0.05));
             }
+            .card.moved { animation: orderMoved 0.9s var(--motion-ease-standard) 2; }
+            @keyframes orderMoved {
+                0% {
+                    border-color: var(--color-primary, var(--text-primary));
+                    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary, var(--text-primary)) 30%, transparent);
+                }
+                100% {
+                    border-color: var(--glass-border-subtle);
+                    box-shadow: var(--shadow-xs, 0 1px 2px rgb(0 0 0 / 0.05));
+                }
+            }
             .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
             .code { font-weight: var(--font-semibold); color: var(--text-primary); font-variant-numeric: tabular-nums; }
             .time { font-size: var(--text-2xs, 10px); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
             .meta { font-size: var(--text-xs); color: var(--text-tertiary); }
             .comment { font-size: var(--text-xs); color: var(--text-secondary); font-style: italic; }
-            .items { font-size: var(--text-xs); color: var(--text-secondary); }
+            .items {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                max-height: 6.5em;
+                overflow-y: auto;
+                flex: 0 0 auto;
+            }
             .items div { display: flex; justify-content: space-between; gap: var(--space-2); }
             .totals { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--glass-border-subtle); padding-top: var(--space-2); }
             .fee { font-size: var(--text-2xs, 10px); color: var(--text-tertiary); display: flex; justify-content: space-between; }
             .total { font-weight: var(--font-semibold); color: var(--text-primary); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }
-            .card-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-            @media (max-width: 1100px) {
-                .board { grid-template-columns: repeat(6, 230px); }
-            }
+            .card-actions { display: flex; gap: var(--space-2); }
+            .card-actions platform-button { flex: 1; min-width: 0; }
         `,
     ];
 
@@ -144,7 +184,51 @@ export class ShopOrdersPage extends PlatformPage {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const prevShopId = changed.get('shopId');
-        if (typeof prevShopId === 'string' && prevShopId !== this.shopId) void this._loadOrders();
+        if (typeof prevShopId === 'string' && prevShopId !== this.shopId) {
+            this._primed = false;
+            this._prevStatus.clear();
+            // lastResult ещё относится к прежнему магазину — праймиться по нему нельзя.
+            this._staleResult = this._listOp.lastResult;
+            void this._loadOrders();
+        }
+        this._diffOrders();
+    }
+
+    private _diffOrders(): void {
+        const rows = this._orders();
+        if (!this._primed) {
+            // Не подсвечиваем и не тостим на первой загрузке — только на дельте.
+            if (this._listOp.lastResult === null || this._listOp.lastResult === undefined || this._listOp.lastResult === this._staleResult) return;
+            this._primed = true;
+            this._prevStatus = new Map(rows.map((o) => [o.shop_order_id, o.status]));
+            return;
+        }
+        let changed = false;
+        for (const order of rows) {
+            const prev = this._prevStatus.get(order.shop_order_id);
+            if (prev === undefined && order.status === 'new') {
+                this.toast('toast.order_arrived', { type: 'info', vars: { code: `#${order.public_code}` } });
+                this._moved.add(order.shop_order_id);
+                changed = true;
+            } else if (prev !== undefined && prev !== order.status) {
+                this._moved.add(order.shop_order_id);
+                changed = true;
+            }
+        }
+        this._prevStatus = new Map(rows.map((o) => [o.shop_order_id, o.status]));
+        if (changed) {
+            this.requestUpdate();
+            window.clearTimeout(this._movedTimer);
+            this._movedTimer = window.setTimeout(() => {
+                this._moved.clear();
+                this.requestUpdate();
+            }, 2500);
+        }
+    }
+
+    private _toggleColumn(col: string): void {
+        if (!this._collapsed.delete(col)) this._collapsed.add(col);
+        this.requestUpdate();
     }
 
     private async _loadOrders(): Promise<void> {
@@ -186,7 +270,7 @@ export class ShopOrdersPage extends PlatformPage {
     private _card(order: OrderRow) {
         const fee = order.delivery_fee_minor;
         return html`
-            <div class="card">
+            <div class="card ${this._moved.has(order.shop_order_id) ? 'moved' : ''}">
                 <div class="card-top">
                     <span class="code">#${order.public_code}</span>
                     <span class="time">${this._time(order.created_at)}</span>
@@ -238,10 +322,11 @@ export class ShopOrdersPage extends PlatformPage {
                         <div class="board">
                             ${COLUMNS.map((col) => {
                                 const rows = orders.filter((o) => o.status === col);
+                                const collapsed = this._collapsed.has(col);
                                 return html`
-                                    <div class="col">
-                                        <div class="col-title ${col}">${this.t(`orders.status.${col}`)} · ${rows.length}</div>
-                                        ${rows.map((o) => this._card(o))}
+                                    <div class="col ${collapsed ? 'collapsed' : ''}">
+                                        <button class="col-title ${col}" @click=${() => this._toggleColumn(col)}>${this.t(`orders.status.${col}`)} · ${rows.length}</button>
+                                        ${collapsed ? nothing : rows.map((o) => this._card(o))}
                                     </div>
                                 `;
                             })}
