@@ -67,26 +67,26 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 
 Один виджет `core/frontend/static/lib/components/platform-map.ts` для ВСЕХ карт платформы (geo, shop, wiki, tracker, flow-ui embed). Вся настройка — сериализуемый `PlatformMapConfig` в духе options-объекта JS API Яндекс.Карт; свои карты/`shop-*-map`/инлайн-MapLibre в сервисах запрещены. Секции config:
 
-- `center`/`zoom`/`minZoom`/`maxZoom`/`interactive`/`padding` — камера и жесты; `interactive:false` — встраиваемое превью без контролов. `scheme:'light'|'dark'` — схема базовой карты, `rotate` — поворот жестами (нужен компасу).
-- `controls.zoom`/`layers`/`locate`/`search`/`ruler`/`rulerArea`/`fit`/`compass`/`scheme`/`route`/`fullscreen`/`scale` — встроенные контролы; `route` — кнопка входа в режим построения маршрута кликами (требует `route.build`), `rulerArea` — замер площади полигоном, `compass` — стрелка bearing + сброс на север, `scheme` — light↔dark.
+- `center`/`zoom`/`minZoom`/`maxZoom`/`interactive`/`padding` — камера и жесты; `interactive:false` — встраиваемое превью без контролов. `scheme:'light'|'dark'|'auto'` — схема базовой карты (`auto` следует `prefers-color-scheme`), `rotate` — поворот жестами (нужен компасу). `cooperativeGestures` — embed-режим: колесо/два пальца без Ctrl не зумят и показывают подсказку (страница скроллится свободно). `hash` — синхронизация камеры с `#map=z/lat/lng` в URL (deep-link).
+- `controls.zoom`/`layers`/`locate`/`search`/`ruler`/`rulerArea`/`fit`/`compass`/`scheme`/`route`/`export`/`fullscreen`/`scale` — встроенные контролы; `route` — кнопка входа в режим построения маршрута кликами (требует `route.build`), `rulerArea` — замер площади полигоном, `compass` — стрелка bearing + сброс на север, `scheme` — light↔dark, `export` — сохранение видимой области в PNG (`pm-export`, включает preserveDrawingBuffer).
 - `layers.fetch`/`hidden` — канонические geo-слои по bbox (`geo/layer_features` + `geo/layers`, visibility через slice `geo/map`).
-- `featureCards.hover`/`click` — хинт и карточка фичи (`lib/map/feature-card.ts`).
+- `featureCards.hover`/`click` — хинт и карточка фичи (`lib/map/feature-card.ts`); хинт маркера берёт `marker.title` (фича слоя приоритетнее).
 - `markers[]` (+`draggable`), `markersCluster` — точечные маркеры и кластеризация; drag отдаёт `pm-marker-drag`.
 - `overlays[]` — произвольные GeoJSON-слои (зоны, треки) с `fit`.
-- `route` — маршрут `geo/route` по `points[]` (A→via…→B, плечи параллельно): линия + буквенные точки + чип с режимами car/foot/bike/scooter и ETA «N км · M мин»; `build:true` — точки кликами, `clearRoute()`/`pm-route`, кнопка очистки.
+- `route` — маршрут `geo/route` по `points[]` (A→via…→B, плечи параллельно): линия + буквенные точки + чип с режимами car/foot/bike/scooter и ETA «N км · M мин»; `build:true` — точки кликами, `clearRoute()`/`pm-route`, кнопки очистки и swap ⇅ A↔B.
 - `isochrone` — контуры достижимости `geo/isochrone` по `minutes[]` от `center`: полигоны от большего к меньшему + лейблы минут; событие `pm-isochrone`.
 - `search` — suggest-дропдаун через `geo/addresses_suggest`, pin + `pm-search-select`.
-- `contextMenu` — «Что здесь?» (`geo/addresses_nearest`) + копирование координат.
-- `statusBar` — координаты курсора и zoom. `draw` — TerraDraw-полигон + `pm-draw-change` (метрики, валидация). `addressesPanel` — `platform-zone-address-panel` + `geo/addresses_in_zone`. `locateTo` — программный перелёт камеры. `moveEvent` — `pm-move` на moveend (center/zoom/bearing/bounds).
-- События `pm-*` (bubbles+composed): `pm-ready`, `pm-click`, `pm-marker-click`, `pm-marker-drag`, `pm-draw-change`, `pm-layer-toggle`, `pm-locate`, `pm-address-hover`, `pm-search-select`, `pm-ruler-change`, `pm-coords-copy`, `pm-route`, `pm-route-point`, `pm-isochrone`, `pm-move`, `pm-error`.
-- Интерактивные контролы размечены `data-action` (`locate`, `ruler`, `ruler-area`, `fit`, `compass`, `scheme`, `route`, `fullscreen`, `route-clear`, `whats-here`, `copy-coords`) и `data-mode` на чипе режимов — тесты и потребители не зависят от локали.
+- `contextMenu` — «Что здесь?» (`geo/addresses_nearest`) + «Маршрут отсюда/сюда» (при настроенном `route`) + копирование координат; долгий тап ≥600мс — то же меню на таче.
+- `statusBar` — координаты курсора, zoom и bearing. `draw` — TerraDraw-полигон + `pm-draw-change` (метрики, валидация). `addressesPanel` — `platform-zone-address-panel` + `geo/addresses_in_zone`. `locateTo` — программный перелёт камеры. `moveEvent` — `pm-move` на moveend (center/zoom/bearing/bounds).
+- События `pm-*` (bubbles+composed): `pm-ready`, `pm-click`, `pm-marker-click`, `pm-marker-drag`, `pm-draw-change`, `pm-layer-toggle`, `pm-locate`, `pm-address-hover`, `pm-search-select`, `pm-ruler-change`, `pm-coords-copy`, `pm-route`, `pm-route-point`, `pm-isochrone`, `pm-move`, `pm-export`, `pm-error`.
+- Интерактивные контролы размечены `data-action` (`locate`, `ruler`, `ruler-area`, `fit`, `compass`, `scheme`, `route`, `export-png`, `fullscreen`, `route-swap`, `route-clear`, `route-from`, `route-to`, `whats-here`, `copy-coords`) и `data-mode` на чипе режимов — тесты и потребители не зависят от локали.
 - Модалка `platform.zone_editor` (`lib/modals/platform-zone-editor-modal.ts`) — общий редактор зоны: метрики, «Рисовать»/«К зоне»/«Очистить»/«К адресу».
 - Витрина и e2e-полигон виджета — `/geo/map-lab` (`apps/geo/ui/pages/geo-map-lab-page.ts`): все секции config на реальных данных.
 
 ### Тесты виджета
 
 - `tests/frontend_core/browser/components/platform-map.spec.ts` — WTR/Chromium по каждой секции config и событию `pm-*` (контролы, слои, поиск, линейка, меню, кластер, draw, модалка).
-- `tests/ui/e2e/test_geo_map_widget_e2e.py` — Playwright против живого geo :9028 на фикстуре `tests/geo/fixtures/micro.osm`: загрузка, zoom, toggle слоёв, карточка фичи, suggest→pin, «Что здесь?», линейка длина/площадь, статусбар, кластер, draggable, панель адресов, превью; маршрут (линия/чип/режимы/build кликами/очистка), изохроны, light↔dark схема, компас, TerraDraw после смены стиля. Новая фича виджета без e2e — не вливается. `[без гейта]`
+- `tests/ui/e2e/test_geo_map_widget_e2e.py` — Playwright против живого geo :9028 на фикстуре `tests/geo/fixtures/micro.osm`: загрузка, zoom, toggle слоёв, карточка фичи, suggest→pin, «Что здесь?», линейка длина/площадь, статусбар, кластер, draggable, панель адресов, превью; маршрут (линия/чип/режимы/build кликами/очистка/swap/меню отсюда-сюда), изохроны, light↔dark и auto-схема по `prefers-color-scheme`, компас, TerraDraw после смены стиля, cooperativeGestures-экран, PNG-экспорт, long-press меню, хинт маркера, `#map=` deep-link. Новая фича виджета без e2e — не вливается. `[без гейта]`
 
 ### Остальное
 

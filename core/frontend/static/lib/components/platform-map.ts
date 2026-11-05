@@ -82,10 +82,14 @@ export interface PlatformMapConfig {
     interactive?: boolean;
     /** Безопасные поля камеры — панели хоста не перекрывают контент. */
     padding?: number;
-    /** Схема базовой карты: light/dark; controls.scheme — кнопка-переключатель. */
-    scheme?: 'light' | 'dark';
+    /** Схема базовой карты: light/dark/auto (auto — prefers-color-scheme, следит за системой). */
+    scheme?: 'light' | 'dark' | 'auto';
     /** Поворот/наклон камеры жестами (dragRotate/two-finger); нужен для compass. */
     rotate?: boolean;
+    /** Embed-режим: Ctrl/⌘+scroll для зума — страница не залипает на карте. */
+    cooperativeGestures?: boolean;
+    /** Синхронизация камеры с URL-хэшем `map=z/lat/lng` — шаринг позиции. */
+    hash?: boolean;
     controls?: {
         zoom?: boolean;
         layers?: boolean;
@@ -107,6 +111,8 @@ export interface PlatformMapConfig {
         scheme?: boolean;
         /** Кнопка «маршрут»: режим построения кликами (требует route.build). */
         route?: boolean;
+        /** Экспорт видимой области карты в PNG (preserveDrawingBuffer). */
+        export?: boolean;
     };
     layers?: {
         fetch?: boolean;
@@ -253,6 +259,8 @@ export class PlatformMapEl extends PlatformElement {
     private _routeSeq = 0;
     private _isoSeq = 0;
     private _scheme: BasemapScheme = 'light';
+    private _schemeMedia: MediaQueryList | null = null;
+    private _lpTimer: number | null = null;
     private _refreshTimer: number | null = null;
     private _suggestTimer: number | null = null;
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
@@ -358,7 +366,10 @@ export class PlatformMapEl extends PlatformElement {
                 <div
                     class="map-canvas"
                     @mousedown=${(e: MouseEvent) => e.stopPropagation()}
-                    @touchstart=${(e: TouchEvent) => e.stopPropagation()}
+                    @touchstart=${this._onTouchStart}
+                    @touchmove=${this._onTouchCancel}
+                    @touchend=${this._onTouchCancel}
+                    @touchcancel=${this._onTouchCancel}
                     @wheel=${(e: WheelEvent) => e.stopPropagation()}
                     @contextmenu=${this._onContextMenu}
                 ></div>
@@ -430,8 +441,9 @@ export class PlatformMapEl extends PlatformElement {
         const compass = c.compass === true && this._ready;
         const scheme = c.scheme === true && this._ready;
         const route = c.route === true && this._ready && this._interactive && this._routeCfg?.build === true;
+        const exportBtn = c.export === true && this._ready;
         const fullscreen = c.fullscreen === true && this._ready;
-        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !fullscreen) return nothing;
+        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !exportBtn && !fullscreen) return nothing;
         const hidden = this._mapCtl?.value.hidden ?? {};
         return html`
             <div class="pm-controls">
@@ -518,6 +530,17 @@ export class PlatformMapEl extends PlatformElement {
                           ⤳
                       </button>`
                     : nothing}
+                ${exportBtn
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn"
+                          data-action="export-png"
+                          title=${this.t('map.export_png')}
+                          @click=${this._exportPng}
+                      >
+                          ⇩
+                      </button>`
+                    : nothing}
                 ${fullscreen
                     ? html`<button
                           type="button"
@@ -552,14 +575,20 @@ export class PlatformMapEl extends PlatformElement {
 
     private _renderStatusBar() {
         const zoom = this._map ? Math.round(this._map.getZoom() * 10) / 10 : 0;
-        return html`<div class="pm-status"><span class="pm-status-coords">${this._cursorText}</span><span class="pm-status-zoom">z${zoom}</span></div>`;
+        const bearing = Math.abs(this._bearing) >= 1 ? ` ↻${Math.round(this._bearing)}°` : '';
+        return html`<div class="pm-status"><span class="pm-status-coords">${this._cursorText}</span><span class="pm-status-zoom">${bearing} z${zoom}</span></div>`;
     }
 
     private _renderMenu() {
         const m = this._menu!;
+        const route = this._routeCfg !== null;
         return html`
             <div class="pm-menu" style="left:${m.x}px; top:${m.y}px" @click=${(e: Event) => e.stopPropagation()}>
                 <button type="button" data-action="whats-here" @click=${() => this._menuWhatsHere(m.lngLat)}>${this.t('map.whats_here')}</button>
+                ${route
+                    ? html`<button type="button" data-action="route-from" @click=${() => this._menuRouteFrom(m.lngLat)}>${this.t('map.route_from')}</button>
+                          <button type="button" data-action="route-to" @click=${() => this._menuRouteTo(m.lngLat)}>${this.t('map.route_to')}</button>`
+                    : nothing}
                 <button type="button" data-action="copy-coords" @click=${() => this._menuCopyCoords(m.lngLat)}>${this.t('map.copy_coords')}</button>
             </div>
         `;
@@ -600,8 +629,11 @@ export class PlatformMapEl extends PlatformElement {
                     : info
                       ? html`<span class="pm-route-text">${this._fmtDist(info.distanceM)} · ${this._fmtDuration(info.durationS)}</span>`
                       : building
-                        ? html`<span class="pm-route-hint">${this.t(pts.length === 0 ? 'map.route_hint_a' : 'map.route_hint_b')}</span>`
+                        ? html`<span class="pm-route-hint">${this.t(this._routeBuildPts.length === 0 ? 'map.route_hint_a' : 'map.route_hint_b')}</span>`
                         : nothing}
+                ${pts.length >= 2
+                    ? html`<button type="button" class="pm-route-clear" data-action="route-swap" title=${this.t('map.route_swap')} @click=${this._swapRoute}>⇅</button>`
+                    : nothing}
                 <button type="button" class="pm-route-clear" data-action="route-clear" title=${this.t('map.route_clear')} @click=${this.clearRoute}>×</button>
             </div>
         `;
@@ -883,11 +915,47 @@ export class PlatformMapEl extends PlatformElement {
         this._refreshRoute();
     }
 
-    /** Точки маршрута: build-состояние в режиме построения, иначе config. */
+    /** ⇅ в чипе: разворачивает порядок точек (B становится стартом). */
+    private _swapRoute = (): void => {
+        const pts = this._routePoints();
+        if (pts.length < 2) return;
+        this._routeBuildPts = [...pts].reverse();
+        this._refreshRoute();
+    };
+
+    /** Контекстное меню: «маршрут отсюда» — точка A = место клика. */
+    private _menuRouteFrom(lngLat: LngLat): void {
+        this._menu = null;
+        const pts = this._routePoints();
+        this._routeBuildPts = [lngLat, ...pts.slice(1)];
+        this._refreshRoute();
+    }
+
+    /** Контекстное меню: «маршрут сюда» — последняя точка = место клика. */
+    private _menuRouteTo(lngLat: LngLat): void {
+        this._menu = null;
+        const pts = this._routePoints();
+        this._routeBuildPts = pts.length >= 2 ? [...pts.slice(0, -1), lngLat] : [...pts, lngLat];
+        this._refreshRoute();
+    }
+
+    /** Экспорт видимой области в PNG (нужен preserveDrawingBuffer). */
+    private _exportPng = (): void => {
+        const map = this._map;
+        if (!map) return;
+        const canvas = map.getCanvas();
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'map.png';
+        a.click();
+        this.dispatchEvent(new CustomEvent('pm-export', { detail: { format: 'png' }, bubbles: true, composed: true }));
+    };
+
+    /** Точки маршрута: build-состояние (клики/меню) важнее config.points. */
     private _routePoints(): LngLat[] {
         const cfg = this._routeCfg;
         if (!cfg) return [];
-        return this._mode === 'route' ? this._routeBuildPts : (cfg.points ?? []);
+        return this._routeBuildPts.length > 0 ? this._routeBuildPts : (cfg.points ?? []);
     }
 
     /** Пересчёт маршрута: плечи параллельно, линия + точки + чип + fit. */
@@ -1049,11 +1117,35 @@ export class PlatformMapEl extends PlatformElement {
         this._map?.easeTo({ bearing: 0, pitch: 0, duration: 400 });
     };
 
-    /** Переключение светлой/тёмной схемы с переустановкой динамических слоёв. */
+    /** Схема по config: 'auto' следует prefers-color-scheme. */
+    private _resolveScheme(): BasemapScheme {
+        const s = this.config.scheme;
+        if (s === 'auto') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return s ?? 'light';
+    }
+
+    /** scheme:'auto' — подписка на смену системной темы. */
+    private _watchAutoScheme(): void {
+        if (this.config.scheme !== 'auto' || this._schemeMedia) return;
+        this._schemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+        this._schemeMedia.addEventListener('change', this._onSchemeMedia);
+    }
+
+    private _onSchemeMedia = (): void => {
+        this._applyScheme(this._resolveScheme());
+    };
+
     private _toggleScheme = (): void => {
+        this._applyScheme(this._scheme === 'dark' ? 'light' : 'dark');
+    };
+
+    /** Смена схемы с переустановкой всех pm-* источников и слоёв. */
+    private _applyScheme(target: BasemapScheme): void {
         const map = this._map;
-        if (!map) return;
-        this._scheme = this._scheme === 'dark' ? 'light' : 'dark';
+        if (!map || this._scheme === target) return;
+        this._scheme = target;
         this._mapLayers.clear();
         map.once('style.load', () => {
             this._installSources(map);
@@ -1152,6 +1244,33 @@ export class PlatformMapEl extends PlatformElement {
         this._menu = { x, y, lngLat: [ll.lng, ll.lat] };
     };
 
+    /** Долгий тап ≥600мс — то же меню, что и правый клик (тач-устройства). */
+    private _onTouchStart = (e: TouchEvent): void => {
+        e.stopPropagation();
+        if (this.config.contextMenu !== true || e.touches.length !== 1) return;
+        if (this._lpTimer !== null) window.clearTimeout(this._lpTimer);
+        const t = e.touches[0]!;
+        this._lpTimer = window.setTimeout(() => {
+            this._lpTimer = null;
+            const map = this._map;
+            const el = this._el;
+            if (!map || !el) return;
+            const rect = el.getBoundingClientRect();
+            const x = t.clientX - rect.left;
+            const y = t.clientY - rect.top;
+            const ll = (map as unknown as { unproject(p: [number, number]): { lng: number; lat: number } }).unproject([x, y]);
+            this._menu = { x, y, lngLat: [ll.lng, ll.lat] };
+        }, 600);
+    };
+
+    private _onTouchCancel = (e: TouchEvent): void => {
+        e.stopPropagation();
+        if (this._lpTimer !== null) {
+            window.clearTimeout(this._lpTimer);
+            this._lpTimer = null;
+        }
+    };
+
     private _menuWhatsHere(lngLat: LngLat): void {
         this._menu = null;
         const map = this._map;
@@ -1225,7 +1344,7 @@ export class PlatformMapEl extends PlatformElement {
         // disconnectedCallback уже обнулил _el/_map; не монтируем в мёртвый div.
         if (!this.isConnected || this._el !== el) return;
         this._maplibre = maplibre;
-        this._scheme = this.config.scheme ?? 'light';
+        this._scheme = this._resolveScheme();
         const interactive = this._interactive;
         const map = await createBasemap(el, {
             center: this.config.center ?? DEFAULT_CENTER,
@@ -1233,6 +1352,9 @@ export class PlatformMapEl extends PlatformElement {
             interactive,
             scheme: this._scheme,
             rotate: this.config.rotate === true,
+            cooperativeGestures: this.config.cooperativeGestures === true,
+            hash: this.config.hash === true,
+            preserveBuffer: this.config.controls?.export === true,
         });
         if (this.config.minZoom !== undefined) map.setMinZoom(this.config.minZoom);
         if (this.config.maxZoom !== undefined) map.setMaxZoom(this.config.maxZoom);
@@ -1305,6 +1427,7 @@ export class PlatformMapEl extends PlatformElement {
                 this._bearing = map.getBearing();
             });
         }
+        this._watchAutoScheme();
         if (this.config.moveEvent === true) {
             map.on('moveend', () => {
                 const c = map.getCenter();
@@ -1640,16 +1763,16 @@ export class PlatformMapEl extends PlatformElement {
                 const feats = this._featuresAt(map, e.point);
                 const markerHit = this._markerAt(map, e.point);
                 map.getCanvas().style.cursor = feats.length > 0 || markerHit ? 'pointer' : '';
-                if (feats.length > 0) {
-                    const text = featureTitle({ layer: feats[0]!.layer, properties: feats[0]!.properties });
-                    if (text !== '') {
-                        if (!this._hintPopup) {
-                            this._hintPopup = new Popup({ closeButton: false, closeOnClick: false, className: 'pm-hint' });
-                        }
-                        const popup = this._hintPopup as { setLngLat(l: unknown): { setText(t: string): { addTo(m: PlatformMap): void } } };
-                        popup.setLngLat(e.lngLat).setText(text).addTo(map);
-                        return;
+                const hintText =
+                    (feats.length > 0 ? featureTitle({ layer: feats[0]!.layer, properties: feats[0]!.properties }) : '') ||
+                    (markerHit?.title ?? '');
+                if (hintText !== '') {
+                    if (!this._hintPopup) {
+                        this._hintPopup = new Popup({ closeButton: false, closeOnClick: false, className: 'pm-hint' });
                     }
+                    const popup = this._hintPopup as { setLngLat(l: unknown): { setText(t: string): { addTo(m: PlatformMap): void } } };
+                    popup.setLngLat(e.lngLat).setText(hintText).addTo(map);
+                    return;
                 }
                 this._hideHint();
             });
@@ -1703,7 +1826,7 @@ export class PlatformMapEl extends PlatformElement {
             .filter((h) => h.layer !== '');
     }
 
-    private _markerAt(map: PlatformMap, point: { x: number; y: number }): { key: string; lngLat: LngLat } | null {
+    private _markerAt(map: PlatformMap, point: { x: number; y: number }): { key: string; lngLat: LngLat; title: string } | null {
         if (!map.getLayer('pm-markers-circle')) return null;
         type QF = (p: [number, number], o?: { layers?: string[] }) => { properties?: Record<string, unknown> | null; geometry?: { coordinates?: unknown } }[];
         const query = (map as unknown as { queryRenderedFeatures: QF }).queryRenderedFeatures.bind(map);
@@ -1714,6 +1837,7 @@ export class PlatformMapEl extends PlatformElement {
         return {
             key: String(hit.properties?.['key'] ?? ''),
             lngLat: coords ?? [0, 0],
+            title: String(hit.properties?.['title'] ?? ''),
         };
     }
 
@@ -2012,6 +2136,9 @@ export class PlatformMapEl extends PlatformElement {
         if (this._refreshTimer !== null) window.clearTimeout(this._refreshTimer);
         if (this._suggestTimer !== null) window.clearTimeout(this._suggestTimer);
         document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+        this._schemeMedia?.removeEventListener('change', this._onSchemeMedia);
+        this._schemeMedia = null;
+        if (this._lpTimer !== null) window.clearTimeout(this._lpTimer);
         this._zoneDraw?.draw.stop();
         this._zoneDraw = null;
         for (const dm of this._domMarkers) dm.remove();

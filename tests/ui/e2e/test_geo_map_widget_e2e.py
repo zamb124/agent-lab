@@ -598,10 +598,20 @@ class TestRouteIsoScheme:
 
     async def test_draw_survives_scheme_switch(self, ui_page_system: Page) -> None:
         await _open_lab(ui_page_system)
-        snap0 = cast(
-            int,
-            await _map_eval(ui_page_system, "(el) => el.getDraw().draw.getSnapshot().length"),
-        )
+        # TerraDraw грузится асинхронно после style.load — ждём init.
+        snap0 = -1
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            snap0 = cast(
+                int,
+                await _map_eval(
+                    ui_page_system,
+                    "(el) => (el.getDraw() ? el.getDraw().draw.getSnapshot().length : -1)",
+                ),
+            )
+            if snap0 >= 0:
+                break
+            await asyncio.sleep(0.4)
         assert snap0 >= 1  # demo-зона в сторе TerraDraw
         await ui_page_system.locator("button[data-action='scheme']").click()
         deadline = time.monotonic() + 15.0
@@ -620,3 +630,181 @@ class TestRouteIsoScheme:
         assert snap >= snap0, f"TerraDraw потерял фичи после смены стиля: {snap0} -> {snap}"
         mode = cast(str, await _map_eval(ui_page_system, "(el) => el.getDraw().draw.getMode()"))
         assert mode in ("select", "static", "polygon")
+
+
+class TestEmbedRouteActions:
+    """Третья итерация: embed-UX, route-действия, auto-схема, export."""
+
+    async def test_context_menu_route_from_and_to(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        assert await _wait_source_features(ui_page_system, "pm-route", 1) >= 1
+        x, y = await _project(ui_page_system, *_ROAD_B)
+        await ui_page_system.mouse.click(x, y, button="right")
+        menu = ui_page_system.locator(".pm-menu")
+        await expect(menu).to_be_visible(timeout=10_000)
+        await expect(menu.locator("button[data-action='route-from']")).to_be_visible()
+        # «Маршрут сюда»: B → место клика; маршрут пересчитывается.
+        await menu.locator("button[data-action='route-to']").click()
+        await expect(menu).to_be_hidden(timeout=10_000)
+        last = cast(
+            list[float],
+            await _map_eval(
+                ui_page_system,
+                "(el) => el._routeBuildPts.at(-1)",
+            ),
+        )
+        assert abs(last[0] - _ROAD_B[0]) < 0.002 and abs(last[1] - _ROAD_B[1]) < 0.002
+        await ui_page_system.mouse.click(x, y, button="right")
+        await ui_page_system.locator(".pm-menu button[data-action='route-from']").click()
+        first = cast(
+            list[float],
+            await _map_eval(ui_page_system, "(el) => el._routeBuildPts[0]"),
+        )
+        assert abs(first[0] - _ROAD_B[0]) < 0.002
+        assert await _wait_source_features(ui_page_system, "pm-route", 1) >= 1
+
+    async def test_route_swap_reverses_endpoints(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        swap = ui_page_system.locator("button[data-action='route-swap']")
+        await expect(swap).to_be_visible(timeout=20_000)
+        await swap.click()
+        pts = cast(
+            list[list[float]],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-route-pts').serialize().data;
+                    return d.features.map((f) => f.geometry.coordinates);
+                }""",
+            ),
+        )
+        # Был A=Тверская(37.6173) → теперь первой точкой стала Никольская(37.6184).
+        assert abs(pts[0][0] - 37.6184) < 0.001, f"swap не развернул точки: {pts[0]}"
+
+    async def test_export_png_downloads_file(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        btn = ui_page_system.locator("button[data-action='export-png']")
+        await expect(btn).to_be_visible(timeout=20_000)
+        async with ui_page_system.expect_download(timeout=15_000) as dl:
+            await btn.click()
+        assert (await dl.value).suggested_filename.endswith(".png")
+
+    async def test_marker_title_shows_hover_hint(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        await ui_page_system.wait_for_timeout(1_000)
+        # Маркер превью-карты (title 'HQ'): layers.fetch:false — канонические
+        # фичи не перекроют title (на главной карте хинт показывает слой улицы).
+        preview = ui_page_system.locator("platform-map").nth(1)
+        x, y = await _project(ui_page_system, 37.6178, 55.7503, nth=1)
+        hint = preview.locator(".pm-hint")
+        # Маркер-кружок попадает в render-pyramid асинхронно — водим мышь до хита.
+        for _ in range(25):
+            await ui_page_system.mouse.move(x, y)
+            await asyncio.sleep(0.15)
+            if await hint.count() > 0 and "HQ" in await hint.inner_text():
+                return
+            await ui_page_system.mouse.move(x + 2, y + 2)
+            await asyncio.sleep(0.15)
+        await expect(hint).to_be_visible(timeout=10_000)
+        assert "HQ" in await hint.inner_text()
+
+    async def test_preview_cooperative_gestures_screen(self, ui_page_system: Page) -> None:
+        """Embed-превью: колесо без Ctrl не зумит, показывает подсказку."""
+        await _open_lab(ui_page_system)
+        preview = ui_page_system.locator("platform-map").nth(1)
+        canvas = preview.locator("canvas.maplibregl-canvas")
+        await expect(canvas).to_be_visible(timeout=20_000)
+        box = await canvas.bounding_box()
+        assert box is not None
+        z0 = cast(
+            float,
+            await _map_eval(ui_page_system, "(el) => el.getMap().getZoom()", nth=1),
+        )
+        await ui_page_system.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await ui_page_system.mouse.wheel(0, 300)
+        # Экран-подсказка «используйте Ctrl»: opacity 0→1 через класс maplibregl-show.
+        screen = preview.locator(".maplibregl-cooperative-gesture-screen")
+        await expect(screen).to_have_class(re.compile(r"maplibregl-show"), timeout=10_000)
+        z1 = cast(
+            float,
+            await _map_eval(ui_page_system, "(el) => el.getMap().getZoom()", nth=1),
+        )
+        assert abs(z1 - z0) < 0.05, f"wheel без Ctrl изменил зум: {z0} -> {z1}"
+
+    async def test_scheme_auto_follows_os_emulation(self, ui_page_system: Page) -> None:
+        """Превью со scheme:'auto' следует prefers-color-scheme ОС."""
+        await _open_lab(ui_page_system)
+
+        async def preview_bg() -> str:
+            return cast(
+                str,
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const m = el.getMap();
+                        const layer = m.getStyle().layers.find((l) => l.type === 'background');
+                        return layer ? m.getPaintProperty(layer.id, 'background-color') : '';
+                    }""",
+                    nth=1,
+                ),
+            )
+
+        light_bg = await preview_bg()
+        await ui_page_system.emulate_media(color_scheme="dark")
+        deadline = time.monotonic() + 20.0
+        dark_bg = light_bg
+        while time.monotonic() < deadline:
+            dark_bg = await preview_bg()
+            if dark_bg and dark_bg != light_bg:
+                break
+            await asyncio.sleep(0.5)
+        assert dark_bg != light_bg, f"auto-схема не ушла в dark: {dark_bg}"
+        await ui_page_system.emulate_media(color_scheme="light")
+        deadline = time.monotonic() + 20.0
+        back = dark_bg
+        while time.monotonic() < deadline:
+            back = await preview_bg()
+            if back == light_bg:
+                break
+            await asyncio.sleep(0.5)
+        assert back == light_bg, f"auto-схема не вернулась в light: {back}"
+
+    async def test_long_press_opens_context_menu(self, ui_page_system: Page) -> None:
+        """Долгий тап ≥600мс — контекстное меню (тач-устройства)."""
+        await _open_lab(ui_page_system)
+        x, y = await _project(ui_page_system, *_TVERSKAYA_1)
+        _ = cast(
+            object,
+            await ui_page_system.locator("platform-map").first.evaluate(
+                """(el, pt) => {
+                const canvas = el.getMap().getCanvas();
+                const r = canvas.getBoundingClientRect();
+                const touch = new Touch({
+                    identifier: 7, target: canvas,
+                    clientX: pt[0], clientY: pt[1],
+                });
+                canvas.dispatchEvent(new TouchEvent('touchstart', {
+                    touches: [touch], bubbles: true, composed: true,
+                }));
+                return true;
+            }""",
+                [x, y],
+            ),
+        )
+        menu = ui_page_system.locator(".pm-menu")
+        await expect(menu).to_be_visible(timeout=10_000)
+
+    async def test_hash_syncs_camera_to_url(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.getMap().jumpTo({ center: [37.62, 55.755], zoom: 15 }); return true; }",
+        )
+        deadline = time.monotonic() + 15.0
+        url = ""
+        while time.monotonic() < deadline:
+            url = ui_page_system.url
+            if "#map=" in url:
+                break
+            await asyncio.sleep(0.4)
+        assert "#map=" in url, f"камера не синхронизировалась с URL: {url}"

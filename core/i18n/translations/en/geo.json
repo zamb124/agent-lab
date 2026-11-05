@@ -43,7 +43,11 @@
     "hr": "h",
     "m": "m",
     "m2": "m²",
-    "km2": "km²"
+    "km2": "km²",
+    "route_from": "Route from here",
+    "route_to": "Route to here",
+    "route_swap": "Swap points",
+    "export_png": "Save as PNG"
   },
   "layers": {
     "title": "Layers",

@@ -702,6 +702,192 @@ describe('platform-map', function () {
         expect(moves.length, 'pm-move эмитнут').to.equal(1);
         expect(typeof moves[0]!.zoom).to.equal('number');
     });
+
+    it("scheme:'auto' → схема из prefers-color-scheme и следит за сменой", async () => {
+        const orig = window.matchMedia.bind(window);
+        let dark = true;
+        const listeners: Array<() => void> = [];
+        const fake = (q: string): MediaQueryList => {
+            const mql = orig(q);
+            return {
+                matches: q.includes('dark') ? dark : mql.matches,
+                media: q,
+                addEventListener: (_t: string, cb: EventListenerOrEventListenerObject) =>
+                    listeners.push(cb as () => void),
+                removeEventListener: () => undefined,
+                addListener: () => undefined,
+                removeListener: () => undefined,
+                onchange: null,
+                dispatchEvent: () => false,
+            } as MediaQueryList;
+        };
+        window.matchMedia = fake as typeof window.matchMedia;
+        let el: MapEl | null = null;
+        try {
+            el = await mapEl({ interactive: true, layers: { fetch: false }, scheme: 'auto' });
+            await waitUntil(() => el!._scheme === 'dark', 'auto → dark', { timeout: 10_000 });
+            dark = false;
+            for (const cb of listeners) cb();
+            await waitUntil(() => el!._scheme === 'light', 'auto следит за сменой → light', { timeout: 15_000 });
+        } finally {
+            window.matchMedia = orig;
+        }
+    });
+
+    it('cooperativeGestures → scroll-zoom заблокирован без Ctrl', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, cooperativeGestures: true });
+        const map = el.getMap()!;
+        const cg = (map as unknown as { cooperativeGestures?: { isEnabled(): boolean } }).cooperativeGestures;
+        expect(cg?.isEnabled(), 'handler включён').to.equal(true);
+        // Поведение: wheel без Ctrl → экран-подсказка cooperative-gesture.
+        map.getCanvas().dispatchEvent(
+            new WheelEvent('wheel', { deltaY: 100, bubbles: true, composed: true, cancelable: true }),
+        );
+        await aTimeout(60);
+        const screen = el.shadowRoot.querySelector('.maplibregl-cooperative-gesture-screen');
+        expect(screen, 'cooperative-gesture экран').to.exist;
+    });
+
+    it('hash → moveend пишет #map= в URL (deep-link)', async () => {
+        history.replaceState(null, '', location.pathname + location.search);
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, hash: true });
+        try {
+            el.getMap()!.fire('moveend');
+            await aTimeout(80);
+            expect(location.hash, 'хэш с камерой').to.include('#map=');
+        } finally {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
+    });
+
+    it('route: swap ⇅ → точки маршрута в обратном порядке', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            route: { points: [[37.6, 55.75], [37.61, 55.76]], mode: 'car' },
+        });
+        await waitUntil(
+            () => el.shadowRoot.querySelector("button[data-action='route-swap']") !== null,
+            'swap-кнопка',
+            { timeout: 10_000 },
+        );
+        el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='route-swap']")!.click();
+        await elementUpdated(el);
+        expect(el._routeBuildPts.length).to.equal(2);
+        expect(el._routeBuildPts[0]![0], 'старт = бывший B').to.be.closeTo(37.61, 0.001);
+        expect(el._routeBuildPts[1]![0], 'финиш = бывший A').to.be.closeTo(37.6, 0.001);
+    });
+
+    it('contextMenu: «маршрут отсюда/сюда» ставит A/B из точки клика', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            contextMenu: true,
+            route: { points: [[37.6, 55.75], [37.61, 55.76]], mode: 'car' },
+        });
+        const map = el.getMap()!;
+        const pt = map.project([37.615, 55.752]);
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('contextmenu', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+        );
+        await elementUpdated(el);
+        const menu = el.shadowRoot.querySelector('.pm-menu');
+        expect(menu, 'меню с route-пунктами').to.exist;
+        const from = menu!.querySelector<HTMLButtonElement>("button[data-action='route-from']");
+        const to = menu!.querySelector<HTMLButtonElement>("button[data-action='route-to']");
+        expect(from, 'route-from').to.exist;
+        expect(to, 'route-to').to.exist;
+        from!.click();
+        await elementUpdated(el);
+        expect(el._routeBuildPts[0]![0], 'A = место клика').to.be.closeTo(37.615, 0.01);
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('contextmenu', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+        );
+        await elementUpdated(el);
+        el.shadowRoot
+            .querySelector<HTMLButtonElement>(".pm-menu button[data-action='route-to']")!
+            .click();
+        await elementUpdated(el);
+        expect(el._routeBuildPts.at(-1)![0], 'B = место клика').to.be.closeTo(37.615, 0.01);
+        await waitUntil(
+            () => {
+                const src = map.getSource('pm-route') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) > 0;
+            },
+            'маршрут перестроен',
+            { timeout: 10_000 },
+        );
+    });
+
+    it('export → кнопка PNG + pm-export по клику', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, controls: { export: true } });
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='export-png']");
+        expect(btn, 'export-контрол').to.exist;
+        const events: unknown[] = [];
+        el.addEventListener('pm-export', (e) => events.push((e as CustomEvent).detail));
+        btn!.click();
+        await aTimeout(30);
+        expect(events.length, 'pm-export эмитнут').to.equal(1);
+    });
+
+    it('marker title → хинт-попап при наведении', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            markers: [{ key: 'a', lngLat: [37.6, 55.75], title: 'Склад Центральный' }],
+        });
+        const map = el.getMap()!;
+        const pt = map.project([37.6, 55.75]);
+        // geojson-маркер попадает в render-pyramid асинхронно — шлём mousemove до хита.
+        await waitUntil(
+            () => {
+                map.getCanvas().dispatchEvent(
+                    new MouseEvent('mousemove', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+                );
+                return el.shadowRoot.querySelector('.pm-hint') !== null;
+            },
+            'хинт с title маркера',
+            { timeout: 15_000 },
+        );
+        expect(el.shadowRoot.querySelector('.pm-hint')!.textContent).to.include('Склад Центральный');
+    });
+
+    it('long-press ≥600мс → контекстное меню на таче', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, contextMenu: true });
+        const canvas = el.getMap()!.getCanvas();
+        const rect = canvas.getBoundingClientRect();
+        const touch = new Touch({
+            identifier: 1,
+            target: canvas,
+            clientX: rect.left + 80,
+            clientY: rect.top + 80,
+        });
+        canvas.dispatchEvent(
+            new TouchEvent('touchstart', { touches: [touch], bubbles: true, composed: true }),
+        );
+        await aTimeout(700);
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.pm-menu'), 'меню после долгого тапа').to.exist;
+        canvas.dispatchEvent(
+            new TouchEvent('touchend', { touches: [], bubbles: true, composed: true }),
+        );
+    });
+
+    it('statusbar → bearing в строке состояния после поворота', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            statusBar: true,
+            rotate: true,
+            controls: { compass: true },
+        });
+        el.getMap()!.setBearing(45);
+        await waitUntil(
+            () => el.shadowRoot.querySelector('.pm-status-zoom')!.textContent!.includes('↻'),
+            'bearing в статусбаре',
+            { timeout: 10_000 },
+        );
+    });
 });
 
 describe('platform.zone_editor', function () {

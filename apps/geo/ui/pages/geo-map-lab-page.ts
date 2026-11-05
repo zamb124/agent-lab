@@ -51,6 +51,7 @@ export class GeoMapLabPage extends PlatformPage {
             zoom: 12,
             interactive: true,
             rotate: true,
+            hash: true,
             controls: {
                 zoom: true,
                 layers: true,
@@ -62,6 +63,7 @@ export class GeoMapLabPage extends PlatformPage {
                 compass: true,
                 scheme: true,
                 route: true,
+                export: true,
                 fullscreen: true,
                 scale: true,
             },
@@ -141,9 +143,11 @@ export class GeoMapLabPage extends PlatformPage {
                             .config=${{
                                 center: CENTER,
                                 zoom: 14,
-                                interactive: false,
+                                interactive: true,
+                                cooperativeGestures: true,
+                                scheme: 'auto',
                                 layers: { fetch: false },
-                                markers: [{ key: 'pin', lngLat: CENTER }],
+                                markers: [{ key: 'pin', lngLat: CENTER, title: 'HQ' }],
                             }}
                         ></platform-map>
                     </div>
