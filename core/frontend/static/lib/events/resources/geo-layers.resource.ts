@@ -31,7 +31,7 @@ export const geoLayerFeaturesOp = createAsyncOp<GeoFeatureCollectionResponse>({
     restMirror: { method: 'POST', path: '/geo/api/v1/layers/features' },
 });
 
-interface GeoMapSliceState {
+interface GeoMapSliceState extends Record<string, unknown> {
     hidden: Record<string, boolean>;
 }
 

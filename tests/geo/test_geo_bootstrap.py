@@ -694,7 +694,7 @@ class TestCoverageRegistry:
             )
             assert [r["region"] for r in rows] == ["moscow"]
 
-            stats = await GeoStats.list_for_generation(gen)
+            stats = await GeoStats.list_for_generation_by_source_region_entity_asc(gen)
             assert {s.entity: s.rows for s in stats} == {
                 "addresses": 4,
                 "vertices": 8,
@@ -747,7 +747,7 @@ class TestCoverageRegistry:
             assert result["imported"] is True
             assert result["rows_addresses"] == 4
             assert await GeoRegion.count_all() == 1
-            stats = await GeoStats.list_for_generation(
+            stats = await GeoStats.list_for_generation_by_source_region_entity_asc(
                 (await _state()).current_generation
             )
             assert {s.region for s in stats} == {"town"}

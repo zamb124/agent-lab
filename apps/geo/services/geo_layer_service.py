@@ -22,7 +22,7 @@ from apps.geo.models.api import (
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.services.geo_coverage_service import GeoCoverageError
 from core.models.base import FlexibleBaseModel, StrictBaseModel
-from core.types import parse_json_object
+from core.types import SqlParameterValue, parse_json_object
 
 
 class _FeatureRow(FlexibleBaseModel):
@@ -135,7 +135,7 @@ class GeoLayerService:
         id_expr = "name" if layer.name == "regions" else "id::text"
         prop_cols = ", ".join(layer.properties)
         where = "geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)"
-        params: list[object] = [west, south, east, north]
+        params: list[SqlParameterValue] = [west, south, east, north]
         if layer.generation_filtered:
             where = f"generation = ${len(params) + 1} AND {where}"
             params.append(generation)

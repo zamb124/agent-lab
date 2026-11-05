@@ -171,7 +171,7 @@ class GeoSettings(BaseSettings):
         description="Разрешить фактический импорт в geo_osm_sync_tick (False — тик завершается no-op).",
     )
     tiles_dir: str = Field(
-        default=".data/tiles",
+        default="data/tiles",
         description=(
             "Директория векторной базовой карты: basemap.pmtiles + "
             "fonts/{Fontstack}/{range}.pbf + sprites/{flavor}.*. Наполняется "

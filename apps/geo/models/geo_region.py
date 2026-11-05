@@ -62,12 +62,12 @@ class GeoRegion(PlatformModel):
         return await cls.objects.filter(name=name).first()
 
     @classmethod
-    async def list_all(cls) -> list[Self]:
+    async def list_all_by_name_asc(cls) -> list[Self]:
         """Все регионы по имени."""
         return await cls.objects.order_by("name").all()
 
     @classmethod
-    async def list_enabled(cls) -> list[Self]:
+    async def list_enabled_by_name_asc(cls) -> list[Self]:
         """Активные регионы — участники синхронизации."""
         return await cls.objects.filter(enabled=True).order_by("name").all()
 

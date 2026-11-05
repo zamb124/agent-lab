@@ -42,7 +42,7 @@ spec:
             {{- if eq $name "geo-worker" }}
             # Общий том с geo-app: sync пишет basemap.pmtiles + ассеты сюда.
             - name: geo-tiles
-              mountPath: /app/.data/tiles
+              mountPath: /app/data/tiles
             {{- end }}
           resources:
             {{- toYaml $worker.resources | nindent 12 }}

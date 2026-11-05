@@ -52,6 +52,6 @@ class GeoSourceCursor(PlatformModel):
         return await cls.objects.filter(source=source, region=region).first()
 
     @classmethod
-    async def list_all(cls) -> list[Self]:
+    async def list_all_by_source_region_asc(cls) -> list[Self]:
         """Все курсоры по источнику."""
         return await cls.objects.order_by("source", "region").all()

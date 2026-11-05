@@ -151,7 +151,7 @@ spec:
             # Общий том с geo-worker: geo_tiles_sync пишет basemap.pmtiles,
             # geo отдаёт /geo/api/v1/tiles/* с этого же PVC.
             - name: geo-tiles
-              mountPath: /app/.data/tiles
+              mountPath: /app/data/tiles
             {{- end }}
             {{- if eq $name "guest-runtime" }}
             - name: guest-runtime-registry

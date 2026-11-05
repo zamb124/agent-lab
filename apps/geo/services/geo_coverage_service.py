@@ -91,13 +91,13 @@ class GeoCoverageService:
     async def regions_response(self) -> GeoRegionListResponse:
         """Регионы со счётчиками данных активного поколения."""
         generation = await GeoImportState.active_generation()
-        stats = await GeoStats.list_for_generation(generation)
+        stats = await GeoStats.list_for_generation_by_source_region_entity_asc(generation)
         counts: dict[str, dict[str, int]] = {}
         for row in stats:
             counts.setdefault(row.region, {})[row.entity] = row.rows
         items = [
             self._region_item(region, counts.get(region.name, {}))
-            for region in await GeoRegion.list_all()
+            for region in await GeoRegion.list_all_by_name_asc()
         ]
         return GeoRegionListResponse(items=items, generation=generation)
 
@@ -145,7 +145,7 @@ class GeoCoverageService:
         _ = await region.save()
         stats = {
             row.entity: row.rows
-            for row in await GeoStats.list_for_generation(
+            for row in await GeoStats.list_for_generation_by_source_region_entity_asc(
                 await GeoImportState.active_generation()
             )
             if row.region == region.name
@@ -161,7 +161,7 @@ class GeoCoverageService:
     async def sources_response(self) -> GeoSourceListResponse:
         """Реестр источников с лицензиями."""
         items: list[GeoSourceItem] = []
-        for source in await GeoSource.list_all():
+        for source in await GeoSource.list_all_by_name_asc():
             assert source.id is not None
             items.append(
                 GeoSourceItem(
@@ -180,7 +180,7 @@ class GeoCoverageService:
     async def stats_overview(self) -> GeoStatsOverview:
         """Сводка загруженных данных активного поколения."""
         generation = await GeoImportState.active_generation()
-        stats = await GeoStats.list_for_generation(generation)
+        stats = await GeoStats.list_for_generation_by_source_region_entity_asc(generation)
         totals: dict[str, int] = {}
         for row in stats:
             totals[row.entity] = totals.get(row.entity, 0) + row.rows
@@ -210,7 +210,7 @@ class GeoCoverageService:
                 last_error=cursor.last_error,
                 updated_at=cursor.updated_at.isoformat(),
             )
-            for cursor in await GeoSourceCursor.list_all()
+            for cursor in await GeoSourceCursor.list_all_by_source_region_asc()
         ]
         return GeoCursorListResponse(items=items)
 

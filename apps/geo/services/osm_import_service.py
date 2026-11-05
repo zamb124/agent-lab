@@ -586,7 +586,7 @@ class OsmImportService:
         state.updated_at = datetime.now(UTC)
         _ = await state.save()
 
-        regions = await GeoRegion.list_enabled()
+        regions = await GeoRegion.list_enabled_by_name_asc()
         if not regions:
             state.status = GeoImportStatus.IDLE
             state.updated_at = datetime.now(UTC)

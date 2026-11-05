@@ -40,6 +40,8 @@ SCAN_DIRS = (
 ALLOWLIST_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "apps" / "crm" / "worker.py",
     REPO_ROOT / "apps" / "crm" / "README.md",
+    # osmium.FileProcessor — имя класса внешней библиотеки (pyosmium), не legacy Files API.
+    REPO_ROOT / "apps" / "geo" / "services" / "osm_import_service.py",
 )
 
 

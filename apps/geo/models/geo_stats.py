@@ -62,7 +62,7 @@ class GeoStats(PlatformModel):
         )
 
     @classmethod
-    async def list_for_generation(cls, generation: int) -> list[Self]:
+    async def list_for_generation_by_source_region_entity_asc(cls, generation: int) -> list[Self]:
         """Все счётчики поколения по source/region/entity."""
         return (
             await cls.objects.filter(generation=generation)
