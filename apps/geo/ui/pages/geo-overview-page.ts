@@ -69,9 +69,21 @@ export class GeoOverviewPage extends PlatformPage {
             <platform-map
                 .config=${{
                     interactive: true,
-                    controls: { zoom: true, layers: true, locate: true },
+                    controls: {
+                        zoom: true,
+                        layers: true,
+                        locate: true,
+                        search: true,
+                        ruler: true,
+                        fit: true,
+                        fullscreen: true,
+                        scale: true,
+                    },
                     layers: { fetch: true },
                     featureCards: { hover: true, click: true },
+                    search: { limit: 7 },
+                    contextMenu: true,
+                    statusBar: true,
                 }}
             ></platform-map>
         `;

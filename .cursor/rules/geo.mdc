@@ -4,7 +4,9 @@ globs:
   - "apps/geo/**"
   - "core/clients/geo_client.py"
   - "core/frontend/static/lib/map/**"
+  - "core/frontend/static/lib/components/platform-map.ts"
   - "core/frontend/static/lib/components/platform-zone-address-panel.ts"
+  - "core/frontend/static/lib/modals/platform-zone-editor-modal.ts"
   - "migrations/geo/**"
   - "tests/geo/**"
 alwaysApply: false
@@ -61,6 +63,30 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 
 ## UI
 
+### `<platform-map>` — единый виджет карты
+
+Один виджет `core/frontend/static/lib/components/platform-map.ts` для ВСЕХ карт платформы (geo, shop, wiki, tracker, flow-ui embed). Вся настройка — сериализуемый `PlatformMapConfig` в духе options-объекта JS API Яндекс.Карт; свои карты/`shop-*-map`/инлайн-MapLibre в сервисах запрещены. Секции config:
+
+- `center`/`zoom`/`minZoom`/`maxZoom`/`interactive`/`padding` — камера и жесты; `interactive:false` — встраиваемое превью без контролов.
+- `controls.zoom`/`layers`/`locate`/`search`/`ruler`/`fit`/`fullscreen`/`scale` — встроенные контролы.
+- `layers.fetch`/`hidden` — канонические geo-слои по bbox (`geo/layer_features` + `geo/layers`, visibility через slice `geo/map`).
+- `featureCards.hover`/`click` — хинт и карточка фичи (`lib/map/feature-card.ts`).
+- `markers[]` (+`draggable`), `markersCluster` — точечные маркеры и кластеризация; drag отдаёт `pm-marker-drag`.
+- `overlays[]` — произвольные GeoJSON-слои (зоны, треки) с `fit`.
+- `search` — suggest-дропдаун через `geo/addresses_suggest`, pin + `pm-search-select`.
+- `contextMenu` — «Что здесь?» (`geo/addresses_nearest`) + копирование координат.
+- `statusBar` — координаты курсора и zoom. `draw` — TerraDraw-полигон + `pm-draw-change` (метрики, валидация). `addressesPanel` — `platform-zone-address-panel` + `geo/addresses_in_zone`. `locateTo` — программный перелёт камеры.
+- События `pm-*` (bubbles+composed): `pm-ready`, `pm-click`, `pm-marker-click`, `pm-marker-drag`, `pm-draw-change`, `pm-layer-toggle`, `pm-locate`, `pm-address-hover`, `pm-search-select`, `pm-ruler-change`, `pm-coords-copy`, `pm-error`.
+- Модалка `platform.zone_editor` (`lib/modals/platform-zone-editor-modal.ts`) — общий редактор зоны: метрики, «Рисовать»/«К зоне»/«Очистить»/«К адресу».
+- Витрина и e2e-полигон виджета — `/geo/map-lab` (`apps/geo/ui/pages/geo-map-lab-page.ts`): все секции config на реальных данных.
+
+### Тесты виджета
+
+- `tests/frontend_core/browser/components/platform-map.spec.ts` — WTR/Chromium по каждой секции config и событию `pm-*` (контролы, слои, поиск, линейка, меню, кластер, draw, модалка).
+- `tests/ui/e2e/test_geo_map_widget_e2e.py` — Playwright против живого geo :9028 на фикстуре `tests/geo/fixtures/micro.osm`: загрузка, zoom, toggle слоёв, карточка фичи, suggest→pin, «Что здесь?», линейка, статусбар, кластер, draggable, панель адресов, превью. Новая фича виджета без e2e — не вливается. `[без гейта]`
+
+### Остальное
+
 - Базовая карта — MapLibre GL + векторные PMTiles: loader `core/frontend/static/lib/map/maplibre.ts` (`loadMapLibre`, `maplibreCssLink`, `pmtiles://`-протокол) и фабрика `lib/map/basemap.ts` (`createBasemap`, style — `GET /geo/api/v1/tiles/style.json`). Vendor — `lib/vendor/maplibre/maplibre-gl.css`.
 - Тайл-сервис geo — `apps/geo/api/tiles.py` (анонимный): `tiles/basemap.pmtiles` (HTTP Range, читает pmtiles.js), `tiles/fonts/*`, `tiles/sprites/*`, `tiles/style.json`. Ассеты живут в `GeoSettings.tiles_dir` и наполняются таской `geo_tiles_sync` (`GeoTilesService`: `pmtiles extract` по `coverage_bbox` + basemaps-assets tar.gz) либо `python -m scripts.geo.fetch_basemap` в dev.
 - `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны; редактирование полигона — terra-draw (MapLibre-адаптер), валидация `ValidateNotSelfIntersecting`.
@@ -70,6 +96,7 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 1. Свои таблицы адресов/дорог, spatial-запросы, OSM-парсинг, PostGIS и pgRouting вне `apps/geo` — доступ только через `GeoClient`. `[без гейта]`
 2. `execute_raw` с nullable-параметрами в geo — баг биндингов oxyde-core 0.7.1 (NULL→non-NULL в переиспользованном prepared statement сдвигает параметры); публикация состояния — `GeoImportState.save()`. `[без гейта]`
 3. MapLibre — только через loader `lib/map/maplibre.ts` и `createBasemap` из `lib/map/basemap.ts`; свои копии vendor/стиля, Leaflet и растровые тайлы в сервисах запрещены. `[без гейта]`
+4. Карта в UI — только `<platform-map>` с `PlatformMapConfig`; продуктовые `<*-map>` компоненты, ветки MapLibre и проприетарные пропсы-копии вне config запрещены. `[без гейта]`
 
 ## Гейты
 

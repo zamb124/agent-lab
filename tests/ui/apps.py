@@ -93,4 +93,12 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         shell_selector="shop-app",
         title="Магазин",
     ),
+    "geo": ServiceUiSpec(
+        key="geo",
+        port=9028,
+        spa_path="/geo/",
+        shell_selector="geo-app",
+        title=None,
+        subdomain_prefix="system",
+    ),
 }

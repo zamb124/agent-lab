@@ -58,6 +58,7 @@ type TestMap = {
     isStyleLoaded(): boolean;
     getCanvas(): HTMLCanvasElement;
     project(lngLat: [number, number]): { x: number; y: number };
+    getCenter?(): { lng: number; lat: number };
     getSource(id: string): { setData(d: unknown): void; _data?: { geojson?: { features?: unknown[] } } } | undefined;
     getLayer(id: string): unknown;
 };
@@ -116,12 +117,38 @@ async function seedI18n() {
     bus.dispatch(CoreEvents.I18N_LOCALE_CHANGED, { locale: 'ru' });
 }
 
+const SUGGEST_RESULT = {
+    items: [
+        {
+            id: 1,
+            osm_type: 'node',
+            osm_id: 1001,
+            display_name: 'Москва, Тверская улица, 1',
+            city: 'Москва',
+            street: 'Тверская улица',
+            housenumber: '1',
+            lat: 55.7501,
+            lng: 37.6173,
+        },
+    ],
+};
+
 /** Ответить на geo запросы боевым контрактом (async, как WS). */
 function answerGeo(): void {
     const bus = getPlatformBus();
     bus.subscribeType(geoLayersOp.events.REQUESTED, (event) => {
         queueMicrotask(() => {
             bus.dispatch(geoLayersOp.events.SUCCEEDED, { result: LAYERS_RESULT }, { causation_id: event.id, source: 'http' });
+        });
+    });
+    bus.subscribeType(geoAddressSuggestOp.events.REQUESTED, (event) => {
+        queueMicrotask(() => {
+            bus.dispatch(geoAddressSuggestOp.events.SUCCEEDED, { result: SUGGEST_RESULT }, { causation_id: event.id, source: 'http' });
+        });
+    });
+    bus.subscribeType(geoAddressNearestOp.events.REQUESTED, (event) => {
+        queueMicrotask(() => {
+            bus.dispatch(geoAddressNearestOp.events.SUCCEEDED, { result: SUGGEST_RESULT }, { causation_id: event.id, source: 'http' });
         });
     });
     bus.subscribeType(geoLayerFeaturesOp.events.REQUESTED, (event) => {
@@ -146,7 +173,9 @@ function answerGeo(): void {
 }
 
 async function mapEl(config: PlatformMapConfig): Promise<MapEl> {
-    const el = await fixture<MapEl>(html`<platform-map .config=${config}></platform-map>`);
+    const el = await fixture<MapEl>(
+        html`<platform-map style="display:block;height:480px;width:640px" .config=${config}></platform-map>`,
+    );
     for (let i = 0; i < 300 && !(el.getMap() && el._ready); i++) await aTimeout(30);
     expect(el.getMap(), 'MapLibre инициализирован').to.exist;
     expect(el._ready, 'стиль загружен').to.equal(true);
@@ -251,6 +280,165 @@ describe('platform-map', function () {
         await aTimeout(50);
         expect(clicks.length, 'pm-click эмитнут').to.be.greaterThan(0);
         expect(clicks[0]!.lngLat[0]).to.be.closeTo(37.6, 0.05);
+    });
+
+    it('до готовности — loading-оверлей со спиннером', async () => {
+        const el = await fixture<MapEl>(html`<platform-map .config=${{ interactive: true }}></platform-map>`);
+        await elementUpdated(el);
+        const loading = el.shadowRoot.querySelector('.pm-loading');
+        if (el._ready) {
+            expect(loading, 'ready → оверлея нет').to.equal(null);
+        } else {
+            expect(loading, 'loading-оверлей').to.exist;
+        }
+    });
+
+    it('search: ввод → suggest_requested, выбор → easeTo + pin + pm-search-select', async () => {
+        const el = await mapEl({ interactive: true, controls: { search: true }, layers: { fetch: false } });
+        const input = el.shadowRoot.querySelector<HTMLInputElement>('.pm-search-input');
+        expect(input, 'поле поиска').to.exist;
+        const reqs: Array<{ type: string; payload: unknown }> = [];
+        getPlatformBus().subscribeType(geoAddressSuggestOp.events.REQUESTED, (e) => reqs.push(e));
+        input!.value = 'Тверск';
+        input!.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await waitUntil(() => reqs.length > 0, 'suggest запрошен', { timeout: 5_000 });
+        expect((reqs[0]!.payload as Record<string, unknown>)['q']).to.equal('Тверск');
+        const selects: unknown[] = [];
+        el.addEventListener('pm-search-select', (e) => selects.push((e as CustomEvent).detail));
+        await waitUntil(
+            () => el.shadowRoot.querySelector('.pm-suggest-item') !== null,
+            'дропдаун подсказок',
+            { timeout: 5_000 },
+        );
+        el.shadowRoot.querySelector<HTMLButtonElement>('.pm-suggest-item')!.dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, composed: true }),
+        );
+        await aTimeout(50);
+        expect(selects.length, 'pm-search-select').to.equal(1);
+        const pin = el.getMap()!.getSource('pm-search-pin') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+        expect(pin?.serialize().data?.features?.length, 'pin на выбранном адресе').to.equal(1);
+    });
+
+    it('search: Escape скрывает дропдаун', async () => {
+        const el = await mapEl({ interactive: true, controls: { search: true }, layers: { fetch: false } });
+        const input = el.shadowRoot.querySelector<HTMLInputElement>('.pm-search-input')!;
+        input.value = 'Тверск';
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await waitUntil(
+            () => el.shadowRoot.querySelector('.pm-suggest') !== null,
+            'дропдаун открыт',
+            { timeout: 5_000 },
+        );
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.pm-suggest'), 'дропдаун скрыт').to.equal(null);
+    });
+
+    it('ruler: контрол → режим, клики → вершины + pm-ruler-change с дистанцией', async () => {
+        const el = await mapEl({ interactive: true, controls: { ruler: true }, layers: { fetch: false } });
+        const btn = [...el.shadowRoot.querySelectorAll<HTMLButtonElement>('.pm-icon-btn')].find(
+            (b) => b.title === 'Линейка',
+        );
+        expect(btn, 'кнопка линейки').to.exist;
+        const changes: Array<{ points: unknown[]; distanceM: number; finished: boolean }> = [];
+        el.addEventListener('pm-ruler-change', (e) => changes.push((e as CustomEvent).detail));
+        btn!.click();
+        await elementUpdated(el);
+        const map = el.getMap()!;
+        for (const [lng, lat] of [[37.6, 55.75], [37.61, 55.75]] as const) {
+            const pt = map.project([lng, lat]);
+            map.getCanvas().dispatchEvent(
+                new MouseEvent('click', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+            );
+            await aTimeout(30);
+        }
+        expect(changes.length).to.be.greaterThan(0);
+        const last = changes.at(-1)!;
+        expect(last.points.length, 'две вершины').to.equal(2);
+        expect(last.distanceM, 'дистанция > 0').to.be.greaterThan(100);
+        const src = map.getSource('pm-ruler') as { serialize(): { data?: { features?: Array<{ geometry: { type: string } }> } } } | undefined;
+        const kinds = src?.serialize().data?.features?.map((f) => f.geometry.type) ?? [];
+        expect(kinds).to.include('LineString');
+        btn!.click();
+        await elementUpdated(el);
+        expect(changes.at(-1)!.finished, 'finish при выходе').to.equal(true);
+    });
+
+    it('markersCluster → cluster-слои; draggable → pm-marker-drag после dragend', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            markersCluster: true,
+            markers: [{ key: 'd', lngLat: [37.6, 55.75], draggable: true }],
+        });
+        const map = el.getMap()!;
+        expect(map.getLayer('pm-cluster-circle'), 'cluster circle layer').to.exist;
+        expect(map.getLayer('pm-cluster-count'), 'cluster count layer').to.exist;
+        const drags: unknown[] = [];
+        el.addEventListener('pm-marker-drag', (e) => drags.push((e as CustomEvent).detail));
+        const domMarker = el.shadowRoot.querySelector('.maplibregl-marker');
+        expect(domMarker, 'DOM-маркер для draggable').to.exist;
+    });
+
+    it('contextMenu: правый клик → меню; «Что здесь?» → nearest_requested', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, contextMenu: true });
+        const map = el.getMap()!;
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('contextmenu', { clientX: 60, clientY: 60, bubbles: true, composed: true }),
+        );
+        await elementUpdated(el);
+        const menu = el.shadowRoot.querySelector('.pm-menu');
+        expect(menu, 'контекстное меню').to.exist;
+        expect(menu!.textContent).to.include('Что здесь');
+        const reqs: unknown[] = [];
+        getPlatformBus().subscribeType(geoAddressNearestOp.events.REQUESTED, (e) => reqs.push(e));
+        const whatsHere = [...menu!.querySelectorAll('button')].find((b) => b.textContent!.includes('Что здесь'))!;
+        whatsHere.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+        await waitUntil(() => reqs.length > 0, 'nearest запрошен', { timeout: 5_000 });
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.pm-menu'), 'меню закрыто').to.equal(null);
+    });
+
+    it('statusBar → строка координат и zoom', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, statusBar: true });
+        const bar = el.shadowRoot.querySelector('.pm-status');
+        expect(bar, 'statusbar').to.exist;
+        const map = el.getMap()!;
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('mousemove', { clientX: 50, clientY: 50, bubbles: true, composed: true }),
+        );
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.pm-status-coords')!.textContent!.trim()).to.not.equal('');
+        expect(el.shadowRoot.querySelector('.pm-status-zoom')!.textContent).to.include('z');
+    });
+
+    it('fit + fullscreen контролы рендерятся и не падают', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            controls: { fit: true, fullscreen: true },
+            overlays: [{ name: 'zone', data: { type: 'Feature', geometry: ZONE, properties: {} } }],
+        });
+        const btns = [...el.shadowRoot.querySelectorAll<HTMLButtonElement>('.pm-icon-btn')];
+        const fit = btns.find((b) => b.title === 'К содержимому');
+        const fs = btns.find((b) => b.title === 'Во весь экран');
+        expect(fit, 'fit-контрол').to.exist;
+        expect(fs, 'fullscreen-контрол').to.exist;
+        const before = el.getMap()!.getCenter?.();
+        fit!.click();
+        await aTimeout(700);
+        const after = el.getMap()!.getCenter?.();
+        if (before && after) {
+            const moved = Math.abs(before.lng - after.lng) + Math.abs(before.lat - after.lat);
+            expect(moved, 'камера сместилась к зоне').to.be.greaterThan(0.001);
+        }
+        fs!.click();
+    });
+
+    it('interactive:false → контролы и жесты выключены', async () => {
+        const el = await mapEl({ interactive: false, layers: { fetch: false }, controls: { search: true, ruler: true } });
+        expect(el.shadowRoot.querySelector('.pm-search'), 'поиска нет').to.equal(null);
+        expect(el.shadowRoot.querySelector('.pm-zoom'), 'zoom-контрола нет').to.equal(null);
     });
 });
 

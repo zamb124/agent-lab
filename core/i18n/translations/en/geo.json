@@ -3,17 +3,29 @@
     "title": "Geo",
     "menu_overview": "Map",
     "menu_sources": "Coverage",
-    "menu_route_lab": "Routes"
+    "menu_route_lab": "Routes",
+    "menu_map_lab": "Map Lab"
   },
   "routes": {
     "overview": "Map",
     "sources": "Coverage",
-    "route_lab": "Route lab"
+    "route_lab": "Route lab",
+    "map_lab": "Map Lab"
   },
   "map": {
     "loading": "Loading layers…",
     "locate": "My location",
-    "addresses_title": "Addresses in zone"
+    "addresses_title": "Addresses in zone",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "search_placeholder": "Search address…",
+    "ruler": "Ruler",
+    "fit": "Fit to content",
+    "fullscreen": "Fullscreen",
+    "whats_here": "What's here?",
+    "copy_coords": "Copy coordinates",
+    "error_title": "Failed to load the map",
+    "retry": "Retry"
   },
   "layers": {
     "title": "Layers",
@@ -103,5 +115,10 @@
     "empty_no_hits": "No directory addresses fall inside the zone.",
     "prev": "Prev",
     "next": "Next"
+  },
+  "map_lab": {
+    "header_title": "Map Lab",
+    "header_subtitle": "platform-map feature showcase",
+    "preview_title": "Embedded preview"
   }
 }

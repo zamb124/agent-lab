@@ -55,11 +55,13 @@ import '../components/geo-sidebar.js';
 import '../pages/geo-overview-page.js';
 import '../pages/geo-sources-page.js';
 import '../pages/geo-route-lab-page.js';
+import '../pages/geo-map-lab-page.js';
 
 const GEO_ROUTES = [
     { key: 'overview',  path: '',            titleKey: 'routes.overview' },
     { key: 'sources',   path: 'sources',     titleKey: 'routes.sources' },
     { key: 'route_lab', path: 'route-lab',   titleKey: 'routes.route_lab' },
+    { key: 'map_lab',   path: 'map-lab',     titleKey: 'routes.map_lab' },
 ];
 
 export class GeoApp extends PlatformApp {
@@ -164,6 +166,9 @@ export class GeoApp extends PlatformApp {
                 break;
             case 'route_lab':
                 content = html`<geo-route-lab-page></geo-route-lab-page>`;
+                break;
+            case 'map_lab':
+                content = html`<geo-map-lab-page></geo-map-lab-page>`;
                 break;
             case 'overview':
             default:

@@ -29,14 +29,14 @@ import { createBasemap } from '@platform/lib/map/basemap.js';
 import type { PlatformMap } from '@platform/lib/map/basemap.js';
 import { createZoneDraw } from '@platform/lib/map/zone-draw.js';
 import type { ZoneDraw } from '@platform/lib/map/zone-draw.js';
-import { ringAreaM2, ringPerimeterM, fmtArea, fmtKm } from '@platform/lib/map/geo-math.js';
+import { ringAreaM2, ringPerimeterM, haversineM, fmtArea, fmtKm } from '@platform/lib/map/geo-math.js';
 import { renderFeatureCard, featureTitle } from '@platform/lib/map/feature-card.js';
 import './platform-zone-address-panel.js';
 import '../events/resources/geo-layers.resource.js';
 import '../events/resources/geo-addresses.resource.js';
 import type { geoLayersOp, geoLayerFeaturesOp, geoMapSlice } from '../events/resources/geo-layers.resource.js';
-import type { geoAddressNearestOp } from '../events/resources/geo-addresses.resource.js';
-import type { GeoFeature, GeoLayerInfo } from '../events/wire/geo.gen.js';
+import type { geoAddressNearestOp, geoAddressSuggestOp } from '../events/resources/geo-addresses.resource.js';
+import type { GeoAddressHit, GeoFeature, GeoLayerInfo } from '../events/wire/geo.gen.js';
 import type {
     Feature,
     FeatureCollection,
@@ -56,6 +56,8 @@ export interface PlatformMapMarker {
     color?: string;
     title?: string;
     size?: number;
+    /** DOM-маркер с drag-жестом; по отпусканию — событие pm-marker-drag. */
+    draggable?: boolean;
 }
 
 export interface PlatformMapOverlay {
@@ -72,11 +74,23 @@ export interface PlatformMapConfig {
     center?: LngLat;
     zoom?: number;
     minZoom?: number;
+    maxZoom?: number;
     interactive?: boolean;
+    /** Безопасные поля камеры — панели хоста не перекрывают контент. */
+    padding?: number;
     controls?: {
         zoom?: boolean;
         layers?: boolean;
         locate?: boolean;
+        /** Поиск адреса по каноническому справочнику (geo/addresses_suggest). */
+        search?: boolean;
+        fullscreen?: boolean;
+        /** Метрический масштаб в углу (нативный ScaleControl). */
+        scale?: boolean;
+        /** Линейка: клики ставят вершины, длина на сегментах и итог. */
+        ruler?: boolean;
+        /** Кнопка «к содержимому»: fitBounds по оверлеям/маркерам/слоям. */
+        fit?: boolean;
     };
     layers?: {
         fetch?: boolean;
@@ -87,7 +101,22 @@ export interface PlatformMapConfig {
         click?: boolean;
     };
     markers?: PlatformMapMarker[];
+    /** Кластеризация точечных маркеров (кружки со счётчиком, zoom по клику). */
+    markersCluster?: boolean;
     overlays?: PlatformMapOverlay[];
+    /** Поиск по карте: параметры suggest-дропдауна и поведение выбора. */
+    search?: {
+        placeholder?: string;
+        limit?: number;
+        /** Zoom после выбора подсказки (default 16). */
+        flyZoom?: number;
+        /** Ставить pin на выбранном результате (default true). */
+        pin?: boolean;
+    } | false;
+    /** Правый клик: меню «Что здесь?» (reverse geocode) + копирование координат. */
+    contextMenu?: boolean;
+    /** Нижняя строка состояния: координаты курсора и zoom. */
+    statusBar?: boolean;
     draw?: {
         zone?: Polygon | MultiPolygon | null;
     } | false;
@@ -105,7 +134,7 @@ type FeatureGeometry = Point | LineString | Polygon | MultiPolygon;
 type GeoFeatureOf = Feature<FeatureGeometry, GeoJsonProperties>;
 type DrawFeature = Feature<Polygon | MultiPolygon>;
 
-const DEFAULT_CENTER: LngLat = [55.7512, 37.6184];
+const DEFAULT_CENTER: LngLat = [37.6184, 55.7512];
 const DEFAULT_ZOOM = 10;
 const REFRESH_DEBOUNCE_MS = 250;
 const OVERLAY_COLOR = '#2563eb';
@@ -133,11 +162,31 @@ export class PlatformMapEl extends PlatformElement {
         config: { type: Object, attribute: false },
         _ready: { state: true },
         _zoneStats: { state: true },
+        _mode: { state: true },
+        _error: { state: true },
+        _searchQuery: { state: true },
+        _suggestItems: { state: true },
+        _suggestOpen: { state: true },
+        _suggestBusy: { state: true },
+        _cursorText: { state: true },
+        _fullscreen: { state: true },
+        _menu: { state: true },
+        _searchPin: { state: true },
     };
 
     declare config: PlatformMapConfig;
     declare _ready: boolean;
     declare _zoneStats: { areaM2: number; perimeterM: number; valid: boolean } | null;
+    declare _mode: 'select' | 'ruler';
+    declare _error: 'style' | 'init' | null;
+    declare _searchQuery: string;
+    declare _suggestItems: GeoAddressHit[];
+    declare _suggestOpen: boolean;
+    declare _suggestBusy: boolean;
+    declare _cursorText: string;
+    declare _fullscreen: boolean;
+    declare _menu: { x: number; y: number; lngLat: LngLat } | null;
+    declare _searchPin: LngLat | null;
 
     private _el: HTMLDivElement | null = null;
     private _map: PlatformMap | null = null;
@@ -146,11 +195,16 @@ export class PlatformMapEl extends PlatformElement {
     private _featuresOp: OpControllerOf<typeof geoLayerFeaturesOp> | null = null;
     private _layersOp: OpControllerOf<typeof geoLayersOp> | null = null;
     private _nearestOp: OpControllerOf<typeof geoAddressNearestOp> | null = null;
+    private _suggestOp: OpControllerOf<typeof geoAddressSuggestOp> | null = null;
     private _refreshTimer: number | null = null;
+    private _suggestTimer: number | null = null;
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
     private _cardPopup: { remove(): void } | null = null;
     private _zoneDraw: ZoneDraw | null = null;
     private _locateMarker: { remove(): void } | null = null;
+    private _domMarkers: { remove(): void }[] = [];
+    private _clusterHandlersBound = false;
+    private _rulerPoints: LngLat[] = [];
     private _configLayersApplied = false;
     private _mapLayers = new Set<string>();
 
@@ -159,6 +213,16 @@ export class PlatformMapEl extends PlatformElement {
         this.config = {};
         this._ready = false;
         this._zoneStats = null;
+        this._mode = 'select';
+        this._error = null;
+        this._searchQuery = '';
+        this._suggestItems = [];
+        this._suggestOpen = false;
+        this._suggestBusy = false;
+        this._cursorText = '';
+        this._fullscreen = false;
+        this._menu = null;
+        this._searchPin = null;
     }
 
     /** MapLibre-карта — для потребителей, которым нужен прямой API (fitBounds и т.п.). */
@@ -210,26 +274,79 @@ export class PlatformMapEl extends PlatformElement {
             this._layersOp = this.useOp('geo/layers');
             void this._layersOp.run({});
         }
-        if (this.config.controls?.locate === true) {
+        if (this.config.controls?.locate === true || this.config.contextMenu === true) {
             this._nearestOp = this.useOp('geo/addresses_nearest');
+        }
+        if (this.config.controls?.search === true && this.config.search !== false) {
+            this._suggestOp = this.useOp('geo/addresses_suggest');
         }
     }
 
     override render() {
-        const cls = `pm-wrap${this._interactive ? ' interactive' : ''}${this._ready ? ' ready' : ''}`;
+        const cls = `pm-wrap${this._interactive ? ' interactive' : ''}${this._ready ? ' ready' : ''}${this._mode === 'ruler' ? ' ruler' : ''}`;
         const panel = this.config.addressesPanel;
         return html`
             ${maplibreCssLink()}
-            <div class=${cls}>
+            <div class=${cls} @click=${() => (this._menu = null)}>
                 <div
                     class="map-canvas"
                     @mousedown=${(e: MouseEvent) => e.stopPropagation()}
                     @touchstart=${(e: TouchEvent) => e.stopPropagation()}
                     @wheel=${(e: WheelEvent) => e.stopPropagation()}
+                    @contextmenu=${this._onContextMenu}
                 ></div>
+                ${this._renderSearch()}
                 ${this._renderControls()}
                 ${this.config.draw ? this._renderZoneStats() : nothing}
                 ${panel ? this._renderAddressesPanel(panel) : nothing}
+                ${this.config.statusBar === true && this._ready ? this._renderStatusBar() : nothing}
+                ${this._menu ? this._renderMenu() : nothing}
+                ${!this._ready && this._error === null ? html`<div class="pm-overlay pm-loading"><span class="pm-spinner"></span>${this.t('map.loading')}</div>` : nothing}
+                ${this._error !== null
+                    ? html`<div class="pm-overlay pm-error">
+                          <div class="pm-error-title">${this.t('map.error_title')}</div>
+                          <button type="button" class="pm-retry" @click=${this._onRetry}>${this.t('map.retry')}</button>
+                      </div>`
+                    : nothing}
+            </div>
+        `;
+    }
+
+    private _renderSearch() {
+        const enabled = this.config.controls?.search === true && this.config.search !== false && this._interactive;
+        if (!enabled) return nothing;
+        const cfg = typeof this.config.search === 'object' ? this.config.search : undefined;
+        return html`
+            <div class="pm-search">
+                <input
+                    class="pm-search-input"
+                    type="text"
+                    .value=${this._searchQuery}
+                    placeholder=${cfg?.placeholder ?? this.t('map.search_placeholder')}
+                    @input=${this._onSearchInput}
+                    @focus=${() => (this._suggestOpen = this._suggestItems.length > 0)}
+                    @keydown=${this._onSearchKeydown}
+                />
+                ${this._suggestBusy ? html`<span class="pm-search-busy"></span>` : nothing}
+                ${this._suggestOpen && this._suggestItems.length > 0
+                    ? html`<div class="pm-suggest">
+                          ${this._suggestItems.map(
+                              (hit, i) => html`
+                                  <button
+                                      type="button"
+                                      class="pm-suggest-item"
+                                      @mousedown=${(e: MouseEvent) => {
+                                          e.preventDefault();
+                                          this._pickSuggest(hit);
+                                      }}
+                                  >
+                                      <span class="pm-suggest-name">${hit.display_name}</span>
+                                      ${hit.city ? html`<span class="pm-suggest-sub">${hit.city}</span>` : nothing}
+                                  </button>
+                              `,
+                          )}
+                      </div>`
+                    : nothing}
             </div>
         `;
     }
@@ -239,24 +356,57 @@ export class PlatformMapEl extends PlatformElement {
         const zoom = c.zoom !== false && this._ready && this._interactive;
         const layers = c.layers !== false && this._ready && this._layerNames.length > 0;
         const locate = c.locate === true && this._ready && this._interactive;
-        if (!zoom && !layers && !locate) return nothing;
+        const ruler = c.ruler === true && this._ready && this._interactive;
+        const fit = c.fit === true && this._ready;
+        const fullscreen = c.fullscreen === true && this._ready;
+        if (!zoom && !layers && !locate && !ruler && !fit && !fullscreen) return nothing;
         const hidden = this._mapCtl?.value.hidden ?? {};
         return html`
             <div class="pm-controls">
                 ${zoom
                     ? html`<div class="pm-ctrl pm-zoom">
-                          <button type="button" @click=${() => this._map?.zoomIn()}>+</button>
-                          <button type="button" @click=${() => this._map?.zoomOut()}>−</button>
+                          <button type="button" title=${this.t('map.zoom_in')} @click=${() => this._map?.zoomIn()}>+</button>
+                          <button type="button" title=${this.t('map.zoom_out')} @click=${() => this._map?.zoomOut()}>−</button>
                       </div>`
                     : nothing}
                 ${locate
                     ? html`<button
                           type="button"
-                          class="pm-ctrl pm-locate-btn"
+                          class="pm-ctrl pm-icon-btn"
                           title=${this.t('map.locate')}
                           @click=${this._onLocate}
                       >
                           ◎
+                      </button>`
+                    : nothing}
+                ${ruler
+                    ? html`<button
+                          type="button"
+                          class=${`pm-ctrl pm-icon-btn${this._mode === 'ruler' ? ' active' : ''}`}
+                          title=${this.t('map.ruler')}
+                          @click=${this._toggleRuler}
+                      >
+                          ⟋
+                      </button>`
+                    : nothing}
+                ${fit
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn"
+                          title=${this.t('map.fit')}
+                          @click=${this._fitContent}
+                      >
+                          ⤢
+                      </button>`
+                    : nothing}
+                ${fullscreen
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn"
+                          title=${this.t('map.fullscreen')}
+                          @click=${this._toggleFullscreen}
+                      >
+                          ${this._fullscreen ? '⤡' : '⛶'}
                       </button>`
                     : nothing}
                 ${layers
@@ -276,6 +426,21 @@ export class PlatformMapEl extends PlatformElement {
                           )}
                       </div>`
                     : nothing}
+            </div>
+        `;
+    }
+
+    private _renderStatusBar() {
+        const zoom = this._map ? Math.round(this._map.getZoom() * 10) / 10 : 0;
+        return html`<div class="pm-status"><span class="pm-status-coords">${this._cursorText}</span><span class="pm-status-zoom">z${zoom}</span></div>`;
+    }
+
+    private _renderMenu() {
+        const m = this._menu!;
+        return html`
+            <div class="pm-menu" style="left:${m.x}px; top:${m.y}px" @click=${(e: Event) => e.stopPropagation()}>
+                <button type="button" data-action="whats-here" @click=${() => this._menuWhatsHere(m.lngLat)}>${this.t('map.whats_here')}</button>
+                <button type="button" data-action="copy-coords" @click=${() => this._menuCopyCoords(m.lngLat)}>${this.t('map.copy_coords')}</button>
             </div>
         `;
     }
@@ -319,6 +484,257 @@ export class PlatformMapEl extends PlatformElement {
         map.easeTo({ center: [detail.lng, detail.lat], duration: 400 });
     }
 
+    // ---- Search ----
+
+    private _onSearchInput = (e: Event): void => {
+        const q = (e.target as HTMLInputElement).value;
+        this._searchQuery = q;
+        if (this._suggestTimer !== null) window.clearTimeout(this._suggestTimer);
+        if (q.trim().length < 2 || !this._suggestOp) {
+            this._suggestItems = [];
+            this._suggestOpen = false;
+            this._suggestBusy = false;
+            return;
+        }
+        this._suggestBusy = true;
+        const op = this._suggestOp;
+        this._suggestTimer = window.setTimeout(() => {
+            const cfg = typeof this.config.search === 'object' ? this.config.search : undefined;
+            const c = this._map?.getCenter();
+            void op
+                .run({
+                    q: q.trim(),
+                    limit: cfg?.limit ?? 7,
+                    ...(c ? { lat: c.lat, lng: c.lng } : {}),
+                })
+                .then((res) => {
+                if (this._suggestOp !== op) return;
+                this._suggestBusy = false;
+                this._suggestItems = res?.items ?? [];
+                this._suggestOpen = this._suggestItems.length > 0;
+            });
+        }, 220);
+    };
+
+    private _onSearchKeydown = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+            this._suggestOpen = false;
+            (e.target as HTMLInputElement).blur();
+        } else if (e.key === 'Enter' && this._suggestItems.length > 0) {
+            e.preventDefault();
+            this._pickSuggest(this._suggestItems[0]!);
+        }
+    };
+
+    private _pickSuggest(hit: GeoAddressHit): void {
+        const map = this._map;
+        this._suggestOpen = false;
+        this._searchQuery = hit.display_name;
+        if (!map) return;
+        const cfg = typeof this.config.search === 'object' ? this.config.search : undefined;
+        const lngLat: LngLat = [hit.lng, hit.lat];
+        map.easeTo({ center: lngLat, zoom: cfg?.flyZoom ?? 16, duration: 700 });
+        if (cfg?.pin !== false) {
+            this._searchPin = lngLat;
+            this._syncSearchPin();
+        }
+        this.dispatchEvent(new CustomEvent('pm-search-select', { detail: { hit }, bubbles: true, composed: true }));
+    }
+
+    private _syncSearchPin(): void {
+        const pin = this._searchPin;
+        const fc: FeatureCollection = pin
+            ? {
+                  type: 'FeatureCollection',
+                  features: [
+                      { type: 'Feature', geometry: { type: 'Point', coordinates: pin }, properties: {} },
+                  ],
+              }
+            : _EMPTY_FC;
+        this._setSourceData('pm-search-pin', fc);
+    }
+
+    // ---- Ruler ----
+
+    private _toggleRuler = (): void => {
+        if (this._mode === 'ruler') {
+            this._exitRuler();
+            return;
+        }
+        this._mode = 'ruler';
+        this._rulerPoints = [];
+        this._hideHint();
+        this._syncRuler();
+    };
+
+    private _exitRuler(): void {
+        this._mode = 'select';
+        this._emitRuler(true);
+    }
+
+    private _rulerAddPoint(lngLat: LngLat): void {
+        this._rulerPoints = [...this._rulerPoints, lngLat];
+        this._syncRuler();
+        this._emitRuler(false);
+    }
+
+    private _rulerDistanceM(): number {
+        let d = 0;
+        for (let i = 1; i < this._rulerPoints.length; i++) {
+            d += haversineM(this._rulerPoints[i - 1]!, this._rulerPoints[i]!);
+        }
+        return d;
+    }
+
+    private _syncRuler(): void {
+        const pts = this._rulerPoints;
+        const features: Feature[] = pts.map((p, i) => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: p },
+            properties: {
+                idx: i,
+                label: i === 0 ? '' : fmtKm(haversineM(pts[i - 1]!, p)),
+                total: i === pts.length - 1 && pts.length > 1 ? fmtKm(this._rulerDistanceM()) : '',
+            },
+        }));
+        if (pts.length > 1) {
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: pts },
+                properties: {},
+            });
+        }
+        this._setSourceData('pm-ruler', { type: 'FeatureCollection', features });
+    }
+
+    private _emitRuler(finished: boolean): void {
+        this.dispatchEvent(
+            new CustomEvent('pm-ruler-change', {
+                detail: { points: this._rulerPoints, distanceM: this._rulerDistanceM(), finished },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    /** Очистить линейку из хоста (или повторным кликом по контролу). */
+    clearRuler(): void {
+        this._rulerPoints = [];
+        this._syncRuler();
+    }
+
+    // ---- Fit / fullscreen / retry ----
+
+    private _fitContent = (): void => {
+        const map = this._map;
+        if (!map) return;
+        let w = Infinity;
+        let e = -Infinity;
+        let s = Infinity;
+        let n = -Infinity;
+        const extend = (c: unknown): void => {
+            if (!Array.isArray(c)) return;
+            const [x, y] = c as [number, number];
+            if (typeof x === 'number' && typeof y === 'number') {
+                w = Math.min(w, x);
+                e = Math.max(e, x);
+                s = Math.min(s, y);
+                n = Math.max(n, y);
+                return;
+            }
+            for (const cc of c) extend(cc);
+        };
+        const walk = (g: Geometry | null | undefined): void => {
+            if (g) extend((g as { coordinates?: unknown }).coordinates);
+        };
+        for (const m of this.config.markers ?? []) extend(m.lngLat);
+        for (const ov of this.config.overlays ?? []) {
+            const d = ov.data;
+            if (d.type === 'FeatureCollection') for (const f of d.features) walk(f.geometry);
+            else walk(d.geometry);
+        }
+        const style = (map as unknown as { getStyle(): { sources?: Record<string, { data?: FeatureCollection }> } }).getStyle();
+        for (const name of this._mapLayers) {
+            const data = style?.sources?.[`pm-src-${name}`]?.data;
+            if (data) for (const f of data.features ?? []) walk(f.geometry);
+        }
+        if (!Number.isFinite(w)) return;
+        if (w === e && s === n) map.easeTo({ center: [w, s], zoom: 15, duration: 500 });
+        else map.fitBounds([[w, s], [e, n]], { padding: 60, duration: 500 });
+    };
+
+    private _toggleFullscreen = (): void => {
+        const wrap = this.renderRoot.querySelector('.pm-wrap');
+        if (!(wrap instanceof HTMLElement)) return;
+        if (document.fullscreenElement) {
+            void document.exitFullscreen().catch(() => undefined);
+        } else {
+            void wrap.requestFullscreen?.().catch(() => undefined);
+        }
+    };
+
+    private _onFullscreenChange = (): void => {
+        this._fullscreen = document.fullscreenElement !== null;
+        this._map?.resize();
+    };
+
+    private _onRetry = (): void => {
+        this._error = null;
+        void this._initMap();
+    };
+
+    // ---- Context menu ----
+
+    private _onContextMenu = (e: MouseEvent): void => {
+        const map = this._map;
+        if (this.config.contextMenu !== true || !map) return;
+        e.preventDefault();
+        const el = e.currentTarget as HTMLElement;
+        const rect = el.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const ll = (map as unknown as { unproject(p: [number, number]): { lng: number; lat: number } }).unproject([x, y]);
+        this._menu = { x, y, lngLat: [ll.lng, ll.lat] };
+    };
+
+    private _menuWhatsHere(lngLat: LngLat): void {
+        this._menu = null;
+        const map = this._map;
+        const maplibre = this._maplibre;
+        if (!map || !maplibre || !this._nearestOp) return;
+        void this._nearestOp.run({ lat: lngLat[1], lng: lngLat[0], limit: 1 }).then((res) => {
+            const hit = res?.items?.[0];
+            if (!hit) return;
+            this._cardPopup?.remove();
+            this._cardPopup = new maplibre.Popup({ closeButton: true, className: 'pm-card-popup', maxWidth: '340px' })
+                .setLngLat(lngLat)
+                .setHTML(
+                    renderFeatureCard(
+                        {
+                            layer: 'addresses',
+                            properties: {
+                                display_name: hit.display_name,
+                                city: hit.city,
+                                street: hit.street,
+                                housenumber: hit.housenumber,
+                                __coords: `${lngLat[1].toFixed(5)}, ${lngLat[0].toFixed(5)}`,
+                            },
+                        },
+                        (k) => this.t(k),
+                        this._layerColor('addresses'),
+                    ),
+                )
+                .addTo(map) as unknown as { remove(): void };
+        });
+    }
+
+    private _menuCopyCoords(lngLat: LngLat): void {
+        this._menu = null;
+        const text = `${lngLat[1].toFixed(6)}, ${lngLat[0].toFixed(6)}`;
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
+        this.dispatchEvent(new CustomEvent('pm-coords-copy', { detail: { lngLat, text }, bubbles: true, composed: true }));
+    }
+
     override firstUpdated(): void {
         this._el = this.renderRoot.querySelector('.map-canvas');
         void this._initMap();
@@ -359,19 +775,45 @@ export class PlatformMapEl extends PlatformElement {
             interactive,
         });
         if (this.config.minZoom !== undefined) map.setMinZoom(this.config.minZoom);
+        if (this.config.maxZoom !== undefined) map.setMaxZoom(this.config.maxZoom);
+        if (this.config.padding !== undefined) {
+            const p = this.config.padding;
+            map.setPadding({ top: p, right: p, bottom: p, left: p });
+        }
         map.touchZoomRotate?.enableRotation();
         this._map = map;
+        if (this.config.controls?.scale === true) {
+            map.addControl(new maplibre.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left');
+        }
         if (!map.isStyleLoaded()) {
             // Источники и слои — только после load стиля; error отдаём
             // наружу и завершаем init, иначе addSource бросает.
+            // 'error' отдельных тайлов/глифов НЕ фатален (404 за пределами
+            // coverage) — ждём 'load'; без него таймаут или повторяющиеся
+            // ошибки при незагруженном стиле → fail.
             const ok = await new Promise<boolean>((resolve) => {
-                map.once('load', () => resolve(true));
-                map.once('error', () => resolve(false));
+                let settled = false;
+                const done = (v: boolean): void => {
+                    if (!settled) {
+                        settled = true;
+                        resolve(v);
+                    }
+                };
+                map.once('load', () => done(true));
+                map.on('error', () => {
+                    // Шум тайла при грузящемся стиле: даём 'load' ещё 3с;
+                    // мёртвый style.json — fail быстрее общего таймаута.
+                    if (!settled) {
+                        setTimeout(() => done(map.isStyleLoaded() === true), 3000);
+                    }
+                });
+                setTimeout(() => done(map.isStyleLoaded() === true), 15_000);
             });
             if (!ok || this._map !== map) {
                 map.remove();
                 if (this._map === map) this._map = null;
                 if (!ok) {
+                    this._error = 'style';
                     this.dispatchEvent(new CustomEvent('pm-error', { detail: { stage: 'style' }, bubbles: true, composed: true }));
                 }
                 return;
@@ -392,20 +834,108 @@ export class PlatformMapEl extends PlatformElement {
         if (this.config.draw) {
             await this._initDraw();
         }
+        if (this.config.statusBar === true) {
+            map.on('mousemove', (e: { lngLat: { lng: number; lat: number } }) => {
+                this._cursorText = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
+            });
+            map.on('zoom', () => this.requestUpdate());
+        }
+        document.addEventListener('fullscreenchange', this._onFullscreenChange);
         this.dispatchEvent(new CustomEvent('pm-ready', { detail: { map }, bubbles: true, composed: true }));
     }
 
     private _installSources(map: PlatformMap): void {
-        map.addSource('pm-markers', { type: 'geojson', data: _EMPTY_FC });
+        const cluster = this.config.markersCluster === true;
+        map.addSource('pm-markers', {
+            type: 'geojson',
+            data: _EMPTY_FC,
+            ...(cluster ? { cluster: true, clusterMaxZoom: 15, clusterRadius: 48 } : {}),
+        } as never);
+        if (cluster) {
+            map.addLayer({
+                id: 'pm-cluster-circle',
+                type: 'circle',
+                source: 'pm-markers',
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': '#2563eb',
+                    'circle-radius': ['step', ['get', 'point_count'], 16, 10, 20, 50, 26],
+                    'circle-stroke-width': 3,
+                    'circle-stroke-color': '#ffffff',
+                },
+            } as never);
+            map.addLayer({
+                id: 'pm-cluster-count',
+                type: 'symbol',
+                source: 'pm-markers',
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': ['get', 'point_count_abbreviated'],
+                    'text-size': 12,
+                },
+                paint: { 'text-color': '#ffffff' },
+            } as never);
+        }
         map.addLayer({
             id: 'pm-markers-circle',
             type: 'circle',
             source: 'pm-markers',
+            ...(cluster ? { filter: ['!', ['has', 'point_count']] } : {}),
             paint: {
                 'circle-radius': ['coalesce', ['get', 'size'], 9],
                 'circle-color': ['coalesce', ['get', 'color'], MARKER_COLOR],
                 'circle-stroke-width': 3,
                 'circle-stroke-color': '#ffffff',
+            },
+        } as never);
+        map.addSource('pm-search-pin', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-search-pin-circle',
+            type: 'circle',
+            source: 'pm-search-pin',
+            paint: {
+                'circle-radius': 10,
+                'circle-color': '#155dfc',
+                'circle-stroke-width': 4,
+                'circle-stroke-color': '#ffffff',
+            },
+        } as never);
+        map.addSource('pm-ruler', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-ruler-line',
+            type: 'line',
+            source: 'pm-ruler',
+            filter: ['==', ['geometry-type'], 'LineString'],
+            paint: { 'line-color': '#7c3aed', 'line-width': 3, 'line-dasharray': [2, 1.4] },
+        } as never);
+        map.addLayer({
+            id: 'pm-ruler-vertex',
+            type: 'circle',
+            source: 'pm-ruler',
+            filter: ['==', ['geometry-type'], 'Point'],
+            paint: {
+                'circle-radius': 6,
+                'circle-color': '#ffffff',
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#7c3aed',
+            },
+        } as never);
+        map.addLayer({
+            id: 'pm-ruler-label',
+            type: 'symbol',
+            source: 'pm-ruler',
+            filter: ['==', ['geometry-type'], 'Point'],
+            layout: {
+                'text-field': ['coalesce', ['get', 'total'], ['get', 'label']],
+                'text-size': 12,
+                'text-offset': [0, -1.4],
+                'text-anchor': 'bottom',
+                'text-font': ['Noto Sans Regular'],
+            },
+            paint: {
+                'text-color': '#4c1d95',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 2,
             },
         } as never);
     }
@@ -486,6 +1016,13 @@ export class PlatformMapEl extends PlatformElement {
     private _installInteractions(maplibre: MapLibreModule, map: PlatformMap): void {
         const { Popup } = maplibre;
         map.on('click', (e: { lngLat: { lng: number; lat: number }; point: { x: number; y: number } }) => {
+            if (this._mode === 'ruler') {
+                this._rulerAddPoint([e.lngLat.lng, e.lngLat.lat]);
+                return;
+            }
+            if (this.config.markersCluster === true && this._clickCluster(map, e.point)) {
+                return;
+            }
             const feats = this._featuresAt(map, e.point);
             const detail = {
                 lngLat: [e.lngLat.lng, e.lngLat.lat] as LngLat,
@@ -508,6 +1045,11 @@ export class PlatformMapEl extends PlatformElement {
         });
         if (this._hoverEnabled) {
             map.on('mousemove', (e: { lngLat: { lng: number; lat: number }; point: { x: number; y: number } }) => {
+                if (this._mode === 'ruler') {
+                    map.getCanvas().style.cursor = 'crosshair';
+                    this._hideHint();
+                    return;
+                }
                 const feats = this._featuresAt(map, e.point);
                 const markerHit = this._markerAt(map, e.point);
                 map.getCanvas().style.cursor = feats.length > 0 || markerHit ? 'pointer' : '';
@@ -531,6 +1073,32 @@ export class PlatformMapEl extends PlatformElement {
     private _hideHint(): void {
         this._hintPopup?.remove();
         this._hintPopup = null;
+    }
+
+    /** Клик по кластеру маркеров — expand zoom; true, если кластер был. */
+    private _clickCluster(map: PlatformMap, point: { x: number; y: number }): boolean {
+        if (!map.getLayer('pm-cluster-circle')) return false;
+        type QF = (p: [number, number], o?: { layers?: string[] }) => { properties?: Record<string, unknown> | null; geometry?: { coordinates?: unknown } }[];
+        const query = (map as unknown as { queryRenderedFeatures: QF }).queryRenderedFeatures.bind(map);
+        const hits = query([point.x, point.y], { layers: ['pm-cluster-circle'] });
+        const hit = hits[0];
+        if (!hit) return false;
+        const coords = hit.geometry?.coordinates as LngLat | undefined;
+        const src = map.getSource('pm-markers') as unknown as {
+            getClusterExpansionZoom?(id: number): Promise<number>;
+        };
+        const clusterId = Number(hit.properties?.['cluster_id'] ?? -1);
+        if (src?.getClusterExpansionZoom && clusterId >= 0 && coords) {
+            void src
+                .getClusterExpansionZoom(clusterId)
+                .then((zoom) => {
+                    map.easeTo({ center: coords, zoom: zoom + 0.2, duration: 450 });
+                })
+                .catch(() => {
+                    map.easeTo({ center: coords, zoom: map.getZoom() + 2, duration: 450 });
+                });
+        }
+        return true;
     }
 
     private _featuresAt(map: PlatformMap, point: { x: number; y: number }): { layer: string; properties: Record<string, unknown> }[] {
@@ -740,15 +1308,45 @@ export class PlatformMapEl extends PlatformElement {
 
     private _syncMarkers(): void {
         const map = this._map;
+        const maplibre = this._maplibre;
         if (!map) return;
         const src = map.getSource('pm-markers') as { setData(d: FeatureCollection): void } | undefined;
-        if (!src) return;
-        const features = (this.config.markers ?? []).map((m) => ({
-            type: 'Feature' as const,
-            geometry: { type: 'Point' as const, coordinates: m.lngLat },
-            properties: { key: m.key ?? '', color: m.color ?? MARKER_COLOR, size: m.size ?? 9, title: m.title ?? '' },
-        }));
-        src.setData({ type: 'FeatureCollection', features });
+        const markers = this.config.markers ?? [];
+        // Draggable-маркеры — DOM-элементы с родным drag-жестом MapLibre;
+        // остальные рендерятся через geojson-слой (кластеризация работает на нём).
+        for (const dm of this._domMarkers) dm.remove();
+        this._domMarkers = [];
+        const draggable = markers.filter((m) => m.draggable === true);
+        if (maplibre) {
+            for (const m of draggable) {
+                const inst = new maplibre.Marker({ color: m.color ?? MARKER_COLOR, draggable: true })
+                    .setLngLat(m.lngLat)
+                    .addTo(map) as unknown as {
+                    remove(): void;
+                    on(evt: string, cb: () => void): void;
+                    getLngLat(): { lng: number; lat: number };
+                };
+                inst.on('dragend', () => {
+                    const ll = inst.getLngLat();
+                    this.dispatchEvent(
+                        new CustomEvent('pm-marker-drag', {
+                            detail: { key: m.key ?? '', lngLat: [ll.lng, ll.lat] as LngLat },
+                            bubbles: true,
+                            composed: true,
+                        }),
+                    );
+                });
+                this._domMarkers.push(inst);
+            }
+        }
+        const features = markers
+            .filter((m) => m.draggable !== true)
+            .map((m) => ({
+                type: 'Feature' as const,
+                geometry: { type: 'Point' as const, coordinates: m.lngLat },
+                properties: { key: m.key ?? '', color: m.color ?? MARKER_COLOR, size: m.size ?? 9, title: m.title ?? '' },
+            }));
+        src?.setData({ type: 'FeatureCollection', features });
     }
 
     private async _initDraw(): Promise<void> {
@@ -825,14 +1423,19 @@ export class PlatformMapEl extends PlatformElement {
     override disconnectedCallback(): void {
         super.disconnectedCallback();
         if (this._refreshTimer !== null) window.clearTimeout(this._refreshTimer);
+        if (this._suggestTimer !== null) window.clearTimeout(this._suggestTimer);
+        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
         this._zoneDraw?.draw.stop();
         this._zoneDraw = null;
+        for (const dm of this._domMarkers) dm.remove();
+        this._domMarkers = [];
         this._map?.remove();
         this._map = null;
         this._el = null;
         this._hintPopup = null;
         this._cardPopup = null;
         this._locateMarker = null;
+        this._rulerPoints = [];
         this._configLayersApplied = false;
         this._mapLayers = new Set();
     }
@@ -863,10 +1466,12 @@ export class PlatformMapEl extends PlatformElement {
             z-index: 5;
         }
         .pm-ctrl {
-            background: var(--color-surface, #fff);
+            background: color-mix(in srgb, var(--color-surface, #fff) 88%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--color-border, #e2e8f0);
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.14);
             overflow: hidden;
         }
         .pm-zoom {
@@ -874,23 +1479,38 @@ export class PlatformMapEl extends PlatformElement {
             flex-direction: column;
         }
         .pm-zoom button {
-            width: 36px;
-            height: 34px;
+            width: 38px;
+            height: 36px;
             border: 0;
             background: transparent;
             font-size: 18px;
             cursor: pointer;
             color: var(--color-text, #0f172a);
+            transition: background 0.15s ease;
+        }
+        .pm-zoom button:hover {
+            background: var(--color-surface-muted, #f1f5f9);
         }
         .pm-zoom button + button {
             border-top: 1px solid var(--color-border, #e2e8f0);
         }
-        .pm-locate-btn {
-            width: 36px;
-            height: 36px;
+        .pm-icon-btn {
+            width: 38px;
+            height: 38px;
             font-size: 16px;
             cursor: pointer;
             color: var(--color-text, #0f172a);
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .pm-icon-btn:hover {
+            background: var(--color-surface-muted, #f1f5f9);
+        }
+        .pm-icon-btn.active {
+            background: var(--color-primary-soft, #dbeafe);
+            color: var(--color-primary, #2563eb);
+        }
+        .pm-wrap.ruler .map-canvas {
+            cursor: crosshair;
         }
         .pm-layers {
             display: flex;
@@ -970,6 +1590,178 @@ export class PlatformMapEl extends PlatformElement {
             border-radius: 12px;
             box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
             padding: 0;
+        }
+        .pm-search {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: min(320px, calc(100% - 140px));
+            z-index: 6;
+        }
+        .pm-search-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 34px 10px 14px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 12px;
+            background: color-mix(in srgb, var(--color-surface, #fff) 92%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.14);
+            font-size: 13px;
+            color: var(--color-text, #0f172a);
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .pm-search-input:focus {
+            border-color: var(--color-primary, #2563eb);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent), 0 2px 12px rgba(15, 23, 42, 0.14);
+        }
+        .pm-search-busy {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            width: 14px;
+            height: 14px;
+            margin-top: -7px;
+            border: 2px solid var(--color-border, #e2e8f0);
+            border-top-color: var(--color-primary, #2563eb);
+            border-radius: 50%;
+            animation: pm-spin 0.7s linear infinite;
+        }
+        .pm-suggest {
+            margin-top: 6px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 12px;
+            background: color-mix(in srgb, var(--color-surface, #fff) 96%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+            overflow: hidden;
+        }
+        .pm-suggest-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 100%;
+            padding: 9px 14px;
+            border: 0;
+            background: transparent;
+            text-align: left;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--color-text, #0f172a);
+            transition: background 0.12s ease;
+        }
+        .pm-suggest-item:hover,
+        .pm-suggest-item:focus-visible {
+            background: var(--color-surface-muted, #f1f5f9);
+        }
+        .pm-suggest-item + .pm-suggest-item {
+            border-top: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 60%, transparent);
+        }
+        .pm-suggest-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pm-suggest-sub {
+            font-size: 11px;
+            color: var(--color-text-muted, #64748b);
+        }
+        .pm-status {
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 5px 10px;
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--color-surface, #fff) 85%, transparent);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--color-border, #e2e8f0);
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-text-muted, #64748b);
+            z-index: 5;
+        }
+        .pm-status-zoom {
+            color: var(--color-text, #0f172a);
+            font-weight: 600;
+        }
+        .pm-menu {
+            position: absolute;
+            min-width: 180px;
+            border-radius: 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            background: color-mix(in srgb, var(--color-surface, #fff) 96%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.2);
+            overflow: hidden;
+            z-index: 20;
+        }
+        .pm-menu button {
+            display: block;
+            width: 100%;
+            padding: 9px 14px;
+            border: 0;
+            background: transparent;
+            text-align: left;
+            font-size: 13px;
+            color: var(--color-text, #0f172a);
+            cursor: pointer;
+            transition: background 0.12s ease;
+        }
+        .pm-menu button:hover {
+            background: var(--color-surface-muted, #f1f5f9);
+        }
+        .pm-menu button + button {
+            border-top: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 60%, transparent);
+        }
+        .pm-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            background: color-mix(in srgb, var(--color-surface, #fff) 72%, transparent);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            font-size: 13px;
+            color: var(--color-text-muted, #64748b);
+            z-index: 8;
+        }
+        .pm-spinner {
+            width: 22px;
+            height: 22px;
+            border: 3px solid var(--color-border, #e2e8f0);
+            border-top-color: var(--color-primary, #2563eb);
+            border-radius: 50%;
+            animation: pm-spin 0.8s linear infinite;
+        }
+        .pm-error-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text, #0f172a);
+        }
+        .pm-retry {
+            padding: 8px 18px;
+            border: 0;
+            border-radius: 10px;
+            background: var(--color-primary, #2563eb);
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        @keyframes pm-spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
     `;
 }

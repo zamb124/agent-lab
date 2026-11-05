@@ -3,17 +3,29 @@
     "title": "Geo",
     "menu_overview": "Карта",
     "menu_sources": "Покрытие",
-    "menu_route_lab": "Маршруты"
+    "menu_route_lab": "Маршруты",
+    "menu_map_lab": "Map Lab"
   },
   "routes": {
     "overview": "Карта",
     "sources": "Покрытие",
-    "route_lab": "Маршрутная лаборатория"
+    "route_lab": "Маршрутная лаборатория",
+    "map_lab": "Map Lab"
   },
   "map": {
     "loading": "Загружаем слои…",
     "locate": "Моё местоположение",
-    "addresses_title": "Адреса в зоне"
+    "addresses_title": "Адреса в зоне",
+    "zoom_in": "Приблизить",
+    "zoom_out": "Отдалить",
+    "search_placeholder": "Поиск адреса…",
+    "ruler": "Линейка",
+    "fit": "К содержимому",
+    "fullscreen": "Во весь экран",
+    "whats_here": "Что здесь?",
+    "copy_coords": "Копировать координаты",
+    "error_title": "Не удалось загрузить карту",
+    "retry": "Повторить"
   },
   "layers": {
     "title": "Слои",
@@ -103,5 +115,10 @@
     "empty_no_hits": "В зону не попал ни один адрес из справочника.",
     "prev": "Назад",
     "next": "Вперёд"
+  },
+  "map_lab": {
+    "header_title": "Map Lab",
+    "header_subtitle": "Витрина возможностей platform-map",
+    "preview_title": "Встраиваемое превью"
   }
 }

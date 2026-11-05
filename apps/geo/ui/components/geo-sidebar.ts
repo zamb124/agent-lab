@@ -20,6 +20,7 @@ const NAV_ITEMS = [
     { route: 'overview',  icon: 'globe',                label_key: 'sidebar.menu_overview' },
     { route: 'sources',   icon: 'layers',               label_key: 'sidebar.menu_sources' },
     { route: 'route_lab', icon: 'circular-connection',  label_key: 'sidebar.menu_route_lab' },
+    { route: 'map_lab',   icon: 'pin',                  label_key: 'sidebar.menu_map_lab' },
 ];
 
 export class GeoSidebar extends PlatformElement {
