@@ -2494,6 +2494,9 @@ class CustomerAuthTelegramBotConfig(BaseModel):
     bot_username: str = ""
     webhook_secret: str = ""
     api_base_url: str = "https://api.telegram.org"
+    # True — idle-таска `customer_auth_tg_poll` тянет getUpdates вместо webhook:
+    # хост без входящего доступа от api.telegram.org (webhook мёртв в обе стороны).
+    polling_enabled: bool = False
 
 
 class CustomerAuthMaxBotConfig(BaseModel):

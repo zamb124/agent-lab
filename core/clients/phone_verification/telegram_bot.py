@@ -25,8 +25,20 @@ from core.customers.enums import (
 )
 from core.customers.errors import ProviderError
 from core.customers.phone import normalize_phone_e164
-from core.http.client import request_public_oauth
-from core.types import JsonObject, require_json_object
+from core.http.client import ProxyStrategy, request_with_strategy
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+
+
+def parse_telegram_result(body_text: str, ctx: str) -> JsonValue:
+    """Bot API envelope `{"ok": true, "result": ...}` → result; ошибка — ProviderError."""
+    data = parse_json_object(body_text, ctx)
+    if data.get("ok") is not True:
+        raise ProviderError(
+            PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+            f"{ctx}: {data.get('description')}",
+            retryable=True,
+        )
+    return data.get("result")
 
 
 class TelegramContactProvider:
@@ -86,8 +98,7 @@ class TelegramContactProvider:
         assert self._cfg is not None
         if not self._cfg.bot_token:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
-        url = f"{self._cfg.api_base_url}/bot{self._cfg.bot_token}/sendMessage"
-        body = {
+        body: JsonObject = {
             "chat_id": chat_id,
             "text": "Нажмите кнопку, чтобы поделиться номером телефона",
             "reply_markup": {
@@ -99,13 +110,62 @@ class TelegramContactProvider:
             },
         }
         try:
-            _ = await request_public_oauth("POST", url, json=body, timeout=20.0)
+            _ = await self._bot_request("sendMessage", body, timeout=20.0)
         except Exception as exc:
             raise ProviderError(
                 PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
                 f"telegram sendMessage: {exc}",
                 retryable=True,
             ) from exc
+
+    async def _bot_request(
+        self, method: str, body: JsonObject, *, timeout: float
+    ) -> JsonValue:
+        """Вызов Bot API; DIRECT_FIRST — на хостах без доступа к Telegram
+        SMART-learn переводит исходящие на platform proxy после первой попытки."""
+        assert self._cfg is not None
+        if not self._cfg.bot_token:
+            raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
+        resp = await request_with_strategy(
+            "POST",
+            f"{self._cfg.api_base_url}/bot{self._cfg.bot_token}/{method}",
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            json=body,
+            timeout=timeout,
+        )
+        return parse_telegram_result(resp.text, f"telegram.{method}")
+
+    async def get_updates(self, offset: int, timeout: int) -> list[JsonObject]:
+        """Long-poll `getUpdates` — транспорт для хостов, куда Telegram не достучится."""
+        result = await self._bot_request(
+            "getUpdates",
+            {"offset": offset, "timeout": timeout, "allowed_updates": ["message"]},
+            timeout=float(timeout) + 10.0,
+        )
+        if not isinstance(result, list):
+            raise ProviderError(
+                PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+                "telegram getUpdates: result is not a list",
+                retryable=True,
+            )
+        return [u for u in result if isinstance(u, dict)]
+
+    async def delete_webhook(self) -> None:
+        """Снять webhook — обязателен перед `getUpdates` (иначе 409 Conflict)."""
+        _ = await self._bot_request("deleteWebhook", {"drop_pending_updates": False}, timeout=20.0)
+
+    async def set_webhook(self, url: str, secret: str) -> None:
+        """Зарегистрировать webhook: ops-путь для хостов со входящим доступом Telegram."""
+        _ = await self._bot_request(
+            "setWebhook",
+            {
+                "url": url,
+                "secret_token": secret,
+                "allowed_updates": ["message"],
+                "drop_pending_updates": False,
+            },
+            timeout=20.0,
+        )
 
     def parse_update(self, payload: JsonObject) -> DirectVerificationRequest | None:
         """`message.contact` → доказательство; не contact-сообщение — None."""

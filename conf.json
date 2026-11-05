@@ -593,7 +593,8 @@
           "enabled": true,
           "bot_token": "YOUR_CUSTOMER_TG_BOT_TOKEN",
           "bot_username": "YOUR_CUSTOMER_TG_BOT_USERNAME",
-          "webhook_secret": "YOUR_CUSTOMER_TG_WEBHOOK_SECRET"
+          "webhook_secret": "YOUR_CUSTOMER_TG_WEBHOOK_SECRET",
+          "polling_enabled": true
         },
         "max": {
           "enabled": true,

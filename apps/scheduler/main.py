@@ -43,6 +43,7 @@ from apps.stock.tasks.task_names import (
 from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.app import create_service_app
 from core.config.testing import is_testing
+from core.customers.task_names import CUSTOMER_AUTH_TG_POLL
 from core.di import recipe
 from core.identity.system_bootstrap import (
     ensure_system_company_exists,
@@ -771,6 +772,15 @@ async def ensure_platform_schedules(
         task_name=GEO_TILES_SYNC.name,
         cron="40 4 * * 0",
         log_label="Geo tiles sync",
+    )
+    # Telegram getUpdates-поллинг customer-auth: минутный тик, сам таска
+    # держит long-poll до 55 с; при живом поллере тик сразу выходит по lock.
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=CUSTOMER_AUTH_TG_POLL.name,
+        cron="* * * * *",
+        log_label="Customer auth Telegram poll",
     )
     if not is_testing():
         await ensure_search_crawl_schedules(scheduler_service=scheduler_service)

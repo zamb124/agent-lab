@@ -12,6 +12,7 @@ Yandex ID, VK ID (PKCE), Sber ID (OIDC) и SMS.RU — end-to-end.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qs, urlparse
 
@@ -23,6 +24,7 @@ from apps.shop.di import ShopDi
 from core.config import get_settings
 from core.customers.challenge import PhoneChallenge
 from tests.fixtures.phone_verification_emulator.handle import (
+    MAX_ACCESS_TOKEN,
     MAX_WEBHOOK_SECRET,
     TG_WEBHOOK_SECRET,
     PhoneVerificationEmulatorHandle,
@@ -447,10 +449,10 @@ class TestSmsCode:
 # --- Telegram webhook ---------------------------------------------------------
 
 
-def _tg_update_start(token: str, *, chat_id: int = 777001) -> dict:
+def _tg_update_start(token: str, *, chat_id: int = 777001, update_id: int = 100) -> dict:
     """Официальный Update Bot API: `message.text = "/start <token>"`."""
     return {
-        "update_id": 100,
+        "update_id": update_id,
         "message": {
             "message_id": 1,
             "from": {"id": chat_id, "is_bot": False, "first_name": "Иван"},
@@ -461,10 +463,10 @@ def _tg_update_start(token: str, *, chat_id: int = 777001) -> dict:
     }
 
 
-def _tg_update_contact(phone: str, *, user_id: int = 777001, contact_user_id: int | None = None) -> dict:
+def _tg_update_contact(phone: str, *, user_id: int = 777001, contact_user_id: int | None = None, update_id: int = 101) -> dict:
     """Официальный Update Bot API с `message.contact` (shared contact)."""
     return {
-        "update_id": 101,
+        "update_id": update_id,
         "message": {
             "message_id": 2,
             "from": {"id": user_id, "is_bot": False, "first_name": "Иван"},
@@ -617,6 +619,40 @@ class TestTelegramContact:
         assert resp.status_code == 200
         assert phone_verification_emulator.store.telegram_messages == []
 
+    async def test_polling_updates_flow(
+        self,
+        emu_client: AsyncClient,
+        shop_di: ShopDi,
+        phone_verification_emulator: PhoneVerificationEmulatorHandle,
+        unique_id: str,
+    ) -> None:
+        """getUpdates-поллинг: контракт тот же, что webhook.
+
+        Продуктовый сценарий: хост без входящего доступа от api.telegram.org
+        (`polling_enabled`) — таска `customer_auth_tg_poll` тянет updates
+        long-poll'ом; webhook при этом снимается (иначе 409 Conflict).
+        """
+        start, phone, token = await self._begin(emu_client, unique_id)
+        store = phone_verification_emulator.store
+        # offset живёт в Redis между прогонами — id монотонны по wall-clock.
+        base_id = int(time.time() * 1000)
+        store.telegram_updates.extend(
+            [
+                _tg_update_start(token, update_id=base_id),
+                _tg_update_contact(phone, update_id=base_id + 1),
+            ]
+        )
+        processed = await shop_di.customer_auth_service.poll_telegram_updates(
+            budget_seconds=0.5
+        )
+        assert processed == 2
+        assert store.telegram_webhook_deleted == 1
+        resp = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert resp.json()["status"] == "confirmed"
+
     async def test_contact_without_start_ignored(
         self, emu_client: AsyncClient
     ) -> None:
@@ -649,6 +685,21 @@ def _max_update_start(token: str, *, user_id: int = 888001) -> dict:
             "timestamp": 1700000000000,
             "body": {"mid": "mid.1", "seq": 1, "text": f"/start {token}", "attachments": []},
         },
+    }
+
+
+def _max_update_bot_started(token: str, *, user_id: int = 888001) -> dict:
+    """Официальный MAX update `bot_started`: deep link `?start=<token>`.
+
+    Токен приезжает в поле `payload`, `chat_id` — на верхнем уровне update;
+    `message.body.text` при этом пуст (команды /start в ленте нет).
+    """
+    return {
+        "update_type": "bot_started",
+        "timestamp": 1700000000000,
+        "chat_id": user_id,
+        "user": {"user_id": user_id, "first_name": "Иван", "is_bot": False},
+        "payload": token,
     }
 
 
@@ -711,7 +762,44 @@ class TestMaxContact:
         assert len(sent) == 1
         params, body = sent[0]
         assert params["chat_id"] == "888001"
-        assert params["access_token"]
+        # Официальный контракт: токен в Authorization header, не в query.
+        assert "access_token" not in params
+        assert phone_verification_emulator.store.max_authorization == [MAX_ACCESS_TOKEN]
+        kb = body["attachments"][0]["payload"]["buttons"][0][0]
+        assert kb["type"] == "request_contact"
+        resp = await emu_client.post(
+            f"{_AUTH}/webhooks/max", json=_max_update_contact(phone), headers=headers
+        )
+        assert resp.status_code == 200, resp.text
+        resp = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert resp.json()["status"] == "confirmed"
+
+    async def test_bot_started_flow(
+        self,
+        emu_client: AsyncClient,
+        phone_verification_emulator: PhoneVerificationEmulatorHandle,
+        unique_id: str,
+    ) -> None:
+        """Deep link `max.ru/<bot>?start=<token>` → update bot_started.
+
+        Именно этот update приходит на проде при переходе по QR/deep link —
+        `message.body.text` у него пуст, парсер обязан читать `payload`.
+        """
+        start, phone, token = await self._begin(emu_client, unique_id)
+        headers = {"x-max-bot-api-secret": MAX_WEBHOOK_SECRET}
+        resp = await emu_client.post(
+            f"{_AUTH}/webhooks/max",
+            json=_max_update_bot_started(token),
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        sent = phone_verification_emulator.store.max_messages
+        assert len(sent) == 1
+        params, body = sent[0]
+        assert params["chat_id"] == "888001"
         kb = body["attachments"][0]["payload"]["buttons"][0][0]
         assert kb["type"] == "request_contact"
         resp = await emu_client.post(
@@ -932,6 +1020,47 @@ class TestOAuth:
             resp = await emu.get(url)
             assert resp.status_code == 302
             assert "error=access_denied" in resp.headers["location"]
+
+    async def test_yandex_scope_is_default_phone(
+        self,
+        emu_client: AsyncClient,
+        unique_id: str,
+    ) -> None:
+        """Контракт: запрашиваем только `login:default_phone` (право «номер телефона»)."""
+        start = await _start(emu_client, _COMPANY, _phone(unique_id))
+        resp = await _choose(
+            emu_client, start["challenge_id"], _COMPANY, "yandex_id"
+        )
+        url = resp.json()["oauth_url"]
+        q = parse_qs(urlparse(url).query)
+        assert q["scope"] == ["login:default_phone"]
+
+    async def test_yandex_invalid_scope_rejected_by_provider(
+        self,
+        emu_client: AsyncClient,
+        phone_verification_emulator: PhoneVerificationEmulatorHandle,
+        unique_id: str,
+    ) -> None:
+        """Регрессия прода: клиент без права на scope → `error=invalid_scope`."""
+        phone_verification_emulator.store.seed_oauth(
+            "yandex", phone=_phone(unique_id), user_id="u_scope_denied"
+        )
+        phone_verification_emulator.store.allowed_scopes["yandex"] = {"login:info"}
+        start = await _start(emu_client, _COMPANY, _phone(unique_id))
+        resp = await _choose(
+            emu_client, start["challenge_id"], _COMPANY, "yandex_id"
+        )
+        url = resp.json()["oauth_url"]
+        parsed = urlparse(url)
+        async with AsyncClient(base_url=f"{parsed.scheme}://{parsed.netloc}") as emu:
+            resp = await emu.get(url)
+            assert resp.status_code == 302
+            location = resp.headers["location"]
+            assert "error=invalid_scope" in location
+            cb = urlparse(location)
+            # Redirect без code приводит на callback → oauth_params_required.
+            resp = await emu_client.get(f"{cb.path}?{cb.query}")
+            assert resp.status_code == 400
 
 
 # --- Эмуляторный direct / сессия ----------------------------------------------

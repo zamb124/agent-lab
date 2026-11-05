@@ -181,7 +181,9 @@ class YandexIdProvider(_OAuthIdProvider):
     _authorize_url: ClassVar[str] = "https://oauth.yandex.ru/authorize"
     _token_url: ClassVar[str] = "https://oauth.yandex.ru/token"
     _userinfo_url: ClassVar[str] = "https://login.yandex.ru/info"
-    _scope: ClassVar[str] = "login:info"
+    # `login:default_phone` — право «Доступ к номеру телефона» (default_phone в /info);
+    # минимальный scope под нашу задачу — лишнее право = лишний invalid_scope.
+    _scope: ClassVar[str] = "login:default_phone"
 
     @override
     def _userinfo_params(self) -> dict[str, str]:

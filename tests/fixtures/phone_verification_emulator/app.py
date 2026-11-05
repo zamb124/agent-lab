@@ -2,7 +2,8 @@
 
 Протоколы — по официальной документации (см. CONTRACT.md):
 - Telegram Bot API:   POST /tg/bot<token>/sendMessage
-- MAX Bot API:        POST /max/messages?chat_id=&access_token=
+- MAX Bot API:        POST /max/messages?chat_id= (Authorization: <access_token>;
+                      query access_token deprecated → 401)
 - Yandex ID OAuth:    GET /yandex/authorize, POST /yandex/token, GET /yandex/info
 - VK ID OAuth2/PKCE:  GET /vk/authorize, POST /vk/oauth2/auth, POST /vk/oauth2/user_info
 - Sber ID OIDC:       GET /sber/CSAFront/oidc/authorize.do (nonce обязателен),
@@ -58,11 +59,37 @@ def create_phone_verification_emulator_app(store: ProviderEmulatorStore) -> Fast
             }
         )
 
+    @app.post("/tg/bot{token}/getUpdates")
+    async def tg_get_updates(token: str, request: Request) -> JSONResponse:
+        _ = token
+        body = parse_json_object(await request.body(), "tg.getUpdates")
+        offset = int(str(body.get("offset") or 0))
+        updates = [
+            u
+            for u in store.telegram_updates
+            if int(str(u.get("update_id") or 0)) >= offset
+        ]
+        return JSONResponse({"ok": True, "result": updates})
+
+    @app.post("/tg/bot{token}/deleteWebhook")
+    async def tg_delete_webhook(token: str) -> JSONResponse:
+        _ = token
+        store.telegram_webhook_deleted += 1
+        return JSONResponse({"ok": True, "result": True})
+
     # -- MAX Bot API ---------------------------------------------------------
 
     @app.post("/max/messages")
     async def max_send_message(request: Request) -> JSONResponse:
         params = dict(request.query_params)
+        # Официальный контракт: токен в Authorization header;
+        # query access_token deprecated и отклоняется (401).
+        auth = request.headers.get("authorization") or ""
+        store.max_authorization.append(auth)
+        if "access_token" in params or auth != store.max_access_token:
+            return JSONResponse(
+                {"error": "unauthorized"}, status_code=401
+            )
         body = parse_json_object(await request.body(), "max.messages")
         store.max_messages.append((params, body))
         return JSONResponse(
@@ -97,6 +124,11 @@ def create_phone_verification_emulator_app(store: ProviderEmulatorStore) -> Fast
         expected = store.client_credentials.get(provider)
         if expected is not None and params.get("client_id") != expected[0]:
             return RedirectResponse(f"{redirect_uri}?{urlencode({'error': 'unauthorized_client', 'state': state})}", status_code=302)
+        allowed = store.allowed_scopes.get(provider)
+        if allowed is not None:
+            requested = set((params.get("scope") or "").split())
+            if not requested or not requested.issubset(allowed):
+                return RedirectResponse(f"{redirect_uri}?{urlencode({'error': 'invalid_scope', 'state': state})}", status_code=302)
         account = store.oauth_accounts.get(provider)
         if account is None:
             return RedirectResponse(f"{redirect_uri}?{urlencode({'error': 'access_denied', 'state': state})}", status_code=302)

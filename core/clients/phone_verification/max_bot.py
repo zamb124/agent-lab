@@ -68,7 +68,19 @@ class MaxContactProvider:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
 
     def parse_start(self, payload: JsonObject) -> tuple[str, str] | None:
-        """`/start <token>` в MAX update → (chat_id, token)."""
+        """Старт сессии → (chat_id, token).
+
+        Deep link `max.ru/<bot>?start=<token>` производит update
+        `bot_started` с токеном в `payload` и `chat_id` верхнего уровня;
+        ручной ввод `/start <token>` приходит как `message_created` с
+        `message.body.text`.
+        """
+        if payload.get("update_type") == "bot_started":
+            token = str(payload.get("payload") or "").strip()
+            chat_id = str(payload.get("chat_id") or "")
+            if not token or not chat_id:
+                return None
+            return chat_id, token
         message = payload.get("message")
         if not isinstance(message, dict):
             return None
@@ -119,7 +131,8 @@ class MaxContactProvider:
             _ = await request_public_oauth(
                 "POST",
                 f"{self._cfg.api_base_url}/messages",
-                params={"chat_id": chat_id, "access_token": self._cfg.access_token},
+                params={"chat_id": chat_id},
+                headers={"Authorization": self._cfg.access_token},
                 json=body,
                 timeout=20.0,
             )
@@ -127,6 +140,30 @@ class MaxContactProvider:
             raise ProviderError(
                 PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
                 f"max sendMessage: {exc}",
+                retryable=True,
+            ) from exc
+
+    async def set_webhook(self, url: str, secret: str) -> None:
+        """`POST /subscriptions` — подписка webhook; Authorization header, идемпотентно."""
+        assert self._cfg is not None
+        if not self._cfg.access_token:
+            raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
+        try:
+            _ = await request_public_oauth(
+                "POST",
+                f"{self._cfg.api_base_url}/subscriptions",
+                headers={"Authorization": self._cfg.access_token},
+                json={
+                    "url": url,
+                    "update_types": ["bot_started", "message_created"],
+                    "secret": secret,
+                },
+                timeout=20.0,
+            )
+        except Exception as exc:
+            raise ProviderError(
+                PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+                f"max setWebhook: {exc}",
                 retryable=True,
             ) from exc
 

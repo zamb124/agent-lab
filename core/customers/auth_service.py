@@ -18,6 +18,7 @@ import time
 
 from core.clients.phone_verification.base import CodeSender, ContactShareVerifier
 from core.clients.phone_verification.registry import PhoneVerificationRegistry
+from core.clients.phone_verification.telegram_bot import TelegramContactProvider
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.models import CustomerAuthConfig
@@ -60,6 +61,12 @@ logger = get_logger(__name__)
 _RL = "cust_auth:rl:"
 _BUDGET = "cust_auth:budget:"
 _CONTACT_USER = "cust_auth:contact_user:"
+_TG_POLL_LOCK = "cust_auth:tg_poll:lock"
+_TG_POLL_OFFSET = "cust_auth:tg_poll:offset:"
+_TG_POLL_LOCK_TTL_S = 120
+_TG_POLL_OFFSET_TTL_S = 7 * 86400
+_TG_POLL_BUDGET_S = 55.0
+_TG_POLL_REQUEST_TIMEOUT_S = 25
 
 
 def _code_pepper() -> str:
@@ -528,6 +535,73 @@ class CustomerAuthService:
             challenge, phones=phones, provider=provider.provider,
             provider_user_id=proof.provider_user_id,
         )
+
+    async def poll_telegram_updates(
+        self, *, budget_seconds: float = _TG_POLL_BUDGET_S
+    ) -> int:
+        """Цикл `getUpdates` по брендам с `telegram.polling_enabled`.
+
+        Хост без входящего соединения от api.telegram.org не получает webhook —
+        контракт тот же, что `handle_contact_update`, транспорт long-poll:
+        offset живёт в Redis, активный экземпляр один на кластер (SET NX lock).
+        `budget_seconds` ограничивает длину цикла — тик задачи должен укладываться
+        между cron-вызовами. Возвращает число обработанных updates.
+        """
+        brands = [
+            apex
+            for apex, brand in self._cfg.brands.items()
+            if brand.telegram is not None
+            and brand.telegram.enabled
+            and brand.telegram.polling_enabled
+        ]
+        if not brands:
+            return 0
+        providers: dict[str, TelegramContactProvider] = {}
+        for apex in brands:
+            verifier = self._registry(apex).contact_share.get(
+                PhoneVerificationMethod.TELEGRAM_CONTACT
+            )
+            if isinstance(verifier, TelegramContactProvider) and verifier.available():
+                providers[apex] = verifier
+        if not providers or not await self._redis.set_nx(
+            _TG_POLL_LOCK, "1", _TG_POLL_LOCK_TTL_S
+        ):
+            return 0
+        try:
+            # getUpdates при активном webhook отвечает 409 Conflict — снимаем его.
+            for provider in providers.values():
+                await provider.delete_webhook()
+            processed = 0
+            deadline = time.monotonic() + budget_seconds
+            while time.monotonic() < deadline:
+                for apex, provider in providers.items():
+                    processed += await self._poll_telegram_brand(apex, provider)
+            return processed
+        finally:
+            _ = await self._redis.delete(_TG_POLL_LOCK)
+
+    async def _poll_telegram_brand(
+        self, apex: str, provider: TelegramContactProvider
+    ) -> int:
+        """Один getUpdates-запрос по бренду + разбор updates."""
+        offset_key = f"{_TG_POLL_OFFSET}{apex}"
+        raw_offset = await self._redis.get(offset_key)
+        offset = int(raw_offset) if raw_offset else 0
+        updates = await provider.get_updates(offset, _TG_POLL_REQUEST_TIMEOUT_S)
+        if not updates:
+            return 0
+        next_offset = offset
+        for update in updates:
+            raw_id = update.get("update_id")
+            update_id = int(raw_id) if isinstance(raw_id, (int, str)) else 0
+            if update_id >= next_offset:
+                next_offset = update_id + 1
+            await self.handle_contact_update(provider=provider, payload=update)
+            # offset инкрементально: падение update не переобрабатывает предыдущие.
+            _ = await self._redis.set(
+                offset_key, str(next_offset), ttl=_TG_POLL_OFFSET_TTL_S
+            )
+        return len(updates)
 
     async def complete_oauth(
         self,

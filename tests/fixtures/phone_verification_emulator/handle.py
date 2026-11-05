@@ -101,6 +101,7 @@ def emulator_brand_config(base_url: str) -> CustomerAuthBrandConfig:
             bot_username=TG_BOT_USERNAME,
             webhook_secret=TG_WEBHOOK_SECRET,
             api_base_url=f"{base_url}/tg",
+            polling_enabled=True,
         ),
         max=CustomerAuthMaxBotConfig(
             enabled=True,
@@ -129,11 +130,12 @@ async def phone_verification_emulator(
         raise TypeError("unused_tcp_port_factory must be callable")
     port = int(port_factory())
     store = ProviderEmulatorStore(
+        max_access_token=MAX_ACCESS_TOKEN,
         client_credentials={
             "yandex": (OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET),
             "vk": (OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET),
             "sber": (OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET),
-        }
+        },
     )
     app = create_phone_verification_emulator_app(store)
     server = GranianEmbedServer(

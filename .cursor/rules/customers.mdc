@@ -50,6 +50,16 @@ alwaysApply: false
 - Shop: `op_public_order_create` зовёт `require_customer()`, `ShopOrderService.create_order` пишет `customer_id`/`customer_phone` из scope; витрина поднимает `<platform-customer-auth>` только при оформлении заказа.
 - Трассинг/логи — без plaintext кода и секретов; номер в логах маскируется.
 
+## Регистрация провайдеров (ops)
+
+Webhook'и ботов и OAuth-консоли настраиваются вручную + `python -m scripts.customers.sync_bot_webhooks` после деплоя/смены домена.
+
+- **Telegram**: deep link `t.me/<bot>?start=` → `message.text="/start <token>"`. Хост со входящим доступом от api.telegram.org — `setWebhook`+`secret_token`; без — `telegram.polling_enabled=true` и updates тянет idle-таска `customer_auth_tg_poll` (минутный cron, getUpdates через DIRECT_FIRST, `deleteWebhook` обязателен — иначе 409).
+- **MAX**: deep link `max.ru/<bot>?start=` → update `bot_started` (токен в `payload`, `chat_id` верхнего уровня); подписка — `POST /subscriptions` с `bot_started`+`message_created`. Авторизация API — `Authorization` header; query `access_token` deprecated → 401.
+- **Yandex ID**: scope `login:default_phone`; в консоли — право «номер телефона» и callback URI `https://<apex>/<seg>/api/v1/public/customer-auth/oauth/yandex/callback`.
+- **VK ID**: базовый домен apex и redirect URI в консоли VK ID; обязательны PKCE, `device_id`, `state`.
+- **Sber ID**: `nonce` в authorize, `rquid`/`x-introspect-rquid` в back-channel.
+
 ## Запреты
 
 1. Продуктовые роутеры авторизации покупателя в `apps/**` — поверхность только `core/api/customer_auth.py`.

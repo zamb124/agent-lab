@@ -21,10 +21,14 @@ class OAuthAccount:
 class ProviderEmulatorStore:
     """Записанные вызовы + мутируемое состояние провайдеров."""
 
-    # Telegram: тела sendMessage
+    # Telegram: тела sendMessage, очередь getUpdates, счётчик deleteWebhook
     telegram_messages: list[JsonObject] = field(default_factory=list)
-    # MAX: (query params, body) POST /messages
+    telegram_updates: list[JsonObject] = field(default_factory=list)
+    telegram_webhook_deleted: int = 0
+    # MAX: (query params, body) POST /messages; Authorization header последних вызовов
     max_messages: list[tuple[dict[str, str], JsonObject]] = field(default_factory=list)
+    max_authorization: list[str] = field(default_factory=list)
+    max_access_token: str = ""
     # SMS.RU: query params /sms/send
     sms_requests: list[dict[str, str]] = field(default_factory=list)
     # OAuth: authorize-запросы по провайдеру
@@ -43,6 +47,8 @@ class ProviderEmulatorStore:
     sms_inner_status_code: int | None = None
     # provider -> (client_id, client_secret), которые эмулятор принимает
     client_credentials: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # provider -> множество допустимых scope; запрос вне их → error=invalid_scope
+    allowed_scopes: dict[str, set[str]] = field(default_factory=dict)
     _counter: int = 0
 
     def next_id(self, prefix: str) -> str:
