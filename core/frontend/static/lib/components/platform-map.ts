@@ -326,16 +326,22 @@ export class PlatformMapEl extends PlatformElement {
 
     override updated(changed: PropertyValues): void {
         if (!changed.has('config') || !this._ready) return;
-        this._syncOverlays();
-        this._syncMarkers();
-        if (this._interactive && this._layersFetch) {
-            this._applyConfigHiddenLayers();
-            this._refresh();
-        }
-        const lt = this.config.locateTo;
-        if (lt && this._map) {
-            this._map.easeTo({ center: lt.lngLat, zoom: lt.zoom ?? 15, duration: 600 });
-        }
+        // Контроллеры op/slice при изменении состояния зовут host.requestUpdate —
+        // выносим side-effects в микротаск, чтобы не планировать update
+        // внутри завершённого цикла (Lit dev-warning change-in-update).
+        queueMicrotask(() => {
+            if (!this._ready) return;
+            this._syncOverlays();
+            this._syncMarkers();
+            if (this._interactive && this._layersFetch) {
+                this._applyConfigHiddenLayers();
+                this._refresh();
+            }
+            const lt = this.config.locateTo;
+            if (lt && this._map) {
+                this._map.easeTo({ center: lt.lngLat, zoom: lt.zoom ?? 15, duration: 600 });
+            }
+        });
     }
 
     private async _initMap(): Promise<void> {

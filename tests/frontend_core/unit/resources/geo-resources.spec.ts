@@ -27,6 +27,8 @@ import {
 import { testEvent } from '../../helpers/bus-fixtures.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 
+type AnyAsyncOp = import('@platform/lib/events/factories/async-op.js').AsyncOpFactory;
+
 beforeEach(() => resetFactories());
 afterEach(() => resetFactories());
 
@@ -48,7 +50,7 @@ describe('geo addresses resource', () => {
 
 describe('geo route resource', () => {
     it('route/isochrone — silent WS-команды с REST-зеркалом', () => {
-        const ops: Array<[typeof geoRouteOp, string, string]> = [
+        const ops: Array<[AnyAsyncOp, string, string]> = [
             [geoRouteOp, 'geo/route/calculate_requested', '/geo/api/v1/route/calculate'],
             [geoIsochroneOp, 'geo/route/isochrone_requested', '/geo/api/v1/route/isochrone'],
         ];
@@ -91,7 +93,7 @@ describe('geo coverage resource', () => {
     });
 
     it('одиночные опросы страницы «Источники» — silent WS-команды', () => {
-        const ops: Array<[typeof geoSourcesOp, string, string, string]> = [
+        const ops: Array<[AnyAsyncOp, string, string, string]> = [
             [geoSourcesOp, 'geo/sources/list_requested', 'GET', '/geo/api/v1/sources'],
             [geoStatsOp, 'geo/stats/overview_requested', 'GET', '/geo/api/v1/stats/overview'],
             [geoCursorsOp, 'geo/cursors/list_requested', 'GET', '/geo/api/v1/cursors'],
