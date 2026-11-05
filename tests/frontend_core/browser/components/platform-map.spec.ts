@@ -888,6 +888,88 @@ describe('platform-map', function () {
             { timeout: 10_000 },
         );
     });
+
+    it('controls.miniMap → inset с прямоугольником viewport', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, controls: { miniMap: true } });
+        const miniEl = el.shadowRoot.querySelector<HTMLElement>('.pm-minimap');
+        expect(miniEl, 'контейнер миникарты').to.exist;
+        await waitUntil(
+            () => {
+                const mini = (el as unknown as { _mini: TestMap | null })._mini;
+                if (!mini) return false;
+                const src = mini.getSource('pm-minimap-box') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) === 1;
+            },
+            'viewport-rect в inset',
+            { timeout: 15_000 },
+        );
+        expect(el.shadowRoot.querySelectorAll('canvas.maplibregl-canvas').length, 'два canvas').to.equal(2);
+    });
+
+    it('locateWatch → синяя точка + круг точности + pm-locate', async () => {
+        const orig = Object.getOwnPropertyDescriptor(Navigator.prototype, 'geolocation') ??
+            Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+        const fixes = [{ coords: { longitude: 37.6, latitude: 55.75, accuracy: 25 } }];
+        Object.defineProperty(navigator, 'geolocation', {
+            configurable: true,
+            value: {
+                watchPosition: (ok: (p: unknown) => void) => {
+                    setTimeout(() => ok(fixes[0]), 20);
+                    return 42;
+                },
+                clearWatch: () => undefined,
+                getCurrentPosition: () => undefined,
+            },
+        });
+        try {
+            const events: Array<{ lngLat: [number, number]; accuracy: number }> = [];
+            const el = await fixture<MapEl>(
+                html`<platform-map
+                    style="display:block;height:480px;width:640px"
+                    .config=${{ interactive: true, layers: { fetch: false }, locateWatch: true }}
+                ></platform-map>`,
+            );
+            el.addEventListener('pm-locate', (e) =>
+                events.push((e as CustomEvent<{ lngLat: [number, number]; accuracy: number }>).detail),
+            );
+            for (let i = 0; i < 300 && !(el.getMap() && el._ready); i++) await aTimeout(30);
+            await waitUntil(
+                () => {
+                    const src = el.getMap()!.getSource('pm-user') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                    return (src?.serialize().data?.features?.length ?? 0) === 2;
+                },
+                'точка + круг точности в pm-user',
+                { timeout: 10_000 },
+            );
+            expect(events.length, 'pm-locate с accuracy').to.be.greaterThan(0);
+            expect(events[0]!.accuracy).to.equal(25);
+        } finally {
+            if (orig) {
+                Object.defineProperty(navigator, 'geolocation', orig);
+            }
+        }
+    });
+
+    it('marker title → балун по клику на маркере', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            markers: [{ key: 'a', lngLat: [37.6, 55.75], title: 'Склад Центральный' }],
+        });
+        const map = el.getMap()!;
+        const pt = map.project([37.6, 55.75]);
+        await waitUntil(
+            () => {
+                map.getCanvas().dispatchEvent(
+                    new MouseEvent('click', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+                );
+                return el.shadowRoot.querySelector('.pm-balloon') !== null;
+            },
+            'балун открылся',
+            { timeout: 15_000 },
+        );
+        expect(el.shadowRoot.querySelector('.pm-balloon')!.textContent).to.include('Склад Центральный');
+    });
 });
 
 describe('platform.zone_editor', function () {

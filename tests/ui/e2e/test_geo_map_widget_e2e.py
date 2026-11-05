@@ -695,7 +695,18 @@ class TestEmbedRouteActions:
         # Маркер превью-карты (title 'HQ'): layers.fetch:false — канонические
         # фичи не перекроют title (на главной карте хинт показывает слой улицы).
         preview = ui_page_system.locator("platform-map").nth(1)
-        x, y = await _project(ui_page_system, 37.6178, 55.7503, nth=1)
+        # Bounding box — canvas внутри самого preview (не глобальный nth:
+        # миникарта main-карты добавила третий canvas в документ).
+        pbox = await preview.locator(".map-canvas canvas.maplibregl-canvas").bounding_box()
+        assert pbox is not None
+        pt = cast(
+            dict[str, float],
+            await preview.evaluate(
+                "(el, ll) => { const p = el.getMap().project(ll); return {x: p.x, y: p.y}; }",
+                [37.6178, 55.7503],
+            ),
+        )
+        x, y = pbox["x"] + float(pt["x"]), pbox["y"] + float(pt["y"])
         hint = preview.locator(".pm-hint")
         # Маркер-кружок попадает в render-pyramid асинхронно — водим мышь до хита.
         for _ in range(25):
@@ -808,3 +819,120 @@ class TestEmbedRouteActions:
                 break
             await asyncio.sleep(0.4)
         assert "#map=" in url, f"камера не синхронизировалась с URL: {url}"
+
+    async def test_minimap_inset_shows_viewport(self, ui_page_system: Page) -> None:
+        """controls.miniMap: inset в углу с прямоугольником видимой области."""
+        await _open_lab(ui_page_system)
+        # Inset — вторая MapLibre: ей нужен свой style.load, опрашиваем DOM.
+        mini = ui_page_system.locator(".pm-minimap")
+        await expect(mini.locator("canvas.maplibregl-canvas")).to_be_visible(timeout=20_000)
+        # Source живёт на inset-карте (el._mini), не на основной — свой опрос.
+        deadline = time.monotonic() + 20.0
+        box_feats = 0
+        while time.monotonic() < deadline:
+            box_feats = cast(
+                int,
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const s = el._mini ? el._mini.getSource('pm-minimap-box') : null;
+                        return s ? s.serialize().data.features.length : -1;
+                    }""",
+                ),
+            )
+            if box_feats == 1:
+                break
+            await asyncio.sleep(0.4)
+        assert box_feats == 1, f"viewport-rect в inset: {box_feats}"
+        # Двигаем основную карту — rect следует за viewport.
+        init_ring = cast(
+            list[float],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el._mini.getSource('pm-minimap-box').serialize().data;
+                    return d.features[0].geometry.coordinates[0][0];
+                }""",
+            ),
+        )
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.getMap().jumpTo({ center: [37.623, 55.754], zoom: 15 }); return true; }",
+        )
+        deadline = time.monotonic() + 15.0
+        moved = False
+        ring = init_ring
+        while time.monotonic() < deadline:
+            ring = cast(
+                list[float],
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const d = el._mini.getSource('pm-minimap-box').serialize().data;
+                        return d.features[0].geometry.coordinates[0][0];
+                    }""",
+                ),
+            )
+            # Западный край bbox для center=37.623 zoom=15 ≈ 37.6157 —
+            # проверяем именно смещение rect относительно стартового.
+            if abs(ring[0] - init_ring[0]) > 1e-4:
+                moved = True
+                break
+            await asyncio.sleep(0.3)
+        assert moved, f"inset-rect не следует за камерой: {init_ring} -> {ring}"
+
+    async def test_locate_watch_blue_dot(self, ui_page_system: Page) -> None:
+        """locateWatch: синяя точка + круг точности по реальной геолокации."""
+        ctx = ui_page_system.context
+        await ctx.grant_permissions(["geolocation"], origin=_GEO_UI.origin)
+        await ctx.set_geolocation({"latitude": 55.7503, "longitude": 37.6178, "accuracy": 18})
+        await _open_lab(ui_page_system)
+        feats = await _wait_source_features(ui_page_system, "pm-user", 2)
+        assert feats == 2, "точка + круг точности в pm-user"
+        dot = cast(
+            list[float],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-user').serialize().data;
+                    return d.features.find((f) => f.properties.kind === 'dot').geometry.coordinates;
+                }""",
+            ),
+        )
+        assert abs(dot[0] - 37.6178) < 0.0005 and abs(dot[1] - 55.7503) < 0.0005
+
+    async def test_marker_click_opens_balloon(self, ui_page_system: Page) -> None:
+        """Клик по маркеру с title — балун Яндекс-стиля."""
+        await _open_lab(ui_page_system)
+        # Приближаемся к courier-маркеру — на z12 он внутри кластера poi.
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.getMap().jumpTo({ center: [37.6173, 55.7501], zoom: 18 }); return true; }",
+        )
+        # Клик по реально отрендеренному маркеру, а не вслепую по координате.
+        deadline = time.monotonic() + 15.0
+        balloon = ui_page_system.locator(".pm-balloon")
+        while time.monotonic() < deadline:
+            pt = cast(
+                list[float] | None,
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const m = el.getMap();
+                        const hits = m.queryRenderedFeatures({ layers: ['pm-markers-circle'] })
+                            .filter((f) => f.properties.key === 'courier');
+                        if (!hits.length) return null;
+                        const p = m.project(hits[0].geometry.coordinates);
+                        return [p.x, p.y];
+                    }""",
+                ),
+            )
+            if pt is not None:
+                box = await ui_page_system.locator("canvas.maplibregl-canvas").first.bounding_box()
+                assert box is not None
+                await ui_page_system.mouse.click(box["x"] + pt[0], box["y"] + pt[1])
+                if await balloon.count() > 0:
+                    break
+            await asyncio.sleep(0.4)
+        await expect(balloon).to_be_visible(timeout=10_000)
+        assert "Courier" in await balloon.inner_text()

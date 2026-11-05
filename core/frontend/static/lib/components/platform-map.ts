@@ -113,6 +113,8 @@ export interface PlatformMapConfig {
         route?: boolean;
         /** Экспорт видимой области карты в PNG (preserveDrawingBuffer). */
         export?: boolean;
+        /** Мини-карта обзора в углу: та же схема + прямоугольник viewport. */
+        miniMap?: boolean;
     };
     layers?: {
         fetch?: boolean;
@@ -150,6 +152,8 @@ export interface PlatformMapConfig {
         lngLat: LngLat;
         zoom?: number;
     } | false;
+    /** Слежение за геолокацией: синяя точка + круг точности, первый fix — перелёт. */
+    locateWatch?: boolean;
     /**
      * Маршрут A → via… → B по дорожному графу (geo/route на каждое плечо).
      * Линия + точки с буквами + ETA-чип «N км · M мин» с выбором режима.
@@ -261,6 +265,10 @@ export class PlatformMapEl extends PlatformElement {
     private _scheme: BasemapScheme = 'light';
     private _schemeMedia: MediaQueryList | null = null;
     private _lpTimer: number | null = null;
+    private _mini: PlatformMap | null = null;
+    private _balloonPopup: { remove(): void } | null = null;
+    private _locateWatchId: number | null = null;
+    private _locateFlew = false;
     private _refreshTimer: number | null = null;
     private _suggestTimer: number | null = null;
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
@@ -379,6 +387,7 @@ export class PlatformMapEl extends PlatformElement {
                 ${this.config.draw ? this._renderZoneStats() : nothing}
                 ${panel ? this._renderAddressesPanel(panel) : nothing}
                 ${this.config.statusBar === true && this._ready ? this._renderStatusBar() : nothing}
+                ${this.config.controls?.miniMap === true && this._ready ? html`<div class="pm-minimap" @click=${(e: Event) => e.stopPropagation()}></div>` : nothing}
                 ${this._menu ? this._renderMenu() : nothing}
                 ${!this._ready && this._error === null ? html`<div class="pm-overlay pm-loading"><span class="pm-spinner"></span>${this.t('map.loading')}</div>` : nothing}
                 ${this._error !== null
@@ -1149,6 +1158,8 @@ export class PlatformMapEl extends PlatformElement {
         this._mapLayers.clear();
         map.once('style.load', () => {
             this._installSources(map);
+            // Миникарта следует схеме основной карты.
+            this._mini?.setStyle(basemapStyleUrl(this._scheme));
             // TerraDraw-источники стираются setStyle — рестарт пересоздаёт их
             // и перерисовывает фичи из стора.
             if (this._zoneDraw) {
@@ -1315,6 +1326,12 @@ export class PlatformMapEl extends PlatformElement {
     }
 
     override updated(changed: PropertyValues): void {
+        // Миникарта: контейнер отрендерился после _ready — создаём inset один раз
+        // (независимо от того, какое свойство вызвало update).
+        const miniEl = this.renderRoot.querySelector<HTMLElement>('.pm-minimap');
+        if (miniEl && !this._mini && this._map) {
+            void this._initMiniMap(miniEl);
+        }
         if (!changed.has('config') || !this._ready) return;
         // Контроллеры op/slice при изменении состояния зовут host.requestUpdate —
         // выносим side-effects в микротаск, чтобы не планировать update
@@ -1333,6 +1350,116 @@ export class PlatformMapEl extends PlatformElement {
             if (lt && this._map) {
                 this._map.easeTo({ center: lt.lngLat, zoom: lt.zoom ?? 15, duration: 600 });
             }
+        });
+    }
+
+    /** Inset-обзор: та же схема, zoom-5, прямоугольник viewport основной карты. */
+    private async _initMiniMap(el: HTMLElement): Promise<void> {
+        const main = this._map;
+        if (!main || this._mini) return;
+        const c = main.getCenter();
+        const mini = await createBasemap(el, {
+            center: [c.lng, c.lat],
+            zoom: Math.max(0, main.getZoom() - 5),
+            interactive: false,
+            scheme: this._scheme,
+        });
+        if (this._map !== main || !this.isConnected || this._mini) {
+            mini.remove();
+            return;
+        }
+        this._mini = mini;
+        mini.on('style.load', () => {
+            if (mini.getSource('pm-minimap-box')) return;
+            mini.addSource('pm-minimap-box', { type: 'geojson', data: _EMPTY_FC } as never);
+            mini.addLayer({
+                id: 'pm-minimap-box-fill',
+                type: 'fill',
+                source: 'pm-minimap-box',
+                paint: { 'fill-color': '#155dfc', 'fill-opacity': 0.12 },
+            } as never);
+            mini.addLayer({
+                id: 'pm-minimap-box-line',
+                type: 'line',
+                source: 'pm-minimap-box',
+                paint: { 'line-color': '#155dfc', 'line-width': 1.5 },
+            } as never);
+            this._syncMini();
+        });
+        this._syncMini();
+    }
+
+    private _syncMini = (): void => {
+        const main = this._map;
+        const mini = this._mini;
+        if (!main || !mini) return;
+        const c = main.getCenter();
+        mini.jumpTo({
+            center: [c.lng, c.lat],
+            zoom: Math.max(0, main.getZoom() - 5),
+            bearing: main.getBearing(),
+        });
+        const b = main.getBounds();
+        const ring: LngLat[] = [
+            [b.getWest(), b.getSouth()],
+            [b.getEast(), b.getSouth()],
+            [b.getEast(), b.getNorth()],
+            [b.getWest(), b.getNorth()],
+            [b.getWest(), b.getSouth()],
+        ];
+        const src = mini.getSource('pm-minimap-box') as { setData(d: FeatureCollection): Promise<void> } | undefined;
+        void src?.setData({
+            type: 'FeatureCollection',
+            features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } }],
+        });
+    };
+
+    /** Непрерывная геолокация: синяя точка + круг точности (locateWatch). */
+    private _startLocateWatch(): void {
+        if (this._locateWatchId !== null || !navigator.geolocation) return;
+        this._locateWatchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const lngLat: LngLat = [pos.coords.longitude, pos.coords.latitude];
+                this._syncUserDot(lngLat, pos.coords.accuracy);
+                if (!this._locateFlew) {
+                    this._locateFlew = true;
+                    this._map?.easeTo({ center: lngLat, zoom: 16, duration: 700 });
+                }
+                this.dispatchEvent(
+                    new CustomEvent('pm-locate', {
+                        detail: { lngLat, accuracy: pos.coords.accuracy },
+                        bubbles: true,
+                        composed: true,
+                    }),
+                );
+            },
+            () => {
+                this.dispatchEvent(new CustomEvent('pm-locate', { detail: { error: 'denied' }, bubbles: true, composed: true }));
+            },
+            { enableHighAccuracy: true, maximumAge: 5000 },
+        );
+    }
+
+    /** Точка пользователя + круг точности ~accuracy метров (64-сегментная окружность). */
+    private _syncUserDot(lngLat: LngLat, accuracy: number): void {
+        const map = this._map;
+        if (!map) return;
+        const src = map.getSource('pm-user') as { setData(d: FeatureCollection): Promise<void> } | undefined;
+        if (!src) return;
+        const r = Math.max(accuracy, 10);
+        const latR = r / 111_320;
+        const lngR = latR / Math.cos((lngLat[1] * Math.PI) / 180);
+        const ring: LngLat[] = [];
+        for (let i = 0; i <= 64; i++) {
+            const a = (i / 64) * Math.PI * 2;
+            ring.push([lngLat[0] + Math.cos(a) * lngR, lngLat[1] + Math.sin(a) * latR]);
+        }
+        void src.setData({
+            type: 'FeatureCollection',
+            features: [
+                { type: 'Feature', properties: { kind: 'acc' }, geometry: { type: 'Polygon', coordinates: [ring] } },
+                { type: 'Feature', properties: { kind: 'dot' }, geometry: { type: 'Point', coordinates: lngLat } },
+            ],
         });
     }
 
@@ -1428,6 +1555,12 @@ export class PlatformMapEl extends PlatformElement {
             });
         }
         this._watchAutoScheme();
+        if (this.config.locateWatch === true && interactive) {
+            this._startLocateWatch();
+        }
+        if (this.config.controls?.miniMap === true && interactive) {
+            map.on('move', this._syncMini);
+        }
         if (this.config.moveEvent === true) {
             map.on('moveend', () => {
                 const c = map.getCenter();
@@ -1496,6 +1629,26 @@ export class PlatformMapEl extends PlatformElement {
             paint: {
                 'circle-radius': ['coalesce', ['get', 'size'], 9],
                 'circle-color': ['coalesce', ['get', 'color'], MARKER_COLOR],
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#ffffff',
+            },
+        } as never);
+        map.addSource('pm-user', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-user-acc',
+            type: 'fill',
+            source: 'pm-user',
+            filter: ['==', ['get', 'kind'], 'acc'],
+            paint: { 'fill-color': '#155dfc', 'fill-opacity': 0.12 },
+        } as never);
+        map.addLayer({
+            id: 'pm-user-dot',
+            type: 'circle',
+            source: 'pm-user',
+            filter: ['==', ['get', 'kind'], 'dot'],
+            paint: {
+                'circle-radius': 7,
+                'circle-color': '#155dfc',
                 'circle-stroke-width': 3,
                 'circle-stroke-color': '#ffffff',
             },
@@ -1748,6 +1901,14 @@ export class PlatformMapEl extends PlatformElement {
                         composed: true,
                     }),
                 );
+                // Балун Яндекс-стиля: клик по маркеру с title — карточка на точке.
+                if (markerHit.title !== '') {
+                    this._balloonPopup?.remove();
+                    this._balloonPopup = new Popup({ closeButton: true, closeOnClick: true, className: 'pm-balloon' })
+                        .setLngLat(markerHit.lngLat)
+                        .setText(markerHit.title)
+                        .addTo(map) as unknown as { remove(): void };
+                }
             }
             if (this._clickCardEnabled && feats.length > 0) {
                 this._showCard(maplibre, map, [e.lngLat.lng, e.lngLat.lat], feats);
@@ -1924,8 +2085,8 @@ export class PlatformMapEl extends PlatformElement {
     }
 
     private _setSourceData(id: string, data: FeatureCollection): void {
-        const source = this._map?.getSource(id) as { setData(d: FeatureCollection): void } | undefined;
-        source?.setData(data);
+        const source = this._map?.getSource(id) as { setData(d: FeatureCollection): Promise<void> } | undefined;
+        void source?.setData(data);
     }
 
     private _syncOverlays(): void {
@@ -1946,9 +2107,9 @@ export class PlatformMapEl extends PlatformElement {
             const sid = `pm-ov-${ov.name}`;
             const color = ov.color ?? OVERLAY_COLOR;
             const data = ov.data;
-            const src = map.getSource(sid) as { setData(d: Feature | FeatureCollection): void } | undefined;
+            const src = map.getSource(sid) as { setData(d: Feature | FeatureCollection): Promise<void> } | undefined;
             if (src) {
-                src.setData(data);
+                void src.setData(data);
             } else {
                 map.addSource(sid, { type: 'geojson', data });
                 map.addLayer({
@@ -2021,7 +2182,7 @@ export class PlatformMapEl extends PlatformElement {
         const map = this._map;
         const maplibre = this._maplibre;
         if (!map) return;
-        const src = map.getSource('pm-markers') as { setData(d: FeatureCollection): void } | undefined;
+        const src = map.getSource('pm-markers') as { setData(d: FeatureCollection): Promise<void> } | undefined;
         const markers = this.config.markers ?? [];
         // Draggable-маркеры — DOM-элементы с родным drag-жестом MapLibre;
         // остальные рендерятся через geojson-слой (кластеризация работает на нём).
@@ -2057,7 +2218,7 @@ export class PlatformMapEl extends PlatformElement {
                 geometry: { type: 'Point' as const, coordinates: m.lngLat },
                 properties: { key: m.key ?? '', color: m.color ?? MARKER_COLOR, size: m.size ?? 9, title: m.title ?? '' },
             }));
-        src?.setData({ type: 'FeatureCollection', features });
+        void src?.setData({ type: 'FeatureCollection', features });
     }
 
     private async _initDraw(): Promise<void> {
@@ -2109,9 +2270,13 @@ export class PlatformMapEl extends PlatformElement {
         const map = this._map;
         const maplibre = this._maplibre;
         if (!map || !maplibre) return;
-        const onFix = (pos: { coords: { longitude: number; latitude: number } }): void => {
+        const onFix = (pos: { coords: { longitude: number; latitude: number; accuracy?: number } }): void => {
             const lngLat: LngLat = [pos.coords.longitude, pos.coords.latitude];
             map.easeTo({ center: lngLat, zoom: 16, duration: 700 });
+            if (this._locateWatchId !== null) {
+                this._syncUserDot(lngLat, pos.coords.accuracy ?? 0);
+                return;
+            }
             this._locateMarker?.remove();
             this._locateMarker = new maplibre.Marker({ color: '#155dfc' }).setLngLat(lngLat).addTo(map) as unknown as {
                 remove(): void;
@@ -2139,6 +2304,12 @@ export class PlatformMapEl extends PlatformElement {
         this._schemeMedia?.removeEventListener('change', this._onSchemeMedia);
         this._schemeMedia = null;
         if (this._lpTimer !== null) window.clearTimeout(this._lpTimer);
+        if (this._locateWatchId !== null) navigator.geolocation.clearWatch(this._locateWatchId);
+        this._locateWatchId = null;
+        this._locateFlew = false;
+        this._mini?.remove();
+        this._mini = null;
+        this._balloonPopup = null;
         this._zoneDraw?.draw.stop();
         this._zoneDraw = null;
         for (const dm of this._domMarkers) dm.remove();
@@ -2408,6 +2579,28 @@ export class PlatformMapEl extends PlatformElement {
         .pm-status-zoom {
             color: var(--color-text, #0f172a);
             font-weight: 600;
+        }
+        .pm-minimap {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            width: 150px;
+            height: 105px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--color-border, #e2e8f0);
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.2);
+            z-index: 6;
+            cursor: pointer;
+        }
+        .pm-minimap .maplibregl-ctrl-attrib {
+            display: none;
+        }
+        .pm-balloon .maplibregl-popup-content {
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 28px 8px 12px;
         }
         .pm-menu {
             position: absolute;
