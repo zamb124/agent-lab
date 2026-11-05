@@ -17,7 +17,7 @@ class GeoSettings(BaseSettings):
         default_factory=lambda: [
             "https://download.bbbike.org/osm/bbbike/Moscow/Moscow.osm.pbf",
         ],
-        description="PBF-экстракты OSM для импорта (объединение). BBBike Moscow (85MB) — влезает в лимит воркера в память; Geofabrik central-fed-district (884MB) OOM на ноде 31GB; у download.openstreetmap.fr России нет.",
+        description="PBF-экстракты OSM для импорта (объединение). Импорт потоковый — память не зависит от размера; BBBike Moscow (85MB) выбран как компактный источник города: Geofabrik central-fed-district (884MB) дольше качается и парсится, у download.openstreetmap.fr России нет.",
     )
     coverage_bbox: tuple[float, float, float, float] = Field(
         default=(54.2, 35.1, 56.9, 40.4),

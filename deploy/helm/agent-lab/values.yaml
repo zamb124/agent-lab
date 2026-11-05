@@ -1057,7 +1057,9 @@ workers:
         memory: 512Mi
       limits:
         cpu: "1"
-        memory: 4Gi
+        # Импорт OSM потоковый: измеренный пик ~420MB (Москва 85MB),
+        # память не растёт с размером экстракта — запас x4.
+        memory: 2Gi
 
 litserve:
   enabled: true

@@ -107,7 +107,9 @@ async def geo_seed():
         [_GEN],
         using="geo",
     )
-    for (src, dst, cf, cr, ff, fr, bf, br, sf, sr, highway, oneway) in _EDGES:
+    for way_id, (src, dst, cf, cr, ff, fr, bf, br, sf, sr, highway, oneway) in enumerate(
+        _EDGES, start=1
+    ):
         a, b = _NODES[src], _NODES[dst]
         _ = await execute_raw(
             """
@@ -119,11 +121,11 @@ async def geo_seed():
             ) VALUES (
                 $1,$2,$3,$4,$5,$6,100.0,
                 $7,$8,$9,$10,$11,$12,$13,$14,
-                $15,$16,'тест',0,$17
+                $15,$16,'тест',$17,$18
             )
             """,
             [src, dst, a[0], a[1], b[0], b[1], cf, cr, ff, fr, bf, br, sf, sr,
-             oneway, highway, _GEN],
+             oneway, highway, way_id, _GEN],
             using="geo",
         )
     for (osm_type, osm_id, name, city, street, house, postcode, lat, lng) in _ADDRESSES:

@@ -430,6 +430,30 @@ class TestRunSyncFile:
         finally:
             await _restore_state(snapshot)
 
+    async def test_retry_into_same_generation_no_duplicates(
+        self, geo_service: None
+    ) -> None:
+        """Retry задачи в то же поколение: ON CONFLICT, строк не дублирует."""
+        _ = geo_service
+        snapshot = await _snapshot_state()
+        try:
+            await _set_state(generation=0, source_modified_at=None)
+            svc = OsmImportService(
+                GeoSettings(osm_extract_urls=[f"file://{_MICRO}"])
+            )
+            _ = await svc.run_sync()
+            gen = (await _state()).current_generation
+
+            # Воркер убит после публикации? Откат указателя → тот же gen.
+            await _set_state(generation=gen - 1, source_modified_at=None)
+            _ = await svc.run_sync()
+
+            assert await _count("geo_addresses", gen) == 4
+            assert await _count("geo_road_vertices", gen) == 8
+            assert await _count("geo_road_edges", gen) == 9
+        finally:
+            await _restore_state(snapshot)
+
     async def test_sync_disabled_noop(self, geo_service: None) -> None:
         """sync_enabled=False → skip, состояние и данные не тронуты."""
         _ = geo_service

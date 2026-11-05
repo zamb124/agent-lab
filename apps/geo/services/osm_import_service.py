@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import osmium
+from osmium.osm import Node, Way, osm_entity_bits
 from oxyde import execute_raw
+from pydantic import BaseModel
 
 from apps.geo.config import GeoSettings
 from apps.geo.db.import_lock import geo_import_lock
@@ -30,7 +32,7 @@ from core.tasks import enqueue
 from core.types import SqlParameterValue
 
 if TYPE_CHECKING:
-    from osmium.osm import Node, NodeRef, TagList, Way
+    from osmium.osm import NodeRef, TagList
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,7 @@ _ACCESS_ALLOW = frozenset(
 _ONEWAY_YES = frozenset({"yes", "true", "1"})
 _ONEWAY_NO = frozenset({"no", "false", "0"})
 _EARTH_R = 6_371_000.0
+_ENTITY_BITS = osm_entity_bits.NODE | osm_entity_bits.WAY
 
 
 def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -206,56 +209,66 @@ def _mode_costs(tags: TagList, highway: str, length_m: float, settings: GeoSetti
     return out
 
 
-class _ImportHandler(osmium.SimpleHandler):
-    """Один проход по экстракту: адреса + дорожный граф.
+class _GenerationCountsRow(BaseModel):
+    a: int
+    v: int
+    e: int
 
-    Локации нод — C++-кэш ``NodeLocationsForWays`` (``locations=True``,
-    flex_mem ~10B/нода): два прохода с Python set/dict на десятки миллионов
-    нод не влезали в лимит воркера и заканчивались memcg OOM.
+
+class _RowBuilder:
+    """Строки БД из объектов OSM без накопления: каждый вызов возвращает список.
+
+    Потребление памяти парсинга ограничено буферами caller'а: строки сливаются
+    в Postgres батчами по ходу чтения экстракта, а локации нод лежат в
+    дисковом индексе ``sparse_file_array`` — Python-структур на десятки
+    миллионов записей не создаётся.
     """
 
     def __init__(self, settings: GeoSettings) -> None:
-        super().__init__()
         self._bbox: tuple[float, float, float, float] = settings.coverage_bbox
         self._settings: GeoSettings = settings
-        self.node_addresses: list[dict[str, SqlParameterValue]] = []
-        self.way_addresses: list[dict[str, SqlParameterValue]] = []
-        self.edges: list[dict[str, SqlParameterValue]] = []
-        self.vertices: dict[int, tuple[float, float]] = {}
 
     def _in_bbox(self, lat: float, lng: float) -> bool:
         lat_min, lng_min, lat_max, lng_max = self._bbox
         return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
-    def node(self, n: Node) -> None:
+    def node_row(self, n: Node) -> dict[str, SqlParameterValue] | None:
         if not n.location.valid() or not self._in_bbox(n.location.lat, n.location.lon):
-            return
-        if n.tags.get("addr:housenumber"):
-            name = _display_name(n.tags)
-            if name:
-                self.node_addresses.append(
-                    {
-                        "osm_type": "node",
-                        "osm_id": n.id,
-                        "display_name": name,
-                        "city": n.tags.get("addr:city") or n.tags.get("addr:place") or "",
-                        "street": n.tags.get("addr:street") or "",
-                        "housenumber": n.tags.get("addr:housenumber") or "",
-                        "postcode": n.tags.get("addr:postcode") or "",
-                        "lat": n.location.lat,
-                        "lng": n.location.lon,
-                    }
-                )
+            return None
+        if not n.tags.get("addr:housenumber"):
+            return None
+        name = _display_name(n.tags)
+        if not name:
+            return None
+        return {
+            "osm_type": "node",
+            "osm_id": n.id,
+            "display_name": name,
+            "city": n.tags.get("addr:city") or n.tags.get("addr:place") or "",
+            "street": n.tags.get("addr:street") or "",
+            "housenumber": n.tags.get("addr:housenumber") or "",
+            "postcode": n.tags.get("addr:postcode") or "",
+            "lat": n.location.lat,
+            "lng": n.location.lon,
+        }
 
     def _coord(self, n: NodeRef) -> tuple[float, float] | None:
         if n.location.valid() and self._in_bbox(n.location.lat, n.location.lon):
             return (n.location.lat, n.location.lon)
         return None
 
-    def way(self, w: Way) -> None:
+    def way_rows(
+        self, w: Way
+    ) -> tuple[
+        dict[str, SqlParameterValue] | None,
+        list[dict[str, SqlParameterValue]],
+        list[tuple[int, float, float]],
+    ]:
+        """Адресная строка, рёбра графа и вершины одного way."""
         tags = w.tags
         coords = [self._coord(n) for n in w.nodes]
 
+        addr_row: dict[str, SqlParameterValue] | None = None
         housenumber = tags.get("addr:housenumber")
         if housenumber:
             known = [c for c in coords if c is not None]
@@ -264,23 +277,23 @@ class _ImportHandler(osmium.SimpleHandler):
                 if name:
                     clat = sum(c[0] for c in known) / len(known)
                     clng = sum(c[1] for c in known) / len(known)
-                    self.way_addresses.append(
-                        {
-                            "osm_type": "way",
-                            "osm_id": w.id,
-                            "display_name": name,
-                            "city": tags.get("addr:city") or tags.get("addr:place") or "",
-                            "street": tags.get("addr:street") or "",
-                            "housenumber": housenumber,
-                            "postcode": tags.get("addr:postcode") or "",
-                            "lat": clat,
-                            "lng": clng,
-                        }
-                    )
+                    addr_row = {
+                        "osm_type": "way",
+                        "osm_id": w.id,
+                        "display_name": name,
+                        "city": tags.get("addr:city") or tags.get("addr:place") or "",
+                        "street": tags.get("addr:street") or "",
+                        "housenumber": housenumber,
+                        "postcode": tags.get("addr:postcode") or "",
+                        "lat": clat,
+                        "lng": clng,
+                    }
 
+        edge_rows: list[dict[str, SqlParameterValue]] = []
+        vertex_rows: list[tuple[int, float, float]] = []
         highway = tags.get("highway")
         if not highway or highway in _HIGHWAY_SKIP:
-            return
+            return addr_row, edge_rows, vertex_rows
         name = tags.get("name", "")
         oneway_tag = tags.get("oneway", "")
         oneway = 1 if oneway_tag in _ONEWAY_YES else (-1 if oneway_tag == "-1" else 0)
@@ -294,9 +307,9 @@ class _ImportHandler(osmium.SimpleHandler):
             costs = _mode_costs(tags, highway, length_m, self._settings)
             if not costs.any_passable():
                 continue
-            self.vertices[w.nodes[i].ref] = a
-            self.vertices[w.nodes[i + 1].ref] = b
-            self.edges.append(
+            vertex_rows.append((w.nodes[i].ref, a[0], a[1]))
+            vertex_rows.append((w.nodes[i + 1].ref, b[0], b[1]))
+            edge_rows.append(
                 {
                     "source": w.nodes[i].ref,
                     "target": w.nodes[i + 1].ref,
@@ -319,6 +332,7 @@ class _ImportHandler(osmium.SimpleHandler):
                     "osm_way_id": w.id,
                 }
             )
+        return addr_row, edge_rows, vertex_rows
 
 
 class OsmImportService:
@@ -457,32 +471,53 @@ class OsmImportService:
         return paths, cleanup_paths, newest
 
     async def _import(self, paths: list[str], *, generation: int) -> dict[str, int]:
-        """Парсинг всех экстрактов и заливка в новое поколение."""
+        """Парсинг всех экстрактов и заливка в новое поколение.
+
+        Один проход ``FileProcessor`` на файл: объекты превращаются в строки и
+        сливаются в Postgres по достижении ``import_batch_size``, локации нод —
+        дисковый индекс ``sparse_file_array``. Память не зависит от размера
+        экстракта: в куче живёт только три буфера <= размера батча.
+        """
         state = await GeoImportState.get_state()
         assert state is not None
         state.status = GeoImportStatus.IMPORTING
         state.updated_at = datetime.now(UTC)
         _ = await state.save()
 
+        bs = self._settings.import_batch_size
+        builder = _RowBuilder(self._settings)
         addresses: list[dict[str, SqlParameterValue]] = []
         edges: list[dict[str, SqlParameterValue]] = []
-        vertices: dict[int, tuple[float, float]] = {}
+        vertices: list[tuple[int, float, float]] = []
         for p in paths:
-            h = _ImportHandler(self._settings)
-            h.apply_file(p, locations=True)
-            addresses.extend(h.node_addresses)
-            addresses.extend(h.way_addresses)
-            edges.extend(h.edges)
-            vertices.update(h.vertices)
+            fp = osmium.FileProcessor(p, _ENTITY_BITS).with_locations(
+                "sparse_file_array"
+            )
+            for obj in fp:
+                if isinstance(obj, Node):
+                    row = builder.node_row(obj)
+                    if row is not None:
+                        addresses.append(row)
+                elif isinstance(obj, Way):
+                    addr_row, edge_rows, vertex_rows = builder.way_rows(obj)
+                    if addr_row is not None:
+                        addresses.append(addr_row)
+                    edges.extend(edge_rows)
+                    vertices.extend(vertex_rows)
+                if len(addresses) >= bs:
+                    await self._bulk_insert_addresses(addresses, generation)
+                    addresses.clear()
+                if len(vertices) >= bs:
+                    await self._bulk_insert_vertices(vertices, generation)
+                    vertices.clear()
+                if len(edges) >= bs:
+                    await self._bulk_insert_edges(edges, generation)
+                    edges.clear()
 
         await self._bulk_insert_addresses(addresses, generation)
         await self._bulk_insert_vertices(vertices, generation)
         await self._bulk_insert_edges(edges, generation)
-        return {
-            "rows_addresses": len(addresses),
-            "rows_vertices": len(vertices),
-            "rows_edges": len(edges),
-        }
+        return await self._generation_counts(generation)
 
     async def _bulk_insert_addresses(
         self, rows: list[dict[str, SqlParameterValue]], generation: int
@@ -519,21 +554,19 @@ class OsmImportService:
 
     async def _bulk_insert_vertices(
         self,
-        vertices: dict[int, tuple[float, float]],
+        vertices: list[tuple[int, float, float]],
         generation: int,
     ) -> None:
-        ids = sorted(vertices)
         cols = 4
         bs = min(self._settings.import_batch_size, 60_000 // cols)
-        for i in range(0, len(ids), bs):
-            chunk = ids[i : i + bs]
+        for i in range(0, len(vertices), bs):
+            chunk = vertices[i : i + bs]
             values = ",".join(
                 f"(${j * cols + 1},${j * cols + 2},${j * cols + 3},${j * cols + 4})"
                 for j in range(len(chunk))
             )
             params: list[SqlParameterValue] = []
-            for vid in chunk:
-                lat, lng = vertices[vid]
+            for vid, lat, lng in chunk:
                 params.extend([vid, lat, lng, generation])
             _ = await execute_raw(
                 f"""
@@ -578,10 +611,30 @@ class OsmImportService:
                      scooter_cost, scooter_reverse_cost,
                      oneway, highway, name, osm_way_id, generation)
                 VALUES {values}
+                ON CONFLICT (generation, osm_way_id, source, target) DO NOTHING
                 """,
                 params,
                 using="geo",
             )
+
+    async def _generation_counts(self, generation: int) -> dict[str, int]:
+        """Точное число строк поколения после ON CONFLICT-дедупа."""
+        rows = await execute_raw(
+            """
+            SELECT
+                (SELECT count(*) FROM geo_addresses WHERE generation=$1) AS a,
+                (SELECT count(*) FROM geo_road_vertices WHERE generation=$1) AS v,
+                (SELECT count(*) FROM geo_road_edges WHERE generation=$1) AS e
+            """,
+            [generation],
+            using="geo",
+        )
+        r = _GenerationCountsRow.model_validate(rows[0])
+        return {
+            "rows_addresses": r.a,
+            "rows_vertices": r.v,
+            "rows_edges": r.e,
+        }
 
     async def _publish(
         self,

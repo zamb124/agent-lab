@@ -29,13 +29,14 @@ alwaysApply: false
 
 ### Импорт и обновления
 
-`OsmImportService` — трёхпроходный pyosmium-парс (нужные ноды → локации → адреса+ребра), bulk-insert пачками под лимит bind-параметров, атомарный своп поколения. `GEO_OSM_SYNC_TICK` (scheduled TaskIQ на очереди `geo`) — If-Modified-Since → реимпорт → своп; источник — `osm_extract_urls` в `GeoSettings`. Экстракты берутся под конкретную витрину-регион.
+`OsmImportService` — потоковый pyosmium-парс одним проходом (`FileProcessor` + локации нод в дисковом `sparse_file_array`): строки сливаются в Postgres батчами `import_batch_size` по ходу чтения, память не зависит от размера экстракта; атомарный своп поколения. `GEO_OSM_SYNC_TICK` (scheduled TaskIQ на очереди `geo`) — If-Modified-Since → реимпорт → своп; источник — `osm_extract_urls` в `GeoSettings`. Экстракты берутся под конкретную витрину-регион.
 
 ## Инварианты
 
 1. Пустой справочник не ждёт крона: lifecycle воркера зовёт `OsmImportService.ensure_bootstrapped()` — нет опубликованного поколения → немедленный `enqueue` импорта.
 2. `run_sync` сериализован advisory-lock (`apps/geo/db/import_lock.py`): конкурентный вызов/tick — no-op, двойной публикации и дублей строк не бывает.
 3. Failed-импорт живое поколение не трогает: `status=FAILED` + `last_error`, `current_generation` не меняется.
+4. Импорт — bounded memory: никаких Python-коллекций на весь экстракт; буферы ≤ `import_batch_size`, локации нод — дисковый индекс pyosmium, рёбра дедупятся `ON CONFLICT (generation, osm_way_id, source, target)` — retry в то же поколение безопасен.
 
 ## Контракты
 
