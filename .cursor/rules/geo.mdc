@@ -67,28 +67,31 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 
 Один виджет `core/frontend/static/lib/components/platform-map.ts` для ВСЕХ карт платформы (geo, shop, wiki, tracker, flow-ui embed). Вся настройка — сериализуемый `PlatformMapConfig` в духе options-объекта JS API Яндекс.Карт; свои карты/`shop-*-map`/инлайн-MapLibre в сервисах запрещены. Секции config:
 
-- `center`/`zoom`/`minZoom`/`maxZoom`/`interactive`/`padding` — камера и жесты; `interactive:false` — встраиваемое превью без контролов.
-- `controls.zoom`/`layers`/`locate`/`search`/`ruler`/`fit`/`fullscreen`/`scale` — встроенные контролы.
+- `center`/`zoom`/`minZoom`/`maxZoom`/`interactive`/`padding` — камера и жесты; `interactive:false` — встраиваемое превью без контролов. `scheme:'light'|'dark'` — схема базовой карты, `rotate` — поворот жестами (нужен компасу).
+- `controls.zoom`/`layers`/`locate`/`search`/`ruler`/`rulerArea`/`fit`/`compass`/`scheme`/`route`/`fullscreen`/`scale` — встроенные контролы; `route` — кнопка входа в режим построения маршрута кликами (требует `route.build`), `rulerArea` — замер площади полигоном, `compass` — стрелка bearing + сброс на север, `scheme` — light↔dark.
 - `layers.fetch`/`hidden` — канонические geo-слои по bbox (`geo/layer_features` + `geo/layers`, visibility через slice `geo/map`).
 - `featureCards.hover`/`click` — хинт и карточка фичи (`lib/map/feature-card.ts`).
 - `markers[]` (+`draggable`), `markersCluster` — точечные маркеры и кластеризация; drag отдаёт `pm-marker-drag`.
 - `overlays[]` — произвольные GeoJSON-слои (зоны, треки) с `fit`.
+- `route` — маршрут `geo/route` по `points[]` (A→via…→B, плечи параллельно): линия + буквенные точки + чип с режимами car/foot/bike/scooter и ETA «N км · M мин»; `build:true` — точки кликами, `clearRoute()`/`pm-route`, кнопка очистки.
+- `isochrone` — контуры достижимости `geo/isochrone` по `minutes[]` от `center`: полигоны от большего к меньшему + лейблы минут; событие `pm-isochrone`.
 - `search` — suggest-дропдаун через `geo/addresses_suggest`, pin + `pm-search-select`.
 - `contextMenu` — «Что здесь?» (`geo/addresses_nearest`) + копирование координат.
-- `statusBar` — координаты курсора и zoom. `draw` — TerraDraw-полигон + `pm-draw-change` (метрики, валидация). `addressesPanel` — `platform-zone-address-panel` + `geo/addresses_in_zone`. `locateTo` — программный перелёт камеры.
-- События `pm-*` (bubbles+composed): `pm-ready`, `pm-click`, `pm-marker-click`, `pm-marker-drag`, `pm-draw-change`, `pm-layer-toggle`, `pm-locate`, `pm-address-hover`, `pm-search-select`, `pm-ruler-change`, `pm-coords-copy`, `pm-error`.
+- `statusBar` — координаты курсора и zoom. `draw` — TerraDraw-полигон + `pm-draw-change` (метрики, валидация). `addressesPanel` — `platform-zone-address-panel` + `geo/addresses_in_zone`. `locateTo` — программный перелёт камеры. `moveEvent` — `pm-move` на moveend (center/zoom/bearing/bounds).
+- События `pm-*` (bubbles+composed): `pm-ready`, `pm-click`, `pm-marker-click`, `pm-marker-drag`, `pm-draw-change`, `pm-layer-toggle`, `pm-locate`, `pm-address-hover`, `pm-search-select`, `pm-ruler-change`, `pm-coords-copy`, `pm-route`, `pm-route-point`, `pm-isochrone`, `pm-move`, `pm-error`.
+- Интерактивные контролы размечены `data-action` (`locate`, `ruler`, `ruler-area`, `fit`, `compass`, `scheme`, `route`, `fullscreen`, `route-clear`, `whats-here`, `copy-coords`) и `data-mode` на чипе режимов — тесты и потребители не зависят от локали.
 - Модалка `platform.zone_editor` (`lib/modals/platform-zone-editor-modal.ts`) — общий редактор зоны: метрики, «Рисовать»/«К зоне»/«Очистить»/«К адресу».
 - Витрина и e2e-полигон виджета — `/geo/map-lab` (`apps/geo/ui/pages/geo-map-lab-page.ts`): все секции config на реальных данных.
 
 ### Тесты виджета
 
 - `tests/frontend_core/browser/components/platform-map.spec.ts` — WTR/Chromium по каждой секции config и событию `pm-*` (контролы, слои, поиск, линейка, меню, кластер, draw, модалка).
-- `tests/ui/e2e/test_geo_map_widget_e2e.py` — Playwright против живого geo :9028 на фикстуре `tests/geo/fixtures/micro.osm`: загрузка, zoom, toggle слоёв, карточка фичи, suggest→pin, «Что здесь?», линейка, статусбар, кластер, draggable, панель адресов, превью. Новая фича виджета без e2e — не вливается. `[без гейта]`
+- `tests/ui/e2e/test_geo_map_widget_e2e.py` — Playwright против живого geo :9028 на фикстуре `tests/geo/fixtures/micro.osm`: загрузка, zoom, toggle слоёв, карточка фичи, suggest→pin, «Что здесь?», линейка длина/площадь, статусбар, кластер, draggable, панель адресов, превью; маршрут (линия/чип/режимы/build кликами/очистка), изохроны, light↔dark схема, компас, TerraDraw после смены стиля. Новая фича виджета без e2e — не вливается. `[без гейта]`
 
 ### Остальное
 
 - Базовая карта — MapLibre GL + векторные PMTiles: loader `core/frontend/static/lib/map/maplibre.ts` (`loadMapLibre`, `maplibreCssLink`, `pmtiles://`-протокол) и фабрика `lib/map/basemap.ts` (`createBasemap`, style — `GET /geo/api/v1/tiles/style.json`). Vendor — `lib/vendor/maplibre/maplibre-gl.css`.
-- Тайл-сервис geo — `apps/geo/api/tiles.py` (анонимный): `tiles/basemap.pmtiles` (HTTP Range, читает pmtiles.js), `tiles/fonts/*`, `tiles/sprites/*`, `tiles/style.json`. Ассеты живут в `GeoSettings.tiles_dir` и наполняются таской `geo_tiles_sync` (`GeoTilesService`: `pmtiles extract` по `coverage_bbox` + basemaps-assets tar.gz) либо `python -m scripts.geo.fetch_basemap` в dev.
+- Тайл-сервис geo — `apps/geo/api/tiles.py` (анонимный): `tiles/basemap.pmtiles` (HTTP Range, читает pmtiles.js), `tiles/fonts/*`, `tiles/sprites/{scheme}/…`, `tiles/style.json?scheme=light|dark`. Ассеты живут в `GeoSettings.tiles_dir` и наполняются таской `geo_tiles_sync` (`GeoTilesService`: `pmtiles extract` по `coverage_bbox` + basemaps-assets tar.gz) либо `python -m scripts.geo.fetch_basemap` в dev. Схемы — `data/tiles/style-{light,dark}.json` из `@protomaps/basemaps` `namedFlavor`; виджет переключает `setStyle` и рестартует TerraDraw, чтобы draw переживал смену стиля.
 - `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны; редактирование полигона — terra-draw (MapLibre-адаптер), валидация `ValidateNotSelfIntersecting`.
 
 ## Запреты

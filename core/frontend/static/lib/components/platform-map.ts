@@ -23,19 +23,21 @@ import { html, css, nothing } from 'lit';
 import type { PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { SliceControllerOf, OpControllerOf } from '../base/use-resource.js';
-import { maplibreCssLink, loadMapLibre } from '@platform/lib/map/maplibre.js';
-import type { MapLibreModule } from '@platform/lib/map/maplibre.js';
+import { maplibreCssLink, loadMapLibre, basemapStyleUrl } from '@platform/lib/map/maplibre.js';
+import type { BasemapScheme, MapLibreModule } from '@platform/lib/map/maplibre.js';
 import { createBasemap } from '@platform/lib/map/basemap.js';
 import type { PlatformMap } from '@platform/lib/map/basemap.js';
 import { createZoneDraw } from '@platform/lib/map/zone-draw.js';
 import type { ZoneDraw } from '@platform/lib/map/zone-draw.js';
-import { ringAreaM2, ringPerimeterM, haversineM, fmtArea, fmtKm } from '@platform/lib/map/geo-math.js';
+import { ringAreaM2, ringPerimeterM, haversineM, fmtArea } from '@platform/lib/map/geo-math.js';
 import { renderFeatureCard, featureTitle } from '@platform/lib/map/feature-card.js';
 import './platform-zone-address-panel.js';
 import '../events/resources/geo-layers.resource.js';
 import '../events/resources/geo-addresses.resource.js';
+import '../events/resources/geo-route.resource.js';
 import type { geoLayersOp, geoLayerFeaturesOp, geoMapSlice } from '../events/resources/geo-layers.resource.js';
 import type { geoAddressNearestOp, geoAddressSuggestOp } from '../events/resources/geo-addresses.resource.js';
+import type { geoRouteOp, geoIsochroneOp } from '../events/resources/geo-route.resource.js';
 import type { GeoAddressHit, GeoFeature, GeoLayerInfo } from '../events/wire/geo.gen.js';
 import type {
     Feature,
@@ -70,6 +72,8 @@ export interface PlatformMapOverlay {
     fitPadding?: number;
 }
 
+export type PlatformMapRouteMode = 'car' | 'foot' | 'bike' | 'scooter';
+
 export interface PlatformMapConfig {
     center?: LngLat;
     zoom?: number;
@@ -78,6 +82,10 @@ export interface PlatformMapConfig {
     interactive?: boolean;
     /** Безопасные поля камеры — панели хоста не перекрывают контент. */
     padding?: number;
+    /** Схема базовой карты: light/dark; controls.scheme — кнопка-переключатель. */
+    scheme?: 'light' | 'dark';
+    /** Поворот/наклон камеры жестами (dragRotate/two-finger); нужен для compass. */
+    rotate?: boolean;
     controls?: {
         zoom?: boolean;
         layers?: boolean;
@@ -89,8 +97,16 @@ export interface PlatformMapConfig {
         scale?: boolean;
         /** Линейка: клики ставят вершины, длина на сегментах и итог. */
         ruler?: boolean;
+        /** Линейка площади: клики строят полигон, итог — площадь в м²/км². */
+        rulerArea?: boolean;
         /** Кнопка «к содержимому»: fitBounds по оверлеям/маркерам/слоям. */
         fit?: boolean;
+        /** Компас: показывает bearing, клик — север вверх. */
+        compass?: boolean;
+        /** Переключатель светлой/тёмной схемы базовой карты. */
+        scheme?: boolean;
+        /** Кнопка «маршрут»: режим построения кликами (требует route.build). */
+        route?: boolean;
     };
     layers?: {
         fetch?: boolean;
@@ -128,6 +144,34 @@ export interface PlatformMapConfig {
         lngLat: LngLat;
         zoom?: number;
     } | false;
+    /**
+     * Маршрут A → via… → B по дорожному графу (geo/route на каждое плечо).
+     * Линия + точки с буквами + ETA-чип «N км · M мин» с выбором режима.
+     * `build: true` — точки расставляются кликами по карте (A, B, далее via).
+     */
+    route?: {
+        points?: LngLat[];
+        mode?: PlatformMapRouteMode;
+        /** controls.route — кнопка входа в режим построения кликами. */
+        build?: boolean;
+        /** fitBounds по линии после расчёта (default true при build). */
+        fit?: boolean;
+        color?: string;
+        /** Чип режима A↔B: смена mode пересчитывает маршрут (default true). */
+        panel?: boolean;
+    } | false;
+    /**
+     * Контуры достижимости за N минут от точки (geo/isochrone на каждый
+     * порог; бóльшие рисуются под меньшими). Маркер центра + лейблы минут.
+     */
+    isochrone?: {
+        center: LngLat;
+        minutes: number[];
+        mode?: PlatformMapRouteMode;
+        colors?: string[];
+    } | false;
+    /** Событие pm-move на каждый moveend — синхронизация состояния для хостов. */
+    moveEvent?: boolean;
 }
 
 type FeatureGeometry = Point | LineString | Polygon | MultiPolygon;
@@ -172,12 +216,16 @@ export class PlatformMapEl extends PlatformElement {
         _fullscreen: { state: true },
         _menu: { state: true },
         _searchPin: { state: true },
+        _bearing: { state: true },
+        _routeInfo: { state: true },
+        _routeBusy: { state: true },
+        _routeBuildPts: { state: true },
     };
 
     declare config: PlatformMapConfig;
     declare _ready: boolean;
     declare _zoneStats: { areaM2: number; perimeterM: number; valid: boolean } | null;
-    declare _mode: 'select' | 'ruler';
+    declare _mode: 'select' | 'ruler' | 'area' | 'route';
     declare _error: 'style' | 'init' | null;
     declare _searchQuery: string;
     declare _suggestItems: GeoAddressHit[];
@@ -187,6 +235,10 @@ export class PlatformMapEl extends PlatformElement {
     declare _fullscreen: boolean;
     declare _menu: { x: number; y: number; lngLat: LngLat } | null;
     declare _searchPin: LngLat | null;
+    declare _bearing: number;
+    declare _routeInfo: { distanceM: number; durationS: number } | null;
+    declare _routeBusy: boolean;
+    declare _routeBuildPts: LngLat[];
 
     private _el: HTMLDivElement | null = null;
     private _map: PlatformMap | null = null;
@@ -196,6 +248,11 @@ export class PlatformMapEl extends PlatformElement {
     private _layersOp: OpControllerOf<typeof geoLayersOp> | null = null;
     private _nearestOp: OpControllerOf<typeof geoAddressNearestOp> | null = null;
     private _suggestOp: OpControllerOf<typeof geoAddressSuggestOp> | null = null;
+    private _routeOp: OpControllerOf<typeof geoRouteOp> | null = null;
+    private _isoOp: OpControllerOf<typeof geoIsochroneOp> | null = null;
+    private _routeSeq = 0;
+    private _isoSeq = 0;
+    private _scheme: BasemapScheme = 'light';
     private _refreshTimer: number | null = null;
     private _suggestTimer: number | null = null;
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
@@ -223,6 +280,10 @@ export class PlatformMapEl extends PlatformElement {
         this._fullscreen = false;
         this._menu = null;
         this._searchPin = null;
+        this._bearing = 0;
+        this._routeInfo = null;
+        this._routeBusy = false;
+        this._routeBuildPts = [];
     }
 
     /** MapLibre-карта — для потребителей, которым нужен прямой API (fitBounds и т.п.). */
@@ -280,10 +341,16 @@ export class PlatformMapEl extends PlatformElement {
         if (this.config.controls?.search === true && this.config.search !== false) {
             this._suggestOp = this.useOp('geo/addresses_suggest');
         }
+        if (this.config.route) {
+            this._routeOp = this.useOp('geo/route');
+        }
+        if (this.config.isochrone) {
+            this._isoOp = this.useOp('geo/isochrone');
+        }
     }
 
     override render() {
-        const cls = `pm-wrap${this._interactive ? ' interactive' : ''}${this._ready ? ' ready' : ''}${this._mode === 'ruler' ? ' ruler' : ''}`;
+        const cls = `pm-wrap${this._interactive ? ' interactive' : ''}${this._ready ? ' ready' : ''}${this._mode === 'ruler' || this._mode === 'area' ? ' ruler' : ''}${this._mode === 'route' ? ' route-build' : ''}`;
         const panel = this.config.addressesPanel;
         return html`
             ${maplibreCssLink()}
@@ -297,6 +364,7 @@ export class PlatformMapEl extends PlatformElement {
                 ></div>
                 ${this._renderSearch()}
                 ${this._renderControls()}
+                ${this._renderRouteChip()}
                 ${this.config.draw ? this._renderZoneStats() : nothing}
                 ${panel ? this._renderAddressesPanel(panel) : nothing}
                 ${this.config.statusBar === true && this._ready ? this._renderStatusBar() : nothing}
@@ -317,7 +385,7 @@ export class PlatformMapEl extends PlatformElement {
         if (!enabled) return nothing;
         const cfg = typeof this.config.search === 'object' ? this.config.search : undefined;
         return html`
-            <div class="pm-search">
+            <div class=${`pm-search${this.config.addressesPanel ? ' with-panel' : ''}`}>
                 <input
                     class="pm-search-input"
                     type="text"
@@ -357,9 +425,13 @@ export class PlatformMapEl extends PlatformElement {
         const layers = c.layers !== false && this._ready && this._layerNames.length > 0;
         const locate = c.locate === true && this._ready && this._interactive;
         const ruler = c.ruler === true && this._ready && this._interactive;
+        const rulerArea = c.rulerArea === true && this._ready && this._interactive;
         const fit = c.fit === true && this._ready;
+        const compass = c.compass === true && this._ready;
+        const scheme = c.scheme === true && this._ready;
+        const route = c.route === true && this._ready && this._interactive && this._routeCfg?.build === true;
         const fullscreen = c.fullscreen === true && this._ready;
-        if (!zoom && !layers && !locate && !ruler && !fit && !fullscreen) return nothing;
+        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !fullscreen) return nothing;
         const hidden = this._mapCtl?.value.hidden ?? {};
         return html`
             <div class="pm-controls">
@@ -373,6 +445,7 @@ export class PlatformMapEl extends PlatformElement {
                     ? html`<button
                           type="button"
                           class="pm-ctrl pm-icon-btn"
+                          data-action="locate"
                           title=${this.t('map.locate')}
                           @click=${this._onLocate}
                       >
@@ -383,26 +456,73 @@ export class PlatformMapEl extends PlatformElement {
                     ? html`<button
                           type="button"
                           class=${`pm-ctrl pm-icon-btn${this._mode === 'ruler' ? ' active' : ''}`}
+                          data-action="ruler"
                           title=${this.t('map.ruler')}
-                          @click=${this._toggleRuler}
+                          @click=${() => this._toggleRuler('ruler')}
                       >
                           ⟋
+                      </button>`
+                    : nothing}
+                ${rulerArea
+                    ? html`<button
+                          type="button"
+                          class=${`pm-ctrl pm-icon-btn${this._mode === 'area' ? ' active' : ''}`}
+                          data-action="ruler-area"
+                          title=${this.t('map.ruler_area')}
+                          @click=${() => this._toggleRuler('area')}
+                      >
+                          ⬠
                       </button>`
                     : nothing}
                 ${fit
                     ? html`<button
                           type="button"
                           class="pm-ctrl pm-icon-btn"
+                          data-action="fit"
                           title=${this.t('map.fit')}
                           @click=${this._fitContent}
                       >
                           ⤢
                       </button>`
                     : nothing}
+                ${compass
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn pm-compass"
+                          data-action="compass"
+                          title=${this.t('map.compass')}
+                          @click=${this._resetNorth}
+                      >
+                          <span class="pm-compass-arrow" style="transform:rotate(${-this._bearing}deg)">▲</span>
+                      </button>`
+                    : nothing}
+                ${scheme
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn"
+                          data-action="scheme"
+                          title=${this.t(this._scheme === 'dark' ? 'map.scheme_light' : 'map.scheme_dark')}
+                          @click=${this._toggleScheme}
+                      >
+                          ${this._scheme === 'dark' ? '☀' : '☾'}
+                      </button>`
+                    : nothing}
+                ${route
+                    ? html`<button
+                          type="button"
+                          class=${`pm-ctrl pm-icon-btn${this._mode === 'route' ? ' active' : ''}`}
+                          data-action="route"
+                          title=${this.t('map.route_build')}
+                          @click=${this._toggleRouteBuild}
+                      >
+                          ⤳
+                      </button>`
+                    : nothing}
                 ${fullscreen
                     ? html`<button
                           type="button"
                           class="pm-ctrl pm-icon-btn"
+                          data-action="fullscreen"
                           title=${this.t('map.fullscreen')}
                           @click=${this._toggleFullscreen}
                       >
@@ -445,13 +565,75 @@ export class PlatformMapEl extends PlatformElement {
         `;
     }
 
+    /** Чип маршрута: режимы car/foot/bike/scooter + «N км · M мин» + очистка. */
+    private _renderRouteChip() {
+        const cfg = this.config.route;
+        if (!cfg || this._interactive === false) return nothing;
+        const info = this._routeInfo;
+        const pts = this._routePoints();
+        const modes: PlatformMapRouteMode[] = ['car', 'foot', 'bike', 'scooter'];
+        const modeIcons: Record<PlatformMapRouteMode, string> = { car: '🚗', foot: '🚶', bike: '🚲', scooter: '🛴' };
+        const cur = cfg.mode ?? 'car';
+        const showPanel = cfg.panel !== false;
+        const building = this._mode === 'route';
+        // Ничего не рисуем, пока нет ни линии, ни активного строительства.
+        if (!info && !this._routeBusy && !building) return nothing;
+        return html`
+            <div class="pm-route-chip">
+                ${showPanel
+                    ? html`<span class="pm-route-modes">
+                          ${modes.map(
+                              (m) => html`<button
+                                  type="button"
+                                  class=${m === cur ? 'active' : ''}
+                                  data-mode=${m}
+                                  title=${this.t(`map.mode_${m}`)}
+                                  @click=${() => this._setRouteMode(m)}
+                              >
+                                  ${modeIcons[m]}
+                              </button>`,
+                          )}
+                      </span>`
+                    : nothing}
+                ${this._routeBusy
+                    ? html`<span class="pm-route-busy"></span>`
+                    : info
+                      ? html`<span class="pm-route-text">${this._fmtDist(info.distanceM)} · ${this._fmtDuration(info.durationS)}</span>`
+                      : building
+                        ? html`<span class="pm-route-hint">${this.t(pts.length === 0 ? 'map.route_hint_a' : 'map.route_hint_b')}</span>`
+                        : nothing}
+                <button type="button" class="pm-route-clear" data-action="route-clear" title=${this.t('map.route_clear')} @click=${this.clearRoute}>×</button>
+            </div>
+        `;
+    }
+
+    private _fmtDuration(s: number): string {
+        const m = Math.round(s / 60);
+        if (m < 60) return `${m} ${this.t('map.min')}`;
+        return `${Math.floor(m / 60)} ${this.t('map.hr')} ${m % 60} ${this.t('map.min')}`;
+    }
+
+    /** «111 м» / «1.2 км» — единицы по величине, не всегда км. */
+    private _fmtDist(m: number): string {
+        return m >= 1000
+            ? `${(m / 1000).toFixed(1)} ${this.t('map.km')}`
+            : `${Math.round(m)} ${this.t('map.m')}`;
+    }
+
+    /** «420 м²» / «0.85 км²» — то же для площади. */
+    private _fmtAreaM2(m2: number): string {
+        return m2 >= 1_000_000
+            ? `${fmtArea(m2)} ${this.t('map.km2')}`
+            : `${Math.round(m2)} ${this.t('map.m2')}`;
+    }
+
     private _renderZoneStats() {
         const s = this._zoneStats;
         if (!s) return nothing;
         return html`
             <div class="pm-stats">
-                <span>${this.t('zone_editor.area')} <b>${fmtArea(s.areaM2)} ${this.t('zone_editor.km2')}</b></span>
-                <span>${this.t('zone_editor.perimeter')} <b>${fmtKm(s.perimeterM)} ${this.t('zone_editor.km')}</b></span>
+                <span>${this.t('zone_editor.area')} <b>${this._fmtAreaM2(s.areaM2)}</b></span>
+                <span>${this.t('zone_editor.perimeter')} <b>${this._fmtDist(s.perimeterM)}</b></span>
                 ${!s.valid ? html`<span class="pm-stats-err">${this.t('zone_editor.self_intersection')}</span>` : nothing}
             </div>
         `;
@@ -556,16 +738,16 @@ export class PlatformMapEl extends PlatformElement {
 
     // ---- Ruler ----
 
-    private _toggleRuler = (): void => {
-        if (this._mode === 'ruler') {
+    private _toggleRuler(mode: 'ruler' | 'area'): void {
+        if (this._mode === mode) {
             this._exitRuler();
             return;
         }
-        this._mode = 'ruler';
+        this._mode = mode;
         this._rulerPoints = [];
         this._hideHint();
         this._syncRuler();
-    };
+    }
 
     private _exitRuler(): void {
         this._mode = 'select';
@@ -586,18 +768,50 @@ export class PlatformMapEl extends PlatformElement {
         return d;
     }
 
+    private _rulerAreaM2(): number {
+        return this._rulerPoints.length >= 3 ? ringAreaM2(this._rulerPoints) : 0;
+    }
+
     private _syncRuler(): void {
         const pts = this._rulerPoints;
+        const area = this._mode === 'area';
         const features: Feature[] = pts.map((p, i) => ({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: p },
             properties: {
                 idx: i,
-                label: i === 0 ? '' : fmtKm(haversineM(pts[i - 1]!, p)),
-                total: i === pts.length - 1 && pts.length > 1 ? fmtKm(this._rulerDistanceM()) : '',
+                label:
+                    i === 0
+                        ? ''
+                        : area
+                          ? ''
+                          : this._fmtDist(haversineM(pts[i - 1]!, p)),
+                total:
+                    i === pts.length - 1 && pts.length > 1
+                        ? area
+                            ? pts.length >= 3
+                                ? this._fmtAreaM2(this._rulerAreaM2())
+                                : ''
+                            : this._fmtDist(this._rulerDistanceM())
+                        : '',
             },
         }));
-        if (pts.length > 1) {
+        if (area) {
+            if (pts.length >= 3) {
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]!]] },
+                    properties: { area: true },
+                });
+            }
+            if (pts.length > 1) {
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [...pts, pts[0]!] },
+                    properties: {},
+                });
+            }
+        } else if (pts.length > 1) {
             features.push({
                 type: 'Feature',
                 geometry: { type: 'LineString', coordinates: pts },
@@ -610,7 +824,13 @@ export class PlatformMapEl extends PlatformElement {
     private _emitRuler(finished: boolean): void {
         this.dispatchEvent(
             new CustomEvent('pm-ruler-change', {
-                detail: { points: this._rulerPoints, distanceM: this._rulerDistanceM(), finished },
+                detail: {
+                    points: this._rulerPoints,
+                    distanceM: this._rulerDistanceM(),
+                    areaM2: this._rulerAreaM2(),
+                    mode: this._mode,
+                    finished,
+                },
                 bubbles: true,
                 composed: true,
             }),
@@ -622,6 +842,241 @@ export class PlatformMapEl extends PlatformElement {
         this._rulerPoints = [];
         this._syncRuler();
     }
+
+    // ---- Route / isochrone / scheme / compass ----
+
+    private get _routeCfg(): Exclude<PlatformMapConfig['route'], false | undefined> | null {
+        return this.config.route || null;
+    }
+
+    /** Очистка маршрута (линия, точки, чип); хост может звать напрямую. */
+    clearRoute = (): void => {
+        this._routeBuildPts = [];
+        this._routeInfo = null;
+        this._routeBusy = false;
+        this._mode = 'select';
+        this._setSourceData('pm-route', _EMPTY_FC);
+        this._setSourceData('pm-route-pts', _EMPTY_FC);
+        // config.route.points — базовый маршрут хоста; build-точки очищены →
+        // refresh вернёт его на карту, а без точек просто прячет чип.
+        this._refreshRoute();
+    };
+
+    /** Кнопка «маршрут»: вход/выход в режим построения кликами. */
+    private _toggleRouteBuild = (): void => {
+        if (this._mode === 'route') {
+            this._mode = 'select';
+            return;
+        }
+        this._mode = 'route';
+        this._routeBuildPts = [];
+        this._routeInfo = null;
+        this._setSourceData('pm-route', _EMPTY_FC);
+        this._setSourceData('pm-route-pts', _EMPTY_FC);
+        this._hideHint();
+    };
+
+    private _setRouteMode(mode: PlatformMapRouteMode): void {
+        const cfg = this._routeCfg;
+        if (!cfg) return;
+        this.config = { ...this.config, route: { ...cfg, mode } };
+        this._refreshRoute();
+    }
+
+    /** Точки маршрута: build-состояние в режиме построения, иначе config. */
+    private _routePoints(): LngLat[] {
+        const cfg = this._routeCfg;
+        if (!cfg) return [];
+        return this._mode === 'route' ? this._routeBuildPts : (cfg.points ?? []);
+    }
+
+    /** Пересчёт маршрута: плечи параллельно, линия + точки + чип + fit. */
+    private _refreshRoute(): void {
+        const map = this._map;
+        const op = this._routeOp;
+        const cfg = this._routeCfg;
+        if (!map || !cfg) return;
+        const pts = this._routePoints();
+        this._syncRoutePoints(pts);
+        if (pts.length < 2 || !op) {
+            this._routeInfo = null;
+            this._routeBusy = false;
+            this._setSourceData('pm-route', _EMPTY_FC);
+            return;
+        }
+        const mode = cfg.mode ?? 'car';
+        const seq = ++this._routeSeq;
+        this._routeBusy = true;
+        const legs = pts.slice(0, -1).map(
+            (p, i): Promise<unknown> =>
+                op.run({
+                    from_point: { lng: p[0], lat: p[1] },
+                    to_point: { lng: pts[i + 1]![0], lat: pts[i + 1]![1] },
+                    mode,
+                }),
+        );
+        void Promise.all(legs).then((results) => {
+            if (seq !== this._routeSeq) return;
+            this._routeBusy = false;
+            const features: Feature[] = [];
+            let distanceM = 0;
+            let durationS = 0;
+            for (const res of results) {
+                const r = res as { distance_m?: number; duration_s?: number; geometry?: { type: string; coordinates: unknown } | null } | null;
+                if (!r?.geometry) continue;
+                distanceM += r.distance_m ?? 0;
+                durationS += r.duration_s ?? 0;
+                features.push({ type: 'Feature', geometry: r.geometry as Feature['geometry'], properties: {} });
+            }
+            this._setSourceData('pm-route', { type: 'FeatureCollection', features });
+            if (features.length === 0) {
+                this._routeInfo = null;
+                return;
+            }
+            this._routeInfo = { distanceM, durationS };
+            if (cfg.fit !== false) {
+                this._fitFeatures(features);
+            }
+            this.dispatchEvent(
+                new CustomEvent('pm-route', {
+                    detail: { distanceM, durationS, mode, points: pts },
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+        });
+    }
+
+    private _fitFeatures(features: Feature[]): void {
+        const map = this._map;
+        if (!map) return;
+        let w = Infinity;
+        let e = -Infinity;
+        let s = Infinity;
+        let n = -Infinity;
+        const walk = (c: unknown): void => {
+            if (!Array.isArray(c)) return;
+            const [x, y] = c as [number, number];
+            if (typeof x === 'number' && typeof y === 'number') {
+                w = Math.min(w, x);
+                e = Math.max(e, x);
+                s = Math.min(s, y);
+                n = Math.max(n, y);
+                return;
+            }
+            for (const cc of c) walk(cc);
+        };
+        for (const f of features) walk((f.geometry as { coordinates?: unknown })?.coordinates);
+        if (!Number.isFinite(w)) return;
+        if (w === e && s === n) map.easeTo({ center: [w, s], duration: 500 });
+        else map.fitBounds([[w, s], [e, n]], { padding: 80, duration: 600 });
+    }
+
+    /** A/B/via-точки маршрута с буквенными лейблами. */
+    private _syncRoutePoints(pts: LngLat[]): void {
+        const letters = 'ABCDEFGH';
+        const features: Feature[] = pts.map((p, i) => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: p },
+            properties: { label: letters[i] ?? `${i + 1}`, end: i === 0 || i === pts.length - 1 },
+        }));
+        this._setSourceData('pm-route-pts', { type: 'FeatureCollection', features });
+    }
+
+    /** Клик в build-режиме: добавить точку и пересчитать. */
+    private _routeAddPoint(lngLat: LngLat): void {
+        if (this._routeBuildPts.length >= 8) return;
+        this._routeBuildPts = [...this._routeBuildPts, lngLat];
+        this.dispatchEvent(new CustomEvent('pm-route-point', { detail: { lngLat, count: this._routeBuildPts.length }, bubbles: true, composed: true }));
+        this._refreshRoute();
+    }
+
+    /** Контуры достижимости: N опов параллельно, бóльшие — под меньшими. */
+    private _refreshIso(): void {
+        const map = this._map;
+        const op = this._isoOp;
+        const cfg = this.config.isochrone;
+        if (!map || !cfg || !op) return;
+        const minutes = [...cfg.minutes].sort((a, b) => b - a);
+        const mode = cfg.mode ?? 'car';
+        const seq = ++this._isoSeq;
+        void Promise.all(
+            minutes.map((m) =>
+                op.run({ center: { lng: cfg.center[0], lat: cfg.center[1] }, minutes: m, mode }),
+            ),
+        ).then((results) => {
+            if (seq !== this._isoSeq) return;
+            const colors = cfg.colors ?? ['#2563eb', '#7c3aed', '#db2777', '#ea580c'];
+            const features: Feature[] = [];
+            results.forEach((res, i) => {
+                const r = res as { polygon?: { type: string; coordinates: unknown } | null } | null;
+                if (!r?.polygon) return;
+                features.push({
+                    type: 'Feature',
+                    geometry: r.polygon as Feature['geometry'],
+                    properties: {
+                        minutes: minutes[i],
+                        color: colors[i % colors.length],
+                        label: `${minutes[i]} ${this.t('map.min')}`,
+                    },
+                });
+            });
+            this._setSourceData('pm-iso', { type: 'FeatureCollection', features });
+            const pts: Feature[] = [
+                { type: 'Feature', geometry: { type: 'Point', coordinates: cfg.center }, properties: {} },
+                ...features
+                    .map((f) => {
+                        const ring = ((f.geometry as { coordinates?: unknown })?.coordinates as LngLat[][] | undefined)?.[0];
+                        const mid = ring?.[Math.floor((ring.length ?? 0) / 2)];
+                        return mid
+                            ? ({ type: 'Feature', geometry: { type: 'Point', coordinates: mid }, properties: f.properties } as Feature)
+                            : null;
+                    })
+                    .filter((f): f is Feature => f !== null),
+            ];
+            this._setSourceData('pm-iso-pts', { type: 'FeatureCollection', features: pts });
+            this.dispatchEvent(
+                new CustomEvent('pm-isochrone', {
+                    detail: { center: cfg.center, minutes, count: features.length },
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+        });
+    }
+
+    private _resetNorth = (): void => {
+        this._map?.easeTo({ bearing: 0, pitch: 0, duration: 400 });
+    };
+
+    /** Переключение светлой/тёмной схемы с переустановкой динамических слоёв. */
+    private _toggleScheme = (): void => {
+        const map = this._map;
+        if (!map) return;
+        this._scheme = this._scheme === 'dark' ? 'light' : 'dark';
+        this._mapLayers.clear();
+        map.once('style.load', () => {
+            this._installSources(map);
+            // TerraDraw-источники стираются setStyle — рестарт пересоздаёт их
+            // и перерисовывает фичи из стора.
+            if (this._zoneDraw) {
+                this._zoneDraw.draw.stop();
+                this._zoneDraw.draw.start();
+            }
+            this._syncOverlays();
+            this._syncMarkers();
+            this._syncSearchPin();
+            this._syncRuler();
+            this._syncRoutePoints(this._routePoints());
+            this._refreshRoute();
+            this._refreshIso();
+            if (this._interactive && this._layersFetch) {
+                this._applyConfigHiddenLayers();
+                this._refresh();
+            }
+        });
+        map.setStyle(basemapStyleUrl(this._scheme));
+    };
 
     // ---- Fit / fullscreen / retry ----
 
@@ -749,6 +1204,8 @@ export class PlatformMapEl extends PlatformElement {
             if (!this._ready) return;
             this._syncOverlays();
             this._syncMarkers();
+            if (this._routeCfg) this._refreshRoute();
+            if (this.config.isochrone) this._refreshIso();
             if (this._interactive && this._layersFetch) {
                 this._applyConfigHiddenLayers();
                 this._refresh();
@@ -768,11 +1225,14 @@ export class PlatformMapEl extends PlatformElement {
         // disconnectedCallback уже обнулил _el/_map; не монтируем в мёртвый div.
         if (!this.isConnected || this._el !== el) return;
         this._maplibre = maplibre;
+        this._scheme = this.config.scheme ?? 'light';
         const interactive = this._interactive;
         const map = await createBasemap(el, {
             center: this.config.center ?? DEFAULT_CENTER,
             zoom: this.config.zoom ?? DEFAULT_ZOOM,
             interactive,
+            scheme: this._scheme,
+            rotate: this.config.rotate === true,
         });
         if (this.config.minZoom !== undefined) map.setMinZoom(this.config.minZoom);
         if (this.config.maxZoom !== undefined) map.setMaxZoom(this.config.maxZoom);
@@ -833,6 +1293,35 @@ export class PlatformMapEl extends PlatformElement {
         }
         if (this.config.draw) {
             await this._initDraw();
+        }
+        if (this._routeCfg) {
+            this._refreshRoute();
+        }
+        if (this.config.isochrone) {
+            this._refreshIso();
+        }
+        if (this.config.controls?.compass === true || this.config.rotate === true) {
+            map.on('rotate', () => {
+                this._bearing = map.getBearing();
+            });
+        }
+        if (this.config.moveEvent === true) {
+            map.on('moveend', () => {
+                const c = map.getCenter();
+                const b = map.getBounds();
+                this.dispatchEvent(
+                    new CustomEvent('pm-move', {
+                        detail: {
+                            center: [c.lng, c.lat] as LngLat,
+                            zoom: map.getZoom(),
+                            bearing: map.getBearing(),
+                            bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+                        },
+                        bubbles: true,
+                        composed: true,
+                    }),
+                );
+            });
         }
         if (this.config.statusBar === true) {
             map.on('mousemove', (e: { lngLat: { lng: number; lat: number } }) => {
@@ -900,7 +1389,101 @@ export class PlatformMapEl extends PlatformElement {
                 'circle-stroke-color': '#ffffff',
             },
         } as never);
+        map.addSource('pm-route', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-route-casing',
+            type: 'line',
+            source: 'pm-route',
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 8,
+                'line-opacity': 0.85,
+            },
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+        } as never);
+        map.addLayer({
+            id: 'pm-route-line',
+            type: 'line',
+            source: 'pm-route',
+            paint: {
+                'line-color': this._routeCfg?.color ?? '#155dfc',
+                'line-width': 4.5,
+            },
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+        } as never);
+        map.addSource('pm-route-pts', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-route-pt-circle',
+            type: 'circle',
+            source: 'pm-route-pts',
+            paint: {
+                'circle-radius': ['case', ['==', ['get', 'end'], true], 10, 7],
+                'circle-color': ['case', ['==', ['get', 'idx'], 0], '#16a34a', '#155dfc'],
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#ffffff',
+            },
+        } as never);
+        map.addLayer({
+            id: 'pm-route-pt-label',
+            type: 'symbol',
+            source: 'pm-route-pts',
+            layout: {
+                'text-field': ['get', 'label'],
+                'text-size': 11,
+                'text-font': ['Noto Sans Regular'],
+            },
+            paint: { 'text-color': '#ffffff' },
+        } as never);
+        map.addSource('pm-iso', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-iso-fill',
+            type: 'fill',
+            source: 'pm-iso',
+            paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 },
+        } as never);
+        map.addLayer({
+            id: 'pm-iso-line',
+            type: 'line',
+            source: 'pm-iso',
+            paint: { 'line-color': ['get', 'color'], 'line-width': 2 },
+        } as never);
+        map.addSource('pm-iso-pts', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-iso-label',
+            type: 'symbol',
+            source: 'pm-iso-pts',
+            filter: ['has', 'minutes'],
+            layout: {
+                'text-field': ['get', 'label'],
+                'text-size': 12,
+                'text-font': ['Noto Sans Regular'],
+            },
+            paint: {
+                'text-color': ['get', 'color'],
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 2.5,
+            },
+        } as never);
+        map.addLayer({
+            id: 'pm-iso-center',
+            type: 'circle',
+            source: 'pm-iso-pts',
+            filter: ['!', ['has', 'minutes']],
+            paint: {
+                'circle-radius': 7,
+                'circle-color': '#0f172a',
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#ffffff',
+            },
+        } as never);
         map.addSource('pm-ruler', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-ruler-fill',
+            type: 'fill',
+            source: 'pm-ruler',
+            filter: ['==', ['geometry-type'], 'Polygon'],
+            paint: { 'fill-color': '#7c3aed', 'fill-opacity': 0.14 },
+        } as never);
         map.addLayer({
             id: 'pm-ruler-line',
             type: 'line',
@@ -1016,8 +1599,12 @@ export class PlatformMapEl extends PlatformElement {
     private _installInteractions(maplibre: MapLibreModule, map: PlatformMap): void {
         const { Popup } = maplibre;
         map.on('click', (e: { lngLat: { lng: number; lat: number }; point: { x: number; y: number } }) => {
-            if (this._mode === 'ruler') {
+            if (this._mode === 'ruler' || this._mode === 'area') {
                 this._rulerAddPoint([e.lngLat.lng, e.lngLat.lat]);
+                return;
+            }
+            if (this._mode === 'route') {
+                this._routeAddPoint([e.lngLat.lng, e.lngLat.lat]);
                 return;
             }
             if (this.config.markersCluster === true && this._clickCluster(map, e.point)) {
@@ -1045,7 +1632,7 @@ export class PlatformMapEl extends PlatformElement {
         });
         if (this._hoverEnabled) {
             map.on('mousemove', (e: { lngLat: { lng: number; lat: number }; point: { x: number; y: number } }) => {
-                if (this._mode === 'ruler') {
+                if (this._mode === 'ruler' || this._mode === 'area' || this._mode === 'route') {
                     map.getCanvas().style.cursor = 'crosshair';
                     this._hideHint();
                     return;
@@ -1598,6 +2185,10 @@ export class PlatformMapEl extends PlatformElement {
             width: min(320px, calc(100% - 140px));
             z-index: 6;
         }
+        .pm-search.with-panel {
+            left: 324px;
+            width: min(320px, calc(100% - 464px));
+        }
         .pm-search-input {
             width: 100%;
             box-sizing: border-box;
@@ -1720,6 +2311,84 @@ export class PlatformMapEl extends PlatformElement {
         }
         .pm-menu button + button {
             border-top: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 60%, transparent);
+        }
+        .pm-route-chip {
+            position: absolute;
+            left: 50%;
+            bottom: 14px;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 8px 7px 12px;
+            border-radius: 14px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            background: color-mix(in srgb, var(--color-surface, #fff) 90%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 18px rgba(15, 23, 42, 0.16);
+            font-size: 13px;
+            color: var(--color-text, #0f172a);
+            z-index: 15;
+            white-space: nowrap;
+        }
+        .pm-route-modes {
+            display: flex;
+            border-radius: 9px;
+            background: var(--color-surface-muted, #f1f5f9);
+            overflow: hidden;
+        }
+        .pm-route-modes button {
+            border: 0;
+            background: transparent;
+            padding: 4px 9px;
+            font-size: 14px;
+            cursor: pointer;
+            opacity: 0.55;
+            transition:
+                background 0.12s ease,
+                opacity 0.12s ease;
+        }
+        .pm-route-modes button:hover {
+            opacity: 0.9;
+        }
+        .pm-route-modes button.active {
+            background: var(--color-primary, #155dfc);
+            opacity: 1;
+        }
+        .pm-route-text {
+            font-weight: 600;
+        }
+        .pm-route-hint {
+            color: var(--color-text-muted, #64748b);
+        }
+        .pm-route-busy {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--color-border, #e2e8f0);
+            border-top-color: var(--color-primary, #155dfc);
+            border-radius: 50%;
+            animation: pm-spin 0.8s linear infinite;
+        }
+        .pm-route-clear {
+            border: 0;
+            background: transparent;
+            font-size: 17px;
+            line-height: 1;
+            color: var(--color-text-muted, #64748b);
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 7px;
+        }
+        .pm-route-clear:hover {
+            background: var(--color-surface-muted, #f1f5f9);
+            color: var(--color-text, #0f172a);
+        }
+        .pm-compass-arrow {
+            display: inline-block;
+            font-size: 13px;
+            color: var(--color-danger, #dc2626);
+            transition: transform 0.15s ease;
         }
         .pm-overlay {
             position: absolute;

@@ -5,33 +5,38 @@
  * (style.json живёт на geo и собирается из vendored Protomaps Light).
  */
 
-import { BASEMAP_STYLE_URL, loadMapLibre } from './maplibre.js';
-import type { MapLibreModule } from './maplibre.js';
+import { basemapStyleUrl, loadMapLibre } from './maplibre.js';
+import type { BasemapScheme, MapLibreModule } from './maplibre.js';
 
 export type PlatformMap = import('maplibre-gl').Map;
+export type { BasemapScheme } from './maplibre.js';
 
 export interface BasemapOptions {
     center: [number, number];
     zoom: number;
     interactive?: boolean;
+    /** Светлая/тёмная схема базовой карты (style.json?scheme=…). */
+    scheme?: BasemapScheme;
+    /** Правый drag/два пальца — поворот и наклон камеры (компас в контролах). */
+    rotate?: boolean;
 }
 
 /** Создаёт MapLibre-карту в контейнере; `interactive=false` — без zoom/tilt. */
 export async function createBasemap(
     el: HTMLElement,
-    { center, zoom, interactive = true }: BasemapOptions,
+    { center, zoom, interactive = true, scheme = 'light', rotate = false }: BasemapOptions,
 ): Promise<PlatformMap> {
     const maplibre: MapLibreModule = await loadMapLibre();
     const map = new maplibre.Map({
         container: el,
-        style: BASEMAP_STYLE_URL,
+        style: basemapStyleUrl(scheme),
         center,
         zoom,
         scrollZoom: interactive,
         boxZoom: interactive,
         dragPan: interactive,
-        dragRotate: false,
-        pitchWithRotate: false,
+        dragRotate: interactive && rotate,
+        pitchWithRotate: interactive && rotate,
         keyboard: interactive,
         doubleClickZoom: interactive,
         touchZoomRotate: interactive,

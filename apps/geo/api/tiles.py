@@ -175,19 +175,30 @@ async def tiles_sprites(request: Request, di: Di, filename: str) -> Response:
     )
 
 
-_STYLE_PATH = Path(__file__).resolve().parent.parent / "tiles" / "style-light.json"
+_STYLE_DIR = Path(__file__).resolve().parent.parent / "tiles"
+_STYLE_PATHS = {
+    "light": _STYLE_DIR / "style-light.json",
+    "dark": _STYLE_DIR / "style-dark.json",
+}
 
 
 @router.get("/tiles/style.json")
-async def tiles_style(request: Request) -> JSONResponse:
-    """MapLibre style с нашими URL: pmtiles-источник, glyphs, sprites."""
+async def tiles_style(request: Request, scheme: str = "light") -> JSONResponse:
+    """MapLibre style с нашими URL: pmtiles-источник, glyphs, sprites.
+
+    ``scheme`` — ``light`` (по умолчанию) или ``dark``; любое другое
+    значение — 404, allowlist как у остальных tile-маршрутов.
+    """
+    path = _STYLE_PATHS.get(scheme)
+    if path is None:
+        raise PlatformNotFoundError("Unknown style scheme", error_code="tile_not_found")
     base = f"{request.url.scheme}://{request.url.netloc}{request.scope.get('root_path', '')}"
     tiles = f"{base}/geo/api/v1/tiles"
-    raw = _STYLE_PATH.read_text(encoding="utf-8")
+    raw = path.read_text(encoding="utf-8")
     return JSONResponse(
         json.loads(raw.replace("__TILES_URL__", tiles)),
         headers={
             "Cache-Control": "public, max-age=300",
-            "ETag": _etag(_STYLE_PATH),
+            "ETag": _etag(path),
         },
     )

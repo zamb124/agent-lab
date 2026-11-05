@@ -50,13 +50,18 @@ export class GeoMapLabPage extends PlatformPage {
             center: CENTER,
             zoom: 12,
             interactive: true,
+            rotate: true,
             controls: {
                 zoom: true,
                 layers: true,
                 locate: true,
                 search: true,
                 ruler: true,
+                rulerArea: true,
                 fit: true,
+                compass: true,
+                scheme: true,
+                route: true,
                 fullscreen: true,
                 scale: true,
             },
@@ -76,6 +81,21 @@ export class GeoMapLabPage extends PlatformPage {
             statusBar: true,
             draw: { zone: this._zone },
             addressesPanel: { zone: this._zone },
+            route: {
+                points: [
+                    [37.6173, 55.7501] as LngLat,
+                    [37.6184, 55.7506] as LngLat,
+                ],
+                mode: 'car',
+                build: true,
+                fit: false,
+            },
+            isochrone: {
+                center: [37.6181, 55.7504] as LngLat,
+                minutes: [3, 7],
+                mode: 'foot',
+            },
+            moveEvent: true,
         };
     }
 
@@ -88,6 +108,7 @@ export class GeoMapLabPage extends PlatformPage {
             platform-map { flex: 1; min-height: 0; }
             .preview-col { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--space-3); }
             .preview { height: 180px; border-radius: var(--radius-lg, 14px); overflow: hidden; }
+            .preview platform-map { display: block; height: 100%; }
             .preview-title { font-size: var(--text-sm); color: var(--text-tertiary); }
         `,
     ];

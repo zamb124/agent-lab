@@ -7,9 +7,12 @@ Granian'ом, слои/адреса/роутинг идут боевым кон�
 запаршенная pyosmium при старте стека.
 
 Покрытие: загрузка и контролы, zoom, панель слоёв и toggle, карточка
-фичи по клику, поиск с suggest и pin, линейка, контекстное меню
-«Что здесь?», статусбар, fit, кластер маркеров, draggable-маркер,
-рисование зоны TerraDraw, панель адресов, неинтерактивное превью.
+фичи по клику, поиск с suggest и pin, линейка (длина и площадь),
+контекстное меню «Что здесь?», статусбар, fit, кластер маркеров,
+draggable-маркер, рисование зоны TerraDraw, панель адресов,
+неинтерактивное превью; маршрут (линия/чип/режимы/build кликами/
+очистка), изохроны, переключение light/dark-схемы, компас,
+живучесть draw после смены стиля.
 """
 
 from __future__ import annotations
@@ -229,7 +232,7 @@ class TestOverviewRealData:
 
     async def test_ruler_measures_distance(self, ui_page_system: Page) -> None:
         await _open_overview(ui_page_system)
-        ruler = ui_page_system.locator("button.pm-icon-btn", has_text="⟋")
+        ruler = ui_page_system.locator("button[data-action='ruler']")
         await expect(ruler).to_be_visible(timeout=20_000)
         await ruler.click()
         x1, y1 = await _project(ui_page_system, *_TVERSKAYA_1)
@@ -279,7 +282,7 @@ class TestOverviewRealData:
     async def test_scale_and_fit_controls(self, ui_page_system: Page) -> None:
         await _open_overview(ui_page_system)
         await expect(ui_page_system.locator(".maplibregl-ctrl-scale")).to_be_visible(timeout=20_000)
-        fit = ui_page_system.locator("button.pm-icon-btn", has_text="⤢")
+        fit = ui_page_system.locator("button[data-action='fit']")
         await expect(fit).to_be_visible()
         await fit.click()
         await ui_page_system.wait_for_timeout(800)
@@ -362,3 +365,258 @@ class TestMapLabFullConfig:
         await expect(panel).to_be_visible(timeout=20_000)
         # Тверская 1/3 и Никольская 10 внутри demo-зоны → ≥1 адрес.
         await expect(panel.locator("text=Тверск").first).to_be_visible(timeout=20_000)
+
+
+# Узлы дорожного графа micro.osm — клики строительства маршрута
+# должны приземляться на рёбра, иначе pgRouting не найдёт путь.
+_ROAD_A = (37.6170, 55.7500)
+_ROAD_B = (37.6190, 55.7510)
+
+
+async def _wait_source_features(page: Page, source: str, minimum: int, *, timeout_s: float = 20.0) -> int:
+    """Число фич geojson-source с поллингом — headless rAF ненадёжен."""
+    deadline = time.monotonic() + timeout_s
+    count = 0
+    while time.monotonic() < deadline:
+        count = cast(
+            int,
+            await _map_eval(
+                page,
+                f"""(el) => {{
+                    const s = el.getMap().getSource('{source}');
+                    return s ? s.serialize().data.features.length : -1;
+                }}""",
+            ),
+        )
+        if count >= minimum:
+            return count
+        await asyncio.sleep(0.4)
+    return count
+
+
+class TestRouteIsoScheme:
+    """Map Lab: маршрут, изохроны, схема, компас, линейка площади."""
+
+    async def test_route_line_endpoints_and_chip(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        # Конфиг-маршрут Тверская→Никольская: линия, A/B-точки, чип с ETA.
+        assert await _wait_source_features(ui_page_system, "pm-route", 1) >= 1
+        pts = await _wait_source_features(ui_page_system, "pm-route-pts", 2)
+        assert pts == 2
+        chip = ui_page_system.locator(".pm-route-chip")
+        await expect(chip).to_be_visible(timeout=10_000)
+        text = await chip.inner_text()
+        assert "·" in text  # «0.1 км · 1 мин» — дистанция + ETA
+        info = cast(
+            dict[str, float],
+            await _map_eval(ui_page_system, "(el) => el._routeInfo"),
+        )
+        assert info["distanceM"] > 0 and info["durationS"] > 0
+
+    async def test_route_mode_switch_recalculates(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        assert await _wait_source_features(ui_page_system, "pm-route", 1) >= 1
+        chip = ui_page_system.locator(".pm-route-chip")
+        await expect(chip).to_be_visible(timeout=10_000)
+        car_s = cast(
+            float,
+            await _map_eval(ui_page_system, "(el) => el._routeInfo.durationS"),
+        )
+        await chip.locator("button[data-mode='foot']").click()
+        # Пешеход медленнее авто: ждём пересчёт и иное ETA.
+        deadline = time.monotonic() + 20.0
+        foot_s = car_s
+        while time.monotonic() < deadline:
+            foot = cast(
+                dict[str, float] | None,
+                await _map_eval(ui_page_system, "(el) => el._routeInfo"),
+            )
+            if foot is not None and abs(foot["durationS"] - car_s) > 0.01:
+                foot_s = foot["durationS"]
+                break
+            await asyncio.sleep(0.4)
+        assert foot_s != car_s, f"ETA не изменилось при смене режима: {car_s}"
+        await expect(chip.locator("button[data-mode='foot']")).to_have_class(re.compile(r"active"))
+
+    async def test_route_build_mode_two_clicks_and_clear(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        await expect(ui_page_system.locator(".pm-route-chip")).to_be_visible(timeout=20_000)
+        await ui_page_system.locator("button[data-action='route']").click()
+        # Режим построения: конфиг-маршрут скрыт, чип показывает подсказку.
+        await expect(ui_page_system.locator(".pm-route-hint")).to_be_visible(timeout=10_000)
+        for pt in (_ROAD_A, _ROAD_B):
+            x, y = await _project(ui_page_system, *pt)
+            await ui_page_system.mouse.click(x, y)
+            await asyncio.sleep(0.3)
+        assert await _wait_source_features(ui_page_system, "pm-route", 1) >= 1
+        assert await _wait_source_features(ui_page_system, "pm-route-pts", 2) == 2
+        built = cast(
+            dict[str, float],
+            await _map_eval(ui_page_system, "(el) => el._routeInfo"),
+        )
+        assert built["distanceM"] > 0
+        # Очистка возвращает конфиг-маршрут хоста (A на Тверской).
+        await ui_page_system.locator("button[data-action='route-clear']").click()
+        assert await _wait_source_features(ui_page_system, "pm-route-pts", 2) == 2
+        first = cast(
+            list[float],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-route-pts').serialize().data;
+                    return d.features[0].geometry.coordinates;
+                }""",
+            ),
+        )
+        assert abs(first[0] - 37.6173) < 0.001 and abs(first[1] - 55.7501) < 0.001
+
+    async def test_isochrone_polygons_and_labels(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        assert await _wait_source_features(ui_page_system, "pm-iso", 2) == 2
+        minutes = cast(
+            list[int],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-iso').serialize().data;
+                    return d.features.map((f) => f.properties.minutes);
+                }""",
+            ),
+        )
+        assert sorted(minutes) == [3, 7]
+        # Центр + лейблы «N мин» на границах контуров.
+        pts = cast(
+            list[object],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-iso-pts').serialize().data;
+                    return d.features.map((f) => f.properties?.minutes ?? null);
+                }""",
+            ),
+        )
+        assert len(pts) >= 3 and pts.count(None) == 1  # ровно один центр
+
+    async def test_scheme_toggle_dark_light(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        bg = cast(
+            str,
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const m = el.getMap();
+                    const layer = m.getStyle().layers.find((l) => l.type === 'background');
+                    return m.getPaintProperty(layer.id, 'background-color');
+                }""",
+            ),
+        )
+        await ui_page_system.locator("button[data-action='scheme']").click()
+        deadline = time.monotonic() + 15.0
+        dark = bg
+        while time.monotonic() < deadline:
+            dark = cast(
+                str,
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const m = el.getMap();
+                        const layer = m.getStyle().layers.find((l) => l.type === 'background');
+                        return layer ? m.getPaintProperty(layer.id, 'background-color') : '';
+                    }""",
+                ),
+            )
+            if dark and dark != bg:
+                break
+            await asyncio.sleep(0.4)
+        assert dark != bg, f"фон не сменился: {bg}"
+        # Обратно в light — кнопка и фон возвращаются.
+        await ui_page_system.locator("button[data-action='scheme']").click()
+        deadline = time.monotonic() + 15.0
+        cur = ""
+        while time.monotonic() < deadline:
+            cur = cast(
+                str,
+                await _map_eval(
+                    ui_page_system,
+                    """(el) => {
+                        const m = el.getMap();
+                        const layer = m.getStyle().layers.find((l) => l.type === 'background');
+                        return layer ? m.getPaintProperty(layer.id, 'background-color') : '';
+                    }""",
+                ),
+            )
+            if cur == bg:
+                break
+            await asyncio.sleep(0.4)
+        assert cur == bg, f"фон не вернулся к light: {cur}"
+
+    async def test_compass_resets_north(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        _ = await _map_eval(ui_page_system, "(el) => { el.getMap().setBearing(55); return true; }")
+        arrow = ui_page_system.locator(".pm-compass-arrow")
+        # Lit батчит requestUpdate — ждём поворота стрелки опросом.
+        deadline = time.monotonic() + 10.0
+        transform = ""
+        while time.monotonic() < deadline:
+            transform = cast(str, await arrow.evaluate("(el) => el.style.transform"))
+            if "rotate(-55" in transform:
+                break
+            await asyncio.sleep(0.3)
+        assert "rotate(-55" in transform, f"стрелка не повернулась: {transform}"
+        await ui_page_system.locator("button[data-action='compass']").click()
+        deadline = time.monotonic() + 10.0
+        bearing = 55.0
+        while time.monotonic() < deadline:
+            bearing = cast(float, await _map_eval(ui_page_system, "(el) => el.getMap().getBearing()"))
+            if abs(bearing) < 1.0:
+                break
+            await asyncio.sleep(0.3)
+        assert abs(bearing) < 1.0, f"bearing не сбросился: {bearing}"
+
+    async def test_area_ruler_polygon(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        await ui_page_system.locator("button[data-action='ruler-area']").click()
+        for pt in (_ROAD_A, (37.6200, 55.7500), (37.6190, 55.7520)):
+            x, y = await _project(ui_page_system, *pt)
+            await ui_page_system.mouse.click(x, y)
+            await asyncio.sleep(0.3)
+        kinds = cast(
+            list[str],
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    const d = el.getMap().getSource('pm-ruler').serialize().data;
+                    return d.features.map((f) => f.geometry.type);
+                }""",
+            ),
+        )
+        assert "Polygon" in kinds
+        area = cast(float, await _map_eval(ui_page_system, "(el) => el._rulerAreaM2()"))
+        assert area > 0
+        # Выход из режима — линейка остаётся до clearRuler.
+        await ui_page_system.locator("button[data-action='ruler-area']").click()
+
+    async def test_draw_survives_scheme_switch(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        snap0 = cast(
+            int,
+            await _map_eval(ui_page_system, "(el) => el.getDraw().draw.getSnapshot().length"),
+        )
+        assert snap0 >= 1  # demo-зона в сторе TerraDraw
+        await ui_page_system.locator("button[data-action='scheme']").click()
+        deadline = time.monotonic() + 15.0
+        snap = 0
+        while time.monotonic() < deadline:
+            snap = cast(
+                int,
+                await _map_eval(
+                    ui_page_system,
+                    "(el) => (el.getDraw() ? el.getDraw().draw.getSnapshot().length : -1)",
+                ),
+            )
+            if snap >= snap0:
+                break
+            await asyncio.sleep(0.4)
+        assert snap >= snap0, f"TerraDraw потерял фичи после смены стиля: {snap0} -> {snap}"
+        mode = cast(str, await _map_eval(ui_page_system, "(el) => el.getDraw().draw.getMode()"))
+        assert mode in ("select", "static", "polygon")

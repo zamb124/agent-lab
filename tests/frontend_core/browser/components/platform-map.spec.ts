@@ -22,6 +22,7 @@ import {
     geoAddressNearestOp,
     geoAddressesInZoneOp,
 } from '@platform/lib/events/resources/geo-addresses.resource.js';
+import { geoRouteOp, geoIsochroneOp } from '@platform/lib/events/resources/geo-route.resource.js';
 import '@platform/lib/components/platform-map.js';
 import '@platform/lib/modals/platform-zone-editor-modal.js';
 import '@platform/lib/components/platform-modal-stack.js';
@@ -34,6 +35,8 @@ const FACTORIES = [
     geoAddressSuggestOp,
     geoAddressNearestOp,
     geoAddressesInZoneOp,
+    geoRouteOp,
+    geoIsochroneOp,
 ];
 
 const ZONE = {
@@ -61,6 +64,12 @@ type TestMap = {
     getCenter?(): { lng: number; lat: number };
     getSource(id: string): { setData(d: unknown): void; _data?: { geojson?: { features?: unknown[] } } } | undefined;
     getLayer(id: string): unknown;
+    setBearing(b: number): void;
+    getBearing(): number;
+    fire(name: string): void;
+    setStyle(url: string): void;
+    getStyle(): { layers: Array<{ id: string; type: string }>; sources: Record<string, unknown> };
+    getPaintProperty(layer: string, prop: string): string;
 };
 
 type TestDraw = {
@@ -72,6 +81,11 @@ type MapEl = HTMLElement & {
     shadowRoot: ShadowRoot;
     config: PlatformMapConfig;
     _ready: boolean;
+    _mode: string;
+    _scheme: string;
+    _routeInfo: { distanceM: number; durationS: number } | null;
+    _routeBuildPts: [number, number][];
+    _rulerAreaM2(): number;
     getMap(): TestMap | null;
     getDraw(): { draw: TestDraw } | null;
 };
@@ -164,6 +178,56 @@ function answerGeo(): void {
                                 properties: { display_name: 'Москва, Тверская, 1' },
                             },
                         ],
+                    },
+                },
+                { causation_id: event.id, source: 'http' },
+            );
+        });
+    });
+    bus.subscribeType(geoRouteOp.events.REQUESTED, (event) => {
+        queueMicrotask(() => {
+            const p = event.payload as { from_point: { lng: number; lat: number }; to_point: { lng: number; lat: number } };
+            bus.dispatch(
+                geoRouteOp.events.SUCCEEDED,
+                {
+                    result: {
+                        distance_m: 900,
+                        duration_s: 120,
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: [
+                                [p.from_point.lng, p.from_point.lat],
+                                [p.to_point.lng, p.to_point.lat],
+                            ],
+                        },
+                        legs: [],
+                    },
+                },
+                { causation_id: event.id, source: 'http' },
+            );
+        });
+    });
+    bus.subscribeType(geoIsochroneOp.events.REQUESTED, (event) => {
+        queueMicrotask(() => {
+            const p = event.payload as { center: { lng: number; lat: number }; minutes: number };
+            const d = 0.002 * (p.minutes / 5);
+            bus.dispatch(
+                geoIsochroneOp.events.SUCCEEDED,
+                {
+                    result: {
+                        minutes: p.minutes,
+                        polygon: {
+                            type: 'Polygon',
+                            coordinates: [
+                                [
+                                    [p.center.lng - d, p.center.lat - d],
+                                    [p.center.lng + d, p.center.lat - d],
+                                    [p.center.lng + d, p.center.lat + d],
+                                    [p.center.lng - d, p.center.lat + d],
+                                    [p.center.lng - d, p.center.lat - d],
+                                ],
+                            ],
+                        },
                     },
                 },
                 { causation_id: event.id, source: 'http' },
@@ -336,9 +400,7 @@ describe('platform-map', function () {
 
     it('ruler: контрол → режим, клики → вершины + pm-ruler-change с дистанцией', async () => {
         const el = await mapEl({ interactive: true, controls: { ruler: true }, layers: { fetch: false } });
-        const btn = [...el.shadowRoot.querySelectorAll<HTMLButtonElement>('.pm-icon-btn')].find(
-            (b) => b.title === 'Линейка',
-        );
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='ruler']");
         expect(btn, 'кнопка линейки').to.exist;
         const changes: Array<{ points: unknown[]; distanceM: number; finished: boolean }> = [];
         el.addEventListener('pm-ruler-change', (e) => changes.push((e as CustomEvent).detail));
@@ -392,7 +454,7 @@ describe('platform-map', function () {
         expect(menu!.textContent).to.include('Что здесь');
         const reqs: unknown[] = [];
         getPlatformBus().subscribeType(geoAddressNearestOp.events.REQUESTED, (e) => reqs.push(e));
-        const whatsHere = [...menu!.querySelectorAll('button')].find((b) => b.textContent!.includes('Что здесь'))!;
+        const whatsHere = menu!.querySelector<HTMLButtonElement>("button[data-action='whats-here']")!;
         whatsHere.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
         await waitUntil(() => reqs.length > 0, 'nearest запрошен', { timeout: 5_000 });
         await elementUpdated(el);
@@ -419,9 +481,8 @@ describe('platform-map', function () {
             controls: { fit: true, fullscreen: true },
             overlays: [{ name: 'zone', data: { type: 'Feature', geometry: ZONE, properties: {} } }],
         });
-        const btns = [...el.shadowRoot.querySelectorAll<HTMLButtonElement>('.pm-icon-btn')];
-        const fit = btns.find((b) => b.title === 'К содержимому');
-        const fs = btns.find((b) => b.title === 'Во весь экран');
+        const fit = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='fit']");
+        const fs = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='fullscreen']");
         expect(fit, 'fit-контрол').to.exist;
         expect(fs, 'fullscreen-контрол').to.exist;
         const before = el.getMap()!.getCenter?.();
@@ -439,6 +500,207 @@ describe('platform-map', function () {
         const el = await mapEl({ interactive: false, layers: { fetch: false }, controls: { search: true, ruler: true } });
         expect(el.shadowRoot.querySelector('.pm-search'), 'поиска нет').to.equal(null);
         expect(el.shadowRoot.querySelector('.pm-zoom'), 'zoom-контрола нет').to.equal(null);
+    });
+
+    it('route: config → линия + A/B-точки + чип с ETA + pm-route', async () => {
+        const routes: unknown[] = [];
+        const el = await fixture<MapEl>(
+            html`<platform-map
+                style="display:block;height:480px;width:640px"
+                .config=${{
+                    interactive: true,
+                    layers: { fetch: false },
+                    route: { points: [[37.6, 55.75], [37.61, 55.76]], mode: 'car' },
+                }}
+            ></platform-map>`,
+        );
+        // Слушатель до готовности: pm-route летит во время init карты.
+        el.addEventListener('pm-route', (e) => routes.push((e as CustomEvent).detail));
+        for (let i = 0; i < 300 && !(el.getMap() && el._ready); i++) await aTimeout(30);
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-route') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) > 0;
+            },
+            'линия маршрута в источнике',
+            { timeout: 10_000 },
+        );
+        const pts = el.getMap()!.getSource('pm-route-pts') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+        expect(pts?.serialize().data?.features?.length, 'A/B точки').to.equal(2);
+        await elementUpdated(el);
+        const chip = el.shadowRoot.querySelector('.pm-route-chip');
+        expect(chip, 'чип маршрута').to.exist;
+        expect(el._routeInfo?.distanceM, 'дистанция из ответа').to.equal(900);
+        expect(routes.length, 'pm-route эмитнут').to.equal(1);
+    });
+
+    it('route: build-режим → два клика ставят A/B и строят линию', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            controls: { route: true },
+            route: { build: true, mode: 'car' },
+        });
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='route']");
+        expect(btn, 'кнопка построения').to.exist;
+        btn!.click();
+        await elementUpdated(el);
+        expect(el._mode).to.equal('route');
+        expect(el.shadowRoot.querySelector('.pm-route-hint'), 'подсказка в чипе').to.exist;
+        const map = el.getMap()!;
+        for (const ll of [[37.6, 55.75], [37.62, 55.77]] as [number, number][]) {
+            const pt = map.project(ll);
+            map.getCanvas().dispatchEvent(
+                new MouseEvent('click', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+            );
+            await aTimeout(30);
+        }
+        expect(el._routeBuildPts.length, 'две точки набраны').to.equal(2);
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-route') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) > 0;
+            },
+            'линия после второго клика',
+            { timeout: 10_000 },
+        );
+    });
+
+    it('route: смена режима в чипе → повторный расчёт', async () => {
+        const reqs: unknown[] = [];
+        getPlatformBus().subscribeType(geoRouteOp.events.REQUESTED, (e) => reqs.push(e));
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            route: { points: [[37.6, 55.75], [37.61, 55.76]], mode: 'car' },
+        });
+        await waitUntil(() => reqs.length >= 1, 'первый расчёт', { timeout: 10_000 });
+        await waitUntil(
+            () => el.shadowRoot.querySelector(".pm-route-modes button[data-mode='foot']") !== null,
+            'чип с режимами',
+            { timeout: 10_000 },
+        );
+        el.shadowRoot.querySelector<HTMLButtonElement>(".pm-route-modes button[data-mode='foot']")!.click();
+        await waitUntil(() => reqs.length >= 2, 'пересчёт под foot', { timeout: 10_000 });
+        const last = reqs.at(-1) as { payload: { mode: string } };
+        expect(last.payload.mode, 'запрос с режимом foot').to.equal('foot');
+    });
+
+    it('route: clear → линия и точки сняты, чип скрыт', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            route: { points: [[37.6, 55.75], [37.61, 55.76]], mode: 'car' },
+        });
+        await waitUntil(
+            () => el.shadowRoot.querySelector("button[data-action='route-clear']") !== null,
+            'кнопка очистки',
+            { timeout: 10_000 },
+        );
+        el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='route-clear']")!.click();
+        await elementUpdated(el);
+        const src = el.getMap()!.getSource('pm-route') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+        expect(src?.serialize().data?.features?.length, 'линия очищена').to.equal(0);
+        expect(el._routeInfo, 'ETA снят').to.equal(null);
+    });
+
+    it('isochrone → полигоны порогов + центр + pm-isochrone', async () => {
+        const events: unknown[] = [];
+        const el = await fixture<MapEl>(
+            html`<platform-map
+                style="display:block;height:480px;width:640px"
+                .config=${{
+                    interactive: true,
+                    layers: { fetch: false },
+                    isochrone: { center: [37.6, 55.75], minutes: [5, 10], mode: 'foot' },
+                }}
+            ></platform-map>`,
+        );
+        el.addEventListener('pm-isochrone', (e) => events.push((e as CustomEvent).detail));
+        for (let i = 0; i < 300 && !(el.getMap() && el._ready); i++) await aTimeout(30);
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-iso') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) >= 2;
+            },
+            'полигоны изохрон',
+            { timeout: 10_000 },
+        );
+        const pts = el.getMap()!.getSource('pm-iso-pts') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+        expect(pts?.serialize().data?.features?.length, 'центр + лейблы').to.be.greaterThanOrEqual(3);
+        expect(events.length, 'pm-isochrone').to.equal(1);
+    });
+
+    it('scheme-контрол → setStyle(dark) и обратно', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            controls: { scheme: true },
+            markers: [{ key: 'a', lngLat: [37.6, 55.75] }],
+        });
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='scheme']");
+        expect(btn, 'переключатель схемы').to.exist;
+        btn!.click();
+        await waitUntil(() => el._scheme === 'dark', 'dark схема', { timeout: 5_000 });
+        // После style.load источники переустановлены и маркер вернулся.
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-markers') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) === 1;
+            },
+            'маркеры восстановлены после смены стиля',
+            { timeout: 15_000 },
+        );
+        btn!.click();
+        await waitUntil(() => el._scheme === 'light', 'обратно в light', { timeout: 5_000 });
+    });
+
+    it('compass → клик сбрасывает bearing на север', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            controls: { compass: true },
+            rotate: true,
+        });
+        el.getMap()!.setBearing(50);
+        await aTimeout(60);
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='compass']");
+        expect(btn, 'компас').to.exist;
+        btn!.click();
+        await waitUntil(() => Math.abs(el.getMap()!.getBearing()) < 1, 'bearing → 0', { timeout: 5_000 });
+    });
+
+    it('rulerArea: три клика → полигон + площадь', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            controls: { rulerArea: true },
+        });
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>("button[data-action='ruler-area']");
+        expect(btn, 'линейка площади').to.exist;
+        btn!.click();
+        const map = el.getMap()!;
+        for (const ll of [[37.6, 55.75], [37.62, 55.75], [37.61, 55.77]] as [number, number][]) {
+            const pt = map.project(ll);
+            map.getCanvas().dispatchEvent(
+                new MouseEvent('click', { clientX: pt.x, clientY: pt.y, bubbles: true, composed: true }),
+            );
+            await aTimeout(30);
+        }
+        const src = map.getSource('pm-ruler') as { serialize(): { data?: { features?: Array<{ geometry: { type: string } }> } } } | undefined;
+        const kinds = src?.serialize().data?.features?.map((f) => f.geometry.type) ?? [];
+        expect(kinds).to.include('Polygon');
+        expect(el._rulerAreaM2(), 'площадь > 0').to.be.greaterThan(0);
+    });
+
+    it('moveEvent → pm-move с центром и bounds на moveend', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, moveEvent: true });
+        const moves: Array<{ zoom: number }> = [];
+        el.addEventListener('pm-move', (e) => moves.push((e as CustomEvent<{ zoom: number }>).detail));
+        el.getMap()!.fire('moveend');
+        await aTimeout(30);
+        expect(moves.length, 'pm-move эмитнут').to.equal(1);
+        expect(typeof moves[0]!.zoom).to.equal('number');
     });
 });
 

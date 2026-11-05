@@ -26,6 +26,14 @@ export const MAPLIBRE_WORKER_URL = '/static/core/lib/vendor/maplibre/maplibre-gl
 /** Style JSON векторной базовой карты, отдаётся geo-сервисом (анонимный). */
 export const BASEMAP_STYLE_URL = '/geo/api/v1/tiles/style.json';
 
+/** Схемы базовой карты — allowlist на geo (`?scheme=`). */
+export type BasemapScheme = 'light' | 'dark';
+
+/** URL style.json нужной схемы; дефолт — light (тот же без параметра). */
+export function basemapStyleUrl(scheme: BasemapScheme = 'light'): string {
+    return scheme === 'light' ? BASEMAP_STYLE_URL : `${BASEMAP_STYLE_URL}?scheme=${scheme}`;
+}
+
 let _maplibrePromise: Promise<MapLibreModule> | null = null;
 let _pmtilesProtocol = false;
 
