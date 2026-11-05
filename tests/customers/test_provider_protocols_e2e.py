@@ -622,7 +622,7 @@ class TestTelegramContact:
     async def test_polling_updates_flow(
         self,
         emu_client: AsyncClient,
-        shop_di: ShopDi,
+        shop_di,
         phone_verification_emulator: PhoneVerificationEmulatorHandle,
         unique_id: str,
     ) -> None:

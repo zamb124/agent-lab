@@ -53,7 +53,7 @@ alwaysApply: false
 
 ## Интеграции
 
-- `apps/shop`: зона доставки — `zone_addresses` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `route/calculate` по `Shop.courier_mode`; ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.
+- `apps/shop`: зона доставки — `geo/addresses/in_zone` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `route/calculate` по `Shop.courier_mode`; ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.
 
 ### Прод
 

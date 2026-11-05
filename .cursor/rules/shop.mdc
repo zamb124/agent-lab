@@ -52,7 +52,7 @@ alwaysApply: false
 
 ## Интеграции
 
-- Geo (`geo.mdc`) — единственный владелец адресов, зон и маршрутов; shop ходит только через `GeoClient` (`zone_addresses`, `address_suggest`, `route/calculate`). ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута по `courier_mode`. Geo недоступен → чек и заказ работают без метрик (degrade). Свой spatial SQL, OSM-парсинг и PostGIS-запросы в shop запрещены.
+- Geo (`geo.mdc`) — единственный владелец адресов, зон и маршрутов; shop ходит только через `GeoClient` (`addresses_in_zone`, `address_suggest`, `route/calculate`). ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута по `courier_mode`. Geo недоступен → чек и заказ работают без метрик (degrade). Свой spatial SQL, OSM-парсинг и PostGIS-запросы в shop запрещены.
 - AI (описания, фото, обложка, лого, разбор меню, подсказка модификаторов) — ветки компанийского flow `shop` по A2A (`ShopAiService`, bundle `apps/flows/bundles/shop`); промптов в коде сервиса нет.
 - Уведомления о заказе — свой Telegram-бот магазина (`NotificationService`), доставка задачей `SHOP_NOTIFY_ORDER`.
 - Свой домен — `DomainService` + `SHOP_PROVISION_DOMAIN`, сверка `SHOP_RECONCILE_DOMAINS_TICK`.
@@ -61,7 +61,7 @@ alwaysApply: false
 ## UI
 
 - SPA `ShopApp` (`apps/shop/ui/app/shop-app.ts`): маршруты `shop_home`, `:shopId/menu`, `:shopId/builder` (тема с live-preview через `?tpreset`/`?taccent`/`?tmode`), `:shopId/orders`, `:shopId/promos`, `:shopId/settings`.
-- Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`; карта зоны доставки — `apps/shop/ui/components/shop-zone-map.ts` (vendored Leaflet).
+- Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`; карта зоны доставки — `platform-zone-editor-modal` + `platform-map` внутри `apps/shop/ui/pages/shop-settings-page.ts`.
 - Витрина покупателя — не SPA: HTML + inline JS из `storefront_shell.py`.
 
 ## Запреты
