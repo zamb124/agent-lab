@@ -64,6 +64,8 @@ export class GeoMapLabPage extends PlatformPage {
                 scheme: true,
                 route: true,
                 export: true,
+                tilt: true,
+                share: true,
                 miniMap: true,
                 fullscreen: true,
                 scale: true,

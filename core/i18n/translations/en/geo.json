@@ -47,7 +47,11 @@
     "route_from": "Route from here",
     "route_to": "Route to here",
     "route_swap": "Swap points",
-    "export_png": "Save as PNG"
+    "export_png": "Save as PNG",
+    "route_legs": "Route legs",
+    "tilt": "3D tilt",
+    "share": "Share",
+    "link_copied": "Link copied"
   },
   "layers": {
     "title": "Layers",

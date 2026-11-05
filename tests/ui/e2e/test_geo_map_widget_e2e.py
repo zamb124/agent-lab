@@ -936,3 +936,82 @@ class TestEmbedRouteActions:
             await asyncio.sleep(0.4)
         await expect(balloon).to_be_visible(timeout=10_000)
         assert "Courier" in await balloon.inner_text()
+
+
+class TestTiltShareLegs:
+    """3D-tilt, share deep-link, плечи маршрута — витрина map-lab."""
+
+    async def test_tilt_button_changes_pitch(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        btn = ui_page_system.locator("button[data-action='tilt']")
+        await expect(btn).to_be_visible(timeout=10_000)
+        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }")
+        deadline = time.monotonic() + 10.0
+        pitch = 0.0
+        while time.monotonic() < deadline:
+            pitch = cast(float, await _map_eval(ui_page_system, "(el) => el.getMap().getPitch()"))
+            if pitch > 50:
+                break
+            await asyncio.sleep(0.3)
+        assert pitch > 50, f"pitch после tilt = {pitch}"
+        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }")
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            pitch = cast(float, await _map_eval(ui_page_system, "(el) => el.getMap().getPitch()"))
+            if pitch < 5:
+                break
+            await asyncio.sleep(0.3)
+        assert pitch < 5, f"pitch после сброса = {pitch}"
+
+    async def test_share_button_copies_deeplink_and_toasts(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        btn = ui_page_system.locator("button[data-action='share']")
+        await expect(btn).to_be_visible(timeout=10_000)
+        # JS-клик: Playwright-клик висит на hit-target проверке поверх GL-canvas.
+        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='share']\").click(); return true; }")
+        toast = ui_page_system.locator(".pm-toast")
+        await expect(toast).to_be_visible(timeout=5_000)
+        toast_text = (await toast.inner_text()).lower()
+        assert "копир" in toast_text or "copied" in toast_text
+        # pm-share с URL, содержащим #map= deep-link — ловим синхронно через locator (проникает в shadow).
+        url = cast(
+            str,
+            await _map_eval(
+                ui_page_system,
+                """(el) => {
+                    let captured = null;
+                    el.addEventListener('pm-share', (e) => { captured = e.detail.url; }, { once: true });
+                    el._shareLink();
+                    return captured;
+                }""",
+            ),
+        )
+        assert "#map=" in url, f"deep-link URL: {url}"
+        # Тост сам гаснет через ~2с.
+        await expect(toast).to_be_hidden(timeout=8_000)
+
+    async def test_route_legs_panel_lists_segments(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        chip = ui_page_system.locator(".pm-route-chip")
+        await expect(chip).to_be_visible(timeout=10_000)
+        # Конфиг-маршрут в lab — 2 точки = 1 плечо: кнопки плечей нет.
+        assert await chip.locator("button[data-action='route-legs']").count() == 0
+        # Строим 3-точечный маршрут программно → 2 плеча → кнопка «⋮».
+        _ = await _map_eval(
+            ui_page_system,
+            """(el) => {
+                el._routeBuildPts = [[37.6174, 55.7504], [37.6186, 55.7509], [37.6194, 55.7512]];
+                el._refreshRoute();
+                return true;
+            }""",
+        )
+        btn = chip.locator("button[data-action='route-legs']")
+        await expect(btn).to_be_visible(timeout=15_000)
+        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }")
+        legs = ui_page_system.locator(".pm-route-leg")
+        await expect(legs).to_have_count(2, timeout=5_000)
+        text = await ui_page_system.locator(".pm-route-legs").inner_text()
+        assert "A → B" in text and "B → C" in text
+        # Повторный клик сворачивает панель.
+        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }")
+        await expect(ui_page_system.locator(".pm-route-legs")).to_be_hidden(timeout=5_000)

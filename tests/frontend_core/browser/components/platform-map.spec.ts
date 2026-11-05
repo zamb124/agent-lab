@@ -70,6 +70,7 @@ type TestMap = {
     setStyle(url: string): void;
     getStyle(): { layers: Array<{ id: string; type: string }>; sources: Record<string, unknown> };
     getPaintProperty(layer: string, prop: string): string;
+    getPitch(): number;
 };
 
 type TestDraw = {
@@ -85,6 +86,7 @@ type MapEl = HTMLElement & {
     _scheme: string;
     _routeInfo: { distanceM: number; durationS: number } | null;
     _routeBuildPts: [number, number][];
+    _tilted: boolean;
     _rulerAreaM2(): number;
     getMap(): TestMap | null;
     getDraw(): { draw: TestDraw } | null;
@@ -969,6 +971,54 @@ describe('platform-map', function () {
             { timeout: 15_000 },
         );
         expect(el.shadowRoot.querySelector('.pm-balloon')!.textContent).to.include('Склад Центральный');
+    });
+
+    it('controls.tilt → кнопка переключает pitch карты', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, controls: { tilt: true } });
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>('button[data-action="tilt"]');
+        expect(btn, 'кнопка tilt').to.exist;
+        const map = el.getMap()!;
+        btn!.click();
+        await waitUntil(() => map.getPitch() > 55, 'pitch вырос до ~60', { timeout: 5_000 });
+        expect(el._tilted).to.equal(true);
+        btn!.click();
+        await waitUntil(() => map.getPitch() < 5, 'pitch вернулся', { timeout: 5_000 });
+        expect(el._tilted).to.equal(false);
+    });
+
+    it('controls.share → копия deep-link с #map= + тост + pm-share', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: false }, controls: { share: true } });
+        const shares: Array<{ url: string }> = [];
+        el.addEventListener('pm-share', (e) => shares.push((e as CustomEvent<{ url: string }>).detail));
+        const btn = el.shadowRoot.querySelector<HTMLButtonElement>('button[data-action="share"]');
+        expect(btn, 'кнопка share').to.exist;
+        btn!.click();
+        await elementUpdated(el);
+        expect(shares.length, 'pm-share').to.equal(1);
+        expect(shares[0]!.url).to.include('#map=');
+        expect(shares[0]!.url).to.match(/#map=\d+\.\d+\/\d+\.\d+\/\d+\.\d+/);
+        const toast = el.shadowRoot.querySelector('.pm-toast');
+        expect(toast, 'тост «ссылка скопирована»').to.exist;
+        expect(toast!.textContent).to.match(/копир|copied/i);
+    });
+
+    it('route → pm-route, а чип раскрывает плечи A→B→C', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: false },
+            route: { points: [[37.6, 55.75], [37.62, 55.76], [37.64, 55.77]] },
+        });
+        await waitUntil(
+            () => el.shadowRoot.querySelector('button[data-action="route-legs"]') !== null,
+            'кнопка плечей (2 плеча)',
+            { timeout: 10_000 },
+        );
+        el.shadowRoot.querySelector<HTMLButtonElement>('button[data-action="route-legs"]')!.click();
+        await elementUpdated(el);
+        const legs = el.shadowRoot.querySelectorAll('.pm-route-leg');
+        expect(legs.length, 'два плеча A→B и B→C').to.equal(2);
+        expect(legs[0]!.textContent).to.include('A → B');
+        expect(legs[1]!.textContent).to.include('B → C');
     });
 });
 

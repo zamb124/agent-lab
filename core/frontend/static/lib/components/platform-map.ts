@@ -115,6 +115,10 @@ export interface PlatformMapConfig {
         export?: boolean;
         /** Мини-карта обзора в углу: та же схема + прямоугольник viewport. */
         miniMap?: boolean;
+        /** Наклон карты 3D (pitch 0 ↔ 60). */
+        tilt?: boolean;
+        /** Поделиться: копия deep-link URL с камерой `#map=` в буфер + тост. */
+        share?: boolean;
     };
     layers?: {
         fetch?: boolean;
@@ -230,6 +234,9 @@ export class PlatformMapEl extends PlatformElement {
         _routeInfo: { state: true },
         _routeBusy: { state: true },
         _routeBuildPts: { state: true },
+        _routeLegsOpen: { state: true },
+        _toast: { state: true },
+        _tilted: { state: true },
     };
 
     declare config: PlatformMapConfig;
@@ -246,9 +253,12 @@ export class PlatformMapEl extends PlatformElement {
     declare _menu: { x: number; y: number; lngLat: LngLat } | null;
     declare _searchPin: LngLat | null;
     declare _bearing: number;
-    declare _routeInfo: { distanceM: number; durationS: number } | null;
+    declare _routeInfo: { distanceM: number; durationS: number; legs: { distanceM: number; durationS: number }[] } | null;
     declare _routeBusy: boolean;
     declare _routeBuildPts: LngLat[];
+    declare _routeLegsOpen: boolean;
+    declare _toast: string;
+    declare _tilted: boolean;
 
     private _el: HTMLDivElement | null = null;
     private _map: PlatformMap | null = null;
@@ -300,6 +310,9 @@ export class PlatformMapEl extends PlatformElement {
         this._routeInfo = null;
         this._routeBusy = false;
         this._routeBuildPts = [];
+        this._routeLegsOpen = false;
+        this._toast = '';
+        this._tilted = false;
     }
 
     /** MapLibre-карта — для потребителей, которым нужен прямой API (fitBounds и т.п.). */
@@ -389,6 +402,7 @@ export class PlatformMapEl extends PlatformElement {
                 ${this.config.statusBar === true && this._ready ? this._renderStatusBar() : nothing}
                 ${this.config.controls?.miniMap === true && this._ready ? html`<div class="pm-minimap" @click=${(e: Event) => e.stopPropagation()}></div>` : nothing}
                 ${this._menu ? this._renderMenu() : nothing}
+                ${this._toast !== '' ? html`<div class="pm-toast" role="status">${this._toast}</div>` : nothing}
                 ${!this._ready && this._error === null ? html`<div class="pm-overlay pm-loading"><span class="pm-spinner"></span>${this.t('map.loading')}</div>` : nothing}
                 ${this._error !== null
                     ? html`<div class="pm-overlay pm-error">
@@ -451,15 +465,17 @@ export class PlatformMapEl extends PlatformElement {
         const scheme = c.scheme === true && this._ready;
         const route = c.route === true && this._ready && this._interactive && this._routeCfg?.build === true;
         const exportBtn = c.export === true && this._ready;
+        const tilt = c.tilt === true && this._ready;
+        const share = c.share === true && this._ready;
         const fullscreen = c.fullscreen === true && this._ready;
-        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !exportBtn && !fullscreen) return nothing;
+        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !exportBtn && !tilt && !share && !fullscreen) return nothing;
         const hidden = this._mapCtl?.value.hidden ?? {};
         return html`
             <div class="pm-controls">
                 ${zoom
                     ? html`<div class="pm-ctrl pm-zoom">
-                          <button type="button" title=${this.t('map.zoom_in')} @click=${() => this._map?.zoomIn()}>+</button>
-                          <button type="button" title=${this.t('map.zoom_out')} @click=${() => this._map?.zoomOut()}>−</button>
+                          <button type="button" aria-label=${this.t('map.zoom_in')} title=${this.t('map.zoom_in')} @click=${() => this._map?.zoomIn()}>+</button>
+                          <button type="button" aria-label=${this.t('map.zoom_out')} title=${this.t('map.zoom_out')} @click=${() => this._map?.zoomOut()}>−</button>
                       </div>`
                     : nothing}
                 ${locate
@@ -467,7 +483,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn"
                           data-action="locate"
-                          title=${this.t('map.locate')}
+                          aria-label=${this.t('map.locate')} title=${this.t('map.locate')}
                           @click=${this._onLocate}
                       >
                           ◎
@@ -478,7 +494,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class=${`pm-ctrl pm-icon-btn${this._mode === 'ruler' ? ' active' : ''}`}
                           data-action="ruler"
-                          title=${this.t('map.ruler')}
+                          aria-label=${this.t('map.ruler')} title=${this.t('map.ruler')}
                           @click=${() => this._toggleRuler('ruler')}
                       >
                           ⟋
@@ -489,7 +505,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class=${`pm-ctrl pm-icon-btn${this._mode === 'area' ? ' active' : ''}`}
                           data-action="ruler-area"
-                          title=${this.t('map.ruler_area')}
+                          aria-label=${this.t('map.ruler_area')} title=${this.t('map.ruler_area')}
                           @click=${() => this._toggleRuler('area')}
                       >
                           ⬠
@@ -500,7 +516,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn"
                           data-action="fit"
-                          title=${this.t('map.fit')}
+                          aria-label=${this.t('map.fit')} title=${this.t('map.fit')}
                           @click=${this._fitContent}
                       >
                           ⤢
@@ -511,7 +527,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn pm-compass"
                           data-action="compass"
-                          title=${this.t('map.compass')}
+                          aria-label=${this.t('map.compass')} title=${this.t('map.compass')}
                           @click=${this._resetNorth}
                       >
                           <span class="pm-compass-arrow" style="transform:rotate(${-this._bearing}deg)">▲</span>
@@ -522,7 +538,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn"
                           data-action="scheme"
-                          title=${this.t(this._scheme === 'dark' ? 'map.scheme_light' : 'map.scheme_dark')}
+                          aria-label=${this.t(this._scheme === 'dark' ? 'map.scheme_light' : 'map.scheme_dark')} title=${this.t(this._scheme === 'dark' ? 'map.scheme_light' : 'map.scheme_dark')}
                           @click=${this._toggleScheme}
                       >
                           ${this._scheme === 'dark' ? '☀' : '☾'}
@@ -533,7 +549,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class=${`pm-ctrl pm-icon-btn${this._mode === 'route' ? ' active' : ''}`}
                           data-action="route"
-                          title=${this.t('map.route_build')}
+                          aria-label=${this.t('map.route_build')} title=${this.t('map.route_build')}
                           @click=${this._toggleRouteBuild}
                       >
                           ⤳
@@ -544,10 +560,32 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn"
                           data-action="export-png"
-                          title=${this.t('map.export_png')}
+                          aria-label=${this.t('map.export_png')} title=${this.t('map.export_png')}
                           @click=${this._exportPng}
                       >
                           ⇩
+                      </button>`
+                    : nothing}
+                ${tilt
+                    ? html`<button
+                          type="button"
+                          class=${`pm-ctrl pm-icon-btn${this._tilted ? ' active' : ''}`}
+                          data-action="tilt"
+                          aria-label=${this.t('map.tilt')} title=${this.t('map.tilt')}
+                          @click=${this._toggleTilt}
+                      >
+                          ⬒
+                      </button>`
+                    : nothing}
+                ${share
+                    ? html`<button
+                          type="button"
+                          class="pm-ctrl pm-icon-btn"
+                          data-action="share"
+                          aria-label=${this.t('map.share')} title=${this.t('map.share')}
+                          @click=${this._shareLink}
+                      >
+                          ⧉
                       </button>`
                     : nothing}
                 ${fullscreen
@@ -555,7 +593,7 @@ export class PlatformMapEl extends PlatformElement {
                           type="button"
                           class="pm-ctrl pm-icon-btn"
                           data-action="fullscreen"
-                          title=${this.t('map.fullscreen')}
+                          aria-label=${this.t('map.fullscreen')} title=${this.t('map.fullscreen')}
                           @click=${this._toggleFullscreen}
                       >
                           ${this._fullscreen ? '⤡' : '⛶'}
@@ -641,10 +679,31 @@ export class PlatformMapEl extends PlatformElement {
                         ? html`<span class="pm-route-hint">${this.t(this._routeBuildPts.length === 0 ? 'map.route_hint_a' : 'map.route_hint_b')}</span>`
                         : nothing}
                 ${pts.length >= 2
-                    ? html`<button type="button" class="pm-route-clear" data-action="route-swap" title=${this.t('map.route_swap')} @click=${this._swapRoute}>⇅</button>`
+                    ? html`<button type="button" class="pm-route-clear" data-action="route-swap" aria-label=${this.t('map.route_swap')} title=${this.t('map.route_swap')} @click=${this._swapRoute}>⇅</button>`
                     : nothing}
-                <button type="button" class="pm-route-clear" data-action="route-clear" title=${this.t('map.route_clear')} @click=${this.clearRoute}>×</button>
+                ${info && info.legs.length > 1
+                    ? html`<button
+                          type="button"
+                          class="pm-route-clear"
+                          data-action="route-legs"
+                          aria-label=${this.t('map.route_legs')} title=${this.t('map.route_legs')}
+                          @click=${() => {
+                              this._routeLegsOpen = !this._routeLegsOpen;
+                          }}
+                          >⋮</button>`
+                    : nothing}
+                <button type="button" class="pm-route-clear" data-action="route-clear" aria-label=${this.t('map.route_clear')} title=${this.t('map.route_clear')} @click=${this.clearRoute}>×</button>
             </div>
+            ${info && this._routeLegsOpen && info.legs.length > 1
+                ? html`<div class="pm-route-legs">
+                      ${info.legs.map(
+                          (leg, i) => html`<div class="pm-route-leg">
+                              <span class="pm-route-leg-pts">${String.fromCharCode(65 + i)} → ${String.fromCharCode(66 + i)}</span>
+                              <span class="pm-route-leg-m">${this._fmtDist(leg.distanceM)} · ${this._fmtDuration(leg.durationS)}</span>
+                          </div>`,
+                      )}
+                  </div>`
+                : nothing}
         `;
     }
 
@@ -960,6 +1019,48 @@ export class PlatformMapEl extends PlatformElement {
         this.dispatchEvent(new CustomEvent('pm-export', { detail: { format: 'png' }, bubbles: true, composed: true }));
     };
 
+    /** 3D-наклон камеры: toggle pitch 0 ↔ ~60°. */
+    private _toggleTilt = (): void => {
+        const map = this._map;
+        if (!map) return;
+        this._tilted = !this._tilted;
+        map.easeTo({ pitch: this._tilted ? 60 : 0, duration: 400 });
+    };
+
+    /** Копия deep-link в буфер: текущий URL + #map= камера; тост-подтверждение. */
+    private _shareLink = (): void => {
+        const map = this._map;
+        const url = new URL(window.location.href);
+        if (map) {
+            const c = map.getCenter();
+            url.hash = `map=${map.getZoom().toFixed(2)}/${c.lat.toFixed(5)}/${c.lng.toFixed(5)}`;
+        }
+        const link = url.toString();
+        void navigator.clipboard
+            ?.writeText(link)
+            .catch(() => {
+                const input = document.createElement('input');
+                input.value = link;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                input.remove();
+            });
+        this._showToast(this.t('map.link_copied'));
+        this.dispatchEvent(new CustomEvent('pm-share', { detail: { url: link }, bubbles: true, composed: true }));
+    };
+
+    private _toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** Краткое всплывающее сообщение внизу карты (share, копия координат). */
+    private _showToast(text: string): void {
+        this._toast = text;
+        if (this._toastTimer) clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => {
+            this._toast = '';
+        }, 2200);
+    }
+
     /** Точки маршрута: build-состояние (клики/меню) важнее config.points. */
     private _routePoints(): LngLat[] {
         const cfg = this._routeCfg;
@@ -996,6 +1097,7 @@ export class PlatformMapEl extends PlatformElement {
             if (seq !== this._routeSeq) return;
             this._routeBusy = false;
             const features: Feature[] = [];
+            const legs: { distanceM: number; durationS: number }[] = [];
             let distanceM = 0;
             let durationS = 0;
             for (const res of results) {
@@ -1003,6 +1105,7 @@ export class PlatformMapEl extends PlatformElement {
                 if (!r?.geometry) continue;
                 distanceM += r.distance_m ?? 0;
                 durationS += r.duration_s ?? 0;
+                legs.push({ distanceM: r.distance_m ?? 0, durationS: r.duration_s ?? 0 });
                 features.push({ type: 'Feature', geometry: r.geometry as Feature['geometry'], properties: {} });
             }
             this._setSourceData('pm-route', { type: 'FeatureCollection', features });
@@ -1010,7 +1113,7 @@ export class PlatformMapEl extends PlatformElement {
                 this._routeInfo = null;
                 return;
             }
-            this._routeInfo = { distanceM, durationS };
+            this._routeInfo = { distanceM, durationS, legs };
             if (cfg.fit !== false) {
                 this._fitFeatures(features);
             }
@@ -1957,19 +2060,75 @@ export class PlatformMapEl extends PlatformElement {
         const coords = hit.geometry?.coordinates as LngLat | undefined;
         const src = map.getSource('pm-markers') as unknown as {
             getClusterExpansionZoom?(id: number): Promise<number>;
+            getClusterLeaves?(id: number, limit: number, offset: number): Promise<GeoJSON.Feature[]>;
         };
         const clusterId = Number(hit.properties?.['cluster_id'] ?? -1);
         if (src?.getClusterExpansionZoom && clusterId >= 0 && coords) {
             void src
                 .getClusterExpansionZoom(clusterId)
                 .then((zoom) => {
-                    map.easeTo({ center: coords, zoom: zoom + 0.2, duration: 450 });
+                    const capped = Math.min(zoom + 0.2, map.getMaxZoom());
+                    if (capped - map.getZoom() < 0.5 && src.getClusterLeaves) {
+                        this._clusterListPopup(map, src, clusterId, coords);
+                        return;
+                    }
+                    map.easeTo({ center: coords, zoom: capped, duration: 450 });
                 })
                 .catch(() => {
                     map.easeTo({ center: coords, zoom: map.getZoom() + 2, duration: 450 });
                 });
         }
         return true;
+    }
+
+    /** Кластер на макс-зуме: popup со списком маркеров вместо бессмысленного zoom. */
+    private _clusterListPopup(
+        map: PlatformMap,
+        src: { getClusterLeaves?(id: number, limit: number, offset: number): Promise<GeoJSON.Feature[]> },
+        clusterId: number,
+        coords: LngLat,
+    ): void {
+        const maplibre = this._maplibre;
+        if (!maplibre || !src.getClusterLeaves) return;
+        void src
+            .getClusterLeaves(clusterId, 20, 0)
+            .then((leaves) => {
+                const items = leaves
+                    .map((f) => {
+                        const p = (f.properties ?? {}) as Record<string, unknown>;
+                        const key = String(p['key'] ?? '');
+                        const label = String(p['title'] ?? key ?? '•');
+                        return `<button type="button" class="pm-cluster-item" data-marker-key="${key}">${label.replace(/</g, '&lt;')}</button>`;
+                    })
+                    .join('');
+                const popup = new maplibre.Popup({ closeButton: true, className: 'pm-cluster-popup', maxWidth: '260px' })
+                    .setLngLat(coords)
+                    .setHTML(`<div class="pm-cluster-list">${items}</div>`)
+                    .addTo(map);
+                popup
+                    .getElement()
+                    ?.querySelectorAll<HTMLButtonElement>('.pm-cluster-item')
+                    .forEach((btn: HTMLButtonElement) => {
+                        btn.addEventListener('click', () => {
+                            const key = btn.dataset['markerKey'] ?? '';
+                            const marker = (this.config.markers ?? []).find((m) => m.key === key);
+                            if (marker) {
+                                popup.remove();
+                                map.easeTo({ center: marker.lngLat, duration: 300 });
+                                this.dispatchEvent(
+                                    new CustomEvent('pm-marker-click', {
+                                        detail: { key: marker.key, lngLat: marker.lngLat, title: marker.title },
+                                        bubbles: true,
+                                        composed: true,
+                                    }),
+                                );
+                            }
+                        });
+                    });
+            })
+            .catch(() => {
+                map.easeTo({ center: coords, zoom: map.getZoom() + 1, duration: 350 });
+            });
     }
 
     private _featuresAt(map: PlatformMap, point: { x: number; y: number }): { layer: string; properties: Record<string, unknown> }[] {
@@ -2703,6 +2862,94 @@ export class PlatformMapEl extends PlatformElement {
         .pm-route-clear:hover {
             background: var(--color-surface-muted, #f1f5f9);
             color: var(--color-text, #0f172a);
+        }
+        .pm-route-legs {
+            position: absolute;
+            left: 50%;
+            bottom: 56px;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            background: color-mix(in srgb, var(--color-surface, #fff) 92%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 18px rgba(15, 23, 42, 0.14);
+            font-size: 12px;
+            color: var(--color-text, #0f172a);
+            z-index: 15;
+            min-width: 180px;
+        }
+        .pm-route-leg {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 3px 4px;
+            border-radius: 6px;
+        }
+        .pm-route-leg-pts {
+            font-weight: 600;
+        }
+        .pm-route-leg-m {
+            color: var(--color-text-muted, #64748b);
+        }
+        .pm-toast {
+            position: absolute;
+            left: 50%;
+            bottom: 56px;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.88);
+            color: #f8fafc;
+            font-size: 12.5px;
+            font-weight: 500;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.3);
+            z-index: 25;
+            pointer-events: none;
+            animation: pm-toast-in 0.18s ease;
+        }
+        @keyframes pm-toast-in {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        .pm-cluster-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            max-height: 220px;
+            overflow-y: auto;
+            min-width: 160px;
+        }
+        .pm-cluster-item {
+            border: 0;
+            background: transparent;
+            text-align: left;
+            padding: 7px 10px;
+            font-size: 12.5px;
+            font-family: inherit;
+            color: var(--color-text, #0f172a);
+            cursor: pointer;
+            border-radius: 7px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pm-cluster-item:hover {
+            background: var(--color-surface-muted, #f1f5f9);
+        }
+        .pm-cluster-popup .maplibregl-popup-content {
+            padding: 6px;
+            border-radius: 12px;
         }
         .pm-compass-arrow {
             display: inline-block;

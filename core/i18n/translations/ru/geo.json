@@ -47,7 +47,11 @@
     "route_from": "Маршрут отсюда",
     "route_to": "Маршрут сюда",
     "route_swap": "Поменять точки",
-    "export_png": "Сохранить как PNG"
+    "export_png": "Сохранить как PNG",
+    "route_legs": "Участки маршрута",
+    "tilt": "Наклон 3D",
+    "share": "Поделиться",
+    "link_copied": "Ссылка скопирована"
   },
   "layers": {
     "title": "Слои",
