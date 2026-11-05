@@ -13,6 +13,7 @@ export const PLATFORM_FILES_ROUTE_SEGMENTS = Object.freeze(
         'crm',
         'sync',
         'flows',
+        'geo',
         'rag',
         'documents',
         'wiki',
