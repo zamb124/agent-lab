@@ -15,9 +15,9 @@ class GeoSettings(BaseSettings):
 
     osm_extract_urls: list[str] = Field(
         default_factory=lambda: [
-            "https://download.geofabrik.de/russia/central-fed-district-latest.osm.pbf",
+            "https://download.bbbike.org/osm/bbbike/Moscow/Moscow.osm.pbf",
         ],
-        description="PBF-экстракты OSM для импорта (объединение). Импорт клипает к coverage_bbox — хватает одного экстракта ЦФО Geofabrik; у download.openstreetmap.fr России нет.",
+        description="PBF-экстракты OSM для импорта (объединение). BBBike Moscow (85MB) — влезает в лимит воркера в память; Geofabrik central-fed-district (884MB) OOM на ноде 31GB; у download.openstreetmap.fr России нет.",
     )
     coverage_bbox: tuple[float, float, float, float] = Field(
         default=(54.2, 35.1, 56.9, 40.4),
