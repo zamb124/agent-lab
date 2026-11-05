@@ -30,7 +30,7 @@ from core.tasks import enqueue
 from core.types import SqlParameterValue
 
 if TYPE_CHECKING:
-    from osmium.osm import Node, TagList, Way
+    from osmium.osm import Node, NodeRef, TagList, Way
 
 logger = get_logger(__name__)
 
@@ -206,36 +206,30 @@ def _mode_costs(tags: TagList, highway: str, length_m: float, settings: GeoSetti
     return out
 
 
-class _NeededNodesHandler(osmium.SimpleHandler):
-    """Проход 1: id нод, нужных ways-адресам и ways-дорогам."""
+class _ImportHandler(osmium.SimpleHandler):
+    """Один проход по экстракту: адреса + дорожный граф.
 
-    def __init__(self) -> None:
+    Локации нод — C++-кэш ``NodeLocationsForWays`` (``locations=True``,
+    flex_mem ~10B/нода): два прохода с Python set/dict на десятки миллионов
+    нод не влезали в лимит воркера и заканчивались memcg OOM.
+    """
+
+    def __init__(self, settings: GeoSettings) -> None:
         super().__init__()
-        self.needed: set[int] = set()
-
-    def way(self, w: Way) -> None:
-        if w.tags.get("addr:housenumber") or w.tags.get("highway"):
-            self.needed.update(n.ref for n in w.nodes)
-
-
-class _NodeLocationsHandler(osmium.SimpleHandler):
-    """Проход 2: локации только нужных нод + узлы-адреса напрямую."""
-
-    def __init__(self, needed: set[int], bbox: tuple[float, float, float, float]) -> None:
-        super().__init__()
-        self._needed: set[int] = needed
-        self._bbox: tuple[float, float, float, float] = bbox
-        self.locations: dict[int, tuple[float, float]] = {}
+        self._bbox: tuple[float, float, float, float] = settings.coverage_bbox
+        self._settings: GeoSettings = settings
         self.node_addresses: list[dict[str, SqlParameterValue]] = []
+        self.way_addresses: list[dict[str, SqlParameterValue]] = []
+        self.edges: list[dict[str, SqlParameterValue]] = []
+        self.vertices: dict[int, tuple[float, float]] = {}
+
+    def _in_bbox(self, lat: float, lng: float) -> bool:
+        lat_min, lng_min, lat_max, lng_max = self._bbox
+        return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
     def node(self, n: Node) -> None:
-        if not n.location.valid():
+        if not n.location.valid() or not self._in_bbox(n.location.lat, n.location.lon):
             return
-        lat_min, lng_min, lat_max, lng_max = self._bbox
-        if not (lat_min <= n.location.lat <= lat_max and lng_min <= n.location.lon <= lng_max):
-            return
-        if n.id in self._needed:
-            self.locations[n.id] = (n.location.lat, n.location.lon)
         if n.tags.get("addr:housenumber"):
             name = _display_name(n.tags)
             if name:
@@ -253,25 +247,14 @@ class _NodeLocationsHandler(osmium.SimpleHandler):
                     }
                 )
 
-
-class _WaysHandler(osmium.SimpleHandler):
-    """Проход 3: ways → адреса (центроид) и рёбра дорожного графа."""
-
-    def __init__(
-        self,
-        locations: dict[int, tuple[float, float]],
-        settings: GeoSettings,
-    ) -> None:
-        super().__init__()
-        self._loc: dict[int, tuple[float, float]] = locations
-        self._settings: GeoSettings = settings
-        self.way_addresses: list[dict[str, SqlParameterValue]] = []
-        self.edges: list[dict[str, SqlParameterValue]] = []
-        self.vertex_ids: set[int] = set()
+    def _coord(self, n: NodeRef) -> tuple[float, float] | None:
+        if n.location.valid() and self._in_bbox(n.location.lat, n.location.lon):
+            return (n.location.lat, n.location.lon)
+        return None
 
     def way(self, w: Way) -> None:
         tags = w.tags
-        coords = [self._loc.get(n.ref) for n in w.nodes]
+        coords = [self._coord(n) for n in w.nodes]
 
         housenumber = tags.get("addr:housenumber")
         if housenumber:
@@ -311,7 +294,8 @@ class _WaysHandler(osmium.SimpleHandler):
             costs = _mode_costs(tags, highway, length_m, self._settings)
             if not costs.any_passable():
                 continue
-            self.vertex_ids.update((w.nodes[i].ref, w.nodes[i + 1].ref))
+            self.vertices[w.nodes[i].ref] = a
+            self.vertices[w.nodes[i + 1].ref] = b
             self.edges.append(
                 {
                     "source": w.nodes[i].ref,
@@ -480,33 +464,23 @@ class OsmImportService:
         state.updated_at = datetime.now(UTC)
         _ = await state.save()
 
-        needed: set[int] = set()
-        for p in paths:
-            h = _NeededNodesHandler()
-            h.apply_file(p, locations=False)
-            needed |= h.needed
-
-        locations: dict[int, tuple[float, float]] = {}
         addresses: list[dict[str, SqlParameterValue]] = []
         edges: list[dict[str, SqlParameterValue]] = []
-        vertex_ids: set[int] = set()
+        vertices: dict[int, tuple[float, float]] = {}
         for p in paths:
-            nh = _NodeLocationsHandler(needed, self._settings.coverage_bbox)
-            nh.apply_file(p, locations=False)
-            locations.update(nh.locations)
-            addresses.extend(nh.node_addresses)
-            wh = _WaysHandler(locations, self._settings)
-            wh.apply_file(p, locations=False)
-            addresses.extend(wh.way_addresses)
-            edges.extend(wh.edges)
-            vertex_ids |= wh.vertex_ids
+            h = _ImportHandler(self._settings)
+            h.apply_file(p, locations=True)
+            addresses.extend(h.node_addresses)
+            addresses.extend(h.way_addresses)
+            edges.extend(h.edges)
+            vertices.update(h.vertices)
 
         await self._bulk_insert_addresses(addresses, generation)
-        await self._bulk_insert_vertices(locations, vertex_ids, generation)
+        await self._bulk_insert_vertices(vertices, generation)
         await self._bulk_insert_edges(edges, generation)
         return {
             "rows_addresses": len(addresses),
-            "rows_vertices": len([v for v in vertex_ids if v in locations]),
+            "rows_vertices": len(vertices),
             "rows_edges": len(edges),
         }
 
@@ -545,13 +519,10 @@ class OsmImportService:
 
     async def _bulk_insert_vertices(
         self,
-        locations: dict[int, tuple[float, float]],
-        vertex_ids: set[int],
+        vertices: dict[int, tuple[float, float]],
         generation: int,
     ) -> None:
-        # Вершины без локации (нод вне bbox) пропускаем — рёбра к ним
-        # просто не притянутся на snap.
-        ids = sorted(v for v in vertex_ids if v in locations)
+        ids = sorted(vertices)
         cols = 4
         bs = min(self._settings.import_batch_size, 60_000 // cols)
         for i in range(0, len(ids), bs):
@@ -562,7 +533,7 @@ class OsmImportService:
             )
             params: list[SqlParameterValue] = []
             for vid in chunk:
-                lat, lng = locations[vid]
+                lat, lng = vertices[vid]
                 params.extend([vid, lat, lng, generation])
             _ = await execute_raw(
                 f"""
