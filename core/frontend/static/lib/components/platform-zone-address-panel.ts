@@ -91,50 +91,51 @@ export class PlatformZoneAddressPanel extends PlatformElement {
             flex-direction: column;
             min-width: 0;
             height: 100%;
-            background: var(--glass-bg, rgba(255, 255, 255, 0.94));
-            border-left: 1px solid var(--border-color, #e2e8f0);
+            background: var(--bg-secondary);
+            border-left: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
             font-family: var(--font-family, inherit);
         }
         .search {
-            padding: var(--space-3, 12px) var(--space-3, 12px) var(--space-2, 8px);
-            border-bottom: 1px solid var(--border-color, #e2e8f0);
+            padding: var(--space-3) var(--space-3) var(--space-2);
+            border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
         }
         .search-box {
             display: flex;
             align-items: center;
-            gap: var(--space-2, 8px);
-            background: var(--input-bg, #f8fafc);
-            border: 1px solid var(--border-color, #e2e8f0);
+            gap: var(--space-2);
+            background: var(--glass-tint-medium);
+            border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
             border-radius: var(--radius-md, 10px);
             padding: 8px 12px;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
         .search-box:focus-within {
-            border-color: var(--accent, #6366f1);
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 15%, transparent);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-subtle);
         }
-        .search-box platform-icon { color: var(--text-secondary, #64748b); flex: none; }
+        .search-box platform-icon { color: var(--text-secondary); flex: none; }
         .search-box input {
             flex: 1;
             border: none;
             background: transparent;
             outline: none;
             font-size: var(--font-size-md, 14px);
-            color: var(--text-primary, #0f172a);
+            color: var(--text-primary);
             min-width: 0;
         }
-        .search-box input::placeholder { color: var(--text-tertiary, #94a3b8); }
+        .search-box input::placeholder { color: var(--text-tertiary); }
         .count {
             display: flex;
             align-items: center;
-            gap: var(--space-2, 8px);
-            padding: var(--space-2, 8px) var(--space-3, 12px);
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
             font-size: var(--font-size-sm, 13px);
-            color: var(--text-secondary, #64748b);
-            border-bottom: 1px solid var(--border-color, #e2e8f0);
+            color: var(--text-secondary);
+            border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
             min-height: 20px;
         }
-        .count b { color: var(--text-primary, #0f172a); font-weight: 600; }
+        .count b { color: var(--text-primary); font-weight: 600; }
+        .count .err { color: var(--danger, #d92d20); }
         .list {
             flex: 1;
             overflow-y: auto;
@@ -143,21 +144,21 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         .row {
             display: flex;
             align-items: center;
-            gap: var(--space-2, 8px);
-            padding: 7px var(--space-3, 12px);
+            gap: var(--space-2);
+            padding: 7px var(--space-3);
             cursor: pointer;
             border-left: 2px solid transparent;
         }
         .row:hover, .row.hovered {
-            background: color-mix(in srgb, var(--accent, #6366f1) 8%, transparent);
-            border-left-color: var(--accent, #6366f1);
+            background: var(--accent-subtle);
+            border-left-color: var(--accent);
         }
-        .row platform-icon { color: var(--accent, #6366f1); flex: none; }
+        .row platform-icon { color: var(--accent); flex: none; }
         .row .addr {
             flex: 1;
             min-width: 0;
             font-size: var(--font-size-sm, 13px);
-            color: var(--text-primary, #0f172a);
+            color: var(--text-primary);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -166,9 +167,9 @@ export class PlatformZoneAddressPanel extends PlatformElement {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: var(--space-2, 8px);
-            padding: var(--space-6, 24px) var(--space-3, 12px);
-            color: var(--text-tertiary, #94a3b8);
+            gap: var(--space-2);
+            padding: var(--space-6) var(--space-3);
+            color: var(--text-tertiary);
             font-size: var(--font-size-sm, 13px);
             text-align: center;
         }
@@ -177,23 +178,23 @@ export class PlatformZoneAddressPanel extends PlatformElement {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: var(--space-2, 8px) var(--space-3, 12px);
-            border-top: 1px solid var(--border-color, #e2e8f0);
+            padding: var(--space-2) var(--space-3);
+            border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
             font-size: var(--font-size-sm, 13px);
-            color: var(--text-secondary, #64748b);
+            color: var(--text-secondary);
         }
         .pager button {
             border: none;
             background: transparent;
-            color: var(--accent, #6366f1);
+            color: var(--accent);
             font: inherit;
             cursor: pointer;
             padding: 4px 8px;
             border-radius: 6px;
         }
-        .pager button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent, #6366f1) 10%, transparent); }
-        .pager button:disabled { color: var(--text-tertiary, #94a3b8); cursor: default; }
-        .spin { display: flex; justify-content: center; padding: var(--space-4, 16px); }
+        .pager button:hover:not(:disabled) { background: var(--accent-subtle); }
+        .pager button:disabled { color: var(--text-tertiary); cursor: default; }
+        .spin { display: flex; justify-content: center; padding: var(--space-4); }
     `;
 
     override connectedCallback(): void {
