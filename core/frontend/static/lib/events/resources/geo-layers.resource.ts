@@ -16,6 +16,7 @@ import type {
 
 export const geoLayersOp = createAsyncOp<GeoLayerListResponse>({
     name: 'geo/layers',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/layers/list_requested',

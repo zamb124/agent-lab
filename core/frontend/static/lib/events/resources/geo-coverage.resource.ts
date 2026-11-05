@@ -41,6 +41,7 @@ export const geoRegionsResource = createResourceCollection<GeoRegionItem>({
 
 export const geoSourcesOp = createAsyncOp<GeoSourceListResponse>({
     name: 'geo/sources',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/sources/list_requested',
@@ -49,6 +50,7 @@ export const geoSourcesOp = createAsyncOp<GeoSourceListResponse>({
 
 export const geoStatsOp = createAsyncOp<GeoStatsOverview>({
     name: 'geo/stats',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/stats/overview_requested',
@@ -57,6 +59,7 @@ export const geoStatsOp = createAsyncOp<GeoStatsOverview>({
 
 export const geoCursorsOp = createAsyncOp<GeoCursorListResponse>({
     name: 'geo/cursors',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/cursors/list_requested',
@@ -65,6 +68,7 @@ export const geoCursorsOp = createAsyncOp<GeoCursorListResponse>({
 
 export const geoImportStatusOp = createAsyncOp<GeoImportStatusResponse>({
     name: 'geo/import_status',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/import/status_requested',
@@ -73,6 +77,7 @@ export const geoImportStatusOp = createAsyncOp<GeoImportStatusResponse>({
 
 export const geoImportRunOp = createAsyncOp<GeoImportRunResponse>({
     name: 'geo/import_run',
+    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/import/run_requested',
