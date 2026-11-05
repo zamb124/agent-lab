@@ -20,6 +20,7 @@ import {
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '../../../../apps/shop/ui/modals/shop-zone-editor-modal.js';
+import { ShopApp } from '../../../../apps/shop/ui/app/shop-app.js';
 
 const FACTORIES = [shopShopsResource, shopGeocodeOp, shopZoneAddressesOp];
 const TAG = 'shop-zone-editor-modal';
@@ -191,6 +192,13 @@ describe('shop-zone-editor-modal', function () {
         setDefaultI18nNamespace('shop');
         bootstrapTestBus({ factories: FACTORIES });
         await seedI18n();
+    });
+
+    it('ShopApp.factories регистрирует shop/zone_addresses — иначе панель падает до dispatch', () => {
+        const names = (ShopApp.factories ?? []).map((f) => f.name);
+        expect(names, 'shop/zone_addresses обязан быть в ShopApp.factories').to.include(
+            'shop/zone_addresses',
+        );
     });
 
     it('открытие без зоны → карта с terra-draw, пустые метрики, «Применить» активна', async () => {
