@@ -451,13 +451,23 @@ class CustomerAuthService:
         proof: DirectVerificationRequest,
         company_id: str,
     ) -> tuple[Customer, str]:
-        """Direct-подтверждение, присланное клиентом (эмулятор / mini-app)."""
+        """Direct-подтверждение, присланное клиентом (эмулятор / mini-app).
+
+        Proof клиента доверяет только `client_verifiers` реестра — TG/MAX
+        подтверждаются webhook/poll-апдейтом (`handle_contact_update`), OAuth —
+        code exchange, иначе любой мог бы аттестовать чужой номер.
+        """
         challenge = await self._require_pending(challenge_id)
         self._check_scope(challenge, company_id)
         registry = self._registry(self._apex_of(challenge))
-        verifier = registry.direct_for(proof.provider)
+        verifier = registry.client_direct_for(proof.provider)
         if verifier is None or not verifier.available():
             raise CustomerAuthError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
+        if (
+            challenge.kind != PhoneChallengeKind.DIRECT
+            or challenge.method != verifier.method
+        ):
+            raise CustomerAuthError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
         phones = await verifier.fetch_phones(proof)
         return await self._confirm_matched(
             challenge, phones=phones, provider=verifier.provider,
@@ -472,8 +482,14 @@ class CustomerAuthService:
         provider: CustomerIdentityProvider,
         provider_user_id: str,
     ) -> tuple[Customer, str]:
-        """Номер провайдера обязан совпасть с номером challenge."""
+        """Номер провайдера обязан совпасть с номером challenge.
+
+        Без аттестованного провайдером номера подтверждать нечего —
+        challenge-номер нельзя принимать на веру.
+        """
         matched = [p for p in phones if p.verified]
+        if not matched:
+            raise CustomerAuthError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
         phone = next(
             (p.phone_e164 for p in matched if p.phone_e164 == challenge.phone_e164),
             None,

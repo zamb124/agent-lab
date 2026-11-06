@@ -8,6 +8,8 @@ import { mergePlatformI18nVars } from '@platform/lib/utils/platform-i18n-vars.js
 import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -175,17 +177,19 @@ export class LegalPage extends PlatformPage {
         const total = spec.sections;
         const indices = Array.from({ length: total }, (_value, index) => index + 1);
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="210" data-cosmic-label=${this._lt('title', undefined, ns)}>
                 <div class="marketing-content">
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this._lt('title', undefined, ns)}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this._lt('title', undefined, ns)}></scramble-text></h1>
                         <p class="updated">${this._lt('updated', undefined, ns)} ${this._lt('updated_at', undefined, ns)}</p>
                     </header>
                     <div class="marketing-prose">${indices.map((index) => this._renderSection(index))}</div>
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

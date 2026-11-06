@@ -17,6 +17,9 @@ const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/products/crm':       'product-crm',
     '/products/sync':      'product-sync',
     '/products/documents': 'product-documents',
+    '/products/geo':       'product-geo',
+    '/products/wiki':      'product-wiki',
+    '/products/shop':      'product-shop',
     '/support':            'support',
     '/dashboard':          'dashboard',
     '/blog':               'blog',
@@ -127,12 +130,15 @@ export class LandingHeader extends PlatformElement {
             /* PlatformElement has a more specific :any-link rule inside Shadow DOM. */
             .nav a.nav-link:any-link,
             button.nav-dropdown-trigger {
-                color: var(--accent);
+                color: var(--text-secondary);
+                font-size: 14px;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
             }
-            
+
             .nav a.nav-link:any-link:hover,
             button.nav-dropdown-trigger:hover {
-                color: var(--accent-hover);
+                color: var(--accent);
             }
 
             .nav-dropdown {
@@ -143,7 +149,8 @@ export class LandingHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                font: 400 16px/normal var(--font-sans);
+                font-family: var(--font-sans);
+                font-weight: 400;
                 text-decoration: none;
                 transition: color 0.3s;
                 white-space: nowrap;
@@ -179,6 +186,8 @@ export class LandingHeader extends PlatformElement {
                 flex-direction: column;
                 gap: 4px;
                 box-shadow: var(--glass-shadow-strong);
+                max-height: calc(100vh - 96px);
+                overflow-y: auto;
             }
             
             .nav-dropdown.open .nav-dropdown-menu {
@@ -296,8 +305,9 @@ export class LandingHeader extends PlatformElement {
                 padding: 8px 20px;
                 background: var(--platform-btn-primary-bg);
                 border: none;
-                border-radius: 24px;
-                color: var(--text-on-accent);
+                border-radius: 0;
+                clip-path: var(--marketing-cosmic-btn-clip);
+                color: var(--platform-btn-primary-text);
                 font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
@@ -305,17 +315,18 @@ export class LandingHeader extends PlatformElement {
                 transition: background 0.3s;
                 white-space: nowrap;
             }
-            
+
             .login-btn:hover {
                 background: var(--platform-btn-primary-bg-hover);
             }
-            
+
             .dashboard-btn {
                 display: flex;
                 padding: 8px 20px;
                 background: transparent;
                 border: 1px solid var(--accent);
-                border-radius: 24px;
+                border-radius: 0;
+                clip-path: var(--marketing-cosmic-btn-clip);
                 color: var(--text-secondary);
                 font-family: var(--font-sans);
                 font-size: 14px;
@@ -371,7 +382,7 @@ export class LandingHeader extends PlatformElement {
                 align-items: stretch;
                 gap: clamp(12px, 3vw, 20px);
                 z-index: 10000;
-                background: var(--marketing-page-bg);
+                background: var(--marketing-cosmic-bg, var(--marketing-page-bg));
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
                 min-height: calc(100vh - var(--marketing-header-height));
@@ -454,10 +465,7 @@ export class LandingHeader extends PlatformElement {
                     font-size: 20px;
                 }
                 
-                .nav-link {
-                    font-size: 18px;
-                }
-                
+                .nav a.nav-link:any-link,
                 button.nav-dropdown-trigger {
                     font-size: 18px;
                 }
@@ -514,10 +522,7 @@ export class LandingHeader extends PlatformElement {
                     gap: 40px;
                 }
                 
-                .nav-link {
-                    font-size: 20px;
-                }
-                
+                .nav a.nav-link:any-link,
                 button.nav-dropdown-trigger {
                     font-size: 20px;
                 }
@@ -851,6 +856,33 @@ export class LandingHeader extends PlatformElement {
                                     <span class="nav-dropdown-item-desc">${h('product_documents_desc')}</span>
                                 </div>
                             </a>
+                            <a href="/products/wiki" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/wiki_logo.svg" alt=${h('product_wiki_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_wiki_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_wiki_desc')}</span>
+                                </div>
+                            </a>
+                            <a href="/products/shop" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/shop_logo.svg" alt=${h('product_shop_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_shop_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_shop_desc')}</span>
+                                </div>
+                            </a>
+                            <a href="/products/geo" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/geo_logo.svg" alt=${h('product_geo_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_geo_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_geo_desc')}</span>
+                                </div>
+                            </a>
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
@@ -940,6 +972,24 @@ export class LandingHeader extends PlatformElement {
                             <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
                         </div>
                         ${h('product_documents_title')}
+                    </a>
+                    <a href="/products/wiki" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/wiki_logo.svg" alt=${h('product_wiki_title')} />
+                        </div>
+                        ${h('product_wiki_title')}
+                    </a>
+                    <a href="/products/shop" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/shop_logo.svg" alt=${h('product_shop_title')} />
+                        </div>
+                        ${h('product_shop_title')}
+                    </a>
+                    <a href="/products/geo" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/geo_logo.svg" alt=${h('product_geo_title')} />
+                        </div>
+                        ${h('product_geo_title')}
                     </a>
                 </div>
                 

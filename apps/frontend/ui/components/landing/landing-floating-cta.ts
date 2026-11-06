@@ -73,7 +73,8 @@ export class LandingFloatingCta extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 padding: 10px 18px;
-                border-radius: 999px;
+                border-radius: 0;
+                clip-path: var(--marketing-cosmic-btn-clip);
                 background: var(--marketing-product-accent);
                 color: var(--text-on-accent);
                 font-family: var(--font-sans);

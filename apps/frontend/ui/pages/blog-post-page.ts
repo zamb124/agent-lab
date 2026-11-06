@@ -11,6 +11,7 @@ import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -120,8 +121,9 @@ export class BlogPostPage extends PlatformPage {
         const loaded = anyRecord(this._postOp.lastResult);
         const post = loaded !== null && typeof loaded.slug === 'string' ? loaded : null;
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="196" data-cosmic-label=${this.t('blog_page.title')}>
                 <div class="marketing-content">
                     <p>
                         <button type="button" class="marketing-text-link" @click=${() => this.navigate('blog', {})}>
@@ -144,8 +146,9 @@ export class BlogPostPage extends PlatformPage {
                           `
                         : null}
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

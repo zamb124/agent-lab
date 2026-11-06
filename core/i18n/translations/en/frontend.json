@@ -35,7 +35,10 @@
         "lead-requests": "Leads",
         "platform-tracing": "Tracing",
         "crawl-report": "Crawl report",
-        "platform-billing": "Pricing (admin)"
+        "platform-billing": "Pricing (admin)",
+        "product-geo": "Geo",
+        "product-wiki": "Wiki",
+        "product-shop": "Shop"
     },
     "bottom_nav": {
         "dashboard": "Dashboard",

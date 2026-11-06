@@ -204,6 +204,9 @@ import '../pages/products/product-rag-page.js';
 import '../pages/products/product-crm-page.js';
 import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
+import '../pages/products/product-geo-page.js';
+import '../pages/products/product-wiki-page.js';
+import '../pages/products/product-shop-page.js';
 import '../pages/legal-page.js';
 import '../components/landing/cookie-consent-banner.js';
 import '../pages/support-page.js';
@@ -244,6 +247,9 @@ const FRONTEND_ROUTES = [
     { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
     { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync' },
     { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents' },
+    { key: 'product-geo',             path: 'products/geo',             parent: 'landing',     titleKey: 'routes.product-geo' },
+    { key: 'product-wiki',            path: 'products/wiki',            parent: 'landing',     titleKey: 'routes.product-wiki' },
+    { key: 'product-shop',            path: 'products/shop',            parent: 'landing',     titleKey: 'routes.product-shop' },
     { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
     { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
     { key: 'cookies',                 path: 'cookies',                  parent: 'landing',     titleKey: 'routes.cookies' },
@@ -279,6 +285,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'product-geo', 'product-wiki', 'product-shop',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -289,6 +296,7 @@ const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'product-geo', 'product-wiki', 'product-shop',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -301,6 +309,9 @@ const DOCUMENT_META_SKIP = new Set([
     'product-crm',
     'product-sync',
     'product-documents',
+    'product-geo',
+    'product-wiki',
+    'product-shop',
     'blog-post',
 ]);
 
@@ -321,6 +332,7 @@ const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'product-geo', 'product-wiki', 'product-shop',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -605,6 +617,11 @@ export class FrontendApp extends PlatformApp {
         this.toggleAttribute('landing', landingPublic);
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.toggle('frontend-landing-public', landingPublic);
+            if (landingPublic) {
+                document.documentElement.setAttribute('data-platform-theme-lock', 'dark');
+            } else {
+                document.documentElement.removeAttribute('data-platform-theme-lock');
+            }
         }
 
         if (
@@ -641,6 +658,7 @@ export class FrontendApp extends PlatformApp {
         super.disconnectedCallback();
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.remove('frontend-landing-public');
+            document.documentElement.removeAttribute('data-platform-theme-lock');
         }
     }
 
@@ -863,6 +881,9 @@ export class FrontendApp extends PlatformApp {
             case 'product-crm':        page = html`<product-crm-page></product-crm-page>`; break;
             case 'product-sync':       page = html`<product-sync-page></product-sync-page>`; break;
             case 'product-documents':  page = html`<product-documents-page></product-documents-page>`; break;
+            case 'product-geo':        page = html`<product-geo-page></product-geo-page>`; break;
+            case 'product-wiki':       page = html`<product-wiki-page></product-wiki-page>`; break;
+            case 'product-shop':       page = html`<product-shop-page></product-shop-page>`; break;
             case 'policy':             page = html`<legal-page kind="policy"></legal-page>`; break;
             case 'terms':              page = html`<legal-page kind="terms"></legal-page>`; break;
             case 'cookies':            page = html`<legal-page kind="cookies"></legal-page>`; break;

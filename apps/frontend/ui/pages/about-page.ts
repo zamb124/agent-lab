@@ -9,6 +9,8 @@ import { FrontendLeadFormModal } from '../modals/lead-form-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 
 export class AboutPage extends PlatformPage {
@@ -34,11 +36,12 @@ export class AboutPage extends PlatformPage {
 
     override render(): TemplateResult {
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="222" data-cosmic-label=${this.t('about_page.title')}>
                 <div class="marketing-content">
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this.t('about_page.title')}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this.t('about_page.title')}></scramble-text></h1>
                         <p class="marketing-content-lede">${this.t('about_page.lead')}</p>
                     </header>
                     <div class="marketing-prose">
@@ -54,8 +57,9 @@ export class AboutPage extends PlatformPage {
                         </platform-button>
                     </div>
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

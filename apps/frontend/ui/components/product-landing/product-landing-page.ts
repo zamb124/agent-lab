@@ -8,6 +8,8 @@ import { marketingProductPageStyles } from '@platform/lib/styles/shared/marketin
 import '@platform/lib/components/platform-button.js';
 import '../landing/landing-header.js';
 import '../landing/landing-footer.js';
+import '../cosmic/cosmic-scope.js';
+import '../cosmic/scramble-text.js';
 import { applyPublicDocumentMeta } from '../../_helpers/public-document-meta.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
@@ -26,7 +28,7 @@ export interface ProductLandingGalleryImage {
     altKey: string;
 }
 
-export type ProductLandingServiceEntry = 'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend';
+export type ProductLandingServiceEntry = 'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend' | 'geo' | 'wiki' | 'shop';
 export type ProductLandingAccent = 'accent' | 'success' | 'accent-secondary';
 
 export class ProductLandingPage extends PlatformPage {
@@ -114,9 +116,9 @@ export class ProductLandingPage extends PlatformPage {
     _renderHero() {
         const heroSrc = this._resolveHeroImageSrc();
         return html`
-            <section class="marketing-hero">
+            <section class="marketing-hero" data-cosmic-chapter data-cosmic-hue="196" data-cosmic-label=${this._t('hero_badge')}>
                 <span class="marketing-hero-badge">${this._t('hero_badge')}</span>
-                <h1 class="marketing-hero-title">${this._t('hero_title')}</h1>
+                <h1 class="marketing-hero-title"><scramble-text .text=${this._t('hero_title')}></scramble-text></h1>
                 <div class="marketing-hero-shot">
                     <img
                         src=${heroSrc}
@@ -143,7 +145,7 @@ export class ProductLandingPage extends PlatformPage {
             return html``;
         }
         return html`
-            <section class="marketing-gallery" aria-label=${this._t('gallery_section_label')}>
+            <section class="marketing-gallery" aria-label=${this._t('gallery_section_label')} data-cosmic-chapter data-cosmic-hue="216" data-cosmic-label=${this._t('gallery_section_label')}>
                 <div class="marketing-gallery-grid">
                     ${galleryImages.map((galleryImage) => html`
                             <div class="marketing-hero-shot">
@@ -165,7 +167,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderFeatures() {
         return html`
-            <section class="marketing-features">
+            <section class="marketing-features" data-cosmic-chapter data-cosmic-hue="222" data-cosmic-label=${this._t('hero_badge')}>
                 <div class="marketing-features-grid">
                     ${[1, 2, 3, 4].map((index) => html`
                             <div class="marketing-feature-card glass-medium glass-interactive">
@@ -181,7 +183,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderSteps() {
         return html`
-            <section class="marketing-steps">
+            <section class="marketing-steps" data-cosmic-chapter data-cosmic-hue="235" data-cosmic-label=${this._t('how_title')}>
                 <div class="marketing-steps-container">
                     <h2 class="marketing-steps-title">${this._t('how_title')}</h2>
                     <div class="marketing-steps-grid">
@@ -203,7 +205,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderBenefits() {
         return html`
-            <section class="marketing-benefits">
+            <section class="marketing-benefits" data-cosmic-chapter data-cosmic-hue="252" data-cosmic-label=${this._t('benefits_title')}>
                 <div class="marketing-benefits-container">
                     <h2 class="marketing-benefits-title">${this._t('benefits_title')}</h2>
                     <div class="marketing-benefits-grid">
@@ -225,7 +227,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderUseCases() {
         return html`
-            <section class="marketing-use-cases">
+            <section class="marketing-use-cases" data-cosmic-chapter data-cosmic-hue="205" data-cosmic-label=${this._t('use_cases_title')}>
                 <h2 class="marketing-use-cases-title">${this._t('use_cases_title')}</h2>
                 <div class="marketing-use-cases-grid">
                     ${[1, 2, 3, 4, 5, 6].map((index) => html`
@@ -242,7 +244,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderFaq() {
         return html`
-            <section class="marketing-faq">
+            <section class="marketing-faq" data-cosmic-chapter data-cosmic-hue="198" data-cosmic-label=${this._t('faq_title')}>
                 <h2 class="marketing-faq-title">${this._t('faq_title')}</h2>
                 <div class="marketing-faq-list">
                     ${[1, 2, 3].map((index) => html`
@@ -259,7 +261,7 @@ export class ProductLandingPage extends PlatformPage {
 
     _renderCta() {
         return html`
-            <section class="marketing-cta">
+            <section class="marketing-cta" data-cosmic-chapter data-cosmic-hue="186" data-cosmic-label=${this._t('cta_title')}>
                 <h2 class="marketing-cta-title">${this._t('cta_title')}</h2>
                 <p class="marketing-cta-subtitle">${this._t('cta_subtitle')}</p>
                 <platform-button variant="primary" @click=${this._handleProductCtaClick}>
@@ -299,11 +301,11 @@ export class ProductLandingPage extends PlatformPage {
             throw new Error(`${this.tagName.toLowerCase()}: sections are required`);
         }
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
                 ${sections.map((sectionKey) => this._renderSection(sectionKey))}
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

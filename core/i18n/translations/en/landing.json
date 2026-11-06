@@ -23,7 +23,13 @@
         "mobile_nav_aria": "Menu",
         "blog": "Blog",
         "company_page": "Company",
-        "roadmap": "Roadmap"
+        "roadmap": "Roadmap",
+        "product_wiki_title": "Wiki",
+        "product_wiki_desc": "Team knowledge base",
+        "product_shop_title": "Shop",
+        "product_shop_desc": "Storefront and online orders",
+        "product_geo_title": "Geo",
+        "product_geo_desc": "Routing and delivery zones"
     },
     "meta": {
         "home_title": "{platformName} — business automation platform",
@@ -348,7 +354,10 @@
         "toast_contact_required": "Provide an email or phone number",
         "toast_products_required": "Select at least one product",
         "button_cancel": "Cancel",
-        "select_headcount_placeholder": "Company size *"
+        "select_headcount_placeholder": "Company size *",
+        "product_wiki": "Wiki",
+        "product_shop": "Shop",
+        "product_geo": "Geo"
     },
     "floating_cta": {
         "text": "Questions left? Message us on Telegram",
@@ -422,5 +431,20 @@
         "q2_li2": "Expanded observability for admins",
         "q2_li3": "Voice and multimodal journeys with the Voice service",
         "note": "Timelines evolve with prioritization; customers receive specifics via support."
+    },
+    "cosmic": {
+        "label_hero": "ORBIT",
+        "label_trust": "TRUST",
+        "label_agents": "AGENTS",
+        "label_about": "SYSTEM",
+        "label_abilities": "MODULES",
+        "label_advantages": "RESULT",
+        "label_roi": "IMPACT",
+        "label_plans": "PLANS",
+        "label_cases": "CASES",
+        "label_reviews": "SIGNAL",
+        "label_faq": "FAQ",
+        "label_cta": "LAUNCH",
+        "scroll_hint": "Scroll"
     }
 }

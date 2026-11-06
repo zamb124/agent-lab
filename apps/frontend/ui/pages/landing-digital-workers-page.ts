@@ -12,6 +12,8 @@ import '@platform/lib/components/platform-empty-state.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -244,12 +246,13 @@ export class LandingDigitalWorkersPage extends PlatformPage {
         const items = this._itemsList();
 
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="252" data-cosmic-label=${this.t('digital_workers.title')}>
                 <div class="marketing-content marketing-digital-workers">
                     <platform-breadcrumbs></platform-breadcrumbs>
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this.t('digital_workers.title')}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this.t('digital_workers.title')}></scramble-text></h1>
                         <p class="marketing-content-lede">${this.t('digital_workers.subtitle')}</p>
                     </header>
                     <p class="marketing-digital-workers-disclaimer">${this.t('digital_workers.disclaimer')}</p>
@@ -307,8 +310,9 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                           `
                         : ''}
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
             ${this._drawerSpec === null
                 ? nothing
                 : html`

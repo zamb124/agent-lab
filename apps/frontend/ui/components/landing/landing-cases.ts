@@ -67,6 +67,54 @@ export class LandingCases extends PlatformElement {
                 line-height: 1.55;
                 color: var(--text-secondary);
             }
+
+            /* Pin-хореография: карточки едут горизонтально на
+               --cosmic-section-t, пока секция прилипла (200vh). */
+            @media (prefers-reduced-motion: no-preference) {
+                :host {
+                    height: 100vh;
+                    padding: 0;
+                    overflow: clip;
+                }
+                .wrap {
+                    max-width: none;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    gap: clamp(24px, 4vh, 40px);
+                }
+                h2 {
+                    margin: 0;
+                    padding-top: clamp(64px, 10vh, 110px);
+                }
+                .sub {
+                    margin: 0;
+                }
+                .grid {
+                    display: flex;
+                    align-items: stretch;
+                    gap: clamp(16px, 2.5vw, 28px);
+                    padding: 0 clamp(20px, 10vw, 160px);
+                    box-sizing: border-box;
+                    /* translate % считается от ширины трека —
+                       max-content даёт полную ширину ленты. */
+                    width: max-content;
+                    will-change: transform;
+                    transform: translate3d(
+                        min(0px, calc(var(--cosmic-section-t, 0) * (100vw - 100%))),
+                        0,
+                        0
+                    );
+                }
+                article {
+                    flex: 0 0 min(400px, 78vw);
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    min-height: clamp(220px, 32vh, 300px);
+                }
+            }
         `,
     ];
 

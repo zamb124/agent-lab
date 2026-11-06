@@ -119,11 +119,13 @@ class TypographyRole(TypedDict):
 class TypographyStacks(TypedDict):
     sans: str
     mono: str
+    display: str
 
 
 class PlatformTypographyManifest(TypedDict):
     sans: TypographyRole
     mono: TypographyRole
+    display: TypographyRole
     stacks: TypographyStacks
     features: dict[str, str]
 
@@ -155,7 +157,7 @@ def _is_scannable(path: Path) -> bool:
 
 
 def _check_manifest_files(manifest: PlatformTypographyManifest, errors: list[str]) -> None:
-    for role in ("sans", "mono"):
+    for role in ("sans", "mono", "display"):
         block = manifest[role]
         for face in block["faces"]:
             rel_path = face["path"]
@@ -171,9 +173,11 @@ def _check_tokens_import(manifest: PlatformTypographyManifest, errors: list[str]
 
     expected_sans = manifest["stacks"]["sans"]
     expected_mono = manifest["stacks"]["mono"]
+    expected_display = manifest["stacks"]["display"]
 
     sans_match = re.search(r"--font-sans:\s*([^;]+);", tokens_text)
     mono_match = re.search(r"--font-mono:\s*([^;]+);", tokens_text)
+    display_match = re.search(r"--font-display:\s*([^;]+);", tokens_text)
     if sans_match is None:
         _fail(errors, "tokens.css: missing --font-sans")
     elif sans_match.group(1).strip() != expected_sans:
@@ -187,6 +191,13 @@ def _check_tokens_import(manifest: PlatformTypographyManifest, errors: list[str]
         _fail(
             errors,
             "tokens.css --font-mono must match platform-typography.json stacks.mono",
+        )
+    if display_match is None:
+        _fail(errors, "tokens.css: missing --font-display")
+    elif display_match.group(1).strip() != expected_display:
+        _fail(
+            errors,
+            "tokens.css --font-display must match platform-typography.json stacks.display",
         )
 
     if "--font-feature-sans:" not in tokens_text:
@@ -217,10 +228,13 @@ def _check_platform_fonts_css(manifest: PlatformTypographyManifest, errors: list
     css_text = FONTS_CSS_PATH.read_text(encoding="utf-8")
     sans_family = manifest["sans"]["family"]
     mono_family = manifest["mono"]["family"]
+    display_family = manifest["display"]["family"]
     if f"font-family: '{sans_family}'" not in css_text:
         _fail(errors, "platform-fonts.css must declare sans family from manifest")
     if f"font-family: '{mono_family}'" not in css_text:
         _fail(errors, "platform-fonts.css must declare mono family from manifest")
+    if f"font-family: '{display_family}'" not in css_text:
+        _fail(errors, "platform-fonts.css must declare display family from manifest")
     if "font-display: swap" not in css_text:
         _fail(errors, "platform-fonts.css must set font-display: swap")
 
@@ -272,17 +286,21 @@ def _is_allowed_font_family(value: str) -> bool:
     stripped = value.strip()
     if stripped in {"inherit", "initial", "unset", "revert"}:
         return True
-    if stripped.startswith("var(--font-sans") or stripped.startswith("var(--font-mono"):
+    if (
+        stripped.startswith("var(--font-sans")
+        or stripped.startswith("var(--font-mono")
+        or stripped.startswith("var(--font-display")
+    ):
         return True
     return False
 
 
 def _check_font_family_value(path: Path, value: str, errors: list[str]) -> None:
     if _is_allowed_font_family(value):
-        if "var(--font-mono," in value or "var(--font-sans," in value:
+        if "var(--font-mono," in value or "var(--font-sans," in value or "var(--font-display," in value:
             _fail(
                 errors,
-                f"{_rel(path)}: font-family fallback on platform token forbidden — use var(--font-mono) or var(--font-sans)",
+                f"{_rel(path)}: font-family fallback on platform token forbidden — use var(--font-mono), var(--font-sans) or var(--font-display)",
             )
         return
 
@@ -353,10 +371,10 @@ def _scan_file(path: Path, errors: list[str]) -> None:
 
     for match in FONT_SHORTHAND_RE.finditer(text):
         shorthand = match.group(0)
-        if "var(--font-mono," in shorthand or "var(--font-sans," in shorthand:
+        if "var(--font-mono," in shorthand or "var(--font-sans," in shorthand or "var(--font-display," in shorthand:
             _fail(
                 errors,
-                f"{_rel(path)}: font shorthand must not add fallbacks to --font-sans/--font-mono",
+                f"{_rel(path)}: font shorthand must not add fallbacks to --font-sans/--font-mono/--font-display",
             )
         forbidden = _contains_forbidden_literal(shorthand)
         if forbidden is not None:

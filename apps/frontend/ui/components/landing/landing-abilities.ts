@@ -175,26 +175,91 @@ export class LandingAbilities extends PlatformElement {
                 :host {
                     padding: 120px 80px;
                 }
-                
+
                 .abilities-title {
                     font-size: 60px;
                     margin-bottom: 100px;
                 }
-                
+
                 .ability-item {
                     gap: 80px;
                 }
-                
+
                 .ability-name {
                     font-size: 44px;
                 }
-                
+
                 .ability-description {
                     font-size: 20px;
                 }
-                
+
                 .ability-features li {
                     font-size: 18px;
+                }
+            }
+
+            /* Pin-хореография: секция прилипает (200vh), лента слайдов едет
+               горизонтально на --cosmic-section-t. Сдвиг ограничен min(0,·),
+               чтобы короткая лента не уезжала вправо. */
+            @media (prefers-reduced-motion: no-preference) {
+                :host {
+                    height: 100vh;
+                    padding: 0;
+                    overflow: clip;
+                }
+
+                .abilities-container {
+                    max-width: none;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    gap: clamp(20px, 4vh, 48px);
+                }
+
+                .abilities-title {
+                    margin: 0;
+                    padding-top: clamp(64px, 10vh, 110px);
+                }
+
+                .abilities-track {
+                    display: flex;
+                    align-items: center;
+                    gap: clamp(32px, 6vw, 96px);
+                    padding: 0 clamp(20px, 10vw, 160px);
+                    box-sizing: border-box;
+                    /* translate % считается от ширины самого трека —
+                       max-content даёт полную ширину ленты. */
+                    width: max-content;
+                    min-height: 0;
+                    will-change: transform;
+                    transform: translate3d(
+                        min(0px, calc(var(--cosmic-section-t, 0) * (100vw - 100%))),
+                        0,
+                        0
+                    );
+                }
+
+                .ability-item {
+                    flex: 0 0 auto;
+                    width: min(78vw, 960px);
+                    margin: 0;
+                }
+
+                @media (min-width: 768px) {
+                    .ability-item {
+                        flex-direction: row;
+                        align-items: center;
+                    }
+                }
+
+                @media (max-width: 767px) {
+                    .ability-item {
+                        width: 84vw;
+                    }
+                    .abilities-title {
+                        font-size: 26px;
+                    }
                 }
             }
         `
@@ -222,7 +287,7 @@ export class LandingAbilities extends PlatformElement {
         return html`
             <div class="abilities-container">
                 <h2 class="abilities-title">${t('features.tag')}</h2>
-                
+                <div class="abilities-track">
                 <div class="ability-item">
                     <div class="ability-image">
                         <img
@@ -353,6 +418,7 @@ export class LandingAbilities extends PlatformElement {
                             <li>${t('features.feature5_li3')}</li>
                         </ul>
                     </div>
+                </div>
                 </div>
             </div>
         `;

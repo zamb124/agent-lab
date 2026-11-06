@@ -94,7 +94,8 @@ describe('platform typography canon', () => {
     it('manifest declares Inter sans and JetBrains Mono with existing woff2 files', () => {
         expect(manifest.sans.family).toBe('Inter');
         expect(manifest.mono.family).toBe('JetBrains Mono');
-        for (const role of ['sans', 'mono']) {
+        expect(manifest.display.family).toBe('Unbounded');
+        for (const role of ['sans', 'mono', 'display']) {
             for (const face of manifest[role].faces) {
                 const fontPath = path.join(FONTS_DIR, face.path);
                 expect(existsSync(fontPath), face.path).toBe(true);
@@ -108,6 +109,7 @@ describe('platform typography canon', () => {
         expect(tokens).toContain("@import url('../fonts/platform-fonts.css');");
         expect(tokens).toContain(`--font-sans: ${manifest.stacks.sans};`);
         expect(tokens).toContain(`--font-mono: ${manifest.stacks.mono};`);
+        expect(tokens).toContain(`--font-display: ${manifest.stacks.display};`);
         expect(tokens).toContain('--font-feature-sans:');
         expect(reset).toContain('font-family: var(--font-sans);');
         expect(reset).toContain('font-feature-settings: var(--font-feature-sans);');
@@ -123,6 +125,7 @@ describe('platform typography canon', () => {
         const fontsCss = readFileSync(FONTS_CSS_PATH, 'utf8');
         expect(fontsCss).toContain(`font-family: '${manifest.sans.family}'`);
         expect(fontsCss).toContain(`font-family: '${manifest.mono.family}'`);
+        expect(fontsCss).toContain(`font-family: '${manifest.display.family}'`);
         expect(fontsCss).toContain('font-display: swap');
     });
 

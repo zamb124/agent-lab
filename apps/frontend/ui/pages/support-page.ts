@@ -12,6 +12,8 @@ import { isValidEmail } from '@platform/lib/utils/validators.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 const MAX_SUBJECT = 200;
@@ -127,11 +129,12 @@ export class SupportPage extends PlatformPage {
         const statusText = statusKey.length > 0 ? this.t(statusKey) : '';
         const supportEmail = this._supportEmail();
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="196" data-cosmic-label=${this.t('support_page.title')}>
                 <div class="marketing-content">
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this.t('support_page.title')}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this.t('support_page.title')}></scramble-text></h1>
                         <p class="marketing-content-lede">${this.t('support_page.lede')}</p>
                     </header>
 
@@ -197,8 +200,9 @@ export class SupportPage extends PlatformPage {
                         </a>
                     </footer>
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

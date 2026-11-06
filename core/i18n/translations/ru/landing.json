@@ -23,7 +23,13 @@
         "mobile_nav_aria": "Меню",
         "blog": "Блог",
         "company_page": "О компании",
-        "roadmap": "Roadmap"
+        "roadmap": "Roadmap",
+        "product_wiki_title": "Wiki",
+        "product_wiki_desc": "База знаний команды",
+        "product_shop_title": "Shop",
+        "product_shop_desc": "Витрина и онлайн-заказы",
+        "product_geo_title": "Geo",
+        "product_geo_desc": "Маршруты и зоны доставки"
     },
     "meta": {
         "home_title": "{platformName} — платформа автоматизации бизнеса",
@@ -348,7 +354,10 @@
         "toast_contact_required": "Укажите email или телефон",
         "toast_products_required": "Выберите хотя бы один продукт",
         "button_cancel": "Отмена",
-        "select_headcount_placeholder": "Выберите размер компании *"
+        "select_headcount_placeholder": "Выберите размер компании *",
+        "product_wiki": "Wiki",
+        "product_shop": "Shop",
+        "product_geo": "Geo"
     },
     "floating_cta": {
         "text": "Остались вопросы? Напишите в Telegram",
@@ -422,5 +431,20 @@
         "q2_li2": "Расширение наблюдаемости и отчётности для администраторов",
         "q2_li3": "Развитие голосовых и мультимодальных сценариев совместно с Voice-сервисом",
         "note": "Сроки уточняются по мере приоритизации; актуальная версия для клиентов — через поддержку."
+    },
+    "cosmic": {
+        "label_hero": "ОРБИТА",
+        "label_trust": "ДОВЕРИЕ",
+        "label_agents": "АГЕНТЫ",
+        "label_about": "СИСТЕМА",
+        "label_abilities": "МОДУЛИ",
+        "label_advantages": "РЕЗУЛЬТАТ",
+        "label_roi": "ЭФФЕКТ",
+        "label_plans": "ТАРИФЫ",
+        "label_cases": "СЦЕНАРИИ",
+        "label_reviews": "СИГНАЛ",
+        "label_faq": "FAQ",
+        "label_cta": "ЗАПУСК",
+        "scroll_hint": "Скролл"
     }
 }

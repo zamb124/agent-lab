@@ -5,7 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { cosmicUiStyles } from '@platform/lib/styles/shared/cosmic-marketing.styles.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { cookieConsentDecisionIsCurrent } from '../../_helpers/cookie-consent-analytics.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -38,6 +38,7 @@ const PUBLIC_BANNER_ROUTES = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'product-geo', 'product-wiki', 'product-shop',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -49,7 +50,7 @@ export class CookieConsentBanner extends PlatformElement {
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
-        buttonStyles,
+        cosmicUiStyles,
         css`
             :host {
                 display: none;
@@ -65,45 +66,65 @@ export class CookieConsentBanner extends PlatformElement {
             }
             .panel {
                 pointer-events: auto;
-                margin: 0 auto;
-                max-width: 960px;
-                padding: var(--space-4);
-                background: var(--bg-elevated);
-                border: 1px solid var(--border-default);
-                border-bottom: none;
-                border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-                color: var(--text-primary);
-                box-shadow: var(--glass-shadow-medium);
+                margin: 0 auto var(--space-4);
+                width: min(620px, calc(100% - 32px));
+                margin-left: max(96px, calc(50% - 310px));
+                padding: var(--space-5) var(--space-6);
+                background: var(--marketing-cosmic-panel-bg);
+                border: 1px solid var(--marketing-cosmic-panel-border);
+                clip-path: var(--marketing-cosmic-btn-clip);
+                backdrop-filter: blur(18px);
+                color: var(--marketing-cosmic-text);
+                box-shadow: var(--marketing-cosmic-panel-shadow);
             }
             .title {
                 margin: 0 0 var(--space-2);
-                font-size: var(--text-lg);
+                font-family: var(--font-mono);
+                font-size: var(--text-sm);
                 font-weight: 600;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--marketing-cosmic-cyan);
             }
             .body {
                 margin: 0 0 var(--space-3);
                 font-size: var(--text-sm);
                 line-height: 1.5;
-                color: var(--text-tertiary);
+                color: var(--marketing-cosmic-muted);
             }
             .links {
                 display: flex;
                 flex-wrap: wrap;
-                gap: var(--space-3);
+                gap: var(--space-4);
                 margin: 0 0 var(--space-4);
             }
             .links a {
-                color: var(--accent);
-                font-size: var(--text-sm);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--marketing-cosmic-muted);
+                text-decoration: none;
+                border-bottom: 1px solid var(--marketing-cosmic-line-strong);
+                padding-bottom: 2px;
+            }
+            .links a:hover {
+                color: var(--marketing-cosmic-cyan);
+                border-bottom-color: var(--marketing-cosmic-cyan);
             }
             .actions {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
             }
-            .actions .btn {
-                flex: 1 1 160px;
-                min-height: 44px;
+            .actions .cosmic-btn {
+                flex: 1 1 150px;
+                min-height: 40px;
+                font-size: var(--text-sm);
+            }
+            .actions .cosmic-btn:disabled {
+                opacity: 0.5;
+                cursor: default;
             }
             .categories {
                 display: flex;
@@ -111,11 +132,16 @@ export class CookieConsentBanner extends PlatformElement {
                 gap: var(--space-3);
                 margin: 0 0 var(--space-4);
             }
+            @media (max-width: 900px) {
+                .panel {
+                    margin-left: auto;
+                }
+            }
             @media (max-width: 480px) {
                 .actions {
                     flex-direction: column;
                 }
-                .actions .btn {
+                .actions .cosmic-btn {
                     width: 100%;
                 }
             }
@@ -355,28 +381,28 @@ export class CookieConsentBanner extends PlatformElement {
                 <div class="actions">
                     ${consent.settingsOpen
                         ? html`
-                              <button class="btn btn-secondary" type="button" ?disabled=${busy}
+                              <button class="cosmic-btn cosmic-btn--primary" type="button" ?disabled=${busy}
                                   @click=${this._onSaveSettings}>
                                   ${this.t('banner.save')}
                               </button>
                           `
                         : analyticsConfigured
                           ? html`
-                                <button class="btn btn-secondary" type="button" ?disabled=${busy}
+                                <button class="cosmic-btn cosmic-btn--primary" type="button" ?disabled=${busy}
                                     @click=${this._onAcceptAll}>
                                     ${this.t('banner.accept_all')}
                                 </button>
-                                <button class="btn btn-secondary" type="button" ?disabled=${busy}
+                                <button class="cosmic-btn" type="button" ?disabled=${busy}
                                     @click=${this._onNecessaryOnly}>
                                     ${this.t('banner.necessary_only')}
                                 </button>
-                                <button class="btn btn-secondary" type="button" ?disabled=${busy}
+                                <button class="cosmic-btn" type="button" ?disabled=${busy}
                                     @click=${() => this._consent.openSettings(null)}>
                                     ${this.t('banner.settings')}
                                 </button>
                             `
                           : html`
-                                <button class="btn btn-secondary" type="button" ?disabled=${busy}
+                                <button class="cosmic-btn cosmic-btn--primary" type="button" ?disabled=${busy}
                                     @click=${this._onUnderstood}>
                                     ${this.t('banner.understood')}
                                 </button>

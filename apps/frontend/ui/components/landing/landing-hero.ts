@@ -13,7 +13,9 @@ import {
 import { markPublicSearchLandingTransition } from '../../_helpers/public-search-transition.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
+import { cosmicTypeStyles } from '@platform/lib/styles/shared/cosmic-marketing.styles.js';
 import '@platform/lib/components/platform-icon.js';
+import '../cosmic/scramble-text.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 const SEARCH_MODES = Object.freeze([
@@ -37,6 +39,7 @@ export class LandingHero extends PlatformElement {
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
+        cosmicTypeStyles,
         css`
             :host {
                 display: block;
@@ -46,9 +49,8 @@ export class LandingHero extends PlatformElement {
                 min-height: var(--app-vh, 100vh);
                 position: relative;
                 overflow: hidden;
-                background: var(--marketing-hero-bg);
             }
-            
+
             .hero-container {
                 max-width: 1440px;
                 width: 100%;
@@ -61,60 +63,73 @@ export class LandingHero extends PlatformElement {
                 min-height: calc(var(--app-vh, 100vh) - 71px);
                 position: relative;
             }
-            
+
             .hero-subtitle {
                 display: none;
             }
 
             .hero-title {
                 position: absolute;
-                top: 50%;
+                top: 34%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
+                font-family: var(--font-display);
+                letter-spacing: 0.02em;
                 font-weight: 500;
-                font-size: 280px;
-                line-height: 320px;
+                font-size: clamp(3.5rem, 11vw, 9.5rem);
+                line-height: 1;
                 text-align: center;
-                color: var(--marketing-product-accent);
+                color: var(--marketing-cosmic-text);
                 margin: 0;
-                text-transform: capitalize;
-                z-index: 1;
+                text-transform: uppercase;
+                z-index: 12;
                 white-space: nowrap;
+                pointer-events: none;
+                text-shadow: 0 0 60px color-mix(in srgb, var(--marketing-cosmic-cyan) 25%, transparent);
             }
-            
+
             .hero-image-wrapper {
-                position: relative;
-                z-index: 10;
-                width: 100%;
-                max-width: 1200px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .hero-image {
-                width: 100%;
-                height: auto;
-                object-fit: contain;
-                filter: var(--marketing-hero-image-filter);
+                display: none;
             }
 
             .hero-search {
                 position: absolute;
                 left: 50%;
-                top: clamp(520px, calc(var(--app-vh, 100vh) - 230px), 660px);
+                top: clamp(480px, calc(var(--app-vh, 100vh) - 260px), 660px);
                 bottom: auto;
                 transform: translateX(-50%);
                 z-index: 24;
                 width: min(760px, calc(100% - 40px));
-                border-radius: 30px;
+                border-radius: var(--radius-xl);
                 padding: 10px;
                 box-sizing: border-box;
-                background: var(--glass-bg-strong);
-                border: 1px solid var(--glass-border-medium);
-                box-shadow: var(--glass-shadow-ultra);
+                background: var(--marketing-cosmic-panel-bg);
+                border: 1px solid var(--marketing-cosmic-panel-border);
+                box-shadow: var(--marketing-cosmic-panel-shadow);
                 backdrop-filter: blur(28px);
+            }
+
+            .hero-scroll-hint {
+                position: absolute;
+                left: var(--space-6);
+                bottom: var(--space-6);
+                z-index: 20;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-family: var(--font-mono);
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--marketing-cosmic-label);
+            }
+
+            .hero-scroll-hint::after {
+                content: '';
+                display: block;
+                width: 42px;
+                height: 1px;
+                background: var(--marketing-cosmic-line-strong);
             }
 
             .hero-search-main {
@@ -128,7 +143,7 @@ export class LandingHero extends PlatformElement {
             .hero-search-icon {
                 display: grid;
                 place-items: center;
-                color: var(--text-secondary);
+                color: var(--marketing-cosmic-label);
             }
 
             input[type='search'] {
@@ -137,7 +152,7 @@ export class LandingHero extends PlatformElement {
                 border: 0;
                 outline: none;
                 background: transparent;
-                color: var(--text-primary);
+                color: var(--marketing-cosmic-text);
                 font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 20px;
@@ -146,7 +161,7 @@ export class LandingHero extends PlatformElement {
             }
 
             input[type='search']::placeholder {
-                color: var(--text-disabled);
+                color: var(--marketing-cosmic-label);
             }
 
             .hero-search-submit,
@@ -154,18 +169,23 @@ export class LandingHero extends PlatformElement {
                 width: 44px;
                 height: 44px;
                 border: 0;
-                border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--text-on-accent);
-                background: var(--marketing-product-accent);
+                color: var(--marketing-cosmic-bg);
+                background: var(--marketing-cosmic-cyan);
+                clip-path: var(--marketing-cosmic-btn-clip);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
 
-            .hero-search-submit:hover,
+            .hero-search-submit:hover {
+                background: var(--marketing-cosmic-text);
+                transform: translateY(-1px);
+            }
+
             .hero-tool-icon:hover {
-                background: var(--accent);
+                border-color: var(--marketing-cosmic-cyan);
+                color: var(--marketing-cosmic-text);
                 transform: translateY(-1px);
             }
 
@@ -194,40 +214,43 @@ export class LandingHero extends PlatformElement {
 
             .hero-mode-chip {
                 height: 36px;
-                border: 0;
-                border-radius: 999px;
+                border: 1px solid var(--marketing-cosmic-panel-border);
+                border-radius: var(--radius-full);
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
                 padding: 0 13px;
-                color: var(--text-secondary);
-                background: var(--glass-bg-medium);
-                font-family: var(--font-sans);
+                color: var(--marketing-cosmic-muted);
+                background: transparent;
+                font-family: var(--font-mono);
                 font-weight: 500;
-                font-size: 14px;
+                font-size: 12px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
                 line-height: 1;
                 white-space: nowrap;
                 cursor: pointer;
-                transition: transform 180ms ease, color 180ms ease, background 180ms ease;
+                transition: transform 180ms ease, color 180ms ease, border-color 180ms ease;
             }
 
             .hero-mode-chip:hover {
-                color: var(--text-primary);
-                background: var(--glass-border-strong);
+                color: var(--marketing-cosmic-text);
+                border-color: var(--marketing-cosmic-panel-border-strong);
                 transform: translateY(-1px);
             }
 
             .hero-mode-chip[aria-pressed='true'] {
-                color: var(--text-on-accent);
-                background: color-mix(in srgb, var(--accent) 36%, transparent);
-                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+                color: var(--marketing-cosmic-cyan);
+                border-color: var(--marketing-cosmic-cyan);
+                background: var(--marketing-cosmic-glass);
             }
 
             .hero-tool-icon {
                 width: 36px;
                 height: 36px;
-                background: var(--glass-bg-medium);
-                color: var(--text-secondary);
+                background: var(--marketing-cosmic-glass);
+                border: 1px solid var(--marketing-cosmic-panel-border);
+                color: var(--marketing-cosmic-muted);
             }
 
             .hero-file-input {
@@ -259,10 +282,10 @@ export class LandingHero extends PlatformElement {
                 align-items: center;
                 gap: 8px;
                 padding: 0 7px 0 10px;
-                border-radius: 999px;
-                color: var(--text-secondary);
-                background: var(--glass-bg-medium);
-                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-full);
+                color: var(--marketing-cosmic-muted);
+                background: var(--marketing-cosmic-glass);
+                border: 1px solid var(--marketing-cosmic-panel-border);
                 box-sizing: border-box;
             }
 
@@ -284,7 +307,7 @@ export class LandingHero extends PlatformElement {
 
             .hero-file-size {
                 flex-shrink: 0;
-                color: var(--text-disabled);
+                color: var(--marketing-cosmic-label);
                 font-size: 12px;
                 line-height: 1;
             }
@@ -296,42 +319,46 @@ export class LandingHero extends PlatformElement {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--text-secondary);
+                color: var(--marketing-cosmic-muted);
                 background: transparent;
                 cursor: pointer;
                 transition: color 160ms ease, background 160ms ease;
             }
 
             .hero-file-remove:hover {
-                color: var(--text-primary);
-                background: var(--glass-border-medium);
+                color: var(--marketing-cosmic-text);
+                background: var(--marketing-cosmic-glass-strong);
             }
-            
+
             .hero-text-left {
                 position: absolute;
                 bottom: 235px;
                 left: 50px;
-                font-family: var(--font-sans);
-                font-size: 22px;
-                line-height: 1.4;
-                color: var(--text-secondary);
-                max-width: 260px;
+                font-family: var(--font-mono);
+                font-size: 14px;
+                line-height: 1.5;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--marketing-cosmic-label);
+                max-width: 240px;
                 z-index: 3;
             }
-            
+
             .hero-text-right {
                 position: absolute;
                 bottom: 235px;
                 right: 50px;
-                font-family: var(--font-sans);
-                font-size: 22px;
-                line-height: 1.4;
-                color: var(--text-secondary);
-                max-width: 260px;
+                font-family: var(--font-mono);
+                font-size: 14px;
+                line-height: 1.5;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--marketing-cosmic-label);
+                max-width: 240px;
                 text-align: right;
                 z-index: 3;
             }
-            
+
             .hero-cta-row {
                 position: absolute;
                 bottom: 38px;
@@ -347,25 +374,27 @@ export class LandingHero extends PlatformElement {
             }
 
             .hero-cta {
-                padding: 12px 24px;
-                border-radius: 40px;
+                padding: 14px 28px;
+                border: 1px solid var(--marketing-cosmic-cyan);
+                border-radius: 0;
+                clip-path: var(--marketing-cosmic-btn-clip);
                 font-family: var(--font-sans);
-                font-weight: 500;
-                font-size: 20px;
+                font-weight: 600;
+                font-size: 17px;
                 line-height: 24px;
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
                 white-space: nowrap;
-                box-shadow: none;
+                box-shadow: 0 0 32px color-mix(in srgb, var(--marketing-cosmic-cyan) 22%, transparent);
                 text-align: center;
                 text-decoration: none;
-                background: var(--marketing-product-accent);
-                color: var(--text-on-accent);
-                border: none;
+                background: var(--marketing-cosmic-cyan);
+                color: var(--marketing-cosmic-bg);
             }
-            
+
             .hero-cta:hover {
-                background: var(--accent);
+                background: var(--marketing-cosmic-text);
+                border-color: var(--marketing-cosmic-text);
                 transform: translateY(-2px);
             }
             
@@ -820,32 +849,26 @@ export class LandingHero extends PlatformElement {
         const heroWordmark = (brand === undefined || brand === null || typeof brand.platformName !== 'string' ? '' : brand.platformName).toUpperCase();
         return html`
             <div class="hero-container">
-                <h1 class="hero-title">${heroWordmark}</h1>
+                <h1 class="hero-title"><scramble-text .text=${heroWordmark}></scramble-text></h1>
                 <p class="hero-subtitle">${t('hero.subtitle')}</p>
-                
-                    <div class="hero-image-wrapper">
-                        <img
-                            src="/static/frontend/assets/images/main_img.png"
-                            alt=${t('hero.image_alt')}
-                            class="hero-image"
-                        />
-                    </div>
 
                 ${this._renderSearch()}
-                    
+
                 <p class="hero-text-left">
                     ${unsafeHTML(t('hero.trust_process'))}
                         </p>
-                        
+
                         <div class="hero-cta-row">
                             <button type="button" class="hero-cta" @click=${this._handleCTA}>
                                 ${t('hero.start_button')}
                             </button>
                         </div>
-                        
+
                 <p class="hero-text-right">
                     ${unsafeHTML(t('hero.evolution'))}
                         </p>
+
+                <span class="hero-scroll-hint">${t('cosmic.scroll_hint')}</span>
             </div>
         `;
     }

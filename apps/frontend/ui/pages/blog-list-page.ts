@@ -7,6 +7,8 @@ import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/ma
 import '@platform/lib/components/platform-spinner.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -55,11 +57,12 @@ export class BlogListPage extends PlatformPage {
             if (Array.isArray(rawItems)) items = rawItems;
         }
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="196" data-cosmic-label=${this.t('blog_page.title')}>
                 <div class="marketing-content">
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this.t('blog_page.title')}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this.t('blog_page.title')}></scramble-text></h1>
                         <p class="marketing-content-lede">${this.t('blog_page.subtitle')}</p>
                     </header>
                     ${busy ? html`<platform-spinner></platform-spinner>` : null}
@@ -84,8 +87,9 @@ export class BlogListPage extends PlatformPage {
                         )}
                     </ul>
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

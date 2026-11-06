@@ -7,6 +7,8 @@ import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/ma
 import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import '../components/cosmic/cosmic-scope.js';
+import '../components/cosmic/scramble-text.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 
 export class RoadmapPage extends PlatformPage {
@@ -32,11 +34,12 @@ export class RoadmapPage extends PlatformPage {
 
     override render(): TemplateResult {
         return html`
-            <landing-header></landing-header>
-            <div class="marketing-page-container">
+            <cosmic-scope class="marketing-page-container">
+                <landing-header></landing-header>
+                <section data-cosmic-chapter data-cosmic-hue="258" data-cosmic-label=${this.t('roadmap_page.title')}>
                 <div class="marketing-content">
                     <header class="marketing-content-hero">
-                        <h1 class="marketing-content-title">${this.t('roadmap_page.title')}</h1>
+                        <h1 class="marketing-content-title"><scramble-text .text=${this.t('roadmap_page.title')}></scramble-text></h1>
                         <p class="marketing-content-lede">${this.t('roadmap_page.subtitle')}</p>
                     </header>
                     <div class="marketing-content-stack">
@@ -59,8 +62,9 @@ export class RoadmapPage extends PlatformPage {
                     </div>
                     <p class="marketing-text-muted">${this.t('roadmap_page.note')}</p>
                 </div>
+                </section>
                 <landing-footer></landing-footer>
-            </div>
+            </cosmic-scope>
         `;
     }
 }

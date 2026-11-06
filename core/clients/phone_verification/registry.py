@@ -38,11 +38,13 @@ class PhoneVerificationRegistry:
         *,
         code_senders: list[CodeSender],
         direct_verifiers: list[DirectVerifier],
+        client_verifiers: list[DirectVerifier],
         contact_share: dict[PhoneVerificationMethod, ContactShareVerifier],
         oauth: dict[PhoneVerificationMethod, OAuthVerifier],
     ) -> None:
         self.code_senders: list[CodeSender] = code_senders
         self.direct_verifiers: list[DirectVerifier] = direct_verifiers
+        self.client_verifiers: list[DirectVerifier] = client_verifiers
         self.contact_share: dict[PhoneVerificationMethod, ContactShareVerifier] = contact_share
         self.oauth: dict[PhoneVerificationMethod, OAuthVerifier] = oauth
 
@@ -64,6 +66,12 @@ class PhoneVerificationRegistry:
 
         code_senders: list[CodeSender] = [smsru, emulator_code]
         direct: list[DirectVerifier] = [telegram, max_bot, yandex, vk, sber, emulator_direct]
+        # Proof, присланное клиентом (`/verify direct`), доверяет только
+        # верификатору, чьё доказательство проверяемо клиентски: эмулятор
+        # (dev/test), позже — подписанные данные mini-app. Contact-share
+        # подтверждается только webhook/poll-апдейтом с серверов провайдера,
+        # OAuth — обменом code→token: в `client_verifiers` им не место.
+        client_direct: list[DirectVerifier] = [emulator_direct]
         contact_share: dict[PhoneVerificationMethod, ContactShareVerifier] = {
             PhoneVerificationMethod.TELEGRAM_CONTACT: telegram,
             PhoneVerificationMethod.MAX_CONTACT: max_bot,
@@ -76,12 +84,19 @@ class PhoneVerificationRegistry:
         return cls(
             code_senders=code_senders,
             direct_verifiers=direct,
+            client_verifiers=client_direct,
             contact_share=contact_share,
             oauth=oauth,
         )
 
     def direct_for(self, provider: CustomerIdentityProvider) -> DirectVerifier | None:
         for verifier in self.direct_verifiers:
+            if verifier.provider == provider:
+                return verifier
+        return None
+
+    def client_direct_for(self, provider: CustomerIdentityProvider) -> DirectVerifier | None:
+        for verifier in self.client_verifiers:
             if verifier.provider == provider:
                 return verifier
         return None

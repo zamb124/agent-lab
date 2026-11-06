@@ -31,9 +31,21 @@
       }
     ]
   },
+  "display": {
+    "family": "Unbounded",
+    "license": "OFL-1.1",
+    "faces": [
+      {
+        "path": "unbounded/Unbounded-Variable.woff2",
+        "weight": "200 900",
+        "style": "normal"
+      }
+    ]
+  },
   "stacks": {
     "sans": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    "mono": "'JetBrains Mono', ui-monospace, 'SF Mono', monospace"
+    "mono": "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
+    "display": "'Unbounded', var(--font-sans)"
   },
   "features": {
     "sans": "'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1"

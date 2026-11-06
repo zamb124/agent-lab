@@ -35,7 +35,10 @@
         "lead-requests": "Заявки",
         "platform-tracing": "Трейсинг",
         "crawl-report": "Краулер",
-        "platform-billing": "Тарифы (админ)"
+        "platform-billing": "Тарифы (админ)",
+        "product-geo": "Geo",
+        "product-wiki": "Wiki",
+        "product-shop": "Shop"
     },
     "bottom_nav": {
         "dashboard": "Панель",
