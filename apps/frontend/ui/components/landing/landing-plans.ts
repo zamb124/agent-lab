@@ -160,7 +160,7 @@ export class LandingPlans extends PlatformElement {
             .plan-cta.transparent {
                 background: transparent;
                 border: 1px solid var(--text-secondary);
-                color: var(--text-on-accent);
+                color: var(--text-secondary);
             }
             
             .plan-cta.transparent:hover {
@@ -170,7 +170,7 @@ export class LandingPlans extends PlatformElement {
             
             .plan-cta.primary {
                 background: var(--marketing-product-accent);
-                color: var(--text-secondary);
+                color: var(--text-on-accent);
             }
             
             .plan-cta.primary:hover {
