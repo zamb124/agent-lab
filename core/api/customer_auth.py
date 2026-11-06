@@ -45,7 +45,7 @@ from core.customers.models import CustomerAddress
 from core.customers.session import merge_scope_company_ids
 from core.di.platform import Di
 from core.platform_brand.resolver import resolve_brand_domain
-from core.request_scope import require_customer
+from core.request_scope import CustomerScope, require_customer
 from core.types import parse_json_object
 
 customer_auth_router = APIRouter(prefix="/customer-auth", tags=["customer-auth"])
@@ -194,7 +194,7 @@ async def customer_auth_status(
     return view
 
 
-def _scope_ref(scope) -> CustomerRef:
+def _scope_ref(scope: CustomerScope) -> CustomerRef:
     return CustomerRef(
         customer_id=scope.customer_id,
         phone_e164=scope.phone_e164,

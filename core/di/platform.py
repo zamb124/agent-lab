@@ -31,6 +31,7 @@ from core.config.models import (
 from core.context import get_context
 from core.customers.address_service import CustomerAddressService
 from core.customers.auth_service import CustomerAuthService
+from core.customers.notify_service import CustomerNotifyService
 from core.customers.service import CustomerService
 from core.customers.session import CustomerSessionService
 from core.db.storage import SharedStorage, Storage
@@ -112,6 +113,19 @@ def customer_auth_service(
 
 
 @recipe
+def customer_notify_service(
+    customer_auth: CustomerAuthConfig,
+    server: ServerConfig,
+    redis_client: RedisClient,
+) -> CustomerNotifyService:
+    return CustomerNotifyService(
+        cfg=customer_auth,
+        env=server.env,
+        redis=redis_client,
+    )
+
+
+@recipe
 def geocoder(geocoding: GeocodingConfig, redis_client: RedisClient) -> Geocoder:
     return NominatimGeocoder(geocoding, redis_client)
 
@@ -178,6 +192,7 @@ class PlatformDi(
         customer_service,
         customer_session_service,
         customer_auth_service,
+        customer_notify_service,
         geocoder,
         customer_address_service,
     ),
@@ -190,6 +205,7 @@ class PlatformDi(
     company_integration_credential_service: CompanyIntegrationCredentialService
     customer_address_service: CustomerAddressService
     customer_auth_service: CustomerAuthService
+    customer_notify_service: CustomerNotifyService
     customer_service: CustomerService
     customer_session_service: CustomerSessionService
     geocoder: Geocoder

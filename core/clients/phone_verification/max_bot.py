@@ -143,6 +143,27 @@ class MaxContactProvider:
                 retryable=True,
             ) from exc
 
+    async def send_text(self, chat_id: str, text: str) -> None:
+        """Произвольное сообщение в чат покупателя (уведомления кабинета)."""
+        assert self._cfg is not None
+        if not self._cfg.access_token:
+            raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
+        try:
+            _ = await request_public_oauth(
+                "POST",
+                f"{self._cfg.api_base_url}/messages",
+                params={"chat_id": chat_id},
+                headers={"Authorization": self._cfg.access_token},
+                json={"text": text},
+                timeout=20.0,
+            )
+        except Exception as exc:
+            raise ProviderError(
+                PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+                f"max sendMessage: {exc}",
+                retryable=True,
+            ) from exc
+
     async def set_webhook(self, url: str, secret: str) -> None:
         """`POST /subscriptions` — подписка webhook; Authorization header, идемпотентно."""
         assert self._cfg is not None

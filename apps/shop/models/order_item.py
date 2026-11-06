@@ -41,5 +41,12 @@ class ShopOrderItem(PlatformModel):
         return await cls.objects.filter(order_id=order_id).all()
 
     @classmethod
+    async def list_many_by_order_ids(cls, order_ids: list[str]) -> list[Self]:
+        """Позиции пачки заказов — превью ленты кабинета без N+1."""
+        if not order_ids:
+            return []
+        return await cls.objects.filter(order_id__in=order_ids).all()
+
+    @classmethod
     async def create_many(cls, items: list[Self]) -> list[Self]:
         return await cls.objects.bulk_create(items)

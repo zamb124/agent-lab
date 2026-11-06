@@ -42,8 +42,11 @@ from apps.shop.models.api import (
     ShopModifierOptionCreateRequest,
     ShopModifierOptionResponse,
     ShopModifierOptionUpdateRequest,
+    ShopMyOrderDetailResponse,
+    ShopMyOrderListItemResponse,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
+    ShopOrderItemPreview,
     ShopOrderResponse,
     ShopOrderStatusResponse,
     ShopProductCreateRequest,
@@ -57,6 +60,7 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopStorefrontGeoResponse,
     ShopTableCreateRequest,
     ShopTableResponse,
     ShopTableUpdateRequest,
@@ -256,6 +260,25 @@ class ShopOrderCreatePayload(ShopOrderCreateRequest):
 
 class ShopPublicOrderStatusPayload(StrictBaseModel):
     public_code: str = Field(min_length=4, max_length=16)
+
+
+class ShopMyOrdersListPayload(StrictBaseModel):
+    """Лента `my/orders`: фильтр по статусу или «активные/завершённые»."""
+
+    status: ShopOrderStatus | None = None
+    active: bool | None = None
+    limit: int = Field(default=30, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class ShopMyOrderCodePayload(StrictBaseModel):
+    """Детали/отмена заказа кабинета по публичному коду."""
+
+    public_code: str = Field(min_length=4, max_length=16)
+
+
+class ShopStorefrontGeoPayload(StrictBaseModel):
+    slug: str = Field(min_length=3, max_length=40)
 
 
 class ShopAiDescribePayload(StrictBaseModel):
@@ -907,6 +930,125 @@ async def op_public_order_status(
         table_label=order.table_label,
         created_at=order.created_at.isoformat(),
     )
+
+
+# --- Кабинет покупателя: сквозная история и гео витрины ---
+
+
+_ACTIVE_STATUSES = [
+    ShopOrderStatus.NEW,
+    ShopOrderStatus.ACCEPTED,
+    ShopOrderStatus.PREPARING,
+    ShopOrderStatus.DELIVERING,
+]
+_DONE_STATUSES = [ShopOrderStatus.DONE, ShopOrderStatus.CANCELLED]
+
+
+def _my_statuses(payload: ShopMyOrdersListPayload) -> list[ShopOrderStatus] | None:
+    if payload.status is not None:
+        return [ShopOrderStatus(payload.status)]
+    if payload.active is True:
+        return _ACTIVE_STATUSES
+    if payload.active is False:
+        return _DONE_STATUSES
+    return None
+
+
+async def op_public_my_orders_list(
+    payload: ShopMyOrdersListPayload, *, user: User, di: Di
+) -> OffsetPage[ShopMyOrderListItemResponse]:
+    """Сквозная история заказов покупателя по всем витринам платформы."""
+    _ = user
+    customer = require_customer()
+    orders, shops, items_by_order, total = await di.order_service.list_customer_orders(
+        customer.customer_id,
+        statuses=_my_statuses(payload),
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return OffsetPage(
+        items=[
+            di.order_service.my_order_list_item(
+                order,
+                shops.get(order.shop_id),
+                storefront_url=(
+                    di.storefront_service.storefront_url(shops[order.shop_id])
+                    if order.shop_id in shops
+                    else ""
+                ),
+                items_preview=[
+                    ShopOrderItemPreview(name=i.name_snapshot, qty=i.qty)
+                    for i in items_by_order.get(order.shop_order_id, [])
+                ],
+            )
+            for order in orders
+        ],
+        total=total,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+
+
+async def op_public_my_order_get(
+    payload: ShopMyOrderCodePayload, *, user: User, di: Di
+) -> ShopMyOrderDetailResponse:
+    """Карточка заказа покупателя: позиции, таймлайн статусов, гео доставки."""
+    _ = user
+    customer = require_customer()
+    try:
+        order, shop, items = await di.order_service.customer_order_detail(
+            customer.customer_id, payload.public_code
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return di.order_service.my_order_detail(
+        order,
+        shop,
+        items,
+        storefront_url=(
+            di.storefront_service.storefront_url(shop) if shop is not None else ""
+        ),
+    )
+
+
+async def op_public_my_order_cancel(
+    payload: ShopMyOrderCodePayload, *, user: User, di: Di
+) -> ShopMyOrderDetailResponse:
+    """Отмена заказа покупателем: только пока статус `new` — дальше зовёт магазин."""
+    _ = user
+    customer = require_customer()
+    try:
+        order = await di.order_service.customer_cancel(
+            customer.customer_id, payload.public_code
+        )
+        _, shop, items = await di.order_service.customer_order_detail(
+            customer.customer_id, payload.public_code
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    return di.order_service.my_order_detail(
+        order,
+        shop,
+        items,
+        storefront_url=(
+            di.storefront_service.storefront_url(shop) if shop is not None else ""
+        ),
+    )
+
+
+async def op_public_storefront_geo(
+    payload: ShopStorefrontGeoPayload, *, user: User, di: Di
+) -> ShopStorefrontGeoResponse:
+    """Точка магазина и зона доставки для карты витрины (анонимно)."""
+    _ = user
+    geo = await di.storefront_service.geo_payload(payload.slug)
+    if geo is None:
+        raise_not_found(
+            PlatformNotFoundError("Storefront not found", error_code="storefront_not_found")
+        )
+    return ShopStorefrontGeoResponse.model_validate(geo)
 
 
 # --- AI-операции (канонический core.ai runtime, биллинг внутри клиентов) ---

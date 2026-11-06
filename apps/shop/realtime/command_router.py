@@ -26,6 +26,8 @@ from apps.shop.realtime.operations import (
     ShopModifierOptionCreatePayload,
     ShopModifierOptionIdPayload,
     ShopModifierOptionUpdatePayload,
+    ShopMyOrderCodePayload,
+    ShopMyOrdersListPayload,
     ShopOrderCreatePayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
@@ -41,6 +43,7 @@ from apps.shop.realtime.operations import (
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
     ShopPublicOrderStatusPayload,
+    ShopStorefrontGeoPayload,
     ShopTableCreatePayload,
     ShopTableIdPayload,
     ShopTableUpdatePayload,
@@ -88,8 +91,12 @@ from apps.shop.realtime.operations import (
     op_promos_remove,
     op_promos_update,
     op_public_cart_price,
+    op_public_my_order_cancel,
+    op_public_my_order_get,
+    op_public_my_orders_list,
     op_public_order_create,
     op_public_order_status,
+    op_public_storefront_geo,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -222,6 +229,18 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/public/order_status_requested": Operation(
         payload_model=ShopPublicOrderStatusPayload, fn=op_public_order_status
+    ),
+    "shop/public/my_orders_list_requested": Operation(
+        payload_model=ShopMyOrdersListPayload, fn=op_public_my_orders_list
+    ),
+    "shop/public/my_order_get_requested": Operation(
+        payload_model=ShopMyOrderCodePayload, fn=op_public_my_order_get
+    ),
+    "shop/public/my_order_cancel_requested": Operation(
+        payload_model=ShopMyOrderCodePayload, fn=op_public_my_order_cancel
+    ),
+    "shop/public/storefront_geo_requested": Operation(
+        payload_model=ShopStorefrontGeoPayload, fn=op_public_storefront_geo
     ),
     "shop/ai/describe_requested": Operation(
         payload_model=ShopAiDescribePayload, fn=op_ai_describe_product

@@ -7,38 +7,54 @@ Read-path идёт в Redis-снапшот с ETag/304 — PostgreSQL не тр�
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
+import json
+from collections.abc import AsyncIterator
 
 import segno
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from apps.shop.api.market_shell import market_html
-from apps.shop.api.storefront_shell import storefront_html
+from apps.shop.api.storefront import storefront_html
 from apps.shop.di import Di
+from apps.shop.models import Shop
 from apps.shop.models.api import (
     ShopCartPriceRequest,
     ShopCartPriceResponse,
+    ShopMyOrderDetailResponse,
+    ShopMyOrderListItemResponse,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
     ShopOrderStatusResponse,
+    ShopStorefrontGeoResponse,
 )
+from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
     ShopCartPricePayload,
+    ShopMyOrderCodePayload,
+    ShopMyOrdersListPayload,
     ShopOrderCreatePayload,
     ShopPublicOrderStatusPayload,
+    ShopStorefrontGeoPayload,
     op_public_cart_price,
+    op_public_my_order_cancel,
+    op_public_my_order_get,
+    op_public_my_orders_list,
     op_public_order_create,
     op_public_order_status,
+    op_public_storefront_geo,
 )
 from core.context import require_context
 from core.errors.boundary import PlatformNotFoundError
+from core.http.client import get_httpx_client
 from core.pagination import OffsetPage
 from core.platform_brand.resolver import resolve_brand_or_primary
 from core.types import JsonObject, parse_json_object
 from core.utils.geo import zone_covers_point
-from core.websocket import WsCommandError
+from core.websocket import WsCommandError, raise_not_found
 
 router = APIRouter(prefix="/public", tags=["shop-public"])
 
@@ -169,6 +185,288 @@ async def get_order_status(public_code: str, di: Di) -> ShopOrderStatusResponse:
         ShopPublicOrderStatusPayload(public_code=public_code),
         user=require_context().user,
         di=di,
+    )
+
+
+# --- Кабинет покупателя: сквозная история по всем витринам ---
+
+
+@router.get("/my/orders", response_model=OffsetPage[ShopMyOrderListItemResponse])
+async def list_my_orders(
+    di: Di,
+    status: ShopOrderStatus | None = None,
+    active: bool | None = None,
+    limit: int = 30,
+    offset: int = 0,
+) -> OffsetPage[ShopMyOrderListItemResponse]:
+    """Лента заказов покупателя: все витрины платформы, ownership по JWT."""
+    return await op_public_my_orders_list(
+        ShopMyOrdersListPayload(status=status, active=active, limit=limit, offset=offset),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/my/orders/{public_code}", response_model=ShopMyOrderDetailResponse)
+async def get_my_order(public_code: str, di: Di) -> ShopMyOrderDetailResponse:
+    """Карточка заказа: позиции, таймлайн, гео; чужой код — not-found."""
+    return await op_public_my_order_get(
+        ShopMyOrderCodePayload(public_code=public_code),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/my/orders/{public_code}/cancel", response_model=ShopMyOrderDetailResponse)
+async def cancel_my_order(public_code: str, di: Di) -> ShopMyOrderDetailResponse:
+    """Отмена покупателем — только пока заказ `new`."""
+    return await op_public_my_order_cancel(
+        ShopMyOrderCodePayload(public_code=public_code),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/storefront/{slug}/geo", response_model=ShopStorefrontGeoResponse)
+async def get_storefront_geo(slug: str, di: Di) -> ShopStorefrontGeoResponse:
+    """Точка магазина и зона доставки для карты на витрине."""
+    return await op_public_storefront_geo(
+        ShopStorefrontGeoPayload(slug=slug),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/orders/{public_code}/events", response_model=None)
+async def stream_order_events(public_code: str, request: Request, di: Di) -> StreamingResponse:
+    """SSE-стрим статусов заказа: fanout хвоста platform:events по коду.
+
+    Публичный код — тот же токен доверия, что и у `GET /orders/{code}`:
+    payload события без PII. Клиент при обрыве откатывается на polling.
+    """
+
+    async def gen() -> AsyncIterator[str]:
+        queue = di.order_events_service.subscribe(public_code)
+        try:
+            yield f"event: open\ndata: {json.dumps({'public_code': public_code})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(message, ensure_ascii=False)}\n\n"
+                except TimeoutError:
+                    yield ": heartbeat\n\n"
+        finally:
+            di.order_events_service.unsubscribe(public_code, queue)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# --- Geo-прокси: тайлы и стиль карты на витринных хостах ---
+
+_GEO_PASSTHROUGH_HEADERS = ("range", "if-none-match", "if-modified-since")
+_GEO_RESPONSE_HEADERS = (
+    "content-type",
+    "cache-control",
+    "etag",
+    "last-modified",
+    "accept-ranges",
+    "content-range",
+    "content-length",
+)
+
+
+@router.api_route("/geo/{path:path}", methods=["GET", "HEAD"], response_model=None)
+async def proxy_geo(path: str, request: Request, di: Di) -> Response:
+    """Прокси анонимных geo-ассетов (тайлы/стиль/шрифты PMTiles) на хост витрины.
+
+    На витринном хосте `/geo/api/v1/...` физически приходит в shop — ingress
+    его не знает; прокси пробрасывает GET/HEAD с Range (PMTiles читается
+    кусками) и отдаёт upstream-байты с кэш-заголовками как есть.
+    """
+    if ".." in path:
+        raise_not_found(
+            PlatformNotFoundError("Geo asset not found", error_code="geo_asset_not_found")
+        )
+    base = di.settings.server.get_service_url("geo")
+    headers = {
+        name: value
+        for name, value in request.headers.items()
+        if name.lower() in _GEO_PASSTHROUGH_HEADERS
+    }
+    try:
+        async with get_httpx_client(timeout=30.0) as client:
+            upstream = await client.request(
+                request.method,
+                f"{base}/geo/api/v1/{path}",
+                params=dict(request.query_params),
+                headers=headers,
+            )
+    except Exception as exc:
+        raise WsCommandError(
+            "unavailable", "Geo service unavailable", error_code="geo_unavailable"
+        ) from exc
+    response_headers = {
+        name: value
+        for name, value in upstream.headers.items()
+        if name.lower() in _GEO_RESPONSE_HEADERS
+    }
+    # Стиль карты отдаёт относительные URL источников — они уже резолвятся
+    # в тот же /geo/... прокси на хосте витрины, рерайт не нужен.
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+        media_type=upstream.headers.get("content-type"),
+    )
+
+
+# --- PWA: манифест, service worker и иконка витрины ---
+
+_SW_JS = """\
+const CACHE = 'shop-shell-v1';
+self.addEventListener('install', (e) => { self.skipWaiting(); });
+self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET') return;
+  // API и live-стримы — всегда сеть.
+  if (url.pathname.includes('/api/') || url.pathname.endsWith('/events')) return;
+  // Тайлы карты и статика — cache-first с дозаписью.
+  if (url.pathname.includes('/tiles/') || url.pathname.includes('/static/')) {
+    e.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const hit = await cache.match(e.request);
+        const fetched = fetch(e.request).then((r) => {
+          if (r.ok) cache.put(e.request, r.clone());
+          return r;
+        }).catch(() => hit);
+        return hit || fetched;
+      })
+    );
+  }
+});
+"""
+
+
+def _manifest_payload(shop: Shop) -> dict[str, object]:
+    """Web app manifest витрины: имя и цвета из темы магазина."""
+    theme = shop.theme or {}
+    return {
+        "name": shop.name,
+        "short_name": shop.name[:12] or shop.name,
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": theme.get("bg") or "#ffffff",
+        "theme_color": theme.get("accent") or "#111827",
+        "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
+    }
+
+
+def _manifest_response(shop: Shop) -> JSONResponse:
+    return JSONResponse(
+        _manifest_payload(shop),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+def _icon_svg(shop: Shop) -> str:
+    theme = shop.theme or {}
+    accent = theme.get("accent") or "#111827"
+    letter = (shop.name[:1] or "S").upper()
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
+        f'<rect width="512" height="512" rx="96" fill="{accent}"/>'
+        f'<text x="256" y="330" font-family="system-ui, sans-serif" font-size="280"'
+        f' font-weight="700" fill="#ffffff" text-anchor="middle">{letter}</text>'
+        "</svg>"
+    )
+
+
+def _sw_response() -> Response:
+    return Response(
+        content=_SW_JS,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+async def _shop_by_host(request: Request, di: Di) -> Shop:
+    shop = await di.storefront_service.resolve_shop_by_host(
+        request.headers.get("host", "")
+    )
+    if shop is None:
+        raise WsCommandError(
+            "not_found", "Storefront not found", error_code="storefront_not_found"
+        )
+    return shop
+
+
+@router.get("/storefront/{slug}/manifest.webmanifest", response_model=None)
+async def get_storefront_manifest(slug: str, request: Request, di: Di) -> Response:
+    _ = request, di
+    shop = await Shop.get_by_slug(slug)
+    if shop is None:
+        raise_not_found(
+            PlatformNotFoundError("Storefront not found", error_code="storefront_not_found")
+        )
+    return _manifest_response(shop)
+
+
+@router.get("/storefront/{slug}/sw.js", response_model=None)
+async def get_storefront_sw(slug: str, request: Request, di: Di) -> Response:
+    """Service worker витрины: кэш тайлов карты и статики, API — в сеть."""
+    _ = slug, request, di
+    return _sw_response()
+
+
+@router.get("/storefront/{slug}/icon.svg", response_model=None)
+async def get_storefront_icon(slug: str, di: Di) -> Response:
+    """SVG-иконка витрины: первая буква названия на акцентном фоне темы."""
+    _ = di
+    shop = await Shop.get_by_slug(slug)
+    if shop is None:
+        raise_not_found(
+            PlatformNotFoundError("Storefront not found", error_code="storefront_not_found")
+        )
+    return Response(
+        content=_icon_svg(shop),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+# Host-резолв для витринных доменов: /sw.js и /manifest.webmanifest на корне
+# хоста (service worker scope требует корневого пути).
+
+
+@router.get("/host/manifest.webmanifest", response_model=None)
+async def get_host_manifest(request: Request, di: Di) -> Response:
+    return _manifest_response(await _shop_by_host(request, di))
+
+
+@router.get("/host/sw.js", response_model=None)
+async def get_host_sw(request: Request, di: Di) -> Response:
+    _ = await _shop_by_host(request, di)
+    return _sw_response()
+
+
+@router.get("/host/icon.svg", response_model=None)
+async def get_host_icon(request: Request, di: Di) -> Response:
+    return Response(
+        content=_icon_svg(await _shop_by_host(request, di)),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

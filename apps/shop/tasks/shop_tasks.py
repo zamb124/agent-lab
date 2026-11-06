@@ -9,9 +9,17 @@ from __future__ import annotations
 
 from apps.shop.di import Di
 from apps.shop.events import publish_shop_catalog_changed
-from apps.shop.models import Shop, ShopCategory, ShopDomain, ShopDomainStatus, ShopProduct
+from apps.shop.models import (
+    Shop,
+    ShopCategory,
+    ShopDomain,
+    ShopDomainStatus,
+    ShopOrder,
+    ShopProduct,
+)
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
+    SHOP_NOTIFY_CUSTOMER,
     SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_AGGREGATE,
@@ -65,6 +73,52 @@ async def shop_notify_order(
     await _enter_worker_context(trace_id=f"shop:notify:{shop_order_id}")
     try:
         delivered = await di.notification_service.notify_order(shop_order_id)
+        return JsonObject({"shop_order_id": shop_order_id, "delivered": delivered})
+    finally:
+        clear_context()
+
+
+_CUSTOMER_STATUS_LABEL: dict[str, str] = {
+    "new": "принят",
+    "accepted": "подтверждён магазином",
+    "preparing": "готовится",
+    "delivering": "едет к вам",
+    "done": "выполнен",
+    "cancelled": "отменён",
+}
+
+
+@platform_task(SHOP_NOTIFY_CUSTOMER)
+async def shop_notify_customer(
+    shop_order_id: str,
+    *,
+    di: Di,
+) -> JsonObject:
+    """DM покупателю о статусе заказа: TG/MAX бренда + Redis-outbox (e2e).
+
+    Идемпотентно по факту статуса: повторная доставка того же текста
+    безопасна, ретрай TaskIQ не плодит новых сущностей.
+    """
+    await _enter_worker_context(trace_id=f"shop:notify-customer:{shop_order_id}")
+    try:
+        order = await ShopOrder.get_by_id(shop_order_id)
+        if order is None or not order.customer_id:
+            return JsonObject({"delivered": False, "reason": "no_customer"})
+        shop = await Shop.get_by_id(order.shop_id)
+        status_label = _CUSTOMER_STATUS_LABEL.get(
+            order.status.value, order.status.value
+        )
+        shop_name = shop.name if shop is not None else ""
+        text = (
+            f"Заказ #{order.public_code} — {status_label}.\n"
+            f"{shop_name}\nИтого: {order.total_minor // 100} "
+            f"{order.currency}"
+        )
+        delivered = await di.customer_notify_service.send_text(
+            order.customer_id,
+            text,
+            apex=di.settings.storefront_domain_suffix,
+        )
         return JsonObject({"shop_order_id": shop_order_id, "delivered": delivered})
     finally:
         clear_context()

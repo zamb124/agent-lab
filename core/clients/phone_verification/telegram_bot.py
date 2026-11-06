@@ -122,6 +122,24 @@ class TelegramContactProvider:
                 retryable=True,
             ) from exc
 
+    async def send_text(self, chat_id: str, text: str) -> None:
+        """Произвольный `sendMessage` в чат покупателя (уведомления кабинета)."""
+        assert self._cfg is not None
+        if not self._cfg.bot_token:
+            raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
+        try:
+            _ = await self._bot_request(
+                "sendMessage",
+                {"chat_id": chat_id, "text": text},
+                timeout=20.0,
+            )
+        except Exception as exc:
+            raise ProviderError(
+                PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+                f"telegram sendMessage: {exc}",
+                retryable=True,
+            ) from exc
+
     async def _bot_request(
         self, method: str, body: JsonObject, *, timeout: float
     ) -> JsonValue:

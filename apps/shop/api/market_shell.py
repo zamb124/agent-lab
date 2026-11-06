@@ -2,7 +2,7 @@
 
 Отдаётся анонимно на ``/shop/api/v1/public/market``: снапшот опубликованных
 магазинов встроен в HTML, поиск товаров идёт в ``/aggregate/search`` без
-перезагрузки. Та же SSR-lite модель, что и у storefront_shell.
+перезагрузки. Та же SSR-lite модель, что и у storefront/shell.py.
 """
 
 from __future__ import annotations

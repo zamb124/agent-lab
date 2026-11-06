@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from html import escape
 
+from apps.shop.api.storefront.account import account_tail
 from core.types import JsonObject
 
 _PAGE = """<!DOCTYPE html>
@@ -28,6 +29,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script type="module" src="/static/core/lib/customer-auth/autoload.js"></script>
 {seo_head}
+{pwa_head}
 <style>
 :root{{--accent:{accent};--on-accent:{on_accent};--afg:{afg_dark};--bg:#131110;--card:#1e1a17;--card2:#2a241f;--text:#f7f3ec;--muted:#a39a8d;--line:#2e2823;--radius:18px;--overlay:rgba(10,9,8,.62);--on-hero:#fff;--success:#4ade80;--warn:#f0b45c;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-lg:0 14px 44px rgba(0,0,0,.55);color-scheme:dark}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -278,7 +280,10 @@ call:'M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-1
 truck:'M240-160q-50 0-85-35t-35-85H40v-440h80l96-160h384l96 160h224v440h-80q0 50-35 85t-85 35q-50 0-85-35t-35-85H360q0 50-35 85t-85 35Zm0-80q17 0 28.5-11.5T280-280q0-17-11.5-28.5T240-320q-17 0-28.5 11.5T200-280q0 17 11.5 28.5T240-240Zm480 0q17 0 28.5-11.5T760-280q0-17-11.5-28.5T720-320q-17 0-28.5 11.5T680-280q0 17 11.5 28.5T720-240ZM160-360h640v-200H160v200Z',
 store:'M160-720v-80h640v80H160Zm0 560v-280h-40v-80l40-200h640l40 200v80h-40v280h-80v-280H560v280H160Zm80-80h240v-200H240v200Zm-30-280h540-540Zm0 0h540l-25-120H235l-25 120Z',
 clock:'m612-292 56-56-148-148v-184h-80v216l172 172ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 320q133 0 226.5-93.5T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160Z',
-restaurant:'M280-600v-240q0-17 11.5-28.5T320-880q17 0 28.5 11.5T360-840v240h40v-240q0-17 11.5-28.5T440-880q17 0 28.5 11.5T480-840v240q0 56-34.5 98T360-446v326q0 17-11.5 28.5T320-80q-17 0-28.5-11.5T280-120v-326q-51-14-85.5-56T160-600v-240q0-17 11.5-28.5T200-880q17 0 28.5 11.5T240-840v240h40Zm400 200h-80q-17 0-28.5-11.5T560-440v-240q0-70 51.5-135T718-880q18 0 30 14t12 33v713q0 17-11.5 28.5T720-80q-17 0-28.5-11.5T680-120v-280Z'}};
+restaurant:'M280-600v-240q0-17 11.5-28.5T320-880q17 0 28.5 11.5T360-840v240h40v-240q0-17 11.5-28.5T440-880q17 0 28.5 11.5T480-840v240q0 56-34.5 98T360-446v326q0 17-11.5 28.5T320-80q-17 0-28.5-11.5T280-120v-326q-51-14-85.5-56T160-600v-240q0-17 11.5-28.5T200-880q17 0 28.5 11.5T240-840v240h40Zm400 200h-80q-17 0-28.5-11.5T560-440v-240q0-70 51.5-135T718-880q18 0 30 14t12 33v713q0 17-11.5 28.5T720-80q-17 0-28.5-11.5T680-120v-280Z',
+person:'M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Zm0-80Zm0 400Z',
+lock:'M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm0-80h480v-400H240v400Zm240-120q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM240-640h480v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80H240Z',
+cart:'M280-80q-33 0-56.5-23.5T200-160q0-33 23.5-56.5T280-240q33 0 56.5 23.5T360-160q0 33-23.5 56.5T280-80Zm400 0q-33 0-56.5-23.5T600-160q0-33 23.5-56.5T680-240q33 0 56.5 23.5T760-160q0 33-23.5 56.5T680-80ZM208-800h590q23 0 35 20.5t1 41.5L692-482q-11 20-29.5 31T622-440H324l-44 80h480v80H280q-45 0-68-39.5t-2-78.5l54-98-144-304H40v-80h130l38 80Z'}};
 const ic=n=>`<svg viewBox="0 -960 960 960"><path d="${{_IC[n]}}"/></svg>`;
 function selHash(sel){{return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}}
 function cartQty(pid){{let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}}
@@ -738,6 +743,7 @@ const deeplink=new URLSearchParams(location.search).get('p');
 if(deeplink){{const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');
   if(el){{el.classList.add('flash');setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'center'}}),200);}}}}
 </script>
+{account_tail}
 </body>
 </html>"""
 
@@ -954,6 +960,13 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
     )
     title = str(snapshot.get("name", "Витрина"))
     description = str(snapshot.get("description", ""))[:200]
+    slug = str(snapshot.get("slug", ""))
+    pwa_head = "\n".join(
+        [
+            '<meta name="mobile-web-app-capable" content="yes">',
+            f'<link rel="manifest" href="/shop/api/v1/public/storefront/{escape(slug)}/manifest.webmanifest">' if slug else "",
+        ]
+    )
     return _PAGE.format(
         title=escape(title),
         description=escape(description),
@@ -971,4 +984,6 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
         body_class=escape(body_class),
         preset=escape(preset),
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),
+        pwa_head=pwa_head,
+        account_tail=account_tail(),
     )

@@ -18,7 +18,12 @@ _MARKET_PAGE = "/shop/api/v1/public/market"
 _PUBLIC_FILES: dict[str, str] = {
     "/robots.txt": "/shop/api/v1/public/robots.txt",
     "/sitemap.xml": "/shop/api/v1/public/sitemap.xml",
+    "/sw.js": "/shop/api/v1/public/host/sw.js",
+    "/manifest.webmanifest": "/shop/api/v1/public/host/manifest.webmanifest",
+    "/icon.svg": "/shop/api/v1/public/host/icon.svg",
 }
+_GEO_PREFIX = "/geo/api/v1/"
+_GEO_PROXY_PREFIX = "/shop/api/v1/public/geo/"
 
 
 class StorefrontHostMiddleware:
@@ -60,6 +65,12 @@ class StorefrontHostMiddleware:
             await self._app(scope, receive, send)
             return
         if not host.endswith(self._suffix):
+            await self._app(scope, receive, send)
+            return
+        if isinstance(path, str) and path.startswith(_GEO_PREFIX):
+            # Тайлы/стиль карты на витринном хосте: ingress отдаёт /geo в shop,
+            # дальше — прокси на geo-сервис (см. proxy_geo в public.py).
+            scope["path"] = f"{_GEO_PROXY_PREFIX}{path[len(_GEO_PREFIX):]}"
             await self._app(scope, receive, send)
             return
         if path == "/":

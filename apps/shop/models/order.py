@@ -42,6 +42,7 @@ class ShopOrder(PlatformModel):
         indexes: list[Index] = [
             Index(["shop_id", "created_at"]),
             Index(["shop_id", "status", "created_at"]),
+            Index(["customer_id", "created_at"]),
         ]
 
     shop_order_id: str = DbField(db_pk=True, max_length=64)

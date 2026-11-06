@@ -79,6 +79,10 @@ class ContactShareVerifier(DirectVerifier, Protocol):
         """Кнопка «Поделиться номером» (request_contact) в ответ на /start."""
         ...
 
+    async def send_text(self, chat_id: str, text: str) -> None:
+        """Произвольное DM покупателю от брендового бота (уведомления кабинета)."""
+        ...
+
     def parse_update(self, payload: JsonObject) -> DirectVerificationRequest | None:
         """Webhook update → доказательство; None — не contact-сообщение."""
         ...

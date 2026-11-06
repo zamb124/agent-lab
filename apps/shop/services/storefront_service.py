@@ -25,12 +25,15 @@ from apps.shop.models import (
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
+from core.clients.geocoding.base import Geocoder
 from core.clients.redis_client import RedisClient
 from core.models.identity_models import Company
 from core.types import JsonObject, parse_json_object
 
 _SNAPSHOT_KEY_PREFIX = "shop:sf:"
 _TENANT_KEY_PREFIX = "shop:tenant:"
+_SHOP_GEO_KEY_PREFIX = "shop:geo:"
+_SHOP_GEO_TTL_S = 86400
 _NEGATIVE_MARKER = "none"
 _ETAG_PREFIX = 'W/"shop-'
 
@@ -43,10 +46,12 @@ class StorefrontService:
         settings: ShopSettings,
         redis: RedisClient,
         shop_service: ShopService,
+        geocoder: Geocoder,
     ) -> None:
         self._settings: ShopSettings = settings
         self._redis: RedisClient = redis
         self._shops: ShopService = shop_service
+        self._geocoder: Geocoder = geocoder
 
     async def resolve_shop_by_host(self, host: str) -> Shop | None:
         """Магазин по Host заголовка: slug-витрина или активный кастомный домен."""
@@ -60,6 +65,49 @@ class StorefrontService:
         if shop is None or shop.status != ShopStatus.PUBLISHED:
             return None
         return shop
+
+    def storefront_url(self, shop: Shop) -> str:
+        """Каноничный публичный адрес витрины — slug-поддомен платформы."""
+        return f"https://{shop.slug}.{self._settings.storefront_domain_suffix}"
+
+    async def shop_geo(self, shop: Shop) -> JsonObject:
+        """Точка магазина для карты: geocode адреса, кэш в Redis на сутки.
+
+        Деградация: адрес не геокодится → {address, lat: None, lng: None} —
+        карта просто рисует зону без маркера магазина.
+        """
+        key = f"{_SHOP_GEO_KEY_PREFIX}{shop.shop_id}"
+        cached = await self._redis.get(key)
+        if cached is not None:
+            return parse_json_object(cached, "shop geo cache")
+        geo = await self._geocoder.geocode(shop.address) if shop.address.strip() else None
+        result: JsonObject = {
+            "address": shop.address,
+            "lat": geo.lat if geo is not None else None,
+            "lng": geo.lng if geo is not None else None,
+        }
+        _ = await self._redis.set(
+            key,
+            json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+            ttl=_SHOP_GEO_TTL_S,
+        )
+        return result
+
+    async def geo_payload(self, slug: str) -> JsonObject | None:
+        """`GET /public/storefront/{slug}/geo`: точка магазина + зона доставки."""
+        snapshot = await self.get_snapshot(slug)
+        if snapshot is None:
+            return None
+        shop = await Shop.get_by_slug(slug)
+        if shop is None:
+            return None
+        geo = await self.shop_geo(shop)
+        return {
+            "address": geo.get("address") or "",
+            "lat": geo.get("lat"),
+            "lng": geo.get("lng"),
+            "delivery_zone": snapshot.get("delivery_zone") or {},
+        }
 
     async def check_order_rate_limit(self, client_key: str) -> bool:
         """Лимит заказов с одного IP: скользящее минутное окно в Redis."""

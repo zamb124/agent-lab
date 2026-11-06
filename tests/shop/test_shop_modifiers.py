@@ -393,7 +393,9 @@ class TestModifierSnapshot:
         assert item["price_minor"] == 50000 + 5000 * 2
         assert item["modifiers"] == [
             {
+                "group_id": gid,
                 "group_name": "Добавки",
+                "option_id": cheese["shop_modifier_option_id"],
                 "option_name": "Сыр",
                 "price_minor": 5000,
                 "qty": 2,

@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from apps.shop.events import (
+    SHOP_ORDER_CREATED,
+    SHOP_ORDER_STATUS_CHANGED,
+    publish_shop_order_event,
+)
 from apps.shop.models import (
     Shop,
     ShopDeliveryType,
@@ -26,11 +31,16 @@ from apps.shop.models.api import (
     ShopCartPriceLineResponse,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
+    ShopMyOrderDetailResponse,
+    ShopMyOrderListItemResponse,
+    ShopMyOrderShopBlock,
     ShopOrderCreateRequest,
     ShopOrderItemModifierResponse,
+    ShopOrderItemPreview,
     ShopOrderItemRequest,
     ShopOrderItemResponse,
     ShopOrderResponse,
+    ShopOrderStatusEntry,
     ShopPromoAppliedResponse,
 )
 from apps.shop.models.common import new_id
@@ -40,11 +50,6 @@ from apps.shop.services.modifier_pricing import (
     load_modifier_tree_by_sort_asc,
     nested_lookup,
     validate_and_price,
-)
-from apps.shop.events import (
-    SHOP_ORDER_CREATED,
-    SHOP_ORDER_STATUS_CHANGED,
-    publish_shop_order_event,
 )
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
 from apps.shop.tasks.task_names import SHOP_NOTIFY_CUSTOMER, SHOP_NOTIFY_ORDER
@@ -401,6 +406,7 @@ class ShopOrderService:
             created_at=now,
             updated_at=now,
             status_changed_at=now,
+            status_history=[{"status": ShopOrderStatus.NEW.value, "at": now.isoformat()}],
         )
         _ = await ShopOrder.create(order)
         _ = await ShopOrderItem.create_many(order_items)
@@ -582,14 +588,21 @@ class ShopOrderService:
         statuses: list[ShopOrderStatus] | None = None,
         limit: int = 30,
         offset: int = 0,
-    ) -> tuple[list[ShopOrder], dict[str, Shop], int]:
-        """Сквозная история покупателя: заказы всех витрин + магазины пачкой."""
+    ) -> tuple[list[ShopOrder], dict[str, Shop], dict[str, list[ShopOrderItem]], int]:
+        """Сквозная история покупателя: заказы всех витрин + магазины и
+        позиции пачкой (без N+1)."""
         orders = await ShopOrder.list_by_customer_by_created_desc(
             customer_id, statuses=statuses, limit=limit, offset=offset
         )
         total = await ShopOrder.count_by_customer(customer_id, statuses=statuses)
         shops = await Shop.list_many_by_ids([o.shop_id for o in orders])
-        return orders, {s.shop_id: s for s in shops}, total
+        items = await ShopOrderItem.list_many_by_order_ids(
+            [o.shop_order_id for o in orders]
+        )
+        items_by_order: dict[str, list[ShopOrderItem]] = {}
+        for i in items:
+            items_by_order.setdefault(i.order_id, []).append(i)
+        return orders, {s.shop_id: s for s in shops}, items_by_order, total
 
     async def customer_order_detail(
         self, customer_id: str, public_code: str
@@ -660,4 +673,128 @@ class ShopOrderService:
                 return code
         raise PlatformConflictError(
             "Failed to allocate order code", error_code="order_code_exhausted"
+        )
+
+    # --- Кабинет покупателя: сборка ответов `my/orders` ---
+
+    @staticmethod
+    def _active(status: ShopOrderStatus) -> bool:
+        return ShopOrderStatus(status) not in (
+            ShopOrderStatus.DONE,
+            ShopOrderStatus.CANCELLED,
+        )
+
+    def _shop_block(
+        self,
+        shop: Shop | None,
+        order: ShopOrder,
+        *,
+        storefront_url: str,
+    ) -> ShopMyOrderShopBlock:
+        """Блок «магазин» в ответе кабинета; витрина могла быть удалена."""
+        if shop is None:
+            return ShopMyOrderShopBlock(
+                shop_id=order.shop_id,
+                slug="",
+                name="",
+                lat=order.shop_lat,
+                lng=order.shop_lng,
+            )
+        open_state = shop_open_state(shop.working_hours, shop.timezone, utcnow())
+        return ShopMyOrderShopBlock(
+            shop_id=shop.shop_id,
+            slug=shop.slug,
+            name=shop.name,
+            kind=shop.kind,
+            logo_file_id=shop.logo_file_id,
+            phone=shop.phone,
+            address=shop.address,
+            city=shop.city,
+            working_hours=shop.working_hours,
+            open_now=open_state.open,
+            is_published=shop.status == ShopStatus.PUBLISHED,
+            storefront_url=storefront_url,
+            lat=order.shop_lat,
+            lng=order.shop_lng,
+        )
+
+    def my_order_list_item(
+        self,
+        order: ShopOrder,
+        shop: Shop | None,
+        *,
+        storefront_url: str,
+        items_preview: list[ShopOrderItemPreview] | None = None,
+    ) -> ShopMyOrderListItemResponse:
+        """Строка ленты `my/orders`: заказ + витрина, где он исполняется."""
+        return ShopMyOrderListItemResponse(
+            public_code=order.public_code,
+            status=ShopOrderStatus(order.status),
+            status_changed_at=order.status_changed_at.isoformat(),
+            created_at=order.created_at.isoformat(),
+            active=self._active(ShopOrderStatus(order.status)),
+            total_minor=order.total_minor,
+            currency=order.currency,
+            delivery_type=order.delivery_type,
+            address=order.address,
+            table_label=order.table_label,
+            delivery_eta_minutes=order.delivery_eta_minutes,
+            items_preview=items_preview or [],
+            items_count=len(items_preview or []),
+            shop=self._shop_block(shop, order, storefront_url=storefront_url),
+        )
+
+    def my_order_detail(
+        self,
+        order: ShopOrder,
+        shop: Shop | None,
+        items: list[ShopOrderItem],
+        *,
+        storefront_url: str,
+    ) -> ShopMyOrderDetailResponse:
+        """Полная карточка заказа кабинета: позиции, таймлайн, гео доставки."""
+        base = self.my_order_list_item(
+            order,
+            shop,
+            storefront_url=storefront_url,
+            items_preview=[
+                ShopOrderItemPreview(name=i.name_snapshot, qty=i.qty) for i in items
+            ],
+        )
+        data = base.model_dump()
+        return ShopMyOrderDetailResponse.model_validate(
+            {
+                **data,
+                "items_total_minor": order.items_total_minor,
+                "discount_minor": order.discount_minor,
+                "delivery_fee_minor": order.delivery_fee_minor,
+                "comment": order.comment,
+                "promos": [
+                    ShopPromoAppliedResponse.model_validate(p).model_dump()
+                    for p in order.promos
+                ],
+                "items": [
+                    ShopOrderItemResponse(
+                        product_id=i.product_id,
+                        name=i.name_snapshot,
+                        price_minor=i.price_minor,
+                        qty=i.qty,
+                        discount_minor=i.discount_minor,
+                        modifiers=[
+                            ShopOrderItemModifierResponse.model_validate(m)
+                            for m in i.modifiers
+                        ],
+                    ).model_dump()
+                    for i in items
+                ],
+                "status_history": [
+                    ShopOrderStatusEntry.model_validate(e).model_dump()
+                    for e in (order.status_history or [])
+                ],
+                "can_cancel": ShopOrderStatus(order.status) == ShopOrderStatus.NEW,
+                "delivery_lat": order.delivery_lat,
+                "delivery_lng": order.delivery_lng,
+                "delivery_route": order.delivery_route or {},
+                "delivery_zone": (shop.delivery_zone if shop is not None else {}) or {},
+            }
         )

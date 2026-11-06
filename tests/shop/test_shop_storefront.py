@@ -6,7 +6,7 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
-from apps.shop.api.storefront_shell import accent_vars, contrast_ratio, hex_rgb
+from apps.shop.api.storefront.shell import accent_vars, contrast_ratio, hex_rgb
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"

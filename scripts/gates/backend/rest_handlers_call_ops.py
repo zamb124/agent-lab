@@ -68,6 +68,17 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/shop/api/public.py::address_suggest",
         # внутренний резолв Host → slug для прокси/shell слоя
         "apps/shop/api/public.py::resolve_host",
+        # SSE-стрим статусов заказа: внешний протокол, не REST-команда
+        "apps/shop/api/public.py::stream_order_events",
+        # geo-прокси тайлов карты на витринных хостах: сырые байты, не команда
+        "apps/shop/api/public.py::proxy_geo",
+        # PWA-ассеты витрины: статические байты без команды
+        "apps/shop/api/public.py::get_storefront_manifest",
+        "apps/shop/api/public.py::get_storefront_sw",
+        "apps/shop/api/public.py::get_storefront_icon",
+        "apps/shop/api/public.py::get_host_manifest",
+        "apps/shop/api/public.py::get_host_sw",
+        "apps/shop/api/public.py::get_host_icon",
         "apps/office/api/bff.py::onlyoffice_callback",
         # анонимные публичные ссылки Documents и Wiki
         "apps/office/api/bff.py::public_catalog_binding_open",

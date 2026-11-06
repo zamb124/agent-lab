@@ -523,3 +523,82 @@ class ShopPromoResponse(StrictBaseModel):
 
 class ShopPromosResponse(StrictBaseModel):
     promos: list[ShopPromoResponse]
+
+
+# --- Кабинет покупателя (сквозная история по всем витринам) ---
+
+
+class ShopOrderStatusEntry(StrictBaseModel):
+    """Одна точка таймлайна статусов заказа."""
+
+    status: ShopOrderStatus
+    at: str
+
+
+class ShopOrderItemPreview(StrictBaseModel):
+    name: str
+    qty: int
+
+
+class ShopMyOrderShopBlock(StrictBaseModel):
+    """Магазин заказа — кто и где его исполняет (для кросс-витринной ленты)."""
+
+    shop_id: str
+    slug: str
+    name: str
+    kind: ShopKind = ShopKind.RESTAURANT
+    logo_file_id: str | None = None
+    phone: str = ""
+    address: str = ""
+    city: str = ""
+    working_hours: JsonObject = Field(default_factory=dict)
+    open_now: bool = False
+    is_published: bool = False
+    storefront_url: str = ""
+    lat: float | None = None
+    lng: float | None = None
+
+
+class ShopMyOrderListItemResponse(StrictBaseModel):
+    """Строка `GET /public/my/orders` — заказ покупателя любой витрины."""
+
+    public_code: str
+    status: ShopOrderStatus
+    status_changed_at: str
+    created_at: str
+    active: bool
+    total_minor: int
+    currency: str
+    delivery_type: ShopDeliveryType
+    address: str = ""
+    table_label: str = ""
+    delivery_eta_minutes: int | None = None
+    items_preview: list[ShopOrderItemPreview] = Field(default_factory=list)
+    items_count: int = 0
+    shop: ShopMyOrderShopBlock
+
+
+class ShopMyOrderDetailResponse(ShopMyOrderListItemResponse):
+    """Полная карточка заказа кабинета: позиции, таймлайн, гео."""
+
+    items_total_minor: int
+    discount_minor: int
+    delivery_fee_minor: int
+    comment: str = ""
+    promos: list[ShopPromoAppliedResponse] = Field(default_factory=list)
+    items: list[ShopOrderItemResponse] = Field(default_factory=list)
+    status_history: list[ShopOrderStatusEntry] = Field(default_factory=list)
+    can_cancel: bool = False
+    delivery_lat: float | None = None
+    delivery_lng: float | None = None
+    delivery_route: JsonObject = Field(default_factory=dict)
+    delivery_zone: JsonObject = Field(default_factory=dict)
+
+
+class ShopStorefrontGeoResponse(StrictBaseModel):
+    """`GET /public/storefront/{slug}/geo` — точка магазина и зона для карты."""
+
+    lat: float | None = None
+    lng: float | None = None
+    address: str = ""
+    delivery_zone: JsonObject = Field(default_factory=dict)
