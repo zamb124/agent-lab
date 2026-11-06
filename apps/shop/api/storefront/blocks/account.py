@@ -65,11 +65,15 @@ body.acct #acct{display:block}
 .atl .ev.hit::before{background:var(--accent);border-color:var(--accent)}
 .atl .ev .when{display:block;font-size:11px;color:var(--muted)}
 .ditems{margin:10px 0}
-.ditems .di{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font:400 13px/1.4 inherit;
+.ditems .di{display:flex;align-items:center;gap:10px;padding:7px 0;font:400 13px/1.4 inherit;
   border-bottom:1px dashed var(--line)}
 .ditems .di:last-child{border-bottom:0}
+.diph{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.diph-empty{display:flex;align-items:center;justify-content:center;background:var(--card2);color:var(--muted)}
+.diph-empty svg{width:20px;height:20px;fill:currentColor}
+.din{flex:1;min-width:0}
 .ditems .di .q{color:var(--muted);white-space:nowrap}
-.ditems .mods{grid-column:1/-1;font-size:12px;color:var(--muted)}
+.ditems .mods{font-size:12px;color:var(--muted)}
 .trow{display:flex;justify-content:space-between;padding:6px 0;font:500 13px/1.4 inherit}
 .trow.total{font-weight:700;font-size:15px;border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
 .amap{height:220px;border-radius:14px;overflow:hidden;margin-top:12px;border:1px solid var(--line)}
@@ -139,21 +143,23 @@ for(const t of TABS){
 }
 document.body.appendChild(nav);
 const acct=el('div','');acct.id='acct';
-const wrap=document.querySelector('.wrap');
-wrap.parentElement.insertBefore(ahead,wrap);
-wrap.parentElement.appendChild(acct);
+const appEl=document.getElementById('app');
+appEl.parentElement.insertBefore(ahead,appEl);
+appEl.parentElement.appendChild(acct);
 const banner=el('div','abanner');banner.style.display='none';
-wrap.parentElement.insertBefore(banner,ahead.nextSibling);
+appEl.parentElement.insertBefore(banner,ahead.nextSibling);
 document.body.classList.add('has-nav');
 if(EMBED){ahead.style.display='none';}
 
-function setTab(id){
+function markTab(id){
  document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===id));
- const inMenu=id==='menu';
- document.body.classList.toggle('acct',!inMenu);
- if(!inMenu){renderView(id);}
+ document.body.classList.toggle('acct',id!=='menu');
 }
-function go(id){setTab(id);if(id!=='orders')stopSse();}
+function setTab(id){
+ markTab(id);
+ if(id!=='menu'){renderView(id);}
+}
+function go(id){stopSse();if(id==='orders')curOrder=null;setTab(id);}
 window.goTab=go;
 
 /* --- orders --- */
@@ -196,12 +202,12 @@ function watchOrder(code){
   sse=new EventSource(API+'/orders/'+encodeURIComponent(code)+'/events');
   sse.onmessage=ev=>{try{const m=JSON.parse(ev.data);
    if(curOrder===code&&m.status){const chip=document.querySelector('.od-st');if(chip){chip.textContent=m.status_label||m.status;chip.className='stchip od-st '+stCls(m.status)+' live';}
-    refreshBanner();}}}catch(e){}};
+    refreshBanner();}}catch(e){}};
   sse.onerror=()=>{/* фолбэк — переопрос карточки каждые 20 c */};
  }catch(e){}
 }
 async function openOrder(code){
- curOrder=code;setTab('orders');
+ curOrder=code;markTab('orders');
  let o;
  try{o=await jget(API+'/my/orders/'+encodeURIComponent(code));}catch(e){
   acct.innerHTML='<div class="aview"><button class="aback" onclick="goTab(\'orders\');loadOrders()">← Назад</button><div class="aempty">Заказ не найден</div></div>';return;}
@@ -221,7 +227,10 @@ async function openOrder(code){
  const box=el('div','acard');box.style.cursor='default';
  let rows='<div class="ditems">';
  for(const i of o.items||[]){
-  rows+='<div class="di"><span>'+esc(i.name)+(i.modifiers&&i.modifiers.length?'<div class="mods">'+i.modifiers.map(m=>esc(m.option_name)+(m.qty>1?' ×'+m.qty:'')).join(', ')+'</div>':'')+'</span><span class="q">'+i.qty+' × '+money(i.price_minor)+'</span></div>';
+  const ph=i.photo_file_id
+   ?'<img class="diph" src="'+IMG(i.photo_file_id,'sm!sq')+'" loading="lazy" alt="" onload="this.classList.add(\'ld\')">'
+   :'<span class="diph diph-empty">'+ic('restaurant')+'</span>';
+  rows+='<div class="di">'+ph+'<span class="din">'+esc(i.name)+(i.modifiers&&i.modifiers.length?'<div class="mods">'+i.modifiers.map(m=>esc(m.option_name)+(m.qty>1?' ×'+m.qty:'')).join(', ')+'</div>':'')+'</span><span class="q">'+i.qty+' × '+money(i.price_minor)+'</span></div>';
  }
  rows+='</div>';
  rows+='<div class="trow"><span>Позиции</span><span>'+money(o.items_total_minor)+'</span></div>';
@@ -251,7 +260,7 @@ async function openOrder(code){
 }
 function mountMap(v,o){
  const pts=[];const overlays=[];
- if(o.shop_lat!=null&&o.shop_lng!=null)pts.push({lngLat:[o.shop_lng,o.shop_lat],color:'var(--accent)',title:o.shop.name||'Магазин'});
+ if(o.shop&&o.shop.lat!=null&&o.shop.lng!=null)pts.push({lngLat:[o.shop.lng,o.shop.lat],color:'var(--accent)',title:o.shop.name||'Магазин'});
  if(o.delivery_lat!=null&&o.delivery_lng!=null)pts.push({lngLat:[o.delivery_lng,o.delivery_lat],color:'#4ade80',title:'Ваш адрес'});
  if(o.delivery_route&&o.delivery_route.type){
   overlays.push({name:'Маршрут',data:o.delivery_route,color:'#e2553f',width:4,opacity:.9});}
@@ -262,7 +271,7 @@ function mountMap(v,o){
  loadMap().then(()=>{
   const m=document.createElement('platform-map');
   m.config={center:(pts[0]?pts[0].lngLat:[37.6,55.75]),zoom:pts.length>1?12:15,
-   controls:{zoom:true,fit:true},markers:pts,overlays:overlays,
+   controls:{zoom:true,fit:true},markers:pts,overlays:overlays,layers:{fetch:false},
    scheme:document.body.classList.contains('light')?'light':'dark'};
   holder.appendChild(m);
  }).catch(()=>{holder.remove();});
@@ -297,18 +306,32 @@ function renderContacts(){
  if(S.address)h+='<div class="arow">'+ic('pin')+' <b>'+esc(S.address)+'</b></div>';
  if(S.city)h+='<div class="arow">'+ic('pin')+' '+esc(S.city)+'</div>';
  if(S.phone)h+='<div class="arow">'+ic('call')+' <a style="color:var(--afg)" href="tel:'+esc(S.phone)+'">'+esc(S.phone)+'</a></div>';
- const hb=hoursBadge();if(hb)h+='<div class="arow">'+ic('clock')+' '+(hb.open?'Открыто':'Закрыто')+' · '+esc(hb.t)+'</div>';
+ const hb=hoursBadge();if(hb)h+='<div class="arow">'+ic('clock')+' '+esc(hb.t)+'</div>';
  card.innerHTML=h;v.appendChild(card);
  jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/geo').then(g=>{
-  if(!g||(g.lat==null))return;
+  if(!g)return;
+  const zone=(g.delivery_zone&&g.delivery_zone.type)?g.delivery_zone:null;
+  if(g.lat==null&&!zone)return;
   const holder=el('div','amap');v.appendChild(holder);
   loadMap().then(()=>{
    const m=document.createElement('platform-map');
    const ov=[];
-   if(g.delivery_zone&&g.delivery_zone.type)ov.push({name:'Зона доставки',data:g.delivery_zone,color:'#e2553f',opacity:.12,width:1});
-   m.config={center:[g.lng,g.lat],zoom:14,controls:{zoom:true,fit:true},
-    markers:[{lngLat:[g.lng,g.lat],color:'var(--accent)',title:S.name}],
+   if(zone)ov.push({name:'Зона доставки',data:zone,color:'#e2553f',opacity:.12,width:1});
+   const mk=[];
+   if(g.lat!=null)mk.push({lngLat:[g.lng,g.lat],color:'var(--accent)',title:S.name});
+   let box=null;
+   if(zone){
+    const pts=[];
+    (function walk(c){if(typeof c[0]==='number'){pts.push(c);return;}for(const x of c)walk(x);})(zone.coordinates);
+    let a=pts[0][0],b=a,c=pts[0][1],d=c;
+    for(const p of pts){if(p[0]<a)a=p[0];if(p[0]>b)b=p[0];if(p[1]<c)c=p[1];if(p[1]>d)d=p[1];}
+    box=[[a,c],[b,d]];
+   }
+   m.config={center:g.lat!=null?[g.lng,g.lat]:[(box[0][0]+box[1][0])/2,(box[0][1]+box[1][1])/2],zoom:12,
+    controls:{zoom:true,fit:true},
+    markers:mk,
     overlays:ov,scheme:document.body.classList.contains('light')?'light':'dark'};
+   if(box)m.addEventListener('pm-ready',ev=>ev.detail.map.fitBounds(box,{padding:60,duration:400}),{once:true});
    holder.appendChild(m);
   }).catch(()=>{holder.remove();});
  }).catch(()=>{});
@@ -349,7 +372,7 @@ async function refreshBanner(){
   if(!o){banner.style.display='none';return;}
   banner.innerHTML='<div><span class="dot"></span><span>Заказ #'+esc(o.public_code)+' — '+(o.status_label||o.status)+' · '+esc(o.shop.name||'')+'</span></div>';
   banner.style.display='';
-  banner.onclick=()=>{setTab('orders');openOrder(o.public_code);};
+  banner.onclick=()=>{markTab('orders');openOrder(o.public_code);};
  }catch(e){}
  clearTimeout(bannerTimer);bannerTimer=setTimeout(refreshBanner,60000);
 }
@@ -368,7 +391,7 @@ setTab('menu');
 const tab=qs.get('tab');
 const order=qs.get('order');
 const reorderCode=qs.get('reorder');
-if(order){go('orders');openOrder(order);}
+if(order){openOrder(order);}
 else if(reorderCode){reorderByCode(reorderCode);}
 else if(tab&&TABS.some(t=>t.id===tab))go(tab);
 refreshBanner();

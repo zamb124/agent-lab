@@ -16,6 +16,7 @@ from core.files.audio_transcode import (
     transcode_audio_bytes_to_m4a_aac,
 )
 from core.files.create_spec import FileSourceKind
+from core.files.image_variants.variants import variant_family_keys
 from core.files.models import FileRecord, FileStatus
 from core.files.object_key import object_key
 from core.files.object_store.gate import raise_storage_unavailable
@@ -212,7 +213,11 @@ class FileStorage:
             return False
         resolved = await resolve_for_record(file_record)
         s3_client = await client_for(resolved)
-        _ = await s3_client.delete_file(file_record.s3_key)
+        for key in dict.fromkeys(
+            [file_record.s3_key, *variant_family_keys(file_record)]
+        ):
+            if key != "":
+                _ = await s3_client.delete_file(key)
         _ = await FileRecord.delete_by_id(file_id)
         return True
 

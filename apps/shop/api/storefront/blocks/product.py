@@ -90,7 +90,7 @@ function renderCust(){if(!cust)return;const p=byId(cust.pid);if(!p)return;
   const ok=selValid(p);const u=unitPrice(p,cust.sel);
   document.getElementById('cpanel').innerHTML=
     `<button class="pshare" onclick="shareProduct('${p.id}')" aria-label="Поделиться">${SHARE_ICON}</button>`+
-    `${photo(p.photo_file_id,'phero')}<h2>${esc(p.name)}${tags(p)}${portionOf(p)}</h2>`+
+    `${photo(p.photo_file_id,'phero','lg')}<h2>${esc(p.name)}${tags(p)}${portionOf(p)}</h2>`+
     `${p.description?`<p class="pdesc">${esc(p.description)}</p>`:''}`+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
     `<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${cust.qty}</span><button onclick="custQty(1)">+</button></span></div>`+

@@ -30,6 +30,7 @@ from apps.shop.models.api import (
     ShopOrderCreateRequest,
     ShopOrderStatusResponse,
     ShopStorefrontGeoResponse,
+    normalize_shop_theme,
 )
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
@@ -119,7 +120,12 @@ async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLRespon
         else ""
     )
     return HTMLResponse(
-        content=storefront_html(snapshot, canonical_url=canonical, image_url=image_url),
+        content=storefront_html(
+            snapshot,
+            canonical_url=canonical,
+            image_url=image_url,
+            host=request.headers.get("host", ""),
+        ),
         headers={"ETag": etag, "Cache-Control": "public, max-age=30"},
     )
 
@@ -319,10 +325,18 @@ async def proxy_geo(path: str, request: Request, di: Di) -> Response:
         for name, value in upstream.headers.items()
         if name.lower() in _GEO_RESPONSE_HEADERS
     }
-    # Стиль карты отдаёт относительные URL источников — они уже резолвятся
-    # в тот же /geo/... прокси на хосте витрины, рерайт не нужен.
+    body = upstream.content
+    if path == "tiles/style.json" and upstream.status_code == 200:
+        # style.json содержит абсолютные URL апстрима (источник pmtiles,
+        # glyphs, sprites) — переписываем базу на хост витрины, чтобы браузер
+        # ходил в тот же /geo/... прокси без CORS.
+        upstream_base = f"{base}/geo/api/v1".encode()
+        public_base = f"{request.url.scheme}://{request.url.netloc}/geo/api/v1".encode()
+        body = body.replace(upstream_base, public_base)
+        _ = response_headers.pop("content-length", None)
+        _ = response_headers.pop("etag", None)
     return Response(
-        content=upstream.content,
+        content=body,
         status_code=upstream.status_code,
         headers=response_headers,
         media_type=upstream.headers.get("content-type"),
@@ -359,7 +373,7 @@ self.addEventListener('fetch', (e) => {
 
 def _manifest_payload(shop: Shop) -> dict[str, object]:
     """Web app manifest витрины: имя и цвета из темы магазина."""
-    theme = shop.theme or {}
+    theme = normalize_shop_theme(shop.theme or {})
     return {
         "name": shop.name,
         "short_name": shop.name[:12] or shop.name,
@@ -367,7 +381,7 @@ def _manifest_payload(shop: Shop) -> dict[str, object]:
         "scope": "/",
         "display": "standalone",
         "background_color": theme.get("bg") or "#ffffff",
-        "theme_color": theme.get("accent") or "#111827",
+        "theme_color": theme.get("accent_color") or "#111827",
         "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
     }
 
@@ -381,8 +395,8 @@ def _manifest_response(shop: Shop) -> JSONResponse:
 
 
 def _icon_svg(shop: Shop) -> str:
-    theme = shop.theme or {}
-    accent = theme.get("accent") or "#111827"
+    theme = normalize_shop_theme(shop.theme or {})
+    accent = theme.get("accent_color") or "#111827"
     letter = (shop.name[:1] or "S").upper()
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'

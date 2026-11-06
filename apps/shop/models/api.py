@@ -43,6 +43,18 @@ class ShopTheme(StrictBaseModel):
     custom: ShopThemeCustom = Field(default_factory=ShopThemeCustom)
 
 
+def normalize_shop_theme(theme: JsonObject) -> JsonObject:
+    """Сырые `shop.theme` → канон: легаси-ключ `accent` мапится в `accent_color`."""
+    normalized = dict(theme)
+    if "accent_color" not in normalized:
+        legacy = normalized.pop("accent", None)
+        if isinstance(legacy, str):
+            normalized["accent_color"] = legacy
+    else:
+        _ = normalized.pop("accent", None)
+    return normalized
+
+
 class ShopWorkingHours(StrictBaseModel):
     """Часы работы на каждый день недели (0=пн) в формате HH:MM-HH:MM."""
 
@@ -407,6 +419,7 @@ class ShopOrderItemResponse(StrictBaseModel):
     price_minor: int
     qty: int
     discount_minor: int = 0
+    photo_file_id: str | None = None
     modifiers: list[ShopOrderItemModifierResponse] = []
 
 

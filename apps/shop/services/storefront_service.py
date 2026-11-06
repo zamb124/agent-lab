@@ -23,10 +23,12 @@ from apps.shop.models import (
     ShopTable,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
+from apps.shop.models.api import normalize_shop_theme
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.geocoding.base import Geocoder
 from core.clients.redis_client import RedisClient
+from core.errors.boundary import PlatformUnavailableError
 from core.models.identity_models import Company
 from core.types import JsonObject, parse_json_object
 
@@ -73,14 +75,23 @@ class StorefrontService:
     async def shop_geo(self, shop: Shop) -> JsonObject:
         """Точка магазина для карты: geocode адреса, кэш в Redis на сутки.
 
-        Деградация: адрес не геокодится → {address, lat: None, lng: None} —
-        карта просто рисует зону без маркера магазина.
+        Деградация: адрес не геокодится или апстрим недоступен →
+        {address, lat: None, lng: None} — карта рисует зону без маркера
+        магазина; ошибка апстрима уже залогирована геокодером.
         """
         key = f"{_SHOP_GEO_KEY_PREFIX}{shop.shop_id}"
         cached = await self._redis.get(key)
         if cached is not None:
             return parse_json_object(cached, "shop geo cache")
-        geo = await self._geocoder.geocode(shop.address) if shop.address.strip() else None
+        try:
+            geo = (
+                await self._geocoder.geocode(shop.address)
+                if shop.address.strip()
+                else None
+            )
+        except PlatformUnavailableError:
+            # транзиентный сбой не кэшируем на сутки — следующий запрос перепроверит
+            return {"address": shop.address, "lat": None, "lng": None}
         result: JsonObject = {
             "address": shop.address,
             "lat": geo.lat if geo is not None else None,
@@ -178,7 +189,7 @@ class StorefrontService:
             "delivery_fee_minor": shop.delivery_fee_minor,
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
-            "theme": shop.theme,
+            "theme": normalize_shop_theme(shop.theme),
             "badge_defs": {
                 b["key"]: {"label": b["label"], "icon_path": BADGE_ICONS.get(b["icon"], "")}
                 for b in shop.badges

@@ -15,6 +15,10 @@ from core.documents.tree_service import DocumentTreeService, PlaceResult
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef, stored_file_ref
+from core.files.image_variants.variants import (
+    IMAGE_VARIANT_METADATA_KEY,
+    variant_family_keys,
+)
 from core.files.models import FileRecord
 from core.files.object_key import object_key
 from core.files.object_store.gate import FileGate
@@ -241,6 +245,21 @@ class FilesService:
         if not claimed:
             _ = await s3.delete_file(new_key)
             raise PlatformConflictError("file checksum mismatch")
+        stale_variant_keys = variant_family_keys(record)
+        if stale_variant_keys:
+            fresh = await self.get(record.file_id)
+            cleared = fresh.model_copy(
+                update={
+                    "metadata": {
+                        k: val
+                        for k, val in fresh.metadata.items()
+                        if k != IMAGE_VARIANT_METADATA_KEY
+                    }
+                }
+            )
+            _ = await FileRecord.set(cleared)
+            for key in stale_variant_keys:
+                _ = await s3.delete_file(key)
         if new_key != record.s3_key:
             _ = await s3.delete_file(record.s3_key)
         return await self.get(record.file_id)

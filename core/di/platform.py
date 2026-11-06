@@ -40,6 +40,7 @@ from core.di.kit import ProcessIdentity, ServiceDi, recipe
 from core.documents.tree_service import DocumentTreeService
 from core.files.chunked_upload import ChunkedUploadService
 from core.files.hooks import index_file_in_rag
+from core.files.image_variants.service import ImageVariantService
 from core.files.service import FilesService
 from core.identity.auth_service import AuthService
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
@@ -209,6 +210,7 @@ class PlatformDi(
     customer_service: CustomerService
     customer_session_service: CustomerSessionService
     geocoder: Geocoder
+    image_variant_service: ImageVariantService
     service_client: ServiceClient
     document_tree_service: DocumentTreeService
     files_service: FilesService

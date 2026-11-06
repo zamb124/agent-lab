@@ -20,7 +20,7 @@ const EMBED=new URLSearchParams(location.search).has('embed');
 const TABLE_ID=new URLSearchParams(location.search).get('table')||'';
 const TABLES=Array.isArray(S.tables)?S.tables:[];
 const fmt=v=>(v/100).toLocaleString('ru-RU')+' ₽';
-const IMG=u=>u?`/shop/api/v1/files/download/${u}`:'';
+const IMG=(u,v)=>u?`/shop/api/v1/files/download/${u}${v?`?v=${v}`:''}`:'';
 const DAYS=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 function hoursBadge(){
   const wh=S.working_hours||{};

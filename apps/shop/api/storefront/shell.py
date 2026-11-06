@@ -15,7 +15,18 @@ from html import escape
 
 from apps.shop.api.storefront.blocks import custom_injections, page_css, page_js
 from apps.shop.api.storefront.blocks.account import account_tail
+from core.platform_brand.resolver import (
+    resolve_brand_apex_origin,
+    resolve_brand_or_primary,
+    supported_domains,
+)
 from core.types import JsonObject
+from core.utils.domain import (
+    extract_base_domain,
+    get_protocol,
+    is_local,
+    split_host_port,
+)
 
 _PAGE = """<!DOCTYPE html>
 <html lang="ru">
@@ -28,6 +39,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>{platform_brand}</script>
 <script type="module" src="/static/core/lib/customer-auth/autoload.js"></script>
 {seo_head}
 {pwa_head}
@@ -40,7 +52,7 @@ body.light{{--bg:#f5f4f2;--card:#ffffff;--card2:#eeebe7;--text:#1d1a16;--muted:#
 </style>
 </head>
 <body class="{body_class}" data-preset="{preset}">
-<div class="wrap" id="custom-top">{custom_top}</div>
+{custom_top}
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel"><div class="grab"></div><div id="panel"></div></div></div>
@@ -51,7 +63,7 @@ body.light{{--bg:#f5f4f2;--card:#ffffff;--card2:#eeebe7;--text:#1d1a16;--muted:#
 {blocks_js}
 {custom_js}
 </script>
-<div class="wrap" id="custom-bottom">{custom_bottom}</div>
+{custom_bottom}
 {account_tail}
 </body>
 </html>"""
@@ -248,7 +260,51 @@ def _seo_head(
     return "\n".join(tags)
 
 
-def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url: str = "") -> str:
+def _platform_brand_bootstrap(host: str) -> JsonObject:
+    """``window.__PLATFORM_BRAND__`` для embed-компонентов на витринной странице.
+
+    Тот же контракт, что у PlatformApp (`/frontend/api/platform/brand` →
+    `window.__PLATFORM_BRAND__`): `<platform-map>`, `<platform-customer-auth>`
+    и прочие PlatformElement-embed'ы читают бренд для i18n-интерполяции.
+    Названия бренда — из `platform_brands` конфигурации по Host запроса.
+    """
+    brand = resolve_brand_or_primary(host or None)
+    hostname, port = split_host_port(host) if host else ("", None)
+    protocol = get_protocol(host) if host else "https"
+    try:
+        base_domain = extract_base_domain(host) if host else ""
+    except ValueError:
+        base_domain = ""
+    if not base_domain:
+        base_domain = hostname or "localhost"
+    try:
+        apex_origin = resolve_brand_apex_origin(host, url_scheme=protocol)
+    except ValueError:
+        apex_origin = f"{protocol}://{hostname}/" if hostname else "/"
+    return {
+        "isProduction": not is_local(host),
+        "baseDomain": base_domain,
+        "portSuffix": f":{port}" if port else "",
+        "protocol": protocol,
+        "platformName": brand.platform_name,
+        "supportEmail": brand.support_email,
+        "logoPath": brand.logo_path,
+        "apexOrigin": apex_origin,
+        "supportedDomains": list(supported_domains()),
+        "modelsProductName": brand.models_product_name,
+        "voiceProductName": brand.voice_product_name,
+        "llmsDisplayLabel": brand.llms_display_label,
+        "flowsProductLabel": brand.flows_product_label,
+    }
+
+
+def storefront_html(
+    snapshot: JsonObject,
+    *,
+    canonical_url: str = "",
+    image_url: str = "",
+    host: str = "",
+) -> str:
     """HTML витрины с inline-снапшотом для SSR-lite рендера."""
     accent = _DEFAULT_ACCENT
     preset = "menu"
@@ -277,6 +333,9 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
         ]
     )
     return _PAGE.format(
+        platform_brand="window.__PLATFORM_BRAND__="
+        + json.dumps(_platform_brand_bootstrap(host), ensure_ascii=False)
+        .replace("</", "<\\/"),
         title=escape(title),
         description=escape(description),
         seo_head=_seo_head(

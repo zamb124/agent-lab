@@ -149,11 +149,18 @@ export function resolvePlatformFilesApiBase(opts: PlatformFilesRouteOpts = {}): 
  * }} [opts]
  * @returns {string}
  */
-export function buildPlatformFileDownloadUrl(fileId: string, opts: PlatformFilesRouteOpts = {}): string {
+export function buildPlatformFileDownloadUrl(
+    fileId: string,
+    opts: PlatformFilesRouteOpts = {},
+    variant?: string | undefined,
+): string {
     if (typeof fileId !== 'string' || fileId === '') {
         throw new Error('buildPlatformFileDownloadUrl: fileId required');
     }
-    return `${resolvePlatformFilesApiBase(opts)}/download/${encodeURIComponent(fileId)}`;
+    const url = `${resolvePlatformFilesApiBase(opts)}/download/${encodeURIComponent(fileId)}`;
+    return typeof variant === 'string' && variant !== ''
+        ? `${url}?v=${encodeURIComponent(variant)}`
+        : url;
 }
 
 /** Любой `/{segment}/api/v1/files/download/{file_id}`. */

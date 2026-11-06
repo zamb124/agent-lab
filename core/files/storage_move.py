@@ -6,6 +6,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
+from core.files.image_variants.variants import variant_family_keys
 from core.files.models import FileRecord
 from core.files.object_storage import PLATFORM_STORAGE_ID, ObjectStorage, ObjectStorageState
 from core.files.object_store.pool import client_for
@@ -29,17 +30,21 @@ async def _move_file(record: FileRecord, migration: StorageMigration) -> int:
     source = await client_for(
         resolve_company_storage(await ObjectStorage.require(migration.source_storage_id))
     )
-    data = await source.download_bytes(record.s3_key)
-    digest = hashlib.sha256(data).hexdigest()
     target = await client_for(await _target_resolved(migration.target_storage_id))
-    _ = await target.upload_bytes(
-        data=data,
-        key=record.s3_key,
-        content_type=record.content_type,
-    )
-    copied = await target.download_bytes(record.s3_key)
-    if hashlib.sha256(copied).hexdigest() != digest or len(copied) != len(data):
-        raise ValueError(f"checksum mismatch while moving {record.file_id}")
+    family_keys = [record.s3_key, *variant_family_keys(record)]
+    total_bytes = 0
+    for key in family_keys:
+        data = await source.download_bytes(key)
+        digest = hashlib.sha256(data).hexdigest()
+        _ = await target.upload_bytes(
+            data=data,
+            key=key,
+            content_type=record.content_type,
+        )
+        copied = await target.download_bytes(key)
+        if hashlib.sha256(copied).hexdigest() != digest or len(copied) != len(data):
+            raise ValueError(f"checksum mismatch while moving {record.file_id}")
+        total_bytes += len(data)
     claimed = await FileRecord.claim_storage_move(
         record.file_id,
         source_storage_id=migration.source_storage_id,
@@ -47,8 +52,9 @@ async def _move_file(record: FileRecord, migration: StorageMigration) -> int:
         s3_key=record.s3_key,
     )
     if claimed:
-        _ = await source.delete_file(record.s3_key)
-    return len(data)
+        for key in family_keys:
+            _ = await source.delete_file(key)
+    return total_bytes
 
 
 async def run_storage_migration_batch(storage_migration_id: str) -> StorageMigration:

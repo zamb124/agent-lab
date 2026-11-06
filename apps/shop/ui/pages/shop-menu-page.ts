@@ -619,7 +619,7 @@ export class ShopMenuPage extends PlatformPage {
                 @dragstart=${(e: DragEvent) => this._onProductDragStart(e, p.shop_product_id)}
                 @dragend=${(e: DragEvent) => this._onProductDragEnd(e)}>
                 ${p.photo_file_id
-                    ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
+                    ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}?v=sm!sq" alt="" loading="lazy">`
                     : html`<span class="thumb-empty"><platform-icon name="image" size="18"></platform-icon></span>`}
                 <div class="pinfo">
                     <div class="pname">

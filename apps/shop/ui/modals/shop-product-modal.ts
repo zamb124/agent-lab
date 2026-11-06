@@ -148,7 +148,7 @@ export class ShopProductModal extends PlatformModal {
             this._badges = [...p.badges];
             this._photoFileId = p.photo_file_id ?? '';
             this._photoPreview = p.photo_file_id !== null
-                ? `/shop/api/v1/files/download/${p.photo_file_id}`
+                ? `/shop/api/v1/files/download/${p.photo_file_id}?v=md!sq`
                 : '';
         }
     }
@@ -222,7 +222,7 @@ export class ShopProductModal extends PlatformModal {
             const fileId = (result as { file_id?: unknown }).file_id;
             if (typeof fileId === 'string') {
                 this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
+                this._photoPreview = `/shop/api/v1/files/download/${fileId}?v=md!sq`;
             }
         }
         input.value = '';
@@ -235,7 +235,7 @@ export class ShopProductModal extends PlatformModal {
             const fileId = (result as { file_id?: unknown }).file_id;
             if (typeof fileId === 'string') {
                 this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
+                this._photoPreview = `/shop/api/v1/files/download/${fileId}?v=md!sq`;
             }
         }
     }
@@ -248,7 +248,7 @@ export class ShopProductModal extends PlatformModal {
             const fileId = (result as { file_id?: unknown }).file_id;
             if (typeof fileId === 'string') {
                 this._photoFileId = fileId;
-                this._photoPreview = `/shop/api/v1/files/download/${fileId}`;
+                this._photoPreview = `/shop/api/v1/files/download/${fileId}?v=md!sq`;
             }
         }
     }

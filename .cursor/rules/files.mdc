@@ -45,6 +45,7 @@ alwaysApply: false
 1. Download — `GET /{segment}/api/v1/files/download/{file_id}`: streaming + `Range`/206 (`stream_s3_file`); любой сервис с Files router отдаёт любой `file_id`; `file_id` из URL любого segment — `file_id_from_download_url`.
 2. `is_public=true` разрешает анонимный download; непубличный без компании — 403.
 3. Наружу — только same-origin URL; `get_public_url()` и прямой URL S3 в ответах запрещены.
+4. Варианты изображений — `?v={sm|md|lg}[!sq]` (`core/files/image_variants/`): `sm`/`md`/`lg` — contain в бокс 160/480/1200 px без upscale, `!sq` — cover-кроп к квадрату; вариант всегда `image/webp`. Ленивая материализация `ImageVariantService.ensure_variant_key`: первый запрос рендерит из оригинала и пишет объект `v_{name}.webp` + индекс `metadata.image_variants`, дальше — готовый ключ. Авторизация всегда по логической записи (`FileGate.open`), `?v=` её не обходит. Не-растровые файлы и невалидный `v` — 404/400. Удаление, `replace_content` и `storage_move` оперируют всем семейством ключей `variant_family_keys`; смена checksum инвалидирует индекс.
 
 ### DataTable
 

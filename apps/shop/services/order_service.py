@@ -644,6 +644,7 @@ class ShopOrderService:
 
     async def order_response(self, order: ShopOrder) -> ShopOrderResponse:
         items = await ShopOrderItem.list_by_order(order.shop_order_id)
+        photos = await self._item_photos(items)
         return ShopOrderResponse(
             shop_order_id=order.shop_order_id,
             shop_id=order.shop_id,
@@ -676,6 +677,7 @@ class ShopOrderService:
                     price_minor=i.price_minor,
                     qty=i.qty,
                     discount_minor=i.discount_minor,
+                    photo_file_id=photos.get(i.product_id),
                     modifiers=[
                         ShopOrderItemModifierResponse.model_validate(m) for m in i.modifiers
                     ],
@@ -683,6 +685,13 @@ class ShopOrderService:
                 for i in items
             ],
         )
+
+    @staticmethod
+    async def _item_photos(items: list[ShopOrderItem]) -> dict[str, str]:
+        """Фото позиций заказа — join по текущему товару (дисплейные данные)."""
+        ids = [i.product_id for i in items if i.product_id]
+        products = await ShopProduct.list_many_by_ids(ids) if ids else []
+        return {p.shop_product_id: p.photo_file_id for p in products if p.photo_file_id}
 
     async def _allocate_public_code(self) -> str:
         for _ in range(5):
@@ -765,7 +774,7 @@ class ShopOrderService:
             shop=self._shop_block(shop, order, storefront_url=storefront_url),
         )
 
-    def my_order_detail(
+    async def my_order_detail(
         self,
         order: ShopOrder,
         shop: Shop | None,
@@ -774,6 +783,7 @@ class ShopOrderService:
         storefront_url: str,
     ) -> ShopMyOrderDetailResponse:
         """Полная карточка заказа кабинета: позиции, таймлайн, гео доставки."""
+        photos = await self._item_photos(items)
         base = self.my_order_list_item(
             order,
             shop,
@@ -801,6 +811,7 @@ class ShopOrderService:
                         price_minor=i.price_minor,
                         qty=i.qty,
                         discount_minor=i.discount_minor,
+                        photo_file_id=photos.get(i.product_id),
                         modifiers=[
                             ShopOrderItemModifierResponse.model_validate(m)
                             for m in i.modifiers

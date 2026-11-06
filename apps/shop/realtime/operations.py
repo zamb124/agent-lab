@@ -67,6 +67,7 @@ from apps.shop.models.api import (
     ShopTableUpdateRequest,
     ShopTheme,
     ShopUpdateRequest,
+    normalize_shop_theme,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
@@ -82,6 +83,7 @@ from core.errors.boundary import (
     PlatformNotFoundError,
     PlatformUnavailableError,
 )
+from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
@@ -364,7 +366,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         prep_minutes=shop.prep_minutes,
         courier_mode=shop.courier_mode,
         currency=shop.currency,
-        theme=ShopTheme.model_validate(shop.theme or {}),
+        theme=ShopTheme.model_validate(normalize_shop_theme(shop.theme or {})),
         badges=[
             ShopBadgeResponse(
                 key=b["key"],
@@ -433,6 +435,19 @@ async def _enqueue_rebuild(
     _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=slug)
 
 
+logger = get_logger(__name__)
+
+
+async def _delete_orphaned_file(di: Di, file_id: str | None) -> None:
+    """Заменённый файл (фото/лого/обложка) — удаление записи и всей семьи вариантов."""
+    if file_id is None or file_id == "":
+        return
+    try:
+        _ = await di.files_service.delete(file_id)
+    except Exception:
+        logger.warning("shop.file_cleanup_failed", file_id=file_id)
+
+
 # --- Витрины (админ) ---
 
 
@@ -485,11 +500,16 @@ async def op_shops_update(payload: ShopUpdatePayload, *, user: User, di: Di) -> 
             error_code="invalid_delivery_zone",
         )
     try:
+        before = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
         shop = await di.shop_service.update_shop(scope.company_id, payload.shop_id, payload)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformConflictError as exc:
         raise_conflict(exc)
+    if shop.logo_file_id != before.logo_file_id:
+        await _delete_orphaned_file(di, before.logo_file_id)
+    if shop.cover_file_id != before.cover_file_id:
+        await _delete_orphaned_file(di, before.cover_file_id)
     await publish_shop_event(
         SHOP_SHOP_UPDATED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
@@ -652,12 +672,15 @@ async def op_products_update(
 ) -> ShopProductResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
+    before = await ShopProduct.get_by_id(payload.shop_product_id)
     try:
         product = await di.shop_service.update_product(
             scope.company_id, payload.shop_id, payload.shop_product_id, payload
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    if before is not None and product.photo_file_id != before.photo_file_id:
+        await _delete_orphaned_file(di, before.photo_file_id)
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return _product_response(product)
@@ -698,12 +721,15 @@ async def op_products_import(
 async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: Di) -> EmptyPayload:
     scope = await require_company_admin(di.authz_service)
     _ = user
+    before = await ShopProduct.get_by_id(payload.shop_product_id)
     try:
         await di.shop_service.delete_product(
             scope.company_id, payload.shop_id, payload.shop_product_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    if before is not None:
+        await _delete_orphaned_file(di, before.photo_file_id)
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return EmptyPayload()
@@ -1010,7 +1036,7 @@ async def op_public_my_order_get(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return di.order_service.my_order_detail(
+    return await di.order_service.my_order_detail(
         order,
         shop,
         items,
@@ -1037,7 +1063,7 @@ async def op_public_my_order_cancel(
         raise_not_found(exc)
     except PlatformConflictError as exc:
         raise_conflict(exc)
-    return di.order_service.my_order_detail(
+    return await di.order_service.my_order_detail(
         order,
         shop,
         items,

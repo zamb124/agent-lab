@@ -189,8 +189,8 @@ export class ShopBrandEditor extends PlatformElement {
         await this._saveField(kind === 'logo' ? 'logo_file_id' : 'cover_file_id', fileId);
     }
 
-    private _fileUrl(fileId: string): string {
-        return `/shop/api/v1/files/download/${fileId}`;
+    private _fileUrl(fileId: string, variant: string): string {
+        return `/shop/api/v1/files/download/${fileId}?v=${variant}`;
     }
 
     override render(): TemplateResult {
@@ -205,7 +205,7 @@ export class ShopBrandEditor extends PlatformElement {
                             <platform-icon name="image" size="22"></platform-icon>
                             <span>${this._uploadOp.busy ? this.t('settings.upload') : this.t('settings.cover')}</span>`
                         : html`
-                            <img src=${this._fileUrl(this.coverFileId)} alt="">
+                            <img src=${this._fileUrl(this.coverFileId, 'md')} alt="">
                             <span class="veil">${this.t('settings.replace_photo')}</span>`}
                 </button>
                 <button class="fab cover-ai" ?disabled=${aiDisabled} title=${this.t('settings.ai_cover_hint')} @click=${() => this._aiGenerate('cover')}>
@@ -217,7 +217,7 @@ export class ShopBrandEditor extends PlatformElement {
                 <button class="logo" ?disabled=${this._uploadOp.busy} title=${this.t('settings.logo')} @click=${() => this._pickFile('logo')}>
                     ${this.logoFileId === ''
                         ? html`<platform-icon name="image" size="22"></platform-icon>`
-                        : html`<img src=${this._fileUrl(this.logoFileId)} alt="">`}
+                        : html`<img src=${this._fileUrl(this.logoFileId, 'sm!sq')} alt="">`}
                 </button>
                 <button class="fab logo-ai" ?disabled=${aiDisabled} title=${this.t('settings.ai_logo_hint')} @click=${() => this._aiGenerate('logo')}>
                     ${this._aiLogoOp.busy

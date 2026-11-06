@@ -223,7 +223,9 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return stored_file_ref(file_record, route_segment=route_segment)
 
-    async def download_file(file_id: str, request: Request, di: Di) -> StreamingResponse | Response:
+    async def download_file(
+        file_id: str, request: Request, di: Di, v: str | None = None
+    ) -> StreamingResponse | Response:
         try:
             handle = await FileGate(di.authz_service).open(
                 file_id,
@@ -237,6 +239,18 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
         file_record = handle.record
         s3_key = file_record.s3_key
         content_type = file_record.content_type
+        if v is not None:
+            if v.strip() == "":
+                raise HTTPException(status_code=400, detail="Empty image variant.")
+            try:
+                resolved_variant = await di.image_variant_service.ensure_variant_key(
+                    file_record, v
+                )
+            except PlatformNotFoundError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            handle = handle.with_key(resolved_variant.key)
+            s3_key = resolved_variant.key
+            content_type = resolved_variant.content_type
         if file_record.storage_id != "" and s3_key != "":
             if content_type == "":
                 raise HTTPException(status_code=500, detail="File content_type is missing.")

@@ -35,7 +35,7 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 .item p{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .item .row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
 .price{font-size:16.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
-.add{font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;transition:transform .1s,box-shadow .15s}
+.add{font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;white-space:nowrap;transition:transform .1s,box-shadow .15s}
 .add:hover{box-shadow:0 2px 12px color-mix(in srgb,var(--accent) 45%,transparent)}
 .add:active{transform:scale(.94)}
 .stepper{display:inline-flex;align-items:center;gap:2px;background:var(--card2);border-radius:99px;padding:3px}
@@ -52,13 +52,13 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 .compact .item{padding:12px 2px}
 .compact .item img{display:none}"""
 
-JS: str = """function rowList(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
-function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
+JS: str = """function rowList(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','sm!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
+function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','md!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
 function rowCompact(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')"><div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){
   const hb=hoursBadge();
-  let h=`<div class="hero">${photo(S.cover_file_id,'bg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo')}<div><h1 class="serif">${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>
+  let h=`<div class="hero">${photo(S.cover_file_id,'bg','lg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo','sm!sq')}<div><h1 class="serif">${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>
   <div class="meta">${hb?`<span class="${hb.open?'ob-open':'ob-closed'}">${ic('clock')}${hb.t}</span>`:''}${S.city||S.address?`<span>${ic('pin')}${esc([S.city,S.address].filter(Boolean).join(', '))}</span>`:''}${S.phone?`<span>${ic('call')}${esc(S.phone)}</span>`:''}${S.delivery_enabled?`<span>${ic('truck')}Доставка</span>`:''}${S.pickup_enabled?`<span>${ic('store')}Самовывоз</span>`:''}${S.onsite_enabled?`<span>${ic('restaurant')}В заведении</span>`:''}</div>`;
   if(!S.products.length){app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}
   h+=`<div id="msw"></div><div id="menu"></div>`;

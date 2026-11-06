@@ -102,15 +102,15 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 <script>
 const S=JSON.parse(document.getElementById('snapshot').textContent);
 const fmt=v=>(v/100).toLocaleString('ru-RU')+' ₽';
-const IMG=u=>u?`/shop/api/v1/files/download/${{u}}`:'';
+const IMG=(u,v)=>u?`/shop/api/v1/files/download/${{u}}${{v?`?v=${{v}}`:''}}`:'';
 const LINK=s=>`/shop/api/v1/public/s/${{s}}`;
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
 const KIND={{restaurant:'Ресторан',cafe:'Кафе',bakery:'Пекарня',shop:'Магазин',other:'Заведение'}};
 const COVB={{yes:['yes','Доставит к вам'],no:['no','Не доставляет по адресу']}};
 function shopCard(s){{const cov=COVB[s.delivery_coverage];
   return `<a class="shop" href="${{LINK(s.slug)}}">
-  <span class="cover">${{s.cover_file_id?`<img src="${{IMG(s.cover_file_id)}}" loading="lazy" alt="">`:''}}</span>
-  <span class="b">${{s.logo_file_id?`<img class="logo" src="${{IMG(s.logo_file_id)}}" alt="">`:''}}<span>
+  <span class="cover">${{s.cover_file_id?`<img src="${{IMG(s.cover_file_id,'md')}}" loading="lazy" alt="">`:''}}</span>
+  <span class="b">${{s.logo_file_id?`<img class="logo" src="${{IMG(s.logo_file_id,'sm!sq')}}" alt="">`:''}}<span>
     <h3>${{esc(s.name)}}</h3>
     <span class="meta">${{esc([KIND[s.kind]||KIND.other,s.city].filter(Boolean).join(' · '))}}${{s.description?`<br>${{esc(s.description)}}`:''}}</span>
     ${{cov?`<span class="cov ${{cov[0]}}">${{cov[1]}}</span>`:''}}
@@ -171,7 +171,7 @@ function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 let lastQ='';
 const PTAGS=b=>`<span class="ptag">${{b.icon_path?`<svg viewBox="0 -960 960 960"><path d="${{b.icon_path}}"/></svg>`:''}}${{esc(b.label)}}</span>`;
 const pcardHtml=p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
-  ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
+  ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id,'md!sq')}}" loading="lazy" alt="">`:''}}
   <span class="b"><h3>${{esc(p.name)}}${{(p.badges||[]).map(PTAGS).join('')}}${{p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
 function searchUrl(q,offset){{let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24&offset=${{offset}}`;
   if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;return url;}}

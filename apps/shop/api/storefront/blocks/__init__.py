@@ -116,6 +116,9 @@ def custom_injections(snapshot: JsonObject) -> dict[str, str]:
     if isinstance(blocks, dict):
         for slot_id in _BLOCK_SLOT_IDS:
             value = blocks.get(slot_id)
-            if isinstance(value, str):
-                slots[f"custom_{slot_id}"] = value
+            if isinstance(value, str) and value.strip():
+                # пустой слот не рендерится: пустой .wrap дал бы мёртвый отступ
+                slots[f"custom_{slot_id}"] = (
+                    f'<div class="wrap" id="custom-{slot_id}">{value}</div>'
+                )
     return slots

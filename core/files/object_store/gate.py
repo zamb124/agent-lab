@@ -52,19 +52,25 @@ def raise_storage_unavailable(exc: Exception) -> NoReturn:
 class FileHandle:
     record: FileRecord
     _client: S3Client
+    _object_key: str
 
-    def __init__(self, record: FileRecord, client: S3Client) -> None:
+    def __init__(self, record: FileRecord, client: S3Client, object_key: str | None = None) -> None:
         self.record = record
         self._client = client
+        self._object_key = record.s3_key if object_key is None else object_key
+
+    def with_key(self, object_key: str) -> FileHandle:
+        """Handle на производный объект записи (вариант изображения) — та же запись, другой ключ."""
+        return FileHandle(self.record, self._client, object_key)
 
     async def read_bytes(self) -> bytes:
         try:
-            return await self._client.download_bytes(self.record.s3_key)
+            return await self._client.download_bytes(self._object_key)
         except Exception as exc:
             raise_storage_unavailable(exc)
 
     async def stream(self, byte_range: str | None = None) -> AsyncIterator[bytes]:
-        body = await self._client.open_object_body(self.record.s3_key, byte_range=byte_range)
+        body = await self._client.open_object_body(self._object_key, byte_range=byte_range)
         while True:
             chunk = await body.read(1024 * 1024)
             if not chunk:
@@ -72,7 +78,7 @@ class FileHandle:
             yield chunk
 
     async def head(self) -> tuple[int, str]:
-        meta = await self._client.get_object_metadata(self.record.s3_key)
+        meta = await self._client.get_object_metadata(self._object_key)
         return meta.content_length, meta.content_type
 
 
