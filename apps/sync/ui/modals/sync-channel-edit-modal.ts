@@ -59,7 +59,6 @@ function uploadedFileId(result: unknown): string {
     }
     return fileId;
 }
-import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
 
@@ -359,13 +358,14 @@ export class SyncChannelEditModal extends PlatformFormModal {
         const file = files[0];
         const item = this._currentChannel();
         if (!item || item.type === 'direct') return;
-        const compressed = await compressImageFileToJpeg(file);
+        // Оригинал загружаем как есть: аватарные размеры даёт платформенный
+        // вариант ?v=sm!sq на стороне Files API (ленивая материализация).
         const spec = buildSyncChannelAssetFileCreateSpecJson({
             channelId: this.channelId,
             purpose: 'channel_avatar',
         });
         const result = await this._fileUpload.run({
-            file: compressed,
+            file,
             spec,
         });
         if (this._fileUpload.error !== null) {

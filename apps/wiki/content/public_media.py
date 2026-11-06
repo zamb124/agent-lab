@@ -20,9 +20,14 @@ from core.files.file_ref import file_id_from_download_url
 IMAGE_NODE: str = "image"
 
 
-def public_file_url(link_token: str, file_id: str) -> str:
-    """Ссылка на файл внутри публичного сайта."""
-    return f"/wiki/api/v1/public/pages/{link_token}/files/{file_id}"
+def public_file_url(link_token: str, file_id: str, variant: str | None = None) -> str:
+    """Ссылка на файл внутри публичного сайта.
+
+    `variant` — платформенный вариант изображения `?v=` (см. files.mdc):
+    ленивая WebP-материализация вместо отдачи оригинала.
+    """
+    url = f"/wiki/api/v1/public/pages/{link_token}/files/{file_id}"
+    return f"{url}?v={variant}" if variant else url
 
 
 def platform_file_id_from_url(url: str) -> str:
@@ -84,7 +89,7 @@ def rewrite_media_for_public(content: ProseMirrorNode, link_token: str) -> Prose
     if content.type == IMAGE_NODE:
         file_id = _image_file_id(content.attrs)
         if file_id != "":
-            attrs["src"] = public_file_url(link_token, file_id)
+            attrs["src"] = public_file_url(link_token, file_id, variant="lg")
             attrs["file_id"] = file_id
     return ProseMirrorNode(
         type=content.type,
@@ -100,7 +105,7 @@ def rewrite_cover_for_public(cover_url: str, link_token: str) -> str:
     file_id = platform_file_id_from_url(cover_url)
     if file_id == "":
         return cover_url
-    return public_file_url(link_token, file_id)
+    return public_file_url(link_token, file_id, variant="lg")
 
 
 __all__ = [

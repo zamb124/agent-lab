@@ -9,6 +9,7 @@
 
 import type { PmAttrs, PmBundleLike, PmSchemaLike } from './pm-types.js';
 import { isPlainRecord } from '../events/payload.js';
+import { platformFileImageVariantUrl } from '../utils/platform-files-url.js';
 
 export type { PmBundleLike } from './pm-types.js';
 
@@ -257,7 +258,11 @@ const DOM_SPECS: Record<string, NodeDomSpec | null> = Object.freeze({
         toDOM: (node: PmAttrs) => [
             'img',
             {
-                src: node.attrs.src,
+                // В документе хранится канонический URL; в редакторе показываем
+                // платформенный вариант lg вместо оригинала.
+                src: typeof node.attrs.src === 'string' && node.attrs.src !== ''
+                    ? platformFileImageVariantUrl(node.attrs.src, 'lg')
+                    : node.attrs.src,
                 alt: node.attrs.alt,
                 title: optionalAttr(node.attrs.title),
                 'data-file-id': optionalAttr(node.attrs.file_id),

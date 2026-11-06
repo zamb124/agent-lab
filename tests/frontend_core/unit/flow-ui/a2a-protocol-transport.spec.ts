@@ -278,7 +278,7 @@ describe('agent identity image', () => {
         ] }] };
         expect(() => agentIdentityImageUrlFromDocument(conflict)).toThrow(/image_url conflict/);
 
-        expect(resolveAgentIdentityImageSrc({ imageUrl: files, document, platformUiOrigin: 'https://ui' })).toBe(`https://ui${files}`);
+        expect(resolveAgentIdentityImageSrc({ imageUrl: files, document, platformUiOrigin: 'https://ui' })).toBe(`https://ui${files}?v=sm%21sq`);
         expect(resolveAgentIdentityImageSrc({ document })).toBe('https://doc/img.png');
         expect(resolveAgentIdentityImageSrc({ flowIdentity: { image_url: 'https://flow/i.png' } })).toBe('https://flow/i.png');
         expect(resolveAgentIdentityImageSrc({ flowIdentity: { image_url: null }, platformUiOrigin: 'https://ui' })).toBe(`https://ui${BRAND_LOGO_PATH}`);

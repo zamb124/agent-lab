@@ -59,6 +59,15 @@ describe('placeholder-avatar', () => {
         expect(r.src).toBe('https://example.com/a.png');
     });
 
+    it('resolveAvatarImageSrc: платформенный download URL — вариант sm!sq', () => {
+        const r = resolveAvatarImageSrc({
+            avatarUrl: '/sync/api/v1/files/download/file_1',
+            seed: 'u',
+        });
+        expect(r.kind).toBe('remote');
+        expect(r.src).toBe('/sync/api/v1/files/download/file_1?v=sm%21sq');
+    });
+
     it('resolveAvatarImageSrc: нет URL — placeholder с seed', () => {
         const r = resolveAvatarImageSrc({ avatarUrl: null, seed: 'user_x' });
         expect(r.kind).toBe('placeholder');

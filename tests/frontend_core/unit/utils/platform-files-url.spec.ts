@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
     buildPlatformFileDownloadUrl,
     clearPlatformFilesRouteSegment,
+    platformFileImageVariantUrl,
     resolvePlatformFilesApiBase,
     resolvePlatformFilesRouteSegment,
     setPlatformFilesRouteSegment,
@@ -49,5 +50,32 @@ describe('platform-files-url', () => {
     it('opts.routeSegment overrides bind', () => {
         setPlatformFilesRouteSegment('frontend');
         expect(resolvePlatformFilesRouteSegment({ routeSegment: 'sync' })).toBe('sync');
+    });
+
+    it('variant query on download URLs: относительные и абсолютные', () => {
+        expect(platformFileImageVariantUrl('/shop/api/v1/files/download/f1', 'sm!sq')).toBe(
+            '/shop/api/v1/files/download/f1?v=sm%21sq',
+        );
+        expect(
+            platformFileImageVariantUrl('https://h.test/sync/api/v1/files/download/f2', 'md'),
+        ).toBe('https://h.test/sync/api/v1/files/download/f2?v=md');
+    });
+
+    it('variant query: сохраняет hash и заменяет существующий v', () => {
+        expect(
+            platformFileImageVariantUrl('/crm/api/v1/files/download/f1?x=1#frag', 'lg'),
+        ).toBe('/crm/api/v1/files/download/f1?x=1&v=lg#frag');
+        expect(
+            platformFileImageVariantUrl('/crm/api/v1/files/download/f1?v=sm', 'lg'),
+        ).toBe('/crm/api/v1/files/download/f1?v=lg');
+    });
+
+    it('variant query: не-download URL возвращается как есть', () => {
+        expect(platformFileImageVariantUrl('https://cdn.test/a.png', 'sm')).toBe(
+            'https://cdn.test/a.png',
+        );
+        expect(platformFileImageVariantUrl('/static/core/logo.svg', 'sm')).toBe(
+            '/static/core/logo.svg',
+        );
     });
 });

@@ -5,6 +5,7 @@
  */
 
 import { indexFromSeed } from './hash-string.js';
+import { platformFileImageVariantUrl } from './platform-files-url.js';
 
 /** Базовый URL каталога `png/` в репозитории alohe/avatars. */
 export const PLACEHOLDER_AVATAR_CDN_BASE = 'https://cdn.jsdelivr.net/gh/alohe/avatars/png/';
@@ -100,7 +101,9 @@ export function resolveAvatarImageSrc(args: { avatarUrl?: string | null; seed: s
     const rawUrl = args.avatarUrl;
     const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
     if (trimmed !== '') {
-        return { kind: 'remote', src: trimmed };
+        // Аватар всегда рендерится мелким — платформенный вариант sm!sq
+        // (160px cover WebP) вместо оригинала. Внешние URL проходят как есть.
+        return { kind: 'remote', src: platformFileImageVariantUrl(trimmed, 'sm!sq') };
     }
     if (typeof seed !== 'string' || seed === '') {
         throw new Error('resolveAvatarImageSrc: seed must be a non-empty string when avatarUrl is absent');

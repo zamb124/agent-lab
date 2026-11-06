@@ -3,6 +3,7 @@
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { html, nothing } from 'lit';
 import { flowUIMediaSrc } from '../runtime/agent-identity-image.js';
+import { platformFileImageVariantUrl } from '../../utils/platform-files-url.js';
 import { blockText as text, blockUrl } from '../runtime/templating.js';
 import { markdownToHtml } from '../../utils/markdown.js';
 import type { FlowUiBlockRenderer, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
@@ -33,7 +34,9 @@ export const CONTENT_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Obj
         const src = mediaSrc(ctx, block.url);
         if (src === null) return nothing;
         const alt = text(ctx, block.alt);
-        return html`<img class="fu-media" src=${src} alt=${alt === null ? '' : alt} loading="lazy">`;
+        // Платформенный файл — вариант lg (1200px contain WebP); внешний URL — как есть.
+        const displaySrc = platformFileImageVariantUrl(src, 'lg');
+        return html`<img class="fu-media" src=${displaySrc} alt=${alt === null ? '' : alt} loading="lazy">`;
     },
 
     video(block, ctx) {

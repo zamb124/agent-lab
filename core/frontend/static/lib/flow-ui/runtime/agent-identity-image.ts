@@ -3,7 +3,10 @@
  * ``flow_identity.image_url`` ответа interface, иначе логотип бренда.
  */
 
-import { PLATFORM_FILES_DOWNLOAD_PATH_RE } from '../../utils/platform-files-url.js';
+import {
+    PLATFORM_FILES_DOWNLOAD_PATH_RE,
+    platformFileImageVariantUrl,
+} from '../../utils/platform-files-url.js';
 import { brandLogoSrc, platformStaticSrc } from '../shell/brand-logo.js';
 import { iterBlocks } from './flow-ui-store.js';
 
@@ -72,5 +75,6 @@ export function resolveAgentIdentityImageSrc({ document = null, flowIdentity = n
         ?? agentIdentityImageUrlFromDocument(document)
         ?? flowIdentityImageUrl(flowIdentity);
     if (raw === null) return brandLogoSrc(platformUiOrigin);
-    return flowUIMediaSrc(platformUiOrigin, raw);
+    // Аватар агента — мелкий круг: платформенный вариант sm!sq вместо оригинала.
+    return platformFileImageVariantUrl(flowUIMediaSrc(platformUiOrigin, raw), 'sm!sq');
 }

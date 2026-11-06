@@ -168,6 +168,37 @@ export const PLATFORM_FILES_DOWNLOAD_PATH_RE =
     /\/[^/]+\/api\/v1\/files\/download\/([^/?#]+)/;
 
 /**
+ * URL варианта изображения для существующей download-ссылки.
+ *
+ * Для любых `/{segment}/api/v1/files/download/{file_id}` (относительных и
+ * абсолютных) добавляет/заменяет query `?v=`. Не-download URL возвращается
+ * как есть — внешние картинки вариантов не имеют.
+ *
+ * @param {string} url
+ * @param {string} variant — `sm|md|lg` опционально с суффиксом `!sq`
+ * @returns {string}
+ */
+export function platformFileImageVariantUrl(url: string, variant: string): string {
+    if (typeof url !== 'string' || url === '') {
+        throw new Error('platformFileImageVariantUrl: url required');
+    }
+    if (typeof variant !== 'string' || variant === '') {
+        throw new Error('platformFileImageVariantUrl: variant required');
+    }
+    if (!PLATFORM_FILES_DOWNLOAD_PATH_RE.test(url)) {
+        return url;
+    }
+    const qIndex = url.indexOf('?');
+    const hashIndex = url.indexOf('#');
+    const base = qIndex >= 0 ? url.slice(0, qIndex) : hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+    const query = qIndex >= 0 ? url.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined) : '';
+    const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+    const params = new URLSearchParams(query);
+    params.set('v', variant);
+    return `${base}?${params.toString()}${hash}`;
+}
+
+/**
  * @param {string|null|undefined} raw
  * @returns {string|null}
  */

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 from httpx2 import AsyncClient
+from io import BytesIO
+from PIL import Image
 
 from core.files.create_spec import (
     FileCreateSpec,
@@ -194,7 +196,9 @@ async def test_image_of_published_page_is_served_by_token(
     _ = wiki_domain_context
     require_s3_configured()
     page = await create_page(f"Раздел {unique_id}")
-    payload = f"wiki-public-image-{unique_id}".encode("utf-8")
+    png_buf = BytesIO()
+    Image.new("RGB", (800, 600), (200, 60, 60)).save(png_buf, format="PNG")
+    payload = png_buf.getvalue()
     file_id = await _upload_private_image(wiki_di, payload, f"cover-{unique_id}.png")
     await _put_image_content(wiki_client, page["wiki_page_id"], file_id)
     token = await _issue_link(wiki_client, page["wiki_page_id"])
@@ -202,12 +206,19 @@ async def test_image_of_published_page_is_served_by_token(
     public_page = await wiki_client_anonymous.get(f"{PUBLIC_URL}/{token}")
     assert public_page.status_code == 200, public_page.text
     image = public_page.json()["content"]["content"][0]
-    assert image["attrs"]["src"] == f"{PUBLIC_URL}/{token}/files/{file_id}"
+    assert image["attrs"]["src"] == f"{PUBLIC_URL}/{token}/files/{file_id}?v=lg"
 
     file_response = await wiki_client_anonymous.get(f"{PUBLIC_URL}/{token}/files/{file_id}")
 
     assert file_response.status_code == 200, file_response.text
     assert file_response.content == payload
+
+    variant_response = await wiki_client_anonymous.get(
+        f"{PUBLIC_URL}/{token}/files/{file_id}?v=sm!sq"
+    )
+    assert variant_response.status_code == 200, variant_response.text
+    assert variant_response.headers["content-type"] == "image/webp"
+    assert variant_response.content != payload
 
 
 async def test_file_outside_site_content_is_not_served(

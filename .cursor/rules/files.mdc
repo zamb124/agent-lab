@@ -46,6 +46,8 @@ alwaysApply: false
 2. `is_public=true` разрешает анонимный download; непубличный без компании — 403.
 3. Наружу — только same-origin URL; `get_public_url()` и прямой URL S3 в ответах запрещены.
 4. Варианты изображений — `?v={sm|md|lg}[!sq]` (`core/files/image_variants/`): `sm`/`md`/`lg` — contain в бокс 160/480/1200 px без upscale, `!sq` — cover-кроп к квадрату; вариант всегда `image/webp`. Ленивая материализация `ImageVariantService.ensure_variant_key`: первый запрос рендерит из оригинала и пишет объект `v_{name}.webp` + индекс `metadata.image_variants`, дальше — готовый ключ. Авторизация всегда по логической записи (`FileGate.open`), `?v=` её не обходит. Не-растровые файлы и невалидный `v` — 404/400. Удаление, `replace_content` и `storage_move` оперируют всем семейством ключей `variant_family_keys`; смена checksum инвалидирует индекс.
+5. Frontend-контракт `?v=` (`core/frontend/static/lib/utils/platform-files-url.ts`): `buildPlatformFileDownloadUrl(fileId, opts, variant)` — вариант на этапе сборки URL; `platformFileImageVariantUrl(url, variant)` — вариант на уже готовую download-ссылку (относительную и абсолютную, query/hash сохраняются, не-download URL проходит как есть). Аватарные `<img>` платформы — всегда `resolveAvatarImageSrc` → `sm!sq`; свой клиентский ресайз (canvas/JPEG перед upload) запрещён — оригинал грузится как есть.
+6. Публичные file-роуты сервисов с собственной авторизацией (wiki `GET /wiki/api/v1/public/pages/{token}/files/{file_id}`) повторяют тот же `?v=` контракт: `v` валидируется и резолвится через `di.image_variant_service.ensure_variant_key` после проверки доступа к логической записи, дальше `handle.with_key`.
 
 ### DataTable
 

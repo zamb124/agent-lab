@@ -34,7 +34,10 @@ import { parseMentionsToSegments } from '../_helpers/sync-mention-text.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
-import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
+import {
+    buildPlatformFileDownloadUrl,
+    platformFileImageVariantUrl,
+} from '@platform/lib/utils/platform-files-url.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { isSpeechOriginText, messageHasSpeechOriginText } from '../_helpers/sync-speech-origin.js';
 import { guestDisplayNameFromSenderId, isGuestSenderId } from '../_helpers/sync-guest-sender.js';
@@ -961,7 +964,9 @@ export class SyncMessageBubble extends PlatformElement {
         const alt = (typeof data.alt_text === 'string' && data.alt_text !== '')
             ? data.alt_text
             : (typeof data.original_name === 'string' ? data.original_name : '');
-        return html`<div class="image-wrap"><img src=${url} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
+        // В пузыре — вариант md (480px contain WebP), по клику открываем оригинал.
+        const previewUrl = platformFileImageVariantUrl(url, 'md');
+        return html`<div class="image-wrap"><img src=${previewUrl} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
     }
 
     _openFileData(data: Record<string, unknown> | null, url: string, source: string) {

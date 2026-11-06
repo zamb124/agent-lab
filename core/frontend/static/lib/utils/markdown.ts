@@ -10,6 +10,7 @@
 import { Marked } from 'marked';
 
 import { escapeHtml } from './escape-html.js';
+import { platformFileImageVariantUrl } from './platform-files-url.js';
 
 const SAFE_URL_PATTERN = /^(https?:\/\/|mailto:)/i;
 
@@ -31,7 +32,9 @@ const renderer = {
     image({ href, title, text }: MarkedImageArgs): string {
         if (!SAFE_URL_PATTERN.test(href)) return escapeHtml(text);
         const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
-        return `<img src="${escapeHtml(href)}" alt="${escapeHtml(text)}"${titleAttribute}>`;
+        // Платформенный файл — вариант lg (ленивый WebP) вместо оригинала.
+        const src = escapeHtml(platformFileImageVariantUrl(href, 'lg'));
+        return `<img src="${src}" alt="${escapeHtml(text)}"${titleAttribute}>`;
     },
 };
 

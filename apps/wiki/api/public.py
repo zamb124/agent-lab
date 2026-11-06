@@ -25,6 +25,7 @@ from apps.wiki.models.api import (
     WikiPublicTreeResponse,
 )
 from apps.wiki.models.page import WikiPage
+from core.errors.boundary import PlatformNotFoundError
 from core.files.http_range import RangeNotSatisfiableError
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
@@ -122,7 +123,7 @@ async def get_public_site_page_markdown(
 
 @router.get("/pages/{link_token}/files/{file_id}", response_model=None)
 async def get_public_site_file(
-    di: Di, link_token: str, file_id: str, request: Request
+    di: Di, link_token: str, file_id: str, request: Request, v: str | None = None
 ) -> StreamingResponse | Response:
     """Файл публичного сайта.
 
@@ -149,11 +150,23 @@ async def get_public_site_file(
         file_record,
         SystemPrincipal(company_id=file_record.company_id),
     )
+    content_type = file_record.content_type
+    if v is not None:
+        if v.strip() == "":
+            raise WsCommandError("invalid", "Empty image variant", error_code="invalid")
+        try:
+            resolved_variant = await di.image_variant_service.ensure_variant_key(
+                file_record, v
+            )
+        except PlatformNotFoundError as exc:
+            raise WsCommandError("not_found", "File not found", error_code="not_found") from exc
+        handle = handle.with_key(resolved_variant.key)
+        content_type = resolved_variant.content_type
     range_raw = request.headers.get("range")
     try:
         return await stream_file_handle(
             handle=handle,
-            content_type=file_record.content_type,
+            content_type=content_type,
             range_header=range_raw.strip() if isinstance(range_raw, str) else None,
         )
     except RangeNotSatisfiableError as exc:
