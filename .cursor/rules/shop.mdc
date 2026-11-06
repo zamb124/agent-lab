@@ -24,7 +24,7 @@ alwaysApply: false
 - `ShopProduct` — позиция: `price_minor`, `portion`, `badges` (ключи меток магазина), `photo_file_id`, `is_available`.
 - `ShopModifierGroup` + `ShopModifierOption` + `ShopProductModifierGroup` — модификаторы в модели Uber Eats/iiko: группа переиспользуется товарами, связь переопределяет `min_selected`/`max_selected`, опция ссылается на `nested_group_id`. Семантика `kind`/`selection_mode`/`price_mode` — `apps/shop/models/enums.py`.
 - `ShopPromo` — акция: `condition` + `action` + `window` (JSONB) + `priority`/`stacking`; типы — docstring `apps/shop/models/promo.py`.
-- `ShopOrder` + `ShopOrderItem` — заказ анонимного покупателя: `public_code`, `idempotency_key`, `delivery_type` (`ShopDeliveryType`: `delivery`/`pickup`/`onsite`), `table_label` — снапшот метки стола, суммы в минорных единицах, `promos`; строка хранит снапшот имени, цены и модификаторов.
+- `ShopOrder` + `ShopOrderItem` — заказ анонимного покупателя: `public_code`, `idempotency_key`, `customer_id` платформенного покупателя, `status_history` (таймлайн переходов, сидится при create), `delivery_type` (`ShopDeliveryType`: `delivery`/`pickup`/`onsite`), `table_label` — снапшот метки стола, суммы в минорных единицах, `promos`, гео-снапшот `delivery_lat/lng` + `delivery_route` (GeoJSON маршрута) + `shop_lat/lng`; строка хранит снапшот имени, цены и модификаторов (с `option_id`/`group_id` для повторного заказа). Индекс ленты кабинета — `(customer_id, created_at DESC)`.
 - `ShopDomain` — свой домен витрины, `ShopDomainStatus`, один на магазин.
 - Метки: иконки — `BADGE_ICONS`, стартовый набор — `DEFAULT_SHOP_BADGES` (`apps/shop/models/badge_icons.py`).
 
@@ -40,21 +40,22 @@ alwaysApply: false
 8. Мутации, AI и `op_shops_list` — `require_company_admin`, остальное чтение — `require_company_viewer`; `op_public_*` анонимны. `[без гейта]`
 9. Публичный заказ по HTTP ограничен `check_order_rate_limit` по IP до вызова `op_public_order_create`.
 10. `onsite`-заказ требует `shop.onsite_enabled` и существующий `table_id` того же магазина (`onsite_disabled`/`table_required`/`table_unknown`).
-11. Заказ требует customer-сессию (`customers.mdc`): телефон — верифицированный `customer.phone_e164` из `customer_token`, scope — компания витрины.
+11. Заказ требует customer-сессию (`customers.mdc`): телефон — верифицированный `customer.phone_e164` из `customer_token`, компания витрины обязана входить в `scope.company_ids`.
 12. Статус-флоу `onsite` идёт `new → accepted → preparing → done` без `delivering` — матрица переходов общая, UI фильтрует действие по `delivery_type`.
+13. Кабинет покупателя (`/public/my/orders*`) — сквозная лента по `customer_id` всех витрин платформы; чужой `public_code` в детали/отмене — not-found, не access-denied. Отмена покупателем — только из `new`.
 
 ## Контракты
 
 - Команды `shop/<entity>/<verb>_requested` — каталог `SHOP_OPERATIONS` (`apps/shop/realtime/command_router.py`); анонимные — `shop/public/*`.
 - Push — `apps/shop/events.py`: `shop/shop/created|updated|published`, `shop/catalog/changed` (ещё и доменное событие для flows-триггеров), `shop/order/created|status_changed` без PII.
-- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (`storefront_shell.py`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам, сортировка по `delivery_coverage`), `GET /storefront/{slug}/delivery-check` и `GET /aggregate/geocode` (геокодинг адреса через `di.geocoder` + проверка `delivery_zone`; нерезолвленный адрес — `address_unverifiable`), `GET /storefront/{slug}/address-suggest` (автокомплит чекаута внутри зоны через GeoClient), Telegram webhook.
+- Публичные поверхности (`apps/shop/api/public.py`): JSON-снапшот с ETag, SSR-lite HTML витрины (пакет `storefront/`, `?embed=1` — режим iframe, `?table=<id>` — предвыбор onsite-заказа со стола), QR витрины и столов (`storefront/{slug}/tables/{id}/qr.svg`), `robots.txt`/`sitemap.xml`, агрегатор `/market` (`market_shell.py`, `AggregateService` — pg_trgm поиск по опубликованным витринам, сортировка по `delivery_coverage`), `GET /storefront/{slug}/delivery-check` и `GET /aggregate/geocode` (геокодинг адреса через `di.geocoder` + проверка `delivery_zone`; нерезолвленный адрес — `address_unverifiable`), `GET /storefront/{slug}/address-suggest` (автокомплит чекаута внутри зоны через GeoClient), кабинет `my/orders` (лента/деталь/cancel), `GET /storefront/{slug}/geo` (точка и зона для карты), SSE `GET /orders/{code}/events` (fanout `OrderEventsService` поверх `PlatformEventTailReader`; polling — фолбэк), geo-прокси `/public/geo/{path}` (тайлы/PMTiles с Range для `<platform-map>` на витрине), PWA `manifest.webmanifest`/`sw.js`/`icon.svg`, Telegram webhook.
 - Рерайт Host → публичные пути — `StorefrontHostMiddleware` (`apps/shop/host_middleware.py`); в проде ingress `shop.<apex>` (`shop-ingress.yaml`), корень поддомена компании для анонима проксирует `apps/frontend/main.py`.
 
 ## Интеграции
 
 - Geo (`geo.mdc`) — единственный владелец адресов, зон и маршрутов; shop ходит только через `GeoClient` (`addresses_in_zone`, `address_suggest`, `route/calculate`). ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута по `courier_mode`. Geo недоступен → чек и заказ работают без метрик (degrade). Свой spatial SQL, OSM-парсинг и PostGIS-запросы в shop запрещены.
 - AI (описания, фото, обложка, лого, разбор меню, подсказка модификаторов) — ветки компанийского flow `shop` по A2A (`ShopAiService`, bundle `apps/flows/bundles/shop`); промптов в коде сервиса нет.
-- Уведомления о заказе — свой Telegram-бот магазина (`NotificationService`), доставка задачей `SHOP_NOTIFY_ORDER`.
+- Уведомления о заказе — свой Telegram-бот магазина (`NotificationService`), доставка задачей `SHOP_NOTIFY_ORDER`; покупателю — `CustomerNotifyService` (`core/customers/notify_service.py`, личка бота бренда TG/MAX по identity покупателя) задачей `SHOP_NOTIFY_CUSTOMER`.
 - Свой домен — `DomainService` + `SHOP_PROVISION_DOMAIN`, сверка `SHOP_RECONCILE_DOMAINS_TICK`.
 - Задачи — `apps/shop/tasks/task_names.py`; батч AI-описаний `SHOP_AI_DESCRIBE_BATCH` идёт в биллинг компании магазина.
 
@@ -62,7 +63,7 @@ alwaysApply: false
 
 - SPA `ShopApp` (`apps/shop/ui/app/shop-app.ts`): маршруты `shop_home`, `:shopId/menu`, `:shopId/builder` (тема с live-preview через `?tpreset`/`?taccent`/`?tmode`), `:shopId/orders`, `:shopId/promos`, `:shopId/settings`.
 - Фабрики — `apps/shop/ui/events/resources/shop.resource.ts`, `transport: 'ws'` + `restMirror`; карта зоны доставки — `platform-zone-editor-modal` + `platform-map` внутри `apps/shop/ui/pages/shop-settings-page.ts`.
-- Витрина покупателя — не SPA: HTML + inline JS из `storefront_shell.py`.
+- Витрина покупателя — не SPA: HTML + inline JS из пакета `apps/shop/api/storefront/` (`shell.py` — страница, `account.py` — кабинет: нижние табы на мобиле / верхний хидер на десктопе, лента заказов всех витрин, деталь с таймлайном и картой, профиль, повтор заказа, `?tab`/`?order`/`?reorder` диплинки). Карта — `<platform-map>` через lazy-бандл `/static/core/lib/map/autoload.js` (собирается `scripts/build/ui.ts` из `core/frontend/static/lib/map/autoload.ts`), тайлы — `/public/geo/*` прокси.
 
 ## Запреты
 
@@ -74,7 +75,7 @@ alwaysApply: false
 
 ## Исключения
 
-- Исключение: протокольные публичные хендлеры без `op_*` (снапшот, HTML, QR, robots, sitemap, market, aggregate, resolve, Telegram webhook) — `PROTOCOL_HANDLERS` (`scripts/gates/backend/rest_handlers_call_ops.py`).
+- Исключение: протокольные публичные хендлеры без `op_*` (снапшот, HTML, QR, robots, sitemap, market, aggregate, resolve, SSE events, geo-прокси, PWA-файлы, Telegram webhook) — `PROTOCOL_HANDLERS` (`scripts/gates/backend/rest_handlers_call_ops.py`).
 
 ## Гейты
 
@@ -82,5 +83,6 @@ alwaysApply: false
 - `tests/shop/test_shop_promos.py` — паритет цены корзины и заказа, движок акций.
 - `tests/shop/test_shop_orders.py` — идемпотентность, rate limit по IP, матрица статусов.
 - `tests/shop/test_shop_storefront.py` — снапшот, Host-рерайт, поддомен компании, `/market`.
+- `tests/shop/test_shop_customer_account.py` — кабинет: сквозная лента двух компаний, ownership-isolation, отмена, `/me`, geo и PWA.
 - `tests/shop/test_shop_admin.py`, `tests/shop/test_shop_modifiers.py`, `tests/shop/test_shop_distribution.py`, `tests/shop/test_shop_infra.py` — slug, модификаторы, QR/sitemap/Telegram/инвалидация, очередь и маршруты.
 - `tests/frontend_core/browser/shop/` — меню, дерево категорий, шапка страницы.

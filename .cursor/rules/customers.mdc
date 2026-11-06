@@ -14,7 +14,9 @@ alwaysApply: false
 
 Платформенная (core) авторизация покупателя по номеру телефона. Покупатель
 — не `User` и не member компании: `Customer` живёт в shared DB глобально,
-а привязка к витрине — `scope_company_id` в его сессии.
+а привязки к витринам — `scope_company_ids` в его сессии (множество
+компаний, где покупатель реально проходил верификацию; `scope_company_id`
+— активная для обратной совместимости).
 
 ## Модель
 
@@ -22,7 +24,7 @@ alwaysApply: false
 - `CustomerIdentity` (`core/customers/models/customer_identity.py`) — `(provider, provider_user_id)` → customer; code-каналы пишут `provider_user_id="phone:<e164>"`.
 - `PhoneChallenge` (`core/customers/challenge.py`) — эфемерное состояние попытки в Redis (`RedisClient`, обязательный TTL); код хранится как hash, не plaintext.
 - Контракты и enum'ы — `core/customers/contracts.py`, `core/customers/enums.py`; ошибки — `CustomerAuthError` + `PhoneVerificationErrorCode` (`core/customers/errors.py`).
-- `CustomerSessionService` (`core/customers/session.py`) — JWT `TokenType.CUSTOMER` в httpOnly cookie `customer_token`; прав платформенного пользователя не даёт.
+- `CustomerSessionService` (`core/customers/session.py`) — JWT `TokenType.CUSTOMER` в httpOnly cookie `customer_token`; прав платформенного пользователя не даёт. Verify перевыпускает токен с merge `scope_company_ids` (`merge_scope_company_ids`) — silent rescope без реальной верификации запрещён.
 - `CustomerAuthService` (`core/customers/auth_service.py`) — сценарии start/choose/verify/status/webhook/OAuth, rate limits и дневной бюджет SMS в Redis.
 - `CustomerAddress` (`core/customers/models/customer_address.py`) — сохранённый адрес покупателя с координатами; CRUD и геокодинг — `CustomerAddressService` (`core/customers/address_service.py`, DI `customer_address_service`).
 - Конфиг — `CustomerAuthConfig` (`core/config/models.py`), секция `customer_auth` в conf.json; креды провайдеров — платформенные, per-apex `brands`.
@@ -31,7 +33,7 @@ alwaysApply: false
 
 1. Провайдеры верификации — только `core/clients/phone_verification/` (`CodeSender`, `ContactShareVerifier`, `OAuthVerifier`, `DirectVerifier`, `PhoneVerificationRegistry`); выбор методов — `CustomerAuthService.method_options` по `method_priority` конфига и доступности провайдера на apex.
 2. Бесплатные direct/OAuth-методы (Telegram contact, Yandex/VK/Sber ID) идут перед `sms_code`; SMS — fallback за счёт платформы (`sms_fallback_enabled`, `daily_budget_rub`), мерчанту не выставляется.
-3. Заказ и любое действие покупателя требует `require_customer()` (`core/request_scope.py`) — `CustomerScope` из `customer_token`; scope сессии обязан совпадать с компанией витрины (`forbidden_scope`).
+3. Заказ и любое действие покупателя требует `require_customer()` (`core/request_scope.py`) — `CustomerScope` из `customer_token`; компания витрины обязана входить в `scope.company_ids` (`forbidden_scope`).
 4. Телефон покупателя в данных продукта — только верифицированный из сессии; «телефон из формы» запрещён.
 5. `Context.customer` заполняет `ContextFactory` из cookie для любого типа контекста; `customer_token` не создаёт `User` и не открывает api-контекст.
 
@@ -48,7 +50,9 @@ alwaysApply: false
 
 - Исходящий HTTP провайдеров — через `core.http.client` (`request_public_oauth`, `get_httpx_client`, `ProxyStrategy`) → `integrations.mdc`.
 - Геокодинг — `Geocoder` (`core/clients/geocoding/`, Nominatim, секция `geocoding` конфига, DI `geocoder`); точка адреса проверяется `delivery_zone` витрины → `shop.mdc`.
-- Shop: `op_public_order_create` зовёт `require_customer()`, `ShopOrderService.create_order` пишет `customer_id`/`customer_phone` из scope; витрина поднимает `<platform-customer-auth>` только при оформлении заказа.
+- Shop: `op_public_order_create` зовёт `require_customer()`, `ShopOrderService.create_order` пишет `customer_id`/`customer_phone` из scope; витрина поднимает `<platform-customer-auth>` при оформлении заказа и из таба «Профиль» кабинета. Заказы в чужой витрине требуют верификации в её компании — новый scope мёржится в токен.
+- `GET/POST .../customer-auth/me` — профиль кабинета (`CustomerMe`: имя, `scope_company_ids`); `CustomerAddressService` — адреса покупателя.
+- Уведомления покупателю — `CustomerNotifyService` (`core/customers/notify_service.py`, DI `customer_notify_service`): личка бота бренда через `send_text` провайдеров phone_verification (TG/MAX), получатель — `CustomerIdentity` канала; без identity — no-op. Эмулятор пишет в Redis-outbox для тестов.
 - Трассинг/логи — без plaintext кода и секретов; номер в логах маскируется.
 - Webhook'и ботов и OAuth-консоли настраиваются вручную + `python -m scripts.customers.sync_bot_webhooks` после деплоя/смены домена:
   - **Telegram**: deep link `t.me/<bot>?start=` → `message.text="/start <token>"`. Хост со входящим доступом от api.telegram.org — `setWebhook`+`secret_token`; без — `telegram.polling_enabled=true` и updates тянет idle-таска `customer_auth_tg_poll` (минутный cron, getUpdates через DIRECT_FIRST, `deleteWebhook` обязателен — иначе 409).
