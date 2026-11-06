@@ -65,10 +65,14 @@ class TelegramContactProvider:
         return f"https://t.me/{self._cfg.bot_username}?start={token}"
 
     def verify_secret(self, header_token: str | None) -> None:
-        """Сверка `X-Telegram-Bot-Api-Secret-Token` с webhook_secret бренда."""
+        """Сверка `X-Telegram-Bot-Api-Secret-Token` с webhook_secret бренда.
+
+        Бренд без webhook_secret не может проверить происхождение update —
+        webhook-апдейт отклоняется всегда (polling-путь секрету не подчинён).
+        """
         assert self._cfg is not None
         secret = self._cfg.webhook_secret
-        if secret and header_token != secret:
+        if not secret or header_token != secret:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
 
     def parse_start(self, payload: JsonObject) -> tuple[str, str] | None:

@@ -42,6 +42,7 @@ alwaysApply: false
 - UI — самодостаточный embed-бандл `<platform-customer-auth>` (`core/frontend/static/lib/customer-auth/`): атрибуты `api-base`, `company-id`; `open()` → событие `customer-authenticated` / `customer-auth-cancelled`. Отдаётся по `/static/core/lib/customer-auth/autoload.js`.
 - Вебхуки ботов контактов — `POST .../customer-auth/webhooks/{provider}`, секрет проверяет `ContactShareVerifier.verify_secret`.
 - OAuth callbacks — `GET .../customer-auth/oauth/{provider}/callback`, `state` → challenge в Redis (защита от CSRF/replay).
+- `POST .../customer-auth/verify` принимает `code` (для `kind=CODE`) или `direct`-proof клиента. Client-proof доверяют только `client_verifiers` реестра (эмулятор — dev/test): TG/MAX подтверждаются исключительно апдейтом с серверов провайдера (webhook со сверкой `webhook_secret` fail-closed или `getUpdates`-полл), OAuth — обменом `code→token→userinfo`. `_confirm_matched` требует `verified`-номер из `fetch_phones`, равный `challenge.phone_e164` (или единственный аттестованный при phone-less challenge); без него — `provider_mismatch`.
 
 ## Интеграции
 

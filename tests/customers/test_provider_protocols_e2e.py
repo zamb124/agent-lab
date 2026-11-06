@@ -1157,3 +1157,121 @@ class TestEmulatorAndSession:
             params={"challenge_id": start["challenge_id"], "company_id": "cmp_other"},
         )
         assert resp.status_code == 403
+
+
+class TestForgedDirectProof:
+    """Клиентский direct-proof не подтверждает номер: TG/MAX — только
+    webhook/poll-апдейтом, client_verifiers — только эмулятор."""
+
+    async def test_forged_telegram_direct_rejected(
+        self, emu_client: AsyncClient, unique_id: str
+    ) -> None:
+        phone = _phone(unique_id)
+        start = await _start(emu_client, _COMPANY, phone)
+        resp = await _verify(
+            emu_client,
+            start["challenge_id"],
+            _COMPANY,
+            direct={
+                "kind": "contact_share",
+                "provider": "telegram",
+                "provider_user_id": "attacker",
+                "contact_user_id": "attacker",
+                "contact_phone": phone,
+            },
+        )
+        assert resp.status_code == 503
+        status = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert status.json()["status"] == "pending"
+
+    async def test_forged_max_direct_rejected(
+        self, emu_client: AsyncClient, unique_id: str
+    ) -> None:
+        phone = _phone(unique_id)
+        start = await _start(emu_client, _COMPANY, phone)
+        resp = await _verify(
+            emu_client,
+            start["challenge_id"],
+            _COMPANY,
+            direct={
+                "kind": "contact_share",
+                "provider": "max",
+                "provider_user_id": "attacker",
+                "contact_user_id": "attacker",
+                "contact_phone": phone,
+            },
+        )
+        assert resp.status_code == 503
+        status = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert status.json()["status"] == "pending"
+
+    async def test_forged_oauth_direct_rejected(
+        self, emu_client: AsyncClient, unique_id: str
+    ) -> None:
+        phone = _phone(unique_id)
+        start = await _start(emu_client, _COMPANY, phone)
+        resp = await _verify(
+            emu_client,
+            start["challenge_id"],
+            _COMPANY,
+            direct={
+                "kind": "oauth",
+                "provider": "yandex",
+                "oauth_code": "forged",
+                "oauth_state": "forged",
+                "contact_phone": phone,
+            },
+        )
+        assert resp.status_code == 503
+        status = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert status.json()["status"] == "pending"
+
+    async def test_direct_without_chosen_method_rejected(
+        self, emu_client: AsyncClient, unique_id: str
+    ) -> None:
+        phone = _phone(unique_id)
+        start = await _start(emu_client, _COMPANY, phone)
+        resp = await _verify(
+            emu_client,
+            start["challenge_id"],
+            _COMPANY,
+            direct={
+                "kind": "contact_share",
+                "provider": "emulator",
+                "contact_phone": phone,
+            },
+        )
+        assert resp.status_code == 409
+        status = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert status.json()["status"] == "pending"
+
+    async def test_emulator_proof_on_telegram_challenge_rejected(
+        self, emu_client: AsyncClient, unique_id: str
+    ) -> None:
+        phone = _phone(unique_id)
+        start = await _start(emu_client, _COMPANY, phone)
+        resp = await _choose(emu_client, start["challenge_id"], _COMPANY, "telegram_contact")
+        assert resp.status_code == 200, resp.text
+        resp = await _verify(
+            emu_client,
+            start["challenge_id"],
+            _COMPANY,
+            direct={
+                "kind": "contact_share",
+                "provider": "emulator",
+                "contact_phone": phone,
+            },
+        )
+        assert resp.status_code == 409

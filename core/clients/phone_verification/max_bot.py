@@ -64,7 +64,7 @@ class MaxContactProvider:
     def verify_secret(self, header_token: str | None) -> None:
         assert self._cfg is not None
         secret = self._cfg.webhook_secret
-        if secret and header_token != secret:
+        if not secret or header_token != secret:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
 
     def parse_start(self, payload: JsonObject) -> tuple[str, str] | None:

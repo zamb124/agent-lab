@@ -466,6 +466,7 @@ class CustomerAuthService:
         if (
             challenge.kind != PhoneChallengeKind.DIRECT
             or challenge.method != verifier.method
+            or challenge.direct_kind != proof.kind
         ):
             raise CustomerAuthError(PhoneVerificationErrorCode.PROVIDER_MISMATCH)
         phones = await verifier.fetch_phones(proof)
