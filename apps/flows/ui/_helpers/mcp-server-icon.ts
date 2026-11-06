@@ -4,6 +4,7 @@
 
 import { html } from 'lit';
 import type {TemplateResult} from 'lit';
+import { platformFileImageVariantUrl } from '@platform/lib/utils/platform-files-url.js';
 
 export const MCP_LOGO_BASE = '/static/core/assets/mcp_logos';
 
@@ -38,7 +39,7 @@ export function renderMcpServerIcon(server: any, size = 24) {
         return html`
             <img
                 class="mcp-server-icon-img"
-                src=${iconUrl}
+                src=${platformFileImageVariantUrl(iconUrl, 'sm!sq')}
                 alt=""
                 width=${size}
                 height=${size}

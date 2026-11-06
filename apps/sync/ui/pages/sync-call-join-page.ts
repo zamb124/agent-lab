@@ -10,6 +10,7 @@ import type { SelectController } from '@platform/lib/events/select-controller.js
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { AuthState, AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { platformFileImageVariantUrl } from '@platform/lib/utils/platform-files-url.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
@@ -361,7 +362,7 @@ export class SyncCallJoinPage extends PlatformPage {
                     ? html`
                           <div class="organizer-row">
                               ${avatar !== ''
-                                  ? html`<img src=${avatar} alt="" width="40" height="40" />`
+                                  ? html`<img src=${platformFileImageVariantUrl(avatar, 'sm!sq')} alt="" width="40" height="40" />`
                                   : ''}
                               <span>${this.t('call_join.organizer')}: ${organizer}</span>
                           </div>

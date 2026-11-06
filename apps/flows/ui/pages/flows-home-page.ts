@@ -10,6 +10,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/build-service-entry-url.js';
+import { platformFileImageVariantUrl } from '@platform/lib/utils/platform-files-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
@@ -1176,7 +1177,7 @@ export class FlowsHomePage extends PlatformPage {
         const record = flowRecord(flow);
         const imageUrl = typeof record.store_card_image_url === 'string' ? record.store_card_image_url : '';
         if (imageUrl.length > 0) {
-            return html`<img src=${imageUrl} alt=${flowTitle(flow)} />`;
+            return html`<img src=${platformFileImageVariantUrl(imageUrl, 'md!sq')} alt=${flowTitle(flow)} />`;
         }
         return html`<platform-icon name="workflow" size="34"></platform-icon>`;
     }

@@ -10,6 +10,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { platformFileImageVariantUrl } from '@platform/lib/utils/platform-files-url.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -136,7 +137,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             <div class="field">
                 <span class="field-card-label">${this.t('flow_edit_modal.field_card_image')}</span>
                 ${cardUrl.length > 0
-        ? html`<img class="card-preview" src=${cardUrl} alt="" />`
+        ? html`<img class="card-preview" src=${platformFileImageVariantUrl(cardUrl, 'md!sq')} alt="" />`
         : null}
                 <div class="card-actions">
                     <input

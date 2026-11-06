@@ -28,6 +28,7 @@ import {
     type StatePathEntry,
 } from '../../_helpers/interface-editor-domain.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { platformFileImageVariantUrl } from '@platform/lib/utils/platform-files-url.js';
 import {
     CONVERSATION_DEF,
     HIDDEN_PROPERTIES,
@@ -486,7 +487,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             <div class="image-row">
                 <article class="image-preview" role="button" tabindex="0" aria-label=${this.t('interface_editor.image_upload')}
                     @click=${() => this._pickImage()} @keydown=${(event: KeyboardEvent) => this._onImagePreviewKey(event)}>
-                    ${url !== '' ? html`<img src=${url} alt="">` : html`<platform-icon name="image" size="22"></platform-icon>`}
+                    ${url !== '' ? html`<img src=${platformFileImageVariantUrl(url, 'sm!sq')} alt="">` : html`<platform-icon name="image" size="22"></platform-icon>`}
                 </article>
                 <div class="image-actions">
                     <input type="file" accept="image/*" class="visually-hidden" data-image-input @change=${(event: KeyboardEvent) => this._onImageFile(name, event)}>
