@@ -115,5 +115,16 @@ class Shop(PlatformModel):
         return await cls.objects.filter(status=ShopStatus.PUBLISHED, deleted_at=None).all()
 
     @classmethod
+    async def list_many_by_ids(cls, shop_ids: list[str]) -> list[Self]:
+        """Пачка магазинов по id — склейка сквозной истории заказов.
+
+        Удалённые тоже возвращаются: история заказов покупателя переживает
+        закрытие витрины (повтор просто будет недоступен).
+        """
+        if not shop_ids:
+            return []
+        return await cls.objects.filter(shop_id__in=shop_ids).all()
+
+    @classmethod
     async def create(cls, shop: Self) -> Self:
         return await cls.objects.create(instance=shop)

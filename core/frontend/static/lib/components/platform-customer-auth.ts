@@ -57,6 +57,7 @@ interface CustomerMe {
     customer_id: string;
     phone_e164: string;
     scope_company_id: string;
+    scope_company_ids?: string[];
     name?: string | null;
 }
 
@@ -425,11 +426,26 @@ export class PlatformCustomerAuth extends PlatformElement {
         this._error = '';
         // 401 /me для анонима — штатный путь, не ошибка для показа.
         const me = await this._fetch<CustomerMe>('me', undefined, 'GET', false);
-        if (me) {
+        if (me && this._scopeCovers(me)) {
             this._confirm(me);
             return;
         }
+        if (me) {
+            // Сессия есть, но эта витрина вне её scope: короткая
+            // доверификация — номер уже известен, сразу методы.
+            this._phone = me.phone_e164;
+            void this._start();
+            return;
+        }
         this._step = 'phone';
+    }
+
+    private _scopeCovers(me: CustomerMe): boolean {
+        if (!this.companyId) return true;
+        const scopes = me.scope_company_ids?.length
+            ? me.scope_company_ids
+            : [me.scope_company_id];
+        return scopes.includes(this.companyId);
     }
 
     close(cancelled = true): void {

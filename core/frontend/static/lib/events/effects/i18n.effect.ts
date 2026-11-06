@@ -95,11 +95,18 @@ function _interpolate(str: string, vars: Record<string, unknown> | null | undefi
     return out;
 }
 
+const _NUMERIC_SEGMENT_RE = /^\d+$/;
+
 function _lookupPath(root: unknown, path: string[]): string | undefined {
-    let cur = root;
+    let cur: unknown = root;
     for (const segment of path) {
-        if (!isPlainRecord(cur)) return undefined;
-        cur = cur[segment];
+        if (isPlainRecord(cur)) {
+            cur = cur[segment];
+        } else if (Array.isArray(cur) && _NUMERIC_SEGMENT_RE.test(segment)) {
+            cur = cur[Number(segment)];
+        } else {
+            return undefined;
+        }
     }
     return typeof cur === 'string' ? cur : undefined;
 }

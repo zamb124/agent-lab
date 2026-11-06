@@ -41,7 +41,13 @@ from apps.shop.services.modifier_pricing import (
     nested_lookup,
     validate_and_price,
 )
+from apps.shop.events import (
+    SHOP_ORDER_CREATED,
+    SHOP_ORDER_STATUS_CHANGED,
+    publish_shop_order_event,
+)
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
+from apps.shop.tasks.task_names import SHOP_NOTIFY_CUSTOMER, SHOP_NOTIFY_ORDER
 from core.clients.geo_client import GeoClient
 from core.clients.geocoding.base import Geocoder
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -52,6 +58,7 @@ from core.errors.boundary import (
     PlatformNotFoundError,
 )
 from core.request_scope import CustomerScope
+from core.tasks import enqueue
 from core.types import JsonObject
 from core.utils.geo import is_valid_delivery_zone, point_in_polygon, polygon_ring
 from core.utils.time import utcnow
@@ -65,6 +72,17 @@ class _PricedItem:
     qty: int
     unit_minor: int
     modifiers_snapshot: list[dict[str, object]]
+
+
+@dataclass
+class _CourierRoute:
+    """Метрика дороги курьера + точка магазина (геокод идёт в тот же вызов)."""
+
+    distance_m: float
+    duration_s: float
+    geometry: JsonObject | None
+    shop_lat: float
+    shop_lng: float
 
 
 # Допустимые переходы статуса: каждый ключ — из каких статусов можно в него перейти.
@@ -148,7 +166,7 @@ class ShopOrderService:
 
     async def _courier_route(
         self, shop: Shop, cust_lat: float, cust_lng: float
-    ) -> tuple[float, float] | None:
+    ) -> _CourierRoute | None:
         """Дистанция/время дороги курьера до адреса по ``shop.courier_mode``.
 
         Деградация: geo недоступен → ``None``; чек и заказ остаются рабочими.
@@ -168,17 +186,13 @@ class ShopOrderService:
             )
         except ServiceClientError:
             return None
-        return route.distance_m, route.duration_s
-
-    async def _delivery_eta_minutes(
-        self, shop: Shop, cust_lat: float, cust_lng: float
-    ) -> int | None:
-        """ETA заказа: готовка + дорога курьера. ``None`` — geo недоступен."""
-        routed = await self._courier_route(shop, cust_lat, cust_lng)
-        if routed is None:
-            return None
-        _dist, travel_s = routed
-        return int(-(-(shop.prep_minutes * 60 + travel_s) // 60))
+        return _CourierRoute(
+            distance_m=route.distance_m,
+            duration_s=route.duration_s,
+            geometry=route.geometry,
+            shop_lat=shop_geo.lat,
+            shop_lng=shop_geo.lng,
+        )
 
     async def _enrich_route(
         self, shop: Shop, cust_lat: float, cust_lng: float, result: JsonObject
@@ -191,13 +205,14 @@ class ShopOrderService:
         routed = await self._courier_route(shop, cust_lat, cust_lng)
         if routed is None:
             return
-        dist_m, travel_s = routed
-        result["distance_m"] = dist_m
-        result["duration_s"] = travel_s
-        result["courier_travel_s"] = travel_s
+        result["distance_m"] = routed.distance_m
+        result["duration_s"] = routed.duration_s
+        result["courier_travel_s"] = routed.duration_s
         result["courier_mode"] = shop.courier_mode
         result["prep_minutes"] = shop.prep_minutes
-        result["eta_minutes"] = int(-(-(shop.prep_minutes * 60 + travel_s) // 60))
+        result["eta_minutes"] = int(
+            -(-(shop.prep_minutes * 60 + routed.duration_s) // 60)
+        )
 
     async def address_suggest(self, shop: Shop, query: str) -> JsonObject:
         """Автокомплит адреса покупателя по справочнику внутри зоны доставки.
@@ -237,10 +252,10 @@ class ShopOrderService:
         """Новый заказ: идемпотентность, расчёт суммы по живым ценам каталога.
 
         Телефон и имя покупателя — из верифицированной сессии `customer`
-        (customers.mdc), не из ввода формы; scope сессии обязан совпадать
-        с компанией-владельцем витрины.
+        (customers.mdc), не из ввода формы; компания витрины обязана входить
+        во `scope_company_ids` сессии (витрины, где номер подтверждали).
         """
-        if customer.company_id != str(shop.company_id):
+        if str(shop.company_id) not in customer.company_ids:
             raise PlatformAccessDeniedError(
                 "Customer session scope does not match this storefront",
                 error_code="forbidden_scope",
@@ -259,6 +274,11 @@ class ShopOrderService:
         if payload.honeypot:
             raise PlatformConflictError("Order rejected", error_code="order_rejected")
         delivery_eta: int | None = None
+        delivery_route: JsonObject = {}
+        delivery_lat: float | None = None
+        delivery_lng: float | None = None
+        shop_lat: float | None = None
+        shop_lng: float | None = None
         if payload.delivery_type == ShopDeliveryType.DELIVERY:
             if not shop.delivery_enabled:
                 raise PlatformConflictError(
@@ -270,8 +290,15 @@ class ShopOrderService:
                     "Delivery address is required", error_code="address_required"
                 )
             lat, lng = await self._resolve_delivery_point(payload, customer)
+            delivery_lat, delivery_lng = lat, lng
             if lat is not None and lng is not None:
-                delivery_eta = await self._delivery_eta_minutes(shop, lat, lng)
+                routed = await self._courier_route(shop, lat, lng)
+                if routed is not None:
+                    delivery_eta = int(
+                        -(-(shop.prep_minutes * 60 + routed.duration_s) // 60)
+                    )
+                    delivery_route = routed.geometry or {}
+                    shop_lat, shop_lng = routed.shop_lat, routed.shop_lng
             ring = polygon_ring(shop.delivery_zone)
             if ring is not None:
                 if lat is None or lng is None:
@@ -350,6 +377,11 @@ class ShopOrderService:
             delivery_type=payload.delivery_type,
             address=payload.address,
             delivery_eta_minutes=delivery_eta,
+            delivery_route=delivery_route,
+            delivery_lat=delivery_lat,
+            delivery_lng=delivery_lng,
+            shop_lat=shop_lat,
+            shop_lng=shop_lng,
             table_id=table_id,
             table_label=table_label,
             comment=payload.comment,
@@ -372,7 +404,23 @@ class ShopOrderService:
         )
         _ = await ShopOrder.create(order)
         _ = await ShopOrderItem.create_many(order_items)
+        await self._after_created(shop, order)
         return order
+
+    async def _after_created(self, shop: Shop, order: ShopOrder) -> None:
+        """Факт создания: доменное событие + уведомления владельцу и покупателю."""
+        await publish_shop_order_event(
+            SHOP_ORDER_CREATED,
+            shop_id=shop.shop_id,
+            shop_order_id=order.shop_order_id,
+            public_code=order.public_code,
+            status=ShopOrderStatus(order.status),
+            total_minor=order.total_minor,
+            currency=order.currency,
+            company_id=str(shop.company_id),
+        )
+        _ = await enqueue(SHOP_NOTIFY_ORDER, shop_order_id=order.shop_order_id)
+        _ = await enqueue(SHOP_NOTIFY_CUSTOMER, shop_order_id=order.shop_order_id)
 
     async def _price_items(
         self, shop: Shop, items: list[ShopOrderItemRequest]
@@ -505,8 +553,66 @@ class ShopOrderService:
         order.status = ShopOrderStatus(status)
         order.status_changed_at = now
         order.updated_at = now
+        history = list(order.status_history or [])
+        history.append({"status": ShopOrderStatus(status).value, "at": now.isoformat()})
+        order.status_history = history
         _ = await order.save()
+        await self._after_status_change(company_shop, order)
         return order
+
+    async def _after_status_change(self, shop: Shop, order: ShopOrder) -> None:
+        """Факт смены статуса: доменное событие + уведомления обеим сторонам."""
+        await publish_shop_order_event(
+            SHOP_ORDER_STATUS_CHANGED,
+            shop_id=shop.shop_id,
+            shop_order_id=order.shop_order_id,
+            public_code=order.public_code,
+            status=ShopOrderStatus(order.status),
+            total_minor=order.total_minor,
+            currency=order.currency,
+            company_id=str(shop.company_id),
+        )
+        _ = await enqueue(SHOP_NOTIFY_ORDER, shop_order_id=order.shop_order_id)
+        _ = await enqueue(SHOP_NOTIFY_CUSTOMER, shop_order_id=order.shop_order_id)
+
+    async def list_customer_orders(
+        self,
+        customer_id: str,
+        *,
+        statuses: list[ShopOrderStatus] | None = None,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> tuple[list[ShopOrder], dict[str, Shop], int]:
+        """Сквозная история покупателя: заказы всех витрин + магазины пачкой."""
+        orders = await ShopOrder.list_by_customer_by_created_desc(
+            customer_id, statuses=statuses, limit=limit, offset=offset
+        )
+        total = await ShopOrder.count_by_customer(customer_id, statuses=statuses)
+        shops = await Shop.list_many_by_ids([o.shop_id for o in orders])
+        return orders, {s.shop_id: s for s in shops}, total
+
+    async def customer_order_detail(
+        self, customer_id: str, public_code: str
+    ) -> tuple[ShopOrder, Shop | None, list[ShopOrderItem]]:
+        """Детали заказа покупателя; чужой `public_code` — not-found."""
+        order = await ShopOrder.get_by_public_code(public_code)
+        if order is None or order.customer_id != customer_id:
+            raise PlatformNotFoundError("Order not found", error_code="order_not_found")
+        items = await ShopOrderItem.list_by_order(order.shop_order_id)
+        shop = await Shop.get_by_id(order.shop_id)
+        return order, shop, items
+
+    async def customer_cancel(self, customer_id: str, public_code: str) -> ShopOrder:
+        """Отмена покупателем из кабинета: только пока заказ новый."""
+        order = await ShopOrder.get_by_public_code(public_code)
+        if order is None or order.customer_id != customer_id:
+            raise PlatformNotFoundError("Order not found", error_code="order_not_found")
+        shop = await Shop.get_by_id(order.shop_id)
+        if shop is None:
+            raise PlatformNotFoundError(
+                "Storefront not found", error_code="storefront_not_found"
+            )
+        return await self.set_status(shop, order.shop_order_id, ShopOrderStatus.CANCELLED)
 
     async def order_response(self, order: ShopOrder) -> ShopOrderResponse:
         items = await ShopOrderItem.list_by_order(order.shop_order_id)

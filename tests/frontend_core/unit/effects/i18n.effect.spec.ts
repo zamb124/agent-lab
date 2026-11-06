@@ -85,6 +85,10 @@ describe('translate', () => {
             crm: { title: 'CRM' },
             with_var: 'Привет, {{name}}',
             new_brace: 'Old {name}',
+            section_3: {
+                title: 'Секция',
+                list: ['Первый пункт', 'Пункт про {name}'],
+            },
         },
     };
     const stateWith = (defaultNamespace: string | null) => ({
@@ -119,6 +123,18 @@ describe('translate', () => {
 
     it('подстановка {var} (single)', () => {
         expect(translate(stateWith(null), 'new_brace', { name: 'Bob' })).toBe('Old Bob');
+    });
+
+    it('элемент списка по числовому индексу', () => {
+        expect(translate(stateWith(null), 'section_3.list.0')).toBe('Первый пункт');
+    });
+
+    it('элемент списка с подстановкой {var}', () => {
+        expect(translate(stateWith(null), 'section_3.list.1', { name: 'Bob' })).toBe('Пункт про Bob');
+    });
+
+    it('индекс за границей списка → возвращает key', () => {
+        expect(translate(stateWith(null), 'section_3.list.5')).toBe('section_3.list.5');
     });
 
     it('не найдено → возвращает key', () => {

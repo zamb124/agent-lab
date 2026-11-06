@@ -34,6 +34,7 @@ from core.customers.contracts import (
     AuthVerifyView,
     CustomerAddressView,
     CustomerMe,
+    CustomerMeUpdatePayload,
     CustomerRef,
     MethodChallengedView,
     MethodChosenPayload,
@@ -41,6 +42,7 @@ from core.customers.contracts import (
 from core.customers.enums import PhoneVerificationErrorCode, PhoneVerificationMethod
 from core.customers.errors import CustomerAuthError
 from core.customers.models import CustomerAddress
+from core.customers.session import merge_scope_company_ids
 from core.di.platform import Di
 from core.platform_brand.resolver import resolve_brand_domain
 from core.request_scope import require_customer
@@ -80,6 +82,14 @@ def _apex(request: Request) -> str:
         return resolve_brand_domain(request.headers.get("host", ""))
     except ValueError:
         return "localhost"
+
+
+def _prior_scopes(request: Request, di: Di) -> tuple[str, ...]:
+    """Scopes действующей customer-сессии — для merge при новой верификации."""
+    ref = di.customer_session_service.resolve_cookie(request)
+    if ref is None:
+        return ()
+    return ref.scope_company_ids or (ref.scope_company_id,)
 
 
 @customer_auth_router.post("/start", response_model=AuthStartView)
@@ -123,18 +133,21 @@ async def customer_auth_verify(
     payload: AuthVerifyPayload, request: Request, response: Response, di: Di
 ) -> AuthVerifyView:
     """Код или direct-доказательство → customer + `customer_token` cookie."""
+    prior = _prior_scopes(request, di)
     try:
         if payload.code is not None:
             customer, token = await di.customer_auth_service.verify_code(
                 challenge_id=payload.challenge_id,
                 code=payload.code,
                 company_id=payload.company_id,
+                prior_scope_company_ids=prior,
             )
         elif payload.direct is not None:
             customer, token = await di.customer_auth_service.verify_direct(
                 challenge_id=payload.challenge_id,
                 proof=payload.direct,
                 company_id=payload.company_id,
+                prior_scope_company_ids=prior,
             )
         else:
             raise HTTPException(status_code=400, detail="code_or_direct_required")
@@ -149,6 +162,9 @@ async def customer_auth_verify(
             customer_id=customer.customer_id,
             phone_e164=customer.phone_e164,
             scope_company_id=payload.company_id,
+            scope_company_ids=tuple(
+                merge_scope_company_ids(prior, payload.company_id)
+            ),
             name=customer.name,
         ),
     )
@@ -165,7 +181,9 @@ async def customer_auth_status(
     """Polling direct/OAuth потоков: при confirmed дополнительно Set-Cookie."""
     try:
         view, token = await di.customer_auth_service.status(
-            challenge_id, company_id=company_id
+            challenge_id,
+            company_id=company_id,
+            prior_scope_company_ids=_prior_scopes(request, di),
         )
     except CustomerAuthError as exc:
         raise _http(exc) from exc
@@ -176,17 +194,33 @@ async def customer_auth_status(
     return view
 
 
+def _scope_ref(scope) -> CustomerRef:
+    return CustomerRef(
+        customer_id=scope.customer_id,
+        phone_e164=scope.phone_e164,
+        scope_company_id=scope.company_id,
+        scope_company_ids=tuple(sorted(scope.company_ids)),
+    )
+
+
 @customer_auth_router.get("/me", response_model=CustomerMe)
 async def customer_me(di: Di) -> CustomerMe:
     """Текущий покупатель по `customer_token` cookie; 401 без сессии."""
     scope = require_customer()
-    me = await di.customer_service.to_me(
-        CustomerRef(
-            customer_id=scope.customer_id,
-            phone_e164=scope.phone_e164,
-            scope_company_id=scope.company_id,
-        )
-    )
+    me = await di.customer_service.to_me(_scope_ref(scope))
+    if me is None:
+        raise HTTPException(status_code=401, detail="session_invalid")
+    return me
+
+
+@customer_auth_router.post("/me", response_model=CustomerMe)
+async def customer_me_update(payload: CustomerMeUpdatePayload, di: Di) -> CustomerMe:
+    """Правка профиля покупателя (имя) — кабинет витрины."""
+    scope = require_customer()
+    customer = await di.customer_service.set_name(scope.customer_id, payload.name)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="session_invalid")
+    me = await di.customer_service.to_me(_scope_ref(scope))
     if me is None:
         raise HTTPException(status_code=401, detail="session_invalid")
     return me
@@ -312,6 +346,7 @@ async def customer_auth_oauth_callback(
             state=state,
             apex=apex,
             device_id=device_id,
+            prior_scope_company_ids=_prior_scopes(request, di),
         )
     except CustomerAuthError as exc:
         raise _http(exc) from exc

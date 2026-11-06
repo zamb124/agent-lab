@@ -52,3 +52,9 @@ class Customer(PlatformModel):
         _ = await cls.objects.filter(customer_id=customer_id).update(
             last_login_at=_now(), updated_at=_now()
         )
+
+    @classmethod
+    async def set_name(cls, customer_id: str, name: str) -> None:
+        _ = await cls.objects.filter(customer_id=customer_id).update(
+            name=name.strip()[:200], updated_at=_now()
+        )

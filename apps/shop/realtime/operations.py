@@ -6,14 +6,11 @@ from pydantic import Field
 
 from apps.shop.di import Di
 from apps.shop.events import (
-    SHOP_ORDER_CREATED,
-    SHOP_ORDER_STATUS_CHANGED,
     SHOP_SHOP_CREATED,
     SHOP_SHOP_PUBLISHED,
     SHOP_SHOP_UPDATED,
     publish_shop_catalog_changed,
     publish_shop_event,
-    publish_shop_order_event,
 )
 from apps.shop.models import (
     Shop,
@@ -70,7 +67,6 @@ from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
-    SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
 )
@@ -789,22 +785,13 @@ async def op_orders_set_status(
     _ = user
     try:
         shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+        # Событие и уведомления — внутри сервиса: единая точка для admin-op
+        # и отмены покупателем.
         order = await di.order_service.set_status(shop, payload.shop_order_id, payload.status)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformConflictError as exc:
         raise_conflict(exc)
-    await publish_shop_order_event(
-        SHOP_ORDER_STATUS_CHANGED,
-        shop_id=shop.shop_id,
-        shop_order_id=order.shop_order_id,
-        public_code=order.public_code,
-        status=ShopOrderStatus(order.status),
-        total_minor=order.total_minor,
-        currency=order.currency,
-        company_id=scope.company_id,
-    )
-    _ = await enqueue(SHOP_NOTIFY_ORDER, shop_order_id=order.shop_order_id)
     return await di.order_service.order_response(order)
 
 
@@ -894,17 +881,6 @@ async def op_public_order_create(
         raise_conflict(exc)
     except PlatformBoundaryError as exc:
         raise_conflict(exc)
-    await publish_shop_order_event(
-        SHOP_ORDER_CREATED,
-        shop_id=shop.shop_id,
-        shop_order_id=order.shop_order_id,
-        public_code=order.public_code,
-        status=ShopOrderStatus(order.status),
-        total_minor=order.total_minor,
-        currency=order.currency,
-        company_id=str(shop.company_id),
-    )
-    _ = await enqueue(SHOP_NOTIFY_ORDER, shop_order_id=order.shop_order_id)
     return ShopOrderCreatedResponse(
         public_code=order.public_code,
         status=ShopOrderStatus(order.status),

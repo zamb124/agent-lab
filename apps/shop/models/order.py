@@ -16,6 +16,7 @@ from apps.shop.models.enums import (
     ShopOrderStatus,
 )
 from core.models.platform_model import PlatformModel
+from core.types import JsonObject
 
 _PUBLIC_CODE_ALPHABET = string.ascii_uppercase + string.digits
 
@@ -64,6 +65,14 @@ class ShopOrder(PlatformModel):
     currency: str = DbField(default="RUB", max_length=3)
     source: ShopOrderSource = DbField(default=ShopOrderSource.WEB)
     idempotency_key: str = DbField(default="", max_length=128, db_index=True)
+    # Таймлайн статусов для кабинета покупателя: [{status, at}].
+    status_history: list[dict[str, object]] = DbField(default_factory=list, db_type="JSONB")
+    # Гео-снапшот доставки: точка покупателя, маршрут курьера, точка магазина.
+    delivery_lat: float | None = DbField(default=None)
+    delivery_lng: float | None = DbField(default=None)
+    delivery_route: JsonObject = DbField(default_factory=dict, db_type="JSONB")
+    shop_lat: float | None = DbField(default=None)
+    shop_lng: float | None = DbField(default=None)
     created_at: datetime = DbField()
     updated_at: datetime = DbField()
     status_changed_at: datetime = DbField()
@@ -102,6 +111,30 @@ class ShopOrder(PlatformModel):
         qs = cls.objects.filter(shop_id=shop_id)
         if status is not None:
             qs = qs.filter(status=status)
+        return await qs.count()
+
+    @classmethod
+    async def list_by_customer_by_created_desc(
+        cls,
+        customer_id: str,
+        *,
+        statuses: list[ShopOrderStatus] | None = None,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[Self]:
+        """Сквозная история заказов покупателя по всем витринам платформы."""
+        qs = cls.objects.filter(customer_id=customer_id)
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        return await qs.order_by("-created_at").offset(offset).limit(limit).all()
+
+    @classmethod
+    async def count_by_customer(
+        cls, customer_id: str, *, statuses: list[ShopOrderStatus] | None = None
+    ) -> int:
+        qs = cls.objects.filter(customer_id=customer_id)
+        if statuses:
+            qs = qs.filter(status__in=statuses)
         return await qs.count()
 
     @classmethod

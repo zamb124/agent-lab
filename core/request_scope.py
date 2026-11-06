@@ -82,18 +82,23 @@ async def require_company_admin(authz_service: AuthzService) -> CompanyScope:
 
 
 class CustomerScope(StrictBaseModel):
-    """Покупатель витрины + компания-владелец витрины из scope его сессии."""
+    """Покупатель витрины + компании, где он проходил верификацию.
+
+    `company_id` — компания последней верификации (primary scope);
+    `company_ids` — все витрины из scope сессии (мульти-scope JWT).
+    """
 
     customer_id: str
     phone_e164: str
     company_id: str
+    company_ids: frozenset[str] = frozenset()
 
 
 def require_customer() -> CustomerScope:
     """Покупатель обязателен: `Context.customer` из `customer_token` JWT.
 
-    Сессия скопирована на компанию витрины (`scope_company_id`) — заказ
-    в чужой витрине с чужим токеном не пройдёт.
+    Сессия скопирована на витрины из `scope_company_ids` — заказ в витрине
+    вне этого множества с чужим токеном не пройдёт.
     """
     context = get_context()
     if context is None or context.customer is None:
@@ -107,6 +112,9 @@ def require_customer() -> CustomerScope:
         customer_id=customer.customer_id,
         phone_e164=customer.phone_e164,
         company_id=customer.scope_company_id,
+        company_ids=frozenset(
+            customer.scope_company_ids or (customer.scope_company_id,)
+        ),
     )
 
 

@@ -51,7 +51,7 @@ from core.customers.selection import (
     select_methods_by_priority_asc,
 )
 from core.customers.service import CustomerService
-from core.customers.session import CustomerSessionService
+from core.customers.session import CustomerSessionService, merge_scope_company_ids
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
@@ -392,6 +392,7 @@ class CustomerAuthService:
         provider: CustomerIdentityProvider,
         provider_user_id: str,
         phone_e164: str,
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[Customer, str]:
         """Финал подтверждения: customer + identity + challenge.confirmed + JWT."""
         customer = await self._customers.get_or_create_by_phone(phone_e164)
@@ -408,16 +409,25 @@ class CustomerAuthService:
         challenge.confirmed_customer_id = customer.customer_id
         await challenge.save(self._redis, ttl=self._cfg.challenge_ttl_seconds)
         await Customer.touch_login(customer.customer_id)
+        scopes = merge_scope_company_ids(
+            prior_scope_company_ids, challenge.scope_company_id
+        )
         token = self._sessions.issue(
             customer_id=customer.customer_id,
             phone_e164=customer.phone_e164,
             scope_company_id=challenge.scope_company_id,
             ttl_seconds=self._sessions.token_ttl(),
+            scope_company_ids=scopes,
         )
         return customer, token
 
     async def verify_code(
-        self, *, challenge_id: str, code: str, company_id: str
+        self,
+        *,
+        challenge_id: str,
+        code: str,
+        company_id: str,
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[Customer, str]:
         """Проверка короткого кода: попытки ограничены `attempts_per_challenge`."""
         challenge = await self._require_pending(challenge_id)
@@ -442,6 +452,7 @@ class CustomerAuthService:
             provider=sender_provider,
             provider_user_id=f"phone:{challenge.phone_e164}",
             phone_e164=challenge.phone_e164,
+            prior_scope_company_ids=prior_scope_company_ids,
         )
 
     async def verify_direct(
@@ -450,6 +461,7 @@ class CustomerAuthService:
         challenge_id: str,
         proof: DirectVerificationRequest,
         company_id: str,
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[Customer, str]:
         """Direct-подтверждение, присланное клиентом (эмулятор / mini-app).
 
@@ -473,6 +485,7 @@ class CustomerAuthService:
         return await self._confirm_matched(
             challenge, phones=phones, provider=verifier.provider,
             provider_user_id=proof.provider_user_id or proof.contact_user_id or "",
+            prior_scope_company_ids=prior_scope_company_ids,
         )
 
     async def _confirm_matched(
@@ -482,6 +495,7 @@ class CustomerAuthService:
         phones: list[ProviderPhone],
         provider: CustomerIdentityProvider,
         provider_user_id: str,
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[Customer, str]:
         """Номер провайдера обязан совпасть с номером challenge.
 
@@ -508,6 +522,7 @@ class CustomerAuthService:
             provider=provider,
             provider_user_id=provider_user_id,
             phone_e164=phone,
+            prior_scope_company_ids=prior_scope_company_ids,
         )
 
     def _apex_of(self, challenge: PhoneChallenge) -> str:
@@ -630,6 +645,7 @@ class CustomerAuthService:
         state: str,
         apex: str,
         device_id: str = "",
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[Customer, str, str | None]:
         """OAuth callback: state → challenge, code → phones, confirm → token + return_url."""
         registry = self._registry(apex)
@@ -654,11 +670,16 @@ class CustomerAuthService:
         customer, token = await self._confirm_matched(
             challenge, phones=phones, provider=verifier.provider,
             provider_user_id=phones[0].phone_e164 if phones else "",
+            prior_scope_company_ids=prior_scope_company_ids,
         )
         return customer, token, challenge.provider_data.get("return_url")
 
     async def status(
-        self, challenge_id: str, *, company_id: str
+        self,
+        challenge_id: str,
+        *,
+        company_id: str,
+        prior_scope_company_ids: tuple[str, ...] = (),
     ) -> tuple[AuthStatusView, str | None]:
         """Polling: статус +, если confirmed, свежая сессия для Set-Cookie."""
         challenge = await PhoneChallenge.load(self._redis, challenge_id)
@@ -678,10 +699,14 @@ class CustomerAuthService:
         ):
             customer = await self._customers.get(challenge.confirmed_customer_id)
             if customer is not None:
+                scopes = merge_scope_company_ids(
+                    prior_scope_company_ids, challenge.scope_company_id
+                )
                 customer_view = CustomerMe(
                     customer_id=customer.customer_id,
                     phone_e164=customer.phone_e164,
                     scope_company_id=challenge.scope_company_id,
+                    scope_company_ids=tuple(scopes),
                     name=customer.name,
                 )
                 token = self._sessions.issue(
@@ -689,6 +714,7 @@ class CustomerAuthService:
                     phone_e164=customer.phone_e164,
                     scope_company_id=challenge.scope_company_id,
                     ttl_seconds=self._sessions.token_ttl(),
+                    scope_company_ids=scopes,
                 )
         return (
             AuthStatusView(

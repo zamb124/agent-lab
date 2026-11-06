@@ -19,3 +19,6 @@ class CustomerRef(BaseModel):
     customer_id: str
     phone_e164: str
     scope_company_id: str
+    # Витрины, где покупатель реально проходил верификацию; пусто →
+    # трактуется как одиночный `scope_company_id` (токены старого формата).
+    scope_company_ids: tuple[str, ...] = ()

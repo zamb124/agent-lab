@@ -179,9 +179,17 @@ class TokenService:
         phone_e164: str,
         scope_company_id: str,
         session_id: str,
+        scope_company_ids: list[str] | None = None,
         expires_in: int = CUSTOMER_EXPIRES,
     ) -> str:
-        """JWT покупателя витрины. `user_id=customer_id`; scope в metadata."""
+        """JWT покупателя витрины. `user_id=customer_id`; scope в metadata.
+
+        `scope_company_ids` — все витрины, где покупатель подтверждал номер;
+        `scope_company_id` — витрина последней верификации (primary).
+        """
+        scopes = list(scope_company_ids or [])
+        if scope_company_id not in scopes:
+            scopes.insert(0, scope_company_id)
         return self.create_token(
             user_id=customer_id,
             company_id=scope_company_id,
@@ -193,6 +201,7 @@ class TokenService:
                 "customer_id": customer_id,
                 "phone_e164": phone_e164,
                 "scope_company_id": scope_company_id,
+                "scope_company_ids": scopes,
             },
         )
 

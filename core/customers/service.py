@@ -57,6 +57,15 @@ class CustomerService:
         )
         return await CustomerIdentity.objects.create(instance=identity)
 
+    async def set_name(self, customer_id: str, name: str) -> Customer | None:
+        """Имя профиля кабинета покупателя (`POST /customer-auth/me`)."""
+        customer = await Customer.get(customer_id)
+        if customer is None:
+            return None
+        await Customer.set_name(customer_id, name)
+        customer.name = name.strip()[:200]
+        return customer
+
     async def to_me(self, ref: CustomerRef) -> CustomerMe | None:
         customer = await Customer.get(ref.customer_id)
         if customer is None or customer.status != CustomerStatus.ACTIVE:
@@ -65,5 +74,6 @@ class CustomerService:
             customer_id=customer.customer_id,
             phone_e164=customer.phone_e164,
             scope_company_id=ref.scope_company_id,
+            scope_company_ids=ref.scope_company_ids or (ref.scope_company_id,),
             name=customer.name,
         )

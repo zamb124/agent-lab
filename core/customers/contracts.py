@@ -31,6 +31,12 @@ class CustomerMe(CustomerRef):
     name: str | None = None
 
 
+class CustomerMeUpdatePayload(StrictBaseModel):
+    """`POST .../customer-auth/me` — правка профиля покупателя."""
+
+    name: str = Field(min_length=1, max_length=200)
+
+
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:24]}"
 

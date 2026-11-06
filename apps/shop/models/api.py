@@ -378,6 +378,9 @@ class ShopOrderItemModifierResponse(StrictBaseModel):
     option_name: str
     price_minor: int
     qty: int
+    # Id для точного повтора заказа; пустые у заказов до введения кабинета.
+    group_id: str = ""
+    option_id: str = ""
 
 
 class ShopOrderItemResponse(StrictBaseModel):

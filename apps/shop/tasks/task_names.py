@@ -12,6 +12,9 @@ SHOP_REBUILD_STOREFRONT = declare_task(
 SHOP_NOTIFY_ORDER = declare_task(
     "shop_notify_order", queue="shop", retry=True, max_retries=3
 )
+SHOP_NOTIFY_CUSTOMER = declare_task(
+    "shop_notify_customer", queue="shop", retry=True, max_retries=3
+)
 SHOP_PROVISION_DOMAIN = declare_task(
     "shop_provision_domain", queue="shop", retry=True, max_retries=1
 )
@@ -27,6 +30,7 @@ SHOP_AI_DESCRIBE_BATCH = declare_task(
 
 __all__ = [
     "SHOP_AI_DESCRIBE_BATCH",
+    "SHOP_NOTIFY_CUSTOMER",
     "SHOP_NOTIFY_ORDER",
     "SHOP_PROVISION_DOMAIN",
     "SHOP_REBUILD_AGGREGATE",

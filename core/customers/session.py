@@ -17,6 +17,19 @@ from core.utils.domain import get_cookie_domain
 from core.utils.tokens import TokenService, TokenType, get_token_service
 
 CUSTOMER_COOKIE = "customer_token"
+_TOKEN_SCOPES_CAP = 32
+
+
+def merge_scope_company_ids(
+    prior: tuple[str, ...] | list[str], company_id: str
+) -> list[str]:
+    """Scopes прежней сессии + компания свежей верификации в голову списка.
+
+    Дедуп с сохранением порядка «свежие первыми», LRU-обрезка cap —
+    злоупотребление множеством витрин ограничено.
+    """
+    merged = [company_id, *[s for s in prior if s != company_id]]
+    return merged[:_TOKEN_SCOPES_CAP]
 
 
 class CustomerSessionService:
@@ -29,6 +42,7 @@ class CustomerSessionService:
         phone_e164: str,
         scope_company_id: str,
         ttl_seconds: int,
+        scope_company_ids: list[str] | None = None,
     ) -> str:
         session_id = f"csess_{uuid4().hex}"
         return get_token_service().create_customer_token(
@@ -36,6 +50,7 @@ class CustomerSessionService:
             phone_e164=phone_e164,
             scope_company_id=scope_company_id,
             session_id=session_id,
+            scope_company_ids=scope_company_ids,
             expires_in=ttl_seconds,
         )
 
@@ -52,10 +67,17 @@ class CustomerSessionService:
         scope = data.metadata.get("scope_company_id")
         if not all(isinstance(v, str) and v for v in (customer_id, phone, scope)):
             return None
+        raw_scopes = data.metadata.get("scope_company_ids")
+        scopes = (
+            tuple(s for s in raw_scopes if isinstance(s, str) and s)
+            if isinstance(raw_scopes, list)
+            else ()
+        ) or (str(scope),)
         return CustomerRef(
             customer_id=str(customer_id),
             phone_e164=str(phone),
             scope_company_id=str(scope),
+            scope_company_ids=scopes,
         )
 
     def attach_cookie(

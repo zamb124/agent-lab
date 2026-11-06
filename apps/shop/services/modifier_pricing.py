@@ -131,6 +131,8 @@ def _validate_group(
             sums["delta"] += opt.price_minor * qty
         snapshot.append(
             {
+                "group_id": ag.group.shop_modifier_group_id,
+                "option_id": opt.shop_modifier_option_id,
                 "group_name": ag.group.name,
                 "option_name": opt.name,
                 "price_minor": opt.price_minor,
