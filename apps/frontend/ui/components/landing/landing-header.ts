@@ -174,70 +174,156 @@ export class LandingHeader extends PlatformElement {
                 position: absolute;
                 top: 100%;
                 left: 50%;
-                transform: translateX(-50%);
+                transform: translateX(-50%) translateY(8px) scale(0.97);
+                transform-origin: top center;
                 margin-top: 16px;
-                min-width: 220px;
+                min-width: 620px;
+                max-width: calc(100vw - 48px);
                 background: var(--glass-solid-strong);
-                backdrop-filter: blur(20px);
+                backdrop-filter: blur(24px);
                 border: 1px solid var(--glass-border-medium);
-                border-radius: 12px;
-                padding: 12px;
+                border-radius: var(--radius-lg, 16px);
+                padding: 14px;
                 display: none;
-                flex-direction: column;
-                gap: 4px;
-                box-shadow: var(--glass-shadow-strong);
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+                box-shadow: var(--glass-shadow-strong), 0 0 40px rgba(61, 220, 255, 0.08);
                 max-height: calc(100vh - 96px);
                 overflow-y: auto;
+                opacity: 0;
             }
-            
+
             .nav-dropdown.open .nav-dropdown-menu {
-                display: flex;
+                display: grid;
+                animation: nav-menu-in 0.32s cubic-bezier(0.22, 1.4, 0.36, 1) forwards;
             }
-            
+
+            @keyframes nav-menu-in {
+                to {
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0) scale(1);
+                }
+            }
+
             .nav-dropdown-item {
+                position: relative;
                 display: flex;
-                align-items: center;
-                gap: 12px;
-                padding: 12px 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+                padding: 16px 14px;
                 color: var(--text-secondary);
                 text-decoration: none;
-                border-radius: 8px;
+                border-radius: var(--radius-md, 12px);
+                border: 1px solid transparent;
+                background: color-mix(in srgb, var(--glass-bg-subtle, rgba(10, 16, 28, 0.5)) 60%, transparent);
+                overflow: hidden;
+                transition: var(--motion-transition-interactive);
+                opacity: 0;
+            }
+
+            .nav-dropdown.open .nav-dropdown-item {
+                animation: nav-tile-in 0.4s cubic-bezier(0.22, 1.3, 0.36, 1) forwards;
+            }
+
+            .nav-dropdown.open .nav-dropdown-item:nth-child(1) { animation-delay: 0.02s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(2) { animation-delay: 0.05s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(3) { animation-delay: 0.08s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(4) { animation-delay: 0.11s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(5) { animation-delay: 0.14s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(6) { animation-delay: 0.17s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(7) { animation-delay: 0.20s; }
+            .nav-dropdown.open .nav-dropdown-item:nth-child(8) { animation-delay: 0.23s; }
+
+            @keyframes nav-tile-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px) scale(0.94);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                }
+            }
+
+            .nav-dropdown-item::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: radial-gradient(
+                    120px circle at var(--tile-glow-x, 50%) var(--tile-glow-y, 0%),
+                    rgba(61, 220, 255, 0.14),
+                    transparent 70%
+                );
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+            }
+
+            .nav-dropdown-item:hover {
+                border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+                color: var(--text-primary);
+                transform: translateY(-3px);
+                box-shadow: 0 8px 28px rgba(3, 5, 8, 0.5), 0 0 24px rgba(61, 220, 255, 0.14);
+            }
+
+            .nav-dropdown-item:hover::before {
+                opacity: 1;
+            }
+
+            .nav-dropdown-item-icon {
+                width: 34px;
+                height: 34px;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 10px;
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
+                border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
                 transition: var(--motion-transition-interactive);
             }
-            
-            .nav-dropdown-item:hover {
-                background: color-mix(in srgb, var(--accent) 15%, transparent);
-                color: var(--accent);
-            }
-            
-            .nav-dropdown-item-icon {
-                width: 24px;
-                height: 24px;
-                flex-shrink: 0;
-            }
-            
+
             .nav-dropdown-item-icon img {
-                width: 100%;
-                height: 100%;
+                width: 22px;
+                height: 22px;
                 object-fit: contain;
             }
-            
+
+            .nav-dropdown-item:hover .nav-dropdown-item-icon {
+                background: color-mix(in srgb, var(--accent) 20%, transparent);
+                border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+                box-shadow: 0 0 16px rgba(61, 220, 255, 0.35);
+                transform: scale(1.06);
+            }
+
             .nav-dropdown-item-content {
                 display: flex;
                 flex-direction: column;
-                gap: 2px;
+                gap: 3px;
             }
-            
+
             .nav-dropdown-item-title {
                 font-family: var(--font-sans);
-                font-size: 15px;
-                font-weight: 500;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+                letter-spacing: -0.01em;
             }
-            
+
             .nav-dropdown-item-desc {
                 font-family: var(--font-sans);
-                font-size: 12px;
-                color: var(--text-secondary);
+                font-size: 11px;
+                line-height: 1.4;
+                color: var(--text-tertiary, var(--text-secondary));
+            }
+
+            @media (max-width: 1400px) {
+                .nav-dropdown-menu {
+                    min-width: 480px;
+                    grid-template-columns: repeat(2, 1fr);
+                }
             }
             
             .header-actions {
@@ -737,6 +823,14 @@ export class LandingHeader extends PlatformElement {
         this.productsDropdownOpen = false;
     }
 
+    _onDropdownPointerMove(e: PointerEvent) {
+        const item = (e.target as Element).closest?.('.nav-dropdown-item');
+        if (!(item instanceof HTMLElement)) return;
+        const r = item.getBoundingClientRect();
+        item.style.setProperty('--tile-glow-x', `${e.clientX - r.left}px`);
+        item.style.setProperty('--tile-glow-y', `${e.clientY - r.top}px`);
+    }
+
     override connectedCallback(): void {
         super.connectedCallback();
         this._handleOutsideClick = this._handleOutsideClick.bind(this);
@@ -805,7 +899,7 @@ export class LandingHeader extends PlatformElement {
                             ${h('solutions')}
                             <platform-icon name="arrow-down" size="12"></platform-icon>
                         </button>
-                        <div class="nav-dropdown-menu">
+                        <div class="nav-dropdown-menu" @pointermove=${this._onDropdownPointerMove}>
                             <a href="/products/agents" class="nav-dropdown-item" @click=${this._handleNavClick}>
                                 <div class="nav-dropdown-item-icon">
                                     <img src="/static/core/assets/service_logos/agents_logo.svg" alt=${h('product_agents_title')} />

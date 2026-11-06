@@ -38,6 +38,28 @@ export class CosmicScope extends PlatformElement {
                     radial-gradient(ellipse 70% 50% at 20% 90%, var(--marketing-cosmic-nebula-b), transparent 65%),
                     var(--marketing-cosmic-bg);
             }
+            /* Свет от курсора: фиксированный слой над контентом, следует
+               за pointer через --cursor-x/--cursor-y. Выключен на touch
+               и при prefers-reduced-motion. */
+            .cosmic-spotlight {
+                position: fixed;
+                inset: 0;
+                z-index: 2;
+                pointer-events: none;
+                mix-blend-mode: screen;
+                background:
+                    radial-gradient(
+                        520px circle at var(--cursor-x, 50%) var(--cursor-y, 50%),
+                        rgba(61, 220, 255, 0.10),
+                        rgba(61, 220, 255, 0.035) 42%,
+                        transparent 68%
+                    );
+                opacity: var(--cosmic-spotlight-opacity, 0);
+                transition: opacity 0.5s ease;
+            }
+            @media (pointer: coarse), (prefers-reduced-motion: reduce) {
+                .cosmic-spotlight { display: none; }
+            }
             .cosmic-content {
                 position: relative;
                 z-index: 1;
@@ -114,6 +136,25 @@ export class CosmicScope extends PlatformElement {
         const controller = new CosmicScrollController(this, scene, rail);
         this._controller = controller;
         void controller.start();
+        this._bindSpotlight();
+    }
+
+    private _bindSpotlight(): void {
+        const fine = window.matchMedia('(pointer: fine)').matches;
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!fine || reduced) return;
+        let raf = 0;
+        this.useDomEvent<PointerEvent>(window, 'pointermove', (e) => {
+            if (raf !== 0) return;
+            const x = e.clientX;
+            const y = e.clientY;
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                this.style.setProperty('--cursor-x', `${x}px`);
+                this.style.setProperty('--cursor-y', `${y}px`);
+                this.style.setProperty('--cosmic-spotlight-opacity', '1');
+            });
+        }, { passive: true });
     }
 
     override disconnectedCallback(): void {
@@ -136,6 +177,7 @@ export class CosmicScope extends PlatformElement {
         return html`
             <div class="cosmic-underlay"></div>
             <cosmic-scene></cosmic-scene>
+            <div class="cosmic-spotlight"></div>
             <cosmic-rail></cosmic-rail>
             <div class="cosmic-content"><slot></slot></div>
         `;
