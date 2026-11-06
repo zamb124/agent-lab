@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -23,15 +23,18 @@ class ShopThemeCustom(StrictBaseModel):
     Слоты — именованные точки монтажа в shell (аналог Shopify Custom
     Liquid): `head_html` — в `</head>` (метрики, шрифты), `css` — в конец
     `<style>` (переопределения), `js` — в конец `<script>` (обработчики),
-    `blocks` — собственные HTML-блоки по имени слота shell (`hero:after`,
-    `footer: before` → `<slot name>`). Ограничения размера защищают
-    snapshot; рендерится как есть — это код владельца витрины.
+    `blocks` — собственные HTML-блоки по имени слота. Статические слоты
+    shell: `top` (перед `#app`), `bottom` (после `#app`). Якоря внутри
+    витрины: `<anchor>:before` / `<anchor>:after`, где anchor — `hero`,
+    `meta`, `catalog`; монтируются клиентом через `slot()` в
+    `blocks/ui.py`. Ограничения размера защищают snapshot; рендерится
+    как есть — это код владельца витрины.
     """
 
     head_html: str = Field(default="", max_length=32_000)
     css: str = Field(default="", max_length=64_000)
     js: str = Field(default="", max_length=64_000)
-    blocks: dict[str, str] = Field(default_factory=dict)
+    blocks: dict[str, Annotated[str, Field(max_length=32_000)]] = Field(default_factory=dict)
 
 
 class ShopTheme(StrictBaseModel):

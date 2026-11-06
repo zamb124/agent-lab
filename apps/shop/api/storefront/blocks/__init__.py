@@ -14,8 +14,11 @@ Shell — каркас (`<head>`, тема, DOM-скелет, точки мон�
 - ``custom_js``     — в конец основного ``<script>``, видит глобалы
   блоков (S, cart, esc, ic).
 
-``theme.custom.blocks`` — карта ``slot → html``: ``top``/``bottom``
-монтируются в DOM-слоты; имена блоков реестра резервируются под
+``theme.custom.blocks`` — карта ``slot → html``. Статические слоты
+``top``/``bottom`` монтирует сервер в DOM shell; якоря внутри витрины
+``<anchor>:before``/``<anchor>:after`` (``hero``, ``meta``, ``catalog``)
+монтирует клиентский ``slot()`` (``blocks/ui.py``) — карта едет
+в snapshot как есть. Неизвестные имена резервируются под
 переопределение отдельных блоков в редакторе витрины.
 """
 
@@ -95,9 +98,10 @@ _CUSTOM_SLOT_NAMES = ("custom_head", "custom_css", "custom_top", "custom_bottom"
 def custom_injections(snapshot: JsonObject) -> dict[str, str]:
     """Собрать мерчант-инъекции ``theme.custom`` для слотов shell.
 
-    Пустая тема → пустые слоты, страница не меняется. Ключи blocks
-    вне ``top``/``bottom`` игнорируются — монтаж блока определит
-    редактор витрины, а не произвольный HTML в неизвестной точке DOM.
+    Пустая тема → пустые слоты, страница не меняется. Сервер монтирует
+    только ``top``/``bottom``; якоря ``<name>:before``/``<name>:after``
+    доезжают до клиента в snapshot и монтируются ``slot()`` в точках
+    рендера блоков.
     """
     slots = {name: "" for name in _CUSTOM_SLOT_NAMES}
     theme = snapshot.get("theme")

@@ -58,10 +58,10 @@ function rowCompact(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){
   const hb=hoursBadge();
-  let h=`<div class="hero">${photo(S.cover_file_id,'bg','lg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo','sm!sq')}<div><h1 class="serif">${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>
-  <div class="meta">${hb?`<span class="${hb.open?'ob-open':'ob-closed'}">${ic('clock')}${hb.t}</span>`:''}${S.city||S.address?`<span>${ic('pin')}${esc([S.city,S.address].filter(Boolean).join(', '))}</span>`:''}${S.phone?`<span>${ic('call')}${esc(S.phone)}</span>`:''}${S.delivery_enabled?`<span>${ic('truck')}Доставка</span>`:''}${S.pickup_enabled?`<span>${ic('store')}Самовывоз</span>`:''}${S.onsite_enabled?`<span>${ic('restaurant')}В заведении</span>`:''}</div>`;
-  if(!S.products.length){app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}
-  h+=`<div id="msw"></div><div id="menu"></div>`;
+  let h=`${slot('hero:before')}<div class="hero">${photo(S.cover_file_id,'bg','lg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo','sm!sq')}<div><h1 class="serif">${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>${slot('hero:after')}
+  ${slot('meta:before')}<div class="meta">${hb?`<span class="${hb.open?'ob-open':'ob-closed'}">${ic('clock')}${hb.t}</span>`:''}${S.city||S.address?`<span>${ic('pin')}${esc([S.city,S.address].filter(Boolean).join(', '))}</span>`:''}${S.phone?`<span>${ic('call')}${esc(S.phone)}</span>`:''}${S.delivery_enabled?`<span>${ic('truck')}Доставка</span>`:''}${S.pickup_enabled?`<span>${ic('store')}Самовывоз</span>`:''}${S.onsite_enabled?`<span>${ic('restaurant')}В заведении</span>`:''}</div>${slot('meta:after')}`;
+  if(!S.products.length){app.innerHTML=h+slot('catalog:before')+`<div class="empty">Меню скоро появится</div>`+slot('catalog:after');return;}
+  h+=`${slot('catalog:before')}<div id="msw"></div><div id="menu"></div>${slot('catalog:after')}`;
   app.innerHTML=h;
   if(S.products.length>=6){document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}
   renderMenu();
