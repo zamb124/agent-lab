@@ -465,11 +465,6 @@ export class LandingHeader extends PlatformElement {
                     font-size: 20px;
                 }
                 
-                .nav a.nav-link:any-link,
-                button.nav-dropdown-trigger {
-                    font-size: 18px;
-                }
-                
                 .lang-switcher {
                     display: flex;
                 }
@@ -497,7 +492,7 @@ export class LandingHeader extends PlatformElement {
             @media (min-width: 1800px) {
                 .header-container {
                     max-width: 1680px;
-                    padding: 30px 80px;
+                    padding: 30px 56px;
                 }
                 
                 .logo-icon {
@@ -519,7 +514,7 @@ export class LandingHeader extends PlatformElement {
                 }
                 
                 .nav {
-                    gap: 40px;
+                    gap: 26px;
                 }
                 
                 .nav a.nav-link:any-link,

@@ -2180,7 +2180,9 @@ export class PlatformMapEl extends PlatformElement {
                 const props = { ...f.properties, __coords: coords };
                 return renderFeatureCard({ layer: f.layer, properties: props }, t, colorFor(f.layer));
             })
+            .filter((c) => c !== '')
             .join('');
+        if (cards === '') return;
         this._cardPopup = new maplibre.Popup({ closeButton: true, className: 'pm-card-popup', maxWidth: '340px' })
             .setLngLat(lngLat)
             .setHTML(cards)
@@ -2634,6 +2636,114 @@ export class PlatformMapEl extends PlatformElement {
             border-radius: 12px;
             box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
             padding: 0;
+        }
+        .pm-card {
+            font-family: inherit;
+            color: var(--color-text, #0f172a);
+            padding: 12px 14px 10px;
+            min-width: 200px;
+            max-width: 320px;
+        }
+        .pm-card + .pm-card {
+            border-top: 1px solid var(--color-border, #e2e8f0);
+            margin-top: 4px;
+            padding-top: 10px;
+        }
+        .pm-card-kind {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--color-text-muted, #64748b);
+            margin-bottom: 5px;
+        }
+        .pm-card-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--chip, var(--color-primary, #155dfc));
+            box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--chip, #155dfc) 22%, transparent);
+            flex-shrink: 0;
+        }
+        .pm-card-title {
+            font-size: 14px;
+            font-weight: 650;
+            line-height: 1.3;
+            color: var(--color-text, #0f172a);
+            margin-right: 14px;
+        }
+        .pm-card-sub {
+            font-size: 12.5px;
+            color: var(--color-text-muted, #64748b);
+            margin-top: 2px;
+        }
+        .pm-card-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-top: 8px;
+        }
+        .pm-card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            font-size: 12px;
+        }
+        .pm-card-row-k {
+            color: var(--color-text-muted, #64748b);
+        }
+        .pm-card-row-v {
+            color: var(--color-text, #0f172a);
+            font-weight: 500;
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+        .pm-card-tags {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .pm-card-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 22px;
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, transparent);
+            font-size: 13px;
+            line-height: 1;
+        }
+        .pm-card-meta {
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--color-text-muted, #64748b);
+        }
+        .pm-card-footer {
+            margin-top: 9px;
+            padding-top: 8px;
+            border-top: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 65%, transparent);
+        }
+        .pm-card-coords {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+            color: var(--color-text-muted, #64748b);
+            letter-spacing: 0.01em;
+        }
+        .pm-card-footer .pm-card-meta {
+            margin-top: 0;
+        }
+        :host .pm-balloon .maplibregl-popup-content,
+        :host .pm-cluster-popup .maplibregl-popup-content {
+            color: var(--color-text, #0f172a);
+        }
+        .pm-hint .maplibregl-popup-content {
+            color: var(--color-text, #0f172a);
+            font-weight: 500;
         }
         .pm-search {
             position: absolute;

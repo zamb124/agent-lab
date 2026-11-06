@@ -188,8 +188,25 @@ class TestOverviewRealData:
         await ui_page_system.mouse.click(x, y)
         popup = ui_page_system.locator(".maplibregl-popup.pm-card-popup")
         await expect(popup).to_be_visible(timeout=10_000)
-        card_text = await popup.inner_text()
-        assert len(card_text.strip()) > 0
+        card = popup.locator(".pm-card").first
+        await expect(card).to_be_visible()
+        title = popup.locator(".pm-card-title").first
+        assert len((await title.inner_text()).strip()) > 0
+        # Регрессия «белый текст на белом попапе»: цвет текста тёмный,
+        # фон попапа непрозрачный.
+        readable = cast(
+            bool,
+            await card.evaluate(
+                """(el) => {
+                const cs = getComputedStyle(el);
+                const m = cs.color.match(/\\d+(\\.\\d+)?/g).map(Number);
+                const lum = (0.2126*m[0] + 0.7152*m[1] + 0.0722*m[2]) / 255;
+                const bg = getComputedStyle(el.closest('.maplibregl-popup-content')).backgroundColor;
+                return lum < 0.45 && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+            }"""
+            ),
+        )
+        assert readable, "карточка фичи нечитаема: светлый текст или прозрачный фон"
 
     async def test_search_suggest_pick_pin(self, ui_page_system: Page) -> None:
         await _open_overview(ui_page_system)

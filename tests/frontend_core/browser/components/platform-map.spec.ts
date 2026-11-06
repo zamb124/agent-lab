@@ -348,6 +348,58 @@ describe('platform-map', function () {
         expect(clicks[0]!.lngLat[0]).to.be.closeTo(37.6, 0.05);
     });
 
+    it('клик по фиче → читаемая .pm-card с заголовком и координатами', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: true } });
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-src-addresses') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) > 0;
+            },
+            'фичи загружены в источник',
+            { timeout: 10_000 },
+        );
+        const map = el.getMap()!;
+        // featureCards.click включён по умолчанию: клик по фиче адресов.
+        // queryRenderedFeatures — поллинг: слой рисуется кадром после setData.
+        const pt = map.project([37.6, 55.75]);
+        await waitUntil(
+            () =>
+                (
+                    map as unknown as {
+                        queryRenderedFeatures(p: [number, number]): unknown[];
+                    }
+                ).queryRenderedFeatures([pt.x, pt.y]).length > 0,
+            'фича отрисована в точке клика',
+            { timeout: 10_000 },
+        );
+        const clicks: Array<{ features: unknown[] }> = [];
+        el.addEventListener('pm-click', (e) =>
+            clicks.push((e as CustomEvent<{ features: unknown[] }>).detail),
+        );
+        const rect = map.getCanvas().getBoundingClientRect();
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('click', {
+                clientX: rect.x + pt.x,
+                clientY: rect.y + pt.y,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await waitUntil(
+            () => el.shadowRoot.querySelector('.pm-card-popup .pm-card') !== null,
+            'карточка фичи открыта',
+            { timeout: 10_000 },
+        );
+        const card = el.shadowRoot.querySelector<HTMLElement>('.pm-card-popup .pm-card')!;
+        expect(card.querySelector('.pm-card-kind')!.textContent).to.include('Адрес');
+        expect(card.querySelector('.pm-card-title')!.textContent).to.include('Тверская');
+        expect(card.querySelector('.pm-card-coords')!.textContent!.trim()).to.not.equal('');
+        // Регрессия «белый текст на белом»: вычисленный цвет тёмный.
+        const rgb = getComputedStyle(card).color.match(/\d+/g)!.map(Number);
+        const lum = (0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!) / 255;
+        expect(lum, 'текст карточки тёмный').to.be.lessThan(0.45);
+    });
+
     it('до готовности — loading-оверлей со спиннером', async () => {
         const el = await fixture<MapEl>(html`<platform-map .config=${{ interactive: true }}></platform-map>`);
         await elementUpdated(el);
