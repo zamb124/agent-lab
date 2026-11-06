@@ -129,8 +129,8 @@ export class GeoSourcesPage extends PlatformPage {
                 <platform-breadcrumbs></platform-breadcrumbs>
             </div>
             <page-header
+                dense
                 title=${this.t('sources.header_title')}
-                subtitle=${this.t('sources.header_subtitle')}
             ></page-header>
             <div class="grid">
                 <div class="card">

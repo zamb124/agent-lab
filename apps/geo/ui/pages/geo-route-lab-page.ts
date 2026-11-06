@@ -55,40 +55,78 @@ export class GeoRouteLabPage extends PlatformPage {
         css`
             :host { display: flex; flex-direction: column; height: 100%; }
             .breadcrumbs-wrap { flex-shrink: 0; margin-bottom: var(--space-3); }
-            .toolbar {
+            .map-wrap {
+                position: relative;
+                flex: 1;
+                min-height: 0;
+                display: flex;
+            }
+            platform-map { flex: 1; min-height: 0; }
+            .map-modes {
+                position: absolute;
+                top: 12px;
+                left: 12px;
+                z-index: 6;
                 display: flex;
                 align-items: center;
-                gap: var(--space-3);
-                flex-wrap: wrap;
-                padding: var(--space-2) 0 var(--space-3);
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
+                gap: var(--space-1);
+                padding: 4px;
+                background: var(--glass-solid-medium, rgba(35, 35, 55, 0.85));
+                border: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
+                border-radius: var(--radius-full, 999px);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
             }
-            .modes { display: flex; gap: var(--space-1); }
             .mode-btn {
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid transparent;
+                background: transparent;
                 color: var(--text-secondary);
                 border-radius: var(--radius-full, 999px);
                 padding: var(--space-1) var(--space-3);
                 font: inherit;
                 font-size: var(--text-sm);
                 cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease;
             }
+            .mode-btn:hover { color: var(--text-primary); }
             .mode-btn.active {
-                border-color: var(--accent);
                 color: var(--accent);
                 background: var(--accent-subtle);
+                border-color: color-mix(in srgb, var(--accent) 40%, transparent);
             }
-            .metrics {
+            .map-hint {
+                position: absolute;
+                top: 56px;
+                left: 12px;
+                z-index: 6;
+                padding: var(--space-1) var(--space-3);
+                background: var(--glass-solid-medium, rgba(35, 35, 55, 0.85));
+                border: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
+                border-radius: var(--radius-md, 10px);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                font-size: var(--text-xs, 12px);
+                color: var(--text-tertiary);
+                pointer-events: none;
+            }
+            .map-metrics {
+                position: absolute;
+                bottom: 12px;
+                left: 12px;
+                z-index: 6;
                 display: flex;
                 gap: var(--space-4);
-                padding: var(--space-2) 0 var(--space-3);
+                padding: var(--space-2) var(--space-4);
+                background: var(--glass-solid-medium, rgba(35, 35, 55, 0.85));
+                border: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
+                border-radius: var(--radius-md, 10px);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
+                pointer-events: none;
             }
-            .metrics strong { color: var(--text-primary); font-weight: var(--font-semibold); }
-            platform-map { flex: 1; min-height: 0; }
+            .map-metrics strong { color: var(--text-primary); font-weight: var(--font-semibold); }
         `,
     ];
 
@@ -156,33 +194,32 @@ export class GeoRouteLabPage extends PlatformPage {
                 <platform-breadcrumbs></platform-breadcrumbs>
             </div>
             <page-header
+                dense
                 title=${this.t('route_lab.header_title')}
-                subtitle=${this.t('route_lab.header_subtitle')}
             ></page-header>
-            <div class="toolbar">
-                <span>${this.t('route_lab.modes')}</span>
-                <span class="modes">
+            <div class="map-wrap">
+                <platform-map
+                    .config=${this._mapConfig}
+                    @pm-click=${(e: CustomEvent<{ lngLat: LngLat }>) => this._onMapClick(e)}
+                ></platform-map>
+                <div class="map-modes">
                     ${MODES.map((mode) => html`
                         <button
                             class="mode-btn ${this._mode === mode ? 'active' : ''}"
                             @click=${() => this._setMode(mode)}
                         >${this.t(`route_lab.mode_${mode}`)}</button>
                     `)}
-                </span>
-                <span class="hint">${this.t('route_lab.click_hint')}</span>
+                </div>
+                ${!this._result ? html`<div class="map-hint">${this.t('route_lab.click_hint')}</div>` : nothing}
+                ${this._result
+                    ? html`
+                        <div class="map-metrics">
+                            <span>${this.t('route_lab.distance')} <strong>${(this._result.distance_m / 1000).toFixed(2)} ${this.t('route_lab.km')}</strong></span>
+                            <span>${this.t('route_lab.duration')} <strong>${Math.round(this._result.duration_s / 60)} ${this.t('route_lab.min')}</strong></span>
+                        </div>
+                    `
+                    : nothing}
             </div>
-            ${this._result
-                ? html`
-                    <div class="metrics">
-                        <span>${this.t('route_lab.distance')} <strong>${(this._result.distance_m / 1000).toFixed(2)} ${this.t('route_lab.km')}</strong></span>
-                        <span>${this.t('route_lab.duration')} <strong>${Math.round(this._result.duration_s / 60)} ${this.t('route_lab.min')}</strong></span>
-                    </div>
-                `
-                : nothing}
-            <platform-map
-                .config=${this._mapConfig}
-                @pm-click=${(e: CustomEvent<{ lngLat: LngLat }>) => this._onMapClick(e)}
-            ></platform-map>
         `;
     }
 }

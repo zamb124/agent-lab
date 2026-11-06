@@ -129,8 +129,8 @@ export class GeoMapLabPage extends PlatformPage {
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
             <page-header
+                dense
                 title=${this.t('map_lab.header_title')}
-                subtitle=${this.t('map_lab.header_subtitle')}
             ></page-header>
             <div class="layout">
                 <div class="map-col">

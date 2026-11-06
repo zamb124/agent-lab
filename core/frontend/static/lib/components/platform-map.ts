@@ -2495,6 +2495,7 @@ export class PlatformMapEl extends PlatformElement {
     static override styles = css`
         :host {
             display: block;
+            border-radius: var(--platform-map-radius, var(--radius-lg, 16px));
         }
         .pm-wrap {
             position: relative;
@@ -3081,33 +3082,38 @@ export class PlatformMapEl extends PlatformElement {
             gap: 12px;
             align-items: center;
             justify-content: center;
-            background: color-mix(in srgb, var(--color-surface, #fff) 72%, transparent);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            font-size: 13px;
-            color: var(--color-text-muted, #64748b);
+            background: color-mix(in srgb, var(--bg-surface, var(--color-surface, #fff)) 78%, transparent);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            font-family: inherit;
+            font-size: var(--text-sm, 13px);
+            font-weight: var(--font-medium, 500);
+            letter-spacing: var(--tracking-wide, 0.02em);
+            color: var(--text-secondary, var(--color-text-muted, #64748b));
             z-index: 8;
         }
         .pm-spinner {
             width: 22px;
             height: 22px;
-            border: 3px solid var(--color-border, #e2e8f0);
-            border-top-color: var(--color-primary, #2563eb);
+            border: 3px solid var(--glass-border-subtle, var(--color-border, #e2e8f0));
+            border-top-color: var(--accent, var(--color-primary, #2563eb));
             border-radius: 50%;
             animation: pm-spin 0.8s linear infinite;
         }
         .pm-error-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--color-text, #0f172a);
+            font-size: var(--text-base, 14px);
+            font-weight: var(--font-semibold, 600);
+            color: var(--text-primary, var(--color-text, #0f172a));
         }
         .pm-retry {
             padding: 8px 18px;
             border: 0;
             border-radius: 10px;
-            background: var(--color-primary, #2563eb);
-            color: #fff;
-            font-size: 13px;
+            background: var(--accent, var(--color-primary, #2563eb));
+            color: var(--text-on-accent, #fff);
+            font-family: inherit;
+            font-size: var(--text-sm, 13px);
+            font-weight: var(--font-medium, 500);
             cursor: pointer;
         }
         @keyframes pm-spin {
