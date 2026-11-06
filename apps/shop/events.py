@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from apps.shop.models.enums import ShopOrderStatus, ShopStatus
+from apps.shop.models.enums import ShopDeliveryType, ShopOrderStatus, ShopStatus
 from core.events import (
     publish_domain_event,
     publish_event_to_company,
@@ -46,6 +46,8 @@ class ShopOrderEventPayload(BaseModel):
     shop_order_id: str
     public_code: str
     status: ShopOrderStatus
+    status_label: str = ""
+    delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
     total_minor: int
     currency: str
 
@@ -122,6 +124,8 @@ async def publish_shop_order_event(
     shop_order_id: str,
     public_code: str,
     status: ShopOrderStatus,
+    status_label: str,
+    delivery_type: ShopDeliveryType,
     total_minor: int,
     currency: str,
     company_id: str,
@@ -131,6 +135,8 @@ async def publish_shop_order_event(
         shop_order_id=shop_order_id,
         public_code=public_code,
         status=status,
+        status_label=status_label,
+        delivery_type=delivery_type,
         total_minor=total_minor,
         currency=currency,
     )

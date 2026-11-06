@@ -196,11 +196,17 @@ class TestOrderStatusFlow:
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
         slug = f"flow-{unique_id[:8]}"
-        shop, product = await _shop_with_product(shop_client, slug)
+        shop, product = await _shop_with_product(
+            shop_client, slug, delivery_fee=10000
+        )
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"]),
+                json=_order_body(
+                    product["shop_product_id"],
+                    delivery_type="delivery",
+                    address="ул. Ленина, 1",
+                ),
             )
         ).json()
         orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
@@ -230,6 +236,25 @@ class TestOrderStatusFlow:
             f"{_SHOPS}/{shop['shop_id']}/orders/{order_id}/status",
             params={"status": "done"},
         )
+        assert resp.status_code == 409
+
+    async def test_delivering_rejected_for_pickup(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """`delivering` — только курьерская доставка: у самовывоза нет этапа 'едет'."""
+        slug = f"nopik-{unique_id[:8]}"
+        shop, product = await _shop_with_product(shop_client, slug)
+        await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(product["shop_product_id"]),
+        )
+        orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
+        order_id = orders["items"][0]["shop_order_id"]
+        url = f"{_SHOPS}/{shop['shop_id']}/orders/{order_id}/status"
+        for status in ("accepted", "preparing"):
+            resp = await shop_client.post(url, params={"status": status})
+            assert resp.status_code == 200, (status, resp.text)
+        resp = await shop_client.post(url, params={"status": "delivering"})
         assert resp.status_code == 409
 
     async def test_orders_isolation(

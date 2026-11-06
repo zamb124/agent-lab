@@ -16,6 +16,7 @@ from apps.shop.models import (
     ShopDomainStatus,
     ShopOrder,
     ShopProduct,
+    order_status_label,
 )
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
@@ -78,16 +79,6 @@ async def shop_notify_order(
         clear_context()
 
 
-_CUSTOMER_STATUS_LABEL: dict[str, str] = {
-    "new": "принят",
-    "accepted": "подтверждён магазином",
-    "preparing": "готовится",
-    "delivering": "едет к вам",
-    "done": "выполнен",
-    "cancelled": "отменён",
-}
-
-
 @platform_task(SHOP_NOTIFY_CUSTOMER)
 async def shop_notify_customer(
     shop_order_id: str,
@@ -105,8 +96,8 @@ async def shop_notify_customer(
         if order is None or not order.customer_id:
             return JsonObject({"delivered": False, "reason": "no_customer"})
         shop = await Shop.get_by_id(order.shop_id)
-        status_label = _CUSTOMER_STATUS_LABEL.get(
-            order.status.value, order.status.value
+        status_label = order_status_label(
+            order.status, order.delivery_type, for_notify=True
         )
         shop_name = shop.name if shop is not None else ""
         text = (

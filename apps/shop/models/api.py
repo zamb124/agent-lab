@@ -17,12 +17,30 @@ from core.models import StrictBaseModel
 from core.types import JsonObject
 
 
+class ShopThemeCustom(StrictBaseModel):
+    """Мерчант-кастомизация витрины — код владельца магазина.
+
+    Слоты — именованные точки монтажа в shell (аналог Shopify Custom
+    Liquid): `head_html` — в `</head>` (метрики, шрифты), `css` — в конец
+    `<style>` (переопределения), `js` — в конец `<script>` (обработчики),
+    `blocks` — собственные HTML-блоки по имени слота shell (`hero:after`,
+    `footer: before` → `<slot name>`). Ограничения размера защищают
+    snapshot; рендерится как есть — это код владельца витрины.
+    """
+
+    head_html: str = Field(default="", max_length=32_000)
+    css: str = Field(default="", max_length=64_000)
+    js: str = Field(default="", max_length=64_000)
+    blocks: dict[str, str] = Field(default_factory=dict)
+
+
 class ShopTheme(StrictBaseModel):
     """Визуальная тема витрины: акцентный цвет, пресет раскладки и режим."""
 
     accent_color: str = Field(default="#e2553f", max_length=16)
     preset: str = Field(default="menu", max_length=32)
     mode: str = Field(default="dark", pattern=r"^(dark|light)$")
+    custom: ShopThemeCustom = Field(default_factory=ShopThemeCustom)
 
 
 class ShopWorkingHours(StrictBaseModel):
@@ -403,6 +421,7 @@ class ShopOrderResponse(StrictBaseModel):
     shop_id: str
     public_code: str
     status: ShopOrderStatus
+    status_label: str
     customer_id: str = ""
     customer_name: str
     customer_phone: str
@@ -446,6 +465,9 @@ class ShopOrderCreateRequest(StrictBaseModel):
 class ShopOrderCreatedResponse(StrictBaseModel):
     public_code: str
     status: ShopOrderStatus
+    status_label: str
+    delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
+    table_label: str = ""
     total_minor: int
     currency: str
 
@@ -453,6 +475,7 @@ class ShopOrderCreatedResponse(StrictBaseModel):
 class ShopOrderStatusResponse(StrictBaseModel):
     public_code: str
     status: ShopOrderStatus
+    status_label: str
     total_minor: int
     currency: str
     delivery_type: ShopDeliveryType
@@ -564,6 +587,7 @@ class ShopMyOrderListItemResponse(StrictBaseModel):
 
     public_code: str
     status: ShopOrderStatus
+    status_label: str
     status_changed_at: str
     created_at: str
     active: bool
@@ -588,6 +612,7 @@ class ShopMyOrderDetailResponse(ShopMyOrderListItemResponse):
     promos: list[ShopPromoAppliedResponse] = Field(default_factory=list)
     items: list[ShopOrderItemResponse] = Field(default_factory=list)
     status_history: list[ShopOrderStatusEntry] = Field(default_factory=list)
+    status_labels: dict[str, str] = Field(default_factory=dict)
     can_cancel: bool = False
     delivery_lat: float | None = None
     delivery_lng: float | None = None

@@ -12,7 +12,7 @@ from __future__ import annotations
 import secrets
 
 from apps.shop.config import ShopSettings
-from apps.shop.models import Shop, ShopOrder, ShopOrderItem
+from apps.shop.models import Shop, ShopOrder, ShopOrderItem, order_status_label
 from core.errors.boundary import (
     PlatformNotFoundError,
     PlatformUnavailableError,
@@ -23,24 +23,15 @@ from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
-_STATUS_LABEL: dict[str, str] = {
-    "new": "Новый",
-    "accepted": "Принят",
-    "preparing": "Готовится",
-    "delivering": "В доставке",
-    "done": "Выполнен",
-    "cancelled": "Отменён",
-}
-
-
 def order_notify_text(order: ShopOrder, items: list[ShopOrderItem]) -> str:
     """Текст уведомления о заказе для Telegram-бота магазина.
 
     Способ выдачи одной строкой: адрес для delivery, стол для onsite;
     pickup без дополнительной строки — гость сам придёт.
     """
+    label = order_status_label(order.status, order.delivery_type)
     lines = [
-        f"Заказ #{order.public_code} — {_STATUS_LABEL[order.status.value]}",
+        f"Заказ #{order.public_code} — {label}",
         "",
         *[
             f"• {i.name_snapshot} × {i.qty} — {i.price_minor * i.qty // 100} ₽"

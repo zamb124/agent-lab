@@ -22,6 +22,7 @@ from apps.shop.models import (
     ShopProductModifierGroup,
     ShopPromo,
     ShopTable,
+    order_status_label,
 )
 from apps.shop.models.api import (
     ShopAiParseMenuResponse,
@@ -907,6 +908,11 @@ async def op_public_order_create(
     return ShopOrderCreatedResponse(
         public_code=order.public_code,
         status=ShopOrderStatus(order.status),
+        status_label=order_status_label(
+            ShopOrderStatus(order.status), order.delivery_type
+        ),
+        delivery_type=order.delivery_type,
+        table_label=order.table_label,
         total_minor=order.total_minor,
         currency=order.currency,
     )
@@ -924,6 +930,9 @@ async def op_public_order_status(
     return ShopOrderStatusResponse(
         public_code=order.public_code,
         status=ShopOrderStatus(order.status),
+        status_label=order_status_label(
+            ShopOrderStatus(order.status), order.delivery_type
+        ),
         total_minor=order.total_minor,
         currency=order.currency,
         delivery_type=order.delivery_type,

@@ -66,6 +66,7 @@ class OrderEventsService:
             "type": event.type,
             "public_code": public_code,
             "status": event.payload.get("status"),
+            "status_label": event.payload.get("status_label"),
             "total_minor": event.payload.get("total_minor"),
             "currency": event.payload.get("currency"),
         }

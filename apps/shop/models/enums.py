@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import assert_never
 
 
 class ShopKind(StrEnum):
@@ -54,6 +55,41 @@ class ShopDeliveryType(StrEnum):
     DELIVERY = "delivery"
     PICKUP = "pickup"
     ONSITE = "onsite"
+
+
+def order_status_label(
+    status: ShopOrderStatus,
+    delivery_type: ShopDeliveryType = ShopDeliveryType.DELIVERY,
+    *,
+    for_notify: bool = False,
+) -> str:
+    """Пользовательский текст статуса — единый словарь домена.
+
+    Подпись зависит от способа выдачи: «доставлен» у курьерского заказа,
+    «выдан» у самовывоза, «завершён» у заказа в зале. `for_notify` —
+    формулировка для DM покупателю («едет к вам»), иначе — нейтральный
+    чип («в доставке»). Статусы вне словаря возвращаются как есть —
+    новый член enum не ломает витрину, а фиксируется здесь.
+    """
+    if status == ShopOrderStatus.NEW:
+        return "принят" if for_notify else "Новый"
+    if status == ShopOrderStatus.ACCEPTED:
+        return "подтверждён магазином" if for_notify else "Подтверждён"
+    if status == ShopOrderStatus.PREPARING:
+        return "готовится" if for_notify else "Готовится"
+    if status == ShopOrderStatus.DELIVERING:
+        if delivery_type == ShopDeliveryType.DELIVERY:
+            return "едет к вам" if for_notify else "В доставке"
+        return "почти готов, ждём вас" if for_notify else "Готовится"
+    if status == ShopOrderStatus.DONE:
+        if delivery_type == ShopDeliveryType.DELIVERY:
+            return "доставлен" if for_notify else "Доставлен"
+        if delivery_type == ShopDeliveryType.PICKUP:
+            return "выдан" if for_notify else "Выдан"
+        return "завершён" if for_notify else "Завершён"
+    if status == ShopOrderStatus.CANCELLED:
+        return "отменён" if for_notify else "Отменён"
+    assert_never(status)
 
 
 class ShopOrderSource(StrEnum):

@@ -13,6 +13,7 @@ from apps.shop.models.enums import (
     ShopOrderSource,
     ShopOrderStatus,
     ShopStatus,
+    order_status_label,
 )
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
@@ -46,4 +47,5 @@ __all__ = [
     "ShopPromo",
     "ShopStatus",
     "ShopTable",
+    "order_status_label",
 ]

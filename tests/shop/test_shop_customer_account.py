@@ -107,6 +107,8 @@ class TestMyOrders:
         assert detail.status_code == 200, detail.text
         body = detail.json()
         assert body["status"] == "new"
+        assert body["status_label"] == "Новый"
+        assert body["status_labels"]["done"] == "Выдан"
         assert body["can_cancel"] is True
         assert body["items"][0]["name"] == "Маргарита"
         assert body["items"][0]["qty"] == 2
@@ -127,8 +129,42 @@ class TestMyOrders:
         )
         body = detail.json()
         assert body["status"] == "accepted"
+        assert body["status_label"] == "Подтверждён"
         assert body["can_cancel"] is False
         assert [h["status"] for h in body["status_history"]] == ["new", "accepted"]
+
+    async def test_status_label_per_delivery_type(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Лейбл чипа зависит от способа выдачи: у самовывоза нет «в доставке»."""
+        slug = f"lbl-{unique_id[:8]}"
+        shop, product = await _shop_with_product(shop_client, slug)
+        await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={"delivery_fee_minor": 10000},
+        )
+        pickup = await _order(shop_public_client, slug, product["shop_product_id"])
+        body = (
+            await shop_public_client.get(
+                f"{PUBLIC_PREFIX}/my/orders/{pickup['public_code']}"
+            )
+        ).json()
+        assert body["status_labels"]["delivering"] == "Готовится"
+        assert body["status_labels"]["done"] == "Выдан"
+        delivery = await _order(
+            shop_public_client,
+            slug,
+            product["shop_product_id"],
+            delivery_type="delivery",
+            address="ул. Ленина, 1",
+        )
+        body = (
+            await shop_public_client.get(
+                f"{PUBLIC_PREFIX}/my/orders/{delivery['public_code']}"
+            )
+        ).json()
+        assert body["status_labels"]["delivering"] == "В доставке"
+        assert body["status_labels"]["done"] == "Доставлен"
 
     async def test_ownership_isolation(
         self, shop_app, shop_client: AsyncClient, shop_public_client: AsyncClient,

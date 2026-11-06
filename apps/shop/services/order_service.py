@@ -26,6 +26,7 @@ from apps.shop.models import (
     ShopPromo,
     ShopStatus,
     ShopTable,
+    order_status_label,
 )
 from apps.shop.models.api import (
     ShopCartPriceLineResponse,
@@ -421,6 +422,10 @@ class ShopOrderService:
             shop_order_id=order.shop_order_id,
             public_code=order.public_code,
             status=ShopOrderStatus(order.status),
+            status_label=order_status_label(
+                ShopOrderStatus(order.status), order.delivery_type
+            ),
+            delivery_type=order.delivery_type,
             total_minor=order.total_minor,
             currency=order.currency,
             company_id=str(shop.company_id),
@@ -550,7 +555,13 @@ class ShopOrderService:
         """Переход статуса по разрешённой матрице; конфликт → 409."""
         order = await self.get_order(company_shop, order_id)
         allowed_from = _ALLOWED_TRANSITIONS.get(status, frozenset())
-        if order.status not in allowed_from:
+        if (
+            order.status not in allowed_from
+            or (
+                ShopOrderStatus(status) == ShopOrderStatus.DELIVERING
+                and order.delivery_type != ShopDeliveryType.DELIVERY
+            )
+        ):
             raise PlatformConflictError(
                 f"Transition {order.status} -> {status} is not allowed",
                 error_code="order_transition_invalid",
@@ -574,6 +585,10 @@ class ShopOrderService:
             shop_order_id=order.shop_order_id,
             public_code=order.public_code,
             status=ShopOrderStatus(order.status),
+            status_label=order_status_label(
+                ShopOrderStatus(order.status), order.delivery_type
+            ),
+            delivery_type=order.delivery_type,
             total_minor=order.total_minor,
             currency=order.currency,
             company_id=str(shop.company_id),
@@ -634,6 +649,9 @@ class ShopOrderService:
             shop_id=order.shop_id,
             public_code=order.public_code,
             status=ShopOrderStatus(order.status),
+            status_label=order_status_label(
+                ShopOrderStatus(order.status), order.delivery_type
+            ),
             customer_id=order.customer_id,
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,
@@ -730,6 +748,9 @@ class ShopOrderService:
         return ShopMyOrderListItemResponse(
             public_code=order.public_code,
             status=ShopOrderStatus(order.status),
+            status_label=order_status_label(
+                ShopOrderStatus(order.status), order.delivery_type
+            ),
             status_changed_at=order.status_changed_at.isoformat(),
             created_at=order.created_at.isoformat(),
             active=self._active(ShopOrderStatus(order.status)),
@@ -791,6 +812,10 @@ class ShopOrderService:
                     ShopOrderStatusEntry.model_validate(e).model_dump()
                     for e in (order.status_history or [])
                 ],
+                "status_labels": {
+                    s.value: order_status_label(s, order.delivery_type)
+                    for s in ShopOrderStatus
+                },
                 "can_cancel": ShopOrderStatus(order.status) == ShopOrderStatus.NEW,
                 "delivery_lat": order.delivery_lat,
                 "delivery_lng": order.delivery_lng,

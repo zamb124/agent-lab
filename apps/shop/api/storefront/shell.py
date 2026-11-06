@@ -14,6 +14,7 @@ import json
 from html import escape
 
 from apps.shop.api.storefront.account import account_tail
+from apps.shop.api.storefront.blocks import custom_injections
 from core.types import JsonObject
 
 _PAGE = """<!DOCTYPE html>
@@ -30,6 +31,7 @@ _PAGE = """<!DOCTYPE html>
 <script type="module" src="/static/core/lib/customer-auth/autoload.js"></script>
 {seo_head}
 {pwa_head}
+{custom_head}
 <style>
 :root{{--accent:{accent};--on-accent:{on_accent};--afg:{afg_dark};--bg:#131110;--card:#1e1a17;--card2:#2a241f;--text:#f7f3ec;--muted:#a39a8d;--line:#2e2823;--radius:18px;--overlay:rgba(10,9,8,.62);--on-hero:#fff;--success:#4ade80;--warn:#f0b45c;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-lg:0 14px 44px rgba(0,0,0,.55);color-scheme:dark}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -215,9 +217,11 @@ body[data-preset=compact] .item{{padding-left:12px;padding-right:12px}}
 .toast{{bottom:44px}}
 }}
 @media(max-width:520px){{.hero{{height:210px}}.hero h1{{font-size:26px}}.grid{{grid-template-columns:1fr 1fr;gap:10px}}}}
+{custom_css}
 </style>
 </head>
 <body class="{body_class}" data-preset="{preset}">
+<div class="wrap" id="custom-top">{custom_top}</div>
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel"><div class="grab"></div><div id="panel"></div></div></div>
@@ -620,19 +624,18 @@ window.submit=async()=>{{
   const d=await r.json();
   if(dtype==='delivery'&&addrText&&!pickedAddrId)saveAddress(addrText);
   cart.clear();draw();
-  trackOrder(d.public_code);
+  trackOrder(d.public_code,d);
 }};
-const STATUS_LABEL={{new:'Принят',accepted:'Подтверждён',preparing:'Готовится',delivering:'В доставке',done:'Выполнен',cancelled:'Отменён'}};
-window.trackOrder=async code=>{{
+window.trackOrder=async(code,created)=>{{
   const p=document.getElementById('panel');
-  const render=(st,d)=>{{const hall=d&&d.delivery_type==='onsite'&&d.table_label?`<br>Ваш стол: ${{esc(d.table_label)}}`:'';
-    p.innerHTML=`<div class="done"><h2 class="serif">Заказ принят!</h2><div class="code">#${{code}}</div><div class="st">${{STATUS_LABEL[st]||st}}</div><p>Сохраните номер заказа — по нему можно проверить статус.${{hall}}<br>Мы свяжемся с вами для подтверждения.</p></div>`;}};
-  render('new');
+  const render=d=>{{const hall=d&&d.delivery_type==='onsite'&&d.table_label?`<br>Ваш стол: ${{esc(d.table_label)}}`:'';
+    p.innerHTML=`<div class="done"><h2 class="serif">Заказ принят!</h2><div class="code">#${{code}}</div><div class="st">${{esc(d.status_label||d.status)}}</div><p>Сохраните номер заказа — по нему можно проверить статус.${{hall}}<br>Мы свяжемся с вами для подтверждения.</p></div>`;}};
+  render(created);
   const poll=async()=>{{
     if(!document.getElementById('sheet').classList.contains('show'))return;
     try{{
       const r=await fetch(`/shop/api/v1/public/orders/${{code}}`);
-      if(r.ok){{const d=await r.json();render(d.status,d);if(d.status!=='done'&&d.status!=='cancelled')setTimeout(poll,15000);}}
+      if(r.ok){{const d=await r.json();render(d);if(d.status!=='done'&&d.status!=='cancelled')setTimeout(poll,15000);}}
       else setTimeout(poll,30000);
     }}catch(e){{setTimeout(poll,30000);}}
   }};
@@ -742,7 +745,9 @@ loadCart();for(const l of cart.values())refreshQty(l.pid);draw();
 const deeplink=new URLSearchParams(location.search).get('p');
 if(deeplink){{const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');
   if(el){{el.classList.add('flash');setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'center'}}),200);}}}}
+{custom_js}
 </script>
+<div class="wrap" id="custom-bottom">{custom_bottom}</div>
 {account_tail}
 </body>
 </html>"""
@@ -986,4 +991,5 @@ def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url:
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),
         pwa_head=pwa_head,
         account_tail=account_tail(),
+        **custom_injections(snapshot),
     )

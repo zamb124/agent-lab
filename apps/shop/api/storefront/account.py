@@ -157,7 +157,6 @@ function go(id){setTab(id);if(id!=='orders')stopSse();}
 window.goTab=go;
 
 /* --- orders --- */
-const ST={new:'Принят',accepted:'Подтверждён',preparing:'Готовится',delivering:'В доставке',done:'Выполнен',cancelled:'Отменён'};
 const stCls=s=>s==='done'?'done':s==='cancelled'?'cancelled':'';
 let ordersCache=null;
 async function loadOrders(force){
@@ -178,7 +177,7 @@ function renderOrders(items){
  if(!items.length){v.appendChild(el('div','aempty','<div class="big">'+ic('cart')+'</div>Заказов пока нет —<br>самое время выбрать что-нибудь вкусное'));}
  for(const o of items){
   const c=el('div','acard');
-  const st=ST[o.status]||o.status;
+  const st=o.status_label||o.status;
   const itemsTxt=(o.items_preview||[]).map(i=>esc(i.name)+' × '+i.qty).join(', ');
   c.innerHTML='<div class="top"><span class="shop">'+esc(o.shop.name||'Магазин')+'</span><span class="stchip '+stCls(o.status)+(o.active?' live':'')+'">'+st+'</span></div>'
    +'<div class="when">#'+esc(o.public_code)+' · '+WHEN(o.created_at)+'</div>'
@@ -196,7 +195,7 @@ function watchOrder(code){
  try{
   sse=new EventSource(API+'/orders/'+encodeURIComponent(code)+'/events');
   sse.onmessage=ev=>{try{const m=JSON.parse(ev.data);
-   if(curOrder===code&&m.status){const chip=document.querySelector('.od-st');if(chip){chip.textContent=ST[m.status]||m.status;chip.className='stchip od-st '+stCls(m.status)+' live';}
+   if(curOrder===code&&m.status){const chip=document.querySelector('.od-st');if(chip){chip.textContent=m.status_label||m.status;chip.className='stchip od-st '+stCls(m.status)+' live';}
     refreshBanner();}}}catch(e){}};
   sse.onerror=()=>{/* фолбэк — переопрос карточки каждые 20 c */};
  }catch(e){}
@@ -210,13 +209,13 @@ async function openOrder(code){
  v.appendChild(el('button','aback','← Все заказы')).onclick=()=>{curOrder=null;stopSse();loadOrders();};
  const head=el('div','acard');
  head.style.cursor='default';
- head.innerHTML='<div class="top"><span class="shop">'+esc(o.shop.name||'Магазин')+'</span><span class="stchip od-st '+stCls(o.status)+(o.active?' live':'')+'">'+(ST[o.status]||o.status)+'</span></div>'
+ head.innerHTML='<div class="top"><span class="shop">'+esc(o.shop.name||'Магазин')+'</span><span class="stchip od-st '+stCls(o.status)+(o.active?' live':'')+'">'+(o.status_label||o.status)+'</span></div>'
   +'<div class="when">#'+esc(o.public_code)+' · '+WHEN(o.created_at)+'</div>';
  v.appendChild(head);
  /* timeline */
  const tl=el('div','atl');
  const hist=(o.status_history&&o.status_history.length)?o.status_history:[{status:o.status,at:o.status_changed_at}];
- for(const h of hist){const e=el('div','ev hit','<b>'+(ST[h.status]||h.status)+'</b><span class="when">'+WHEN(h.at)+'</span>');tl.appendChild(e);}
+ for(const h of hist){const e=el('div','ev hit','<b>'+((o.status_labels||{})[h.status]||h.status)+'</b><span class="when">'+WHEN(h.at)+'</span>');tl.appendChild(e);}
  v.appendChild(tl);
  /* items + totals */
  const box=el('div','acard');box.style.cursor='default';
@@ -348,7 +347,7 @@ async function refreshBanner(){
   const d=await jget(API+'/my/orders?active=true&limit=1');
   const o=(d.items||[])[0];
   if(!o){banner.style.display='none';return;}
-  banner.innerHTML='<div><span class="dot"></span><span>Заказ #'+esc(o.public_code)+' — '+(ST[o.status]||o.status)+' · '+esc(o.shop.name||'')+'</span></div>';
+  banner.innerHTML='<div><span class="dot"></span><span>Заказ #'+esc(o.public_code)+' — '+(o.status_label||o.status)+' · '+esc(o.shop.name||'')+'</span></div>';
   banner.style.display='';
   banner.onclick=()=>{setTab('orders');openOrder(o.public_code);};
  }catch(e){}
