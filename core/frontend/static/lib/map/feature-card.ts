@@ -12,7 +12,7 @@ export interface FeatureCardInput {
     properties: Record<string, unknown>;
 }
 
-type Translate = (key: string) => string;
+type Translate = (key: string, vars?: Record<string, string | number> | null, namespace?: string) => string;
 
 const _ESC_RE = /[&<>"]/g;
 const _ESC_MAP: Record<string, string> = {
@@ -74,7 +74,7 @@ export function renderFeatureCard(
     layerColor: string | null,
 ): string {
     const { layer, properties } = input;
-    const layerLabel = layer !== '' ? t(`layers.${layer}`) : '';
+    const layerLabel = layer !== '' ? t(`layers.${layer}`, null, 'geo') : '';
     const chip =
         layerLabel !== '' && layerLabel !== `layers.${layer}`
             ? `<div class="pm-card-kind"><span class="pm-card-dot"${layerColor ? ` style="--chip:${escHtml(layerColor)}"` : ''}></span>${escHtml(layerLabel)}</div>`
@@ -101,7 +101,7 @@ export function renderFeatureCard(
             const parts: string[] = [];
             const len = _fmtLen(properties['length_m']);
             if (len !== '') parts.push(len);
-            if (properties['oneway'] === true || properties['oneway'] === 'yes') parts.push(t('map.card_one_way'));
+            if (properties['oneway'] === true || properties['oneway'] === 'yes') parts.push(t('map.card_one_way', null, 'geo'));
             if (parts.length > 0) sub = parts.join(' · ');
             const osm = _osm('way', properties['osm_way_id']);
             if (osm !== '') meta = osm;
@@ -109,7 +109,7 @@ export function renderFeatureCard(
         }
         case 'barriers': {
             const kind = String(properties['barrier'] ?? '');
-            const kindLabel = kind !== '' ? t(`map.card_barrier_${kind}`) : '';
+            const kindLabel = kind !== '' ? t(`map.card_barrier_${kind}`, null, 'geo') : '';
             if (kindLabel !== '' && kindLabel !== `map.card_barrier_${kind}`) title = kindLabel;
             else if (kind !== '') title = kind;
             const blocked = (['car', 'foot', 'bike', 'scooter'] as const).filter(
@@ -117,7 +117,7 @@ export function renderFeatureCard(
             );
             const icons: Record<string, string> = { car: '🚗', foot: '🚶', bike: '🚲', scooter: '🛴' };
             if (blocked.length > 0) {
-                tags = `<div class="pm-card-tags" title="${escHtml(t('map.card_blocks'))}">${blocked
+                tags = `<div class="pm-card-tags" title="${escHtml(t('map.card_blocks', null, 'geo'))}">${blocked
                     .map((mode) => `<span class="pm-card-tag">${icons[mode]}</span>`)
                     .join('')}</div>`;
             }
@@ -127,7 +127,7 @@ export function renderFeatureCard(
         }
         case 'restrictions': {
             const kind = String(properties['restriction'] ?? '');
-            const kindLabel = kind !== '' ? t(`map.card_restriction_${kind}`) : '';
+            const kindLabel = kind !== '' ? t(`map.card_restriction_${kind}`, null, 'geo') : '';
             if (kindLabel !== '' && kindLabel !== `map.card_restriction_${kind}`) title = kindLabel;
             else if (kind !== '') title = kind;
             const parts = [_osm('relation', properties['osm_relation_id'])];
@@ -144,12 +144,12 @@ export function renderFeatureCard(
             if (regTitle !== '') title = regTitle;
             const parts = [String(properties['kind'] ?? ''), String(properties['name'] ?? '')].filter((v) => v !== '');
             if (parts.length > 0) sub = parts.join(' · ');
-            if (properties['enabled'] === true) meta = t('map.card_enabled');
-            else if (properties['enabled'] === false) meta = t('map.card_disabled');
+            if (properties['enabled'] === true) meta = t('map.card_enabled', null, 'geo');
+            else if (properties['enabled'] === false) meta = t('map.card_disabled', null, 'geo');
             break;
         }
         case 'signals': {
-            title = t('map.card_signal');
+            title = t('map.card_signal', null, 'geo');
             const osm = _osm('node', properties['osm_node_id']);
             if (osm !== '') meta = osm;
             break;

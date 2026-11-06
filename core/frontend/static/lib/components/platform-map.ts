@@ -1408,7 +1408,7 @@ export class PlatformMapEl extends PlatformElement {
                                 __coords: `${lngLat[1].toFixed(5)}, ${lngLat[0].toFixed(5)}`,
                             },
                         },
-                        (k) => this.t(k),
+                        (k, vars, ns) => this.t(k, vars, ns),
                         this._layerColor('addresses'),
                     ),
                 )
@@ -2027,9 +2027,15 @@ export class PlatformMapEl extends PlatformElement {
                 const feats = this._featuresAt(map, e.point);
                 const markerHit = this._markerAt(map, e.point);
                 map.getCanvas().style.cursor = feats.length > 0 || markerHit ? 'pointer' : '';
-                const hintText =
-                    (feats.length > 0 ? featureTitle({ layer: feats[0]!.layer, properties: feats[0]!.properties }) : '') ||
-                    (markerHit?.title ?? '');
+                let hintText =
+                    feats.length > 0
+                        ? featureTitle({ layer: feats[0]!.layer, properties: feats[0]!.properties })
+                        : '';
+                if (feats.length > 0 && hintText === feats[0]!.layer) {
+                    const translated = this.t(`layers.${hintText}`);
+                    if (translated !== `layers.${hintText}`) hintText = translated;
+                }
+                hintText = hintText !== '' ? hintText : (markerHit?.title ?? '');
                 if (hintText !== '') {
                     if (!this._hintPopup) {
                         this._hintPopup = new Popup({ closeButton: false, closeOnClick: false, className: 'pm-hint' });
@@ -2168,7 +2174,7 @@ export class PlatformMapEl extends PlatformElement {
         feats: { layer: string; properties: Record<string, unknown> }[],
     ): void {
         this._cardPopup?.remove();
-        const t = (k: string) => this.t(k);
+        const t = (k: string, vars?: Record<string, string | number> | null, ns?: string) => this.t(k, vars, ns);
         const colorFor = (name: string): string | null => {
             const info = (this._layersOp?.lastResult?.layers ?? []).find((l) => l.name === name);
             return info ? info.color : null;
