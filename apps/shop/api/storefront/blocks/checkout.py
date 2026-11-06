@@ -48,7 +48,7 @@ function renderSheet(){
   const seg=DTYPES.length>1?`<div class="seg">${DTYPES.map(d=>`<button class="${dtype===d[0]?'on':''}" onclick="setDtype('${d[0]}')">${ic(d[1])}${d[2]}</button>`).join('')}</div>`:'';
   p.innerHTML=`<h2>Ваш заказ</h2>`+[...cart.entries()].map(([key,l])=>{const x=byId(l.pid);if(!x)return'';
     const mods=modsText(x,l.sel);const u=unitPrice(x,l.sel);
-    return `<div class="cl"><span class="n">${esc(x.name)}${mods?`<span class="mods">${esc(mods)}</span>`:''}</span><span class="stepper"><button class="ghost" onclick="addLine('${key}',-1);renderSheet()">−</button><span>${l.qty}</span><button onclick="addLine('${key}',1);renderSheet()">+</button></span><b class="s">${fmt(u*l.qty)}</b></div>`;}).join('')+
+    return `<div class="cl">${photo(x.photo_file_id,'climg','sm!sq')}<span class="n">${esc(x.name)}${mods?`<span class="mods">${esc(mods)}</span>`:''}</span><span class="stepper"><button class="ghost" onclick="addLine('${key}',-1);renderSheet()">−</button><span>${l.qty}</span><button onclick="addLine('${key}',1);renderSheet()">+</button></span><b class="s">${fmt(u*l.qty)}</b></div>`;}).join('')+
   seg+
   `<div id="savings"></div>`+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${fmt(fee)}</b></div>`:'')+

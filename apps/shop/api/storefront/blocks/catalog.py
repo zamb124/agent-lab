@@ -50,11 +50,11 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 .gcard p{font-size:12.5px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .gcard .row{display:flex;justify-content:space-between;align-items:center;margin-top:auto;gap:8px}
 .compact .item{padding:12px 2px}
-.compact .item img{display:none}"""
+.compact .item img{width:52px;height:52px}"""
 
 JS: str = """function rowList(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','sm!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
 function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','md!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
-function rowCompact(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')"><div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
+function rowCompact(ps){return ps.map(p=>`<div class="item" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','sm!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){
   const hb=hoursBadge();

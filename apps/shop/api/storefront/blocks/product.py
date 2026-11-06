@@ -7,6 +7,7 @@
 CSS: str = """.cl{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:15px;border-bottom:1px solid var(--line)}
 .cl .n{flex:1;min-width:0}
 .cl .mods{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+.cl img.climg{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--card2);flex-shrink:0}
 .cl .s{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .mg{margin:16px 0}
 .mg.nest{margin:12px 0 4px 14px;padding-left:12px;border-left:2px solid var(--line)}

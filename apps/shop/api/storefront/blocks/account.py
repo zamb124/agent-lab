@@ -330,7 +330,7 @@ function renderContacts(){
    m.config={center:g.lat!=null?[g.lng,g.lat]:[(box[0][0]+box[1][0])/2,(box[0][1]+box[1][1])/2],zoom:12,
     controls:{zoom:true,fit:true},
     markers:mk,
-    overlays:ov,scheme:document.body.classList.contains('light')?'light':'dark'};
+    overlays:ov,layers:{fetch:false},scheme:document.body.classList.contains('light')?'light':'dark'};
    if(box)m.addEventListener('pm-ready',ev=>ev.detail.map.fitBounds(box,{padding:60,duration:400}),{once:true});
    holder.appendChild(m);
   }).catch(()=>{holder.remove();});
