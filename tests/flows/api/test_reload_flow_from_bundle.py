@@ -100,6 +100,60 @@ async def test_reload_from_bundle_returns_403_when_flow_absent(client, auth_head
 
 
 @pytest.mark.asyncio
+async def test_reload_from_bundle_installs_under_custom_flow_id(
+    client, unique_id: str, auth_headers_system
+) -> None:
+    """Установка bundle под новым flow_id не перезаписывает исходный flow."""
+    bundle_id = "example_react"
+    target_id = f"example_react_copy_{unique_id}"
+    name = f"Copy {unique_id}"
+    description = f"Installed as copy {unique_id}"
+
+    source_before = await client.get(
+        f"/flows/api/v1/flows/{bundle_id}", headers=auth_headers_system
+    )
+    assert source_before.status_code == 200, source_before.text
+    source_body = source_before.json()
+    source_name = source_body["name"]
+    source_version = source_body["version"]
+
+    try:
+        response = await client.post(
+            f"/flows/api/v1/flows/{target_id}/reload-from-bundle",
+            headers=auth_headers_system,
+            json={
+                "bundle_id": bundle_id,
+                "name": name,
+                "description": description,
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["flow_id"] == target_id
+
+        installed = await client.get(
+            f"/flows/api/v1/flows/{target_id}", headers=auth_headers_system
+        )
+        assert installed.status_code == 200, installed.text
+        body = installed.json()
+        assert body["flow_id"] == target_id
+        assert body["name"] == name
+        assert body["description"] == description
+        assert body["source"] == "api"
+
+        source_after = await client.get(
+            f"/flows/api/v1/flows/{bundle_id}", headers=auth_headers_system
+        )
+        assert source_after.status_code == 200, source_after.text
+        assert source_after.json()["name"] == source_name
+        assert source_after.json()["version"] == source_version
+    finally:
+        delete = await client.delete(
+            f"/flows/api/v1/flows/{target_id}", headers=auth_headers_system
+        )
+        assert delete.status_code in (200, 404), delete.text
+
+
+@pytest.mark.asyncio
 async def test_list_flows_returns_200_for_system_company(client, auth_headers_system) -> None:
     """GET /flows/api/v1/flows не падает 500 при сборке bundle update flags."""
     response = await client.get("/flows/api/v1/flows", headers=auth_headers_system)

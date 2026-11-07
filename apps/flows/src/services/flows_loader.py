@@ -319,11 +319,30 @@ class FlowsLoader:
             reference_ids.update(self._collect_reference_ids_from_nodes(branch_nodes))
         return reference_ids
 
-    async def _load_flow_bundle(self, bundle_id: str) -> str | None:
+    async def _load_flow_bundle(
+        self,
+        bundle_id: str,
+        *,
+        target_flow_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> str | None:
         """Один каталог bundle -> FlowConfig в БД. Nodes предзагружены в preload_nodes_to_cache."""
         flow_config = await self.build_flow_bundle_config(bundle_id)
         if flow_config is None:
             return None
+
+        overrides: dict[str, str] = {}
+        if target_flow_id is not None and target_flow_id != flow_config.flow_id:
+            # Копия из каталога под другим id — не 1:1 file-backed entry registry.
+            overrides["flow_id"] = target_flow_id
+            overrides["source"] = "api"
+        if name is not None:
+            overrides["name"] = name
+        if description is not None:
+            overrides["description"] = description
+        if overrides:
+            flow_config = flow_config.model_copy(update=overrides)
 
         previous = await FlowConfig.current_for_flow(flow_config.flow_id)
         _ = await FlowConfig.create_version(flow_config)
@@ -336,7 +355,12 @@ class FlowsLoader:
                 _ = await FlowConfig.create_version(previous)
             raise
 
-        logger.info("flows.loader.bundle_saved", bundle_id=bundle_id, name=flow_config.name)
+        logger.info(
+            "flows.loader.bundle_saved",
+            bundle_id=bundle_id,
+            flow_id=flow_config.flow_id,
+            name=flow_config.name,
+        )
         return flow_config.flow_id
 
     async def build_flow_bundle_config(self, bundle_id: str) -> FlowConfig | None:
@@ -1326,9 +1350,17 @@ class FlowsLoader:
             visit(bundle_id, [])
         return ordered
 
-    async def _reload_bundle_chain(self, bundle_id: str, *, seen: set[str]) -> None:
+    async def _reload_bundle_chain(
+        self,
+        bundle_id: str,
+        *,
+        seen: set[str],
+        target_flow_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> str:
         if bundle_id in seen:
-            return
+            return target_flow_id if target_flow_id is not None else bundle_id
         seen.add(bundle_id)
         bundle_dir = self.bundles_dir / bundle_id
         config_path = bundle_dir / "flow.json"
@@ -1337,15 +1369,31 @@ class FlowsLoader:
                 f"Bundle directory '{bundle_id}' not found or has no flow.json: {bundle_dir}"
             )
         for companion_id in self._read_bundle_depends_on_flow_ids(bundle_dir):
-            await self._reload_bundle_chain(companion_id, seen=seen)
+            _ = await self._reload_bundle_chain(companion_id, seen=seen)
         await self.preload_nodes_to_cache(bundle_id)
-        loaded_flow_id = await self._load_flow_bundle(bundle_id)
+        loaded_flow_id = await self._load_flow_bundle(
+            bundle_id,
+            target_flow_id=target_flow_id,
+            name=name,
+            description=description,
+        )
         if not loaded_flow_id:
             raise ValueError(f"Failed to load bundle '{bundle_id}' into the database")
+        return loaded_flow_id
 
-    async def reload_flow_bundle(self, bundle_id: str) -> str:
+    async def reload_flow_bundle(
+        self,
+        bundle_id: str,
+        *,
+        target_flow_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> str:
         """
         Перезаписывает один flow и связанные nodes из каталога ``bundles/<bundle_id>/`` в БД.
+
+        ``target_flow_id`` / ``name`` / ``description`` — установка под другим id или с
+        override метаданных (зависимости ``depends_on_flow_ids`` грузятся без remap).
 
         Использует тот же путь, что и полная загрузка registry: demand-driven резолв refs, defaults из registry.
         """
@@ -1360,8 +1408,13 @@ class FlowsLoader:
         self.load_registry_yaml()
 
         seen: set[str] = set()
-        await self._reload_bundle_chain(bundle_id, seen=seen)
-        return bundle_id
+        return await self._reload_bundle_chain(
+            bundle_id,
+            seen=seen,
+            target_flow_id=target_flow_id,
+            name=name,
+            description=description,
+        )
 
 
 async def load_flows_to_db(

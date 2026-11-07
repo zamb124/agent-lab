@@ -11,7 +11,8 @@
  * Шаг 2: ввод flow_id / name / description (для пресетов) или подтверждение
  *   установки (для bundle). Submit:
  *     - preset → useResource('flows/flows').create(config)
- *     - bundle → useOp('flows/flow_reload_from_bundle').run({ flow_id })
+ *     - bundle → useOp('flows/flow_reload_from_bundle').run({
+ *         flow_id, bundle_id, name, description })
  *   Затем `this.navigate('flow_editor', { flowId })`.
  */
 
@@ -168,6 +169,16 @@ function isFlowBundle(value: unknown): value is FlowBundle {
     return isPlainRecord(value) && typeof value.bundle_id === 'string' && value.bundle_id.length > 0;
 }
 
+function storeBundleItems(result: unknown): FlowBundle[] {
+    if (Array.isArray(result)) {
+        return result.filter(isFlowBundle);
+    }
+    if (isPlainRecord(result) && Array.isArray(result.items)) {
+        return result.items.filter(isFlowBundle);
+    }
+    return [];
+}
+
 export class FlowsFlowCreateModal extends PlatformFormModal {
     static modalKind = 'flows.flow_create';
     static i18nNamespace = 'flows';
@@ -289,6 +300,12 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
 
     override connectedCallback(): void {
         super.connectedCallback();
+        this._ensureStoreBundles();
+    }
+
+    _ensureStoreBundles() {
+        if (this._bundlesOp.busy) return;
+        if (storeBundleItems(this._bundlesOp.lastResult).length > 0) return;
         void this._bundlesOp.run({});
     }
 
@@ -307,9 +324,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     }
 
     _bundles(): FlowBundle[] {
-        const result = this._bundlesOp.lastResult;
-        if (!isPlainRecord(result) || !Array.isArray(result.items)) return [];
-        return result.items.filter(isFlowBundle);
+        return storeBundleItems(this._bundlesOp.lastResult);
     }
 
     _filteredBundles() {
@@ -405,6 +420,14 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     _renderStore(bundles: readonly FlowBundle[]) {
         if (this._bundlesOp.busy && bundles.length === 0) {
             return html`<div style="padding: var(--space-4); text-align: center"><platform-spinner></platform-spinner></div>`;
+        }
+        const storeError = this._bundlesOp.error;
+        if (typeof storeError === 'string' && storeError.length > 0 && bundles.length === 0) {
+            return html`<div class="grid"><platform-empty-state
+                icon="warning"
+                title=${this.t('flow_create_modal.store_error')}
+                hint=${storeError}
+            ></platform-empty-state></div>`;
         }
         if (bundles.length === 0) {
             return html`<div class="grid"><platform-empty-state icon="apps" title=${this.t('flow_create_modal.store_empty')}></platform-empty-state></div>`;
@@ -589,10 +612,15 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 this.navigate('flow_editor', { flowId: config.flow_id });
                 return;
             }
-            const result = await this._installOp.run({ flow_id: sel.bundle.bundle_id });
+            const result = await this._installOp.run({
+                flow_id,
+                bundle_id: sel.bundle.bundle_id,
+                name,
+                description: this._description,
+            });
             const installedId = isPlainRecord(result) && typeof result.flow_id === 'string' && result.flow_id !== ''
                 ? result.flow_id
-                : sel.bundle.bundle_id;
+                : flow_id;
             this.closeAfterSave();
             this._flows.load();
             this.navigate('flow_editor', { flowId: installedId });

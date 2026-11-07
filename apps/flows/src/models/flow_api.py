@@ -94,6 +94,21 @@ class FlowDeletedResponse(StrictBaseModel):
     flow_id: str
 
 
+class FlowReloadFromBundleRequest(StrictBaseModel):
+    """Установка или перезапись flow из каталожного bundle.
+
+    ``flow_id`` — целевой id в БД (path REST / поле команды).
+    ``bundle_id`` — каталог ``apps/flows/bundles/<bundle_id>/``; пустой —
+    совпадает с ``flow_id`` (перезагрузка того же id).
+    ``name`` / ``description`` — опциональный override поверх ``flow.json``.
+    """
+
+    flow_id: str = ""
+    bundle_id: str | None = Field(default=None, min_length=1)
+    name: str | None = None
+    description: str | None = None
+
+
 class ReloadFlowFromBundleResponse(StrictBaseModel):
     flow_id: str
     message: str

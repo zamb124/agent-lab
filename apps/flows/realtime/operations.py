@@ -48,6 +48,7 @@ from apps.flows.src.models.flow_api import (
     FlowNodeTypeCard,
     FlowPreviewShareRequest,
     FlowPreviewShareResponse,
+    FlowReloadFromBundleRequest,
     FlowResourceTypeCard,
     FlowResponse,
     FlowStoreBundleResponse,
@@ -498,7 +499,8 @@ async def get_bundle_update_flags(
     for flow_cfg in file_flows:
         bundle_id = flow_to_bundle.get(flow_cfg.flow_id)
         if bundle_id is None:
-            raise_internal(RuntimeError(f"bundle_mapping_not_found for flow_id={flow_cfg.flow_id}"))
+            # source=file без каталожного id (копия / рассинхрон) — индикатора обновления нет.
+            continue
         bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
         if bundle_cfg is None:
             raise_internal(RuntimeError(f"bundle_config_none for bundle_id={bundle_id}"))
@@ -1024,12 +1026,15 @@ async def op_flows_validate(
 
 
 async def op_flows_reload_from_bundle(
-    payload: FlowsFlowIdPayload,
+    payload: FlowReloadFromBundleRequest,
     *,
     user: User,
     di: Di,
 ) -> ReloadFlowFromBundleResponse:
     _ = user
+    if not payload.flow_id.strip():
+        raise_invalid(ValueError("flow_id is required"))
+    bundle_id = payload.bundle_id if payload.bundle_id is not None else payload.flow_id
     catalog_install = await authorize_reload_from_bundle(di, payload.flow_id)
     _ = await load_tools_to_db(
         flow_access_service=di.flow_access_service,
@@ -1042,7 +1047,12 @@ async def op_flows_reload_from_bundle(
         files_service=di.files_service,
     )
     try:
-        loaded_id = await loader.reload_flow_bundle(payload.flow_id)
+        loaded_id = await loader.reload_flow_bundle(
+            bundle_id,
+            target_flow_id=payload.flow_id,
+            name=payload.name,
+            description=payload.description,
+        )
     except ValueError as exc:
         msg = str(exc).lower()
         if "не найден" in msg or "not found" in msg:

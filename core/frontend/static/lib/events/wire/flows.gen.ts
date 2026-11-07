@@ -3324,6 +3324,22 @@ export interface FlowPreviewShareResponse {
 }
 
 /**
+ * Установка или перезапись flow из каталожного bundle.
+ * 
+ * ``flow_id`` — целевой id в БД (path REST / поле команды).
+ * ``bundle_id`` — каталог ``apps/flows/bundles/<bundle_id>/``; пустой —
+ * совпадает с ``flow_id`` (перезагрузка того же id).
+ * ``name`` / ``description`` — опциональный override поверх ``flow.json``.
+ */
+export interface FlowReloadFromBundleRequest {
+    "flow_id"?: string | undefined;
+    "bundle_id"?: string | null | undefined;
+    "name"?: string | null | undefined;
+    "description"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * FlowResourceTypeCard
  */
 export interface FlowResourceTypeCard {
@@ -7763,7 +7779,7 @@ export interface FlowsCommandMap {
     "flows/flows/metadata_update_requested": { payload: FlowMetadataRequest; result: FlowMetadataResponse },
     "flows/flows/nodes_bulk_delete_requested": { payload: BulkDeleteNodesRequest; result: BulkDeleteNodesResponse },
     "flows/flows/preview_share_requested": { payload: FlowPreviewShareRequest; result: FlowPreviewShareResponse },
-    "flows/flows/reload_from_bundle_requested": { payload: FlowsFlowIdPayload; result: ReloadFlowFromBundleResponse },
+    "flows/flows/reload_from_bundle_requested": { payload: FlowReloadFromBundleRequest; result: ReloadFlowFromBundleResponse },
     "flows/flows/remove_requested": { payload: FlowsFlowIdPayload; result: FlowDeletedResponse },
     "flows/flows/store_bundles_requested": { payload: EmptyPayload; result: ListResponse_FlowStoreBundleResponse_ },
     "flows/flows/update_requested": { payload: FlowCreateRequest; result: FlowResponse },

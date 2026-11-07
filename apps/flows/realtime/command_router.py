@@ -347,6 +347,7 @@ from apps.flows.src.models.flow_api import (
     FlowCreateRequest,
     FlowMetadataRequest,
     FlowPreviewShareRequest,
+    FlowReloadFromBundleRequest,
     FlowValidateRequest,
     FlowVoiceSessionQueryRequest,
 )
@@ -454,7 +455,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowsDi]] = {
         payload_model=FlowValidateRequest, fn=op_flows_validate
     ),
     "flows/flows/reload_from_bundle_requested": Operation(
-        payload_model=FlowsFlowIdPayload, fn=op_flows_reload_from_bundle
+        payload_model=FlowReloadFromBundleRequest, fn=op_flows_reload_from_bundle
     ),
     "flows/flows/versions_list_requested": Operation(
         payload_model=FlowsFlowIdPayload, fn=op_flows_versions_list

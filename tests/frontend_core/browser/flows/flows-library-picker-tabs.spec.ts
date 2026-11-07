@@ -284,9 +284,112 @@ describe('flows library picker tabs', () => {
         expect(flat[0].tool.tool_id).to.equal('mcp:alpha:find_me');
         expect(flat[0].server.server_id).to.equal('alpha');
 
-        const host = await fixture<TestEl>(html`<div>${modal._renderMcpFlatSearchBody(false)}</div>`);
+        const host = await fixture<TestEl>(html`<div>${modal._renderMcpFlatSearchResults()}</div>`);
         expect(q(host!, '.mcp-picker-flat-hint')).to.not.equal(null);
         expect(qsa(host!, 'platform-picker-card')).to.have.length(1);
+    });
+
+    function pickerSearchInput(modal: TestEl): HTMLInputElement {
+        const search = qs(shadow(modal), 'platform-modal-search-field');
+        expect(search).to.not.equal(null);
+        const field = qs(shadow(search!), 'platform-field');
+        const inner = qs(shadow(field!), 'platform-field-string');
+        const input = qs(shadow(inner!), 'input.field-pill-input');
+        expect(input).to.not.equal(null);
+        return input as HTMLInputElement;
+    }
+
+    it('keeps search focus and caret while intermediate search results reload', async () => {
+        const responses: Array<{ q: string | undefined; items: Array<Record<string, unknown>> }> = [];
+        let releaseSecond: ((value?: unknown) => void) | null = null;
+        const secondGate = new Promise((resolve) => {
+            releaseSecond = resolve;
+        });
+        window.fetch = async (url: RequestInfo | URL) => {
+            throw new Error(`unexpected fetch: ${String(url)}`);
+        };
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/tools/tag_groups_requested') {
+                return { items: [], total: 0, limit: 200, offset: 0 };
+            }
+            if (opts.type === 'flows/tools/list_all_requested') {
+                const payload = opts.payload as Record<string, unknown>;
+                const q = typeof payload.q === 'string' ? payload.q : undefined;
+                if (q === 'read_f') {
+                    await secondGate;
+                    responses.push({
+                        q,
+                        items: [{
+                            tool_id: 'read_file',
+                            title: 'read_file',
+                            item_type: 'tool',
+                            tags: ['files'],
+                            description: 'Reads files',
+                        }],
+                    });
+                    return { items: responses[responses.length - 1]!.items, total: 1, limit: 20, offset: 0 };
+                }
+                responses.push({
+                    q,
+                    items: [
+                        {
+                            tool_id: 'read_file',
+                            title: 'read_file',
+                            item_type: 'tool',
+                            tags: ['files'],
+                            description: 'Reads files',
+                        },
+                        {
+                            tool_id: 'fill_docx_template',
+                            title: 'fill_docx_template',
+                            item_type: 'tool',
+                            tags: ['files'],
+                            description: 'Fills docx',
+                        },
+                    ],
+                });
+                return { items: responses[responses.length - 1]!.items, total: 2, limit: 20, offset: 0 };
+            }
+            throw new Error(`unexpected WS command ${opts.type}`);
+        };
+
+        const modal = await fixture<TestEl>(html`
+            <flows-library-picker-modal pick-mode="all" ?open=${true}></flows-library-picker-modal>
+        `);
+        modal._modalKind = 'flows.tool_picker';
+        await waitUntil(
+            () => modal._pickModeRows().some((row: { tool_id?: string }) => row.tool_id === 'read_file'),
+            'initial picker rows',
+            { timeout: 3000 },
+        );
+
+        const input = pickerSearchInput(modal);
+        input.focus();
+        input.value = 'read_f';
+        input.setSelectionRange(6, 6);
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await modal.updateComplete;
+        expect(document.activeElement === input || modal.contains(document.activeElement)).to.equal(true);
+
+        // Debounce → reload: результаты приходят при удержанном фокусе.
+        await aTimeout(320);
+        releaseSecond!();
+        await waitUntil(
+            () => responses.some((entry) => entry.q === 'read_f'),
+            'search response for read_f',
+            { timeout: 3000 },
+        );
+        await modal.updateComplete;
+        await aTimeout(0);
+
+        const inputAfter = pickerSearchInput(modal);
+        expect(inputAfter).to.equal(input);
+        expect(shadow(modal).activeElement === inputAfter
+            || document.activeElement === inputAfter
+            || inputAfter.matches(':focus')).to.equal(true);
+        expect(inputAfter.value).to.equal('read_f');
+        expect(inputAfter.selectionStart).to.equal(6);
+        expect(inputAfter.selectionEnd).to.equal(6);
     });
 
     it('shows manage MCP CTA when MCP servers and tools are empty', async () => {

@@ -37,6 +37,7 @@ from apps.flows.src.models.flow_api import (
     FlowMetadataResponse,
     FlowPreviewShareRequest,
     FlowPreviewShareResponse,
+    FlowReloadFromBundleRequest,
     FlowResponse,
     FlowStoreBundleResponse,
     FlowValidateRequest,
@@ -133,9 +134,11 @@ async def get_flow(flow_id: str, di: Di) -> FlowResponse:
 async def reload_flow_from_bundle(
     flow_id: str,
     di: Di,
+    body: FlowReloadFromBundleRequest | None = None,
 ) -> ReloadFlowFromBundleResponse:
+    base = body if body is not None else FlowReloadFromBundleRequest()
     return await op_flows_reload_from_bundle(
-        FlowsFlowIdPayload(flow_id=flow_id),
+        base.model_copy(update={"flow_id": flow_id}),
         user=require_context().user,
         di=di,
     )

@@ -818,6 +818,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     private _testOp: OpController;
     private _localeSelect: SelectController<string>;
     private _pickerItemsByCategory: Map<string, unknown[]>;
+    /** Query, для которого сейчас лежат items категории (stale-while-revalidate). */
+    private _pickerItemsQueryByCategory: Map<string, string>;
     private _pickerNextOffsetByCategory: Map<string, number>;
     private _pickerHasMoreByCategory: Map<string, boolean>;
     private _pickerErrorByCategory: Map<string, string>;
@@ -844,6 +846,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._tagGroupDescriptions = {};
         this._collapsedTags = {};
         this._pickerItemsByCategory = new Map();
+        this._pickerItemsQueryByCategory = new Map();
         this._pickerNextOffsetByCategory = new Map();
         this._pickerHasMoreByCategory = new Map();
         this._pickerErrorByCategory = new Map();
@@ -872,6 +875,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _resetPickerCache() {
         this._pickerItemsByCategory = new Map();
+        this._pickerItemsQueryByCategory = new Map();
         this._pickerNextOffsetByCategory = new Map();
         this._pickerHasMoreByCategory = new Map();
         this._pickerErrorByCategory = new Map();
@@ -962,13 +966,18 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return typeof this._search === 'string' ? this._search.trim() : '';
     }
 
+    _pickerItemsMatchQuery(category: string, q: string) {
+        return this._pickerItemsByCategory.has(category)
+            && this._pickerItemsQueryByCategory.get(category) === q;
+    }
+
     async _ensurePickerCategoryLoaded(category: string, { append = false } = {}) {
         if (typeof category !== 'string' || category.length === 0) {
             throw new Error('flows-library-picker-modal: picker category required');
         }
         const q = this._pickerSearchQuery();
         if (this._pickerActiveQuery !== q) {
-            this._pickerItemsByCategory.delete(category);
+            // Items не чистим: stale-while-revalidate, чтобы toolbar/search не мигал spinner'ом.
             this._pickerNextOffsetByCategory.delete(category);
             this._pickerHasMoreByCategory.delete(category);
             this._pickerActiveQuery = q;
@@ -978,7 +987,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._pickerLoadingCategory = null;
             this._pickerLoadingMore = false;
         }
-        if (!append && this._pickerItemsByCategory.has(category)) {
+        if (!append && this._pickerItemsMatchQuery(category, q)) {
             return;
         }
         if (append && this._pickerHasMoreByCategory.get(category) !== true) {
@@ -1031,6 +1040,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 merged.push(item);
             }
             this._pickerItemsByCategory.set(category, merged);
+            this._pickerItemsQueryByCategory.set(category, q);
             this._pickerNextOffsetByCategory.set(category, offset + page.items.length);
             this._pickerHasMoreByCategory.set(category, page.hasMore);
             this._pickerLoadingCategory = null;
@@ -1492,11 +1502,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpFlatSearchBody(showTabs: unknown) {
+    _renderMcpFlatSearchResults() {
         const flat = this._buildMcpFlatSearchTools();
         if (flat.length === 0) {
             return html`
-                ${showTabs ? this._renderToolCategoryTabs() : nothing}
                 <platform-empty-state icon="search" title=${this.t('tool_picker_modal.mcp_empty_search')}></platform-empty-state>
                 ${this._pickerHasMore(this._currentPickerCategory())
                     ? html`
@@ -1509,7 +1518,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             `;
         }
         return html`
-            ${showTabs ? this._renderToolCategoryTabs() : nothing}
             <div class="mcp-picker-flat-hint">${this.t('tool_picker_modal.mcp_flat_search_hint')}</div>
             <div class="mcp-picker-tools-grid" role="list">
                 ${flat.map((entry) => this._renderMcpFlatToolCard(entry))}
@@ -1576,6 +1584,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         try {
             await this._syncOp.run({ server_id: serverId });
             this._pickerItemsByCategory.delete('mcp');
+            this._pickerItemsQueryByCategory.delete('mcp');
             await this._ensurePickerCategoryLoaded('mcp');
         } finally {
             this._syncingServerId = null;
@@ -1628,6 +1637,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     variant="secondary"
                     @click=${() => {
                         this._pickerItemsByCategory.delete(category);
+                        this._pickerItemsQueryByCategory.delete(category);
                         this._pickerErrorByCategory.delete(category);
                         void this._ensurePickerCategoryLoaded(category);
                     }}
@@ -1768,39 +1778,27 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpGroupedBody() {
-        const showTabs = this._showToolCategoryTabs();
+    _renderMcpGroupedResults() {
         const category = this._currentPickerCategory();
         const loadError = this._renderPickerLoadError(category);
         if (loadError !== '') {
-            return html`
-                ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                ${loadError}
-            `;
+            return loadError;
         }
         if (this._mcpGroupedInitialBusy()) {
-            return html`
-                ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                <platform-spinner></platform-spinner>
-            `;
+            return html`<platform-spinner></platform-spinner>`;
         }
         if (this._mcpSearchActive()) {
-            return this._renderMcpFlatSearchBody(showTabs);
+            return this._renderMcpFlatSearchResults();
         }
         const groups = this._buildMcpServerGroups();
         if (groups.length === 0) {
             const hasMcpTools = this._mcpToolsBase().length > 0;
             const hasServers = asArray(this._mcpServers.items).length > 0;
-            const emptyContent = (!hasMcpTools && !hasServers)
+            return (!hasMcpTools && !hasServers)
                 ? this._renderMcpEmptyState()
                 : html`<platform-empty-state icon="tool" title=${this.t('tool_picker_modal.empty')}></platform-empty-state>`;
-            return html`
-                ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                ${emptyContent}
-            `;
         }
         return html`
-            ${showTabs ? this._renderToolCategoryTabs() : nothing}
             <div class="mcp-picker-servers">
                 ${groups.map((group) => this._renderMcpServerSection(group))}
             </div>
@@ -1812,6 +1810,15 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         : nothing}
                 `
                 : nothing}
+        `;
+    }
+
+    _renderMcpGroupedBody() {
+        const showTabs = this._showToolCategoryTabs();
+        // Один outer-template: tabs/header-adjacent chrome не remount'ится при смене results.
+        return html`
+            ${showTabs ? this._renderToolCategoryTabs() : nothing}
+            ${this._renderMcpGroupedResults()}
         `;
     }
 
@@ -1833,12 +1840,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
         this._searchDebounceTimer = setTimeout(() => {
             this._searchDebounceTimer = null;
-            const category = this._currentPickerCategory();
-            this._pickerItemsByCategory.delete(category);
-            this._pickerNextOffsetByCategory.delete(category);
-            this._pickerHasMoreByCategory.delete(category);
-            this._pickerActiveQuery = '';
-            void this._ensurePickerCategoryLoaded(category);
+            void this._ensurePickerCategoryLoaded(this._currentPickerCategory());
         }, SEARCH_DEBOUNCE_MS);
     }
 
@@ -2068,38 +2070,27 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
-    _renderBodyToolPick() {
-        if (this._usesMcpGroupedLayout()) {
-            return this._renderMcpGroupedBody();
-        }
+    _renderToolPickResults() {
         const category = this._currentPickerCategory();
         const loadError = this._renderPickerLoadError(category);
         if (loadError !== '') {
-            return html`
-                ${this._renderToolPickerToolbar()}
-                ${loadError}
-            `;
+            return loadError;
         }
         const templatesLoading = this._isCodeNodeTemplates()
             && this._codeTemplates.busy
             && this._templateListRaw().length === 0;
+        // Spinner только при первом load категории: при смене q держим stale items.
         const toolsLoading = this._isPickerCategoryLoading(category)
             && !this._pickerItemsByCategory.has(category);
         if (templatesLoading || toolsLoading) {
-            return html`
-                ${this._renderToolPickerToolbar()}
-                <platform-spinner></platform-spinner>
-            `;
+            return html`<platform-spinner></platform-spinner>`;
         }
         const rows = this._pickModeRows();
         const emptyKey = this._isCodeNodeTemplates()
             ? 'code_node_templates_modal.empty'
             : 'tool_picker_modal.empty';
         if (rows.length === 0) {
-            return html`
-                ${this._renderToolPickerToolbar()}
-                <platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>
-            `;
+            return html`<platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>`;
         }
         const locale = this._pickerLocale();
         const groups = buildToolTagGroups(rows, {
@@ -2108,15 +2099,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             locale,
         });
         if (groups.length === 0) {
-            return html`
-                ${this._renderToolPickerToolbar()}
-                <platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>
-            `;
+            return html`<platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>`;
         }
         const searchActive = _lower(this._pickerSearchQuery()).length > 0;
         const hasMore = this._pickerHasMore(category);
         return html`
-            ${this._renderToolPickerToolbar()}
             <div class="tag-groups" role="list">
                 ${groups.map((group) => this._renderTagGroupCard(group, { forceExpand: searchActive }))}
             </div>
@@ -2128,6 +2115,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         : nothing}
                 `
                 : nothing}
+        `;
+    }
+
+    _renderBodyToolPick() {
+        if (this._usesMcpGroupedLayout()) {
+            return this._renderMcpGroupedBody();
+        }
+        // Один outer-template: toolbar (search) не уничтожается при смене results/spinner/empty.
+        return html`
+            ${this._renderToolPickerToolbar()}
+            ${this._renderToolPickResults()}
         `;
     }
 
