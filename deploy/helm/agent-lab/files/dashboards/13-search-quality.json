@@ -1,305 +1,312 @@
 {
-  "schemaVersion": 39,
-  "uid": "search-quality",
-  "title": "Search Quality / SERP",
-  "tags": [
-    "search",
-    "serp",
-    "quality",
-    "runet"
-  ],
-  "timezone": "utc",
-  "refresh": "1m",
-  "time": {
-    "from": "now-24h",
-    "to": "now"
-  },
-  "templating": {
-    "list": [
-      {
-        "name": "service",
-        "type": "custom",
-        "query": "search",
-        "multi": false,
-        "includeAll": false,
-        "current": {
-          "text": "search",
-          "value": "search"
-        },
-        "options": [
-          {
-            "selected": true,
-            "text": "search",
-            "value": "search"
-          }
-        ]
-      }
+ "schemaVersion": 39,
+ "uid": "search-quality",
+ "title": "Search Quality / SERP",
+ "tags": [
+  "search",
+  "serp",
+  "quality",
+  "runet"
+ ],
+ "timezone": "utc",
+ "refresh": "1m",
+ "time": {
+  "from": "now-24h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "service",
+    "type": "custom",
+    "query": "search",
+    "multi": false,
+    "includeAll": false,
+    "current": {
+     "text": "search",
+     "value": "search"
+    },
+    "options": [
+     {
+      "selected": true,
+      "text": "search",
+      "value": "search"
+     }
     ]
-  },
-  "panels": [
-    {
-      "id": 1,
-      "title": "SERP Served / min",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 0,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [5m])) * 60",
-          "legendFormat": "served",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 2,
-      "title": "SERP Clicks / min",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [5m])) * 60",
-          "legendFormat": "clicks",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 3,
-      "title": "CTR %",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [15m])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [15m])) + 1e-10) * 100",
-          "legendFormat": "CTR %",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 4,
-      "title": "Avg Click Position",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [15m])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [15m])) + 1e-10)",
-          "legendFormat": "avg position",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 5,
-      "title": "Click Position p50 / p90",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "quantile_over_time(0.5, {service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [15m])",
-          "legendFormat": "p50",
-          "refId": "A",
-          "queryType": "range"
-        },
-        {
-          "expr": "quantile_over_time(0.9, {service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [15m])",
-          "legendFormat": "p90",
-          "refId": "B",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 6,
-      "title": "Zero-Result SERP %",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" | serp_results_count=0 [15m])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [15m])) + 1e-10) * 100",
-          "legendFormat": "zero-result %",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 7,
-      "title": "Clicks by Provider / min",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum by (serp_click_provider) (rate({service=~\"$service\"} | json | message=\"search.serp.click\" [15m])) * 60",
-          "legendFormat": "{{serp_click_provider}}",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 8,
-      "title": "Recent Clicks",
-      "type": "logs",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "{service=~\"$service\"} | json | message=\"search.serp.click\" | line_format \"{{.serp_query}} -> #{{.serp_click_position}} {{.serp_click_url}}\"",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      }
-    }
+   }
   ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "title": "SERP Served / min",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [$__interval])) * 60",
+     "legendFormat": "served",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 2,
+   "title": "SERP Clicks / min",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 8,
+    "y": 0
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [$__interval])) * 60",
+     "legendFormat": "clicks",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 3,
+   "title": "CTR %",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 16,
+    "y": 0
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [$__interval])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [$__interval])) + 1e-10) * 100",
+     "legendFormat": "CTR %",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 4,
+   "title": "Avg Click Position",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 0,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [$__interval])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.click\" [$__interval])) + 1e-10)",
+     "legendFormat": "avg position",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 5,
+   "title": "Click Position p50 / p90",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 8,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "quantile_over_time(0.5, {service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [$__interval])",
+     "legendFormat": "p50",
+     "refId": "A",
+     "queryType": "range"
+    },
+    {
+     "expr": "quantile_over_time(0.9, {service=~\"$service\"} | json | message=\"search.serp.click\" | unwrap serp_click_position [$__interval])",
+     "legendFormat": "p90",
+     "refId": "B",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 6,
+   "title": "Zero-Result SERP %",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 16,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" | serp_results_count=0 [$__interval])) / (sum(rate({service=~\"$service\"} | json | message=\"search.serp.served\" [$__interval])) + 1e-10) * 100",
+     "legendFormat": "zero-result %",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 7,
+   "title": "Clicks by Provider / min",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 12
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (serp_click_provider) (rate({service=~\"$service\"} | json | message=\"search.serp.click\" [$__interval])) * 60",
+     "legendFormat": "{{serp_click_provider}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 8,
+   "title": "Recent Clicks",
+   "type": "logs",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 12
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "{service=~\"$service\"} | json | message=\"search.serp.click\" | line_format \"{{.serp_query}} -> #{{.serp_click_position}} {{.serp_click_url}}\"",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending"
+   }
+  }
+ ]
 }

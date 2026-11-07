@@ -17,10 +17,23 @@ contactPoints:
           bottoken: ${TELEGRAM_ALERTS_BOT_TOKEN}
           chatid: ${TELEGRAM_ALERTS_CHAT_ID}
           message: |-
-            {{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} {{ .CommonLabels.alertname }}
-            {{ range .Alerts }}{{ .Annotations.summary }}
-            {{ .Annotations.description }}
-            {{ end }}
+            {{ if eq .Status "firing" }}🔥 <b>{{ .CommonLabels.alertname }}</b>{{ else }}✅ <b>{{ .CommonLabels.alertname }} · resolved</b>{{ end }}
+            {{- range .Alerts }}
+            {{- if .Labels.service }}
+            <b>service:</b> <code>{{ .Labels.service }}</code>{{ end }}
+            {{- if .Labels.pod }}
+            <b>pod:</b> <code>{{ .Labels.pod }}{{ if .Labels.container }}/{{ .Labels.container }}{{ end }}</code>{{ end }}
+            {{- if .Labels.job }}
+            <b>target:</b> <code>{{ .Labels.job }}{{ if .Labels.instance }}@{{ .Labels.instance }}{{ end }}</code>{{ end }}
+            {{- if .Labels.node }}
+            <b>node:</b> <code>{{ .Labels.node }}</code>{{ end }}
+            {{- if .Labels.persistentvolumeclaim }}
+            <b>pvc:</b> <code>{{ .Labels.persistentvolumeclaim }}</code>{{ end }}
+            {{- if .Labels.phase }}
+            <b>phase:</b> <code>{{ .Labels.phase }}</code>{{ end }}
+            <b>severity:</b> <code>{{ .Labels.severity }}</code>
+            <i>{{ .Annotations.description }}</i>
+            {{- end }}
           parse_mode: HTML
           disable_notifications: false
         disableResolveMessage: false

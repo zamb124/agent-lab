@@ -1,486 +1,486 @@
 {
-  "schemaVersion": 39,
-  "id": null,
-  "uid": "redis",
-  "title": "Redis",
-  "tags": [
-    "redis",
-    "taskiq",
-    "memory",
-    "inventory"
-  ],
-  "timezone": "utc",
-  "refresh": "30s",
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "templating": {
-    "list": [
-      {
-        "name": "service",
-        "type": "custom",
-        "query": "idle-worker",
-        "multi": false,
-        "includeAll": false,
-        "current": {
-          "text": "idle-worker",
-          "value": "idle-worker"
-        },
-        "options": [
-          {
-            "selected": true,
-            "text": "idle-worker",
-            "value": "idle-worker"
-          }
-        ]
-      },
-      {
-        "name": "redis_db",
-        "type": "custom",
-        "query": "0,1",
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".+",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      }
+ "schemaVersion": 39,
+ "id": null,
+ "uid": "redis",
+ "title": "Redis",
+ "tags": [
+  "redis",
+  "taskiq",
+  "memory",
+  "inventory"
+ ],
+ "timezone": "utc",
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "service",
+    "type": "custom",
+    "query": "idle-worker",
+    "multi": false,
+    "includeAll": false,
+    "current": {
+     "text": "idle-worker",
+     "value": "idle-worker"
+    },
+    "options": [
+     {
+      "selected": true,
+      "text": "idle-worker",
+      "value": "idle-worker"
+     }
     ]
-  },
-  "panels": [
-    {
-      "id": 1,
-      "title": "Used Memory (bytes)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (redis_db, redis_url_label) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap used_memory_bytes [15m]))",
-          "legendFormat": "db{{redis_db}} {{redis_url_label}}",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 2,
-      "title": "DBSIZE",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (redis_db, redis_url_label) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap dbsize [15m]))",
-          "legendFormat": "db{{redis_db}} {{redis_url_label}}",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 3,
-      "title": "Keys Without TTL",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (redis_db) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap no_ttl_total [15m]))",
-          "legendFormat": "db{{redis_db}}",
-          "refId": "A",
-          "instant": true,
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "graphMode": "none",
-        "colorMode": "background",
-        "justifyMode": "center"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 4,
-      "title": "platform_schedules Keys",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (redis_db) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=\"1\" | unwrap platform_schedules_count [15m]))",
-          "legendFormat": "db1",
-          "refId": "A",
-          "instant": true,
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0
-        }
-      }
-    },
-    {
-      "id": 5,
-      "title": "SCAN vs DBSIZE Mismatch",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 6
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(count_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | scan_dbsize_mismatch=\"true\" [$__range]))",
-          "legendFormat": "db{{redis_db}}",
-          "refId": "A",
-          "instant": true,
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "graphMode": "none",
-        "colorMode": "background"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "OK",
-                  "color": "green"
-                }
-              }
-            },
-            {
-              "type": "range",
-              "options": {
-                "from": 1,
-                "to": 999999999,
-                "result": {
-                  "text": "MISMATCH",
-                  "color": "red"
-                }
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": 6,
-      "title": "TaskIQ Stream XLEN",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_xlen [15m]))",
-          "legendFormat": "{{stream_name}}",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 7,
-      "title": "Stream XLEN vs Maxlen",
-      "type": "table",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_xlen [15m]))",
-          "legendFormat": "{{stream_name}}",
-          "refId": "A",
-          "instant": true,
-          "queryType": "range"
-        },
-        {
-          "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_maxlen [15m]))",
-          "legendFormat": "{{stream_name}} maxlen",
-          "refId": "B",
-          "instant": true,
-          "queryType": "range"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "renameByName": {
-              "stream_name": "Stream",
-              "Value #A": "XLEN",
-              "Value #B": "Maxlen"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "Top Prefixes by Sample Memory",
-      "type": "table",
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 20
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "topk(25, max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_sample_memory_bytes [15m])))",
-          "legendFormat": "db{{redis_db}} {{redis_prefix}}",
-          "refId": "A",
-          "instant": true,
-          "queryType": "range"
-        },
-        {
-          "expr": "max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_key_count [15m]))",
-          "legendFormat": "keys",
-          "refId": "B",
-          "instant": true,
-          "queryType": "range"
-        },
-        {
-          "expr": "max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_no_ttl_count [15m]))",
-          "legendFormat": "no_ttl",
-          "refId": "C",
-          "instant": true,
-          "queryType": "range"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "renameByName": {
-              "redis_db": "DB",
-              "redis_prefix": "Prefix",
-              "Value #A": "Sample Mem",
-              "Value #B": "Keys",
-              "Value #C": "No TTL"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "title": "Inventory Tick Duration (ms)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 30
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "max(last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.tick_completed\" | unwrap redis_inventory_duration_ms [15m]))",
-          "legendFormat": "duration",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 10,
-      "title": "Inventory Failures / min",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 30
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=\"redis.inventory.tick_failed\" [5m])) * 60",
-          "legendFormat": "failures/min",
-          "refId": "A",
-          "queryType": "range"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        }
-      }
-    },
-    {
-      "id": 11,
-      "title": "Recent Redis Inventory Logs",
-      "type": "logs",
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "expr": "{service=~\"$service\"} | json | message=~\"redis\\\\.inventory\\\\..*\"",
-          "refId": "A",
-          "queryType": "logs"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      }
+   },
+   {
+    "name": "redis_db",
+    "type": "custom",
+    "query": "0,1",
+    "multi": true,
+    "includeAll": true,
+    "allValue": ".+",
+    "current": {
+     "text": "All",
+     "value": "$__all"
     }
+   }
   ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "title": "Used Memory (bytes)",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (redis_db, redis_url_label) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap used_memory_bytes [15m]))",
+     "legendFormat": "db{{redis_db}} {{redis_url_label}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   }
+  },
+  {
+   "id": 2,
+   "title": "DBSIZE",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (redis_db, redis_url_label) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap dbsize [15m]))",
+     "legendFormat": "db{{redis_db}} {{redis_url_label}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   }
+  },
+  {
+   "id": 3,
+   "title": "Keys Without TTL",
+   "type": "stat",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 0,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (redis_db) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | unwrap no_ttl_total [15m]))",
+     "legendFormat": "db{{redis_db}}",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "graphMode": "none",
+    "colorMode": "background",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "platform_schedules Keys",
+   "type": "stat",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 8,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (redis_db) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=\"1\" | unwrap platform_schedules_count [15m]))",
+     "legendFormat": "db1",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0
+    }
+   }
+  },
+  {
+   "id": 5,
+   "title": "SCAN vs DBSIZE Mismatch",
+   "type": "stat",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 16,
+    "y": 6
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | scan_dbsize_mismatch=\"true\" [$__range]))",
+     "legendFormat": "db{{redis_db}}",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "graphMode": "none",
+    "colorMode": "background"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "OK",
+         "color": "green"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 999999999,
+        "result": {
+         "text": "MISMATCH",
+         "color": "red"
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 6,
+   "title": "TaskIQ Stream XLEN",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 12
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_xlen [15m]))",
+     "legendFormat": "{{stream_name}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   }
+  },
+  {
+   "id": 7,
+   "title": "Stream XLEN vs Maxlen",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 12
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_xlen [15m]))",
+     "legendFormat": "{{stream_name}}",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    },
+    {
+     "expr": "max by (stream_name) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.stream_length\" | redis_db=\"1\" | unwrap stream_maxlen [15m]))",
+     "legendFormat": "{{stream_name}} maxlen",
+     "refId": "B",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "stream_name": "Stream",
+       "Value #A": "XLEN",
+       "Value #B": "Maxlen"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "title": "Top Prefixes by Sample Memory",
+   "type": "table",
+   "gridPos": {
+    "h": 10,
+    "w": 24,
+    "x": 0,
+    "y": 20
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(25, max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_sample_memory_bytes [15m])))",
+     "legendFormat": "db{{redis_db}} {{redis_prefix}}",
+     "refId": "A",
+     "instant": true,
+     "queryType": "instant"
+    },
+    {
+     "expr": "max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_key_count [15m]))",
+     "legendFormat": "keys",
+     "refId": "B",
+     "instant": true,
+     "queryType": "instant"
+    },
+    {
+     "expr": "max by (redis_db, redis_prefix) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.prefix_stats\" | redis_db=~\"$redis_db\" | unwrap prefix_no_ttl_count [15m]))",
+     "legendFormat": "no_ttl",
+     "refId": "C",
+     "instant": true,
+     "queryType": "instant"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "redis_db": "DB",
+       "redis_prefix": "Prefix",
+       "Value #A": "Sample Mem",
+       "Value #B": "Keys",
+       "Value #C": "No TTL"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "title": "Inventory Tick Duration (ms)",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 30
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "max(last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.tick_completed\" | unwrap redis_inventory_duration_ms [15m]))",
+     "legendFormat": "duration",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   }
+  },
+  {
+   "id": 10,
+   "title": "Inventory Failures / min",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 30
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=~\"$service\"} | json | message=\"redis.inventory.tick_failed\" [5m])) * 60",
+     "legendFormat": "failures/min",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10
+     }
+    }
+   }
+  },
+  {
+   "id": 11,
+   "title": "Recent Redis Inventory Logs",
+   "type": "logs",
+   "gridPos": {
+    "h": 12,
+    "w": 24,
+    "x": 0,
+    "y": 36
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "{service=~\"$service\"} | json | message=~\"redis\\\\.inventory\\\\..*\"",
+     "refId": "A",
+     "queryType": "logs"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending"
+   }
+  }
+ ]
 }

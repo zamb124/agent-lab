@@ -33,7 +33,8 @@ ALERTS_FILE = (
 LOKI_DATASOURCE_UID = "loki"
 
 _STALE_AFTER_SECONDS = 2 * 3600
-_WORKERS = 6
+_WORKERS = 4
+_REQUEST_TIMEOUT = 60.0
 
 
 @dataclass
@@ -44,6 +45,8 @@ class ProbeTarget:
     name: str  # panel title / alert title
     ref: str  # panel id / alert uid + refId
     expr: str
+    query_type: str = "range"  # "instant" | "range"
+    datasource_uid: str = ""  # non-loki datasources are skipped
 
 
 @dataclass
@@ -124,6 +127,8 @@ def iter_panel_targets() -> list[ProbeTarget]:
                         name=panel.get("title") or f"panel-{panel.get('id')}",
                         ref=f"p{panel.get('id')}/{target.get('refId', idx)}",
                         expr=_substitute_variables(expr, variables),
+                        query_type=str(target.get("queryType") or "range"),
+                        datasource_uid=str(uid or ""),
                     )
                 )
     return targets
@@ -135,7 +140,8 @@ def iter_alert_targets() -> list[ProbeTarget]:
     for group in data.get("groups") or []:
         for rule in group.get("rules") or []:
             for query in rule.get("data") or []:
-                if query.get("datasourceUid") == "__expr__":
+                ds_uid = str(query.get("datasourceUid") or "")
+                if ds_uid == "__expr__":
                     continue
                 expr = (query.get("model") or {}).get("expr")
                 if not expr:
@@ -148,6 +154,8 @@ def iter_alert_targets() -> list[ProbeTarget]:
                         name=f"{rule.get('uid')}: {rule.get('title')}",
                         ref=str(query.get("refId")),
                         expr=expr,
+                        query_type="range",
+                        datasource_uid=ds_uid,
                     )
                 )
     return targets
@@ -156,7 +164,7 @@ def iter_alert_targets() -> list[ProbeTarget]:
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def _loki_get(base_url: str, path: str, params: dict[str, str], timeout: float = 30.0) -> dict:
+def _loki_get(base_url: str, path: str, params: dict[str, str], timeout: float = _REQUEST_TIMEOUT) -> dict:
     url = f"{base_url}{path}?{urllib.parse.urlencode(params)}"
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
     with _OPENER.open(request, timeout=timeout) as response:
@@ -178,7 +186,8 @@ def _series_stats(matrix: list[dict]) -> tuple[int, float | None]:
     series = len(matrix)
     last_ts: float | None = None
     for stream in matrix:
-        for ts_str, _value in stream.get("values") or []:
+        points = stream.get("values") or ([stream["value"]] if stream.get("value") else [])
+        for ts_str, _value in points:
             ts = float(ts_str)
             if last_ts is None or ts > last_ts:
                 last_ts = ts
@@ -198,26 +207,68 @@ def _entries_stats(streams: list[dict]) -> tuple[int, float | None]:
 
 
 def _raw_log_query(expr: str) -> str:
-    """Strip metric machinery so a panel's selector can run as a plain log query.
+    """Extract the inner `{selector} | json | filters` so a panel's underlying
+    events can be counted as plain log lines.
 
-    Keeps `{selector} | json | field filters`; drops `| unwrap ...` and anything
-    after it (unwrap value/label_format stages are metric-only).
+    Cuts at the first `{`, then walks forward stopping at `| unwrap`,
+    `| label_format`, `| line_format`, a `[duration]` window, or the closing
+    paren of the innermost function — whichever comes first.
     """
-    idx = expr.find("| unwrap")
-    head = expr if idx == -1 else expr[:idx]
-    # unwrap with conversion function is written `| unwrap <field>`; also drop
-    # `| label_format` if it trailed unwrap usage in metric context.
-    return head.strip()
+    start = expr.find("{")
+    if start == -1:
+        return ""
+    depth = 0
+    for i in range(start, len(expr)):
+        ch = expr[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        elif depth == 0:
+            rest = expr[i:]
+            if (
+                ch in "[)"
+                or rest.startswith("| unwrap")
+                or rest.startswith("| label_format")
+                or rest.startswith("| line_format")
+            ):
+                return expr[start:i].strip()
+    return expr[start:].strip()
+
+
+def _inner_window_seconds(expr: str) -> int | None:
+    """Smallest `[Nm]`/`[Ns]`/`[Nh]` range-selector window in the expression."""
+    units = {"s": 1, "m": 60, "h": 3600}
+    windows = [int(n) * units[u] for n, u in re.findall(r"\[(\d+)\s*([smh])\]", expr)]
+    return min(windows) if windows else None
 
 
 def probe_target(base_url: str, target: ProbeTarget, start: float, end: float, step: int) -> ProbeResult:
-    if _is_metric_query(target.expr):
+    if target.datasource_uid and target.datasource_uid != LOKI_DATASOURCE_UID:
+        return ProbeResult(target=target, status="skipped", detail={"datasource": target.datasource_uid})
+    metric = _is_metric_query(target.expr)
+    # Instant/stat panels evaluate at a single point — a range request would
+    # stack the probe window on top of the expr's own lookback and exceed
+    # Loki max_query_length. Anything asking for a >=2h lookback is
+    # instant-only by the same reasoning.
+    instant = target.query_type == "instant" or (metric and re.search(r"\[(?:[2-9]|[1-9]\d+)h\]", target.expr))
+    if metric and instant:
+        params = {"query": target.expr, "time": str(end)}
+        endpoint = "/loki/api/v1/query"
+        result_kind = "matrix"
+    elif metric:
+        # Range step must not exceed the expr's inner window — a 30m step with
+        # a [2m] window covers ~7% of the timeline and misreports sparse
+        # panels as empty. Match the window like Grafana's auto-step does.
+        inner = _inner_window_seconds(target.expr)
+        eff_step = max(60, min(step, inner)) if inner else step
         params = {
             "query": target.expr,
             "start": str(int(start)),
             "end": str(int(end)),
-            "step": str(step),
+            "step": str(eff_step),
         }
+        endpoint = "/loki/api/v1/query_range"
         result_kind = "matrix"
     else:
         params = {
@@ -227,9 +278,10 @@ def probe_target(base_url: str, target: ProbeTarget, start: float, end: float, s
             "limit": "500",
             "direction": "backward",
         }
+        endpoint = "/loki/api/v1/query_range"
         result_kind = "streams"
     try:
-        payload = _loki_get(base_url, "/loki/api/v1/query_range", params)
+        payload = _loki_get(base_url, endpoint, params)
     except Exception as exc:  # noqa: BLE001 - probe reports, never raises
         return ProbeResult(target=target, status="error", error=f"request: {exc}")
 
@@ -256,7 +308,7 @@ def probe_target(base_url: str, target: ProbeTarget, start: float, end: float, s
     # "events exist but the rate/quantile window missed them" (sparse traffic).
     if status == "empty" and result_kind == "matrix":
         raw = _raw_log_query(target.expr)
-        if raw != target.expr or "| json" in raw:
+        if raw and (raw != target.expr or "| json" in raw):
             entries_raw, last_raw = _raw_entry_count(base_url, raw, start, end)
             probe.detail["raw_events"] = entries_raw
             if last_raw is not None:
