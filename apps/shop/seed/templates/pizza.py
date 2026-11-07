@@ -12,6 +12,7 @@ from apps.shop.models.enums import (
     ModifierSelectionMode,
     PromoStacking,
     ShopDeliveryType,
+    ShopFeedbackChip,
     ShopKind,
     ShopOrderStatus,
     ShopShelfKind,
@@ -24,6 +25,7 @@ from apps.shop.seed.spec import (
     DemoModifierGroupSpec,
     DemoOptionSpec,
     DemoOrderGeoSpec,
+    DemoFeedbackSpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -46,6 +48,8 @@ PIZZA = DemoShopSpec(
     phone="+7 (495) 300-40-50",
     city="Москва",
     address="Столешников пер., 5",
+    lat=55.7627,
+    lng=37.6139,
     timezone="Europe/Moscow",
     theme={
         "accent_color": "#e2553f",
@@ -488,6 +492,20 @@ PIZZA = DemoShopSpec(
             subtitle="Сезонные пиццы",
         ),
         DemoShelfSpec(
+            key="usual",
+            kind=ShopShelfKind.USUAL,
+            layout=ShopShelfLayout.RAIL,
+            title="Как всегда",
+            subtitle="Ваш привычный заказ — в один клик",
+        ),
+        DemoShelfSpec(
+            key="favorites",
+            kind=ShopShelfKind.FAVORITES,
+            layout=ShopShelfLayout.RAIL,
+            title="Избранное",
+            subtitle="Позиции, отмеченные сердцем",
+        ),
+        DemoShelfSpec(
             key="upsell",
             kind=ShopShelfKind.UPSELL,
             placement=ShopShelfPlacement.CART,
@@ -543,8 +561,8 @@ PIZZA = DemoShopSpec(
             geo=DemoOrderGeoSpec(
                 delivery_lat=55.7540,
                 delivery_lng=37.6220,
-                shop_lat=55.7590,
-                shop_lng=37.6150,
+                shop_lat=55.7627,
+                shop_lng=37.6139,
                 route={
                     "type": "LineString",
                     "coordinates": [
@@ -593,6 +611,11 @@ PIZZA = DemoShopSpec(
             address="Москва, Петровский бул., 21, кв. 7",
             age_hours=26.0,
             history_minutes=(3, 12, 25, 47),
+            feedback=DemoFeedbackSpec(
+                rating=4,
+                chips=(ShopFeedbackChip.QUALITY, ShopFeedbackChip.PRICE),
+                comment="«Четыре сыра» горячая и сочная, морс кисловат на мой вкус. В целом доволен.",
+            ),
         ),
     ),
 )

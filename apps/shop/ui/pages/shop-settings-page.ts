@@ -655,6 +655,7 @@ export class ShopSettingsPage extends PlatformPage {
             { key: 'menu',        done: Number(shop.products_count ?? 0) > 0,        optional: false, section: null },
             { key: 'hours',       done: Object.keys(wh).length > 0,                  optional: false, section: 'hours' },
             { key: 'order',       done: Boolean(shop.pickup_enabled) || Boolean(shop.delivery_enabled) || Boolean(shop.onsite_enabled), optional: false, section: 'delivery' },
+            { key: 'point',       done: typeof shop.lat === 'number' && typeof shop.lng === 'number', optional: false, section: 'delivery' },
             { key: 'notify',      done: Boolean(shop.telegram_connected),            optional: true,  section: 'notifications' },
         ];
     }

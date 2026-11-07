@@ -84,7 +84,7 @@ class TestAggregate:
         for i, suffix in enumerate(("one", "two")):
             slug = f"agg{i}-{unique_id[:6]}"
             resp = await shop_client.post(
-                _SHOPS, json={"slug": slug, "name": f"Rest {suffix}", "kind": "restaurant"}
+                _SHOPS, json={"slug": slug, "name": f"Rest {suffix}", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
             )
             shop = resp.json()
             await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
@@ -108,7 +108,7 @@ class TestAggregate:
     ) -> None:
         slug = f"list-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "Listed", "kind": "bakery"}
+            _SHOPS, json={"slug": slug, "name": "Listed", "kind": "bakery", "lat": 55.7512, "lng": 37.6184}
         )
         await shop_client.post(f"{_SHOPS}/{resp.json()['shop_id']}/publish")
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/aggregate/shops")
@@ -120,7 +120,7 @@ class TestAggregate:
     ) -> None:
         slug = f"nosea-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "DraftRest"}
+            _SHOPS, json={"slug": slug, "name": "DraftRest", "lat": 55.7512, "lng": 37.6184}
         )
         shop = resp.json()
         await shop_client.post(
@@ -142,7 +142,7 @@ class TestAggregate:
         """pg_trgm-поиск: совпадение по описанию и устойчивость к опечатке."""
         slug = f"trgm-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "TrgmRest", "kind": "restaurant"}
+            _SHOPS, json={"slug": slug, "name": "TrgmRest", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
         )
         shop = resp.json()
         await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")

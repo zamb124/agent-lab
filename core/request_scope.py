@@ -118,6 +118,18 @@ def require_customer() -> CustomerScope:
     )
 
 
+def optional_customer() -> CustomerScope | None:
+    """Покупатель, если customer_token валиден; анониму — ``None``.
+
+    Для анонимных публичных путей, где авторизованному покупателю отдаётся
+    персональный срез (предпросмотр скидки лояльности в расчёте корзины).
+    """
+    context = get_context()
+    if context is None or context.customer is None:
+        return None
+    return require_customer()
+
+
 async def require_system_admin(authz_service: AuthzService) -> CompanyScope:
     """Платформенный админ: активная компания `system` и FGA `company#admin` в ней."""
     scope = require_company()

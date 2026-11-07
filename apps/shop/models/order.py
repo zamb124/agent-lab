@@ -75,6 +75,8 @@ class ShopOrder(PlatformModel):
     comment: str = DbField(default="", max_length=1000)
     items_total_minor: int = DbField(ge=0)
     discount_minor: int = DbField(default=0, ge=0)
+    # Скидка наградой лояльности, применённая при создании заказа.
+    loyalty_reward_minor: int = DbField(default=0, ge=0)
     delivery_fee_minor: int = DbField(default=0, ge=0)
     total_minor: int = DbField(ge=0)
     promos: list[dict[str, object]] = DbField(default_factory=list, db_type="JSONB")

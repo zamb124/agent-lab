@@ -19,7 +19,7 @@ _SHOPS = f"{API_PREFIX}/shops"
 
 async def _published_shop(client: AsyncClient, slug: str) -> JsonObject:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Feed {slug}", "kind": "cafe"}
+        _SHOPS, json={"slug": slug, "name": f"Feed {slug}", "kind": "cafe", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = parse_json_object(resp.text, "shop")

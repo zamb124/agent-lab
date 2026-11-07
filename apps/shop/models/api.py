@@ -8,7 +8,9 @@ from pydantic import Field, model_validator
 
 from apps.shop.models.enums import (
     ShopDeliveryType,
+    ShopFeedbackChip,
     ShopKind,
+    ShopLoyaltyRewardKind,
     ShopOrderSource,
     ShopOrderStatus,
     ShopStatus,
@@ -74,13 +76,17 @@ class ShopFeatures(StrictBaseModel):
     полоса КБЖУ в карточке и поля в редакторе товара; ``back_in_stock`` —
     кнопка «Сообщить о появлении» и подписки на возврат позиций;
     ``favorites`` — сердечки на карточках и полка «Избранное» (только
-    для авторизованных покупателей). Управляемые фичи (полки, баннеры)
-    флага не требуют: нет данных — нет блока на витрине.
+    для авторизованных покупателей); ``reviews`` — оценка выполненного
+    заказа, вкладка «Отзывы» и бейдж рейтинга витрины. Управляемые фичи
+    (полки, баннеры) флага не требуют: нет данных — нет блока на витрине.
     """
 
     nutrition: bool = False
     back_in_stock: bool = True
     favorites: bool = True
+    reviews: bool = True
+    # «N-я покупка — награда»: прогресс-бар, claim в чекауте, возврат при отмене.
+    loyalty: bool = False
 
 
 def normalize_shop_features(features: JsonObject) -> JsonObject:
@@ -165,6 +171,15 @@ class ShopCreateRequest(StrictBaseModel):
     slug: str = Field(min_length=3, max_length=40)
     name: str = Field(min_length=1, max_length=200)
     kind: ShopKind = ShopKind.RESTAURANT
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def _lat_lng_pair(self) -> Self:
+        """Точка магазина пишется парой: lat без lng (и наоборот) — ошибка ввода."""
+        if ("lat" in self.model_fields_set) != ("lng" in self.model_fields_set):
+            raise ValueError("lat and lng must be provided together")
+        return self
 
 
 CourierMode = Literal["car", "foot", "bike", "scooter"]
@@ -523,6 +538,7 @@ class ShopOrderResponse(StrictBaseModel):
     comment: str
     items_total_minor: int
     discount_minor: int
+    loyalty_reward_minor: int = 0
     delivery_fee_minor: int
     total_minor: int
     promos: list[ShopPromoAppliedResponse] = []
@@ -555,6 +571,8 @@ class ShopOrderCreateRequest(StrictBaseModel):
     delivery_intercom: str = Field(default="", max_length=64)
     table_id: str | None = Field(default=None, max_length=64)
     comment: str = Field(default="", max_length=1000)
+    # Применить доступную награду лояльности (списывается на сервере).
+    use_loyalty_reward: bool = False
     source: ShopOrderSource = ShopOrderSource.WEB
     idempotency_key: str = Field(default="", max_length=128)
     honeypot: str = Field(default="", max_length=64)
@@ -595,6 +613,8 @@ class ShopCartPriceRequest(StrictBaseModel):
 
     items: list[ShopOrderItemRequest] = Field(min_length=1, max_length=99)
     delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
+    # Показать строку «Награда лояльности» — предпросмотр без списания.
+    use_loyalty_reward: bool = False
 
 
 class ShopCartPriceLineResponse(StrictBaseModel):
@@ -608,6 +628,7 @@ class ShopCartPriceResponse(StrictBaseModel):
     lines: list[ShopCartPriceLineResponse]
     items_total_minor: int
     discount_minor: int
+    loyalty_reward_minor: int = 0
     delivery_fee_minor: int
     total_minor: int
     applied_promos: list[ShopPromoAppliedResponse]
@@ -670,6 +691,20 @@ class ShopOrderItemPreview(StrictBaseModel):
     qty: int
 
 
+class ShopOrderFeedbackResponse(StrictBaseModel):
+    """Отзыв покупателя на заказ — его карточка в кабинете.
+
+    ``chip_labels`` — подписи тегов в полярности его оценки (4–5 —
+    позитивные, 1–3 — негативные), локальные словари в JS запрещены.
+    """
+
+    rating: int
+    chips: list[str]
+    chip_labels: dict[str, str] = Field(default_factory=dict)
+    comment: str = ""
+    created_at: str
+
+
 class ShopMyOrderShopBlock(StrictBaseModel):
     """Магазин заказа — кто и где его исполняет (для кросс-витринной ленты)."""
 
@@ -707,6 +742,9 @@ class ShopMyOrderListItemResponse(StrictBaseModel):
     items_preview: list[ShopOrderItemPreview] = Field(default_factory=list)
     items_count: int = 0
     shop: ShopMyOrderShopBlock
+    # Оценка заказа: can_review — завершён и витрина принимает отзывы.
+    can_review: bool = False
+    feedback: ShopOrderFeedbackResponse | None = None
 
 
 class ShopMyOrderDetailResponse(ShopMyOrderListItemResponse):
@@ -714,6 +752,7 @@ class ShopMyOrderDetailResponse(ShopMyOrderListItemResponse):
 
     items_total_minor: int
     discount_minor: int
+    loyalty_reward_minor: int = 0
     delivery_fee_minor: int
     comment: str = ""
     promos: list[ShopPromoAppliedResponse] = Field(default_factory=list)
@@ -836,6 +875,16 @@ class ShopPersonalUsualItem(StrictBaseModel):
     selections: list[ShopOrderItemSelection]
 
 
+class ShopPersonalLoyalty(StrictBaseModel):
+    """Состояние лояльности покупателя: прогресс и доступные награды."""
+
+    progress: int
+    orders_goal: int
+    rewards_available: int
+    reward_kind: ShopLoyaltyRewardKind
+    reward_value: int
+
+
 class ShopPersonalResponse(StrictBaseModel):
     """`GET /public/storefront/{slug}/personal` — данные авторизованного
     покупателя на витрине: избранное, «как всегда», подписки на возврат."""
@@ -843,6 +892,8 @@ class ShopPersonalResponse(StrictBaseModel):
     favorite_ids: list[str]
     usual: list[ShopPersonalUsualItem]
     back_in_stock_ids: list[str]
+    # None — механика лояльности выключена флагом витрины.
+    loyalty: ShopPersonalLoyalty | None = None
 
 
 class ShopNotifyBackRequest(StrictBaseModel):
@@ -865,3 +916,55 @@ class ShopFavoriteSetRequest(StrictBaseModel):
 
 class ShopFavoriteResponse(StrictBaseModel):
     favorite: bool
+
+
+class ShopFeedbackSetRequest(StrictBaseModel):
+    """Оценка выполненного заказа — slug и код заказа идут из path.
+
+    Один отзыв на заказ: повторная отправка — редактирование своей
+    оценки (идемпотентно по ключу заказа). Теги — ключи
+    ``ShopFeedbackChip``; подписи в полярности оценки отдаёт сервер.
+    """
+
+    rating: int = Field(ge=1, le=5)
+    chips: list[ShopFeedbackChip] = Field(default_factory=list, max_length=6)
+    comment: str = Field(default="", max_length=1000)
+
+
+class ShopReviewItemResponse(StrictBaseModel):
+    """Публичный отзыв на витрине — имя снапшотом из заказа, без PII."""
+
+    rating: int
+    chips: list[str]
+    chip_labels: dict[str, str] = Field(default_factory=dict)
+    comment: str = ""
+    customer_name: str = ""
+    created_at: str
+
+
+class ShopReviewsResponse(StrictBaseModel):
+    """`GET /storefront/{slug}/reviews` — агрегат рейтинга + лента."""
+
+    avg_rating: float | None = None
+    count: int = 0
+    items: list[ShopReviewItemResponse] = Field(default_factory=list)
+
+
+# --- Лояльность: программа «N-я покупка — награда» ---
+
+
+class ShopLoyaltyProgramSetRequest(StrictBaseModel):
+    """Настройка программы директором магазина."""
+
+    orders_goal: int = Field(default=5, ge=1, le=100)
+    reward_kind: ShopLoyaltyRewardKind = ShopLoyaltyRewardKind.DISCOUNT_MINOR
+    # minor-единицы (≤10 000 000) или процент 1..90 — граница по reward_kind
+    # проверяется в сервисе.
+    reward_value: int = Field(ge=1)
+
+
+class ShopLoyaltyProgramResponse(StrictBaseModel):
+    shop_id: str
+    orders_goal: int
+    reward_kind: ShopLoyaltyRewardKind
+    reward_value: int

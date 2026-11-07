@@ -10,6 +10,7 @@ from apps.shop.models.enums import (
     ModifierPriceMode,
     ModifierSelectionMode,
     ShopDeliveryType,
+    ShopFeedbackChip,
     ShopKind,
     ShopOrderStatus,
     ShopShelfKind,
@@ -21,6 +22,7 @@ from apps.shop.seed.spec import (
     DemoCategorySpec,
     DemoModifierGroupSpec,
     DemoOptionSpec,
+    DemoFeedbackSpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -44,6 +46,8 @@ CAFE = DemoShopSpec(
     phone="+7 (495) 100-20-30",
     city="Москва",
     address="ул. Покровка, 17",
+    lat=55.7598,
+    lng=37.6458,
     timezone="Europe/Moscow",
     theme={
         "accent_color": "#c98f4e",
@@ -393,6 +397,13 @@ CAFE = DemoShopSpec(
             subtitle="Ваш привычный заказ — в один клик",
         ),
         DemoShelfSpec(
+            key="favorites",
+            kind=ShopShelfKind.FAVORITES,
+            layout=ShopShelfLayout.RAIL,
+            title="Избранное",
+            subtitle="Позиции, отмеченные сердцем",
+        ),
+        DemoShelfSpec(
             key="upsell",
             kind=ShopShelfKind.UPSELL,
             placement=ShopShelfPlacement.CART,
@@ -507,6 +518,11 @@ CAFE = DemoShopSpec(
             age_hours=22.0,
             history_minutes=(2, 9, 22, 41),
             comment="Позвонить за 10 минут",
+            feedback=DemoFeedbackSpec(
+                rating=5,
+                chips=(ShopFeedbackChip.QUALITY, ShopFeedbackChip.SPEED),
+                comment="Раф как всегда отличный, тирамису — лучший в районе. Привезли ещё тёплым.",
+            ),
         ),
     ),
 )

@@ -16,7 +16,7 @@ async def _published_shop(
     client: AsyncClient, slug: str
 ) -> dict[str, Any]:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Store {slug}", "kind": "cafe"}
+        _SHOPS, json={"slug": slug, "name": f"Store {slug}", "kind": "cafe", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = resp.json()
@@ -62,7 +62,7 @@ class TestStorefrontSnapshot:
     ) -> None:
         draft_slug = f"draft-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": draft_slug, "name": "Draft"}
+            _SHOPS, json={"slug": draft_slug, "name": "Draft", "lat": 55.7512, "lng": 37.6184}
         )
         assert resp.status_code == 200
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{draft_slug}")
@@ -574,7 +574,7 @@ class TestMarketPage:
         slug = f"mkt-{unique_id[:8]}"
         await _published_shop(shop_client, slug)
         resp = await shop_client.post(
-            _SHOPS, json={"slug": f"mktd-{unique_id[:8]}", "name": "Черновик"}
+            _SHOPS, json={"slug": f"mktd-{unique_id[:8]}", "name": "Черновик", "lat": 55.7512, "lng": 37.6184}
         )
         assert resp.status_code == 200
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/market")
@@ -599,7 +599,7 @@ class TestMarketPage:
         slug = f"xss-{unique_id[:8]}"
         resp = await shop_client.post(
             _SHOPS,
-            json={"slug": slug, "name": 'A</script><script>alert(1)</script>', "kind": "cafe"},
+            json={"slug": slug, "name": 'A</script><script>alert(1)</script>', "kind": "cafe", "lat": 55.7512, "lng": 37.6184},
         )
         assert resp.status_code == 200, resp.text
         await shop_client.post(f"{_SHOPS}/{resp.json()['shop_id']}/publish")

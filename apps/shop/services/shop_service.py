@@ -72,6 +72,8 @@ class ShopService:
             kind=payload.kind,
             name=payload.name,
             badges=[dict(b) for b in DEFAULT_SHOP_BADGES],
+            lat=payload.lat,
+            lng=payload.lng,
             created_by_user_id=user_id,
             created_at=now,
             updated_at=now,
@@ -94,6 +96,11 @@ class ShopService:
             await self._check_badge_references(shop)
         for field, value in patch.items():
             setattr(shop, field, value)
+        if shop.status == ShopStatus.PUBLISHED and (shop.lat is None or shop.lng is None):
+            raise PlatformConflictError(
+                "Published shop requires a geo point",
+                error_code="shop_point_required",
+            )
         shop.updated_at = utcnow()
         _ = await shop.save()
         return shop
@@ -142,6 +149,11 @@ class ShopService:
             raise PlatformConflictError(
                 "Shop name is required before publishing",
                 error_code="shop_incomplete",
+            )
+        if shop.lat is None or shop.lng is None:
+            raise PlatformConflictError(
+                "Shop geo point is required before publishing",
+                error_code="shop_point_required",
             )
         shop.status = ShopStatus.PUBLISHED
         shop.published_at = utcnow()

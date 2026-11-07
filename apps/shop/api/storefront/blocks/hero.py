@@ -14,6 +14,7 @@ CSS: str = """.hero{position:relative;margin:0 -16px;height:260px;overflow:hidde
 .meta{padding:14px 2px 6px;color:var(--muted);font-size:13.5px;display:flex;gap:14px;flex-wrap:wrap}
 .meta span{display:inline-flex;align-items:center;gap:6px}
 .meta svg{width:15px;height:15px;fill:currentColor;flex-shrink:0;opacity:.85}
+.meta .rate{color:var(--afg,var(--accent));font-weight:650;cursor:pointer}
 .ob-open,.ob-closed{font-weight:650}
 .ob-open{color:var(--success)}
 .ob-closed{color:var(--warn)}

@@ -17,6 +17,7 @@ from apps.shop.models import (
     ShopBanner,
     ShopCategory,
     ShopDomain,
+    ShopLoyaltyProgram,
     ShopModifierGroup,
     ShopModifierOption,
     ShopProduct,
@@ -53,14 +54,18 @@ from apps.shop.models.api import (
     ShopModifierOptionUpdateRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
+    ShopLoyaltyProgramResponse,
+    ShopLoyaltyProgramSetRequest,
     ShopNotifyBackResponse,
     ShopNutrition,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
+    ShopOrderFeedbackResponse,
     ShopOrderItemPreview,
     ShopOrderResponse,
     ShopOrderStatusResponse,
     ShopPersonalResponse,
+    ShopReviewsResponse,
     ShopProductCreateRequest,
     ShopProductResponse,
     ShopProductsImportRequest,
@@ -86,7 +91,12 @@ from apps.shop.models.api import (
     normalize_shop_theme,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
-from apps.shop.models.enums import ShopOrderStatus
+from apps.shop.models.enums import (
+    ShopFeedbackChip,
+    ShopLoyaltyRewardKind,
+    ShopOrderStatus,
+)
+from apps.shop.services.feed_service import feedback_response
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_BACK_IN_STOCK,
@@ -107,6 +117,7 @@ from core.pagination import ListResponse, OffsetPage
 from core.request_scope import (
     require_company_admin,
     require_company_viewer,
+    optional_customer,
     require_customer,
 )
 from core.tasks import enqueue
@@ -272,6 +283,16 @@ class ShopBannersReorderPayload(ShopBannersReorderRequest):
     shop_id: str = Field(min_length=1)
 
 
+class ShopLoyaltyProgramPayload(StrictBaseModel):
+    """Программа лояльности магазина — get/set настроек владельцем."""
+
+    shop_id: str = Field(min_length=1)
+
+
+class ShopLoyaltyProgramSetPayload(ShopLoyaltyProgramSetRequest):
+    shop_id: str = Field(min_length=1)
+
+
 class ShopNotifyBackPayload(StrictBaseModel):
     """Подписка «сообщить о появлении» — slug витрины + товар."""
 
@@ -291,6 +312,24 @@ class ShopFavoriteSetPayload(StrictBaseModel):
     slug: str = Field(min_length=3, max_length=40)
     product_id: str = Field(min_length=1)
     favorite: bool
+
+
+class ShopFeedbackSetPayload(StrictBaseModel):
+    """Оценка покупателем выполненного заказа — slug + публичный код."""
+
+    slug: str = Field(min_length=3, max_length=40)
+    public_code: str = Field(min_length=4, max_length=16)
+    rating: int = Field(ge=1, le=5)
+    chips: list[ShopFeedbackChip] = Field(default_factory=list, max_length=6)
+    comment: str = Field(default="", max_length=1000)
+
+
+class ShopReviewsListPayload(StrictBaseModel):
+    """Публичная лента отзывов витрины — анонимное чтение."""
+
+    slug: str = Field(min_length=3, max_length=40)
+    limit: int = Field(default=20, ge=1, le=50)
+    offset: int = Field(default=0, ge=0)
 
 
 class ShopPromoCreatePayload(ShopPromoCreateRequest):
@@ -1048,7 +1087,7 @@ async def op_public_personal(
         shop = await di.order_service.resolve_published_shop(payload.slug)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return await di.feed_service.personal(shop.shop_id, customer.customer_id)
+    return await di.feed_service.personal(shop, customer.customer_id)
 
 
 async def op_public_favorite_set(
@@ -1065,6 +1104,45 @@ async def op_public_favorite_set(
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return ShopFavoriteResponse(favorite=favorite)
+
+
+async def op_public_feedback_set(
+    payload: ShopFeedbackSetPayload, *, user: User, di: Di
+) -> ShopOrderFeedbackResponse:
+    """Оценка выполненного заказа — идемпотентна по заказу (customer-сессия)."""
+    _ = user
+    customer = require_customer()
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+        feedback = await di.feed_service.set_feedback(
+            shop.shop_id,
+            payload.public_code,
+            customer.customer_id,
+            payload.rating,
+            payload.chips,
+            payload.comment,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    # Рейтинг витрины живёт в снапшоте — ребилд обновляет бейдж.
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return feedback_response(feedback)
+
+
+async def op_public_reviews_list(
+    payload: ShopReviewsListPayload, *, user: User, di: Di
+) -> ShopReviewsResponse:
+    """Публичная лента отзывов витрины + агрегат рейтинга (анонимно)."""
+    _ = user
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return await di.feed_service.reviews(
+        shop.shop_id, limit=payload.limit, offset=payload.offset
+    )
 
 
 # --- Столы зала ---
@@ -1333,6 +1411,9 @@ async def op_public_my_orders_list(
         limit=payload.limit,
         offset=payload.offset,
     )
+    feedbacks = await di.feed_service.feedback_by_order_ids(
+        [o.shop_order_id for o in orders]
+    )
     return OffsetPage(
         items=[
             di.order_service.my_order_list_item(
@@ -1347,6 +1428,11 @@ async def op_public_my_orders_list(
                     ShopOrderItemPreview(name=i.name_snapshot, qty=i.qty)
                     for i in items_by_order.get(order.shop_order_id, [])
                 ],
+                feedback=(
+                    feedback_response(feedbacks[order.shop_order_id])
+                    if order.shop_order_id in feedbacks
+                    else None
+                ),
             )
             for order in orders
         ],
@@ -1368,6 +1454,8 @@ async def op_public_my_order_get(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    feedbacks = await di.feed_service.feedback_by_order_ids([order.shop_order_id])
+    own = feedbacks.get(order.shop_order_id)
     return await di.order_service.my_order_detail(
         order,
         shop,
@@ -1375,6 +1463,7 @@ async def op_public_my_order_get(
         storefront_url=(
             di.storefront_service.storefront_url(shop) if shop is not None else ""
         ),
+        feedback=feedback_response(own) if own is not None else None,
     )
 
 
@@ -1868,17 +1957,75 @@ async def op_promos_remove(payload: ShopPromoIdPayload, *, user: User, di: Di) -
     return EmptyPayload()
 
 
+# --- Лояльность: программа «N-я покупка — награда» ---
+
+
+def _loyalty_program_response(
+    program: ShopLoyaltyProgram,
+) -> ShopLoyaltyProgramResponse:
+    return ShopLoyaltyProgramResponse(
+        shop_id=program.shop_id,
+        orders_goal=program.orders_goal,
+        reward_kind=ShopLoyaltyRewardKind(program.reward_kind),
+        reward_value=program.reward_value,
+    )
+
+
+async def op_loyalty_program_get(
+    payload: ShopLoyaltyProgramPayload, *, user: User, di: Di
+) -> ShopLoyaltyProgramResponse:
+    """Настройки программы лояльности магазина (дефолты, если не задана)."""
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        program = await di.loyalty_service.get_program(
+            scope.company_id, payload.shop_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return _loyalty_program_response(program)
+
+
+async def op_loyalty_program_set(
+    payload: ShopLoyaltyProgramSetPayload, *, user: User, di: Di
+) -> ShopLoyaltyProgramResponse:
+    """Записать программу лояльности: цель, тип и размер награды."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        program = await di.loyalty_service.set_program(
+            scope.company_id,
+            payload.shop_id,
+            orders_goal=payload.orders_goal,
+            reward_kind=payload.reward_kind,
+            reward_value=payload.reward_value,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _loyalty_program_response(program)
+
+
 async def op_public_cart_price(
     payload: ShopCartPricePayload, *, user: User, di: Di
 ) -> ShopCartPriceResponse:
-    """Живой расчёт корзины витрины: цены + скидки, анонимный путь."""
+    """Живой расчёт корзины витрины: цены + скидки, анонимный путь.
+
+    С customer-сессией учитывает предпросмотр награды лояльности
+    (``use_loyalty_reward``) — без списания.
+    """
     _ = user
+    customer = optional_customer()
     try:
         shop = await di.order_service.resolve_published_shop(payload.slug)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     try:
-        return await di.order_service.price_cart(shop, payload)
+        return await di.order_service.price_cart(
+            shop, payload, customer_id=customer.customer_id if customer else ""
+        )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformConflictError as exc:

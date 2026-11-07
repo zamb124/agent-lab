@@ -1,0 +1,27 @@
+---
+description: "Figma MCP: сервер figma-console (figma-console-mcp) и Desktop Bridge плагин — чтение и правка файлов Figma/FigJam из агента через Plugin API без REST-лимитов. Читать при работе с дизайнами и досками Figma"
+globs:
+  - ".cursor/mcp.json"
+  - "scripts/tools/figma_mcp.py"
+  - ".cursor/skills/figma-mcp/**"
+alwaysApply: false
+---
+
+# Figma MCP
+
+Доступ агента к файлам и доскам Figma — MCP-сервер `figma-console` (npm-пакет `figma-console-mcp`), объявленный в `.cursor/mcp.json`. Подключение, плагин и отладка → `.cursor/skills/figma-mcp`.
+
+## Канон
+
+1. Сервер `figma-console` — `npx -y figma-console-mcp@1.46.0`; версия пиннуется в `.cursor/mcp.json`, bump — коммитом. `[без гейта]`
+2. Транспорт — Desktop Bridge плагин: WebSocket `ws://localhost:9223`–`9232`, Plugin API без REST-лимитов и без токена. Плагин живёт в `~/.figma-console-mcp/plugin/` (перезаписывается сервером при старте), импортируется в Figma Desktop один раз и запускается на открытом файле; `editorType` — `figma`, `figjam`, `slides`, `dev`. `[без гейта]`
+3. `FIGMA_ACCESS_TOKEN` — персональный env пользователя для REST-инструментов (комментарии, версии файла, командные библиотеки); в `.cursor/mcp.json` не задаётся. `[без гейта]`
+4. Агент без MCP-реестра вызывает инструменты через `uv run python -m scripts.tools.figma_mcp` — `list`, `call`, `batch`, `status`, `--wait-plugin`; pin версии скрипт читает из `.cursor/mcp.json`. `[без гейта]`
+5. Чтение доски — `figjam_get_board_contents` (стикеры, фигуры, коннекторы, секции), снимок — `figma_take_screenshot`/`figma_capture_screenshot`, состояние моста — `figma_get_status` с `probe: true`, список инструментов — `figma_mcp list`. `[без гейта]`
+6. Файл и доска — живые документы команды: write-инструменты (создание и правка узлов, комментарии, переменные) вызываются только по явному запросу пользователя. `[без гейта]`
+
+## Запреты
+
+1. `figd_*` и другие секреты Figma в файлах репозитория.
+2. Второй Figma MCP-сервер в `.cursor/mcp.json` (`figma-developer-mcp`, `mcp-server-figma`).
+3. Плавающий тег версии (`@latest`, `*`) у `figma-console-mcp`.

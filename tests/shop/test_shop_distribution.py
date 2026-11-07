@@ -75,7 +75,7 @@ async def _reset_shop_flow() -> None:
 
 async def _published_shop(client: AsyncClient, slug: str) -> dict[str, object]:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
+        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = resp.json()
@@ -111,7 +111,7 @@ class TestStorefrontQr:
     ) -> None:
         slug = f"qrd-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "Draft", "kind": "restaurant"}
+            _SHOPS, json={"slug": slug, "name": "Draft", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
         )
         assert resp.status_code == 200
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}/qr.svg")
@@ -125,7 +125,7 @@ class TestSitemap:
         pub = f"sm-{unique_id[:8]}"
         await _published_shop(shop_client, pub)
         draft = f"smd-{unique_id[:8]}"
-        await shop_client.post(_SHOPS, json={"slug": draft, "name": "Draft", "kind": "restaurant"})
+        await shop_client.post(_SHOPS, json={"slug": draft, "name": "Draft", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184})
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/sitemap.xml")
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("application/xml")
@@ -250,7 +250,7 @@ class TestAiOperations:
     ) -> None:
         """Batch AI: считает позиции без описания и ставит задачу в очередь."""
         slug = f"aib-{unique_id[:8]}"
-        resp = await shop_client.post(_SHOPS, json={"slug": slug, "name": f"Shop {slug}"})
+        resp = await shop_client.post(_SHOPS, json={"slug": slug, "name": f"Shop {slug}", "lat": 55.7512, "lng": 37.6184})
         assert resp.status_code == 200, resp.text
         shop = resp.json()
         await shop_client.post(

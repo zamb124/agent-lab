@@ -20,10 +20,11 @@ from httpx import ASGITransport, AsyncClient
 
 from apps.shop.di import ShopDi
 from apps.shop.models.banner import ShopBanner
-from apps.shop.models.enums import ShopShelfKind, ShopStatus
+from apps.shop.models.enums import ShopOrderStatus, ShopShelfKind, ShopStatus
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder
+from apps.shop.models.order_feedback import ShopOrderFeedback
 from apps.shop.models.order_item import ShopOrderItem
 from apps.shop.models.product import ShopProduct
 from apps.shop.models.promo import ShopPromo
@@ -122,6 +123,16 @@ class TestDemoTemplatesIntegrity:
                 if order.table_key:
                     assert order.table_key in table_keys
 
+    def test_feedback_only_on_done_orders(self) -> None:
+        """Отзыв валиден только на завершённом заказе — как у покупателя."""
+        for tpl in DEMO_TEMPLATES:
+            for order in tpl.orders:
+                if order.feedback is not None:
+                    assert order.status is ShopOrderStatus.DONE, tpl.key
+            assert any(
+                order.feedback is not None for order in tpl.orders
+            ), f"{tpl.key}: no seeded feedback"
+
 
 SeedCtx = tuple[ShopSeedService, Company, User]
 
@@ -216,6 +227,7 @@ class TestDemoSeedService:
             assert shop.demo_template == tpl.key
             assert shop.cover_file_id is not None
             assert shop.company_id == company.company_id
+            assert shop.lat == tpl.lat and shop.lng == tpl.lng
 
             products = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
             assert len(products) == len(tpl.products)
@@ -240,6 +252,20 @@ class TestDemoSeedService:
 
             orders = await ShopOrder.list_by_shop_by_created_desc(shop.shop_id)
             assert len(orders) == len(tpl.orders)
+            feedback_expected = sum(
+                1 for o in tpl.orders if o.feedback is not None
+            )
+            feedback_rows = [
+                fb
+                for order in orders
+                if (
+                    fb := await ShopOrderFeedback.find_by_order(
+                        order.shop_order_id
+                    )
+                )
+                is not None
+            ]
+            assert len(feedback_rows) == feedback_expected, tpl.key
             for order in orders:
                 assert order.status_history, "order must show status timeline"
                 items = await ShopOrderItem.list_by_order(order.shop_order_id)
@@ -331,10 +357,12 @@ class TestDemoSeedService:
             comeback_ids = set(_str_list(comeback[0]["product_ids"]))
             assert comeback_ids <= unavailable_ids
             assert comeback_ids, f"{tpl.key}: comeback empty"
+            favorites = [s for s in snap_shelves if s["kind"] == "favorites"]
+            assert favorites, f"{tpl.key}: favorites shelf missing"
             for shelf in snap_shelves:
-                if shelf["kind"] == "usual":
+                if shelf["kind"] in {"usual", "favorites"}:
                     assert _str_list(shelf["product_ids"]) == [], (
-                        "usual resolves per customer via /personal"
+                        f"{shelf['kind']} resolves per customer via /personal"
                     )
             snap_shelf_ids = {str(s["id"]) for s in snap_shelves}
             snap_cat_ids = {
@@ -352,6 +380,15 @@ class TestDemoSeedService:
                     assert ref in snap_cat_ids, link
                 if prefix == "shelf":
                     assert ref in snap_shelf_ids, link
+            rating = snapshot["rating"]
+            assert isinstance(rating, dict)
+            review_count = sum(1 for o in tpl.orders if o.feedback is not None)
+            assert rating["count"] == review_count, tpl.key
+            if review_count:
+                assert rating["avg"] is not None
+            chips_dict = snapshot["feedback_chips"]
+            assert isinstance(chips_dict, dict)
+            assert set(chips_dict) == {"pos", "neg"}, tpl.key
 
     async def test_seed_is_idempotent(self, seed_company_ctx: SeedCtx) -> None:
         service, company, user = seed_company_ctx

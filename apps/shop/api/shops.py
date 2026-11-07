@@ -26,6 +26,8 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopLoyaltyProgramResponse,
+    ShopLoyaltyProgramSetRequest,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -85,6 +87,8 @@ from apps.shop.realtime.operations import (
     ShopModifierOptionCreatePayload,
     ShopModifierOptionIdPayload,
     ShopModifierOptionUpdatePayload,
+    ShopLoyaltyProgramPayload,
+    ShopLoyaltyProgramSetPayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
     ShopOrderSetStatusPayload,
@@ -135,6 +139,8 @@ from apps.shop.realtime.operations import (
     op_modifier_groups_list,
     op_modifier_groups_remove,
     op_modifier_groups_update,
+    op_loyalty_program_get,
+    op_loyalty_program_set,
     op_modifier_options_create,
     op_modifier_options_remove,
     op_modifier_options_update,
@@ -881,6 +887,28 @@ async def reorder_banners(
 async def remove_banner(shop_id: str, banner_id: str, di: Di) -> EmptyPayload:
     return await op_banners_remove(
         ShopBannerIdPayload(shop_id=shop_id, shop_banner_id=banner_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/{shop_id}/loyalty", response_model=ShopLoyaltyProgramResponse)
+async def get_loyalty_program(shop_id: str, di: Di) -> ShopLoyaltyProgramResponse:
+    return await op_loyalty_program_get(
+        ShopLoyaltyProgramPayload(shop_id=shop_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.put("/{shop_id}/loyalty", response_model=ShopLoyaltyProgramResponse)
+async def set_loyalty_program(
+    shop_id: str, payload: ShopLoyaltyProgramSetRequest, di: Di
+) -> ShopLoyaltyProgramResponse:
+    return await op_loyalty_program_set(
+        ShopLoyaltyProgramSetPayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
         user=require_context().user,
         di=di,
     )

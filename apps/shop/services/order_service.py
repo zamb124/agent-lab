@@ -37,6 +37,7 @@ from apps.shop.models.api import (
     ShopMyOrderListItemResponse,
     ShopMyOrderShopBlock,
     ShopOrderCreateRequest,
+    ShopOrderFeedbackResponse,
     ShopOrderItemModifierResponse,
     ShopOrderItemPreview,
     ShopOrderItemRequest,
@@ -44,10 +45,12 @@ from apps.shop.models.api import (
     ShopOrderResponse,
     ShopOrderStatusEntry,
     ShopPromoAppliedResponse,
+    normalize_shop_features,
 )
 from apps.shop.models.common import new_id
 from apps.shop.models.order import new_public_code
 from apps.shop.services.hours import shop_open_state
+from apps.shop.services.loyalty_service import LoyaltyService
 from apps.shop.services.modifier_pricing import (
     load_modifier_tree_by_sort_asc,
     nested_lookup,
@@ -121,10 +124,12 @@ class ShopOrderService:
         settings: ShopSettings,
         geocoder: Geocoder,
         service_client: ServiceClient,
+        loyalty_service: LoyaltyService,
     ) -> None:
         self._settings: ShopSettings = settings
         self._geocoder: Geocoder = geocoder
         self._service_client: ServiceClient = service_client
+        self._loyalty: LoyaltyService = loyalty_service
 
     def _geo(self, shop: Shop) -> GeoClient:
         """GeoClient от имени компании витрины — для анонимных вызовов покупателя."""
@@ -448,6 +453,12 @@ class ShopOrderService:
                 "Order total is below the minimum", error_code="below_min_order"
             )
         discount_total = sum(priced_cart.line_discounts) + priced_cart.order_discount_minor
+        # Награда лояльности оплачивает товары, не доставку: атомарный claim.
+        loyalty_reward = 0
+        if payload.use_loyalty_reward:
+            loyalty_reward = await self._loyalty.claim_reward(
+                shop, customer.customer_id, items_total - discount_total
+            )
         order_id = new_id("shoporder")
         order_items = [
             ShopOrderItem(
@@ -487,9 +498,11 @@ class ShopOrderService:
             comment=payload.comment,
             items_total_minor=items_total,
             discount_minor=discount_total,
+            loyalty_reward_minor=loyalty_reward,
             delivery_fee_minor=max(0, delivery_fee - priced_cart.delivery_discount_minor),
             total_minor=items_total
             - discount_total
+            - loyalty_reward
             + max(0, delivery_fee - priced_cart.delivery_discount_minor),
             promos=[
                 {"promo_id": a.promo_id, "name": a.name, "saved_minor": a.saved_minor}
@@ -503,8 +516,13 @@ class ShopOrderService:
             status_changed_at=now,
             status_history=[{"status": ShopOrderStatus.NEW.value, "at": now.isoformat()}],
         )
-        _ = await ShopOrder.create(order)
-        _ = await ShopOrderItem.create_many(order_items)
+        try:
+            _ = await ShopOrder.create(order)
+            _ = await ShopOrderItem.create_many(order_items)
+        except Exception:
+            # Claim уже произошёл — возвращаем награду, пока заказа нет.
+            await self._loyalty.refund_reward(order)
+            raise
         await self._after_created(shop, order)
         return order
 
@@ -580,7 +598,9 @@ class ShopOrderService:
             tz = ZoneInfo("Europe/Moscow")
         return evaluate(promos, lines, delivery_fee_minor=delivery_fee, now=datetime.now(tz))
 
-    async def price_cart(self, shop: Shop, payload: ShopCartPriceRequest) -> ShopCartPriceResponse:
+    async def price_cart(
+        self, shop: Shop, payload: ShopCartPriceRequest, *, customer_id: str = ""
+    ) -> ShopCartPriceResponse:
         """Живой расчёт корзины для витрины: цены, скидки, акции — без создания заказа."""
         if shop.status != ShopStatus.PUBLISHED:
             raise PlatformNotFoundError(
@@ -594,6 +614,13 @@ class ShopOrderService:
         )
         delivery_after = max(0, delivery_fee - priced_cart.delivery_discount_minor)
         discount_total = sum(priced_cart.line_discounts) + priced_cart.order_discount_minor
+        loyalty_reward = (
+            await self._loyalty.preview_reward(
+                shop, customer_id, items_total - discount_total
+            )
+            if payload.use_loyalty_reward and customer_id
+            else 0
+        )
         return ShopCartPriceResponse(
             lines=[
                 ShopCartPriceLineResponse(
@@ -606,8 +633,9 @@ class ShopOrderService:
             ],
             items_total_minor=items_total,
             discount_minor=discount_total,
+            loyalty_reward_minor=loyalty_reward,
             delivery_fee_minor=delivery_after,
-            total_minor=items_total - discount_total + delivery_after,
+            total_minor=items_total - discount_total - loyalty_reward + delivery_after,
             applied_promos=[
                 ShopPromoAppliedResponse(
                     promo_id=a.promo_id, name=a.name, saved_minor=a.saved_minor
@@ -669,6 +697,10 @@ class ShopOrderService:
         order.status_history = history
         _ = await order.save()
         await self._after_status_change(company_shop, order)
+        if ShopOrderStatus(status) == ShopOrderStatus.DONE:
+            await self._loyalty.accrue_done_order(company_shop, order)
+        elif ShopOrderStatus(status) == ShopOrderStatus.CANCELLED:
+            await self._loyalty.refund_reward(order)
         return order
 
     async def _after_status_change(self, shop: Shop, order: ShopOrder) -> None:
@@ -762,6 +794,7 @@ class ShopOrderService:
             comment=order.comment,
             items_total_minor=order.items_total_minor,
             discount_minor=order.discount_minor,
+            loyalty_reward_minor=order.loyalty_reward_minor,
             delivery_fee_minor=order.delivery_fee_minor,
             total_minor=order.total_minor,
             promos=[ShopPromoAppliedResponse.model_validate(p) for p in order.promos],
@@ -850,17 +883,21 @@ class ShopOrderService:
         *,
         storefront_url: str,
         items_preview: list[ShopOrderItemPreview] | None = None,
+        feedback: ShopOrderFeedbackResponse | None = None,
     ) -> ShopMyOrderListItemResponse:
         """Строка ленты `my/orders`: заказ + витрина, где он исполняется."""
+        status = ShopOrderStatus(order.status)
+        reviews_on = bool(
+            shop is not None
+            and normalize_shop_features(shop.features).get("reviews", False)
+        )
         return ShopMyOrderListItemResponse(
             public_code=order.public_code,
-            status=ShopOrderStatus(order.status),
-            status_label=order_status_label(
-                ShopOrderStatus(order.status), order.delivery_type
-            ),
+            status=status,
+            status_label=order_status_label(status, order.delivery_type),
             status_changed_at=order.status_changed_at.isoformat(),
             created_at=order.created_at.isoformat(),
-            active=self._active(ShopOrderStatus(order.status)),
+            active=self._active(status),
             total_minor=order.total_minor,
             currency=order.currency,
             delivery_type=order.delivery_type,
@@ -870,6 +907,10 @@ class ShopOrderService:
             items_preview=items_preview or [],
             items_count=len(items_preview or []),
             shop=self._shop_block(shop, order, storefront_url=storefront_url),
+            can_review=(
+                status == ShopOrderStatus.DONE and reviews_on and feedback is None
+            ),
+            feedback=feedback,
         )
 
     async def my_order_detail(
@@ -879,6 +920,7 @@ class ShopOrderService:
         items: list[ShopOrderItem],
         *,
         storefront_url: str,
+        feedback: ShopOrderFeedbackResponse | None = None,
     ) -> ShopMyOrderDetailResponse:
         """Полная карточка заказа кабинета: позиции, таймлайн, гео доставки."""
         photos = await self._item_photos(items)
@@ -889,6 +931,7 @@ class ShopOrderService:
             items_preview=[
                 ShopOrderItemPreview(name=i.name_snapshot, qty=i.qty) for i in items
             ],
+            feedback=feedback,
         )
         data = base.model_dump()
         return ShopMyOrderDetailResponse.model_validate(
@@ -896,6 +939,7 @@ class ShopOrderService:
                 **data,
                 "items_total_minor": order.items_total_minor,
                 "discount_minor": order.discount_minor,
+                "loyalty_reward_minor": order.loyalty_reward_minor,
                 "delivery_fee_minor": order.delivery_fee_minor,
                 "comment": order.comment,
                 "promos": [

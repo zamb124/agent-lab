@@ -31,6 +31,7 @@ from apps.shop.models.enums import (
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder
+from apps.shop.models.order_feedback import ShopOrderFeedback
 from apps.shop.models.order_item import ShopOrderItem
 from apps.shop.models.product import ShopProduct
 from apps.shop.models.product_modifier_group import ShopProductModifierGroup
@@ -149,6 +150,8 @@ class ShopSeedService:
             phone=tpl.phone,
             city=tpl.city,
             address=tpl.address,
+            lat=tpl.lat,
+            lng=tpl.lng,
             timezone=tpl.timezone,
             working_hours=dict(tpl.working_hours),
             delivery_enabled=tpl.delivery_enabled,
@@ -608,6 +611,44 @@ class ShopSeedService:
                 )
             )
             _ = await ShopOrderItem.create_many(items)
+            if order_spec.feedback is not None:
+                await self._seed_feedback(
+                    tpl.key, h16, shop_id, order_id, index,
+                    order_spec, status_changed_at,
+                )
+
+    async def _seed_feedback(
+        self,
+        tpl_key: str,
+        h16: str,
+        shop_id: str,
+        order_id: str,
+        index: int,
+        order_spec: DemoOrderSpec,
+        status_changed_at: datetime,
+    ) -> None:
+        """Отзыв на demo-заказ: рейтинг/теги/комментарий ленты «Отзывы»."""
+        spec = order_spec.feedback
+        if spec is None or order_spec.status is not ShopOrderStatus.DONE:
+            return
+        feedback_id = _child_id(tpl_key, h16, "fb", f"o{index}")
+        if await ShopOrderFeedback.get_by_id(feedback_id) is not None:
+            return
+        written_at = status_changed_at + timedelta(minutes=40)
+        _ = await ShopOrderFeedback.create(
+            ShopOrderFeedback(
+                shop_order_feedback_id=feedback_id,
+                shop_id=shop_id,
+                shop_order_id=order_id,
+                customer_id="",
+                customer_name=order_spec.customer_name,
+                rating=spec.rating,
+                chips=[chip.value for chip in spec.chips],
+                comment=spec.comment,
+                created_at=written_at,
+                updated_at=written_at,
+            )
+        )
 
     def _build_order_items(
         self,

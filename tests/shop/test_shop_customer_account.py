@@ -16,7 +16,7 @@ async def _shop_with_product(
     client: AsyncClient, slug: str
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
+        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = resp.json()

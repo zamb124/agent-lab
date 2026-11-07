@@ -18,15 +18,18 @@ from apps.shop.models import (
     ShopCategory,
     ShopDomain,
     ShopDomainStatus,
+    ShopLoyaltyRewardKind,
     ShopProduct,
     ShopPromo,
     ShopShelf,
     ShopStatus,
     ShopTable,
+    feedback_chip_labels,
 )
 from apps.shop.models.api import normalize_shop_features, normalize_shop_theme
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.feed_service import FeedService
+from apps.shop.services.loyalty_service import LoyaltyService
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.geocoding.base import Geocoder
@@ -52,12 +55,14 @@ class StorefrontService:
         redis: RedisClient,
         shop_service: ShopService,
         feed_service: FeedService,
+        loyalty_service: LoyaltyService,
         geocoder: Geocoder,
     ) -> None:
         self._settings: ShopSettings = settings
         self._redis: RedisClient = redis
         self._shops: ShopService = shop_service
         self._feed: FeedService = feed_service
+        self._loyalty: LoyaltyService = loyalty_service
         self._geocoder: Geocoder = geocoder
 
     async def resolve_shop_by_host(self, host: str) -> Shop | None:
@@ -197,6 +202,7 @@ class StorefrontService:
             for shelf in shelves
         ]
         banners = await ShopBanner.list_active_by_shop_by_sort_asc(shop.shop_id)
+        features = normalize_shop_features(shop.features)
         return {
             "slug": shop.slug,
             "company_id": shop.company_id,
@@ -223,7 +229,31 @@ class StorefrontService:
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
             "theme": normalize_shop_theme(shop.theme),
-            "features": normalize_shop_features(shop.features),
+            "features": features,
+            "rating": (
+                await self._feed.rating_summary(shop.shop_id)
+                if features.get("reviews")
+                else {"avg": None, "count": 0}
+            ),
+            "feedback_chips": (
+                {
+                    "pos": feedback_chip_labels(positive=True),
+                    "neg": feedback_chip_labels(positive=False),
+                }
+                if features.get("reviews")
+                else {}
+            ),
+            # Параметры программы для подписей UI («каждый N-й заказ — скидка»).
+            "loyalty": (
+                {
+                    "orders_goal": program.orders_goal,
+                    "reward_kind": ShopLoyaltyRewardKind(program.reward_kind).value,
+                    "reward_value": program.reward_value,
+                }
+                if features.get("loyalty")
+                and (program := await self._loyalty.program_or_default(shop.shop_id))
+                else None
+            ),
             "shelves": shelf_items,
             "banners": [
                 {

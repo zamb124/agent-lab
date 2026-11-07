@@ -54,7 +54,7 @@ async def _shop_with_product(
     client: AsyncClient, slug: str, *, patch: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
+        _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = resp.json()
@@ -706,7 +706,7 @@ class TestDeliveryZoneValidation:
         self, client: AsyncClient, slug: str, zone: Any
     ) -> httpx2.Response:
         resp = await client.post(
-            _SHOPS, json={"slug": slug, "name": f"Z {slug}", "kind": "cafe"}
+            _SHOPS, json={"slug": slug, "name": f"Z {slug}", "kind": "cafe", "lat": 55.7512, "lng": 37.6184}
         )
         assert resp.status_code == 200, resp.text
         shop = resp.json()

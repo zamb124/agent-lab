@@ -17,7 +17,7 @@ async def _shop(
     client: AsyncClient, slug: str, *, onsite: bool = True
 ) -> dict[str, Any]:
     resp = await client.post(
-        _SHOPS, json={"slug": slug, "name": f"Cafe {slug}", "kind": "restaurant"}
+        _SHOPS, json={"slug": slug, "name": f"Cafe {slug}", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
     )
     assert resp.status_code == 200, resp.text
     shop = resp.json()
@@ -119,7 +119,7 @@ class TestShopTables:
     ) -> None:
         slug = f"oen-{unique_id[:8]}"
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "R", "kind": "restaurant"}
+            _SHOPS, json={"slug": slug, "name": "R", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
         )
         shop = resp.json()
         assert shop["onsite_enabled"] is False

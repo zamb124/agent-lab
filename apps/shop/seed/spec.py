@@ -20,6 +20,7 @@ from apps.shop.models.enums import (
     ModifierSelectionMode,
     PromoStacking,
     ShopDeliveryType,
+    ShopFeedbackChip,
     ShopKind,
     ShopOrderStatus,
     ShopShelfKind,
@@ -173,6 +174,19 @@ class DemoOrderGeoSpec:
 
 
 @dataclass(frozen=True)
+class DemoFeedbackSpec:
+    """Отзыв на demo-заказ: рейтинг, теги и комментарий ленты «Отзывы».
+
+    Валиден только на заказе со статусом ``done`` — таково же правило
+    `FeedService.set_feedback` для реального покупателя.
+    """
+
+    rating: int
+    chips: tuple[ShopFeedbackChip, ...]
+    comment: str
+
+
+@dataclass(frozen=True)
 class DemoOrderSpec:
     """Демо-заказ: статус + лесенка переходов по минутам от created_at.
 
@@ -191,6 +205,7 @@ class DemoOrderSpec:
     table_key: str = ""
     comment: str = ""
     geo: DemoOrderGeoSpec | None = None
+    feedback: DemoFeedbackSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +219,8 @@ class DemoShopSpec:
     phone: str
     city: str
     address: str
+    lat: float
+    lng: float
     timezone: str
     theme: JsonObject
     working_hours: JsonObject

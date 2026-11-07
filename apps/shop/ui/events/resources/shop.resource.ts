@@ -700,6 +700,25 @@ export const shopBannerRemoveOp = createAsyncOp({
     restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/banners/{shop_banner_id}' },
 });
 
+export const shopLoyaltyProgramGetOp: AsyncOpFactory = createAsyncOp({
+    name: 'shop/loyalty_program_get',
+    silent: true,
+    commandType: 'shop/loyalty/program_get_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/loyalty' },
+});
+
+export const shopLoyaltyProgramSetOp = createAsyncOp({
+    name: 'shop/loyalty_program_set',
+    successToastKey: 'shop:toast.loyalty_saved',
+    errorToastKey: 'shop:toast.loyalty_failed',
+    commandType: 'shop/loyalty/program_set_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PUT', path: '/shop/api/v1/shops/{shop_id}/loyalty' },
+});
+
 export const shopDemosSeedOp = createAsyncOp({
     name: 'shop/demos_seed',
     successToastKey: 'shop:toast.demos_seed_scheduled',
@@ -793,5 +812,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/banner_update': typeof shopBannerUpdateOp;
         'shop/banners_reorder': typeof shopBannersReorderOp;
         'shop/banner_remove': typeof shopBannerRemoveOp;
+        'shop/loyalty_program_get': typeof shopLoyaltyProgramGetOp;
+        'shop/loyalty_program_set': typeof shopLoyaltyProgramSetOp;
     }
 }

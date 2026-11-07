@@ -9,6 +9,7 @@ from apps.shop.models.enums import (
     ModifierPriceMode,
     ModifierSelectionMode,
     ShopDeliveryType,
+    ShopFeedbackChip,
     ShopKind,
     ShopOrderStatus,
     ShopShelfKind,
@@ -20,6 +21,7 @@ from apps.shop.seed.spec import (
     DemoCategorySpec,
     DemoModifierGroupSpec,
     DemoOptionSpec,
+    DemoFeedbackSpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -41,6 +43,8 @@ BAKERY = DemoShopSpec(
     phone="+7 (495) 200-30-40",
     city="Москва",
     address="ул. Маросейка, 9",
+    lat=55.7574,
+    lng=37.6349,
     timezone="Europe/Moscow",
     theme={
         "accent_color": "#d98324",
@@ -281,6 +285,20 @@ BAKERY = DemoShopSpec(
             subtitle="Ограниченные серии и сезонное",
         ),
         DemoShelfSpec(
+            key="usual",
+            kind=ShopShelfKind.USUAL,
+            layout=ShopShelfLayout.RAIL,
+            title="Как всегда",
+            subtitle="Ваши частые покупки — в один клик",
+        ),
+        DemoShelfSpec(
+            key="favorites",
+            kind=ShopShelfKind.FAVORITES,
+            layout=ShopShelfLayout.RAIL,
+            title="Избранное",
+            subtitle="Позиции, отмеченные сердцем",
+        ),
+        DemoShelfSpec(
             key="upsell",
             kind=ShopShelfKind.UPSELL,
             placement=ShopShelfPlacement.CART,
@@ -328,6 +346,11 @@ BAKERY = DemoShopSpec(
             age_hours=5.0,
             history_minutes=(3, 18, 42),
             comment="Заберу к 18:00",
+            feedback=DemoFeedbackSpec(
+                rating=5,
+                chips=(ShopFeedbackChip.PACKAGING, ShopFeedbackChip.QUALITY),
+                comment="Круассан с миндалём — воздушный, упаковка подарочная. Забрала точно в срок.",
+            ),
         ),
         DemoOrderSpec(
             status=ShopOrderStatus.NEW,

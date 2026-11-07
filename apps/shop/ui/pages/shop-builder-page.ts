@@ -11,6 +11,7 @@ import { html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
@@ -39,8 +40,10 @@ type Device = (typeof DEVICES)[number];
 
 const DEVICE_ICONS: Record<Device, string> = { phone: 'smartphone', tablet: 'tablet', desktop: 'monitor' };
 
-const FEATURES = ['nutrition', 'back_in_stock', 'favorites'] as const;
+const FEATURES = ['nutrition', 'back_in_stock', 'favorites', 'reviews', 'loyalty'] as const;
 type FeatureKey = (typeof FEATURES)[number];
+
+type LoyaltyRewardKind = 'discount_minor' | 'discount_percent';
 
 interface ShelfRow {
     shop_shelf_id: string;
@@ -80,6 +83,8 @@ export class ShopBuilderPage extends PlatformPage {
     private _shelfReorderOp: OpController;
     private _bannerRemoveOp: OpController;
     private _bannerReorderOp: OpController;
+    private _loyaltyGetOp: OpController;
+    private _loyaltySetOp: OpController;
     declare _preset: string;
     declare _accent: string;
     declare _mode: string;
@@ -88,6 +93,11 @@ export class ShopBuilderPage extends PlatformPage {
     declare _nutrition: boolean;
     declare _backInStock: boolean;
     declare _favorites: boolean;
+    declare _reviews: boolean;
+    declare _loyalty: boolean;
+    declare _loyGoal: number;
+    declare _loyKind: LoyaltyRewardKind;
+    declare _loyValue: number;
     declare _device: Device;
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
@@ -97,6 +107,10 @@ export class ShopBuilderPage extends PlatformPage {
     private _savedNutrition = false;
     private _savedBackInStock = true;
     private _savedFavorites = true;
+    private _savedReviews = true;
+    private _savedLoyalty = false;
+    // Отображаемое значение награды: рубли или процент — в минорные при сохранении.
+    private _savedLoyProgram = { orders_goal: 5, reward_kind: 'discount_minor' as LoyaltyRewardKind, reward_value: 500 };
     declare _loadAttempted: boolean;
     private _hydrated = false;
     private _feedShopId = '';
@@ -110,6 +124,12 @@ export class ShopBuilderPage extends PlatformPage {
         _backdrop: { state: true },
         _nutrition: { state: true },
         _backInStock: { state: true },
+        _favorites: { state: true },
+        _reviews: { state: true },
+        _loyalty: { state: true },
+        _loyGoal: { state: true },
+        _loyKind: { state: true },
+        _loyValue: { state: true },
         _device: { state: true },
         _loadAttempted: { state: true },
     };
@@ -229,6 +249,21 @@ export class ShopBuilderPage extends PlatformPage {
             .feed-row .fbtns button:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
             .feed-row .fbtns button.danger:hover { color: var(--error); }
             .feed-empty { font-size: var(--text-xs); color: var(--text-tertiary); padding: var(--space-2) 0; }
+            .loyprog {
+                margin-top: var(--space-2);
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--bg-surface);
+            }
+            .loyprog .lprow { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-2); align-items: end; }
+            .loyprog .lseg { display: flex; gap: 4px; padding: 3px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+            .loyprog .lseg button {
+                border: 0; background: transparent; color: var(--text-tertiary);
+                min-width: 34px; height: 30px; border-radius: var(--radius-sm);
+                font-size: var(--text-sm); font-weight: var(--font-semibold); cursor: pointer;
+            }
+            .loyprog .lseg button.on { background: var(--accent); color: var(--on-accent, #fff); }
             .actions { display: flex; gap: var(--space-2); }
             .preview {
                 position: relative;
@@ -321,6 +356,11 @@ export class ShopBuilderPage extends PlatformPage {
         this._nutrition = false;
         this._backInStock = true;
         this._favorites = true;
+        this._reviews = true;
+        this._loyalty = false;
+        this._loyGoal = 5;
+        this._loyKind = 'discount_minor';
+        this._loyValue = 500;
         this._device = 'phone';
         this._loadAttempted = false;
         this._shops = this.useResource('shop/shops', { autoload: true });
@@ -331,6 +371,8 @@ export class ShopBuilderPage extends PlatformPage {
         this._shelfReorderOp = this.useOp('shop/shelves_reorder');
         this._bannerRemoveOp = this.useOp('shop/banner_remove');
         this._bannerReorderOp = this.useOp('shop/banners_reorder');
+        this._loyaltyGetOp = this.useOp('shop/loyalty_program_get');
+        this._loyaltySetOp = this.useOp('shop/loyalty_program_set');
     }
 
     override connectedCallback(): void {
@@ -355,7 +397,25 @@ export class ShopBuilderPage extends PlatformPage {
         await Promise.all([
             this._shelvesOp.run({ shop_id: this.shopId }),
             this._bannersOp.run({ shop_id: this.shopId }),
+            this._loadLoyalty(),
         ]);
+    }
+
+    private async _loadLoyalty(): Promise<void> {
+        const program = await this._loyaltyGetOp.run({ shop_id: this.shopId }) as {
+            orders_goal?: number;
+            reward_kind?: string;
+            reward_value?: number;
+        } | null;
+        if (program === null) return;
+        const kind: LoyaltyRewardKind = program.reward_kind === 'discount_percent' ? 'discount_percent' : 'discount_minor';
+        const value = typeof program.reward_value === 'number'
+            ? (kind === 'discount_percent' ? program.reward_value : Math.round(program.reward_value / 100))
+            : (kind === 'discount_percent' ? 10 : 500);
+        this._loyGoal = typeof program.orders_goal === 'number' ? program.orders_goal : 5;
+        this._loyKind = kind;
+        this._loyValue = value;
+        this._savedLoyProgram = { orders_goal: this._loyGoal, reward_kind: kind, reward_value: value };
     }
 
     private _shop(): Record<string, unknown> | null {
@@ -388,6 +448,8 @@ export class ShopBuilderPage extends PlatformPage {
         this._nutrition = features.nutrition === true;
         this._backInStock = features.back_in_stock !== false;
         this._favorites = features.favorites !== false;
+        this._reviews = features.reviews !== false;
+        this._loyalty = features.loyalty === true;
         this._savedPreset = this._preset;
         this._savedAccent = this._accent;
         this._savedMode = this._mode;
@@ -396,17 +458,35 @@ export class ShopBuilderPage extends PlatformPage {
         this._savedNutrition = this._nutrition;
         this._savedBackInStock = this._backInStock;
         this._savedFavorites = this._favorites;
+        this._savedReviews = this._reviews;
+        this._savedLoyalty = this._loyalty;
         return true;
     }
 
     private _featureValue(f: FeatureKey): boolean {
-        return f === 'nutrition' ? this._nutrition : f === 'back_in_stock' ? this._backInStock : this._favorites;
+        switch (f) {
+            case 'nutrition': return this._nutrition;
+            case 'back_in_stock': return this._backInStock;
+            case 'favorites': return this._favorites;
+            case 'reviews': return this._reviews;
+            case 'loyalty': return this._loyalty;
+        }
     }
 
     private _setFeature(f: FeatureKey, v: boolean): void {
-        if (f === 'nutrition') this._nutrition = v;
-        else if (f === 'back_in_stock') this._backInStock = v;
-        else this._favorites = v;
+        switch (f) {
+            case 'nutrition': this._nutrition = v; break;
+            case 'back_in_stock': this._backInStock = v; break;
+            case 'favorites': this._favorites = v; break;
+            case 'reviews': this._reviews = v; break;
+            case 'loyalty': this._loyalty = v; break;
+        }
+    }
+
+    private get _loyProgramDirty(): boolean {
+        return this._loyGoal !== this._savedLoyProgram.orders_goal
+            || this._loyKind !== this._savedLoyProgram.reward_kind
+            || this._loyValue !== this._savedLoyProgram.reward_value;
     }
 
     private get _dirty(): boolean {
@@ -417,7 +497,10 @@ export class ShopBuilderPage extends PlatformPage {
             || this._backdrop !== this._savedBackdrop
             || this._nutrition !== this._savedNutrition
             || this._backInStock !== this._savedBackInStock
-            || this._favorites !== this._savedFavorites;
+            || this._favorites !== this._savedFavorites
+            || this._reviews !== this._savedReviews
+            || this._loyalty !== this._savedLoyalty
+            || this._loyProgramDirty;
     }
 
     private _wireframe(preset: string) {
@@ -449,9 +532,27 @@ export class ShopBuilderPage extends PlatformPage {
                 nutrition: this._nutrition,
                 back_in_stock: this._backInStock,
                 favorites: this._favorites,
+                reviews: this._reviews,
+                loyalty: this._loyalty,
             },
         });
         if (result !== null) {
+            if (this._loyProgramDirty) {
+                const program = await this._loyaltySetOp.run({
+                    shop_id: this.shopId,
+                    orders_goal: this._loyGoal,
+                    reward_kind: this._loyKind,
+                    reward_value: this._loyKind === 'discount_percent'
+                        ? this._loyValue
+                        : Math.round(this._loyValue * 100),
+                });
+                if (program === null) return;
+                this._savedLoyProgram = {
+                    orders_goal: this._loyGoal,
+                    reward_kind: this._loyKind,
+                    reward_value: this._loyValue,
+                };
+            }
             this._savedPreset = this._preset;
             this._savedAccent = this._accent;
             this._savedMode = this._mode;
@@ -460,6 +561,8 @@ export class ShopBuilderPage extends PlatformPage {
             this._savedNutrition = this._nutrition;
             this._savedBackInStock = this._backInStock;
             this._savedFavorites = this._favorites;
+            this._savedReviews = this._reviews;
+            this._savedLoyalty = this._loyalty;
             await this._shops.load();
             this._refreshPreview();
         }
@@ -709,6 +812,45 @@ export class ShopBuilderPage extends PlatformPage {
                                 ></platform-switch>
                             </div>
                         `)}
+                        ${this._loyalty ? html`
+                            <div class="loyprog">
+                                <div class="lprow">
+                                    <platform-field
+                                        type="number"
+                                        mode="edit"
+                                        label=${this.t('builder.loyalty_goal')}
+                                        .value=${String(this._loyGoal)}
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
+                                            const n = Number(e.detail.value);
+                                            if (Number.isFinite(n) && n >= 1) this._loyGoal = Math.round(n);
+                                        }}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="number"
+                                        mode="edit"
+                                        label=${this._loyKind === 'discount_percent'
+                                            ? this.t('builder.loyalty_reward_pct')
+                                            : this.t('builder.loyalty_reward_sum')}
+                                        .value=${String(this._loyValue)}
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
+                                            const n = Number(e.detail.value);
+                                            if (Number.isFinite(n) && n >= 1) this._loyValue = Math.round(n);
+                                        }}
+                                    ></platform-field>
+                                    <div class="lseg">
+                                        <button
+                                            class=${this._loyKind === 'discount_minor' ? 'on' : ''}
+                                            @click=${() => { this._loyKind = 'discount_minor'; this._loyValue = 500; }}
+                                        >₽</button>
+                                        <button
+                                            class=${this._loyKind === 'discount_percent' ? 'on' : ''}
+                                            @click=${() => { this._loyKind = 'discount_percent'; this._loyValue = 10; }}
+                                        >%</button>
+                                    </div>
+                                </div>
+                                <div class="fdesc">${this.t('builder.loyalty_hint')}</div>
+                            </div>
+                        ` : nothing}
                     </div>
                     ${this._renderFeed()}
                     <div class="actions">
@@ -727,6 +869,11 @@ export class ShopBuilderPage extends PlatformPage {
                             this._nutrition = this._savedNutrition;
                             this._backInStock = this._savedBackInStock;
                             this._favorites = this._savedFavorites;
+                            this._reviews = this._savedReviews;
+                            this._loyalty = this._savedLoyalty;
+                            this._loyGoal = this._savedLoyProgram.orders_goal;
+                            this._loyKind = this._savedLoyProgram.reward_kind;
+                            this._loyValue = this._savedLoyProgram.reward_value;
                         }}>
                             ${this.t('builder.reset')}
                         </platform-button>

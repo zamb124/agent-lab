@@ -14,7 +14,9 @@ import json
 from collections.abc import AsyncIterator
 
 import segno
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from apps.shop.api.market_shell import market_html
@@ -26,14 +28,17 @@ from apps.shop.models.api import (
     ShopCartPriceResponse,
     ShopFavoriteResponse,
     ShopFavoriteSetRequest,
+    ShopFeedbackSetRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
     ShopNotifyBackRequest,
     ShopNotifyBackResponse,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
+    ShopOrderFeedbackResponse,
     ShopOrderStatusResponse,
     ShopPersonalResponse,
+    ShopReviewsResponse,
     ShopStorefrontGeoResponse,
     normalize_shop_theme,
 )
@@ -41,15 +46,18 @@ from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
     ShopCartPricePayload,
     ShopFavoriteSetPayload,
+    ShopFeedbackSetPayload,
     ShopMyOrderCodePayload,
     ShopMyOrdersListPayload,
     ShopNotifyBackPayload,
     ShopOrderCreatePayload,
     ShopPersonalPayload,
     ShopPublicOrderStatusPayload,
+    ShopReviewsListPayload,
     ShopStorefrontGeoPayload,
     op_public_cart_price,
     op_public_favorite_set,
+    op_public_feedback_set,
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
@@ -57,6 +65,7 @@ from apps.shop.realtime.operations import (
     op_public_order_create,
     op_public_order_status,
     op_public_personal,
+    op_public_reviews_list,
     op_public_storefront_geo,
 )
 from core.context import require_context
@@ -317,6 +326,42 @@ async def favorite_set(
         ShopFavoriteSetPayload(
             slug=slug, product_id=payload.product_id, favorite=payload.favorite
         ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post(
+    "/storefront/{slug}/orders/{public_code}/feedback",
+    response_model=ShopOrderFeedbackResponse,
+)
+async def feedback_set(
+    slug: str, public_code: str, payload: ShopFeedbackSetRequest, di: Di
+) -> ShopOrderFeedbackResponse:
+    """Оценка выполненного заказа — идемпотентна по заказу (customer-сессия)."""
+    return await op_public_feedback_set(
+        ShopFeedbackSetPayload(
+            slug=slug,
+            public_code=public_code,
+            rating=payload.rating,
+            chips=payload.chips,
+            comment=payload.comment,
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/storefront/{slug}/reviews", response_model=ShopReviewsResponse)
+async def reviews_list(
+    slug: str,
+    di: Di,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ShopReviewsResponse:
+    """Публичная лента отзывов витрины + агрегат рейтинга (анонимно)."""
+    return await op_public_reviews_list(
+        ShopReviewsListPayload(slug=slug, limit=limit, offset=offset),
         user=require_context().user,
         di=di,
     )

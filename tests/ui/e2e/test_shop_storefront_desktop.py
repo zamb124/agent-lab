@@ -81,7 +81,7 @@ async def _create_storefront(
         client,
         headers,
         "/shops",
-        {"slug": slug, "name": f"E2E Витрина {slug}", "kind": "cafe"},
+        {"slug": slug, "name": f"E2E Витрина {slug}", "kind": "cafe", "lat": 55.7512, "lng": 37.6184},
     )
     shop_id = str(shop["shop_id"])
     if shop_patch is not None:

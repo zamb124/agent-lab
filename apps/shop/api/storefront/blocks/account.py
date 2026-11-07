@@ -90,6 +90,41 @@ body.acct #acct{display:block}
 .aempty .big svg{width:44px;height:44px;fill:var(--muted);opacity:.7}
 .ahours{font:400 12px/1.7 inherit;color:var(--muted);margin-top:6px}
 .aback{background:none;border:0;color:var(--afg,var(--accent));font:600 13px/1 inherit;padding:0 0 12px;cursor:pointer}
+.revline{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:flex;align-items:center;gap:6px;
+  font:600 12.5px/1.2 inherit;color:var(--afg,var(--accent))}
+.revline svg{width:14px;height:14px;fill:currentColor}
+.revline.own{color:var(--muted)}
+.fbt{font:700 15px/1.3 inherit;margin-bottom:10px}
+.fbstars{display:flex;gap:4px;margin:0 0 10px}
+.fstar{background:none;border:0;padding:6px;cursor:pointer;color:var(--muted);transition:transform .12s}
+.fstar svg{width:30px;height:30px;fill:currentColor;display:block}
+.fstar.on{color:var(--afg,var(--accent))}
+.fstar:active{transform:scale(.85)}
+.fbchips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px}
+.fchip{border:1px solid var(--line);background:var(--card2,#2a241f);color:var(--muted);
+  font:600 12.5px/1 inherit;padding:9px 14px;border-radius:999px;cursor:pointer;transition:all .15s}
+.fchip.on{background:color-mix(in srgb,var(--accent) 16%,transparent);
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--afg,var(--accent))}
+.fbtext{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--card2,#2a241f);
+  color:var(--text);font:400 13.5px/1.5 inherit;padding:12px 14px;resize:none;box-sizing:border-box}
+.fbtext:focus{outline:none;border-color:var(--accent)}
+.fbedit{background:none;border:0;color:var(--afg,var(--accent));font:600 13px/1 inherit;padding:10px 0 0;cursor:pointer}
+.fbcmt{margin-top:6px;font:400 13px/1.55 inherit}
+.rstars{display:inline-flex;gap:1px;color:var(--afg,var(--accent))}
+.rstars .off{color:var(--muted)}
+.rstars svg{width:15px;height:15px;fill:currentColor;display:block}
+.rsum{text-align:center;padding:24px 16px;cursor:default}
+.rnum{font:750 42px/1 inherit;letter-spacing:-.02em}
+.rsum .rstars{justify-content:center;margin:10px 0 6px}
+.rsum .rstars svg{width:18px;height:18px}
+.rcount{color:var(--muted);font:500 13px/1.3 inherit}
+.ritem{cursor:default}
+.ritem .rtop{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ritem .rname{font:600 13.5px/1.3 inherit}
+.ritem .rchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ritem .fchip{padding:6px 11px;font-size:11.5px;cursor:default}
+.ritem .rcomment{margin-top:8px;font:400 13px/1.55 inherit}
+.ritem .rwhen{margin-top:8px;font:400 11.5px/1 inherit;color:var(--muted)}
 </style>
 """
 
@@ -105,6 +140,10 @@ const money=v=>fmt(v);
 const WHEN=s=>{try{return new Date(s).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return s}};
 const authApi=API+'/customer-auth';
 const auth=()=>document.querySelector('platform-customer-auth');
+const REV_ON=(S.features||{}).reviews!==false;
+const FBCHIP=S.feedback_chips||{};
+const plural=(n,f)=>f[(n%10===1&&n%100!==11)?0:(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?1:2];
+const starRow=(n,cls)=>'<span class="rstars'+(cls?' '+cls:'')+'">'+[1,2,3,4,5].map(i=>'<span class="'+(i<=n?'':'off')+'">'+ic('star')+'</span>').join('')+'</span>';
 let me=null;
 async function fetchMe(){try{const r=await fetch(authApi+'/me',{credentials:'same-origin'});
   me=r.ok?await r.json():null;}catch(e){me=null;}return me;}
@@ -116,9 +155,10 @@ async function jpost(u,b){const r=await fetch(u,{method:'POST',credentials:'same
 const TABS=[
  {id:'menu',label:'Меню',ic:'M280-80v-366h-80v-414h80v-40h80v40h80v-40h80v40h80v414h-80v366H280Zm80-446h240v-254h-80v160h-80v-160h-80v160h-80v-160Z'},
  {id:'orders',label:'Заказы',ic:'M280-80q-33 0-56.5-23.5T200-160q0-33 23.5-56.5T280-240q33 0 56.5 23.5T360-160q0 33-23.5 56.5T280-80Zm400 0q-33 0-56.5-23.5T600-160q0-33 23.5-56.5T680-240q33 0 56.5 23.5T760-160q0 33-23.5 56.5T680-80ZM208-800h590q23 0 35 20.5t1 41.5L692-482q-11 20-29.5 31T622-440H324l-44 80h480v80H280q-45 0-68-39.5t-2-78.5l54-98-144-304H40v-80h130l38 80Z'},
+ {id:'reviews',label:'Отзывы',ic:'M233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'},
  {id:'contacts',label:'Контакты',ic:'M480-480q33 0 56.5-23.5T560-560q0-33-23.5-56.5T480-640q-33 0-56.5 23.5T400-560q0 33 23.5 56.5T480-480Zm0 294q122-112 181-203.5T720-552q0-109-69.5-178.5T480-800q-141 0-210.5 69.5T200-552q0 71 59 162.5T480-186Z'},
  {id:'profile',label:'Профиль',ic:'M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47Zm0 320q-139 0-241-91.5T98-480q0-38 8-73.5t23-68.5q15 34 43.5 54.5T240-654q66 0 113 47t47 113-47 113-113 47q-34 0-63.5-17.5T146-440q-5 20-7.5 39.5T136-360q0 143 96 241.5T480-160Z'},
-];
+].filter(t=>t.id!=='reviews'||REV_ON);
 const nav=el('nav','acctnav');
 const ahead=el('header','ahead');
 ahead.appendChild(el('span','brand',esc(S.name||'Витрина')));
@@ -177,7 +217,9 @@ function renderOrders(items){
   c.innerHTML='<div class="top"><span class="shop">'+esc(o.shop.name||'Магазин')+'</span><span class="stchip '+stCls(o.status)+(o.active?' live':'')+'">'+st+'</span></div>'
    +'<div class="when">#'+esc(o.public_code)+' · '+WHEN(o.created_at)+'</div>'
    +(itemsTxt?'<div class="items">'+itemsTxt+'</div>':'')
-   +'<div class="sum"><b>'+money(o.total_minor)+'</b><span class="when">'+(o.delivery_type==='delivery'?'Доставка':o.delivery_type==='onsite'?'В заведении':'Самовывоз')+'</span></div>';
+   +'<div class="sum"><b>'+money(o.total_minor)+'</b><span class="when">'+(o.delivery_type==='delivery'?'Доставка':o.delivery_type==='onsite'?'В заведении':'Самовывоз')+'</span></div>'
+   +(o.feedback?'<div class="revline own">'+ic('star')+'Вы оценили на '+o.feedback.rating+'</div>'
+    :o.can_review?'<div class="revline">'+ic('star')+'Оценить заказ</div>':'');
   c.onclick=()=>openOrder(o.public_code);
   v.appendChild(c);
  }
@@ -239,6 +281,8 @@ async function openOrder(code){
   v.appendChild(dbox);
   mountMap(v,o);
  }
+ /* оценка заказа — только на витрине самого магазина */
+ const fbc=fbCard(o,code);if(fbc)v.appendChild(fbc);
  /* actions */
  if(o.can_cancel){const cb=el('button','abtn danger','Отменить заказ');
   cb.onclick=async()=>{try{await jpost(API+'/my/orders/'+encodeURIComponent(code)+'/cancel');openOrder(code);refreshBanner();}catch(e){toast('Не удалось отменить');}};
@@ -268,6 +312,77 @@ function mountMap(v,o){
   holder.appendChild(m);
  }).catch(()=>{holder.remove();});
 }
+/* --- feedback: оценка выполненного заказа --- */
+function fbCard(o,code){
+ if(!REV_ON||!o.shop||o.shop.slug!==S.slug)return null;
+ if(!o.feedback&&!o.can_review)return null;
+ const c=el('div','acard fb');c.style.cursor='default';
+ if(o.feedback){
+  const f=o.feedback;
+  c.innerHTML='<div class="fbt">Ваша оценка</div>'+starRow(f.rating,'fbstars')
+   +((f.chips||[]).length?'<div class="fbchips">'+f.chips.map(k=>'<span class="fchip on">'+esc((f.chip_labels||{})[k]||k)+'</span>').join('')+'</div>':'')
+   +(f.comment?'<div class="fbcmt">'+esc(f.comment)+'</div>':'')
+   +'<button class="fbedit" type="button">Изменить</button>';
+  c.querySelector('.fbedit').onclick=()=>renderFbForm(c,code,f);
+ }else{
+  renderFbForm(c,code,null);
+ }
+ return c;
+}
+function renderFbForm(c,code,fb){
+ let rating=fb?fb.rating:0;
+ const chosen=new Set(fb?fb.chips:[]);
+ c.innerHTML='<div class="fbt">'+(fb?'Изменить оценку':'Как вам заказ?')+'</div>'
+  +'<div class="fbstars" data-role="stars"></div>'
+  +'<div class="fbchips" data-role="chips" hidden></div>'
+  +'<textarea class="fbtext" data-role="text" maxlength="1000" rows="3" placeholder="Расскажите, что понравилось или что можно улучшить" hidden>'+esc(fb?fb.comment:'')+'</textarea>'
+  +'<button class="abtn" type="button" data-role="send" hidden>'+(fb?'Сохранить':'Отправить отзыв')+'</button>';
+ const stars=c.querySelector('[data-role=stars]'),chips=c.querySelector('[data-role=chips]'),
+  text=c.querySelector('[data-role=text]'),send=c.querySelector('[data-role=send]');
+ const paint=()=>{
+  stars.innerHTML=[1,2,3,4,5].map(i=>'<button class="fstar'+(i<=rating?' on':'')+'" type="button" data-r="'+i+'">'+ic('star')+'</button>').join('');
+  const labels=rating?(rating>=4?FBCHIP.pos:FBCHIP.neg):null;
+  chips.innerHTML=labels?Object.keys(labels).map(k=>'<button class="fchip'+(chosen.has(k)?' on':'')+'" type="button" data-c="'+k+'">'+esc(labels[k])+'</button>').join(''):'';
+  chips.hidden=!rating;text.hidden=!rating;send.hidden=!rating;
+ };
+ stars.onclick=ev=>{const b=ev.target.closest('.fstar');if(!b)return;rating=+b.dataset.r;paint();};
+ chips.onclick=ev=>{const b=ev.target.closest('.fchip');if(!b)return;const k=b.dataset.c;
+  if(chosen.has(k))chosen.delete(k);else chosen.add(k);b.classList.toggle('on');};
+ send.onclick=async()=>{
+  send.disabled=true;
+  try{
+   await jpost(API+'/storefront/'+encodeURIComponent(S.slug)+'/orders/'+encodeURIComponent(code)+'/feedback',
+    {rating:rating,chips:[...chosen],comment:text.value.trim()});
+   toast('Спасибо за отзыв!');openOrder(code);
+  }catch(e){send.disabled=false;toast(e&&e.status===401?'Войдите по номеру телефона':'Не удалось отправить');}
+ };
+ paint();
+}
+
+/* --- reviews: публичные отзывы витрины --- */
+async function renderReviews(){
+ const v=el('div','aview');
+ let d;
+ try{d=await jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/reviews?limit=50');}
+ catch(e){acct.innerHTML='<div class="aview"><div class="aempty">Не удалось загрузить отзывы</div></div>';return;}
+ if(!d.count){v.appendChild(el('div','aempty','<div class="big">'+ic('star')+'</div>Отзывов пока нет —<br>закажите и станьте первым'));}
+ else{
+  const sum=el('div','acard rsum');
+  sum.innerHTML='<div class="rnum">'+Number(d.avg_rating).toFixed(1)+'</div>'+starRow(Math.round(d.avg_rating))
+   +'<div class="rcount">'+d.count+' '+plural(d.count,['оценка','оценки','оценок'])+'</div>';
+  v.appendChild(sum);
+  for(const r of d.items||[]){
+   const c=el('div','acard ritem');
+   c.innerHTML='<div class="rtop"><span class="rname">'+esc(r.customer_name||'Гость')+'</span>'+starRow(r.rating)+'</div>'
+    +((r.chips||[]).length?'<div class="rchips">'+r.chips.map(k=>'<span class="fchip on">'+esc((r.chip_labels||{})[k]||k)+'</span>').join('')+'</div>':'')
+    +(r.comment?'<div class="rcomment">'+esc(r.comment)+'</div>':'')
+    +'<div class="rwhen">'+WHEN(r.created_at)+'</div>';
+   v.appendChild(c);
+  }
+ }
+ acct.innerHTML='';acct.appendChild(v);
+}
+
 async function reorder(o){
  const v=o||null;
  if(!v)return;
@@ -399,6 +514,7 @@ let cur='menu';
 function renderView(id){
  cur=id;
  if(id==='orders'){if(curOrder)openOrder(curOrder);else loadOrders();}
+ else if(id==='reviews')renderReviews();
  else if(id==='contacts')renderContacts();
  else if(id==='profile')renderProfile();
 }

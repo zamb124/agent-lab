@@ -90,7 +90,7 @@ async def feed_storefront(
         shop_client_http,
         headers,
         "/shops",
-        {"slug": slug, "name": f"Лента {slug}", "kind": "cafe"},
+        {"slug": slug, "name": f"Лента {slug}", "kind": "cafe", "lat": 55.7512, "lng": 37.6184},
     )
     shop_id = str(shop["shop_id"])
     resp = await shop_client_http.patch(

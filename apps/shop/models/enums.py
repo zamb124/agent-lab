@@ -170,3 +170,46 @@ class ShopShelfPlacement(StrEnum):
     CART = "cart"
 
 
+class ShopFeedbackChip(StrEnum):
+    """Быстрый тег отзыва на заказ — единый словарь всех витрин.
+
+    Подпись зависит от полярности оценки: у 4–5 звёзд теги позитивные,
+    у 1–3 — негативные; ключ тега в ответе один и тот же, текст даёт
+    ``feedback_chip_label`` — локальные словари в коде и JS запрещены.
+    """
+
+    QUALITY = "quality"
+    SERVICE = "service"
+    SPEED = "speed"
+    PACKAGING = "packaging"
+    ACCURACY = "accuracy"
+    PRICE = "price"
+
+
+_FEEDBACK_CHIP_LABELS: dict[ShopFeedbackChip, tuple[str, str]] = {
+    ShopFeedbackChip.QUALITY: ("Качество на уровне", "Качество подвело"),
+    ShopFeedbackChip.SERVICE: ("Вежливый сервис", "Сервис подвёл"),
+    ShopFeedbackChip.SPEED: ("Быстро", "Долго ждали"),
+    ShopFeedbackChip.PACKAGING: ("Аккуратная упаковка", "Упаковка пострадала"),
+    ShopFeedbackChip.ACCURACY: ("Всё как заказывали", "Ошиблись в заказе"),
+    ShopFeedbackChip.PRICE: ("Выгодно", "Дорого"),
+}
+
+
+def feedback_chip_label(chip: ShopFeedbackChip, positive: bool) -> str:
+    """Пользовательский текст тега: ``positive=True`` — для оценки 4–5."""
+    return _FEEDBACK_CHIP_LABELS[chip][0 if positive else 1]
+
+
+def feedback_chip_labels(positive: bool) -> dict[str, str]:
+    """Словарь «ключ → подпись» для рендера чипов выбранной полярности."""
+    return {chip.value: feedback_chip_label(chip, positive) for chip in ShopFeedbackChip}
+
+
+class ShopLoyaltyRewardKind(StrEnum):
+    """Тип награды программы лояльности за ``orders_goal`` выполненных заказов."""
+
+    DISCOUNT_MINOR = "discount_minor"
+    DISCOUNT_PERCENT = "discount_percent"
+
+

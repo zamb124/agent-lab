@@ -3,7 +3,9 @@
 Полки описывают композицию ленты (что показать и как), баннеры —
 сторис-карточки верха. Источники полок: ручная выборка, зеркало
 категории или вычисляемая секция (новинки/хиты/возвраты/апсейл) —
-``resolve_shelf_products`` собирает id'шники для снапшота.
+``resolve_shelf_products`` собирает id'шники для снапшота. Отзывы на
+выполненный заказ — тоже здесь: та же витринная поверхность и
+customer-скоуп.
 """
 
 from __future__ import annotations
@@ -15,18 +17,27 @@ from apps.shop.models import (
     ShopBanner,
     ShopCategory,
     ShopFavorite,
+    Shop,
+    ShopFeedbackChip,
+    ShopLoyaltyRewardKind,
     ShopOrder,
+    ShopOrderFeedback,
     ShopOrderItem,
     ShopOrderStatus,
     ShopProduct,
     ShopShelf,
+    feedback_chip_labels,
 )
 from apps.shop.models.api import (
     ShopBannerCreateRequest,
     ShopBannerUpdateRequest,
+    ShopOrderFeedbackResponse,
     ShopOrderItemSelection,
+    ShopPersonalLoyalty,
     ShopPersonalResponse,
     ShopPersonalUsualItem,
+    ShopReviewItemResponse,
+    ShopReviewsResponse,
     ShopShelfCreateRequest,
     ShopShelfUpdateRequest,
 )
@@ -36,7 +47,9 @@ from apps.shop.models.enums import (
     ShopShelfLayout,
     ShopShelfPlacement,
 )
+from apps.shop.services.loyalty_service import LoyaltyService, loyalty_enabled
 from apps.shop.services.shop_service import ShopService
+from core.customers.models.customer import Customer
 from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
@@ -53,8 +66,11 @@ _USUAL_LIMIT = 10
 class FeedService:
     """Полки и баннеры витринной ленты магазина."""
 
-    def __init__(self, shop_service: ShopService) -> None:
+    def __init__(
+        self, shop_service: ShopService, loyalty_service: LoyaltyService
+    ) -> None:
         self._shops: ShopService = shop_service
+        self._loyalty: LoyaltyService = loyalty_service
 
     # --- Полки ---
 
@@ -373,7 +389,7 @@ class FeedService:
 
     # --- Персонализация покупателя (/personal) ---
 
-    async def personal(self, shop_id: str, customer_id: str) -> ShopPersonalResponse:
+    async def personal(self, shop: Shop, customer_id: str) -> ShopPersonalResponse:
         """«Как всегда» и подписки покупателя конкретной витрины.
 
         ``usual`` — топ товаров по сумме штук в неотменённых заказах
@@ -381,6 +397,7 @@ class FeedService:
         последнего заказа с этой позицией. ``back_in_stock_ids`` —
         активные подписки «сообщить о появлении» этого магазина.
         """
+        shop_id = shop.shop_id
         orders = await ShopOrder.list_by_customer_shop_by_created_desc(
             customer_id, shop_id, limit=_USUAL_ORDERS_LIMIT
         )
@@ -438,8 +455,144 @@ class FeedService:
         favorites = await ShopFavorite.list_by_shop_customer_by_created_desc(
             shop_id, customer_id
         )
+        loyalty: ShopPersonalLoyalty | None = None
+        if loyalty_enabled(shop):
+            program, account = await self._loyalty.account_state(shop, customer_id)
+            loyalty = ShopPersonalLoyalty(
+                progress=account.progress if account else 0,
+                orders_goal=program.orders_goal,
+                rewards_available=account.rewards_available if account else 0,
+                reward_kind=ShopLoyaltyRewardKind(program.reward_kind),
+                reward_value=program.reward_value,
+            )
         return ShopPersonalResponse(
             favorite_ids=[f.product_id for f in favorites],
             usual=usual,
             back_in_stock_ids=[pid for pid in sub_product_ids if pid in own],
+            loyalty=loyalty,
         )
+
+    # --- Отзывы на заказ ---
+
+    async def set_feedback(
+        self,
+        shop_id: str,
+        public_code: str,
+        customer_id: str,
+        rating: int,
+        chips: list[ShopFeedbackChip],
+        comment: str,
+    ) -> ShopOrderFeedback:
+        """Оценка покупателем своего выполненного заказа.
+
+        Заказ ищется по ``public_code``: чужой или чужой витрины —
+        not-found. Отзыв принимает только завершённый заказ; повторная
+        отправка — редактирование той же строки (идемпотентно по
+        ``shop_order_id``).
+        """
+        order = await ShopOrder.get_by_public_code(public_code)
+        if (
+            order is None
+            or order.customer_id != customer_id
+            or order.shop_id != shop_id
+        ):
+            raise PlatformNotFoundError(
+                "Order not found", error_code="order_not_found"
+            )
+        if order.status != ShopOrderStatus.DONE:
+            raise PlatformConflictError(
+                "Order is not completed", error_code="feedback_not_ready"
+            )
+        now = utcnow()
+        chip_keys = [ShopFeedbackChip(chip).value for chip in chips]
+        existing = await ShopOrderFeedback.find_by_order(order.shop_order_id)
+        if existing is not None:
+            existing.rating = rating
+            existing.chips = chip_keys
+            existing.comment = comment
+            existing.updated_at = now
+            _ = await existing.save()
+            return existing
+        display_name = await self._review_display_name(order, customer_id)
+        return await ShopOrderFeedback.create(
+            ShopOrderFeedback(
+                shop_order_feedback_id=new_id("shopfb"),
+                shop_id=shop_id,
+                shop_order_id=order.shop_order_id,
+                customer_id=customer_id,
+                customer_name=display_name,
+                rating=rating,
+                chips=chip_keys,
+                comment=comment,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    async def _review_display_name(
+        self, order: ShopOrder, customer_id: str
+    ) -> str:
+        """Публичное имя отзыва: имя профиля → имя из заказа (не телефон)."""
+        customer = await Customer.get(customer_id)
+        if customer is not None and customer.name:
+            return customer.name
+        name = order.customer_name
+        name_digits = "".join(ch for ch in name if ch.isdigit())
+        phone_digits = "".join(ch for ch in order.customer_phone if ch.isdigit())
+        if name and (len(name_digits) < 7 or name_digits != phone_digits):
+            return name
+        return ""
+
+    async def feedback_by_order_ids(
+        self, order_ids: list[str]
+    ) -> dict[str, ShopOrderFeedback]:
+        """Отзывы по набору заказов — один запрос для ленты кабинета."""
+        feedbacks = await ShopOrderFeedback.list_many_by_order_ids(order_ids)
+        return {f.shop_order_id: f for f in feedbacks}
+
+    async def reviews(
+        self, shop_id: str, *, limit: int, offset: int
+    ) -> ShopReviewsResponse:
+        """Публичная лента отзывов витрины + агрегат рейтинга."""
+        items = await ShopOrderFeedback.list_by_shop_by_created_desc(
+            shop_id, limit=limit, offset=offset
+        )
+        count, avg = await ShopOrderFeedback.summary_by_shop(shop_id)
+        return ShopReviewsResponse(
+            avg_rating=round(avg, 2) if avg is not None else None,
+            count=count,
+            items=[_review_item(f) for f in items],
+        )
+
+    async def rating_summary(self, shop_id: str) -> dict[str, JsonValue]:
+        """Агрегат рейтинга для снапшота витрины — ``{avg, count}``."""
+        count, avg = await ShopOrderFeedback.summary_by_shop(shop_id)
+        return {
+            "avg": round(avg, 2) if avg is not None else None,
+            "count": count,
+        }
+
+
+def feedback_response(feedback: ShopOrderFeedback) -> ShopOrderFeedbackResponse:
+    """Отзыв покупателя в его кабинете — чипы с подписями полярности оценки."""
+    labels = feedback_chip_labels(feedback.rating >= 4)
+    return ShopOrderFeedbackResponse(
+        rating=feedback.rating,
+        chips=list(feedback.chips),
+        chip_labels={c: labels[c] for c in feedback.chips if c in labels},
+        comment=feedback.comment,
+        created_at=feedback.created_at.isoformat(),
+    )
+
+
+def _review_item(feedback: ShopOrderFeedback) -> ShopReviewItemResponse:
+    """Публичная карточка отзыва — имя из снапшота заказа, без PII."""
+    labels = feedback_chip_labels(feedback.rating >= 4)
+    return ShopReviewItemResponse(
+        rating=feedback.rating,
+        chips=list(feedback.chips),
+        chip_labels={c: labels[c] for c in feedback.chips if c in labels},
+        comment=feedback.comment,
+        customer_name=feedback.customer_name,
+        created_at=feedback.created_at.isoformat(),
+    )

@@ -192,7 +192,6 @@ EVENT_HITL_OPERATOR_RESPONDED = "hitl_operator_responded"
 EVENT_BILLING_SETTLEMENT_LAG = "billing_settlement_lag"
 EVENT_WS_COMMAND_FINISHED = "ws_command_finished"
 EVENT_PLATFORM_EVENT_PUBLISHED = "platform_event_published"
-EVENT_PLATFORM_EVENT_RECEIVED = "platform_event_received"
 EVENT_BACKGROUND_TASK_STARTED = "background_task_started"
 EVENT_BACKGROUND_TASK_FAILED = "background_task_failed"
 

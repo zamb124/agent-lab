@@ -18,7 +18,14 @@ _SHOPS = f"{API_PREFIX}/shops"
 async def _make_shop(
     client: AsyncClient, slug: str, **overrides: Any
 ) -> dict[str, Any]:
-    payload = {"slug": slug, "name": f"Shop {slug}", "kind": "restaurant", **overrides}
+    payload = {
+        "slug": slug,
+        "name": f"Shop {slug}",
+        "kind": "restaurant",
+        "lat": 55.7512,
+        "lng": 37.6184,
+        **overrides,
+    }
     resp = await client.post(_SHOPS, json=payload)
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -61,21 +68,21 @@ class TestShopCrud:
         slug = f"dup-{unique_id[:8]}"
         await _make_shop(shop_client, slug)
         resp = await shop_client.post(
-            _SHOPS, json={"slug": slug, "name": "Other"}
+            _SHOPS, json={"slug": slug, "name": "Other", "lat": 55.7512, "lng": 37.6184}
         )
         assert resp.status_code == 409
 
     async def test_slug_reserved_rejected(self, shop_client: AsyncClient) -> None:
         for slug in ("grafana", "www", "api", "shop"):
             resp = await shop_client.post(
-                _SHOPS, json={"slug": slug, "name": "Bad"}
+                _SHOPS, json={"slug": slug, "name": "Bad", "lat": 55.7512, "lng": 37.6184}
             )
             assert resp.status_code == 409, slug
 
     async def test_slug_invalid_rejected(self, shop_client: AsyncClient) -> None:
         for slug in ("AB", "UP Case", "up_case", "-lead", "trail-", "a" * 41, "с луг"):
             resp = await shop_client.post(
-                _SHOPS, json={"slug": slug, "name": "Bad"}
+                _SHOPS, json={"slug": slug, "name": "Bad", "lat": 55.7512, "lng": 37.6184}
             )
             assert resp.status_code in (409, 422), slug
 
@@ -110,6 +117,43 @@ class TestShopCrud:
         assert resp.json()["status"] == "published"
         resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/suspend")
         assert resp.json()["status"] == "suspended"
+
+    async def test_publish_requires_geo_point(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"nopt-{unique_id[:8]}"
+        resp = await shop_client.post(_SHOPS, json={"slug": slug, "name": "NoPoint"})
+        shop = resp.json()
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        assert resp.status_code == 409
+        assert resp.json()["error_code"] == "shop_point_required"
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"lat": 55.75, "lng": 37.61}
+        )
+        assert resp.status_code == 200
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        assert resp.status_code == 200
+
+    async def test_published_shop_cannot_lose_geo_point(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"clr-{unique_id[:8]}")
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        assert resp.status_code == 200
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"lat": None, "lng": None}
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error_code"] == "shop_point_required"
+
+    async def test_geo_point_requires_pair(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"half-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "Half", "lat": 55.75}
+        )
+        assert resp.status_code == 422
 
     async def test_delete_shop_excluded_from_list(
         self, shop_client: AsyncClient, unique_id: str
