@@ -1113,5 +1113,17 @@
     "geo_suppression_not_found": "Скрытие объекта не найдено",
     "geo_edge_override_not_found": "Закрытие дороги не найдено",
     "geo_import_source_unknown": "Неизвестный источник импорта"
+  },
+  "json_tree": {
+    "empty": "Пусто",
+    "type_null": "null",
+    "type_boolean": "boolean",
+    "type_number": "number",
+    "type_string": "string",
+    "type_array": "array ({{count}})",
+    "type_object": "object ({{count}})",
+    "show_image": "Показать как картинку",
+    "hide_image": "Скрыть картинку",
+    "image_alt": "Картинка {{path}}"
   }
 }

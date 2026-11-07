@@ -28,6 +28,12 @@ import {
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
+const EMPTY_PARAMETERS_SCHEMA: Record<string, unknown> = Object.freeze({
+    type: 'object',
+    properties: {},
+    required: [],
+});
+
 export class FlowsCodeWorkbench extends PlatformElement {
     static i18nNamespace = 'flows';
 
@@ -178,13 +184,17 @@ export class FlowsCodeWorkbench extends PlatformElement {
     private _editorStateFetchSeq: number;
     private _codeValidationTimer: number;
     private _codeValidationSeq: number;
+    private _completionContextCache: { language: string; parameters_schema: Record<string, unknown> } | null;
+    private _completionContextFingerprint: string;
+    private _completionVariableKeysCache: string[];
+    private _completionVariableKeysFingerprint: string;
 
     constructor() {
         super();
         this.variant = 'node';
         this.code = '';
         this.language = 'python';
-        this.parametersSchema = { type: 'object', properties: {}, required: [] };
+        this.parametersSchema = EMPTY_PARAMETERS_SCHEMA;
         this.documentationPerspective = 'node';
         this.completionVariableKeys = [];
         this.completionFlowId = '';
@@ -202,6 +212,10 @@ export class FlowsCodeWorkbench extends PlatformElement {
         this._codeValidationTimer = 0;
         /** @type {number} */
         this._codeValidationSeq = 0;
+        this._completionContextCache = null;
+        this._completionContextFingerprint = '';
+        this._completionVariableKeysCache = [];
+        this._completionVariableKeysFingerprint = '';
         this._codeEditorStateOp = this.useOp('flows/code_editor_state');
         this._codeValidateOp = this.useOp('flows/code_validate');
     }
@@ -246,10 +260,22 @@ export class FlowsCodeWorkbench extends PlatformElement {
     }
 
     _completionContextPayload() {
-        return {
-            language: this._normalizedLanguage(),
-            parameters_schema: this._parametersSchemaObject(),
+        const language = this._normalizedLanguage();
+        const parametersSchema = this._parametersSchemaObject();
+        const fingerprint = JSON.stringify({ language, parameters_schema: parametersSchema });
+        if (
+            this._completionContextCache !== null
+            && fingerprint === this._completionContextFingerprint
+        ) {
+            return this._completionContextCache;
+        }
+        const payload = {
+            language,
+            parameters_schema: parametersSchema,
         };
+        this._completionContextCache = payload;
+        this._completionContextFingerprint = fingerprint;
+        return payload;
     }
 
     _validationKind() {
@@ -326,13 +352,13 @@ export class FlowsCodeWorkbench extends PlatformElement {
 
     _effectiveCompletionVariableKeys() {
         const manual = Array.isArray(this.completionVariableKeys)
-            ? this.completionVariableKeys.filter((k) => typeof k === 'string')
+            ? this.completionVariableKeys.filter((k): k is string => typeof k === 'string')
             : [];
         const fromState = Array.isArray(this._editorStateVarKeys)
-            ? this._editorStateVarKeys.filter((k) => typeof k === 'string')
+            ? this._editorStateVarKeys.filter((k): k is string => typeof k === 'string')
             : [];
-        const out = [];
-        const seen = new Set();
+        const out: string[] = [];
+        const seen = new Set<string>();
         for (const k of [...manual, ...fromState]) {
             if (seen.has(k)) {
                 continue;
@@ -340,6 +366,12 @@ export class FlowsCodeWorkbench extends PlatformElement {
             seen.add(k);
             out.push(k);
         }
+        const fingerprint = JSON.stringify(out);
+        if (fingerprint === this._completionVariableKeysFingerprint) {
+            return this._completionVariableKeysCache;
+        }
+        this._completionVariableKeysCache = out;
+        this._completionVariableKeysFingerprint = fingerprint;
         return out;
     }
 
@@ -563,7 +595,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
         if (a !== null && typeof a === 'object' && !Array.isArray(a)) {
             return a;
         }
-        return { type: 'object', properties: {}, required: [] };
+        return EMPTY_PARAMETERS_SCHEMA;
     }
 
     override render(): TemplateResult {

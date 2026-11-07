@@ -427,6 +427,8 @@ export class FlowsCodeEditor extends PlatformElement {
     private _lspSocket: WebSocket | null;
     private _lspGeneration: number;
     private _lspRestartTimer: number;
+    /** Fingerprint language + schema + variable_keys активной LSP-сессии; рестарт только при смене содержимого. */
+    private _lspSessionFingerprint: string;
     private _lastTheme: 'dark' | 'light' | undefined;
     private _initInFlight: Promise<void> | null;
     private _onWindowKeydown: (event: KeyboardEvent) => void;
@@ -456,6 +458,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._lspSocket = null;
         this._lspGeneration = 0;
         this._lspRestartTimer = 0;
+        this._lspSessionFingerprint = '';
         this._themeSel = this.select((state) => state.theme.mode);
         this._lastTheme = undefined;
         this._initInFlight = null;
@@ -548,10 +551,13 @@ export class FlowsCodeEditor extends PlatformElement {
             this._editorView.dispatch({
                 effects: this._languageCompartment.reconfigure(this._buildLanguageExtension()),
             });
-            this._scheduleLspRestart();
         }
-        if (changed.has('completionContext') || changed.has('completionVariableKeys')) {
-            this._scheduleLspRestart();
+        if (
+            changed.has('language')
+            || changed.has('completionContext')
+            || changed.has('completionVariableKeys')
+        ) {
+            this._maybeScheduleLspRestart();
         }
         if ((changed.has('language') || changed.has('lineWrapping')) && this._wrappingCompartment) {
             this._editorView.dispatch({
@@ -744,6 +750,29 @@ export class FlowsCodeEditor extends PlatformElement {
         return [];
     }
 
+    _lspFingerprintFromProps(): string {
+        const language = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
+        const ctx = isPlainObject(this.completionContext) ? this.completionContext : {};
+        const parametersSchema = isPlainObject(ctx.parameters_schema)
+            ? ctx.parameters_schema
+            : { type: 'object', properties: {} };
+        const variableKeys = Array.isArray(this.completionVariableKeys)
+            ? this.completionVariableKeys.filter((key) => typeof key === 'string' && key.length > 0)
+            : [];
+        return JSON.stringify({
+            language,
+            parameters_schema: parametersSchema,
+            variable_keys: variableKeys,
+        });
+    }
+
+    _maybeScheduleLspRestart() {
+        if (this._lspFingerprintFromProps() === this._lspSessionFingerprint) {
+            return;
+        }
+        this._scheduleLspRestart();
+    }
+
     _scheduleLspRestart() {
         if (this._lspRestartTimer) {
             window.clearTimeout(this._lspRestartTimer);
@@ -756,6 +785,7 @@ export class FlowsCodeEditor extends PlatformElement {
 
     _stopLsp() {
         this._lspGeneration += 1;
+        this._lspSessionFingerprint = '';
         if (this._lspClient && typeof this._lspClient.disconnect === 'function') {
             this._lspClient.disconnect();
         }
@@ -776,6 +806,10 @@ export class FlowsCodeEditor extends PlatformElement {
             return;
         }
         const language = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
+        const fingerprint = this._lspFingerprintFromProps();
+        if (fingerprint === this._lspSessionFingerprint && this._lspClient !== null) {
+            return;
+        }
         this._stopLsp();
         if (!LSP_LANGUAGES.has(language)) {
             return;
@@ -860,6 +894,7 @@ export class FlowsCodeEditor extends PlatformElement {
         client.connect(transport);
         this._lspClient = client;
         this._lspSocket = socket;
+        this._lspSessionFingerprint = fingerprint;
         this._editorView.dispatch({
             effects: this._lspCompartment.reconfigure(
                 client.plugin(lsp.documentUri, lsp.languageId),

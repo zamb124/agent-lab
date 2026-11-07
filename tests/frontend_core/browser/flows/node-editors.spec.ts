@@ -691,6 +691,26 @@ describe('node editors — top-level NodeConfig contract', () => {
         });
     });
 
+    it('flows-code-workbench — completionContext стабилен при смене code', async () => {
+        const workbench = await fixture<TestEl>(html`
+            <flows-code-workbench
+                .variant=${'node'}
+                .language=${'python'}
+                .code=${'async def run(args, state):\n    return state'}
+                .documentationPerspective=${'node'}
+            ></flows-code-workbench>
+        `);
+        await elementUpdated(workbench);
+        const editor = qs(shadow(workbench), 'flows-code-editor');
+        expect(editor).to.not.be.null;
+        const firstCtx = editor.completionContext;
+        const firstKeys = editor.completionVariableKeys;
+        workbench.code = 'async def run(args, state):\n    state["result"] = 1\n    return state';
+        await elementUpdated(workbench);
+        expect(editor.completionContext).to.equal(firstCtx);
+        expect(editor.completionVariableKeys).to.equal(firstKeys);
+    });
+
     it('flows-code-workbench — debounce-валидация отправляет language и kind', async () => {
         const workbench = await fixture<TestEl>(html`
             <flows-code-workbench

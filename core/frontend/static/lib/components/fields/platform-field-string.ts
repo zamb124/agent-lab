@@ -1,5 +1,6 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
+import { live } from 'lit/directives/live.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']) as readonly string[];
@@ -121,7 +122,7 @@ export class PlatformFieldString extends PlatformElement {
             <input
                 type=${t}
                 class="field-pill-input"
-                .value=${this.value === null || this.value === undefined ? '' : this.value}
+                .value=${live(this.value === null || this.value === undefined ? '' : this.value)}
                 placeholder=${this.placeholder}
                 list=${suggestions.length > 0 ? this._listId : nothing}
                 ?disabled=${this.disabled}

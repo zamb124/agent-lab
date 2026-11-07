@@ -15,6 +15,12 @@ import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
+const EMPTY_PARAMETERS_SCHEMA: Record<string, unknown> = Object.freeze({
+    type: 'object',
+    properties: {},
+    required: [],
+});
+
 export class FlowsCodeNodeEditor extends PlatformElement {
     static i18nNamespace = 'flows';
 
@@ -60,6 +66,10 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         `,
     ];
     private _toolSource: OpController;
+    private _completionVariableKeys: string[];
+    private _completionVariableKeysFingerprint: string;
+    private _parametersSchemaCache: Record<string, unknown>;
+    private _parametersSchemaFingerprint: string;
 
     constructor() {
         super();
@@ -74,6 +84,10 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.dataflowNode = null;
         this.embedded = false;
         this._hydrateKey = '';
+        this._completionVariableKeys = [];
+        this._completionVariableKeysFingerprint = '';
+        this._parametersSchemaCache = EMPTY_PARAMETERS_SCHEMA;
+        this._parametersSchemaFingerprint = '';
         this._toolSource = this.useOp('flows/code_tool_source');
     }
 
@@ -82,6 +96,39 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         if (changed.has('nodeId')) {
             this._hydrateKey = '';
         }
+        if (changed.has('flowVariables')) {
+            this._syncCompletionVariableKeys();
+        }
+        if (changed.has('nodeConfig')) {
+            this._syncParametersSchema();
+        }
+    }
+
+    _syncCompletionVariableKeys() {
+        const fv = isPlainObject(this.flowVariables) ? this.flowVariables : {};
+        const keys = Object.keys(fv);
+        const fingerprint = JSON.stringify(keys);
+        if (fingerprint === this._completionVariableKeysFingerprint) {
+            return;
+        }
+        this._completionVariableKeys = keys;
+        this._completionVariableKeysFingerprint = fingerprint;
+    }
+
+    _syncParametersSchema() {
+        const cfg = isPlainObject(this.nodeConfig) ? this.nodeConfig : {};
+        const schema = cfg.parameters_schema;
+        if (isPlainObject(schema)) {
+            const fingerprint = JSON.stringify(schema);
+            if (fingerprint === this._parametersSchemaFingerprint) {
+                return;
+            }
+            this._parametersSchemaCache = schema;
+            this._parametersSchemaFingerprint = fingerprint;
+            return;
+        }
+        this._parametersSchemaCache = EMPTY_PARAMETERS_SCHEMA;
+        this._parametersSchemaFingerprint = '';
     }
 
     override updated(changed: PropertyValues<this>): void {
@@ -151,13 +198,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
     override render(): TemplateResult {
         const cfg = isPlainObject(this.nodeConfig) ? this.nodeConfig : {};
         const code = typeof cfg.code === 'string' ? cfg.code : '';
-        const schema = cfg.parameters_schema;
-        const parametersSchema = isPlainObject(schema)
-            ? schema
-            : { type: 'object', properties: {}, required: [] };
         const language = normalizeFlowCodeLanguage(cfg.language);
-        const fv = isPlainObject(this.flowVariables) ? this.flowVariables : {};
-        const completionVariableKeys = Object.keys(fv);
         const bid = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : '';
         const fid = typeof this.flowId === 'string' ? this.flowId : '';
         return html`
@@ -190,10 +231,10 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                         documentation-perspective="node"
                         .code=${code}
                         .language=${language}
-                        .parametersSchema=${parametersSchema}
+                        .parametersSchema=${this._parametersSchemaCache}
                         .completionFlowId=${fid}
                         .completionBranchId=${bid}
-                        .completionVariableKeys=${completionVariableKeys}
+                        .completionVariableKeys=${this._completionVariableKeys}
                         @code-workbench-change=${this._onWorkbenchChange}
                     ></flows-code-workbench>
                 </div>

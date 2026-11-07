@@ -14,12 +14,17 @@ export const codeExecuteTestRunHandler = {
         opError: op.error,
         lastResult: op.lastResult,
     }),
-    run: async ({ host, op, requestClientId }: any) => {
+    run: async ({ host, op, requestClientId, matchCtx }: any) => {
         if (!host || typeof host._stateValue !== 'function') {
             throw new Error('codeExecuteTestRunHandler: host._stateValue required');
         }
         if (typeof host._nodeConfigForPayload !== 'function') {
             throw new Error('codeExecuteTestRunHandler: host._nodeConfigForPayload required');
+        }
+        // host.nodeType — DOM Node.nodeType (число 1), не тип flow-ноды.
+        const nodeType = matchCtx && typeof matchCtx.nodeType === 'string' ? matchCtx.nodeType : '';
+        if (nodeType.length === 0) {
+            throw new Error('codeExecuteTestRunHandler: matchCtx.nodeType required');
         }
         let state;
         try {
@@ -34,7 +39,7 @@ export const codeExecuteTestRunHandler = {
             return;
         }
         const nodeConfig = host._nodeConfigForPayload();
-        if (host.nodeType === 'datasource' && nodeConfig.datasource_operation === 'execute') {
+        if (nodeType === 'datasource' && nodeConfig.datasource_operation === 'execute') {
             const { platformConfirm } = await import('@platform/lib/components/platform-confirm-modal.js');
             const confirmed = await platformConfirm(
                 host.t('datasource_node_editor.execute_confirm_body'),
@@ -51,7 +56,7 @@ export const codeExecuteTestRunHandler = {
         const skill = typeof host.branchId === 'string' && host.branchId.length > 0 ? host.branchId : 'base';
         setTestRunRequestClientId(requestClientId);
         const result = await op.run({
-            node_type: host.nodeType,
+            node_type: nodeType,
             node_config: nodeConfig,
             state,
             flow_id: host.flowId,

@@ -26,6 +26,7 @@ UI каждого сервиса — Lit 3 SPA на TypeScript strict (`tsconfig
 9. **ACL в UI.** Права — только ответ backend OpenFGA: admin-контролы — по `state.auth.user.canAdmin` из `GET /auth/me`; проверка ролей по JWT и `user.companies` запрещена → `authorization.mdc`. `[без гейта]`
 10. **Пользователь на экране.** `user_id` показывают только `<platform-user-chip>` и модалка `platform.user_info`; сырой `user_id` в разметке запрещён → `ui_components.mdc` § Пользователь. `[без гейта]`
 11. **Интерфейс flow.** Интерфейс flow в SPA — только `<platform-flow-ui>`: хост передаёт `getRequestHeaders`/`getExtraMetadataVariables`, не делает `fetch` к flows, не разбирает A2A-кадры, не рендерит блоки и не исполняет имя действия из артефакта → `flow_ui.mdc` § Frontend runtime. `[без гейта]`
+12. **Стабильный render.** Object/array prop и payload побочного эффекта с тем же содержимым — та же ссылка или fingerprint до эффекта (рестарт LSP, refetch, `run`); `{}` / `[]` / `Object.keys` / литерал `{...}` в `render()` на каждый кадр запрещены, если значение уходит в child или в `updated`. Поиск и async-список: поле ввода в одном шаблоне (не ветка spinner/empty), результаты — stale-while-revalidate до ответа; value поля — `live()` (`platform-field-string` / `platform-field-text`). Эталоны: `flows-code-editor` (`apps/flows/ui/components/editors/flows-code-editor.ts`), `flows-library-picker-modal` (`apps/flows/ui/modals/flows-library-picker-modal.ts`). `[без гейта]`
 
 ### Структура `apps/<svc>/ui/`
 

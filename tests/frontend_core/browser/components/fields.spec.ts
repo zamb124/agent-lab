@@ -257,6 +257,20 @@ describe('platform-field-string base', () => {
         const inp = qs(shadow(el), 'input.field-pill-input');
         expect(inp.placeholder).to.equal('hint here');
     });
+
+    it('повторный render с тем же value не сбрасывает caret', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field-string mode="edit" value="read_f"></platform-field-string>
+        `);
+        const inp = qs(shadow(el), 'input.field-pill-input') as HTMLInputElement;
+        inp.focus();
+        inp.setSelectionRange(3, 3);
+        el.requestUpdate();
+        await elementUpdated(el);
+        expect(inp.selectionStart).to.equal(3);
+        expect(inp.selectionEnd).to.equal(3);
+        expect(document.activeElement === inp || el.contains(document.activeElement)).to.equal(true);
+    });
 });
 
 describe('platform-field-text', () => {

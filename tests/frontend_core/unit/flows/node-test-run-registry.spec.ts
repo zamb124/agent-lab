@@ -426,6 +426,57 @@ describe('uniquePinnedResourceType', () => {
     });
 });
 
+describe('codeExecuteTestRunHandler', () => {
+    it('sends matchCtx.nodeType, not DOM host.nodeType', async () => {
+        const payloads: Record<string, unknown>[] = [];
+        const host = {
+            nodeType: 1,
+            flowId: 'flow_1',
+            branchId: 'base',
+            nodeId: 'compute',
+            toast: () => {
+                throw new Error('toast must not run');
+            },
+            _stateValue: () => '{"content":null}',
+            _nodeConfigForPayload: () => ({ type: 'code', code: 'async def run(args, state):\n    return state\n' }),
+            _flowEditor: {
+                setPreviewExecutionState: () => undefined,
+                recordDataflowObservation: () => undefined,
+            },
+        };
+        const op = {
+            run: async (payload: Record<string, unknown>) => {
+                payloads.push(payload);
+                return { success: true, diff: [], output_state: {}, duration_ms: 1 };
+            },
+        };
+        await codeExecuteTestRunHandler.run({
+            host,
+            op,
+            requestClientId: 'client_1',
+            matchCtx: { nodeType: 'code', resourceType: null },
+        });
+        expect(payloads).toHaveLength(1);
+        expect(payloads[0]?.node_type).toBe('code');
+    });
+
+    it('throws when matchCtx.nodeType is missing', async () => {
+        const host = {
+            nodeType: 1,
+            _stateValue: () => '{}',
+            _nodeConfigForPayload: () => ({}),
+        };
+        await expect(
+            codeExecuteTestRunHandler.run({
+                host,
+                op: { run: async () => ({ success: false }) },
+                requestClientId: 'client_1',
+                matchCtx: { nodeType: 1, resourceType: null },
+            }),
+        ).rejects.toThrow(/matchCtx\.nodeType required/);
+    });
+});
+
 describe('flows/rag_node_test slice', () => {
     it('stores query by nodeId', () => {
         const initial = flowsRagNodeTestSlice.slice.initial;

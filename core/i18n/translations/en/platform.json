@@ -1113,5 +1113,17 @@
     "geo_suppression_not_found": "Feature suppression not found",
     "geo_edge_override_not_found": "Road closure override not found",
     "geo_import_source_unknown": "Unknown import source"
+  },
+  "json_tree": {
+    "empty": "Empty",
+    "type_null": "null",
+    "type_boolean": "boolean",
+    "type_number": "number",
+    "type_string": "string",
+    "type_array": "array ({{count}})",
+    "type_object": "object ({{count}})",
+    "show_image": "Show as image",
+    "hide_image": "Hide image",
+    "image_alt": "Image at {{path}}"
   }
 }

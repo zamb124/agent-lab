@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
+import { live } from 'lit/directives/live.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 export class PlatformFieldText extends PlatformElement {
@@ -58,7 +59,7 @@ export class PlatformFieldText extends PlatformElement {
         return html`
             <textarea
                 class="field-pill-textarea"
-                .value=${this.value === null || this.value === undefined ? '' : this.value}
+                .value=${live(this.value === null || this.value === undefined ? '' : this.value)}
                 placeholder=${this.placeholder}
                 ?disabled=${this.disabled}
                 @input=${this._onInput}

@@ -543,6 +543,6 @@ describe('flows-flow-canvas node run result pill', () => {
         expect(q(shadow(modal)!, '.field-row[data-path="field_extra"]')).to.not.equal(null);
         const valueView = qs(shadow(modal)!, 'flows-node-run-value-view');
         expect(valueView).to.not.equal(null);
-        expect(q(shadow(valueView)!, 'flows-json-tree')).to.not.equal(null);
+        expect(q(shadow(valueView)!, 'platform-json-tree')).to.not.equal(null);
     });
 });
