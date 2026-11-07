@@ -1,0 +1,234 @@
+{
+  "flow_id": "shop_menu_agent",
+  "name": "Shop Menu Agent",
+  "description": "Разбор меню в JSON с crop фото блюд. Чат: текст или фото/PDF → JSON. WorkItem import: вложения → JSON + complete. Чтение файлов — read_file(page_summarizations, nested_mode=parts), без ReAct.",
+  "tags": [
+    "shop",
+    "menu",
+    "worktracker",
+    "employee"
+  ],
+  "employee": {
+    "enabled": true,
+    "roles": [
+      "member"
+    ],
+    "display_name": "Shop Menu Agent",
+    "curator_user_ids": [
+      "$company_owner"
+    ]
+  },
+  "entry": "route_entry",
+  "nodes": {
+    "route_entry": {
+      "type": "code",
+      "name": "Route chat or WorkItem",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "WORK_ITEM_CONTEXT_PREFIX = \"work_item:\"\n\n\nasync def run(args, state):\n    context_id = state.get(\"context_id\")\n    if isinstance(context_id, str) and context_id.startswith(WORK_ITEM_CONTEXT_PREFIX):\n        state[\"entry_route\"] = \"work\"\n    else:\n        state[\"entry_route\"] = \"chat\"\n    return state\n"
+    },
+    "chat_prepare": {
+      "type": "code",
+      "name": "Prepare chat menu input",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import json\n\n\ndef _is_vision_ref(ref):\n    file_id = ref.get(\"file_id\")\n    content_type = ref.get(\"content_type\")\n    if not isinstance(file_id, str) or not isinstance(content_type, str):\n        return False\n    return content_type.startswith(\"image/\") or content_type == \"application/pdf\"\n\n\nasync def run(args, state):\n    files = state.get(\"files\")\n    if files is None:\n        files = []\n    if not isinstance(files, list):\n        raise TypeError(\"shop_menu_agent: state.files must be a list\")\n    vision_files = [ref for ref in files if isinstance(ref, dict) and _is_vision_ref(ref)]\n    state[\"files\"] = vision_files\n    content = state.get(\"content\")\n    has_text = isinstance(content, str) and content.strip() != \"\"\n    if len(vision_files) > 0:\n        state[\"chat_route\"] = \"files\"\n    elif has_text:\n        state[\"chat_route\"] = \"text\"\n    else:\n        state[\"response\"] = json.dumps(\n            {\n                \"sections\": [],\n                \"failure_reason\": \"Пришлите текст меню или фото/PDF вложения.\",\n            },\n            ensure_ascii=False,\n            indent=2,\n        )\n        state[\"chat_route\"] = \"empty\"\n    return state\n"
+    },
+    "load_job": {
+      "type": "code",
+      "name": "Load import WorkItem",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "WORK_ITEM_CONTEXT_PREFIX = \"work_item:\"\n\n\ndef _variable(variables, key):\n    entry = variables.get(key)\n    if entry is None:\n        return None\n    if not isinstance(entry, dict):\n        raise TypeError(f\"shop_menu_agent: WorkItem variable {key} must be an object\")\n    return entry.get(\"value\")\n\n\ndef _is_vision_ref(ref):\n    file_id = ref.get(\"file_id\")\n    content_type = ref.get(\"content_type\")\n    if not isinstance(file_id, str) or not isinstance(content_type, str):\n        return False\n    return content_type.startswith(\"image/\") or content_type == \"application/pdf\"\n\n\nasync def run(args, state):\n    context_id = state[\"context_id\"]\n    if not isinstance(context_id, str) or not context_id.startswith(WORK_ITEM_CONTEXT_PREFIX):\n        raise ValueError(\n            \"shop_menu_agent: context_id must be work_item:<work_item_id> from the employee inbox\"\n        )\n    work_item_id = context_id[len(WORK_ITEM_CONTEXT_PREFIX) :]\n    item = await tools.work_item_get(work_item_id=work_item_id)\n    variables = item[\"variables\"]\n    mode = _variable(variables, \"mode\")\n    if mode != \"import\":\n        raise ValueError(f\"shop_menu_agent: unsupported WorkItem mode {mode!r}; only import\")\n    shop_id = _variable(variables, \"shop_id\")\n    if not isinstance(shop_id, str) or shop_id == \"\":\n        raise ValueError(\"shop_menu_agent: WorkItem variable shop_id is required\")\n    attachments = item[\"attachments\"]\n    vision_files = [ref for ref in attachments if _is_vision_ref(ref)]\n    attachment_file_ids = [\n        ref[\"file_id\"] for ref in attachments if isinstance(ref.get(\"file_id\"), str)\n    ]\n    state[\"shop_job\"] = {\n        \"work_item_id\": work_item_id,\n        \"mode\": mode,\n        \"shop_id\": shop_id,\n        \"menu_name\": _variable(variables, \"menu_name\"),\n        \"brief\": _variable(variables, \"brief\"),\n        \"attachment_file_ids\": attachment_file_ids,\n    }\n    state[\"files\"] = vision_files\n    state[\"failure_reason\"] = \"\"\n    if len(vision_files) == 0:\n        state[\"failure_reason\"] = \"Нет изображений или PDF меню во вложениях задачи.\"\n        state[\"job_route\"] = \"failed\"\n    else:\n        state[\"job_route\"] = \"import\"\n    return state\n"
+    },
+    "extract_menu": {
+      "type": "code",
+      "name": "Extract menu via read_file summarization",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import json\nimport re\n\nALLERGENS = frozenset({\n    \"gluten\", \"dairy\", \"egg\", \"fish\", \"shellfish\", \"nuts\", \"peanuts\", \"soy\",\n    \"sesame\", \"mustard\", \"celery\", \"lupin\", \"molluscs\", \"sulphites\",\n})\nMEASURE_UNITS = frozenset({\"g\", \"ml\", \"pcs\"})\n\nEXTRACT_FOCUS_TEMPLATE = \"\"\"\\\nInstead of a prose summary, for every ===PAGE n=== output exactly one JSON object \\\n(no markdown fences, no commentary) with keys \"sections\" and \"failure_reason\".\nRules for the JSON:\n- sections: array of {name: string, items: array}. Preserve menu order.\n- Item fields: shop_product_id (always null), name, description (string, empty if absent),\n  price_minor (integer kopecks; omit dish if price unreadable), measure (int|null),\n  measure_unit (g|ml|pcs; default g), ingredients (string[]), nutrition\n  ({calories_kcal,proteins_g,fats_g,carbs_g}|null), allergens (from:\n  gluten,dairy,egg,fish,shellfish,nuts,peanuts,soy,sesame,mustard,celery,lupin,molluscs,sulphites),\n  photo ({file_id,page,x0,y0,x1,y1}|null).\n- photo.file_id must be exactly FILE_ID below; photo.page is the n from ===PAGE n=== (0-based).\n  x0,y0,x1,y1 are fractions 0..1 of the page (or of the full page image you see), top-left origin.\n  Box only the dish food photo, not titles/prices/neighbors. No separate dish photo -> photo null.\n- Skip phones, addresses, delivery notes, promos without a dish.\n- failure_reason: empty string when the page has any dish; otherwise a short Russian reason.\n- Invent nothing. Empty page -> {\"sections\":[],\"failure_reason\":\"\"}.\nFILE_ID=__FILE_ID__\nUSER_CONTEXT=__USER_CONTEXT__\n\"\"\"\n\n\ndef _extract_json_object(text):\n    if not isinstance(text, str):\n        return None\n    stripped = text.strip()\n    if stripped == \"\":\n        return None\n    fence = re.search(r\"```(?:json)?\\s*([\\s\\S]*?)```\", stripped, re.IGNORECASE)\n    if fence is not None:\n        stripped = fence.group(1).strip()\n    start = stripped.find(\"{\")\n    end = stripped.rfind(\"}\")\n    if start < 0 or end <= start:\n        return None\n    try:\n        payload = json.loads(stripped[start : end + 1])\n    except json.JSONDecodeError:\n        return None\n    if not isinstance(payload, dict):\n        return None\n    return payload\n\n\ndef _normalize_photo(raw, *, file_id, page):\n    if raw is None:\n        return None\n    if not isinstance(raw, dict):\n        return None\n    x0 = raw.get(\"x0\")\n    y0 = raw.get(\"y0\")\n    x1 = raw.get(\"x1\")\n    y1 = raw.get(\"y1\")\n    nums = (x0, y0, x1, y1)\n    if not all(isinstance(v, (int, float)) for v in nums):\n        return None\n    if not (0.0 <= float(x0) < float(x1) <= 1.0 and 0.0 <= float(y0) < float(y1) <= 1.0):\n        return None\n    photo_file_id = raw.get(\"file_id\")\n    if not isinstance(photo_file_id, str) or photo_file_id.strip() == \"\":\n        photo_file_id = file_id\n    photo_page = raw.get(\"page\")\n    if not isinstance(photo_page, int) or photo_page < 0:\n        photo_page = page\n    return {\n        \"file_id\": photo_file_id,\n        \"page\": photo_page,\n        \"x0\": float(x0),\n        \"y0\": float(y0),\n        \"x1\": float(x1),\n        \"y1\": float(y1),\n    }\n\n\ndef _normalize_item(raw, *, file_id, page):\n    if not isinstance(raw, dict):\n        return None\n    name = raw.get(\"name\")\n    if not isinstance(name, str) or name.strip() == \"\":\n        return None\n    price = raw.get(\"price_minor\")\n    if not isinstance(price, int):\n        return None\n    description = raw.get(\"description\")\n    if description is None:\n        description = \"\"\n    if not isinstance(description, str):\n        return None\n    measure = raw.get(\"measure\")\n    if measure is not None and not isinstance(measure, int):\n        return None\n    measure_unit = raw.get(\"measure_unit\")\n    if not isinstance(measure_unit, str) or measure_unit not in MEASURE_UNITS:\n        measure_unit = \"g\"\n    ingredients = raw.get(\"ingredients\")\n    if ingredients is None:\n        ingredients = []\n    if not isinstance(ingredients, list) or not all(isinstance(x, str) for x in ingredients):\n        return None\n    nutrition = raw.get(\"nutrition\")\n    if nutrition is not None:\n        if not isinstance(nutrition, dict):\n            return None\n        keys = (\"calories_kcal\", \"proteins_g\", \"fats_g\", \"carbs_g\")\n        if any(k not in nutrition or not isinstance(nutrition[k], (int, float)) for k in keys):\n            nutrition = None\n        else:\n            nutrition = {k: float(nutrition[k]) for k in keys}\n    allergens = raw.get(\"allergens\")\n    if allergens is None:\n        allergens = []\n    if not isinstance(allergens, list):\n        return None\n    clean_allergens = [a for a in allergens if isinstance(a, str) and a in ALLERGENS]\n    return {\n        \"shop_product_id\": None,\n        \"name\": name.strip(),\n        \"description\": description,\n        \"price_minor\": price,\n        \"measure\": measure,\n        \"measure_unit\": measure_unit,\n        \"ingredients\": ingredients,\n        \"nutrition\": nutrition,\n        \"allergens\": clean_allergens,\n        \"photo\": _normalize_photo(raw.get(\"photo\"), file_id=file_id, page=page),\n    }\n\n\ndef _merge_page(sections_by_name, order, payload, *, file_id, page):\n    sections = payload.get(\"sections\")\n    if not isinstance(sections, list):\n        return\n    for section in sections:\n        if not isinstance(section, dict):\n            continue\n        section_name = section.get(\"name\")\n        if not isinstance(section_name, str) or section_name.strip() == \"\":\n            section_name = \"Меню\"\n        else:\n            section_name = section_name.strip()\n        items_raw = section.get(\"items\")\n        if not isinstance(items_raw, list):\n            continue\n        normalized = []\n        for item in items_raw:\n            norm = _normalize_item(item, file_id=file_id, page=page)\n            if norm is not None:\n                normalized.append(norm)\n        if len(normalized) == 0:\n            continue\n        if section_name not in sections_by_name:\n            sections_by_name[section_name] = []\n            order.append(section_name)\n        sections_by_name[section_name].extend(normalized)\n\n\nasync def run(args, state):\n    files = state.get(\"files\")\n    if files is None:\n        files = []\n    if not isinstance(files, list) or len(files) == 0:\n        raise ValueError(\"shop_menu_agent: extract_menu requires vision files in state.files\")\n    content = state.get(\"content\")\n    if isinstance(content, str) and content.strip() != \"\":\n        user_context = content.strip()\n    else:\n        user_context = \"(none)\"\n    sections_by_name = {}\n    order = []\n    page_failures = []\n    for ref in files:\n        if not isinstance(ref, dict):\n            continue\n        file_id = ref.get(\"file_id\")\n        original_name = ref.get(\"original_name\")\n        if not isinstance(file_id, str) or not isinstance(original_name, str):\n            continue\n        focus = (\n            EXTRACT_FOCUS_TEMPLATE\n            .replace(\"__FILE_ID__\", file_id)\n            .replace(\"__USER_CONTEXT__\", user_context)\n        )\n        envelope = await tools.read_file(\n            names=[original_name],\n            page_start=0,\n            page_end=-1,\n            page_summarizations=True,\n            summarization_prompt=focus,\n            nested_mode=\"parts\",\n            recursive=False,\n        )\n        if not isinstance(envelope, dict) or envelope.get(\"success\") is not True:\n            raise RuntimeError(f\"shop_menu_agent: read_file failed for {original_name!r}\")\n        file_results = envelope.get(\"files\")\n        if not isinstance(file_results, list):\n            raise TypeError(\"shop_menu_agent: read_file.files must be a list\")\n        for file_result in file_results:\n            if not isinstance(file_result, dict):\n                continue\n            if file_result.get(\"success\") is not True:\n                err = file_result.get(\"error\")\n                raise RuntimeError(\n                    f\"shop_menu_agent: read_file error for {original_name!r}: {err}\"\n                )\n            results = file_result.get(\"results\")\n            if not isinstance(results, list):\n                continue\n            for page_result in results:\n                if not isinstance(page_result, dict):\n                    continue\n                page = page_result.get(\"page\")\n                if not isinstance(page, int):\n                    page = 0\n                payload = _extract_json_object(page_result.get(\"result\"))\n                if payload is None:\n                    page_failures.append(f\"{original_name}#p{page}\")\n                    continue\n                reason = payload.get(\"failure_reason\")\n                if isinstance(reason, str) and reason.strip() != \"\":\n                    page_failures.append(reason.strip())\n                _merge_page(sections_by_name, order, payload, file_id=file_id, page=page)\n    sections = [{\"name\": name, \"items\": sections_by_name[name]} for name in order]\n    state[\"menu_sections\"] = sections\n    if len(sections) == 0:\n        if page_failures:\n            state[\"failure_reason\"] = page_failures[0]\n        else:\n            state[\"failure_reason\"] = \"Не удалось распознать блюда во вложениях.\"\n    else:\n        state[\"failure_reason\"] = \"\"\n    entry_route = state.get(\"entry_route\")\n    if state[\"failure_reason\"] == \"\":\n        state[\"extract_route\"] = \"ok\"\n    elif entry_route == \"work\":\n        state[\"extract_route\"] = \"work_fail\"\n    else:\n        state[\"extract_route\"] = \"chat_fail\"\n    return state\n"
+    },
+    "parse_text": {
+      "type": "llm_node",
+      "name": "Parse text menu to JSON",
+      "prompt": "prompts/parse_text.md",
+      "llm": {
+        "model": "auto",
+        "temperature": 0.1,
+        "provider": "linnex_llm"
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/import_plan.output_schema.json",
+      "output_mapping": {
+        "sections": "menu_sections",
+        "failure_reason": "failure_reason"
+      }
+    },
+    "materialize_dish_photos": {
+      "type": "code",
+      "name": "Crop dish photos",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import json\n\n\nasync def run(args, state):\n    sections = state[\"menu_sections\"]\n    if not isinstance(sections, list) or len(sections) == 0:\n        raise ValueError(\"shop_menu_agent: menu_sections must be a non-empty array\")\n    job = state.get(\"shop_job\")\n    if isinstance(job, dict):\n        attachment_file_ids = job.get(\"attachment_file_ids\")\n        if attachment_file_ids is None:\n            attachment_file_ids = []\n    else:\n        files = state.get(\"files\")\n        if files is None:\n            files = []\n        if not isinstance(files, list):\n            raise TypeError(\"shop_menu_agent: state.files must be a list\")\n        attachment_file_ids = [\n            ref[\"file_id\"]\n            for ref in files\n            if isinstance(ref, dict) and isinstance(ref.get(\"file_id\"), str)\n        ]\n    if not isinstance(attachment_file_ids, list):\n        raise TypeError(\"shop_menu_agent: attachment_file_ids must be a list\")\n    result = await tools.files_materialize_image_regions(\n        sections=sections,\n        attachment_file_ids=attachment_file_ids,\n    )\n    materialized = result[\"sections\"]\n    if not isinstance(materialized, list):\n        raise TypeError(\"shop_menu_agent: materialize sections must be a list\")\n    state[\"menu_sections\"] = materialized\n    state[\"response\"] = json.dumps(\n        {\"sections\": materialized, \"failure_reason\": \"\"},\n        ensure_ascii=False,\n        indent=2,\n    )\n    return state\n"
+    },
+    "format_chat_failure": {
+      "type": "code",
+      "name": "Format chat failure",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import json\n\n\nasync def run(args, state):\n    reason = state.get(\"failure_reason\")\n    if not isinstance(reason, str) or reason.strip() == \"\":\n        raise ValueError(\"shop_menu_agent: failure_reason is required\")\n    sections = state.get(\"menu_sections\")\n    if sections is None:\n        sections = []\n    if not isinstance(sections, list):\n        raise TypeError(\"shop_menu_agent: menu_sections must be a list\")\n    state[\"response\"] = json.dumps(\n        {\"sections\": sections, \"failure_reason\": reason.strip()},\n        ensure_ascii=False,\n        indent=2,\n    )\n    return state\n"
+    },
+    "apply_menu": {
+      "type": "code",
+      "name": "Complete import WorkItem",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "async def run(args, state):\n    job = state[\"shop_job\"]\n    response = state[\"response\"]\n    if not isinstance(response, str) or response.strip() == \"\":\n        raise ValueError(\"shop_menu_agent: response JSON is required after materialize\")\n    await tools.work_item_complete(\n        work_item_id=job[\"work_item_id\"],\n        terminal_state=\"completed\",\n        resolution_text=response,\n    )\n    return state\n"
+    },
+    "fail_job": {
+      "type": "code",
+      "name": "Fail WorkItem",
+      "incoming_policy": "any",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "async def run(args, state):\n    job = state[\"shop_job\"]\n    reason = state[\"failure_reason\"]\n    if not isinstance(reason, str) or reason.strip() == \"\":\n        raise ValueError(\"shop_menu_agent: failure_reason is required to fail the WorkItem\")\n    await tools.work_item_complete(\n        work_item_id=job[\"work_item_id\"],\n        terminal_state=\"failed\",\n        resolution_text=reason.strip(),\n    )\n    state[\"response\"] = reason.strip()\n    return state\n"
+    }
+  },
+  "edges": [
+    {
+      "from_node": "route_entry",
+      "to_node": "chat_prepare",
+      "condition": {
+        "type": "simple",
+        "variable": "entry_route",
+        "operator": "==",
+        "value": "chat"
+      }
+    },
+    {
+      "from_node": "route_entry",
+      "to_node": "load_job",
+      "condition": {
+        "type": "simple",
+        "variable": "entry_route",
+        "operator": "==",
+        "value": "work"
+      }
+    },
+    {
+      "from_node": "chat_prepare",
+      "to_node": "extract_menu",
+      "condition": {
+        "type": "simple",
+        "variable": "chat_route",
+        "operator": "==",
+        "value": "files"
+      }
+    },
+    {
+      "from_node": "chat_prepare",
+      "to_node": "parse_text",
+      "condition": {
+        "type": "simple",
+        "variable": "chat_route",
+        "operator": "==",
+        "value": "text"
+      }
+    },
+    {
+      "from_node": "chat_prepare",
+      "to_node": null,
+      "condition": {
+        "type": "simple",
+        "variable": "chat_route",
+        "operator": "==",
+        "value": "empty"
+      }
+    },
+    {
+      "from_node": "load_job",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "job_route",
+        "operator": "==",
+        "value": "failed"
+      }
+    },
+    {
+      "from_node": "load_job",
+      "to_node": "extract_menu",
+      "condition": {
+        "type": "simple",
+        "variable": "job_route",
+        "operator": "==",
+        "value": "import"
+      }
+    },
+    {
+      "from_node": "extract_menu",
+      "to_node": "materialize_dish_photos",
+      "condition": {
+        "type": "simple",
+        "variable": "extract_route",
+        "operator": "==",
+        "value": "ok"
+      }
+    },
+    {
+      "from_node": "extract_menu",
+      "to_node": "format_chat_failure",
+      "condition": {
+        "type": "simple",
+        "variable": "extract_route",
+        "operator": "==",
+        "value": "chat_fail"
+      }
+    },
+    {
+      "from_node": "extract_menu",
+      "to_node": "fail_job",
+      "condition": {
+        "type": "simple",
+        "variable": "extract_route",
+        "operator": "==",
+        "value": "work_fail"
+      }
+    },
+    {
+      "from_node": "parse_text",
+      "to_node": "materialize_dish_photos",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "==",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "parse_text",
+      "to_node": "format_chat_failure",
+      "condition": {
+        "type": "simple",
+        "variable": "failure_reason",
+        "operator": "!=",
+        "value": ""
+      }
+    },
+    {
+      "from_node": "materialize_dish_photos",
+      "to_node": "apply_menu",
+      "condition": {
+        "type": "simple",
+        "variable": "entry_route",
+        "operator": "==",
+        "value": "work"
+      }
+    }
+  ],
+  "branches": {}
+}

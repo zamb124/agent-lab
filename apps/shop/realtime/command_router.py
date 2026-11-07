@@ -29,10 +29,7 @@ from apps.shop.realtime.operations import (
     ShopDomainAddPayload,
     ShopDomainIdPayload,
     ShopFavoriteSetPayload,
-    ShopFeedbackSetPayload,
     ShopIdPayload,
-    ShopLoyaltyProgramPayload,
-    ShopLoyaltyProgramSetPayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
     ShopModifierGroupUpdatePayload,
@@ -58,7 +55,6 @@ from apps.shop.realtime.operations import (
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
     ShopPublicOrderStatusPayload,
-    ShopReviewsListPayload,
     ShopShelfCreatePayload,
     ShopShelfIdPayload,
     ShopShelfUpdatePayload,
@@ -93,8 +89,6 @@ from apps.shop.realtime.operations import (
     op_domains_add,
     op_domains_provision,
     op_domains_remove,
-    op_loyalty_program_get,
-    op_loyalty_program_set,
     op_modifier_groups_create,
     op_modifier_groups_list,
     op_modifier_groups_remove,
@@ -119,7 +113,6 @@ from apps.shop.realtime.operations import (
     op_promos_update,
     op_public_cart_price,
     op_public_favorite_set,
-    op_public_feedback_set,
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
@@ -127,7 +120,6 @@ from apps.shop.realtime.operations import (
     op_public_order_create,
     op_public_order_status,
     op_public_personal,
-    op_public_reviews_list,
     op_public_storefront_geo,
     op_shelves_create,
     op_shelves_list,
@@ -276,23 +268,11 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/banners/remove_requested": Operation(
         payload_model=ShopBannerIdPayload, fn=op_banners_remove
     ),
-    "shop/loyalty/program_get_requested": Operation(
-        payload_model=ShopLoyaltyProgramPayload, fn=op_loyalty_program_get
-    ),
-    "shop/loyalty/program_set_requested": Operation(
-        payload_model=ShopLoyaltyProgramSetPayload, fn=op_loyalty_program_set
-    ),
     "shop/public/notify_back_requested": Operation(
         payload_model=ShopNotifyBackPayload, fn=op_public_notify_back
     ),
     "shop/public/favorite_set_requested": Operation(
         payload_model=ShopFavoriteSetPayload, fn=op_public_favorite_set
-    ),
-    "shop/public/feedback_set_requested": Operation(
-        payload_model=ShopFeedbackSetPayload, fn=op_public_feedback_set
-    ),
-    "shop/public/reviews_list_requested": Operation(
-        payload_model=ShopReviewsListPayload, fn=op_public_reviews_list
     ),
     "shop/public/personal_requested": Operation(
         payload_model=ShopPersonalPayload, fn=op_public_personal

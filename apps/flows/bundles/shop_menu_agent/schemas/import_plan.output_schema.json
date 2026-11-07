@@ -1,0 +1,116 @@
+{
+  "type": "object",
+  "properties": {
+    "sections": {
+      "type": "array",
+      "description": "Разделы меню в порядке следования; пустой массив только вместе с failure_reason",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Название раздела меню" },
+          "items": {
+            "type": "array",
+            "description": "Блюда раздела в порядке следования",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shop_product_id": {
+                  "type": ["string", "null"],
+                  "description": "Блюдо каталога; null — новое блюдо"
+                },
+                "name": { "type": "string", "description": "Название блюда без цены и выхода" },
+                "description": { "type": "string", "description": "Описание; пустая строка, если нет" },
+                "price_minor": {
+                  "type": ["integer", "null"],
+                  "description": "Цена в копейках; обязательна для нового блюда"
+                },
+                "measure": { "type": ["integer", "null"], "description": "Выход порции в measure_unit" },
+                "measure_unit": { "type": "string", "enum": ["g", "ml", "pcs"] },
+                "ingredients": { "type": "array", "items": { "type": "string" } },
+                "nutrition": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "description": "КБЖУ на 100 г",
+                      "properties": {
+                        "calories_kcal": { "type": "number" },
+                        "proteins_g": { "type": "number" },
+                        "fats_g": { "type": "number" },
+                        "carbs_g": { "type": "number" }
+                      },
+                      "required": ["calories_kcal", "proteins_g", "fats_g", "carbs_g"],
+                      "additionalProperties": false
+                    },
+                    { "type": "null" }
+                  ]
+                },
+                "allergens": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "gluten",
+                      "dairy",
+                      "egg",
+                      "fish",
+                      "shellfish",
+                      "nuts",
+                      "peanuts",
+                      "soy",
+                      "sesame",
+                      "mustard",
+                      "celery",
+                      "lupin",
+                      "molluscs",
+                      "sulphites"
+                    ]
+                  }
+                },
+                "photo": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "description": "Рамка фото блюда во вложении; координаты — доли ширины и высоты от левого верхнего угла",
+                      "properties": {
+                        "file_id": { "type": "string" },
+                        "page": { "type": "integer" },
+                        "x0": { "type": "number" },
+                        "y0": { "type": "number" },
+                        "x1": { "type": "number" },
+                        "y1": { "type": "number" }
+                      },
+                      "required": ["file_id", "page", "x0", "y0", "x1", "y1"],
+                      "additionalProperties": false
+                    },
+                    { "type": "null" }
+                  ]
+                }
+              },
+              "required": [
+                "shop_product_id",
+                "name",
+                "description",
+                "price_minor",
+                "measure",
+                "measure_unit",
+                "ingredients",
+                "nutrition",
+                "allergens",
+                "photo"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["name", "items"],
+        "additionalProperties": false
+      }
+    },
+    "failure_reason": {
+      "type": "string",
+      "description": "Пустая строка при успехе; иначе короткая причина для менеджера"
+    }
+  },
+  "required": ["sections", "failure_reason"],
+  "additionalProperties": false
+}

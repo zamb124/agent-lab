@@ -11,28 +11,19 @@ from apps.shop.models.enums import (
     PromoStacking,
     ShopDeliveryType,
     ShopDomainStatus,
-    ShopFeedbackChip,
     ShopKind,
-    ShopLoyaltyRewardKind,
     ShopOrderSource,
     ShopOrderStatus,
     ShopShelfKind,
     ShopShelfLayout,
     ShopShelfPlacement,
     ShopStatus,
-    feedback_chip_label,
-    feedback_chip_labels,
     order_status_label,
 )
 from apps.shop.models.favorite import ShopFavorite
-from apps.shop.models.loyalty import (
-    ShopLoyaltyAccount,
-    ShopLoyaltyProgram,
-)
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder, delivery_details_label
-from apps.shop.models.order_feedback import ShopOrderFeedback
 from apps.shop.models.order_item import ShopOrderItem
 from apps.shop.models.product import ShopProduct
 from apps.shop.models.product_modifier_group import ShopProductModifierGroup
@@ -54,15 +45,10 @@ __all__ = [
     "ShopDomain",
     "ShopDomainStatus",
     "ShopFavorite",
-    "ShopFeedbackChip",
     "ShopKind",
-    "ShopLoyaltyAccount",
-    "ShopLoyaltyProgram",
-    "ShopLoyaltyRewardKind",
     "ShopModifierGroup",
     "ShopModifierOption",
     "ShopOrder",
-    "ShopOrderFeedback",
     "ShopOrderItem",
     "ShopOrderSource",
     "ShopOrderStatus",
@@ -76,7 +62,5 @@ __all__ = [
     "ShopStatus",
     "ShopTable",
     "delivery_details_label",
-    "feedback_chip_label",
-    "feedback_chip_labels",
     "order_status_label",
 ]

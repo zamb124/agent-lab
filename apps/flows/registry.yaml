@@ -49,7 +49,11 @@ flows:
   - id: shop
     public: true
     description: "AI-функции витрины shop: описания товаров и предложения опций-модификаторов"
-  
+
+  - id: shop_menu_agent
+    public: true
+    description: "Разбор меню в JSON (чат: текст или фото/PDF; WorkItem import) с crop фото через read_file summarization"
+
   # Telegram Demo
   - id: telegram_demo
     public: true
