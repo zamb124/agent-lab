@@ -45,13 +45,9 @@ def _safe_path(root: Path, *parts: str) -> Path:
     """Резолвит дочерний путь внутри ``root``; выход за корень → 404."""
     target = (root / Path(*parts)).resolve()
     if root != target.parent and root not in target.parents:
-        raise PlatformNotFoundError(
-            "Tile asset not found", error_code="tile_not_found"
-        )
+        raise PlatformNotFoundError("Tile asset not found", error_code="tile_not_found")
     if not target.is_file():
-        raise PlatformNotFoundError(
-            "Tile asset not found", error_code="tile_not_found"
-        )
+        raise PlatformNotFoundError("Tile asset not found", error_code="tile_not_found")
     return target
 
 
@@ -149,9 +145,7 @@ async def tiles_basemap(request: Request, di: Di) -> Response:
 async def tiles_fonts(request: Request, di: Di, fontstack: str, pbf_range: str) -> Response:
     """Glyph-стеки MapLibre: ``{fontstack}/{range}.pbf``."""
     if not _FONTSTACK_RE.match(fontstack) or not _RANGE_RE.match(pbf_range):
-        raise PlatformNotFoundError(
-            "Font asset not found", error_code="tile_not_found"
-        )
+        raise PlatformNotFoundError("Font asset not found", error_code="tile_not_found")
     path = _safe_path(_tiles_root(di), "fonts", fontstack, pbf_range)
     return await _serve_file(
         path,
@@ -165,9 +159,7 @@ async def tiles_fonts(request: Request, di: Di, fontstack: str, pbf_range: str) 
 async def tiles_sprites(request: Request, di: Di, filename: str) -> Response:
     """Спрайты MapLibre: ``v<ver>/{flavor}.{json,png}`` (включая ``@2x``)."""
     if not _SPRITE_RE.match(filename):
-        raise PlatformNotFoundError(
-            "Sprite asset not found", error_code="tile_not_found"
-        )
+        raise PlatformNotFoundError("Sprite asset not found", error_code="tile_not_found")
     path = _safe_path(_tiles_root(di), "sprites", filename)
     media = _MEDIA.get(path.suffix, "application/octet-stream")
     return await _serve_file(

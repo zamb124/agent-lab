@@ -78,6 +78,7 @@ alwaysApply: false
 - Toast `createAsyncOp` — ровно одно: `silent: true` или пара `successToastKey` + `errorToastKey`; смешение — `throw`. Каждая mutating-операция `createResourceCollection` задаёт `toastKeys.<op>`.
 - Toast-ключ — `<ns>:<dotted.key>`, есть в `core/i18n/translations/ru/<ns>.json` и `en/<ns>.json`; динамический toast-ключ запрещён: конечный статус — отдельный ключ и ветка кода.
 - `request` бросает `HttpError`/`WsTransportError` → `*_failed`; прочая ошибка всплывает как баг.
+- `*_failed` от backend-конверта несёт `{error_code, error_detail}`, а не `{message}`: `_requireMessage` в `createResourceCollection` принимает обе формы (message → error_detail → error_code), иначе падает `payload.message required` — продовый крэш `geo/regions LIST_FAILED` был ровно об этом. `[без гейта]`
 - `createForm`: `initial` содержит ключ для каждого поля `schema`; `submitEvent` — тип `REQUESTED` операции или коллекции.
 - `createCursorList.statusMap` — HTTP-код → терминальное событие `<name>/<key>`; на `ws` тот же ключ берётся из `error_code`.
 - `createResourceCollection.listPreserveItemsOnRefresh: true` — повторный list при непустом `items` ставит `refreshing`, не `loading`.

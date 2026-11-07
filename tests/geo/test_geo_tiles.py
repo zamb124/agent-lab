@@ -10,10 +10,13 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from httpx2 import AsyncClient
+from pydantic import TypeAdapter
 
 from core.types import JsonValue
 
 pytestmark = pytest.mark.xdist_group("geo")
+
+_JSON_DICT = TypeAdapter(dict[str, JsonValue])
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "tiles"
 _PMTILES_BYTES = _FIXTURE.joinpath("basemap.pmtiles").read_bytes()
@@ -37,9 +40,7 @@ async def test_basemap_full_get(geo_client: AsyncClient) -> None:
 
 
 async def test_basemap_range_get(geo_client: AsyncClient) -> None:
-    resp = await geo_client.get(
-        f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=10-99"}
-    )
+    resp = await geo_client.get(f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=10-99"})
     assert resp.status_code == 206
     assert resp.content == _PMTILES_BYTES[10:100]
     assert resp.headers["content-range"] == f"bytes 10-99/{len(_PMTILES_BYTES)}"
@@ -47,17 +48,13 @@ async def test_basemap_range_get(geo_client: AsyncClient) -> None:
 
 
 async def test_basemap_range_open_end(geo_client: AsyncClient) -> None:
-    resp = await geo_client.get(
-        f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=1000-"}
-    )
+    resp = await geo_client.get(f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=1000-"})
     assert resp.status_code == 206
     assert resp.content == _PMTILES_BYTES[1000:]
 
 
 async def test_basemap_range_suffix(geo_client: AsyncClient) -> None:
-    resp = await geo_client.get(
-        f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=-16"}
-    )
+    resp = await geo_client.get(f"{_BASE}/basemap.pmtiles", headers={"range": "bytes=-16"})
     assert resp.status_code == 206
     assert resp.content == _PMTILES_BYTES[-16:]
 
@@ -82,9 +79,7 @@ async def test_basemap_head(geo_client: AsyncClient) -> None:
 async def test_basemap_etag_304(geo_client: AsyncClient) -> None:
     first = await geo_client.get(f"{_BASE}/basemap.pmtiles")
     etag = first.headers["etag"]
-    second = await geo_client.get(
-        f"{_BASE}/basemap.pmtiles", headers={"if-none-match": etag}
-    )
+    second = await geo_client.get(f"{_BASE}/basemap.pmtiles", headers={"if-none-match": etag})
     assert second.status_code == 304
 
 
@@ -102,9 +97,7 @@ async def test_fonts_get(geo_client: AsyncClient) -> None:
 
 async def test_fonts_composite_stack_get(geo_client: AsyncClient) -> None:
     """MapLibre склеивает text-font массив запятыми — стек с запятой валиден."""
-    resp = await geo_client.get(
-        f"{_BASE}/fonts/Noto%20Sans%20Regular,Noto%20Sans%20Bold/0-255.pbf"
-    )
+    resp = await geo_client.get(f"{_BASE}/fonts/Noto%20Sans%20Regular,Noto%20Sans%20Bold/0-255.pbf")
     assert resp.status_code == 200
     assert resp.content == b"glyphs-0-255-composite-fixture"
 
@@ -139,7 +132,7 @@ async def test_sprites_bad_name_404(geo_client: AsyncClient) -> None:
 async def test_style_json_urls(geo_client: AsyncClient) -> None:
     resp = await geo_client.get(f"{_BASE}/style.json")
     assert resp.status_code == 200
-    style: dict[str, JsonValue] = resp.json()
+    style = _JSON_DICT.validate_json(resp.content)
     assert style["version"] == 8
     glyphs = style["glyphs"]
     assert isinstance(glyphs, str)
@@ -153,9 +146,7 @@ async def test_style_json_urls(geo_client: AsyncClient) -> None:
     assert isinstance(basemap, dict)
     url = basemap["url"]
     assert isinstance(url, str)
-    assert url.startswith("pmtiles://") and url.endswith(
-        "/geo/api/v1/tiles/basemap.pmtiles"
-    )
+    assert url.startswith("pmtiles://") and url.endswith("/geo/api/v1/tiles/basemap.pmtiles")
     attribution = basemap["attribution"]
     assert isinstance(attribution, str)
     assert "OpenStreetMap" in attribution
