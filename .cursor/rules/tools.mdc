@@ -1,5 +1,5 @@
 ---
-description: "Tools flows: builtin @tool над typed клиентом, CodeTool, ToolRegistry.materialize, авторизация, теги и picker, контракты, preview и approvals. Читать при добавлении tool"
+description: "Tools flows: builtin @tool, тяжёлые через capability, паритет tool↔capability, ToolRegistry, авторизация, теги, preview. Читать при добавлении tool"
 globs:
   - "apps/flows/tools/**"
   - "apps/flows/src/tools/**"
@@ -22,24 +22,27 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 ## Инварианты
 
 1. Материализация — только `ToolRegistry.materialize`: `code_mode=mcp_tool` → `MCPTool`; builtin без `code` → `FunctionTool`; inline `code` → `CodeTool` → `RemoteCodeRunner`; нода (`llm_node`, `flow`, `external_api`, `mcp`, `datasource`, `channel`, `hitl_node`) → `NodeAsToolWrapper`.
-2. Builtin `@tool` — thin wrapper: получает по типу аннотации параметра typed-клиент peer-сервиса из `core/clients/` или сервис flows (`ToolRegistry.register_builtin_tools`), вызывает его и возвращает результат как есть; ошибки клиента пробрасываются, `{success: false}` запрещён. Эталон — `apps/flows/tools/wiki/wiki_tools.py`.
-3. Один домен — один класс клиента с одним именем; подкласс `core.clients.*Client` под тем же именем в `apps/flows` запрещён.
-4. `CodeTool` и `CodeNode` — один entrypoint-контракт: `entrypoint` или первая функция source, вызов `(args, state)`; импорт `apps.*`/`core.*` в коде пользователя — `ValueError` (`reject_forbidden_platform_imports`).
-5. Доступ при вызове — `check_tool_permission` (`apps/flows/src/tools/authz_gate.py`) в `BaseTool._check_permission`: пустой `permission` — членство в компании, иначе группа через OpenFGA; tool grants и tag groups не PDP.
-6. Tag: один primary tag из whitelist `crm`, `datasources`, `documents`, `files`, `flows`, `google_docs`, `google_sheets`, `knowledge`, `misc`, `scheduling`, `stock`, `sync`, `tables`, `text`, `viz`, `web`, `wiki`, `worktracker` (`TOOL_TAG_WHITELIST`); два — только `{crm, worktracker}`; facet-теги запрещены; MCP-tools — `["mcp", "mcp:<server_id>"]`, flow-as-tool — `flow`.
-7. Picker `GET /flows/api/v1/tools/all`: каталог компании (`list_index`, MCP — SQL-предикат) ∪ listed platform tools, видимость — `page_viewable_tool_ids`/`page_viewable_flow_ids` (`batch_check` окна страницы), `total` — размер каталога; tool без tuple не виден; FGA с `builtin_tool_ids()` не снимается.
-8. Параметры builtin — JSON Schema с object root и `additionalProperties: false`; строгая схема для провайдера — `compile_openai_strict_parameters` (`apps/flows/src/tools/provider_schema.py`).
-9. Write-tools объявляют `effects` и `confirmation_floor` в `@tool()`; `POST /flows/api/v1/tools/preview` отдаёт `model_view` (что видит LLM) и `execution_plan` (эффекты, маскированные аргументы, `requires_approval` при `confirmation_floor ∈ {preview, approval}`).
-10. Патч flows из Lara: `mode=propose|apply` — переключатель сценария, не авторизация; apply требует `pending_action_id`, выданный на шаге propose (LaraActionEngine); propose пишет approval в `ToolApprovalStore` (`approval_id` в ответе).
-11. Flow UI tools (`ui_render`, `ui_navigate`, `state_set`, `apps/flows/tools/flows/flow_ui_tools.py`) только ставят события в очередь и пишут state → `flow_ui.mdc`.
-12. Описания групп генерирует `tool_tag_groups_describe_tick` (flows_worker, cron `0 3 * * *`), без LLM при неизменном `content_hash`.
-13. Новый API платформы для кода пользователя — capability в `apps/capability_gateway/services/registry.py`, не Python-helper; документация и stubs редактора — из `CapabilityManifest` → `eval.mdc`.
+2. Builtin `@tool` — thin wrapper: получает по типу аннотации параметра typed-клиент peer-сервиса из `core/clients/` или сервис flows (`ToolRegistry.register_builtin_tools`), вызывает его и возвращает результат как есть; ошибки клиента пробрасываются, `{success: false}` запрещён. Эталон лёгкого tool — `apps/flows/tools/wiki/wiki_tools.py`.
+3. Тяжёлый platform tool (мультишаговый IO, FileReader/envelope, LLM-batch, vision/STT pipeline) исполняется только через capability-gateway: builtin резолвит контекст flows (`names` → `file_ids`, `state`) и зовёт `CapabilityGatewayClient.call`; дублировать пайплайн в `apps/flows/tools/**` запрещено. Эталон — `read_file` → `files.read` (`apps/flows/tools/files/files.py`, `apps/capability_gateway/services/registry.py`). `[без гейта]`
+4. Пара tool ↔ capability с одной платформенной операцией — один контракт: пересечение аргументов и форма ответа совпадают; builtin не отбрасывает и не игнорирует kwargs capability, capability не сужает ответ относительно tool. Новый или изменённый tool с парой в registry обновляет обе стороны в том же изменении. `[без гейта]`
+5. Один домен — один класс клиента с одним именем; подкласс `core.clients.*Client` под тем же именем в `apps/flows` запрещён.
+6. `CodeTool` и `CodeNode` — один entrypoint-контракт: `entrypoint` или первая функция source, вызов `(args, state)`; импорт `apps.*`/`core.*` в коде пользователя — `ValueError` (`reject_forbidden_platform_imports`).
+7. Доступ при вызове — `check_tool_permission` (`apps/flows/src/tools/authz_gate.py`) в `BaseTool._check_permission`: пустой `permission` — членство в компании, иначе группа через OpenFGA; tool grants и tag groups не PDP.
+8. Tag: один primary tag из whitelist `crm`, `datasources`, `documents`, `files`, `flows`, `google_docs`, `google_sheets`, `knowledge`, `misc`, `scheduling`, `stock`, `sync`, `tables`, `text`, `viz`, `web`, `wiki`, `worktracker` (`TOOL_TAG_WHITELIST`); два — только `{crm, worktracker}`; facet-теги запрещены; MCP-tools — `["mcp", "mcp:<server_id>"]`, flow-as-tool — `flow`.
+9. Picker `GET /flows/api/v1/tools/all`: каталог компании (`list_index`, MCP — SQL-предикат) ∪ listed platform tools, видимость — `page_viewable_tool_ids`/`page_viewable_flow_ids` (`batch_check` окна страницы), `total` — размер каталога; tool без tuple не виден; FGA с `builtin_tool_ids()` не снимается.
+10. Параметры builtin — JSON Schema с object root и `additionalProperties: false`; строгая схема для провайдера — `compile_openai_strict_parameters` (`apps/flows/src/tools/provider_schema.py`).
+11. Write-tools объявляют `effects` и `confirmation_floor` в `@tool()`; `POST /flows/api/v1/tools/preview` отдаёт `model_view` (что видит LLM) и `execution_plan` (эффекты, маскированные аргументы, `requires_approval` при `confirmation_floor ∈ {preview, approval}`).
+12. Патч flows из Lara: `mode=propose|apply` — переключатель сценария, не авторизация; apply требует `pending_action_id`, выданный на шаге propose (LaraActionEngine); propose пишет approval в `ToolApprovalStore` (`approval_id` в ответе).
+13. Flow UI tools (`ui_render`, `ui_navigate`, `state_set`, `apps/flows/tools/flows/flow_ui_tools.py`) только ставят события в очередь и пишут state → `flow_ui.mdc`.
+14. Описания групп генерирует `tool_tag_groups_describe_tick` (flows_worker, cron `0 3 * * *`), без LLM при неизменном `content_hash`.
+15. Новый API платформы для кода пользователя — capability в `apps/capability_gateway/services/registry.py`, не Python-helper; документация и stubs редактора — из `CapabilityManifest` → `eval.mdc`.
 
 ## Запреты
 
 1. `ServiceClient()`, `platform_facades`, `runtime_deps`, Port/Facade, `get_*_service`/`get_*_facade` и параметр `di` в `apps/flows/tools/**`.
 2. Глобальный `ToolAuthzGate`, bind/reset hook, вызов `_run_impl` в обход PDP.
 3. Класс-посредник, который только делегирует в сервис flows.
+4. Прямой вызов тяжёлого пайплайна из builtin в обход capability при существующей паре tool↔capability (эталон запрета — `read_files_to_envelope` в `read_file`). `[без гейта]`
 
 ## Гейты
 

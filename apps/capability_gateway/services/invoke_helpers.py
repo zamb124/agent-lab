@@ -1,9 +1,8 @@
-"""Shared invoke helpers for files/text capabilities (aligned with flows builtins).
+"""Shared invoke helpers for text capabilities (aligned with flows builtins).
 
-Files: ``files.create`` / ``files.read`` and tools ``create_file`` / ``read_file``
-both use ``FileWriter`` / ``FileReader`` (process-configured upload for tools;
-gateway binds FilesService for sandbox). No separate typed client — the writer/reader
-stack is the shared surface.
+Files: ``files.create`` — ``FileWriter`` (gateway binds ``FilesService``);
+``files.read`` — ``read_files_to_envelope`` → ``ReadFileEnvelope`` (тот же контракт,
+что tool ``read_file``; tool резолвит ``names`` → ``file_ids`` и зовёт gateway).
 
 Text: ``text.summarize`` / ``text.format_markdown`` and tools ``summarize_text`` /
 ``format_text_markdown`` both call ``TextTransformService`` (tools via

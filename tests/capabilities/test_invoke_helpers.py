@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import pytest
 
 from apps.capability_gateway.services.invoke_helpers import (
@@ -16,7 +17,7 @@ _MOCK_LLM_TEXT = "Mock LLM ответ"
 @pytest.mark.asyncio
 async def test_invoke_text_summarize_returns_summary_object() -> None:
     payload = await invoke_text_summarize(
-        TextTransformService(),
+        TextTransformService(make_test_billing_service()),
         text="long text",
         instruction="shorten",
         provider="mock",
@@ -29,6 +30,6 @@ async def test_invoke_text_summarize_returns_summary_object() -> None:
 
 @pytest.mark.asyncio
 async def test_invoke_text_format_markdown_returns_markdown_object() -> None:
-    payload = await invoke_text_format_markdown(TextTransformService(), text="Title")
+    payload = await invoke_text_format_markdown(TextTransformService(make_test_billing_service()), text="Title")
 
     assert payload == {"markdown": _MOCK_LLM_TEXT}

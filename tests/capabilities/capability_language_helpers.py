@@ -249,8 +249,8 @@ async def run(args, state):
     results["files.get_bytes"] = file_bytes["content_base64"]
     metadata = await call("files.get_metadata", {"file_id": created["file_id"]})
     results["files.get_metadata"] = metadata["file_id"]
-    read_result = await call("files.read", {"file_id": created["file_id"]})
-    results["files.read"] = read_result["pages"][0]["text"]
+    read_result = await call("files.read", {"file_ids": [created["file_id"]]})
+    results["files.read"] = read_result["files"][0]["results"][0]["result"]
     http_result = await call("http.request", {"method": "GET", "url": state["manifest_url"], "timeout_seconds": 10})
     results["http.request"] = http_result["status_code"]
     for method in ["get", "post", "put", "patch", "delete", "head"]:
@@ -343,8 +343,8 @@ async function run(args, state) {
   results["files.get_bytes"] = fileBytes.content_base64;
   const metadata = await call("files.get_metadata", {file_id: created.file_id});
   results["files.get_metadata"] = metadata.file_id;
-  const readResult = await call("files.read", {file_id: created.file_id});
-  results["files.read"] = readResult.pages[0].text;
+  const readResult = await call("files.read", {file_ids: [created.file_id]});
+  results["files.read"] = readResult.files[0].results[0].result;
   const httpResult = await call("http.request", {method: "GET", url: state.manifest_url, timeout_seconds: 10});
   results["http.request"] = httpResult.status_code;
   for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
@@ -450,12 +450,16 @@ func Run(args map[string]any, state map[string]any) (any, error) {
     }
     results["files.get_metadata"] = metadata["file_id"]
 
-    readResult, err := callObj("files.read", map[string]any{"file_id": created["file_id"]})
+    readResult, err := callObj("files.read", map[string]any{
+        "file_ids": []any{created["file_id"]},
+    })
     if err != nil {
         return nil, err
     }
-    readPages := readResult["pages"].([]any)
-    results["files.read"] = readPages[0].(map[string]any)["text"]
+    readFiles := readResult["files"].([]any)
+    readFile := readFiles[0].(map[string]any)
+    readResults := readFile["results"].([]any)
+    results["files.read"] = readResults[0].(map[string]any)["result"]
 
     httpResult, err := callObj("http.request", map[string]any{
         "method": "GET",
@@ -632,10 +636,12 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
     results["files.get_metadata"] = metadata["file_id"];
 
     var readResult = await CallObj("files.read", new Dictionary<string, object?> {
-        ["file_id"] = created["file_id"],
+        ["file_ids"] = new List<object?> { created["file_id"] },
     });
-    var readPages = (List<object?>) readResult["pages"]!;
-    results["files.read"] = ((Dictionary<string, object?>) readPages[0]!)["text"];
+    var readFiles = (List<object?>) readResult["files"]!;
+    var readFile = (Dictionary<string, object?>) readFiles[0]!;
+    var readResults = (List<object?>) readFile["results"]!;
+    results["files.read"] = ((Dictionary<string, object?>) readResults[0]!)["result"];
 
     var httpResult = await CallObj("http.request", new Dictionary<string, object?> {
         ["method"] = "GET",

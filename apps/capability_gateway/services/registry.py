@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import httpx2
 from a2a.types import Message, Part, Role
+from pydantic import ValidationError
 
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.crm_capabilities import (
@@ -90,6 +91,7 @@ from core.clients.service_client import ServiceClient, ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.data_tables.service import DataTableService
+from core.errors.boundary import PlatformNotFoundError
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import (
     RUNTIME_FLOW_ID,
@@ -98,12 +100,13 @@ from core.files.create_spec import (
     FileSourceKind,
     FileSourceRef,
 )
-from core.files.file_ref import stored_file_ref
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import ExecutionPrincipal, SystemPrincipal
-from core.files.reader import FileReader, FileReadError
-from core.files.reader.models import ReadFileArgs, ReadLane
+from core.files.reader import FileReadError
+from core.files.reader.engine import read_files_to_envelope
+from core.files.reader.models import ReadFileArgs, ReadFileEnvelope
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.files.writer import ContentMode, FileWriteError, FileWriter
@@ -215,6 +218,45 @@ def _trace_event_attribute_value(key: str, value: JsonValue) -> OtelAttributeVal
 
 def _object_schema(description: str) -> JsonObject:
     return {"type": "object", "description": description, "additionalProperties": True}
+
+
+def _files_read_input_schema() -> JsonObject:
+    """ReadFileArgs без names + обязательный file_ids (capability-контракт)."""
+    raw = require_json_object(ReadFileArgs.model_json_schema(), "ReadFileArgs.json_schema")
+    properties = require_json_object(
+        raw.get("properties") if isinstance(raw.get("properties"), dict) else {},
+        "ReadFileArgs.properties",
+    )
+    properties = {key: value for key, value in properties.items() if key != "names"}
+    properties["file_ids"] = {
+        "type": "array",
+        "description": "Список persisted file_id для чтения",
+        "items": {"type": "string", "minLength": 1},
+        "minItems": 1,
+    }
+    required: list[str] = ["file_ids"]
+    required_raw = raw.get("required")
+    if isinstance(required_raw, list):
+        for item in required_raw:
+            if isinstance(item, str) and item != "names" and item not in required:
+                required.append(item)
+    schema: JsonObject = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+    defs = raw.get("$defs")
+    if isinstance(defs, dict):
+        schema["$defs"] = defs
+    return schema
+
+
+def _files_read_output_schema() -> JsonObject:
+    return require_json_object(
+        ReadFileEnvelope.model_json_schema(),
+        "ReadFileEnvelope.json_schema",
+    )
 
 
 def _array_schema(description: str) -> JsonObject:
@@ -1219,29 +1261,15 @@ class CapabilityRegistry:
             ),
             "files.read": CapabilityDefinition(
                 name="files.read",
-                title="Read persisted file as structured document",
+                title="Read persisted files as ReadFileEnvelope",
                 description=(
-                    "Читает persisted-файл через канонический FileReader.read и возвращает FileExtract: "
-                    "pages, read_lane, kind, mime_type, warnings, source_checksum, file_id."
+                    "Читает persisted-файлы по file_ids через read_files_to_envelope "
+                    "(тот же контракт, что tool read_file): page_summarizations, nested_mode, "
+                    "budget, recursive, compression, vision_*. Ответ — ReadFileEnvelope "
+                    "(files[].results, continuation, nested)."
                 ),
-                input_schema=_schema_object(
-                    properties={
-                        "file_id": _string_schema("ID файла в FileRepository"),
-                        "file_name": _string_schema("Опциональное имя с расширением"),
-                        "page_start": _integer_schema("Начальная страница (0-based)"),
-                        "page_end": _integer_schema("Конечная страница (-1 = до конца)"),
-                        "vision_prompt": _string_schema(
-                            "Опциональная инструкция для image/vision чтения"
-                        ),
-                        "vision_model": _string_schema("Опциональная vision-модель"),
-                        "transcription_company_id": _string_schema(
-                            "company_id для резолва STT-tier при audio/video"
-                        ),
-                        "forced_lane": _string_schema("text|vision|hybrid|stt"),
-                    },
-                    required=["file_id"],
-                ),
-                output_schema=_object_schema("FileExtract JSON"),
+                input_schema=_files_read_input_schema(),
+                output_schema=_files_read_output_schema(),
                 languages=_supported_languages(),
                 tags=["files", "reader", "documents"],
                 sdk_namespace="files",
@@ -1878,42 +1906,49 @@ class CapabilityRegistry:
 
     async def _files_read(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
-        file_id = _required_string(request.kwargs.get("file_id"), "file_id")
-        file_name = _optional_string(request.kwargs.get("file_name"), "file_name")
-        vision_prompt = _optional_string(request.kwargs.get("vision_prompt"), "vision_prompt")
-        vision_model = _optional_string(request.kwargs.get("vision_model"), "vision_model")
-        page_start_raw = request.kwargs.get("page_start")
-        page_end_raw = request.kwargs.get("page_end")
-        page_start = int(page_start_raw) if isinstance(page_start_raw, int) and not isinstance(page_start_raw, bool) else 0
-        page_end = int(page_end_raw) if isinstance(page_end_raw, int) and not isinstance(page_end_raw, bool) else -1
-        forced_lane_raw = _optional_string(request.kwargs.get("forced_lane"), "forced_lane")
-        forced_lane: ReadLane | None = None
-        if forced_lane_raw is not None:
-            forced_lane = ReadLane(forced_lane_raw)
-        transcription_company_id = _optional_string(
-            request.kwargs.get("transcription_company_id"),
-            "transcription_company_id",
-        )
-        read_args = ReadFileArgs(
-            page_start=page_start,
-            page_end=page_end,
-            vision_prompt=vision_prompt or "",
-            vision_model=vision_model,
-            transcription_company_id=transcription_company_id,
-            forced_lane=forced_lane,
-        )
+        payload = dict(request.kwargs)
+        if "names" in payload:
+            raise ValueError("files.read does not accept names; pass file_ids")
+        if "file_id" in payload:
+            raise ValueError("files.read does not accept file_id; pass file_ids")
+        file_ids_raw = payload.pop("file_ids", None)
+        if not isinstance(file_ids_raw, list) or len(file_ids_raw) == 0:
+            raise ValueError("file_ids must be a non-empty list of strings")
+        file_ids: list[str] = []
+        for item in file_ids_raw:
+            if not isinstance(item, str) or item.strip() == "":
+                raise ValueError("file_ids items must be non-empty strings")
+            file_ids.append(item.strip())
+        try:
+            read_args = ReadFileArgs.model_validate(payload)
+        except ValidationError as exc:
+            raise ValueError(str(exc)) from exc
+
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
+            file_refs: list[FileRef] = []
+            for file_id in file_ids:
+                try:
+                    file_refs.append(
+                        await self._files_service.require_stored_file_ref(file_id)
+                    )
+                except PlatformNotFoundError as exc:
+                    raise ValueError(str(exc)) from exc
+            read_args = read_args.model_copy(
+                update={"names": [file_ref.original_name for file_ref in file_refs]}
+            )
             try:
-                result = await FileReader().read(
-                    file_id,
+                envelope = await read_files_to_envelope(
+                    file_refs,
                     read_args,
-                    file_name=file_name,
-                    file_id=file_id,
+                    tool_name="read_file",
                 )
             except FileReadError as exc:
                 raise ValueError(str(exc)) from exc
-        return require_json_object(result.model_dump(mode="json"), "files.read.response")
+        return require_json_object(
+            envelope.model_dump(mode="json"),
+            "files.read.response",
+        )
 
     def _make_http_method_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:

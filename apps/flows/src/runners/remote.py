@@ -10,10 +10,10 @@ from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.flow_ui.effects import apply_capability_platform_effects
 from apps.flows.src.models.execution_limits import get_remote_code_runner_http_timeout_seconds
 from apps.flows.src.runners.base import BaseCodeRunner
+from apps.flows.src.runners.capability_context import capability_execution_context
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.flow_interface_context import current_flow_interface
-from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from apps.flows.src.state import (
     ExecutionState,
     parse_interrupt_body_from_external_dict,
@@ -349,58 +349,7 @@ class RemoteCodeRunner(BaseCodeRunner):
         )
 
     def _execution_context(self, state: ExecutionState) -> CapabilityExecutionContext:
-        context = get_context()
-        if context is None or context.active_company is None:
-            raise ValueError("Remote code execution requires Context with active_company")
-        company_id = context.active_company.company_id
-        user_id = context.user.user_id
-        settings = get_flows_settings()
-        log_context = get_log_context()
-        request_id = log_context.get("request_id")
-        request_id_value = request_id if isinstance(request_id, str) and request_id.strip() else None
-        tool_context = get_active_tool_call_context()
-        source_node_id = tool_context.node_id if tool_context is not None else None
-        source_tool_call_id = tool_context.tool_call_id if tool_context is not None else None
-        namespace_raw = (context.active_namespace or "").strip()
-        namespace = namespace_raw if namespace_raw and namespace_raw != "default" else None
-        claims = CapabilityExecutionTokenClaims(
-            company_id=company_id,
-            user_id=user_id,
-            flow_id=state.session_flow_id,
-            branch_id=state.branch_id,
-            session_id=state.session_id,
-            task_id=state.task_id,
-            context_id=state.context_id,
-            channel=context.channel,
-            request_id=request_id_value,
-            durable_execution_branch_id=state.durable_execution_branch_id,
-            durable_node_schedule_sequence=state.durable_node_schedule_sequence,
-            durable_superstep_sequence=state.durable_superstep_sequence,
-            source_node_id=source_node_id,
-            source_tool_call_id=source_tool_call_id,
-            namespace=namespace,
-            exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
-        )
-        token = issue_execution_token(claims)
-        return CapabilityExecutionContext(
-            execution_token=token,
-            company_id=company_id,
-            user_id=user_id,
-            flow_id=state.session_flow_id,
-            branch_id=state.branch_id,
-            session_id=state.session_id,
-            task_id=state.task_id,
-            context_id=state.context_id,
-            channel=context.channel,
-            request_id=request_id_value,
-            trace_id=context.trace_id,
-            durable_execution_branch_id=state.durable_execution_branch_id,
-            durable_node_schedule_sequence=state.durable_node_schedule_sequence,
-            durable_superstep_sequence=state.durable_superstep_sequence,
-            source_node_id=source_node_id,
-            source_tool_call_id=source_tool_call_id,
-            namespace=namespace,
-        )
+        return capability_execution_context(state)
 
     def _validation_context(
         self,

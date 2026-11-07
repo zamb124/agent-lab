@@ -5,7 +5,7 @@ from apps.capability_gateway.config import (
     CapabilityGatewaySettings,
     get_capability_gateway_settings,
 )
-from apps.capability_gateway.di import CapabilityGatewayDi
+from apps.capability_gateway.di import CAPABILITY_GATEWAY_LIFECYCLE, CapabilityGatewayDi
 from core.app import create_service_app
 
 app = create_service_app(
@@ -14,6 +14,7 @@ app = create_service_app(
     CapabilityGatewayDi,
     database="shared_url",
     routers=[capabilities_router],
+    lifecycle=CAPABILITY_GATEWAY_LIFECYCLE,
     cors_origins=["*"],
     title="Platform Capability Gateway",
     description="Trusted gateway for sandbox platform capabilities",
