@@ -8,12 +8,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Self
 
 from oxyde import Field as DbField
-from oxyde import execute_raw
 
 from core.models.platform_model import PlatformModel
 
@@ -65,30 +64,24 @@ class GeoSource(PlatformModel):
         return await cls.objects.filter(enabled=True).order_by("name").all()
 
     @classmethod
-    async def insert_once(cls, instance: Self) -> bool:
-        """Вставка при отсутствии по ``name``; ``True`` — строка создана."""
-        rows = await execute_raw(
-            """
-            INSERT INTO geo_sources
-                (name, title, kind, license, attribution, url, enabled,
-                 created_at, updated_at)
-            VALUES ($1, $2, $3::geo_source_kind_enum, $4, $5, $6, $7, $8, $8)
-            ON CONFLICT (name) DO NOTHING
-            RETURNING id
-            """,
-            [
-                instance.name,
-                instance.title,
-                instance.kind.value,
-                instance.license,
-                instance.attribution,
-                instance.url,
-                instance.enabled,
-                datetime.now(UTC),
-            ],
-            using="geo",
-        )
-        return len(rows) > 0
+    async def upsert_by_name(cls, instance: Self) -> Self:
+        """Merge по ``name``: эталонный seed перезаписывает все поля.
+
+        ``enabled`` — тоже эталон: флаг флипается правкой SEED_SOURCES при
+        готовности импортёра, а не руками в БД (ручной флаг перезатрётся).
+        """
+        existing = await cls.by_name(instance.name)
+        if existing is None:
+            return await cls.objects.create(instance=instance)
+        existing.title = instance.title
+        existing.kind = instance.kind
+        existing.license = instance.license
+        existing.attribution = instance.attribution
+        existing.url = instance.url
+        existing.enabled = instance.enabled
+        existing.updated_at = instance.updated_at
+        _ = await existing.save()
+        return existing
 
 
 SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = (
@@ -109,7 +102,7 @@ SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = 
         "ODbL 1.0",
         "© OpenStreetMap contributors",
         "https://download.geofabrik.de",
-        False,
+        True,
     ),
     (
         "data_mos_ru",
@@ -118,7 +111,7 @@ SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = 
         "Открытые данные Москвы",
         "Портал открытых данных Правительства Москвы",
         "https://data.mos.ru",
-        False,
+        True,
     ),
     (
         "nspd",
@@ -127,7 +120,7 @@ SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = 
         "Общедоступные сведения ЕГРН",
         "Росреестр, НСПД",
         "https://nspd.gov.ru",
-        False,
+        True,
     ),
     (
         "overture",
@@ -136,7 +129,7 @@ SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = 
         "CDLA-Permissive 2.0 / ODbL (buildings)",
         "Overture Maps Foundation",
         "https://overturemaps.org",
-        False,
+        True,
     ),
     (
         "gar",
@@ -145,7 +138,7 @@ SEED_SOURCES: tuple[tuple[str, str, GeoSourceKind, str, str, str, bool], ...] = 
         "Открытые данные ФНС",
         "ФНС России, ГАР",
         "https://fias.nalog.ru",
-        False,
+        True,
     ),
     (
         "manual",

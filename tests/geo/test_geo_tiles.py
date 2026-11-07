@@ -100,6 +100,22 @@ async def test_fonts_get(geo_client: AsyncClient) -> None:
     assert resp.content == b"glyphs-0-255-fixture"
 
 
+async def test_fonts_composite_stack_get(geo_client: AsyncClient) -> None:
+    """MapLibre склеивает text-font массив запятыми — стек с запятой валиден."""
+    resp = await geo_client.get(
+        f"{_BASE}/fonts/Noto%20Sans%20Regular,Noto%20Sans%20Bold/0-255.pbf"
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"glyphs-0-255-composite-fixture"
+
+
+async def test_fonts_bad_stack_404(geo_client: AsyncClient) -> None:
+    # Пустые сегменты вокруг запятой и битые диапазоны — 404, не 500.
+    for bad in ("Noto%20Sans%20Regular,", ",Noto%20Sans%20Regular", "Noto,,Sans"):
+        resp = await geo_client.get(f"{_BASE}/fonts/{bad}/0-255.pbf")
+        assert resp.status_code == 404, bad
+
+
 async def test_fonts_bad_name_404(geo_client: AsyncClient) -> None:
     for bad in ("not-a-range.pbf", "..%2Fbasemap.pmtiles", "x-y.pbf"):
         resp = await geo_client.get(f"{_BASE}/fonts/Noto Sans Regular/{bad}")

@@ -69,3 +69,16 @@ class GeoStats(PlatformModel):
             .order_by("source", "region", "entity")
             .all()
         )
+
+    @classmethod
+    async def list_for_overview_by_source_region_entity_asc(cls, generation: int) -> list[Self]:
+        """Счётчики обзора: активное поколение плюс evergreen-строки (gen0).
+
+        Источники обогащения (ГАР и др.) пишут счётчики с ``generation=0`` —
+        они не умирают со свопом и должны быть видны в обзоре всегда.
+        """
+        return (
+            await cls.objects.filter(generation__in=[0, generation])
+            .order_by("source", "region", "entity")
+            .all()
+        )

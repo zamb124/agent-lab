@@ -22,8 +22,8 @@ from apps.shop.models import (
     ShopStatus,
     ShopTable,
 )
-from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.api import normalize_shop_theme
+from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.geocoding.base import Geocoder

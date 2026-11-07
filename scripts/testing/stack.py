@@ -144,6 +144,8 @@ COMMON_TEST_ENV: dict[str, str] = {
     # неизвестный адрес → [] → address_unverifiable, "lat,lng" → точка.
     "GEOCODING__NOMINATIM_BASE_URL": "http://127.0.0.1:18098",
     "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
+    # DownloadService ФИАС — эмулятор стека (не внешний fias.nalog.ru).
+    "GAR_INFO_URL": "http://127.0.0.1:18101/WebServices/Public/DownloadService.asmx",
     # Observability-бэкенды в стеке отсутствуют: flows logs/traces ops ждут
     # *_failed (unavailable), а не пустой succeeded от чужого dev-стека
     # на localhost:3100/3200. Порт 1 — гарантированный ConnectError.
@@ -448,6 +450,30 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="osm_extract",
         app_path="tests.fixtures.osm_extract_emulator.app:app",
         port=18099,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="gar",
+        app_path="tests.fixtures.gar_emulator.app:app",
+        port=18101,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="nspd",
+        app_path="tests.fixtures.nspd_emulator.app:app",
+        port=18102,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="datamos",
+        app_path="tests.fixtures.datamos_emulator.app:app",
+        port=18103,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="replication",
+        app_path="tests.fixtures.replication_emulator.app:app",
+        port=18104,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
 )

@@ -13,6 +13,7 @@ from oxyde import execute_raw
 from apps.geo.config import GeoSettings
 from apps.geo.models.api import GeoAddressHit, GeoAddressListResponse
 from apps.geo.models.geo_import_state import GeoImportState
+from core.types import JsonObject, SqlParameterValue
 
 _ADDRESS_SELECT = """
     SELECT id, osm_type, osm_id, display_name, city, street, housenumber,
@@ -21,7 +22,7 @@ _ADDRESS_SELECT = """
 """
 
 
-def _hits(rows: list[dict[str, object]]) -> list[GeoAddressHit]:
+def _hits(rows: list[JsonObject]) -> list[GeoAddressHit]:
     """Строки справочника → доменные модели; колонки SELECT = полям модели."""
     return [GeoAddressHit.model_validate(row) for row in rows]
 
@@ -45,22 +46,32 @@ class GeoAddressService:
         ``ST_Covers`` — адрес ровно на границе зоны считается внутри
         (бизнес-семантика «мы туда возим»). Возвращает страницу и точный
         total — директору нужен реальный счётчик.
+
+        Nullable-параметры не биндятся — баг oxyde-core prepared
+        statement (NULL↔non-NULL сдвигает биндинги); фильтр по запросу
+        собирается отдельной SQL-веткой.
         """
         generation = await GeoImportState.active_generation()
-        where = """
-            generation = $1
-            AND ST_Covers(ST_GeomFromGeoJSON($2), geom)
-            AND ($3::text IS NULL OR display_name % $3 OR display_name ILIKE $3 || '%')
-        """
+        clauses = [
+            "generation IN (0, $1)",
+            "ST_Covers(ST_GeomFromGeoJSON($2), geom)",
+        ]
+        params: list[SqlParameterValue] = [generation, zone_geojson]
+        if query is not None:
+            idx = len(params) + 1
+            clauses.append(f"(display_name % ${idx} OR display_name ILIKE ${idx} || '%')")
+            params.append(query)
+        where = " AND ".join(clauses)
+        page_idx = len(params) + 1
         rows = await execute_raw(
             _ADDRESS_SELECT
-            + f"WHERE {where} ORDER BY display_name LIMIT $4 OFFSET $5",
-            [generation, zone_geojson, query, limit, offset],
+            + f"WHERE {where} ORDER BY display_name LIMIT ${page_idx} OFFSET ${page_idx + 1}",
+            [*params, limit, offset],
             using="geo",
         )
         count_rows = await execute_raw(
             f"SELECT COUNT(*) AS total FROM geo_addresses WHERE {where}",
-            [generation, zone_geojson, query],
+            params,
             using="geo",
         )
         total: int = count_rows[0]["total"] if count_rows else 0
@@ -75,24 +86,36 @@ class GeoAddressService:
         lng: float | None,
         limit: int,
     ) -> list[GeoAddressHit]:
-        """Автокомплит: префикс → триграм-сходство → близость к точке."""
+        """Автокомплит: префикс → триграм-сходство → близость к точке.
+
+        Nullable-параметры не биндятся — баг oxyde-core prepared
+        statement (NULL↔non-NULL сдвигает биндинги → «invalid GeoJSON
+        representation» на проде); опциональные фильтры — отдельные
+        SQL-ветки.
+        """
         generation = await GeoImportState.active_generation()
+        clauses = ["generation IN (0, $1)"]
+        params: list[SqlParameterValue] = [generation]
+        if zone_geojson is not None:
+            idx = len(params) + 1
+            clauses.append(f"ST_Covers(ST_GeomFromGeoJSON(${idx}), geom)")
+            params.append(zone_geojson)
+        q_idx = len(params) + 1
+        clauses.append(f"(display_name ILIKE ${q_idx} || '%' OR display_name % ${q_idx})")
+        params.append(query)
+        order = (
+            f"(display_name ILIKE ${q_idx} || '%') DESC, similarity(display_name, ${q_idx}) DESC"
+        )
+        if lat is not None and lng is not None:
+            lat_idx = len(params) + 1
+            order += f", geom <-> ST_SetSRID(ST_MakePoint(${lat_idx + 1}, ${lat_idx}), 4326)"
+            params.extend([lat, lng])
+        order += ", display_name"
+        limit_idx = len(params) + 1
+        params.append(limit)
         rows = await execute_raw(
-            _ADDRESS_SELECT
-            + """
-            WHERE generation = $1
-              AND ($2::text IS NULL OR ST_Covers(ST_GeomFromGeoJSON($2), geom))
-              AND (display_name ILIKE $3 || '%' OR display_name % $3)
-            ORDER BY (display_name ILIKE $3 || '%') DESC,
-                     similarity(display_name, $3) DESC,
-                     CASE WHEN $4::float IS NULL
-                          THEN 0::float
-                          ELSE geom <-> ST_SetSRID(ST_MakePoint($5::float, $4::float), 4326)
-                     END,
-                     display_name
-            LIMIT $6
-            """,
-            [generation, zone_geojson, query, lat, lng, limit],
+            _ADDRESS_SELECT + f"WHERE {' AND '.join(clauses)} ORDER BY {order} LIMIT ${limit_idx}",
+            params,
             using="geo",
         )
         return _hits(rows)
@@ -105,7 +128,7 @@ class GeoAddressService:
         rows = await execute_raw(
             _ADDRESS_SELECT
             + """
-            WHERE generation = $1
+            WHERE generation IN (0, $1)
             ORDER BY geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)
             LIMIT $4
             """,

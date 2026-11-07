@@ -127,6 +127,8 @@ export interface PlatformMapConfig {
     featureCards?: {
         hover?: boolean;
         click?: boolean;
+        /** Админ-действия карточки (скрыть фичу/закрыть дорогу) → `pm-feature-admin`. */
+        admin?: boolean;
     };
     markers?: PlatformMapMarker[];
     /** Кластеризация точечных маркеров (кружки со счётчиком, zoom по клику). */
@@ -237,6 +239,7 @@ export class PlatformMapEl extends PlatformElement {
         _routeLegsOpen: { state: true },
         _toast: { state: true },
         _tilted: { state: true },
+        _panelCollapsed: { state: true },
     };
 
     declare config: PlatformMapConfig;
@@ -259,6 +262,7 @@ export class PlatformMapEl extends PlatformElement {
     declare _routeLegsOpen: boolean;
     declare _toast: string;
     declare _tilted: boolean;
+    declare _panelCollapsed: boolean;
 
     private _el: HTMLDivElement | null = null;
     private _map: PlatformMap | null = null;
@@ -316,6 +320,7 @@ export class PlatformMapEl extends PlatformElement {
         this._routeLegsOpen = false;
         this._toast = '';
         this._tilted = false;
+        this._panelCollapsed = false;
     }
 
     /** MapLibre-карта — для потребителей, которым нужен прямой API (fitBounds и т.п.). */
@@ -326,6 +331,11 @@ export class PlatformMapEl extends PlatformElement {
     /** TerraDraw-инстанс режима `draw` — контролы редактора зовут setMode/clear. */
     getDraw(): ZoneDraw | null {
         return this._zoneDraw;
+    }
+
+    /** Принудительный рефетч фич слоёв (после админ-правки снаружи). */
+    refresh(): void {
+        this._refresh();
     }
 
     /** Пересчёт canvas под текущий размер контейнера (после смены layout хостом). */
@@ -749,12 +759,15 @@ export class PlatformMapEl extends PlatformElement {
 
     private _renderAddressesPanel(panel: { zone?: Polygon | MultiPolygon | null; title?: string }) {
         return html`
-            <div class="pm-panel">
+            <div class="pm-panel${this._panelCollapsed ? ' collapsed' : ''}">
                 <platform-zone-address-panel
                     .zone=${panel.zone ?? null}
                     .title=${panel.title ?? this.t('map.addresses_title')}
                     .addressesOpName=${'geo/addresses_in_zone'}
                     @address-hover=${this._onAddressHover}
+                    @collapsed-changed=${(e: CustomEvent<{ collapsed: boolean }>) => {
+                        this._panelCollapsed = e.detail.collapsed === true;
+                    }}
                 ></platform-zone-address-panel>
             </div>
         `;
@@ -2403,6 +2416,7 @@ export class PlatformMapEl extends PlatformElement {
                 const props = { ...f.properties, __coords: coords };
                 return renderFeatureCard({ layer: f.layer, properties: props }, t, colorFor(f.layer), {
                     routeTo: this._routeCfg !== null,
+                    admin: this.config.featureCards?.admin === true,
                 });
             })
             .filter((c) => c !== '')
@@ -2899,6 +2913,7 @@ export class PlatformMapEl extends PlatformElement {
             z-index: 6;
             display: flex;
         }
+        .pm-panel.collapsed { width: 48px; }
         .pm-panel platform-zone-address-panel {
             flex: 1;
             min-height: 0;
@@ -3077,6 +3092,13 @@ export class PlatformMapEl extends PlatformElement {
         }
         .pm-card-act-primary:hover {
             background: color-mix(in srgb, var(--color-primary, #155dfc) 88%, #000000);
+        }
+        .pm-card-act-danger {
+            background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, transparent);
+            color: var(--color-danger, #dc2626);
+        }
+        .pm-card-act-danger:hover {
+            background: color-mix(in srgb, var(--color-danger, #dc2626) 18%, transparent);
         }
         .pm-card-meta {
             margin-top: 8px;

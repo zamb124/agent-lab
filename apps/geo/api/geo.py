@@ -6,20 +6,34 @@ from fastapi import APIRouter
 
 from apps.geo.di import Di
 from apps.geo.models.api import (
+    GeoAddressCreateRequest,
     GeoAddressesInZoneRequest,
+    GeoAddressHit,
     GeoAddressListResponse,
     GeoAddressNearestRequest,
     GeoAddressSuggestRequest,
+    GeoAddressTargetRequest,
+    GeoAddressUpdateRequest,
+    GeoCursorItem,
     GeoCursorListResponse,
+    GeoCursorResetRequest,
+    GeoEdgeCloseRequest,
+    GeoEdgeTargetRequest,
+    GeoEnrichItemResponse,
     GeoEnrichListRequest,
     GeoEnrichListResponse,
+    GeoEnrichRetryRequest,
     GeoFeatureCollectionResponse,
     GeoFeaturesRequest,
+    GeoFeatureSuppressRequest,
+    GeoImportRunRequest,
     GeoImportRunResponse,
     GeoImportStatusResponse,
     GeoIsochroneRequest,
     GeoIsochroneResponse,
     GeoLayerListResponse,
+    GeoOverrideListResponse,
+    GeoOverridesListRequest,
     GeoRegionItem,
     GeoRegionListResponse,
     GeoRegionNameRequest,
@@ -34,15 +48,26 @@ from apps.geo.models.api import (
     GeoStatsOverview,
 )
 from apps.geo.realtime.operations import (
+    op_geo_addresses_create,
     op_geo_addresses_in_zone,
     op_geo_addresses_nearest,
+    op_geo_addresses_override_revert,
+    op_geo_addresses_remove,
     op_geo_addresses_suggest,
+    op_geo_addresses_update,
     op_geo_cursors_list,
+    op_geo_cursors_reset,
+    op_geo_edges_close,
+    op_geo_edges_open,
     op_geo_enrich_list,
+    op_geo_enrich_retry,
+    op_geo_features_suppress,
+    op_geo_features_unsuppress,
     op_geo_import_run,
     op_geo_import_status,
     op_geo_layers_features,
     op_geo_layers_list,
+    op_geo_overrides_list,
     op_geo_regions_create,
     op_geo_regions_list,
     op_geo_regions_remove,
@@ -123,8 +148,8 @@ async def import_status(di: Di) -> GeoImportStatusResponse:
 
 
 @router.post("/import/run", response_model=GeoImportRunResponse)
-async def import_run(di: Di) -> GeoImportRunResponse:
-    return await op_geo_import_run(EmptyPayload(), user=require_context().user, di=di)
+async def import_run(payload: GeoImportRunRequest, di: Di) -> GeoImportRunResponse:
+    return await op_geo_import_run(payload, user=require_context().user, di=di)
 
 
 @router.get("/regions", response_model=GeoRegionListResponse)
@@ -171,11 +196,25 @@ async def cursors_list(di: Di) -> GeoCursorListResponse:
     return await op_geo_cursors_list(EmptyPayload(), user=require_context().user, di=di)
 
 
+@router.post("/cursors/reset", response_model=GeoCursorItem)
+async def cursors_reset(
+    payload: GeoCursorResetRequest, di: Di
+) -> GeoCursorItem:
+    return await op_geo_cursors_reset(payload, user=require_context().user, di=di)
+
+
 @router.post("/enrich/list", response_model=GeoEnrichListResponse)
 async def enrich_list(
     payload: GeoEnrichListRequest, di: Di
 ) -> GeoEnrichListResponse:
     return await op_geo_enrich_list(payload, user=require_context().user, di=di)
+
+
+@router.post("/enrich/retry", response_model=GeoEnrichItemResponse)
+async def enrich_retry(
+    payload: GeoEnrichRetryRequest, di: Di
+) -> GeoEnrichItemResponse:
+    return await op_geo_enrich_retry(payload, user=require_context().user, di=di)
 
 
 @router.get("/layers", response_model=GeoLayerListResponse)
@@ -188,3 +227,68 @@ async def layers_features(
     payload: GeoFeaturesRequest, di: Di
 ) -> GeoFeatureCollectionResponse:
     return await op_geo_layers_features(payload, user=require_context().user, di=di)
+
+
+@router.post("/addresses/create", response_model=GeoAddressHit)
+async def addresses_create(
+    payload: GeoAddressCreateRequest, di: Di
+) -> GeoAddressHit:
+    return await op_geo_addresses_create(payload, user=require_context().user, di=di)
+
+
+@router.post("/addresses/update", response_model=GeoAddressHit)
+async def addresses_update(
+    payload: GeoAddressUpdateRequest, di: Di
+) -> GeoAddressHit:
+    return await op_geo_addresses_update(payload, user=require_context().user, di=di)
+
+
+@router.post("/addresses/remove", response_model=EmptyPayload)
+async def addresses_remove(
+    payload: GeoAddressTargetRequest, di: Di
+) -> EmptyPayload:
+    return await op_geo_addresses_remove(payload, user=require_context().user, di=di)
+
+
+@router.post("/addresses/override-revert", response_model=GeoAddressHit | None)
+async def addresses_override_revert(
+    payload: GeoAddressTargetRequest, di: Di
+) -> GeoAddressHit | None:
+    return await op_geo_addresses_override_revert(
+        payload, user=require_context().user, di=di
+    )
+
+
+@router.post("/overrides/list", response_model=GeoOverrideListResponse)
+async def overrides_list(
+    payload: GeoOverridesListRequest, di: Di
+) -> GeoOverrideListResponse:
+    return await op_geo_overrides_list(payload, user=require_context().user, di=di)
+
+
+@router.post("/features/suppress", response_model=EmptyPayload)
+async def features_suppress(
+    payload: GeoFeatureSuppressRequest, di: Di
+) -> EmptyPayload:
+    return await op_geo_features_suppress(
+        payload, user=require_context().user, di=di
+    )
+
+
+@router.post("/features/unsuppress", response_model=EmptyPayload)
+async def features_unsuppress(
+    payload: GeoFeatureSuppressRequest, di: Di
+) -> EmptyPayload:
+    return await op_geo_features_unsuppress(
+        payload, user=require_context().user, di=di
+    )
+
+
+@router.post("/edges/close", response_model=EmptyPayload)
+async def edges_close(payload: GeoEdgeCloseRequest, di: Di) -> EmptyPayload:
+    return await op_geo_edges_close(payload, user=require_context().user, di=di)
+
+
+@router.post("/edges/open", response_model=EmptyPayload)
+async def edges_open(payload: GeoEdgeTargetRequest, di: Di) -> EmptyPayload:
+    return await op_geo_edges_open(payload, user=require_context().user, di=di)

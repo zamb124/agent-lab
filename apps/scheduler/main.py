@@ -11,7 +11,16 @@ from apps.flows.src.tasks.task_names import (
     TASK_MCP_CATALOG_RESYNC_TOOLS,
     TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
 )
-from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK, GEO_TILES_SYNC
+from apps.geo.tasks.task_names import (
+    GEO_DATAMOS_SYNC,
+    GEO_ENRICH_TICK,
+    GEO_GAR_SYNC,
+    GEO_NSPD_CRAWL,
+    GEO_OSM_DIFF_TICK,
+    GEO_OSM_SYNC_TICK,
+    GEO_OVERTURE_SYNC,
+    GEO_TILES_SYNC,
+)
 from apps.idle.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
@@ -772,6 +781,48 @@ async def ensure_platform_schedules(
         task_name=GEO_TILES_SYNC.name,
         cron="40 4 * * 0",
         log_label="Geo tiles sync",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_ENRICH_TICK.name,
+        cron="*/5 * * * *",
+        log_label="Geo enrich drain",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_GAR_SYNC.name,
+        cron="30 5 * * 0",
+        log_label="Geo GAR sync",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_NSPD_CRAWL.name,
+        cron="17 * * * *",
+        log_label="Geo NSPD crawl",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_DATAMOS_SYNC.name,
+        cron="50 4 * * *",
+        log_label="Geo data.mos.ru sync",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_OVERTURE_SYNC.name,
+        cron="0 6 1 * *",
+        log_label="Geo Overture sync",
+    )
+    await _ensure_calendar_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=GEO_OSM_DIFF_TICK.name,
+        cron="10 4 * * *",
+        log_label="Geo OSM diff tick",
     )
     # Telegram getUpdates-поллинг customer-auth: минутный тик, сам таска
     # держит long-poll до 55 с; при живом поллере тик сразу выходит по lock.

@@ -798,6 +798,7 @@ class OsmImportService:
         await self._bulk_insert_barriers(barriers, generation)
         await self._bulk_insert_signals(signals, generation)
         await self._resolve_restriction_coords(generation)
+        await self._apply_overlays(generation)
         return await self._generation_counts(generation)
 
     async def _bulk_insert_addresses(
@@ -1014,6 +1015,85 @@ class OsmImportService:
             using="geo",
         )
 
+    async def _apply_overlays(self, generation: int) -> None:
+        """Перенос вечных оверлеев на новое поколение.
+
+        Порядок детерминирован: enrich-атрибуты источников → патч админа
+        (побеждает всегда) → тумбстоуны (удаление) → закрытия дорог.
+        Строки generation=0 (manual) сюда не входят — они не поколение.
+        """
+        _ = await execute_raw(
+            """
+            UPDATE geo_addresses a
+            SET gar_guid = e.gar_guid,
+                canonical_name = e.canonical_name,
+                cadastral_number = e.cadastral_number
+            FROM geo_address_enrich e
+            WHERE a.generation = $1
+              AND a.osm_type = e.osm_type AND a.osm_id = e.osm_id
+            """,
+            [generation],
+            using="geo",
+        )
+        _ = await execute_raw(
+            """
+            UPDATE geo_addresses a
+            SET display_name = COALESCE(o.display_name, a.display_name),
+                city = COALESCE(o.city, a.city),
+                street = COALESCE(o.street, a.street),
+                housenumber = COALESCE(o.housenumber, a.housenumber),
+                postcode = COALESCE(o.postcode, a.postcode),
+                lat = COALESCE(o.lat, a.lat),
+                lng = COALESCE(o.lng, a.lng)
+            FROM geo_address_overrides o
+            WHERE a.generation = $1
+              AND a.osm_type = o.osm_type AND a.osm_id = o.osm_id
+              AND NOT o.suppressed
+            """,
+            [generation],
+            using="geo",
+        )
+        _ = await execute_raw(
+            """
+            DELETE FROM geo_addresses a
+            USING geo_address_overrides o
+            WHERE a.generation = $1
+              AND a.osm_type = o.osm_type AND a.osm_id = o.osm_id
+              AND o.suppressed
+            """,
+            [generation],
+            using="geo",
+        )
+        for entity, table, key_col in (
+            ("barrier", "geo_barriers", "osm_node_id"),
+            ("signal", "geo_traffic_signals", "osm_node_id"),
+            ("restriction", "geo_turn_restrictions", "osm_relation_id"),
+            ("edge", "geo_road_edges", "osm_way_id"),
+        ):
+            _ = await execute_raw(
+                f"""
+                DELETE FROM {table} x
+                USING geo_suppressions s
+                WHERE x.generation = $1
+                  AND s.entity = $2 AND x.{key_col} = s.osm_id
+                """,
+                [generation, entity],
+                using="geo",
+            )
+        for mode in ("car", "foot", "bike", "scooter"):
+            _ = await execute_raw(
+                f"""
+                UPDATE geo_road_edges e
+                SET {mode}_cost = -1, {mode}_reverse_cost = -1
+                FROM geo_edge_overrides o
+                WHERE e.generation = $1
+                  AND e.osm_way_id = o.osm_way_id
+                  AND COALESCE((o.cost_masks->>'{mode}')::boolean, false)
+                """,
+                [generation],
+                using="geo",
+            )
+
     async def _generation_counts(
         self, generation: int
     ) -> dict[str, dict[str, int]]:
@@ -1060,6 +1140,7 @@ class OsmImportService:
         new_gen = state.current_generation + 1
         state.current_generation = new_gen
         state.status = GeoImportStatus.IDLE
+        state.source_name = "osm"
         state.source_modified_at = source_modified
         totals = counts["totals"]
         state.rows_addresses = totals.get("addresses", 0)
@@ -1088,8 +1169,8 @@ class OsmImportService:
                     rows=per_region.get(f"{entity}:{region.name}", 0),
                 )
         await GeoRegion.mark_imported([r.name for r in regions])
-        # Чистка старых поколений — после свопа, батчами; geo_stats только
-        # поколений импорта (generation>0) — вечнозелёные строки не трогаем.
+        # Чистка старых поколений — после свопа, батчами; generation=0 —
+        # вечнозелёные строки (manual), чистка их не трогает.
         for table in (
             "geo_addresses",
             "geo_road_vertices",
@@ -1100,9 +1181,7 @@ class OsmImportService:
             "geo_stats",
         ):
             _ = await execute_raw(
-                f"DELETE FROM {table} WHERE generation < $1 AND generation > 0"
-                if table == "geo_stats"
-                else f"DELETE FROM {table} WHERE generation < $1",
+                f"DELETE FROM {table} WHERE generation < $1 AND generation > 0",
                 [new_gen],
                 using="geo",
             )

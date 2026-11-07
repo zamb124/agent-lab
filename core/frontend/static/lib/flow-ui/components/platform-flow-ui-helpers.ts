@@ -5,7 +5,7 @@ import type { HitlConversation } from '../runtime/hitl-transport.js';
 
 export const EDITING_CAPABILITIES = Object.freeze({ cancel: false, files: false, voice: false });
 
-export type FlowUiStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type FlowUiStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
 export type HitlMode = 'takeover' | 'single_reply';
 
 export interface FlowUiInteractionPolicy {

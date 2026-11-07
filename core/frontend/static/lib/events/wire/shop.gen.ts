@@ -12,32 +12,6 @@ export type EmptyPayload = {
     [key: string]: unknown;
 };
 
-/**
- * Адрес из справочника geo.
- */
-export interface GeoAddressHit {
-    "id": number;
-    "osm_type": string;
-    "osm_id": number;
-    "display_name": string;
-    "city"?: string | undefined;
-    "street"?: string | undefined;
-    "housenumber"?: string | undefined;
-    "postcode"?: string | undefined;
-    "lat": number;
-    "lng": number;
-    [key: string]: unknown;
-}
-
-/**
- * GeoAddressListResult
- */
-export interface GeoAddressListResult {
-    "items": GeoAddressHit[];
-    "total": number;
-    [key: string]: unknown;
-}
-
 export type JsonValue = unknown;
 
 /**
@@ -69,6 +43,17 @@ export interface ListResponse_ShopResponse_ {
  */
 export interface ListResponse_ShopTableResponse_ {
     "items": ShopTableResponse[];
+    [key: string]: unknown;
+}
+
+/**
+ * OffsetPage[ShopMyOrderListItemResponse]
+ */
+export interface OffsetPage_ShopMyOrderListItemResponse_ {
+    "items": ShopMyOrderListItemResponse[];
+    "total": number;
+    "limit": number;
+    "offset": number;
     [key: string]: unknown;
 }
 
@@ -417,25 +402,6 @@ export interface ShopDomainIdPayload {
 export type ShopDomainStatus = "pending_dns" | "awaiting_dns" | "provisioning" | "active" | "failed";
 
 /**
- * Геокод адреса магазина для центрирования карты зоны доставки.
- */
-export interface ShopGeocodePayload {
-    "address": string;
-    "shop_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopGeocodeResponse
- */
-export interface ShopGeocodeResponse {
-    "lat": number;
-    "lng": number;
-    "normalized"?: string | undefined;
-    [key: string]: unknown;
-}
-
-/**
  * ShopIdPayload
  */
 export interface ShopIdPayload {
@@ -572,6 +538,103 @@ export interface ShopModifierOptionUpdatePayload {
 }
 
 /**
+ * Детали/отмена заказа кабинета по публичному коду.
+ */
+export interface ShopMyOrderCodePayload {
+    "public_code": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Полная карточка заказа кабинета: позиции, таймлайн, гео.
+ */
+export interface ShopMyOrderDetailResponse {
+    "public_code": string;
+    "status": ShopOrderStatus;
+    "status_label": string;
+    "status_changed_at": string;
+    "created_at": string;
+    "active": boolean;
+    "total_minor": number;
+    "currency": string;
+    "delivery_type": ShopDeliveryType;
+    "address"?: string | undefined;
+    "table_label"?: string | undefined;
+    "delivery_eta_minutes"?: number | null | undefined;
+    "items_preview"?: ShopOrderItemPreview[] | undefined;
+    "items_count"?: number | undefined;
+    "shop": ShopMyOrderShopBlock;
+    "items_total_minor": number;
+    "discount_minor": number;
+    "delivery_fee_minor": number;
+    "comment"?: string | undefined;
+    "promos"?: ShopPromoAppliedResponse[] | undefined;
+    "items"?: ShopOrderItemResponse[] | undefined;
+    "status_history"?: ShopOrderStatusEntry[] | undefined;
+    "status_labels"?: Record<string, string> | undefined;
+    "can_cancel"?: boolean | undefined;
+    "delivery_lat"?: number | null | undefined;
+    "delivery_lng"?: number | null | undefined;
+    "delivery_route"?: Record<string, JsonValue> | undefined;
+    "delivery_zone"?: Record<string, JsonValue> | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Строка `GET /public/my/orders` — заказ покупателя любой витрины.
+ */
+export interface ShopMyOrderListItemResponse {
+    "public_code": string;
+    "status": ShopOrderStatus;
+    "status_label": string;
+    "status_changed_at": string;
+    "created_at": string;
+    "active": boolean;
+    "total_minor": number;
+    "currency": string;
+    "delivery_type": ShopDeliveryType;
+    "address"?: string | undefined;
+    "table_label"?: string | undefined;
+    "delivery_eta_minutes"?: number | null | undefined;
+    "items_preview"?: ShopOrderItemPreview[] | undefined;
+    "items_count"?: number | undefined;
+    "shop": ShopMyOrderShopBlock;
+    [key: string]: unknown;
+}
+
+/**
+ * Магазин заказа — кто и где его исполняет (для кросс-витринной ленты).
+ */
+export interface ShopMyOrderShopBlock {
+    "shop_id": string;
+    "slug": string;
+    "name": string;
+    "kind"?: ShopKind | undefined;
+    "logo_file_id"?: string | null | undefined;
+    "phone"?: string | undefined;
+    "address"?: string | undefined;
+    "city"?: string | undefined;
+    "working_hours"?: Record<string, JsonValue> | undefined;
+    "open_now"?: boolean | undefined;
+    "is_published"?: boolean | undefined;
+    "storefront_url"?: string | undefined;
+    "lat"?: number | null | undefined;
+    "lng"?: number | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Лента `my/orders`: фильтр по статусу или «активные/завершённые».
+ */
+export interface ShopMyOrdersListPayload {
+    "status"?: ShopOrderStatus | null | undefined;
+    "active"?: boolean | null | undefined;
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Заказ с витрины: магазин резолвится по slug — анонимный вызов.
  */
 export interface ShopOrderCreatePayload {
@@ -595,6 +658,9 @@ export interface ShopOrderCreatePayload {
 export interface ShopOrderCreatedResponse {
     "public_code": string;
     "status": ShopOrderStatus;
+    "status_label": string;
+    "delivery_type"?: ShopDeliveryType | undefined;
+    "table_label"?: string | undefined;
     "total_minor": number;
     "currency": string;
     [key: string]: unknown;
@@ -608,6 +674,8 @@ export interface ShopOrderEventPayload {
     "shop_order_id": string;
     "public_code": string;
     "status": ShopOrderStatus;
+    "status_label"?: string | undefined;
+    "delivery_type"?: ShopDeliveryType | undefined;
     "total_minor": number;
     "currency": string;
     [key: string]: unknown;
@@ -629,6 +697,17 @@ export interface ShopOrderItemModifierResponse {
     "group_name": string;
     "option_name": string;
     "price_minor": number;
+    "qty": number;
+    "group_id"?: string | undefined;
+    "option_id"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopOrderItemPreview
+ */
+export interface ShopOrderItemPreview {
+    "name": string;
     "qty": number;
     [key: string]: unknown;
 }
@@ -652,6 +731,7 @@ export interface ShopOrderItemResponse {
     "price_minor": number;
     "qty": number;
     "discount_minor"?: number | undefined;
+    "photo_file_id"?: string | null | undefined;
     "modifiers"?: ShopOrderItemModifierResponse[] | undefined;
     [key: string]: unknown;
 }
@@ -684,6 +764,7 @@ export interface ShopOrderResponse {
     "shop_id": string;
     "public_code": string;
     "status": ShopOrderStatus;
+    "status_label": string;
     "customer_id"?: string | undefined;
     "customer_name": string;
     "customer_phone": string;
@@ -726,11 +807,21 @@ export type ShopOrderSource = "web" | "embed";
 export type ShopOrderStatus = "new" | "accepted" | "preparing" | "delivering" | "done" | "cancelled";
 
 /**
+ * Одна точка таймлайна статусов заказа.
+ */
+export interface ShopOrderStatusEntry {
+    "status": ShopOrderStatus;
+    "at": string;
+    [key: string]: unknown;
+}
+
+/**
  * ShopOrderStatusResponse
  */
 export interface ShopOrderStatusResponse {
     "public_code": string;
     "status": ShopOrderStatus;
+    "status_label": string;
     "total_minor": number;
     "currency": string;
     "delivery_type": ShopDeliveryType;
@@ -996,6 +1087,25 @@ export interface ShopShopEventPayload {
 export type ShopStatus = "draft" | "published" | "suspended";
 
 /**
+ * ShopStorefrontGeoPayload
+ */
+export interface ShopStorefrontGeoPayload {
+    "slug": string;
+    [key: string]: unknown;
+}
+
+/**
+ * `GET /public/storefront/{slug}/geo` — точка магазина и зона для карты.
+ */
+export interface ShopStorefrontGeoResponse {
+    "lat"?: number | null | undefined;
+    "lng"?: number | null | undefined;
+    "address"?: string | undefined;
+    "delivery_zone"?: Record<string, JsonValue> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * ShopTableCreatePayload
  */
 export interface ShopTableCreatePayload {
@@ -1049,6 +1159,28 @@ export interface ShopTheme {
     "accent_color"?: string | undefined;
     "preset"?: string | undefined;
     "mode"?: string | undefined;
+    "custom"?: ShopThemeCustom | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Мерчант-кастомизация витрины — код владельца магазина.
+ * 
+ * Слоты — именованные точки монтажа в shell (аналог Shopify Custom
+ * Liquid): `head_html` — в `</head>` (метрики, шрифты), `css` — в конец
+ * `<style>` (переопределения), `js` — в конец `<script>` (обработчики),
+ * `blocks` — собственные HTML-блоки по имени слота. Статические слоты
+ * shell: `top` (перед `#app`), `bottom` (после `#app`). Якоря внутри
+ * витрины: `<anchor>:before` / `<anchor>:after`, где anchor — `hero`,
+ * `meta`, `catalog`; монтируются клиентом через `slot()` в
+ * `blocks/ui.py`. Ограничения размера защищают snapshot; рендерится
+ * как есть — это код владельца витрины.
+ */
+export interface ShopThemeCustom {
+    "head_html"?: string | undefined;
+    "css"?: string | undefined;
+    "js"?: string | undefined;
+    "blocks"?: Record<string, string> | undefined;
     [key: string]: unknown;
 }
 
@@ -1077,20 +1209,6 @@ export interface ShopUpdatePayload {
     "theme"?: ShopTheme | null | undefined;
     "badges"?: ShopBadge[] | null | undefined;
     "shop_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * Адреса geo-справочника внутри редактируемой зоны доставки.
- * 
- * ``zone`` — GeoJSON-полигон прямо из редактора (ещё не сохранён),
- * поэтому оп валидирует его сам.
- */
-export interface ShopZoneAddressesRequest {
-    "zone": Record<string, JsonValue>;
-    "q"?: string | null | undefined;
-    "limit"?: number | undefined;
-    "offset"?: number | undefined;
     [key: string]: unknown;
 }
 
@@ -1141,17 +1259,19 @@ export interface ShopCommandMap {
     "shop/promos/remove_requested": { payload: ShopPromoIdPayload; result: EmptyPayload },
     "shop/promos/update_requested": { payload: ShopPromoUpdatePayload; result: ShopPromoResponse },
     "shop/public/cart_price_requested": { payload: ShopCartPricePayload; result: ShopCartPriceResponse },
+    "shop/public/my_order_cancel_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
+    "shop/public/my_order_get_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
+    "shop/public/my_orders_list_requested": { payload: ShopMyOrdersListPayload; result: OffsetPage_ShopMyOrderListItemResponse_ },
     "shop/public/order_create_requested": { payload: ShopOrderCreatePayload; result: ShopOrderCreatedResponse },
     "shop/public/order_status_requested": { payload: ShopPublicOrderStatusPayload; result: ShopOrderStatusResponse },
+    "shop/public/storefront_geo_requested": { payload: ShopStorefrontGeoPayload; result: ShopStorefrontGeoResponse },
     "shop/shops/create_requested": { payload: ShopCreateRequest; result: ShopResponse },
-    "shop/shops/geocode_requested": { payload: ShopGeocodePayload; result: ShopGeocodeResponse },
     "shop/shops/item_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/list_requested": { payload: EmptyPayload; result: ListResponse_ShopResponse_ },
     "shop/shops/publish_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/remove_requested": { payload: ShopIdPayload; result: EmptyPayload },
     "shop/shops/suspend_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/update_requested": { payload: ShopUpdatePayload; result: ShopResponse },
-    "shop/shops/zone_addresses_requested": { payload: ShopZoneAddressesRequest; result: GeoAddressListResult },
     "shop/tables/create_requested": { payload: ShopTableCreatePayload; result: ShopTableResponse },
     "shop/tables/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopTableResponse_ },
     "shop/tables/remove_requested": { payload: ShopTableIdPayload; result: EmptyPayload },
@@ -1293,21 +1413,30 @@ export interface ShopEventMap {
     "shop/public/cart_price_failed": PlatformCommandEventPayload,
     "shop/public/cart_price_requested": PlatformCommandEventPayload,
     "shop/public/cart_price_succeeded": PlatformCommandEventPayload,
+    "shop/public/my_order_cancel_failed": PlatformCommandEventPayload,
+    "shop/public/my_order_cancel_requested": PlatformCommandEventPayload,
+    "shop/public/my_order_cancel_succeeded": PlatformCommandEventPayload,
+    "shop/public/my_order_get_failed": PlatformCommandEventPayload,
+    "shop/public/my_order_get_requested": PlatformCommandEventPayload,
+    "shop/public/my_order_get_succeeded": PlatformCommandEventPayload,
+    "shop/public/my_orders_list_failed": PlatformCommandEventPayload,
+    "shop/public/my_orders_list_requested": PlatformCommandEventPayload,
+    "shop/public/my_orders_list_succeeded": PlatformCommandEventPayload,
     "shop/public/order_create_failed": PlatformCommandEventPayload,
     "shop/public/order_create_requested": PlatformCommandEventPayload,
     "shop/public/order_create_succeeded": PlatformCommandEventPayload,
     "shop/public/order_status_failed": PlatformCommandEventPayload,
     "shop/public/order_status_requested": PlatformCommandEventPayload,
     "shop/public/order_status_succeeded": PlatformCommandEventPayload,
+    "shop/public/storefront_geo_failed": PlatformCommandEventPayload,
+    "shop/public/storefront_geo_requested": PlatformCommandEventPayload,
+    "shop/public/storefront_geo_succeeded": PlatformCommandEventPayload,
     "shop/shop/created": ShopShopEventPayload,
     "shop/shop/published": ShopShopEventPayload,
     "shop/shop/updated": ShopShopEventPayload,
     "shop/shops/create_failed": PlatformCommandEventPayload,
     "shop/shops/create_requested": PlatformCommandEventPayload,
     "shop/shops/create_succeeded": PlatformCommandEventPayload,
-    "shop/shops/geocode_failed": PlatformCommandEventPayload,
-    "shop/shops/geocode_requested": PlatformCommandEventPayload,
-    "shop/shops/geocode_succeeded": PlatformCommandEventPayload,
     "shop/shops/item_failed": PlatformCommandEventPayload,
     "shop/shops/item_requested": PlatformCommandEventPayload,
     "shop/shops/item_succeeded": PlatformCommandEventPayload,
@@ -1326,9 +1455,6 @@ export interface ShopEventMap {
     "shop/shops/update_failed": PlatformCommandEventPayload,
     "shop/shops/update_requested": PlatformCommandEventPayload,
     "shop/shops/update_succeeded": PlatformCommandEventPayload,
-    "shop/shops/zone_addresses_failed": PlatformCommandEventPayload,
-    "shop/shops/zone_addresses_requested": PlatformCommandEventPayload,
-    "shop/shops/zone_addresses_succeeded": PlatformCommandEventPayload,
     "shop/tables/create_failed": PlatformCommandEventPayload,
     "shop/tables/create_requested": PlatformCommandEventPayload,
     "shop/tables/create_succeeded": PlatformCommandEventPayload,

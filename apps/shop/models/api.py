@@ -50,9 +50,9 @@ def normalize_shop_theme(theme: JsonObject) -> JsonObject:
     """Сырые `shop.theme` → канон: легаси-ключ `accent` мапится в `accent_color`."""
     normalized = dict(theme)
     if "accent_color" not in normalized:
-        legacy = normalized.pop("accent", None)
-        if isinstance(legacy, str):
-            normalized["accent_color"] = legacy
+        accent = normalized.pop("accent", None)
+        if isinstance(accent, str):
+            normalized["accent_color"] = accent
     else:
         _ = normalized.pop("accent", None)
     return normalized

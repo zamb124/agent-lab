@@ -54,6 +54,7 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         _loading: { state: true },
         _failed: { state: true },
         _hoveredId: { state: true },
+        _collapsed: { state: true },
     };
 
     declare addressesOpName: FactoryNameOfKind<'async-op'> | null;
@@ -66,6 +67,7 @@ export class PlatformZoneAddressPanel extends PlatformElement {
     declare _loading: boolean;
     declare _failed: boolean;
     declare _hoveredId: number | null;
+    declare _collapsed: boolean;
 
     private _op: OpController | null = null;
     private _reqSeq = 0;
@@ -83,6 +85,7 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         this._loading = false;
         this._failed = false;
         this._hoveredId = null;
+        this._collapsed = false;
     }
 
     static override styles: CSSResultGroup = css`
@@ -136,6 +139,39 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         }
         .count b { color: var(--text-primary); font-weight: 600; }
         .count .err { color: var(--danger, #d92d20); }
+        .collapse-btn {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            flex: none;
+        }
+        .collapse-btn:hover { background: var(--accent-subtle); color: var(--accent); }
+        .rail {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) 0;
+        }
+        .rail .collapse-btn { margin-left: 0; }
+        .rail .rail-count {
+            font-size: var(--font-size-sm, 13px);
+            font-weight: 600;
+            color: var(--text-secondary);
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            max-height: 160px;
+            overflow: hidden;
+        }
+        .rail .rail-count.err { color: var(--danger, #d92d20); }
         .list {
             flex: 1;
             overflow-y: auto;
@@ -334,6 +370,18 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         this._query();
     }
 
+    private _setCollapsed(collapsed: boolean): void {
+        if (this._collapsed === collapsed) return;
+        this._collapsed = collapsed;
+        this.dispatchEvent(
+            new CustomEvent('collapsed-changed', {
+                detail: { collapsed },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
     private get _pageCount(): number {
         return Math.max(1, Math.ceil(this._total / this.pageSize));
     }
@@ -356,6 +404,25 @@ export class PlatformZoneAddressPanel extends PlatformElement {
     override render(): TemplateResult {
         const hasZone = this.zone !== null;
         const showPager = this._total > this.pageSize;
+        if (this._collapsed) {
+            return html`
+                <div class="rail">
+                    <button
+                        type="button"
+                        class="collapse-btn"
+                        data-action="panel-expand"
+                        aria-label=${this.t('zone_panel.expand')}
+                        title=${this.t('zone_panel.expand')}
+                        @click=${() => this._setCollapsed(false)}
+                    >
+                        <platform-icon name="chevron-right" size="16"></platform-icon>
+                    </button>
+                    ${hasZone && !this._loading
+                        ? html`<span class="rail-count ${this._failed ? 'err' : ''}">${this._total}</span>`
+                        : nothing}
+                </div>
+            `;
+        }
         return html`
             <div class="search">
                 <div class="search-box">
@@ -377,6 +444,16 @@ export class PlatformZoneAddressPanel extends PlatformElement {
                       ? html`<b>${this._total}</b><span>${this.t('zone_panel.count_suffix')}</span>`
                       : html`<span>${this.t('zone_panel.draw_first')}</span>`}
                 ${this._failed ? html`<span class="err">${this.t('zone_panel.error')}</span>` : nothing}
+                <button
+                    type="button"
+                    class="collapse-btn"
+                    data-action="panel-collapse"
+                    aria-label=${this.t('zone_panel.collapse')}
+                    title=${this.t('zone_panel.collapse')}
+                    @click=${() => this._setCollapsed(true)}
+                >
+                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                </button>
             </div>
             <div class="list" role="list">
                 ${!hasZone

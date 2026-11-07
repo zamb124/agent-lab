@@ -69,6 +69,7 @@ export class FlowUIDrawer extends LitElement {
     declare _cluster: PlacedDrawerGeometry | null;
     declare _dragging: boolean;
     declare _identityImageUrl: string | null;
+    declare _unavailable: boolean;
     private _boundToggleEventName: string | null;
     private _loadedPersistKey: string | null;
     private _gesture: DrawerGesture | null;
@@ -88,6 +89,7 @@ export class FlowUIDrawer extends LitElement {
         _cluster: { state: true },
         _dragging: { state: true },
         _identityImageUrl: { state: true },
+        _unavailable: { state: true },
     };
 
     static override styles = flowUIDrawerStyles;
@@ -100,6 +102,7 @@ export class FlowUIDrawer extends LitElement {
         this._cluster = null;
         this._dragging = false;
         this._identityImageUrl = null;
+        this._unavailable = false;
         this._boundToggleEventName = null;
         this._loadedPersistKey = null;
         this._gesture = null;
@@ -546,6 +549,7 @@ export class FlowUIDrawer extends LitElement {
             ?drawer-expanded=${this.expanded === true}
             .getRequestHeaders=${c.getRequestHeaders}
             .getExtraMetadataVariables=${c.getExtraMetadataVariables}
+            @flow-ui-unavailable=${() => { this._unavailable = true; this.open = false; }}
         ></platform-flow-ui>${this.open === true && gesturesOn === true
             ? html`<button
                 type="button"
@@ -554,7 +558,7 @@ export class FlowUIDrawer extends LitElement {
                 title=${flowUIText(locale, 'resize_aria')}
                 @pointerdown=${this._onResizePointerDown}
             ></button>`
-            : nothing}</div>${c.showLauncher === false
+            : nothing}</div>${c.showLauncher === false || this._unavailable === true
             ? html``
             : html`<button
                 type="button"

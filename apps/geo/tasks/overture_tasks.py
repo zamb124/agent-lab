@@ -1,0 +1,14 @@
+"""Месячный импорт релиза Overture Maps (parquet, gap-fill + здания)."""
+
+from apps.geo.di import Di
+from apps.geo.tasks.task_names import GEO_OVERTURE_SYNC
+from core.tasks import platform_task
+from core.types import SqlParameterValue
+
+
+@platform_task(GEO_OVERTURE_SYNC)
+async def geo_overture_sync(di: Di) -> dict[str, SqlParameterValue]:
+    """Row-groups релиза Overture → gen-0 адреса и ``geo_buildings``
+    (см. OvertureImportService.run_sync)."""
+    result = await di.overture_import_service.run_sync()
+    return result.model_dump()

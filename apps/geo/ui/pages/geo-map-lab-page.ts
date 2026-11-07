@@ -10,12 +10,23 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-map.js';
+import { featureTitle } from '@platform/lib/map/feature-card.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import type { LngLat, PlatformMapConfig, PlatformMapMarker } from '@platform/lib/components/platform-map.js';
+import type { FeatureAdminAction } from '../modals/geo-feature-admin-modal.js';
+import '../modals/geo-feature-admin-modal.js';
 import type { Polygon } from 'geojson';
 
 const CENTER: LngLat = [37.6178, 55.7503];
+
+interface FeatureAdminDetail {
+    action: FeatureAdminAction;
+    entity: string;
+    osmId: number;
+    layer: string;
+    properties: Record<string, unknown>;
+}
 
 const DEMO_ZONE: Polygon = {
     type: 'Polygon',
@@ -71,7 +82,7 @@ export class GeoMapLabPage extends PlatformPage {
                 scale: true,
             },
             layers: { fetch: true },
-            featureCards: { hover: true, click: true },
+            featureCards: { hover: true, click: true, admin: true },
             markers,
             markersCluster: true,
             overlays: [
@@ -125,6 +136,20 @@ export class GeoMapLabPage extends PlatformPage {
         this.requestUpdate();
     };
 
+    private _onFeatureAdmin = (e: Event): void => {
+        const d = (e as CustomEvent<FeatureAdminDetail>).detail;
+        const mapEl = this.shadowRoot?.querySelector<HTMLElement & { refresh(): void }>(
+            '.main-map',
+        );
+        this.openModal('geo.feature_admin', {
+            action: d.action,
+            entity: d.entity,
+            osmId: d.osmId,
+            featureTitle: featureTitle({ layer: d.layer, properties: d.properties }),
+            onApply: () => mapEl?.refresh(),
+        });
+    };
+
     override render() {
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
@@ -138,6 +163,7 @@ export class GeoMapLabPage extends PlatformPage {
                         class="main-map"
                         .config=${this._mapConfig}
                         @pm-draw-change=${this._onDrawChange}
+                        @pm-feature-admin=${this._onFeatureAdmin}
                     ></platform-map>
                 </div>
                 <div class="preview-col">

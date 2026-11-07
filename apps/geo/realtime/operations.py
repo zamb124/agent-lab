@@ -7,20 +7,34 @@ from collections.abc import Awaitable
 
 from apps.geo.di import Di
 from apps.geo.models.api import (
+    GeoAddressCreateRequest,
     GeoAddressesInZoneRequest,
+    GeoAddressHit,
     GeoAddressListResponse,
     GeoAddressNearestRequest,
     GeoAddressSuggestRequest,
+    GeoAddressTargetRequest,
+    GeoAddressUpdateRequest,
+    GeoCursorItem,
     GeoCursorListResponse,
+    GeoCursorResetRequest,
+    GeoEdgeCloseRequest,
+    GeoEdgeTargetRequest,
+    GeoEnrichItemResponse,
     GeoEnrichListRequest,
     GeoEnrichListResponse,
+    GeoEnrichRetryRequest,
     GeoFeatureCollectionResponse,
     GeoFeaturesRequest,
+    GeoFeatureSuppressRequest,
+    GeoImportRunRequest,
     GeoImportRunResponse,
     GeoImportStatusResponse,
     GeoIsochroneRequest,
     GeoIsochroneResponse,
     GeoLayerListResponse,
+    GeoOverrideListResponse,
+    GeoOverridesListRequest,
     GeoRegionItem,
     GeoRegionListResponse,
     GeoRegionNameRequest,
@@ -37,7 +51,16 @@ from apps.geo.models.api import (
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.services.geo_coverage_service import GeoCoverageError
 from apps.geo.services.geo_routing_service import GeoRoutingError
-from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
+from apps.geo.tasks.task_names import (
+    GEO_DATAMOS_SYNC,
+    GEO_ENRICH_TICK,
+    GEO_GAR_SYNC,
+    GEO_NSPD_CRAWL,
+    GEO_OSM_DIFF_TICK,
+    GEO_OSM_SYNC_TICK,
+    GEO_OVERTURE_SYNC,
+    GEO_TILES_SYNC,
+)
 from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
@@ -88,6 +111,23 @@ async def _coverage[T](call: Awaitable[T]) -> T:
         raise_not_found(exc)
     except PlatformConflictError as exc:
         raise_conflict(exc)
+
+
+IMPORT_RUN_SPECS = {
+    "osm": GEO_OSM_SYNC_TICK,
+    "gar": GEO_GAR_SYNC,
+    "nspd": GEO_NSPD_CRAWL,
+    "data_mos_ru": GEO_DATAMOS_SYNC,
+    "overture": GEO_OVERTURE_SYNC,
+    "geofabrik": GEO_OSM_DIFF_TICK,
+    "enrich": GEO_ENRICH_TICK,
+    "tiles": GEO_TILES_SYNC,
+}
+"""``geo/import/run`` — запуск конкретного источника по имени из реестра.
+
+Кроме источников принимает служебные цели: ``enrich`` — немедленный дрейн
+очереди обогащения, ``tiles`` — синк базовой карты (basemap PMTiles).
+``manual`` намеренно отсутствует — слой админ-правок без краулера."""
 
 
 async def op_geo_addresses_in_zone(
@@ -217,13 +257,19 @@ async def op_geo_import_status(
 
 
 async def op_geo_import_run(
-    payload: EmptyPayload, *, user: User, di: Di
+    payload: GeoImportRunRequest, *, user: User, di: Di
 ) -> GeoImportRunResponse:
     _ = await require_company_admin(di.authz_service)
     _ = user
-    _ = payload
-    _ = await enqueue(GEO_OSM_SYNC_TICK)
-    return GeoImportRunResponse(enqueued=True)
+    source = payload.source.strip() or "osm"
+    spec = IMPORT_RUN_SPECS.get(source)
+    if spec is None:
+        raise_invalid(
+            ValueError(f"unknown import source {source!r}"),
+            error_code="geo_import_source_unknown",
+        )
+    _ = await enqueue(spec)
+    return GeoImportRunResponse(enqueued=True, source=source)
 
 
 async def op_geo_regions_list(
@@ -297,6 +343,28 @@ async def op_geo_enrich_list(
     )
 
 
+async def op_geo_cursors_reset(
+    payload: GeoCursorResetRequest, *, user: User, di: Di
+) -> GeoCursorItem:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await _coverage(
+        di.geo_coverage_service.reset_cursor(
+            source=payload.source, region=payload.region
+        )
+    )
+
+
+async def op_geo_enrich_retry(
+    payload: GeoEnrichRetryRequest, *, user: User, di: Di
+) -> GeoEnrichItemResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await _coverage(
+        di.geo_coverage_service.retry_enrich(item_id=payload.item_id)
+    )
+
+
 async def op_geo_layers_list(
     payload: EmptyPayload, *, user: User, di: Di
 ) -> GeoLayerListResponse:
@@ -321,3 +389,127 @@ async def op_geo_layers_features(
             layer_names=payload.layers,
         )
     )
+
+
+async def op_geo_addresses_create(
+    payload: GeoAddressCreateRequest, *, user: User, di: Di
+) -> GeoAddressHit:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    return await di.geo_admin_service.create_address(
+        display_name=payload.display_name,
+        city=payload.city,
+        street=payload.street,
+        housenumber=payload.housenumber,
+        postcode=payload.postcode,
+        lat=payload.lat,
+        lng=payload.lng,
+        region=payload.region,
+        user_id=scope.user_id,
+    )
+
+
+async def _admin[T](call: Awaitable[T]) -> T:
+    """Граница ошибок админ-правок: доменные исключения → коды транспорта."""
+    try:
+        return await call
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+
+
+async def op_geo_addresses_update(
+    payload: GeoAddressUpdateRequest, *, user: User, di: Di
+) -> GeoAddressHit:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    return await _admin(
+        di.geo_admin_service.update_address(payload, user_id=scope.user_id)
+    )
+
+
+async def op_geo_addresses_remove(
+    payload: GeoAddressTargetRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _admin(
+        di.geo_admin_service.remove_address(
+            osm_type=payload.osm_type,
+            osm_id=payload.osm_id,
+            reason=payload.reason,
+            user_id=scope.user_id,
+        )
+    )
+    return EmptyPayload()
+
+
+async def op_geo_addresses_override_revert(
+    payload: GeoAddressTargetRequest, *, user: User, di: Di
+) -> GeoAddressHit | None:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await _admin(
+        di.geo_admin_service.revert_override(
+            osm_type=payload.osm_type, osm_id=payload.osm_id
+        )
+    )
+
+
+async def op_geo_overrides_list(
+    payload: GeoOverridesListRequest, *, user: User, di: Di
+) -> GeoOverrideListResponse:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    return await di.geo_admin_service.overrides_page_desc(
+        limit=payload.limit, offset=payload.offset
+    )
+
+
+async def op_geo_features_suppress(
+    payload: GeoFeatureSuppressRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await di.geo_admin_service.suppress_feature(
+        entity=payload.entity,
+        osm_id=payload.osm_id,
+        reason=payload.reason,
+        user_id=scope.user_id,
+    )
+    return EmptyPayload()
+
+
+async def op_geo_features_unsuppress(
+    payload: GeoFeatureSuppressRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    await _admin(
+        di.geo_admin_service.unsuppress_feature(
+            entity=payload.entity, osm_id=payload.osm_id
+        )
+    )
+    return EmptyPayload()
+
+
+async def op_geo_edges_close(
+    payload: GeoEdgeCloseRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await di.geo_admin_service.close_way(
+        osm_way_id=payload.osm_way_id,
+        modes=payload.modes,
+        reason=payload.reason,
+        user_id=scope.user_id,
+    )
+    return EmptyPayload()
+
+
+async def op_geo_edges_open(
+    payload: GeoEdgeTargetRequest, *, user: User, di: Di
+) -> EmptyPayload:
+    _ = await require_company_admin(di.authz_service)
+    _ = user
+    await _admin(di.geo_admin_service.open_way(osm_way_id=payload.osm_way_id))
+    return EmptyPayload()

@@ -8,7 +8,10 @@
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
 import type {
+    GeoCursorItem,
     GeoCursorListResponse,
+    GeoEnrichItemResponse,
+    GeoEnrichListResponse,
     GeoImportRunResponse,
     GeoImportStatusResponse,
     GeoRegionItem,
@@ -75,13 +78,43 @@ export const geoImportStatusOp = createAsyncOp<GeoImportStatusResponse>({
     restMirror: { method: 'GET', path: '/geo/api/v1/import/status' },
 });
 
+export const geoEnrichOp = createAsyncOp<GeoEnrichListResponse>({
+    name: 'geo/enrich',
+    silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'geo/enrich/list_requested',
+    restMirror: { method: 'POST', path: '/geo/api/v1/enrich/list' },
+});
+
+export const geoCursorResetOp = createAsyncOp<GeoCursorItem>({
+    name: 'geo/cursor_reset',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'geo/cursors/reset_requested',
+    restMirror: { method: 'POST', path: '/geo/api/v1/cursors/reset' },
+    successToastKey: 'geo:toast.cursor_reset',
+    errorToastKey: 'geo:toast.cursor_reset_failed',
+});
+
+export const geoEnrichRetryOp = createAsyncOp<GeoEnrichItemResponse>({
+    name: 'geo/enrich_retry',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'geo/enrich/retry_requested',
+    restMirror: { method: 'POST', path: '/geo/api/v1/enrich/retry' },
+    successToastKey: 'geo:toast.enrich_retried',
+    errorToastKey: 'geo:toast.enrich_retry_failed',
+});
+
 export const geoImportRunOp = createAsyncOp<GeoImportRunResponse>({
     name: 'geo/import_run',
-    silent: true,
     transport: 'ws',
     wsTimeoutMs: 8_000,
     commandType: 'geo/import/run_requested',
     restMirror: { method: 'POST', path: '/geo/api/v1/import/run' },
+    successToastKey: 'geo:toast.import_enqueued',
+    errorToastKey: 'geo:toast.import_enqueue_failed',
 });
 
 declare module '@platform/lib/events/factory-registry.js' {
@@ -90,6 +123,9 @@ declare module '@platform/lib/events/factory-registry.js' {
         'geo/sources': typeof geoSourcesOp;
         'geo/stats': typeof geoStatsOp;
         'geo/cursors': typeof geoCursorsOp;
+        'geo/cursor_reset': typeof geoCursorResetOp;
+        'geo/enrich': typeof geoEnrichOp;
+        'geo/enrich_retry': typeof geoEnrichRetryOp;
         'geo/import_status': typeof geoImportStatusOp;
         'geo/import_run': typeof geoImportRunOp;
     }

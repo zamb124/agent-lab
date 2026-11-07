@@ -1103,6 +1103,11 @@
     "geo_bbox_invalid": "Некорректный прямоугольник региона: юг/запад должны быть меньше севера/востока",
     "geo_layer_unknown": "Неизвестный слой карты",
     "geo_region_exists": "Регион с таким именем уже существует",
-    "geo_region_not_found": "Регион не найден"
+    "geo_region_not_found": "Регион не найден",
+    "geo_address_not_found": "Адрес не найден",
+    "geo_override_not_found": "Правка адреса не найдена",
+    "geo_suppression_not_found": "Скрытие объекта не найдено",
+    "geo_edge_override_not_found": "Закрытие дороги не найдено",
+    "geo_import_source_unknown": "Неизвестный источник импорта"
   }
 }

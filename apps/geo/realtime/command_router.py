@@ -2,12 +2,22 @@
 
 from apps.geo.di import GeoDi
 from apps.geo.models.api import (
+    GeoAddressCreateRequest,
     GeoAddressesInZoneRequest,
     GeoAddressNearestRequest,
     GeoAddressSuggestRequest,
+    GeoAddressTargetRequest,
+    GeoAddressUpdateRequest,
+    GeoCursorResetRequest,
+    GeoEdgeCloseRequest,
+    GeoEdgeTargetRequest,
     GeoEnrichListRequest,
+    GeoEnrichRetryRequest,
     GeoFeaturesRequest,
+    GeoFeatureSuppressRequest,
+    GeoImportRunRequest,
     GeoIsochroneRequest,
+    GeoOverridesListRequest,
     GeoRegionNameRequest,
     GeoRegionUpsertRequest,
     GeoRouteCalculateRequest,
@@ -15,15 +25,26 @@ from apps.geo.models.api import (
     GeoRouteOrderRequest,
 )
 from apps.geo.realtime.operations import (
+    op_geo_addresses_create,
     op_geo_addresses_in_zone,
     op_geo_addresses_nearest,
+    op_geo_addresses_override_revert,
+    op_geo_addresses_remove,
     op_geo_addresses_suggest,
+    op_geo_addresses_update,
     op_geo_cursors_list,
+    op_geo_cursors_reset,
+    op_geo_edges_close,
+    op_geo_edges_open,
     op_geo_enrich_list,
+    op_geo_enrich_retry,
+    op_geo_features_suppress,
+    op_geo_features_unsuppress,
     op_geo_import_run,
     op_geo_import_status,
     op_geo_layers_features,
     op_geo_layers_list,
+    op_geo_overrides_list,
     op_geo_regions_create,
     op_geo_regions_list,
     op_geo_regions_remove,
@@ -64,7 +85,7 @@ GEO_OPERATIONS: dict[str, RegisteredOperation[GeoDi]] = {
         payload_model=EmptyPayload, fn=op_geo_import_status
     ),
     "geo/import/run_requested": Operation(
-        payload_model=EmptyPayload, fn=op_geo_import_run
+        payload_model=GeoImportRunRequest, fn=op_geo_import_run
     ),
     "geo/regions/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_geo_regions_list
@@ -87,13 +108,47 @@ GEO_OPERATIONS: dict[str, RegisteredOperation[GeoDi]] = {
     "geo/cursors/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_geo_cursors_list
     ),
+    "geo/cursors/reset_requested": Operation(
+        payload_model=GeoCursorResetRequest, fn=op_geo_cursors_reset
+    ),
     "geo/enrich/list_requested": Operation(
         payload_model=GeoEnrichListRequest, fn=op_geo_enrich_list
+    ),
+    "geo/enrich/retry_requested": Operation(
+        payload_model=GeoEnrichRetryRequest, fn=op_geo_enrich_retry
     ),
     "geo/layers/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_geo_layers_list
     ),
     "geo/layers/features_requested": Operation(
         payload_model=GeoFeaturesRequest, fn=op_geo_layers_features
+    ),
+    "geo/addresses/create_requested": Operation(
+        payload_model=GeoAddressCreateRequest, fn=op_geo_addresses_create
+    ),
+    "geo/addresses/update_requested": Operation(
+        payload_model=GeoAddressUpdateRequest, fn=op_geo_addresses_update
+    ),
+    "geo/addresses/remove_requested": Operation(
+        payload_model=GeoAddressTargetRequest, fn=op_geo_addresses_remove
+    ),
+    "geo/addresses/override_revert_requested": Operation(
+        payload_model=GeoAddressTargetRequest,
+        fn=op_geo_addresses_override_revert,
+    ),
+    "geo/overrides/list_requested": Operation(
+        payload_model=GeoOverridesListRequest, fn=op_geo_overrides_list
+    ),
+    "geo/features/suppress_requested": Operation(
+        payload_model=GeoFeatureSuppressRequest, fn=op_geo_features_suppress
+    ),
+    "geo/features/unsuppress_requested": Operation(
+        payload_model=GeoFeatureSuppressRequest, fn=op_geo_features_unsuppress
+    ),
+    "geo/edges/close_requested": Operation(
+        payload_model=GeoEdgeCloseRequest, fn=op_geo_edges_close
+    ),
+    "geo/edges/open_requested": Operation(
+        payload_model=GeoEdgeTargetRequest, fn=op_geo_edges_open
     ),
 }

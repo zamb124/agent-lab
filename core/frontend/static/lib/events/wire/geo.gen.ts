@@ -13,6 +13,22 @@ export type EmptyPayload = {
 };
 
 /**
+ * Ручной адрес: evergreen-строка ``generation=0``, ``osm_type='manual'``.
+ */
+export interface GeoAddressCreateRequest {
+    "display_name": string;
+    "city"?: string | undefined;
+    "street"?: string | undefined;
+    "housenumber"?: string | undefined;
+    "postcode"?: string | undefined;
+    "lat": number;
+    "lng": number;
+    "region"?: string | undefined;
+    "reason"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Адрес из справочника.
  */
 export interface GeoAddressHit {
@@ -61,6 +77,33 @@ export interface GeoAddressSuggestRequest {
 }
 
 /**
+ * Операция над адресом по стабильному ключу (osm_type, osm_id).
+ */
+export interface GeoAddressTargetRequest {
+    "osm_type": string;
+    "osm_id": number;
+    "reason"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Патч админа к адресу; ``None``-поле не меняет значение.
+ */
+export interface GeoAddressUpdateRequest {
+    "osm_type": string;
+    "osm_id": number;
+    "display_name"?: string | null | undefined;
+    "city"?: string | null | undefined;
+    "street"?: string | null | undefined;
+    "housenumber"?: string | null | undefined;
+    "postcode"?: string | null | undefined;
+    "lat"?: number | null | undefined;
+    "lng"?: number | null | undefined;
+    "reason"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Постраничный список адресов внутри полигона (GeoJSON Polygon).
  */
 export interface GeoAddressesInZoneRequest {
@@ -105,6 +148,33 @@ export interface GeoCursorListResponse {
 }
 
 /**
+ * Сброс курсора потока источника: следующий тик начнёт проход заново.
+ */
+export interface GeoCursorResetRequest {
+    "source": string;
+    "region"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Закрытие режимов движения на всех рёбрах OSM way.
+ */
+export interface GeoEdgeCloseRequest {
+    "osm_way_id": number;
+    "modes": ("car" | "foot" | "bike" | "scooter")[];
+    "reason"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Операция над дорогой по osm_way_id.
+ */
+export interface GeoEdgeTargetRequest {
+    "osm_way_id": number;
+    [key: string]: unknown;
+}
+
+/**
  * GeoEnrichItemResponse
  */
 export interface GeoEnrichItemResponse {
@@ -140,6 +210,14 @@ export interface GeoEnrichListResponse {
 }
 
 /**
+ * Повтор failed-элемента очереди обогащения.
+ */
+export interface GeoEnrichRetryRequest {
+    "item_id": number;
+    [key: string]: unknown;
+}
+
+/**
  * Состояние задачи обогащения.
  */
 export type GeoEnrichStatus = "pending" | "running" | "done" | "failed";
@@ -165,6 +243,16 @@ export interface GeoFeatureCollectionResponse {
 }
 
 /**
+ * Тумбстоун на объект слоя: barrier/signal/restriction/edge.
+ */
+export interface GeoFeatureSuppressRequest {
+    "entity": "barrier" | "signal" | "restriction" | "edge";
+    "osm_id": number;
+    "reason"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Фичи слоёв в рамке карты; ``layers`` пуст — все слои реестра.
  */
 export interface GeoFeaturesRequest {
@@ -178,10 +266,19 @@ export interface GeoFeaturesRequest {
 }
 
 /**
+ * Внеочередной тик источника; пустой ``source`` → OSM (дефолт).
+ */
+export interface GeoImportRunRequest {
+    "source"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Постановка внеочередного тика синхронизации.
  */
 export interface GeoImportRunResponse {
     "enqueued": boolean;
+    "source"?: string | undefined;
     [key: string]: unknown;
 }
 
@@ -242,6 +339,39 @@ export interface GeoLayerInfo {
 export interface GeoLayerListResponse {
     "layers": GeoLayerInfo[];
     "generation": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Строка аудита правок: патч адреса, тумбстоун или закрытие дороги.
+ */
+export interface GeoOverrideItem {
+    "kind": string;
+    "entity": string;
+    "osm_type": string;
+    "osm_id": number;
+    "reason": string;
+    "updated_by": string;
+    "updated_at": string;
+    "suppressed"?: boolean | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Сводный аудит правок админа по всем сущностям.
+ */
+export interface GeoOverrideListResponse {
+    "items": GeoOverrideItem[];
+    "total": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Страница аудита правок.
+ */
+export interface GeoOverridesListRequest {
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
     [key: string]: unknown;
 }
 
@@ -441,15 +571,26 @@ export type PlatformCommandEventPayload = {
  * Типизированный dispatch/оп-результат по имени команды.
  */
 export interface GeoCommandMap {
+    "geo/addresses/create_requested": { payload: GeoAddressCreateRequest; result: GeoAddressHit },
     "geo/addresses/in_zone_requested": { payload: GeoAddressesInZoneRequest; result: GeoAddressListResponse },
     "geo/addresses/nearest_requested": { payload: GeoAddressNearestRequest; result: GeoAddressListResponse },
+    "geo/addresses/override_revert_requested": { payload: GeoAddressTargetRequest; result: GeoAddressHit },
+    "geo/addresses/remove_requested": { payload: GeoAddressTargetRequest; result: EmptyPayload },
     "geo/addresses/suggest_requested": { payload: GeoAddressSuggestRequest; result: GeoAddressListResponse },
+    "geo/addresses/update_requested": { payload: GeoAddressUpdateRequest; result: GeoAddressHit },
     "geo/cursors/list_requested": { payload: EmptyPayload; result: GeoCursorListResponse },
+    "geo/cursors/reset_requested": { payload: GeoCursorResetRequest; result: GeoCursorItem },
+    "geo/edges/close_requested": { payload: GeoEdgeCloseRequest; result: EmptyPayload },
+    "geo/edges/open_requested": { payload: GeoEdgeTargetRequest; result: EmptyPayload },
     "geo/enrich/list_requested": { payload: GeoEnrichListRequest; result: GeoEnrichListResponse },
-    "geo/import/run_requested": { payload: EmptyPayload; result: GeoImportRunResponse },
+    "geo/enrich/retry_requested": { payload: GeoEnrichRetryRequest; result: GeoEnrichItemResponse },
+    "geo/features/suppress_requested": { payload: GeoFeatureSuppressRequest; result: EmptyPayload },
+    "geo/features/unsuppress_requested": { payload: GeoFeatureSuppressRequest; result: EmptyPayload },
+    "geo/import/run_requested": { payload: GeoImportRunRequest; result: GeoImportRunResponse },
     "geo/import/status_requested": { payload: EmptyPayload; result: GeoImportStatusResponse },
     "geo/layers/features_requested": { payload: GeoFeaturesRequest; result: GeoFeatureCollectionResponse },
     "geo/layers/list_requested": { payload: EmptyPayload; result: GeoLayerListResponse },
+    "geo/overrides/list_requested": { payload: GeoOverridesListRequest; result: GeoOverrideListResponse },
     "geo/regions/create_requested": { payload: GeoRegionUpsertRequest; result: GeoRegionItem },
     "geo/regions/list_requested": { payload: EmptyPayload; result: GeoRegionListResponse },
     "geo/regions/remove_requested": { payload: GeoRegionNameRequest; result: EmptyPayload },
@@ -466,21 +607,51 @@ export interface GeoCommandMap {
  * Карта push-событий сервиса (`register_platform_event`): `type` → payload.
  */
 export interface GeoEventMap {
+    "geo/addresses/create_failed": PlatformCommandEventPayload,
+    "geo/addresses/create_requested": PlatformCommandEventPayload,
+    "geo/addresses/create_succeeded": PlatformCommandEventPayload,
     "geo/addresses/in_zone_failed": PlatformCommandEventPayload,
     "geo/addresses/in_zone_requested": PlatformCommandEventPayload,
     "geo/addresses/in_zone_succeeded": PlatformCommandEventPayload,
     "geo/addresses/nearest_failed": PlatformCommandEventPayload,
     "geo/addresses/nearest_requested": PlatformCommandEventPayload,
     "geo/addresses/nearest_succeeded": PlatformCommandEventPayload,
+    "geo/addresses/override_revert_failed": PlatformCommandEventPayload,
+    "geo/addresses/override_revert_requested": PlatformCommandEventPayload,
+    "geo/addresses/override_revert_succeeded": PlatformCommandEventPayload,
+    "geo/addresses/remove_failed": PlatformCommandEventPayload,
+    "geo/addresses/remove_requested": PlatformCommandEventPayload,
+    "geo/addresses/remove_succeeded": PlatformCommandEventPayload,
     "geo/addresses/suggest_failed": PlatformCommandEventPayload,
     "geo/addresses/suggest_requested": PlatformCommandEventPayload,
     "geo/addresses/suggest_succeeded": PlatformCommandEventPayload,
+    "geo/addresses/update_failed": PlatformCommandEventPayload,
+    "geo/addresses/update_requested": PlatformCommandEventPayload,
+    "geo/addresses/update_succeeded": PlatformCommandEventPayload,
     "geo/cursors/list_failed": PlatformCommandEventPayload,
     "geo/cursors/list_requested": PlatformCommandEventPayload,
     "geo/cursors/list_succeeded": PlatformCommandEventPayload,
+    "geo/cursors/reset_failed": PlatformCommandEventPayload,
+    "geo/cursors/reset_requested": PlatformCommandEventPayload,
+    "geo/cursors/reset_succeeded": PlatformCommandEventPayload,
+    "geo/edges/close_failed": PlatformCommandEventPayload,
+    "geo/edges/close_requested": PlatformCommandEventPayload,
+    "geo/edges/close_succeeded": PlatformCommandEventPayload,
+    "geo/edges/open_failed": PlatformCommandEventPayload,
+    "geo/edges/open_requested": PlatformCommandEventPayload,
+    "geo/edges/open_succeeded": PlatformCommandEventPayload,
     "geo/enrich/list_failed": PlatformCommandEventPayload,
     "geo/enrich/list_requested": PlatformCommandEventPayload,
     "geo/enrich/list_succeeded": PlatformCommandEventPayload,
+    "geo/enrich/retry_failed": PlatformCommandEventPayload,
+    "geo/enrich/retry_requested": PlatformCommandEventPayload,
+    "geo/enrich/retry_succeeded": PlatformCommandEventPayload,
+    "geo/features/suppress_failed": PlatformCommandEventPayload,
+    "geo/features/suppress_requested": PlatformCommandEventPayload,
+    "geo/features/suppress_succeeded": PlatformCommandEventPayload,
+    "geo/features/unsuppress_failed": PlatformCommandEventPayload,
+    "geo/features/unsuppress_requested": PlatformCommandEventPayload,
+    "geo/features/unsuppress_succeeded": PlatformCommandEventPayload,
     "geo/import/run_failed": PlatformCommandEventPayload,
     "geo/import/run_requested": PlatformCommandEventPayload,
     "geo/import/run_succeeded": PlatformCommandEventPayload,
@@ -493,6 +664,9 @@ export interface GeoEventMap {
     "geo/layers/list_failed": PlatformCommandEventPayload,
     "geo/layers/list_requested": PlatformCommandEventPayload,
     "geo/layers/list_succeeded": PlatformCommandEventPayload,
+    "geo/overrides/list_failed": PlatformCommandEventPayload,
+    "geo/overrides/list_requested": PlatformCommandEventPayload,
+    "geo/overrides/list_succeeded": PlatformCommandEventPayload,
     "geo/regions/create_failed": PlatformCommandEventPayload,
     "geo/regions/create_requested": PlatformCommandEventPayload,
     "geo/regions/create_succeeded": PlatformCommandEventPayload,

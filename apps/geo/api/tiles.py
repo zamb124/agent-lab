@@ -26,7 +26,10 @@ from core.files.http_range import RangeNotSatisfiableError, normalize_s3_byte_ra
 router = APIRouter(tags=["geo-tiles"])
 
 _CHUNK = 64 * 1024
-_FONTSTACK_RE = re.compile(r"^[A-Za-z0-9 ._'-]+$")
+# fontstack — одно или несколько имён шрифтов через запятую: MapLibre
+# склеивает массив text-font запятыми («Open Sans Regular,Arial
+# Unicode MS Regular»); пустые сегменты и прочие символы — 404.
+_FONTSTACK_RE = re.compile(r"^[A-Za-z0-9 ._'-]+(,[A-Za-z0-9 ._'-]+)*$")
 _RANGE_RE = re.compile(r"^\d+-\d+\.pbf$")
 _SPRITE_RE = re.compile(r"^v\d/[a-z0-9@_]+\.(json|png)$")
 

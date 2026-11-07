@@ -1103,6 +1103,11 @@
     "geo_bbox_invalid": "Invalid region bbox: south/west must be less than north/east",
     "geo_layer_unknown": "Unknown map layer",
     "geo_region_exists": "Region with this name already exists",
-    "geo_region_not_found": "Region not found"
+    "geo_region_not_found": "Region not found",
+    "geo_address_not_found": "Address not found",
+    "geo_override_not_found": "Address override not found",
+    "geo_suppression_not_found": "Feature suppression not found",
+    "geo_edge_override_not_found": "Road closure override not found",
+    "geo_import_source_unknown": "Unknown import source"
   }
 }

@@ -61,6 +61,7 @@ async def _geo_directory_imported(geo_worker: None) -> None:
         await asyncio.sleep(0.5)
     pytest.fail("geo импорт не опубликовал поколение за 120s", pytrace=False)
 
+
 # micro.osm: Тверская 1 — центральная точка фикстуры.
 _TVERSKAYA_1 = (37.61730, 55.75010)
 _NIKOLSKAYA_10 = (37.61840, 55.75060)
@@ -84,7 +85,9 @@ async def _project(page: Page, lng: float, lat: float, *, nth: int = 0) -> tuple
     """Экранные координаты lngLat внутри canvas platform-map."""
     pt = cast(
         dict[str, float],
-        await page.locator("platform-map").nth(nth).evaluate(
+        await page.locator("platform-map")
+        .nth(nth)
+        .evaluate(
             "(el, ll) => { const m = el.getMap(); const p = m.project(ll); return {x: p.x, y: p.y}; }",
             [lng, lat],
         ),
@@ -149,7 +152,9 @@ class TestOverviewRealData:
             ui_page_system,
             "(el) => { el.getMap().jumpTo({ center: [37.6173, 55.7503], zoom: 17 }); return true; }",
         )
-        await expect(ui_page_system.locator(".pm-layers button").first).to_be_visible(timeout=20_000)
+        await expect(ui_page_system.locator(".pm-layers button").first).to_be_visible(
+            timeout=20_000
+        )
         # moveend→debounce→geo/layer_features→setData: ждём непустой source.
         # Поллинг снаружи браузера — headless rAF может не тикать.
         deadline = time.monotonic() + 20.0
@@ -290,7 +295,9 @@ class TestOverviewRealData:
         # Поверх карты могут всплывать системные баннеры (Lara/install) —
         # повторяем move, пока mousemove не попадёт на canvas.
         for _ in range(20):
-            await ui_page_system.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            await ui_page_system.mouse.move(
+                box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            )
             if pattern.search(await coords.inner_text()):
                 return
             await asyncio.sleep(0.4)
@@ -383,6 +390,26 @@ class TestMapLabFullConfig:
         # Тверская 1/3 и Никольская 10 внутри demo-зоны → ≥1 адрес.
         await expect(panel.locator("text=Тверск").first).to_be_visible(timeout=20_000)
 
+    async def test_addresses_panel_collapses(self, ui_page_system: Page) -> None:
+        await _open_lab(ui_page_system)
+        panel = ui_page_system.locator("platform-zone-address-panel")
+        await expect(panel).to_be_visible(timeout=20_000)
+        wrapper = ui_page_system.locator(".pm-panel")
+        full_width = await wrapper.evaluate("el => el.getBoundingClientRect().width")
+        assert full_width > 100
+        # Сворачивание → рельса без поиска/списка, контейнер узкий.
+        await panel.locator("[data-action='panel-collapse']").click()
+        await expect(panel.locator(".rail")).to_be_visible()
+        await ui_page_system.wait_for_timeout(200)
+        rail_width = await wrapper.evaluate("el => el.getBoundingClientRect().width")
+        assert rail_width < 100, f"collapsed panel width: {rail_width}"
+        await expect(panel.locator(".list")).to_have_count(0)
+        # Разворот возвращает полную панель со списком.
+        await panel.locator("[data-action='panel-expand']").click()
+        await expect(panel.locator(".list")).to_be_visible()
+        expanded_width = await wrapper.evaluate("el => el.getBoundingClientRect().width")
+        assert expanded_width == full_width
+
 
 # Узлы дорожного графа micro.osm — клики строительства маршрута
 # должны приземляться на рёбра, иначе pgRouting не найдёт путь.
@@ -390,7 +417,9 @@ _ROAD_A = (37.6170, 55.7500)
 _ROAD_B = (37.6190, 55.7510)
 
 
-async def _wait_source_features(page: Page, source: str, minimum: int, *, timeout_s: float = 20.0) -> int:
+async def _wait_source_features(
+    page: Page, source: str, minimum: int, *, timeout_s: float = 20.0
+) -> int:
     """Число фич geojson-source с поллингом — headless rAF ненадёжен."""
     deadline = time.monotonic() + timeout_s
     count = 0
@@ -584,7 +613,9 @@ class TestRouteIsoScheme:
         deadline = time.monotonic() + 10.0
         bearing = 55.0
         while time.monotonic() < deadline:
-            bearing = cast(float, await _map_eval(ui_page_system, "(el) => el.getMap().getBearing()"))
+            bearing = cast(
+                float, await _map_eval(ui_page_system, "(el) => el.getMap().getBearing()")
+            )
             if abs(bearing) < 1.0:
                 break
             await asyncio.sleep(0.3)
@@ -962,7 +993,10 @@ class TestTiltShareLegs:
         await _open_lab(ui_page_system)
         btn = ui_page_system.locator("button[data-action='tilt']")
         await expect(btn).to_be_visible(timeout=10_000)
-        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }")
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }",
+        )
         deadline = time.monotonic() + 10.0
         pitch = 0.0
         while time.monotonic() < deadline:
@@ -971,7 +1005,10 @@ class TestTiltShareLegs:
                 break
             await asyncio.sleep(0.3)
         assert pitch > 50, f"pitch после tilt = {pitch}"
-        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }")
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.shadowRoot.querySelector(\"button[data-action='tilt']\").click(); return true; }",
+        )
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             pitch = cast(float, await _map_eval(ui_page_system, "(el) => el.getMap().getPitch()"))
@@ -985,7 +1022,10 @@ class TestTiltShareLegs:
         btn = ui_page_system.locator("button[data-action='share']")
         await expect(btn).to_be_visible(timeout=10_000)
         # JS-клик: Playwright-клик висит на hit-target проверке поверх GL-canvas.
-        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='share']\").click(); return true; }")
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.shadowRoot.querySelector(\"button[data-action='share']\").click(); return true; }",
+        )
         toast = ui_page_system.locator(".pm-toast")
         await expect(toast).to_be_visible(timeout=5_000)
         toast_text = (await toast.inner_text()).lower()
@@ -1024,11 +1064,17 @@ class TestTiltShareLegs:
         )
         btn = chip.locator("button[data-action='route-legs']")
         await expect(btn).to_be_visible(timeout=15_000)
-        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }")
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }",
+        )
         legs = ui_page_system.locator(".pm-route-leg")
         await expect(legs).to_have_count(2, timeout=5_000)
         text = await ui_page_system.locator(".pm-route-legs").inner_text()
         assert "A → B" in text and "B → C" in text
         # Повторный клик сворачивает панель.
-        _ = await _map_eval(ui_page_system, "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }")
+        _ = await _map_eval(
+            ui_page_system,
+            "(el) => { el.shadowRoot.querySelector(\"button[data-action='route-legs']\").click(); return true; }",
+        )
         await expect(ui_page_system.locator(".pm-route-legs")).to_be_hidden(timeout=5_000)

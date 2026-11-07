@@ -31,11 +31,14 @@ from oxyde import execute_raw
 
 from apps.geo.config import GeoSettings
 from apps.geo.models.api import GeoBbox, GeoRegionUpsertRequest
-from apps.geo.models.geo_enrich_item import GeoEnrichItem
+from apps.geo.models.geo_building import GeoBuilding
+from apps.geo.models.geo_enrich_item import GeoEnrichItem, GeoEnrichStatus
 from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
 from apps.geo.models.geo_region import GeoRegion, GeoRegionKind
+from apps.geo.models.geo_source import SEED_SOURCES
 from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
 from apps.geo.models.geo_stats import GeoStats
+from apps.geo.realtime.operations import IMPORT_RUN_SPECS
 from apps.geo.services.geo_coverage_service import (
     GeoCoverageError,
     GeoCoverageService,
@@ -88,6 +91,7 @@ async def _clean_import_generations() -> None:
         "geo_stats",
         "geo_source_cursors",
         "geo_enrich_queue",
+        "geo_buildings",
     ):
         _ = await execute_raw(f"DELETE FROM {table}", using="geo")
 
@@ -205,9 +209,12 @@ class TestEnsureBootstrapped:
         """Lifecycle воркера: поколение 0 → enqueue → живой импорт → publish."""
         _ = geo_worker
         await _set_state(generation=0, source_modified_at=None)
-        svc = _import_svc(GeoSettings())
+        # Сид региона — тем же источником, что env стека воркера
+        # (file://micro.osm): импортёр читает region.extract_urls.
+        settings = GeoSettings(osm_extract_urls=[f"file://{_MICRO}"])
+        svc = _import_svc(settings)
         # Сама рецепт-функция из worker.py — ровно то, что зовёт startup.
-        await ensure_import_bootstrapped(svc)
+        await ensure_import_bootstrapped(svc, GeoCoverageService(settings))
 
         state = await _wait_generation_at_least(1)
         # Воркер импортировал micro.osm из своего env — полный прод-парс.
@@ -625,6 +632,18 @@ class TestTickAndRegistration:
         wire_all()
         require_scheduled_tasks_registered()
 
+    def test_import_run_specs_cover_all_runnable_sources(self) -> None:
+        """Каждый источник с tick-задачей доступен через geo/import/run.
+
+        ``manual`` намеренно вне маппинга — слой админ-правок без краулера.
+        """
+        wire_all()
+        seeded = {row[0] for row in SEED_SOURCES} - {"manual"} | {"enrich", "tiles"}
+        assert set(IMPORT_RUN_SPECS) == seeded
+        brokers = registered_queue_brokers()
+        for name, spec in IMPORT_RUN_SPECS.items():
+            assert brokers["geo"].find_task(spec.name) is not None, name
+
     async def test_tick_executes_real_import(self, geo_worker: None) -> None:
         """enqueue(tick) → воркер исполняет run_sync → поколение растёт."""
         _ = geo_worker
@@ -826,6 +845,48 @@ class TestCoverageRegistry:
         assert enrich.pending == 1
         assert enrich.items[0].kind == "building_nspd"
 
+    async def test_cursor_reset_and_enrich_retry(self) -> None:
+        """Админские recovery-действия: сброс курсора и повтор failed."""
+        svc = GeoCoverageService(GeoSettings())
+        now = datetime.now(UTC)
+        _ = await GeoSourceCursor.objects.create(
+            instance=GeoSourceCursor(
+                source="gar",
+                region="77",
+                cursor="delta:112",
+                status=GeoCursorStatus.FAILED,
+                rows_done=500,
+                last_error="disk full",
+                updated_at=now,
+            )
+        )
+        item = await svc.reset_cursor(source="gar", region="77")
+        assert item.status == "idle"
+        assert item.cursor == "" and item.rows_done == 0 and item.last_error == ""
+        with pytest.raises(PlatformNotFoundError):
+            _ = await svc.reset_cursor(source="missing", region="77")
+
+        _ = await GeoEnrichItem.objects.create(
+            instance=GeoEnrichItem(
+                kind="gar_unresolved",
+                payload={"guid": "abc"},
+                status=GeoEnrichStatus.FAILED,
+                attempts=3,
+                last_error="timeout",
+                created_at=now,
+                updated_at=now,
+                done_at=now,
+            )
+        )
+        listing = await svc.enrich_list_response(status=None, limit=10, offset=0)
+        failed_id = listing.items[0].id
+        retried = await svc.retry_enrich(item_id=failed_id)
+        assert retried.status == "pending"
+        assert retried.attempts == 0 and retried.last_error == ""
+        assert retried.done_at is None
+        with pytest.raises(PlatformNotFoundError):
+            _ = await svc.retry_enrich(item_id=failed_id)
+
 
 class TestLayers:
     """Канонические слои карты: реестр, счётчики и фичи по рамке."""
@@ -842,6 +903,24 @@ class TestLayers:
             result = await svc.run_sync()
             assert result["imported"] is True
 
+            _ = await GeoBuilding.upsert_by_cadastral_number(
+                GeoBuilding(
+                    cadastral_number="77:01:0001001:1001",
+                    address="Москва, Тверская, 1",
+                    lat=55.76,
+                    lng=37.61,
+                    geojson=(
+                        '{"type":"Polygon","coordinates":[[[37.60,55.75],'
+                        + '[37.62,55.75],[37.62,55.77],[37.60,55.77],'
+                        + '[37.60,55.75]]]}'
+                    ),
+                    region="moscow",
+                    source="nspd",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+            )
+
             layers_svc = GeoLayerService()
             listed = await layers_svc.layers_response()
             counts = {layer.name: layer.features for layer in listed.layers}
@@ -852,6 +931,7 @@ class TestLayers:
                 "restrictions": 2,
                 "barriers": 1,
                 "signals": 1,
+                "buildings": 1,
             }
             by_name = {layer.name: layer for layer in listed.layers}
             assert by_name["roads"].min_zoom < by_name["addresses"].min_zoom
@@ -863,8 +943,17 @@ class TestLayers:
             per_layer = {f.layer for f in features.features}
             assert per_layer == {
                 "regions", "roads", "addresses",
-                "restrictions", "barriers", "signals",
+                "restrictions", "barriers", "signals", "buildings",
             }
+            buildings = [
+                f for f in features.features if f.layer == "buildings"
+            ]
+            assert len(buildings) == 1
+            assert buildings[0].geometry["type"] == "Polygon"
+            assert (
+                buildings[0].properties["cadastral_number"]
+                == "77:01:0001001:1001"
+            )
             roads = [f for f in features.features if f.layer == "roads"]
             assert roads[0].geometry["type"] == "LineString"
             assert "highway" in roads[0].properties

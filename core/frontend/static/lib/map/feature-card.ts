@@ -84,6 +84,8 @@ function _osm(kind: string, id: unknown): string {
 export interface FeatureCardOptions {
     /** Кнопка «Маршрут» — точка назначения через `data-pm-action`. */
     routeTo?: boolean;
+    /** Админ-действия слоя: скрыть объект / закрыть дорогу (`pm-feature-admin`). */
+    admin?: boolean;
 }
 
 /** Типизированная карточка слоя: заголовок + значимая meta-строка. */
@@ -186,6 +188,19 @@ export function renderFeatureCard(
             if (osm !== '') meta = osm;
             break;
         }
+        case 'buildings': {
+            const kn = _pick(properties, 'cadastral_number');
+            const addr = _pick(properties, 'address');
+            if (addr !== '') title = addr;
+            else if (kn !== '') title = kn;
+            const src = _pick(properties, 'source');
+            const parts = [
+                kn !== '' ? `${t('map.card_kn', null, 'geo')} ${kn}` : '',
+                src,
+            ].filter((v) => v !== '');
+            if (parts.length > 0) meta = parts.join(' · ');
+            break;
+        }
         default: {
             // Неизвестный слой — читаемая таблица первых полей.
             for (const [k, v] of Object.entries(properties)) {
@@ -240,6 +255,25 @@ export function renderFeatureCard(
         actions.push(
             `<a class="pm-card-act" href="tel:${escHtml(phone.replace(/[^+\d]/g, ''))}">${escHtml(t('map.card_call', null, 'geo'))}</a>`,
         );
+    }
+    if (opts.admin === true) {
+        if (layer === 'roads') {
+            const wayId = Number(properties['osm_way_id']);
+            if (Number.isFinite(wayId) && wayId !== 0) {
+                actions.push(
+                    `<button type="button" class="pm-card-act pm-card-act-danger" data-pm-action="edge-close" data-osm-id="${wayId}">${escHtml(t('map.card_close_road', null, 'geo'))}</button>`,
+                );
+            }
+        } else if (layer === 'barriers' || layer === 'signals' || layer === 'restrictions') {
+            const entity = layer === 'barriers' ? 'barrier' : layer === 'signals' ? 'signal' : 'restriction';
+            const idKey = entity === 'restriction' ? 'osm_relation_id' : 'osm_node_id';
+            const osmId = Number(properties[idKey]);
+            if (Number.isFinite(osmId) && osmId !== 0) {
+                actions.push(
+                    `<button type="button" class="pm-card-act pm-card-act-danger" data-pm-action="feature-suppress" data-entity="${entity}" data-osm-id="${osmId}">${escHtml(t('map.card_hide', null, 'geo'))}</button>`,
+                );
+            }
+        }
     }
     const actionsRow = actions.length > 0 ? `<div class="pm-card-actions">${actions.join('')}</div>` : '';
 

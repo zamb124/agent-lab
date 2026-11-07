@@ -22,6 +22,7 @@ set_settings(_settings)
 set_files_route_segment(resolve_files_route_segment("geo_worker"))
 
 from apps.geo.di import GeoDi
+from apps.geo.services.geo_coverage_service import GeoCoverageService
 from apps.geo.services.osm_import_service import OsmImportService
 from apps.worker_manifest import wire_worker
 from core.di import recipe
@@ -30,8 +31,12 @@ from core.tasks.worker_bootstrap import build_worker
 broker = wire_worker("geo")
 
 
-async def ensure_import_bootstrapped(osm_import_service: OsmImportService) -> None:
-    """Пустой справочник при старте воркера → первый импорт без ожидания cron."""
+async def ensure_import_bootstrapped(
+    osm_import_service: OsmImportService,
+    geo_coverage_service: GeoCoverageService,
+) -> None:
+    """Сид реестра + пустой справочник → первый импорт без ожидания cron."""
+    await geo_coverage_service.ensure_seeded()
     _ = await osm_import_service.ensure_bootstrapped()
 
 

@@ -15,10 +15,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 import asyncpg
 
 _LOCK_KEY = "geo.osm_import"
+_NSPD_LOCK_KEY = "geo.nspd_crawl"
 
 
 @asynccontextmanager
-async def geo_import_lock(geo_url: str | None) -> AsyncGenerator[bool, None]:
+async def geo_import_lock(
+    geo_url: str | None, *, key: str = _LOCK_KEY
+) -> AsyncGenerator[bool, None]:
     """``True`` — lock взят; ``False`` — импорт уже идёт в другом процессе."""
     if geo_url is None or geo_url == "":
         raise ValueError("database.geo_url is not set")
@@ -36,7 +39,7 @@ async def geo_import_lock(geo_url: str | None) -> AsyncGenerator[bool, None]:
     try:
         acquired = bool(
             await connection.fetchval(
-                "SELECT pg_try_advisory_lock(hashtext($1))", _LOCK_KEY
+                "SELECT pg_try_advisory_lock(hashtext($1))", key
             )
         )
         try:
@@ -44,7 +47,7 @@ async def geo_import_lock(geo_url: str | None) -> AsyncGenerator[bool, None]:
         finally:
             if acquired:
                 _ = await connection.execute(
-                    "SELECT pg_advisory_unlock(hashtext($1))", _LOCK_KEY
+                    "SELECT pg_advisory_unlock(hashtext($1))", key
                 )
     finally:
         await connection.close()

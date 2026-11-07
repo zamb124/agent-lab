@@ -19,6 +19,7 @@ import '@platform/lib/components/platform-notification-manager.js';
 const NAV_ITEMS = [
     { route: 'overview',  icon: 'globe',                label_key: 'sidebar.menu_overview' },
     { route: 'sources',   icon: 'layers',               label_key: 'sidebar.menu_sources' },
+    { route: 'addresses', icon: 'pin',                  label_key: 'sidebar.menu_addresses' },
     { route: 'route_lab', icon: 'circular-connection',  label_key: 'sidebar.menu_route_lab' },
     { route: 'map_lab',   icon: 'pin',                  label_key: 'sidebar.menu_map_lab' },
 ];

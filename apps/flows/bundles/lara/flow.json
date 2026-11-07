@@ -637,6 +637,32 @@
         }
       }
     },
+    "geo": {
+      "name": "Geo",
+      "description": "Lara entry: maps, addresses and routing focus; full platform skills attached",
+      "tags": [
+        "geo",
+        "maps",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Geo Assistant",
+          "prompt": "prompts/geo.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "linnex_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user"
+          ]
+        }
+      }
+    },
     "docs": {
       "name": "Documentation Assistant",
       "description": "Lara entry: docs focus with optional pre-lookup; full platform skills attached",

@@ -74,7 +74,7 @@ class GeoCoverageService:
                 )
             )
         for name, title, kind, license_, attribution, url, enabled in SEED_SOURCES:
-            _ = await GeoSource.insert_once(
+            _ = await GeoSource.upsert_by_name(
                 instance=GeoSource(
                     name=name,
                     title=title,
@@ -243,6 +243,45 @@ class GeoCoverageService:
                 )
             )
         return GeoEnrichListResponse(items=out, pending=pending)
+
+    async def reset_cursor(self, *, source: str, region: str) -> GeoCursorItem:
+        """Админский сброс курсора: следующий тик проходит поток заново."""
+        cursor = await GeoSourceCursor.reset_for(source=source, region=region)
+        if cursor is None:
+            raise PlatformNotFoundError(
+                f"geo cursor {source!r}/{region!r} not found",
+                error_code="geo_cursor_not_found",
+            )
+        return GeoCursorItem(
+            source=cursor.source,
+            region=cursor.region,
+            cursor=cursor.cursor,
+            status=cursor.status.value,
+            rows_done=cursor.rows_done,
+            last_error=cursor.last_error,
+            updated_at=cursor.updated_at.isoformat(),
+        )
+
+    async def retry_enrich(self, *, item_id: int) -> GeoEnrichItemResponse:
+        """Админский повтор failed-элемента очереди обогащения."""
+        item = await GeoEnrichItem.retry_failed_by_id(item_id)
+        if item is None:
+            raise PlatformNotFoundError(
+                f"geo enrich item {item_id} not found or not failed",
+                error_code="geo_enrich_not_found",
+            )
+        assert item.id is not None
+        return GeoEnrichItemResponse(
+            id=item.id,
+            kind=item.kind,
+            payload=item.payload,
+            priority=item.priority,
+            status=item.status.value,
+            attempts=item.attempts,
+            last_error=item.last_error,
+            created_at=item.created_at.isoformat(),
+            done_at=None,
+        )
 
     async def _require_region(self, name: str) -> GeoRegion:
         region = await GeoRegion.by_name(name)

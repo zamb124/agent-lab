@@ -501,10 +501,21 @@ export function createResourceCollection<
 
     function _requireMessage(event: PlatformEvent, eventKey: string): string {
         const p = event.payload;
-        if (!isPlainRecord(p) || typeof p.message !== 'string') {
+        if (!isPlainRecord(p)) {
             throw new Error(`createResourceCollection(${name}): ${eventKey} payload.message required (string)`);
         }
-        return p.message;
+        if (typeof p.message === 'string') {
+            return p.message;
+        }
+        // Бэкенд-конверт `*_failed` (error_code/error_detail) делит тип
+        // события с внутренним dispatch фабрики — обе формы валидны.
+        if (typeof p.error_detail === 'string' && p.error_detail.length > 0) {
+            return p.error_detail;
+        }
+        if (typeof p.error_code === 'string' && p.error_code.length > 0) {
+            return p.error_code;
+        }
+        throw new Error(`createResourceCollection(${name}): ${eventKey} payload.message required (string)`);
     }
 
     function _baseReducer(state: S, event: PlatformEvent): S {

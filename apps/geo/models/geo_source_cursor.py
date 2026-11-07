@@ -8,7 +8,7 @@ page, last id) после каждого чанка, рестарт продол
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import ClassVar, Self
 
@@ -55,3 +55,74 @@ class GeoSourceCursor(PlatformModel):
     async def list_all_by_source_region_asc(cls) -> list[Self]:
         """Все курсоры по источнику."""
         return await cls.objects.order_by("source", "region").all()
+
+    @classmethod
+    async def upsert_progress(
+        cls,
+        *,
+        source: str,
+        region: str,
+        cursor: str,
+        rows_done: int,
+        status: GeoCursorStatus = GeoCursorStatus.RUNNING,
+        last_error: str = "",
+    ) -> Self:
+        """Запись прогресса чанка: merge по (source, region)."""
+        existing = await cls.by_source_region(source, region)
+        now = datetime.now(UTC)
+        if existing is None:
+            return await cls.objects.create(
+                instance=cls(
+                    source=source,
+                    region=region,
+                    cursor=cursor,
+                    status=status,
+                    rows_done=rows_done,
+                    last_error=last_error,
+                    updated_at=now,
+                )
+            )
+        existing.cursor = cursor
+        existing.status = status
+        existing.rows_done = rows_done
+        existing.last_error = last_error
+        existing.updated_at = now
+        _ = await existing.save()
+        return existing
+
+    @classmethod
+    async def reset_for(cls, *, source: str, region: str) -> Self | None:
+        """Сброс прогресса: следующий тик проходит поток заново.
+
+        Строка сохраняется для наблюдаемости; ``None`` — курсор не найден.
+        """
+        existing = await cls.by_source_region(source, region)
+        if existing is None:
+            return None
+        existing.cursor = ""
+        existing.status = GeoCursorStatus.IDLE
+        existing.rows_done = 0
+        existing.last_error = ""
+        existing.updated_at = datetime.now(UTC)
+        _ = await existing.save()
+        return existing
+
+    @classmethod
+    async def mark_failed(cls, *, source: str, region: str, error: str) -> None:
+        """Фиксация падения потока: курсор остаётся для resume."""
+        existing = await cls.by_source_region(source, region)
+        if existing is None:
+            _ = await cls.objects.create(
+                instance=cls(
+                    source=source,
+                    region=region,
+                    status=GeoCursorStatus.FAILED,
+                    last_error=error,
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            return
+        existing.status = GeoCursorStatus.FAILED
+        existing.last_error = error
+        existing.updated_at = datetime.now(UTC)
+        _ = await existing.save()

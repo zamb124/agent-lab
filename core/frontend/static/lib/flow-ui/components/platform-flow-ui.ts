@@ -58,6 +58,13 @@ import './flow-ui-task-controls.js';
 import './flow-ui-share-menu.js';
 import './flow-ui-drawer-controls.js';
 import './flow-ui-run-trace.js';
+
+/** HTTP-статус из A2aError (interface/open/shape), иначе undefined. */
+function flowUIInterfaceStatus(error: unknown): number | undefined {
+    if (!isPlainRecord(error)) return undefined;
+    const status = error.status;
+    return typeof status === 'number' ? status : undefined;
+}
 import '../../components/platform-work-item-badge.js';
 
 export type { FlowUiInteractionPolicy } from './platform-flow-ui-helpers.js';
@@ -325,6 +332,13 @@ export class PlatformFlowUI extends LitElement {
         } catch (error) {
             if (generation !== this._generation) return;
             if (flowUIIsAbortError(error)) return;
+            if (flowUIInterfaceStatus(error) === 404) {
+                // Ветки ассистента у сервиса нет — тихий unavailable,
+                // а не красный boundary в закрытом drawer.
+                this._status = 'unavailable';
+                this._emit('flow-ui-unavailable', { error });
+                return;
+            }
             this._error = error;
             this._status = 'error';
             this._emit('flow-ui-error', { error });
@@ -649,6 +663,9 @@ export class PlatformFlowUI extends LitElement {
     override render() {
         const locale = this.resolvedLocale;
         this.setAttribute('data-resolved-theme', resolveFlowUITheme(this.theme, globalThis.document));
+        if (this._status === 'unavailable') {
+            return nothing;
+        }
         if (this._status === 'error') {
             const boundary = html`<flow-ui-error-boundary .error=${this._error} locale=${locale}></flow-ui-error-boundary>`;
             if (this.display !== 'drawer') return boundary;

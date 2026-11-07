@@ -120,6 +120,7 @@ CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events
 CORE_FACTORY_FILE_SERVICE: dict[str, str] = {
     "flows-flows-list.resource.ts": "flows",
     "geo-addresses.resource.ts": "geo",
+    "geo-admin.resource.ts": "geo",
     "geo-coverage.resource.ts": "geo",
     "geo-layers.resource.ts": "geo",
     "geo-route.resource.ts": "geo",

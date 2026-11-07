@@ -110,7 +110,7 @@ class GeoLayerService:
     async def _count_features(layer: GeoLayer, generation: int) -> int:
         if layer.generation_filtered:
             rows = await execute_raw(
-                f"SELECT count(*) AS c FROM {layer.table} WHERE generation = $1",
+                f"SELECT count(*) AS c FROM {layer.table} WHERE generation IN (0, $1)",
                 [generation],
                 using="geo",
             )
@@ -137,7 +137,7 @@ class GeoLayerService:
         where = "geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)"
         params: list[SqlParameterValue] = [west, south, east, north]
         if layer.generation_filtered:
-            where = f"generation = ${len(params) + 1} AND {where}"
+            where = f"generation IN (0, ${len(params) + 1}) AND {where}"
             params.append(generation)
         params.append(layer.max_features)
         rows = await execute_raw(

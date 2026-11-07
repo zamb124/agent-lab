@@ -170,6 +170,198 @@ class GeoSettings(BaseSettings):
         default=True,
         description="Разрешить фактический импорт в geo_osm_sync_tick (False — тик завершается no-op).",
     )
+    enrich_tick_batch: int = Field(
+        default=100,
+        ge=1,
+        description="Размер пачки задач обогащения за один geo_enrich_tick.",
+    )
+    enrich_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        description="Попыток задачи обогащения до failed.",
+    )
+    enrich_retry_pause_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description="Базовая пауза retry обогащения (сек); умножается на номер попытки.",
+    )
+    gar_sync_enabled: bool = Field(
+        default=True,
+        description="Разрешить синк ГАР/ФИАС в geo_gar_sync (False — тик завершается no-op).",
+    )
+    gar_info_url: str = Field(
+        default="https://fias.nalog.ru/WebServices/Public/DownloadService.asmx",
+        description=(
+            "Endpoint DownloadService ФИАС: GetLastDownloadFileInfo и "
+            "GetAllDownloadFileInfo отдают JSON с GarXMLFullURL/GarXMLDeltaURL."
+        ),
+    )
+    gar_region_codes: dict[str, str] = Field(
+        default_factory=lambda: {"moscow": "77"},
+        description="Slug региона покрытия → код региона ГАР (директория внутри gar_xml.zip).",
+    )
+    gar_work_dir: str = Field(
+        default="data/tiles/gar",
+        description=(
+            "Рабочая директория загрузок ГАР: zip с resume по HTTP Range + "
+            "state_{region}.json (дельта-контекст). Дефолт ложится на общий PVC "
+            "geo-tiles (/app/data/tiles) — персистентно в проде без отдельного тома."
+        ),
+    )
+    gar_max_delta_chain: int = Field(
+        default=30,
+        ge=1,
+        description="Максимум дельт подряд от курсора; цепочка длиннее или с разрывом → полная выгрузка.",
+    )
+    gar_match_similarity: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Порог схожести названия улицы при матче дома ГАР к адресу справочника.",
+    )
+    gar_http_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description="Таймаут запросов к DownloadService и HEAD архивов; download идёт потоком.",
+    )
+    gar_unresolved_defer_seconds: float = Field(
+        default=86400.0,
+        gt=0,
+        description="Отсрочка повторного дрейна задачи gar_unresolved (сек) до появления резолвера.",
+    )
+    nspd_sync_enabled: bool = Field(
+        default=True,
+        description="Разрешить краул НСПД (False — тик завершается no-op).",
+    )
+    nspd_base_url: str = Field(
+        default="https://nspd.gov.ru",
+        description="Базовый URL публичного API НСПД (geoportal + aeggis).",
+    )
+    nspd_referer: str = Field(
+        default="https://nspd.gov.ru/map?thematic=PKK",
+        description="Referer запросов к НСПД: без него API отвечает 403.",
+    )
+    nspd_cell_deg: float = Field(
+        default=0.02,
+        gt=0,
+        le=1.0,
+        description="Сторона ячейки краула в градусах (~2 км): intersects-запрос на ячейку.",
+    )
+    nspd_tick_batch: int = Field(
+        default=25,
+        ge=1,
+        description="Ячеек сетки региона за один тик GEO_NSPD_CRAWL.",
+    )
+    nspd_rps: float = Field(
+        default=1.0,
+        gt=0,
+        le=10.0,
+        description="Лимит запросов к НСПД в секунду: агрессивный краул банится по 403.",
+    )
+    nspd_building_layer_id: int = Field(
+        default=36049,
+        ge=1,
+        description="layer_id/category_id слоя «Здания» НСПД для intersects и search.",
+    )
+    nspd_max_retries: int = Field(
+        default=3,
+        ge=1,
+        description="Повторов запроса к НСПД при 403/429/5xx с backoff.",
+    )
+    nspd_retry_pause_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description="Базовая пауза retry НСПД (сек); умножается на номер попытки.",
+    )
+    nspd_http_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Таймаут запросов к API НСПД.",
+    )
+    nspd_unresolved_defer_seconds: float = Field(
+        default=21600.0,
+        gt=0,
+        description="Отсрочка повторного дрейна gar_unresolved при неудачном резолве (сек).",
+    )
+    data_mos_sync_enabled: bool = Field(
+        default=True,
+        description="Разрешить синк data.mos.ru (False — тик завершается no-op).",
+    )
+    data_mos_base_url: str = Field(
+        default="https://apidata.mos.ru",
+        description="Базовый URL API Портала открытых данных Москвы.",
+    )
+    data_mos_api_key: str = Field(
+        default="",
+        description="API-ключ apidata.mos.ru; пустой — тик отвечает skipped=no_api_key.",
+    )
+    data_mos_datasets: dict[str, str] = Field(
+        default_factory=lambda: {"60562": "address"},
+        description="dataset_id → вид сущности ('address' — адресный реестр).",
+    )
+    data_mos_page_size: int = Field(
+        default=500,
+        ge=1,
+        le=1000,
+        description="Строк на страницу /v1/datasets/{id}/rows ($top).",
+    )
+    data_mos_tick_pages: int = Field(
+        default=10,
+        ge=1,
+        description="Страниц датасета за один тик GEO_DATAMOS_SYNC (resume по курсору).",
+    )
+    data_mos_match_similarity: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Порог схожести улицы при матче строки датасета к адресу справочника.",
+    )
+    data_mos_http_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Таймаут запросов к apidata.mos.ru.",
+    )
+    overture_sync_enabled: bool = Field(
+        default=True,
+        description="Разрешить импорт Overture Maps (False — тик no-op).",
+    )
+    overture_base_url: str = Field(
+        default="https://overturemapswestus2.blob.core.windows.net/release",
+        description=(
+            "Корень релизов Overture: Azure-mirror container либо "
+            "file:// каталог с зеркалом раскладки {release}/theme=…/type=…/."
+        ),
+    )
+    overture_release: str = Field(
+        default="2025-11-19.0",
+        description="Версия релиза Overture Maps (первая часть пути parquet).",
+    )
+    overture_themes: list[str] = Field(
+        default_factory=lambda: ["addresses", "buildings"],
+        description="Темы релиза к импорту: addresses → gen-0 gap-fill, buildings → geo_buildings.",
+    )
+    overture_tick_rowgroups: int = Field(
+        default=10,
+        ge=1,
+        description="Parquet row-groups за один тик GEO_OVERTURE_SYNC (resume по курсору).",
+    )
+    overture_gap_radius_m: float = Field(
+        default=25.0,
+        gt=0,
+        description="Радиус gap-fill дедупа (м): адрес Overture пропускается, если рядом тот же housenumber.",
+    )
+    overture_http_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description="Таймаут чтения parquet/listing по HTTPS.",
+    )
+    osm_diff_tick_enabled: bool = Field(
+        default=True,
+        description=(
+            "Тик свежести по replication state.txt: удалённая последовательность "
+            "новее курсора → enqueue полного GEO_OSM_SYNC_TICK."
+        ),
+    )
     tiles_dir: str = Field(
         default="data/tiles",
         description=(

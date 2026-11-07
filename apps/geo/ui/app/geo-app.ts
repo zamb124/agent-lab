@@ -34,10 +34,29 @@ import {
     geoSourcesOp,
     geoStatsOp,
     geoCursorsOp,
+    geoCursorResetOp,
+    geoEnrichOp,
+    geoEnrichRetryOp,
     geoImportStatusOp,
     geoImportRunOp,
 } from '@platform/lib/events/resources/geo-coverage.resource.js';
-import { geoRouteOp, geoIsochroneOp } from '@platform/lib/events/resources/geo-route.resource.js';
+import {
+    geoRouteOp,
+    geoMatrixOp,
+    geoOrderOp,
+    geoIsochroneOp,
+} from '@platform/lib/events/resources/geo-route.resource.js';
+import {
+    geoAddressCreateOp,
+    geoAddressUpdateOp,
+    geoAddressRemoveOp,
+    geoAddressRevertOp,
+    geoOverridesOp,
+    geoFeatureSuppressOp,
+    geoFeatureUnsuppressOp,
+    geoEdgeCloseOp,
+    geoEdgeOpenOp,
+} from '@platform/lib/events/resources/geo-admin.resource.js';
 
 function companyListEntries(list: readonly { company_id?: unknown; subdomain?: unknown }[]): readonly CompanyListEntry[] {
     return list.map((company) => {
@@ -56,10 +75,12 @@ import '../pages/geo-overview-page.js';
 import '../pages/geo-sources-page.js';
 import '../pages/geo-route-lab-page.js';
 import '../pages/geo-map-lab-page.js';
+import '../pages/geo-addresses-page.js';
 
 const GEO_ROUTES = [
     { key: 'overview',  path: '',            titleKey: 'routes.overview' },
     { key: 'sources',   path: 'sources',     titleKey: 'routes.sources' },
+    { key: 'addresses', path: 'addresses',   titleKey: 'routes.addresses' },
     { key: 'route_lab', path: 'route-lab',   titleKey: 'routes.route_lab' },
     { key: 'map_lab',   path: 'map-lab',     titleKey: 'routes.map_lab' },
 ];
@@ -71,7 +92,7 @@ export class GeoApp extends PlatformApp {
     static platformAssistant = {
         branchId: 'geo',
         serviceId: 'geo',
-        showLauncher: false,
+        showLauncher: true,
     };
 
     private _companiesListSel: SelectController<readonly CompanyListEntry[]>;
@@ -94,10 +115,24 @@ export class GeoApp extends PlatformApp {
         geoSourcesOp,
         geoStatsOp,
         geoCursorsOp,
+        geoCursorResetOp,
+        geoEnrichOp,
+        geoEnrichRetryOp,
         geoImportStatusOp,
         geoImportRunOp,
         geoRouteOp,
+        geoMatrixOp,
+        geoOrderOp,
         geoIsochroneOp,
+        geoAddressCreateOp,
+        geoAddressUpdateOp,
+        geoAddressRemoveOp,
+        geoAddressRevertOp,
+        geoOverridesOp,
+        geoFeatureSuppressOp,
+        geoFeatureUnsuppressOp,
+        geoEdgeCloseOp,
+        geoEdgeOpenOp,
     ];
 
     static override styles = [
@@ -158,11 +193,21 @@ export class GeoApp extends PlatformApp {
         );
     }
 
+    override async getPlatformAssistantContextVariables(
+        routeKey: string,
+        _params: Record<string, string>,
+    ) {
+        return { geo_route: routeKey };
+    }
+
     override renderRoute(routeKey: string | null) {
         let content;
         switch (routeKey) {
             case 'sources':
                 content = html`<geo-sources-page></geo-sources-page>`;
+                break;
+            case 'addresses':
+                content = html`<geo-addresses-page></geo-addresses-page>`;
                 break;
             case 'route_lab':
                 content = html`<geo-route-lab-page></geo-route-lab-page>`;

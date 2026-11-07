@@ -255,6 +255,13 @@ class GeoCursorListResponse(StrictBaseModel):
     items: list[GeoCursorItem]
 
 
+class GeoCursorResetRequest(StrictBaseModel):
+    """Сброс курсора потока источника: следующий тик начнёт проход заново."""
+
+    source: str = Field(min_length=1, max_length=64)
+    region: str = Field(default="", max_length=64)
+
+
 class GeoEnrichListRequest(StrictBaseModel):
     """Страница очереди обогащения; ``status`` — необязательный фильтр."""
 
@@ -280,10 +287,23 @@ class GeoEnrichListResponse(StrictBaseModel):
     pending: int
 
 
+class GeoEnrichRetryRequest(StrictBaseModel):
+    """Повтор failed-элемента очереди обогащения."""
+
+    item_id: int = Field(ge=1)
+
+
+class GeoImportRunRequest(StrictBaseModel):
+    """Внеочередной тик источника; пустой ``source`` → OSM (дефолт)."""
+
+    source: str = Field(default="", max_length=32)
+
+
 class GeoImportRunResponse(StrictBaseModel):
     """Постановка внеочередного тика синхронизации."""
 
     enqueued: bool
+    source: str = ""
 
 
 class GeoLayerInfo(StrictBaseModel):
@@ -325,3 +345,89 @@ class GeoFeature(StrictBaseModel):
 class GeoFeatureCollectionResponse(StrictBaseModel):
     features: list[GeoFeature]
     truncated: bool = False
+
+
+class GeoAddressCreateRequest(StrictBaseModel):
+    """Ручной адрес: evergreen-строка ``generation=0``, ``osm_type='manual'``."""
+
+    display_name: str = Field(min_length=1, max_length=500)
+    city: str = Field(default="", max_length=255)
+    street: str = Field(default="", max_length=255)
+    housenumber: str = Field(default="", max_length=64)
+    postcode: str = Field(default="", max_length=32)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    region: str = Field(default="", max_length=64)
+    reason: str = Field(default="", max_length=500)
+
+
+class GeoAddressUpdateRequest(StrictBaseModel):
+    """Патч админа к адресу; ``None``-поле не меняет значение."""
+
+    osm_type: str = Field(min_length=1, max_length=16)
+    osm_id: int
+    display_name: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=255)
+    street: str | None = Field(default=None, max_length=255)
+    housenumber: str | None = Field(default=None, max_length=64)
+    postcode: str | None = Field(default=None, max_length=32)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    reason: str = Field(default="", max_length=500)
+
+
+class GeoAddressTargetRequest(StrictBaseModel):
+    """Операция над адресом по стабильному ключу (osm_type, osm_id)."""
+
+    osm_type: str = Field(min_length=1, max_length=16)
+    osm_id: int
+    reason: str = Field(default="", max_length=500)
+
+
+class GeoFeatureSuppressRequest(StrictBaseModel):
+    """Тумбстоун на объект слоя: barrier/signal/restriction/edge."""
+
+    entity: Literal["barrier", "signal", "restriction", "edge"]
+    osm_id: int
+    reason: str = Field(default="", max_length=500)
+
+
+class GeoEdgeCloseRequest(StrictBaseModel):
+    """Закрытие режимов движения на всех рёбрах OSM way."""
+
+    osm_way_id: int
+    modes: list[RouteMode] = Field(min_length=1)
+    reason: str = Field(default="", max_length=500)
+
+
+class GeoEdgeTargetRequest(StrictBaseModel):
+    """Операция над дорогой по osm_way_id."""
+
+    osm_way_id: int
+
+
+class GeoOverrideItem(StrictBaseModel):
+    """Строка аудита правок: патч адреса, тумбстоун или закрытие дороги."""
+
+    kind: str
+    entity: str
+    osm_type: str
+    osm_id: int
+    reason: str
+    updated_by: str
+    updated_at: str
+    suppressed: bool = False
+
+
+class GeoOverrideListResponse(StrictBaseModel):
+    """Сводный аудит правок админа по всем сущностям."""
+
+    items: list[GeoOverrideItem]
+    total: int
+
+
+class GeoOverridesListRequest(StrictBaseModel):
+    """Страница аудита правок."""
+
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
