@@ -328,6 +328,11 @@ export class PlatformMapEl extends PlatformElement {
         return this._zoneDraw;
     }
 
+    /** Пересчёт canvas под текущий размер контейнера (после смены layout хостом). */
+    resize(): void {
+        this._map?.resize();
+    }
+
     private get _layersFetch(): boolean {
         return this.config.layers?.fetch !== false;
     }
@@ -765,8 +770,25 @@ export class PlatformMapEl extends PlatformElement {
         const detail = (e as CustomEvent<{ lat?: number; lng?: number }>).detail;
         this.dispatchEvent(new CustomEvent('pm-address-hover', { detail, bubbles: true, composed: true }));
         const map = this._map;
-        if (!map || typeof detail?.lat !== 'number' || typeof detail.lng !== 'number') return;
-        map.easeTo({ center: [detail.lng, detail.lat], duration: 400 });
+        const src = map?.getSource('pm-addr-hl') as
+            | { setData(d: FeatureCollection): Promise<void> }
+            | undefined;
+        if (!src) return;
+        const ok = typeof detail?.lat === 'number' && typeof detail.lng === 'number';
+        void src.setData(
+            ok
+                ? {
+                      type: 'FeatureCollection',
+                      features: [
+                          {
+                              type: 'Feature',
+                              properties: {},
+                              geometry: { type: 'Point', coordinates: [detail.lng!, detail.lat!] },
+                          },
+                      ],
+                  }
+                : _EMPTY_FC,
+        );
     }
 
     // ---- Search ----
@@ -1692,6 +1714,11 @@ export class PlatformMapEl extends PlatformElement {
             map.on('zoom', () => this.requestUpdate());
         }
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
+        // Контейнер мог получить финальный layout после создания карты
+        // (портал модалки, enter-motion): MapLibre trackResize ловит смену
+        // размеров, но не сам факт «контейнер был 0px на init» — добиваем
+        // явным resize на следующий кадр.
+        requestAnimationFrame(() => map.resize());
         this.dispatchEvent(new CustomEvent('pm-ready', { detail: { map }, bubbles: true, composed: true }));
     }
 
@@ -1954,6 +1981,30 @@ export class PlatformMapEl extends PlatformElement {
                 'text-color': '#4c1d95',
                 'text-halo-color': '#ffffff',
                 'text-halo-width': 2,
+            },
+        } as never);
+        // Hover строки панели адресов — адресная точка «вырастает»
+        // поверх обычных точек слоя (Яндекс-стиль), камера не дёргается.
+        map.addSource('pm-addr-hl', { type: 'geojson', data: _EMPTY_FC });
+        map.addLayer({
+            id: 'pm-addr-hl-glow',
+            type: 'circle',
+            source: 'pm-addr-hl',
+            paint: {
+                'circle-radius': 16,
+                'circle-color': '#f2542d',
+                'circle-opacity': 0.22,
+            },
+        } as never);
+        map.addLayer({
+            id: 'pm-addr-hl-dot',
+            type: 'circle',
+            source: 'pm-addr-hl',
+            paint: {
+                'circle-radius': 9,
+                'circle-color': '#f2542d',
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#ffffff',
             },
         } as never);
     }
@@ -2374,13 +2425,37 @@ export class PlatformMapEl extends PlatformElement {
             this._pinnedBuilding = null;
             this._setBuildingPinned(map, null);
         });
-        // Кнопки действий карточки: «Маршрут» — точка клика в пункт назначения.
+        // Кнопки действий карточки: «Маршрут» — точка клика в пункт назначения;
+        // админ-действия — наружу `pm-feature-admin` (владелец решает op/модалку).
         popup.getElement?.()?.addEventListener('click', (ev: Event) => {
             const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-pm-action]');
             if (!btn) return;
             ev.preventDefault();
-            if (btn.dataset['pmAction'] === 'route-here') {
+            const action = btn.dataset['pmAction'];
+            if (action === 'route-here') {
                 this._menuRouteTo(lngLat);
+                return;
+            }
+            if (action === 'feature-suppress' || action === 'edge-close') {
+                // Карточки стаканы ≤3: индекс .pm-card в попапе = индекс фичи.
+                const popupEl = popup.getElement?.();
+                const cardEl = btn.closest('.pm-card');
+                const cards = popupEl ? [...popupEl.querySelectorAll('.pm-card')] : [];
+                const idx = cardEl ? cards.indexOf(cardEl) : -1;
+                const feat = idx >= 0 && idx < feats.length ? feats[idx] : undefined;
+                this.dispatchEvent(
+                    new CustomEvent('pm-feature-admin', {
+                        detail: {
+                            action,
+                            entity: btn.dataset['entity'] ?? '',
+                            osmId: Number(btn.dataset['osmId'] ?? 0),
+                            layer: feat?.layer ?? '',
+                            properties: feat?.properties ?? {},
+                        },
+                        bubbles: true,
+                        composed: true,
+                    }),
+                );
             }
         });
     }

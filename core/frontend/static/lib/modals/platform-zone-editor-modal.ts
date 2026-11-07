@@ -113,6 +113,9 @@ export class PlatformZoneEditorModal extends PlatformModal {
         this._suggestOp = this.useOp('geo/addresses_suggest');
         this._zone = this.zone;
         this._mapConfig = this._buildConfig();
+        // Редактор зоны — рабочий инструмент на весь экран: карта
+        // читается сразу, без клика по кнопке fullscreen в шапке.
+        this._isFullscreen = true;
     }
 
     private _buildConfig(): PlatformMapConfig {
@@ -157,10 +160,35 @@ export class PlatformZoneEditorModal extends PlatformModal {
     };
 
     private _toggleDraw(): void {
-        const draw = this._mapEl?.getDraw()?.draw;
-        if (!draw) return;
-        this._drawing = draw.getMode() !== 'polygon';
-        draw.setMode(this._drawing ? 'polygon' : 'select');
+        const zd = this._mapEl?.getDraw();
+        const draw = zd?.draw;
+        if (!zd || !draw) return;
+        if (draw.getMode() !== 'polygon') {
+            this._drawing = true;
+            draw.setMode('polygon');
+            return;
+        }
+        // «Завершить»: коммитим недорисованный полигон через finish()
+        // (close() TerraDraw — валидация + событие finish → select).
+        // Прямой setMode('select') посреди рисования отменяет полигон.
+        const closable = (draw.getSnapshot() as { geometry?: { type?: string; coordinates?: unknown } }[]).some(
+            (f) => {
+                const g = f.geometry;
+                const ring =
+                    g?.type === 'Polygon'
+                        ? (g.coordinates as unknown[][] | undefined)?.[0]
+                        : g?.type === 'MultiPolygon'
+                          ? ((g.coordinates as unknown[][][] | undefined)?.[0]?.[0] as unknown[] | undefined)
+                          : undefined;
+                return Array.isArray(ring) && ring.length >= 3;
+            },
+        );
+        if (closable) {
+            zd.finish();
+        } else {
+            draw.setMode('select');
+            this._drawing = false;
+        }
     }
 
     private _clearZone(): void {
@@ -245,6 +273,9 @@ export class PlatformZoneEditorModal extends PlatformModal {
                         .config=${this._mapConfig}
                         @pm-ready=${(e: CustomEvent) => {
                             this._mapEl = e.target as PlatformMapEl;
+                            // Карта инициализировалась до финального layout
+                            // модалки — пересчитываем canvas под fullscreen.
+                            requestAnimationFrame(() => this._mapEl?.resize());
                         }}
                         @pm-draw-change=${this._onDrawChange}
                     ></platform-map>
@@ -348,21 +379,44 @@ export class PlatformZoneEditorModal extends PlatformModal {
         .ztool {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 7px 12px;
-            border: 1px solid var(--color-border, #e2e8f0);
-            border-radius: 9px;
-            background: var(--color-surface, #fff);
+            gap: 7px;
+            padding: 8px 14px;
+            border: 1px solid color-mix(in srgb, var(--text-primary, #0f172a) 14%, transparent);
+            border-radius: 11px;
+            background: var(--glass-tint-medium, rgba(255, 255, 255, 0.55));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             font-size: 12.5px;
+            font-weight: 500;
             cursor: pointer;
-            color: var(--color-text, #0f172a);
+            color: var(--text-primary, #0f172a);
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease,
+                transform 0.12s ease,
+                box-shadow 0.15s ease;
+        }
+        .ztool:hover:not(:disabled) {
+            background: var(--accent-subtle, rgba(242, 84, 45, 0.1));
+            border-color: color-mix(in srgb, var(--accent, #f2542d) 45%, transparent);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+        }
+        .ztool:active:not(:disabled) {
+            transform: translateY(0);
         }
         .ztool.on {
-            background: var(--color-accent-soft, #fff1ea);
-            border-color: var(--color-accent, #f2542d);
+            background: var(--accent, #f2542d);
+            border-color: var(--accent, #f2542d);
+            color: #fff;
+            box-shadow: 0 4px 16px color-mix(in srgb, var(--accent, #f2542d) 38%, transparent);
         }
         .ztool.danger {
-            color: var(--color-danger, #dc2626);
+            color: var(--danger, #dc2626);
+        }
+        .ztool.danger:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
+            border-color: color-mix(in srgb, var(--danger, #dc2626) 45%, transparent);
         }
         .ztool:disabled {
             opacity: 0.5;

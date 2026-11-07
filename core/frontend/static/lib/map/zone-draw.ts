@@ -23,6 +23,13 @@ export interface ZoneDrawOptions {
 export interface ZoneDraw {
     draw: TerraDrawInstance;
     validate: (feature: Feature) => boolean;
+    /**
+     * Коммитит недорисованный полигон как кнопка «Завершить»: ключ
+     * `keyEvents.finish` режима — единственный путь, который валидирует,
+     * замыкает кольцо и эмитит `finish`. Прямой `setMode('select')`
+     * посреди рисования отменяет полигон — запрещён.
+     */
+    finish: () => void;
 }
 
 export async function createZoneDraw(
@@ -72,5 +79,8 @@ export async function createZoneDraw(
     draw.setMode('select');
     const validate = (feature: Feature): boolean =>
         td.ValidateNotSelfIntersecting(feature as unknown as GeoJSONStoreFeatures).valid;
-    return { draw, validate };
+    const finish = (): void => {
+        map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+    };
+    return { draw, validate, finish };
 }

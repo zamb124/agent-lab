@@ -236,8 +236,39 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         }, _QUERY_DEBOUNCE_MS);
     }
 
+    /**
+     * GeoJSON-зона для запроса: недорисованное кольцо редактора замыкаем
+     * копией первой точки — backend принимает только замкнутые rings
+     * (`is_valid_delivery_zone`). Кольцо <3 точек ещё не зона → ``null``.
+     */
+    private _closedZone(zone: Record<string, unknown>): Record<string, unknown> | null {
+        const closeRing = (ring: unknown): number[][] | null => {
+            if (!Array.isArray(ring) || ring.length < 3) return null;
+            const pts = ring as number[][];
+            const first = pts[0]!;
+            const last = pts[pts.length - 1]!;
+            const closed = first[0] === last[0] && first[1] === last[1] ? pts : [...pts, first];
+            return closed.length >= 4 ? closed : null;
+        };
+        if (zone['type'] === 'Polygon') {
+            const coords = zone['coordinates'];
+            const ring = closeRing(Array.isArray(coords) ? coords[0] : null);
+            return ring === null ? null : { ...zone, coordinates: [ring] };
+        }
+        if (zone['type'] === 'MultiPolygon') {
+            const polys = zone['coordinates'];
+            if (!Array.isArray(polys)) return null;
+            const rings = polys
+                .map((p) => closeRing(Array.isArray(p) ? p[0] : null))
+                .filter((r): r is number[][] => r !== null);
+            return rings.length === 0 ? null : { ...zone, coordinates: rings.map((r) => [r]) };
+        }
+        return null;
+    }
+
     private async _query(): Promise<void> {
-        if (this.zone === null) {
+        const zone = this.zone === null ? null : this._closedZone(this.zone);
+        if (zone === null) {
             this._items = [];
             this._total = 0;
             this._loading = false;
@@ -249,7 +280,7 @@ export class PlatformZoneAddressPanel extends PlatformElement {
         this._failed = false;
         try {
             const result = (await this._ensureOp().run({
-                zone: this.zone,
+                zone,
                 q: this._q || null,
                 limit: this.pageSize,
                 offset: this._page * this.pageSize,

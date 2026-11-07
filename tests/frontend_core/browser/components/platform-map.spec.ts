@@ -107,6 +107,7 @@ type ModalEl = HTMLElement & {
     _zone: unknown;
     _valid: boolean;
     _drawing: boolean;
+    _isFullscreen: boolean;
     close(): void;
 };
 
@@ -1442,6 +1443,103 @@ describe('platform.zone_editor', function () {
         const ring = zone.coordinates[0]!;
         expect(ring[0]).to.deep.equal(ring[ring.length - 1]);
         expect(ring[0]![0]).to.be.closeTo(37.5, 0.01);
+    });
+
+    it('модалка открывается сразу в fullscreen', async () => {
+        const modal = await openEditor({ zone: null, address: '', onApply: null });
+        await elementUpdated(modal);
+        expect(modal._isFullscreen, '_isFullscreen').to.equal(true);
+        const inner = modal.shadowRoot.querySelector('.modal');
+        expect(inner?.classList.contains('fullscreen'), '.modal.fullscreen').to.equal(true);
+    });
+
+    it('«Завершить» посреди рисования коммитит полигон, а не отменяет', async () => {
+        // Прод-регрессия: setMode('select') посреди draw стирал зону.
+        const modal = await openEditor({ zone: null, address: '', onApply: null });
+        const mapEl = await editorReady(modal);
+        ztool(modal, 'Рисовать зону').click();
+        await elementUpdated(modal);
+        await clickMap(mapEl, 37.5, 55.7);
+        await clickMap(mapEl, 37.7, 55.7);
+        await clickMap(mapEl, 37.6, 55.8);
+        ztool(modal, 'Завершить').click();
+        await waitUntil(
+            () =>
+                mapEl.getDraw()!.draw.getSnapshot().filter((f) => f.geometry.type === 'Polygon').length === 1 &&
+                mapEl.getDraw()!.draw.getMode() === 'select',
+            'полигон закоммичен и режим select',
+            { timeout: 10_000 },
+        );
+        expect(modal._drawing, '_drawing сброшен').to.equal(false);
+        const ring = (
+            mapEl.getDraw()!.draw.getSnapshot().find((f) => f.geometry.type === 'Polygon')!
+                .geometry as { coordinates: number[][][] }
+        ).coordinates[0]!;
+        expect(ring[0], 'кольцо замкнуто').to.deep.equal(ring[ring.length - 1]);
+    });
+
+    it('mid-draw зона → in_zone запрос с замкнутым кольцом', async () => {
+        // Прод-регрессия: незамкнутый ring → invalid_delivery_zone → «не удалось загрузить».
+        const events: Array<{ type: string; payload: unknown }> = [];
+        getPlatformBus().subscribeType(geoAddressesInZoneOp.events.REQUESTED, (e) => events.push(e));
+        const modal = await openEditor({ zone: null, address: '', onApply: null });
+        const mapEl = await editorReady(modal);
+        ztool(modal, 'Рисовать зону').click();
+        await clickMap(mapEl, 37.5, 55.7);
+        await clickMap(mapEl, 37.7, 55.7);
+        await clickMap(mapEl, 37.6, 55.8);
+        // НЕ завершаем — зона в статусе «рисуется», кольцо в snapshot незамкнуто.
+        await waitUntil(
+            () => events.length > 0,
+            'in_zone ушёл на живую mid-draw зону',
+            { timeout: 10_000 },
+        );
+        const zone = (events.at(-1)!.payload as { zone: { type: string; coordinates: number[][][] } }).zone;
+        expect(zone.type).to.equal('Polygon');
+        const ring = zone.coordinates[0]!;
+        expect(ring.length, 'минимум 4 точки').to.be.greaterThanOrEqual(4);
+        expect(ring[0], 'кольцо замкнуто для backend').to.deep.equal(ring[ring.length - 1]);
+    });
+
+    it('address-hover → адресная точка вырастает на карте (pm-addr-hl)', async () => {
+        const modal = await openEditor({ zone: ZONE, address: '', onApply: null });
+        const mapEl = await editorReady(modal);
+        const panel = mapEl.shadowRoot.querySelector('platform-zone-address-panel')!;
+        panel.dispatchEvent(
+            new CustomEvent('address-hover', {
+                detail: { id: 1, lat: 55.75, lng: 37.6 },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await waitUntil(
+            () => {
+                const src = mapEl.getMap()!.getSource('pm-addr-hl') as
+                    | { serialize(): { data?: { features?: unknown[] } } }
+                    | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) === 1;
+            },
+            'подсветка точки адреса на карте',
+            { timeout: 10_000 },
+        );
+        expect(mapEl.getMap()!.getLayer('pm-addr-hl-dot'), 'слой подсветки').to.exist;
+        panel.dispatchEvent(
+            new CustomEvent('address-hover', {
+                detail: { id: null, lat: null, lng: null },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await waitUntil(
+            () => {
+                const src = mapEl.getMap()!.getSource('pm-addr-hl') as
+                    | { serialize(): { data?: { features?: unknown[] } } }
+                    | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) === 0;
+            },
+            'подсветка снята после ухода курсора',
+            { timeout: 10_000 },
+        );
     });
 
     it('«Очистить» удаляет полигон; «Применить» отдаёт null и закрывает', async () => {
