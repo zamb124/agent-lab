@@ -20,10 +20,12 @@ alwaysApply: false
 
 ## Модель
 
-- `GeoAddress` (`geo_addresses`) — справочник адресов из OSM: `display_name`, `city`, `street`, `housenumber`, `postcode`, `lat`/`lng`; `geom` — generated column `ST_MakePoint(lng, lat)` + GiST, Oxyde пишет только координаты.
+- `GeoAddress` (`geo_addresses`) — справочник адресов: `display_name`, `city`, `street`, `housenumber`, `postcode`, `lat`/`lng`, `source` (`osm`/`manual`), `osm_type`/`osm_id`; `geom` — generated column `ST_MakePoint(lng, lat)` + GiST, Oxyde пишет только координаты. Вечные записи — `generation=0`: ручные адреса админа (`osm_type='manual'`, отрицательные `osm_id`) не трёт cleanup и читаются вместе с активным поколением (`generation IN (0, $current)`).
 - `GeoRoadVertex` (`geo_road_vertices`) — узлы дорожного графа; PK суррогатный, `node_id` — OSM id (конфликт поколений невозможен).
 - `GeoRoadEdge` (`geo_road_edges`) — сегменты графа: `source`/`target` (pgr), `geom`, `length_m`, `oneway`, `highway`, пары `*_cost`/`*_reverse_cost` в секундах на направление для каждого `RouteMode` (`-1` — непроходимо).
 - `GeoImportState` (`geo_import_state`) — поколение импорта: строки нового импорта пишутся с `generation=N+1`, `current_generation` переключается атомарно; failed-импорт живые данные не трогает.
+- `GeoSource` (`geo_sources`) — реестр источников (лицензии, enabled-флаги через seed-upsert); `GeoSourceCursor` — resume-курсоры по (source, region); `GeoEnrichItem` (`geo_enrich_queue`) — очередь обогащения с rate-limit (`run_after`), дрейнит `GEO_ENRICH_TICK` → `GeoEnrichService`; `GeoAddressEnrich` — атрибуты от внешних источников поверх адреса.
+- Оверлеи правок админа (evergreen, переживают своп поколения): `GeoAddressOverride` — патч/тумбстоун адреса по (osm_type, osm_id) с `before`-снапшотом и `reason`/`updated_by`; `GeoSuppression` — тумбстоун `barrier|signal|restriction|edge` по (entity, osm_id); `GeoEdgeOverride` — маска cost-колонок ребра по `osm_way_id` («закрытая дорога»). `GeoBuilding` (`geo_buildings`) — контуры зданий (НСПД/Overture, фаза 3+).
 
 ### Режимы маршрута
 
@@ -33,12 +35,18 @@ alwaysApply: false
 
 `OsmImportService` — потоковый pyosmium-парс одним проходом (`FileProcessor` + локации нод в дисковом `sparse_file_array`): строки сливаются в Postgres батчами `import_batch_size` по ходу чтения, память не зависит от размера экстракта; атомарный своп поколения. `GEO_OSM_SYNC_TICK` (scheduled TaskIQ на очереди `geo`) — If-Modified-Since → реимпорт → своп; источник — `osm_extract_urls` в `GeoSettings`. Экстракты берутся под конкретную витрину-регион.
 
+Своп поколения — трёхслойный `_publish`: данные источника → enrich-атрибуты (`GeoAddressEnrich`) → правки админа (override > enrich > base), затем тумбстоуны `GeoSuppression` и cost-маски `GeoEdgeOverride` — правки админа всегда побеждают и перенакатываются на каждое новое поколение. Cleanup старых поколений охраняет `generation>0` — evergreen-строки (manual-адреса, оверлеи, очереди) никогда не стираются.
+
+`GarImportService` (`GEO_GAR_SYNC`, вс 05:30) — синк ФИАС: `gar_info_url` (`GetLastDownloadFileInfo`/`GetAllDownloadFileInfo`) → дельта-цепочка от курсора `geo_source_cursors(source='gar')` либо полная выгрузка (нет курсора/state-файла, цепочка длиннее `gar_max_delta_chain` или разорвана). Архив `gar_xml.zip` стримится с resume по HTTP Range в `gar_work_dir`, разбирается потоковым `defusedxml.iterparse` только по директории кода региона (`gar_region_codes`, Москва — `77/`): `AS_ADDR_OBJ` (имена), `AS_HOUSES`, `AS_ADM_HIERARCHY` (материализованный `PATH`). Дельты инкрементальны — контекст имён хранит персистентный `state_{region}.json` в `gar_work_dir`. Матч дома к адресу: регион + нормализованный `HOUSENUM` (+`к`/`стр` из ADDNUM1/2) → имя улицы из PATH без типовых слов vs `street` (`gar_match_similarity`, SeqMatcher). Матч → `GeoAddressEnrich` upsert + живые колонки `gar_guid`/`canonical_name` (переживают своп через `_publish`); промах → `geo_enrich_queue` kind `gar_unresolved` (паркуется `GeoEnrichDeferred` до НСПД-резолвера). Выведенные из ФИАС дома снимают enrich и чистят живые колонки. Прод: `gar_work_dir` нужен PVC на geo-worker (полный архив всех регионов ~гигабайты скачивается целиком, регион фильтруется при разборе).
+
 ## Инварианты
 
 1. Пустой справочник не ждёт крона: lifecycle воркера зовёт `OsmImportService.ensure_bootstrapped()` — нет опубликованного поколения → немедленный `enqueue` импорта.
 2. `run_sync` сериализован advisory-lock (`apps/geo/db/import_lock.py`): конкурентный вызов/tick — no-op, двойной публикации и дублей строк не бывает.
 3. Failed-импорт живое поколение не трогает: `status=FAILED` + `last_error`, `current_generation` не меняется.
 4. Импорт — bounded memory: никаких Python-коллекций на весь экстракт; буферы ≤ `import_batch_size`, локации нод — дисковый индекс pyosmium, рёбра дедупятся `ON CONFLICT (generation, osm_way_id, source, target)` — retry в то же поколение безопасен.
+5. Правки админа нельзя писать в строки данных — OSM-импорт пересоздаёт поколение и сотрёт их. Все корректуры живут в оверлеях (override/suppression/edge_mask) и перенакатываются `_publish`; откат восстанавливает `before`-снапшот в живом поколении мгновенно.
+6. Внешние источники никогда не пишут напрямую в активное поколение — только enrichment-очередь (`run_after` rate-limit) или оверлеи; живые строки правит импортёр в `_publish`.
 
 ## Контракты
 
@@ -52,6 +60,7 @@ alwaysApply: false
 - `geo/route/optimal_order` — `pgr_TSP` порядок точек.
 - `geo/route/isochrone` — `pgr_drivingDistance` → concave hull «зона за N минут».
 - `geo/import/status` — состояние последнего синка.
+- Админ-правки (`GeoAdminService`, `require_company_admin`): `geo/addresses/create|update|remove|override_revert` (manual-адреса в `generation=0`, патчи/тумбстоуны через `GeoAddressOverride`), `geo/overrides/list` (сводный аудит `GeoOverrideItem`: kind `patch|tombstone|edge_mask`), `geo/features/suppress|unsuppress` (тумбстоуны barrier/signal/restriction/edge), `geo/edges/close|open` (cost-маска `GeoEdgeOverride` → ребро `-1` для всех режимов). Ошибки: `geo_address_not_found`, `geo_override_not_found`, `geo_suppression_not_found`, `geo_edge_override_not_found`.
 
 ## Интеграции
 
@@ -75,6 +84,7 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 - `overlays[]` — произвольные GeoJSON-слои (зоны, треки) с `fit`.
 - `route` — маршрут `geo/route` по `points[]` (A→via…→B, плечи параллельно): линия + буквенные точки + чип с режимами car/foot/bike/scooter и ETA «N км · M мин»; `build:true` — точки кликами, `clearRoute()`/`pm-route`, кнопки очистки и swap ⇅ A↔B. Рендер: `pm-route-halo` (мягкое свечение `line-blur`) → `pm-route-casing` (белая окантовка) → `pm-route-line` — Яндекс-стиль.
 - Подсветка зданий при адресных фичах (Яндекс-стиль): hover над `addresses`-фичей → плоский контур в `pm-building-hl` (fill+line) из геометрии слоя `buildings` базового стиля (`_buildingAt` → `queryRenderedFeatures`); клик → здание «вырастает» в 3D — источник `pm-building-hl-3d`, fill-extrusion слой с rAF-анимацией свойства `h` 0→`properties.height` (или 16м), закрытие `.pm-card-popup` снимает пин; оба слоя ставятся под первый symbol-слой, чтобы подписи читались поверх.
+- Адресные фичи подписаны Яндекс-стилем: `pm-lyr-addresses-label` (symbol, `housenumber`, z≥14, halo, цвет под `_scheme`) поверх уменьшенной точки; `label` входит в kind-циклы `_featureLayerIds`/`_applyVisibility`, пересоздаётся `_ensureLayer` после свопа схемы.
 - `isochrone` — контуры достижимости `geo/isochrone` по `minutes[]` от `center`: полигоны от большего к меньшему + лейблы минут; событие `pm-isochrone`.
 - `search` — suggest-дропдаун через `geo/addresses_suggest`, pin + `pm-search-select`.
 - `contextMenu` — «Что здесь?» (`geo/addresses_nearest`) + «Маршрут отсюда/сюда» (при настроенном `route`) + копирование координат; долгий тап ≥600мс — то же меню на таче.
@@ -94,6 +104,7 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 - Базовая карта — MapLibre GL + векторные PMTiles: loader `core/frontend/static/lib/map/maplibre.ts` (`loadMapLibre`, `maplibreCssLink`, `pmtiles://`-протокол) и фабрика `lib/map/basemap.ts` (`createBasemap`, style — `GET /geo/api/v1/tiles/style.json`). Vendor — `lib/vendor/maplibre/maplibre-gl.css`.
 - Тайл-сервис geo — `apps/geo/api/tiles.py` (анонимный): `tiles/basemap.pmtiles` (HTTP Range, читает pmtiles.js), `tiles/fonts/*`, `tiles/sprites/{scheme}/…`, `tiles/style.json?scheme=light|dark`. Ассеты живут в `GeoSettings.tiles_dir` и наполняются таской `geo_tiles_sync` (`GeoTilesService`: `pmtiles extract` по `coverage_bbox` + basemaps-assets tar.gz) либо `python -m scripts.geo.fetch_basemap` в dev. Схемы — `data/tiles/style-{light,dark}.json` из `@protomaps/basemaps` `namedFlavor`; виджет переключает `setStyle` и рестартует TerraDraw, чтобы draw переживал смену стиля.
 - `platform-zone-address-panel` — правая панель «точных адресов в зоне» в редакторе зоны; редактирование полигона — terra-draw (MapLibre-адаптер), валидация `ValidateNotSelfIntersecting`.
+- `/geo/addresses` — админ-справочник адресов (`geo-addresses-page` + модалка `geo.address_editor`): поиск через `geo/addresses_suggest`, правка/скрытие/создание адресов (координаты — draggable-маркер `platform-map` + `pm-click`/`pm-marker-drag`), вкладка аудита с откатом любой строки (address→revert, edge_mask→open, tombstone→unsuppress); ресурсы — `geo-admin.resource.ts`. UI-ресурс на `useOp('<name>')` работает только при runtime-импорте `*.resource.js` — `import type` фабрику не регистрирует.
 
 ## Запреты
 
@@ -104,4 +115,6 @@ Postgres-образ платформы — `deploy/postgres/Dockerfile` (pgvecto
 
 ## Гейты
 
-- `tests/geo/` — реальный Postgres/PostGIS+pgRouting, Redis, geo_worker и TaskIQ, без моков. Эмуляторы провайдеров: Nominatim `:18098` (`/search?q=<lat>,<lng>` → точка, иное — `[]`), OSM-экстракт `:18099` (HEAD/GET, `Last-Modified`, 404). Импортные поколения `<500_000_000` — тестовые, cleanup их трёт; сиды графа живут `≥500_000_000`.
+- `tests/geo/` — реальный Postgres/PostGIS+pgRouting, Redis, geo_worker и TaskIQ, без моков. Эмуляторы провайдеров: Nominatim `:18098` (`/search?q=<lat>,<lng>` → точка, иное — `[]`), OSM-экстракт `:18099` (HEAD/GET, `Last-Modified`, 404), GAR DownloadService `:18101` (версии 98–100, in-memory zip с `77/` + HTTP Range). Импортные поколения `<500_000_000` — тестовые, cleanup их трёт; сиды графа живут `≥500_000_000`.
+- `tests/geo/test_geo_admin.py` — правки/тумбстоуны/revert и инвариант «оверлеи переживают своп поколения» на реальной базе.
+- `tests/ui/e2e/test_geo_addresses_admin_e2e.py` — Playwright-сценарий страницы «Адреса» (scenario-doc + скриншоты `docs/scenarios/geo/addresses/`): поиск → правка → аудит → откат, создание и скрытие manual-адреса.

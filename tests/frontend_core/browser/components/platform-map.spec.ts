@@ -472,6 +472,22 @@ describe('platform-map', function () {
         );
     });
 
+    it('адресные фичи — Яндекс-стиль: label-слой номеров домов', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: true } });
+        await waitUntil(
+            () => el.getMap()?.getLayer('pm-lyr-addresses-label'),
+            'label-слой адресов создан',
+            { timeout: 10_000 },
+        );
+        const map = el.getMap()!;
+        const lyr = map.getLayer('pm-lyr-addresses-label') as { type?: string } | undefined;
+        expect(lyr?.type).to.equal('symbol');
+        expect(map.getPaintProperty('pm-lyr-addresses-label', 'text-halo-width'), 'halo').to.be.greaterThan(0);
+        // Label только у адресов — остальные слои без подписей.
+        expect(map.getLayer('pm-lyr-roads-label')).to.not.exist;
+        expect(map.getLayer('pm-lyr-regions-label')).to.not.exist;
+    });
+
     it('клик по фиче → читаемая .pm-card с заголовком и координатами', async () => {
         const el = await mapEl({ interactive: true, layers: { fetch: true } });
         await waitUntil(

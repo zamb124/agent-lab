@@ -1994,13 +1994,44 @@ export class PlatformMapEl extends PlatformElement {
             minzoom,
             filter: ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]],
             paint: {
-                'circle-radius': 6,
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15.5, 5, 18, 5.5],
                 'circle-color': color,
                 'circle-opacity': 0.9,
                 'circle-stroke-color': '#ffffff',
-                'circle-stroke-width': 2,
+                'circle-stroke-width': 1.8,
             },
         } as never);
+        // Адреса — Яндекс-стиль: номер дома текстом на здании с z≥14.
+        // Точка остаётся под подписью мелкой — кликабельна и даёт hover-таргет.
+        if (name === 'addresses') {
+            const dark = this._scheme === 'dark';
+            map.addLayer({
+                id: `pm-lyr-${name}-label`,
+                type: 'symbol',
+                source: src,
+                minzoom: Math.max(minzoom, 14),
+                filter: [
+                    'all',
+                    ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]],
+                    ['has', 'housenumber'],
+                    ['!=', ['get', 'housenumber'], ''],
+                ],
+                layout: {
+                    'text-field': ['get', 'housenumber'],
+                    'text-size': ['interpolate', ['linear'], ['zoom'], 14, 10.5, 16.5, 12.5, 18, 14],
+                    'text-font': ['Noto Sans Regular'],
+                    'text-allow-overlap': false,
+                    'text-padding': 6,
+                    'text-offset': [0, 0.55],
+                    'text-anchor': 'top',
+                },
+                paint: {
+                    'text-color': dark ? '#d6d3d1' : '#57534e',
+                    'text-halo-color': dark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                    'text-halo-width': 1.6,
+                },
+            } as never);
+        }
     }
 
     private _featureLayerIds(): string[] {
@@ -2008,7 +2039,7 @@ export class PlatformMapEl extends PlatformElement {
         if (!map) return [];
         const ids: string[] = [];
         for (const name of this._mapLayers) {
-            for (const kind of ['fill', 'line', 'point']) {
+            for (const kind of ['fill', 'line', 'point', 'label']) {
                 const id = `pm-lyr-${name}-${kind}`;
                 if (map.getLayer(id)) ids.push(id);
             }
@@ -2022,7 +2053,7 @@ export class PlatformMapEl extends PlatformElement {
         const hidden = this._mapCtl?.value.hidden ?? {};
         for (const name of this._mapLayers) {
             const visibility = hidden[name] === true ? 'none' : 'visible';
-            for (const kind of ['fill', 'line', 'point']) {
+            for (const kind of ['fill', 'line', 'point', 'label']) {
                 const id = `pm-lyr-${name}-${kind}`;
                 if (map.getLayer(id)) {
                     map.setLayoutProperty(id, 'visibility', visibility);
