@@ -67,7 +67,12 @@
     "card_restriction_no_left_turn": "Левый поворот запрещён",
     "card_restriction_no_right_turn": "Правый поворот запрещён",
     "card_restriction_no_u_turn": "Разворот запрещён",
-    "card_restriction_only_straight_on": "Только прямо"
+    "card_restriction_only_straight_on": "Только прямо",
+    "card_route": "Маршрут",
+    "card_site": "Сайт",
+    "card_call": "Позвонить",
+    "card_reviews": "{count} оценок",
+    "card_open_until": "Открыто до {time}"
   },
   "layers": {
     "title": "Слои",

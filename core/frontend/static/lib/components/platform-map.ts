@@ -2350,7 +2350,9 @@ export class PlatformMapEl extends PlatformElement {
             .slice(0, 3)
             .map((f) => {
                 const props = { ...f.properties, __coords: coords };
-                return renderFeatureCard({ layer: f.layer, properties: props }, t, colorFor(f.layer));
+                return renderFeatureCard({ layer: f.layer, properties: props }, t, colorFor(f.layer), {
+                    routeTo: this._routeCfg !== null,
+                });
             })
             .filter((c) => c !== '')
             .join('');
@@ -2358,7 +2360,11 @@ export class PlatformMapEl extends PlatformElement {
         const popup = new maplibre.Popup({ closeButton: true, className: 'pm-card-popup', maxWidth: '340px' })
             .setLngLat(lngLat)
             .setHTML(cards)
-            .addTo(map) as unknown as { remove(): void; on?(event: string, cb: () => void): void };
+            .addTo(map) as unknown as {
+                remove(): void;
+                on?(event: string, cb: () => void): void;
+                getElement?(): HTMLElement | null;
+            };
         this._cardPopup = popup;
         // Закрытие карточки снимает 3D-подсветку здания; replace remove() старого
         // попапа тоже файрит close — игнорируем его (this._cardPopup уже null/новый).
@@ -2367,6 +2373,15 @@ export class PlatformMapEl extends PlatformElement {
             this._cardPopup = null;
             this._pinnedBuilding = null;
             this._setBuildingPinned(map, null);
+        });
+        // Кнопки действий карточки: «Маршрут» — точка клика в пункт назначения.
+        popup.getElement?.()?.addEventListener('click', (ev: Event) => {
+            const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-pm-action]');
+            if (!btn) return;
+            ev.preventDefault();
+            if (btn.dataset['pmAction'] === 'route-here') {
+                this._menuRouteTo(lngLat);
+            }
         });
     }
 
@@ -2906,6 +2921,87 @@ export class PlatformMapEl extends PlatformElement {
             background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, transparent);
             font-size: 13px;
             line-height: 1;
+        }
+        .pm-card-hero {
+            display: block;
+            width: calc(100% + 28px);
+            max-width: none;
+            height: 124px;
+            margin: -12px -14px 10px;
+            object-fit: cover;
+            border-radius: 12px 12px 0 0;
+        }
+        .pm-card-rating {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 3px;
+            font-size: 12.5px;
+        }
+        .pm-card-stars {
+            position: relative;
+            display: inline-block;
+            font-size: 13px;
+            line-height: 1;
+            letter-spacing: 1px;
+        }
+        .pm-card-stars-bg {
+            color: #d4d4d8;
+            white-space: nowrap;
+        }
+        .pm-card-stars-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            color: #f59e0b;
+        }
+        .pm-card-rating-v {
+            font-weight: 650;
+            color: var(--color-text, #0f172a);
+        }
+        .pm-card-rating-n {
+            color: var(--color-text-muted, #64748b);
+            font-size: 12px;
+        }
+        .pm-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .pm-card-act {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 30px;
+            padding: 0 14px;
+            border-radius: 9px;
+            border: none;
+            background: color-mix(in srgb, var(--color-primary, #155dfc) 10%, transparent);
+            color: var(--color-primary, #155dfc);
+            font-size: 12.5px;
+            font-weight: 600;
+            font-family: inherit;
+            text-decoration: none;
+            cursor: pointer;
+            transition:
+                background 0.15s ease,
+                transform 0.1s ease;
+        }
+        .pm-card-act:hover {
+            background: color-mix(in srgb, var(--color-primary, #155dfc) 16%, transparent);
+        }
+        .pm-card-act:active {
+            transform: scale(0.97);
+        }
+        .pm-card-act-primary {
+            background: var(--color-primary, #155dfc);
+            color: #ffffff;
+        }
+        .pm-card-act-primary:hover {
+            background: color-mix(in srgb, var(--color-primary, #155dfc) 88%, #000000);
         }
         .pm-card-meta {
             margin-top: 8px;

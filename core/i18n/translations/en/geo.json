@@ -67,7 +67,12 @@
     "card_restriction_no_left_turn": "No left turn",
     "card_restriction_no_right_turn": "No right turn",
     "card_restriction_no_u_turn": "No U-turn",
-    "card_restriction_only_straight_on": "Straight only"
+    "card_restriction_only_straight_on": "Straight only",
+    "card_route": "Directions",
+    "card_site": "Website",
+    "card_call": "Call",
+    "card_reviews": "{count} ratings",
+    "card_open_until": "Open until {time}"
   },
   "layers": {
     "title": "Layers",

@@ -186,6 +186,19 @@ function answerGeo(): void {
                                 geometry: { type: 'Point', coordinates: [37.6, 55.75] },
                                 properties: { display_name: 'Москва, Тверская, 1' },
                             },
+                            {
+                                layer: 'addresses',
+                                geometry: { type: 'Point', coordinates: [37.62, 55.755] },
+                                properties: {
+                                    display_name: 'Кофейня «Зерно»',
+                                    photo_url: '/core/frontend/static/assets/icons/circle.svg',
+                                    rating: 4.6,
+                                    reviews_count: 128,
+                                    open_until: 'Открыто до 22:00',
+                                    website: 'https://zerno.example.com/menu',
+                                    phone: '+7 495 123-45-67',
+                                },
+                            },
                         ],
                     },
                 },
@@ -538,6 +551,74 @@ describe('platform-map', function () {
         const rgb = getComputedStyle(card).color.match(/\d+/g)!.map(Number);
         const lum = (0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!) / 255;
         expect(lum, 'текст карточки тёмный').to.be.lessThan(0.45);
+    });
+
+    it('rich-карточка: фото + рейтинг + часы + действия, «Маршрут» ставит точку B', async () => {
+        const el = await mapEl({
+            interactive: true,
+            layers: { fetch: true },
+            route: { build: true, mode: 'car' },
+        });
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-src-addresses') as { serialize(): { data?: { features?: unknown[] } } } | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) >= 2;
+            },
+            'фичи загружены в источник',
+            { timeout: 10_000 },
+        );
+        const map = el.getMap()!;
+        const pt = map.project([37.62, 55.755]);
+        await waitUntil(
+            () =>
+                (
+                    map as unknown as {
+                        queryRenderedFeatures(p: [number, number]): unknown[];
+                    }
+                ).queryRenderedFeatures([pt.x, pt.y]).length > 0,
+            'rich-фича отрисована в точке клика',
+            { timeout: 10_000 },
+        );
+        const rect = map.getCanvas().getBoundingClientRect();
+        map.getCanvas().dispatchEvent(
+            new MouseEvent('click', {
+                clientX: rect.x + pt.x,
+                clientY: rect.y + pt.y,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await waitUntil(
+            () => el.shadowRoot.querySelector('.pm-card-popup .pm-card') !== null,
+            'карточка открыта',
+            { timeout: 10_000 },
+        );
+        const card = el.shadowRoot.querySelector<HTMLElement>('.pm-card-popup .pm-card')!;
+        // Яндекс-стиль: hero-фото, звёзды с рейтингом, статус, действия.
+        const hero = card.querySelector<HTMLImageElement>('.pm-card-hero');
+        expect(hero, 'hero-фото').to.exist;
+        expect(hero!.src).to.include('circle.svg');
+        expect(card.querySelector('.pm-card-rating-v')!.textContent).to.equal('4.6');
+        expect(card.querySelector<HTMLElement>('.pm-card-stars-fill')!.style.width).to.equal('92%');
+        expect(card.querySelector('.pm-card-sub')!.textContent).to.include('Открыто до 22:00');
+        const site = card.querySelector<HTMLAnchorElement>('.pm-card-act[href^="https:"]');
+        expect(site, 'кнопка сайта').to.exist;
+        expect(site!.rel).to.include('noopener');
+        const tel = card.querySelector<HTMLAnchorElement>('.pm-card-act[href^="tel:"]');
+        expect(tel, 'кнопка звонка').to.exist;
+        expect(tel!.href).to.include('+74951234567');
+        // «Маршрут» — точка клика становится пунктом назначения маршрута.
+        const routeBtn = card.querySelector<HTMLButtonElement>('[data-pm-action="route-here"]');
+        expect(routeBtn, 'кнопка «Маршрут»').to.exist;
+        routeBtn!.click();
+        await waitUntil(
+            () =>
+                el._routeBuildPts.some(
+                    (p) => Math.abs(p[0] - 37.62) < 0.001 && Math.abs(p[1] - 55.755) < 0.001,
+                ),
+            'точка назначения из карточки в маршруте',
+            { timeout: 10_000 },
+        );
     });
 
     it('до готовности — loading-оверлей со спиннером', async () => {

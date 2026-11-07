@@ -52,6 +52,20 @@ function _val(v: unknown): string {
     return String(v ?? '');
 }
 
+/** Первое непустое строковое свойство по списку ключей. */
+function _pick(properties: Record<string, unknown>, ...keys: string[]): string {
+    for (const k of keys) {
+        const v = properties[k];
+        if (_NONEMPTY(v)) return v.trim();
+    }
+    return '';
+}
+
+/** URL только http(s)/относительный — javascript: и прочие схемы отсекаются. */
+function _safeUrl(v: string): string {
+    return /^(https?:\/\/|\/)/i.test(v) ? v : '';
+}
+
 function _row(label: string, value: string): string {
     return `<div class="pm-card-row"><span class="pm-card-row-k">${escHtml(label)}</span><span class="pm-card-row-v">${escHtml(value)}</span></div>`;
 }
@@ -67,11 +81,17 @@ function _osm(kind: string, id: unknown): string {
     return v === '' ? '' : `OSM ${kind} #${v}`;
 }
 
+export interface FeatureCardOptions {
+    /** Кнопка «Маршрут» — точка назначения через `data-pm-action`. */
+    routeTo?: boolean;
+}
+
 /** Типизированная карточка слоя: заголовок + значимая meta-строка. */
 export function renderFeatureCard(
     input: FeatureCardInput,
     t: Translate,
     layerColor: string | null,
+    opts: FeatureCardOptions = {},
 ): string {
     const { layer, properties } = input;
     const layerLabel = layer !== '' ? t(`layers.${layer}`, null, 'geo') : '';
@@ -79,6 +99,18 @@ export function renderFeatureCard(
         layerLabel !== '' && layerLabel !== `layers.${layer}`
             ? `<div class="pm-card-kind"><span class="pm-card-dot"${layerColor ? ` style="--chip:${escHtml(layerColor)}"` : ''}></span>${escHtml(layerLabel)}</div>`
             : '';
+
+    // Яндекс-стиль rich-блоки — data-driven по свойствам фичи.
+    const photo = _safeUrl(
+        _pick(properties, 'photo', 'photo_url', 'image', 'image_url', 'picture', 'cover_url', 'cover'),
+    );
+    const rating = Number(properties['rating']);
+    const reviews = Number(
+        properties['reviews'] ?? properties['reviews_count'] ?? properties['ratings'] ?? properties['votes'],
+    );
+    const hours = _pick(properties, 'open_until', 'opening_hours', 'hours', 'schedule', 'working_hours');
+    const website = _safeUrl(_pick(properties, 'website', 'url', 'site', 'contact_website'));
+    const phone = _pick(properties, 'phone', 'phone_number', 'contact_phone');
 
     let title = featureTitle(input);
     let sub = '';
@@ -173,13 +205,53 @@ export function renderFeatureCard(
               : '';
     const metaRow = coords !== undefined && meta !== '' ? `<div class="pm-card-meta">${escHtml(meta)}</div>` : '';
 
-    if (title === '' && sub === '' && rows.length === 0 && meta === '') return '';
+    const hero = photo !== '' ? `<img class="pm-card-hero" src="${escHtml(photo)}" alt="" loading="lazy" />` : '';
+
+    let ratingRow = '';
+    if (Number.isFinite(rating) && rating > 0) {
+        const pct = Math.max(0, Math.min(100, (rating / 5) * 100));
+        const reviewsTxt =
+            Number.isFinite(reviews) && reviews > 0
+                ? ` ${t('map.card_reviews', { count: reviews }, 'geo')}`
+                : '';
+        ratingRow =
+            `<div class="pm-card-rating">` +
+            `<span class="pm-card-stars"><span class="pm-card-stars-bg">★★★★★</span>` +
+            `<span class="pm-card-stars-fill" style="width:${pct}%">★★★★★</span></span>` +
+            `<span class="pm-card-rating-v">${rating.toFixed(1)}</span>` +
+            `<span class="pm-card-rating-n">${escHtml(reviewsTxt)}</span></div>`;
+    }
+
+    const subParts = [hours, sub].filter((v) => v !== '');
+    const subRow = subParts.length > 0 ? `<div class="pm-card-sub">${escHtml(subParts.join(' · '))}</div>` : '';
+
+    const actions: string[] = [];
+    if (opts.routeTo === true) {
+        actions.push(
+            `<button type="button" class="pm-card-act pm-card-act-primary" data-pm-action="route-here">${escHtml(t('map.card_route', null, 'geo'))}</button>`,
+        );
+    }
+    if (website !== '') {
+        actions.push(
+            `<a class="pm-card-act" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer">${escHtml(t('map.card_site', null, 'geo'))}</a>`,
+        );
+    }
+    if (phone !== '') {
+        actions.push(
+            `<a class="pm-card-act" href="tel:${escHtml(phone.replace(/[^+\d]/g, ''))}">${escHtml(t('map.card_call', null, 'geo'))}</a>`,
+        );
+    }
+    const actionsRow = actions.length > 0 ? `<div class="pm-card-actions">${actions.join('')}</div>` : '';
+
+    if (title === '' && sub === '' && rows.length === 0 && meta === '' && hero === '') return '';
     return (
-        `<div class="pm-card">${chip}` +
+        `<div class="pm-card">${hero}${chip}` +
         `<div class="pm-card-title">${escHtml(title)}</div>` +
-        (sub !== '' ? `<div class="pm-card-sub">${escHtml(sub)}</div>` : '') +
+        ratingRow +
+        subRow +
         (rows.length > 0 ? `<div class="pm-card-rows">${rows.join('')}</div>` : '') +
         tags +
+        actionsRow +
         metaRow +
         footer +
         `</div>`
