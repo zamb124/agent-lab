@@ -82,20 +82,12 @@ async def span_billing_settlement_tick(
         if rules_doc is None:
             rules_doc = await billing.load_settlement_rules_document_for_company(span_company_id)
             rules_by_company[span_company_id] = rules_doc
+        settlement_lag_ms: int | None = None
         if span.end_time is not None:
             end_time = span.end_time
             if end_time.tzinfo is None:
                 end_time = end_time.replace(tzinfo=timezone.utc)
             settlement_lag_ms = int((now - end_time).total_seconds() * 1000)
-            logger.info(
-                EVENT_BILLING_SETTLEMENT_LAG,
-                **{
-                    LOG_BILLING_SETTLEMENT_LAG_MS: settlement_lag_ms,
-                    LOG_OPERATION_NAME: span.operation_name,
-                    "span_id": span.span_id,
-                    "company_id": span_company_id,
-                },
-            )
         try:
             n = await billing.settle_pending_span_in_job(
                 span=span,
@@ -103,6 +95,16 @@ async def span_billing_settlement_tick(
                 rules_doc=rules_doc,
             )
             settled += n
+            if n > 0 and settlement_lag_ms is not None:
+                logger.info(
+                    EVENT_BILLING_SETTLEMENT_LAG,
+                    **{
+                        LOG_BILLING_SETTLEMENT_LAG_MS: settlement_lag_ms,
+                        LOG_OPERATION_NAME: span.operation_name,
+                        "span_id": span.span_id,
+                        "company_id": span_company_id,
+                    },
+                )
         except Exception as exc:
             errors += 1
             logger.error(

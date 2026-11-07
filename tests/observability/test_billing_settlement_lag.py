@@ -52,7 +52,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
             span_id=sid,
             trace_id=f"trace-lag-{unique_id}",
             parent_span_id=None,
-            operation_name=f"bill.lag.{unique_id}",
+            operation_name=f"llm.bill.lag.{unique_id}",
             kind="INTERNAL",
             start_time=started_at,
             end_time=ended_at,
@@ -82,7 +82,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
 
     _ = await span_billing_settlement_tick(company_id=cid, di=idle_worker_di)
 
-    expected_operation_name = f"bill.lag.{unique_id}"
+    expected_operation_name = f"llm.bill.lag.{unique_id}"
     rec = await wait_for_caplog_event(
         observability_caplog,
         message=BILLING_SETTLEMENT_LAG.message,
