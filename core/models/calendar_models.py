@@ -194,7 +194,7 @@ class CalendarEvent(PlatformModel):
                    external_refs, metadata, mailbox_binding_id, created_by_user_id,
                    updated_by_user_id, created_at, updated_at
             FROM calendar_events
-            WHERE source = $1
+            WHERE source::text = $1
               AND start_at >= $2
               AND start_at < $3
               AND metadata->>'sync_link_token' IS NOT NULL
