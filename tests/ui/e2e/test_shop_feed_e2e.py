@@ -368,6 +368,13 @@ async def test_favorites_heart_auth_and_shelf(
     await expect(heart).not_to_have_class("fav on")
     await expect(fav_shelf.locator(".shcard")).to_have_count(0)
 
+    # Залогиненный тап: сессия резолвится через /me до открытия шита —
+    # auth-модалка не вспыхивает и не закрывается.
+    await heart.click()
+    await expect(auth.locator(".sheet")).not_to_be_visible()
+    await expect(heart).to_have_class("fav on", timeout=10_000)
+    await expect(auth.locator(".sheet")).not_to_be_visible()
+
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -390,3 +397,71 @@ async def test_feed_screenshot_matrix(
     _ = await page.goto(_url(feed_storefront, "?embed=1"), wait_until="load")
     await expect(page.locator(".bnr")).to_have_count(1)
     await _shot(page, "embed", feed_storefront.slug)
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_hero_shelf_panel(
+    page: Page,
+    feed_storefront: FeedStorefront,
+    shop_client_http: httpx2.AsyncClient,
+    auth_headers_system: dict[str, str],
+    shop_worker: None,
+) -> None:
+    """Hero-полка: врезанная accent-панель, читаемый подзаголовок, у каждой
+    карточки видны название, цена и кнопка. Регрессия клипа: класс ``hero``
+    страничной шапки давал полке ``height:260px;overflow:hidden`` — низ
+    карточек обрезался; теперь полка адресуется через ``data-layout``."""
+    _ = shop_worker
+    headers = {**auth_headers_system, **ui_e2e_scope_headers()}
+    _ = await _post(
+        shop_client_http,
+        headers,
+        f"/shops/{feed_storefront.shop_id}/shelves",
+        {
+            "kind": "manual",
+            "title": "Выбор бариста",
+            "subtitle": "Капучино и десерты — авторская подборка",
+            "layout": "hero",
+            "product_ids": [
+                feed_storefront.product_id,
+                feed_storefront.extra_id,
+                feed_storefront.unavailable_id,
+            ],
+        },
+    )
+    await _wait_snapshot_feed(shop_client_http, feed_storefront.slug, shelves=5, banners=1)
+    for name, viewport in (
+        ("phone", _PHONE),
+        ("tablet", _TABLET),
+        ("desktop", _DESKTOP),
+    ):
+        await page.set_viewport_size(viewport)
+        _ = await page.goto(_url(feed_storefront), wait_until="load")
+        shelf = page.locator('.sh[data-layout="hero"]')
+        await expect(shelf).to_have_count(1)
+        await expect(shelf.locator(".sh-h .sub")).to_have_text(
+            "Капучино и десерты — авторская подборка"
+        )
+        cards = shelf.locator(".shcard")
+        assert await cards.count() == 3
+        # Панель врезана в контейнер — не прилипает к кромке вьюпорта.
+        shelf_box = await shelf.bounding_box()
+        assert shelf_box is not None
+        assert shelf_box["x"] >= 12
+        await expect(shelf.locator(".add").first).to_be_visible()
+        for i in range(3):
+            card = cards.nth(i)
+            await card.scroll_into_view_if_needed()
+            await expect(card.locator("h3")).to_be_visible()
+            await expect(card.locator(".price")).to_be_visible()
+            # Низ ряда «цена + кнопка» обязан лежать внутри рамки полки —
+            # иначе это старый клип height+overflow от шапки.
+            row_box = await card.locator(".row").bounding_box()
+            shelf_box = await shelf.bounding_box()
+            assert row_box is not None and shelf_box is not None
+            assert row_box["y"] + row_box["height"] <= (
+                shelf_box["y"] + shelf_box["height"] + 1
+            )
+        await _shot(page, f"hero-{name}", feed_storefront.slug)

@@ -317,7 +317,12 @@ const authEl=document.createElement('platform-customer-auth');
 authEl.setAttribute('api-base','/shop/api/v1/public/customer-auth');
 authEl.setAttribute('company-id',S.company_id||'');
 document.body.appendChild(authEl);
-function ensureAuth(){
+async function ensureAuth(){
+  // Живая сессия резолвится без auth-шита — иначе модалка вспыхивает и гаснет.
+  try{
+    const r=await fetch(API+'/customer-auth/me',{credentials:'same-origin'});
+    if(r.ok)return await r.json();
+  }catch(e){}
   return new Promise(resolve=>{
     const ok=e=>{done();resolve(e.detail);};
     const no=()=>{done();resolve(null);};

@@ -53,7 +53,7 @@ body[data-preset=compact] .item{padding-left:12px;padding-right:12px}
 .bnrs{gap:14px}
 .bnr{width:340px}
 .shcard{width:176px}
-.sh.hero .shcard{width:min(400px,52vw)}
+.sh[data-layout=hero] .shcard{width:min(400px,52vw)}
 }
 @media(min-width:721px) and (max-width:1023px){
 .wrap{max-width:920px;padding:0 24px calc(150px + env(safe-area-inset-bottom))}
@@ -63,7 +63,7 @@ body[data-hero=cover] .hero{height:340px}
 .grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
 .bnr{width:330px}
 .shcard{width:168px}
-.sh.hero .shcard{width:min(360px,60vw)}
+.sh[data-layout=hero] .shcard{width:min(360px,60vw)}
 .tabs{top:calc(env(safe-area-inset-top) + 4px)}
 .panel{width:min(640px,100vw)}
 }

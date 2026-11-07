@@ -1727,6 +1727,12 @@ export class PlatformMapEl extends PlatformElement {
             map.on('zoom', () => this.requestUpdate());
         }
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
+        // locateTo из стартового конфига — иначе перелёт, заказанный до _ready,
+        // терялся бы: updated() применяет его только при смене config на живой карте.
+        const lt = this.config.locateTo;
+        if (lt) {
+            map.easeTo({ center: lt.lngLat, zoom: lt.zoom ?? 15, duration: 600 });
+        }
         // Контейнер мог получить финальный layout после создания карты
         // (портал модалки, enter-motion): MapLibre trackResize ловит смену
         // размеров, но не сам факт «контейнер был 0px на init» — добиваем

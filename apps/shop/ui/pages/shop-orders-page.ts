@@ -13,6 +13,7 @@ import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-icon.js';
 import '../components/shop-page-head.js';
 import { shopHeadRow } from '../components/shop-page-head.js';
 import type { ShopHeadRow } from '../components/shop-page-head.js';
@@ -23,6 +24,13 @@ const NEXT: Record<string, string[]> = {
     accepted: ['preparing', 'cancelled'],
     preparing: ['delivering', 'done', 'cancelled'],
     delivering: ['done'],
+};
+const ACTION_ICON: Record<string, string> = {
+    accepted: 'check',
+    preparing: 'restaurant',
+    delivering: 'truck',
+    done: 'done-all',
+    cancelled: 'close',
 };
 
 interface OrderItemRow {
@@ -152,6 +160,11 @@ export class ShopOrdersPage extends PlatformPage {
                 }
             }
             .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+            .card-top .top-right { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+            .card-top .top-right .time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .card-top .top-right .act-cancel { flex-shrink: 0; }
+            .card-top .act-cancel { margin-block: -4px; opacity: 0.55; }
+            .card-top .act-cancel:hover { opacity: 1; }
             .code { font-weight: var(--font-semibold); color: var(--text-primary); font-variant-numeric: tabular-nums; }
             .time { font-size: var(--text-2xs, 10px); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
             .meta { font-size: var(--text-xs); color: var(--text-tertiary); }
@@ -167,8 +180,14 @@ export class ShopOrdersPage extends PlatformPage {
             .totals { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--glass-border-subtle); padding-top: var(--space-2); }
             .fee { font-size: var(--text-2xs, 10px); color: var(--text-tertiary); display: flex; justify-content: space-between; }
             .total { font-weight: var(--font-semibold); color: var(--text-primary); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }
-            .card-actions { display: flex; gap: var(--space-2); }
-            .card-actions platform-button { flex: 1; min-width: 0; }
+            .card-actions { display: flex; flex-direction: column; gap: var(--space-1); }
+            .card-actions platform-button {
+                min-width: 0;
+                --btn-padding: 5px 12px;
+                --btn-font-size: var(--text-sm);
+                --btn-radius: var(--radius-md);
+            }
+            .card-actions platform-button platform-icon { flex-shrink: 0; }
         `,
     ];
 
@@ -291,7 +310,17 @@ export class ShopOrdersPage extends PlatformPage {
             <div class="card ${this._moved.has(order.shop_order_id) ? 'moved' : ''}">
                 <div class="card-top">
                     <span class="code">#${order.public_code}</span>
-                    <span class="time">${this._time(order.created_at)}</span>
+                    <span class="top-right">
+                        <span class="time">${this._time(order.created_at)}</span>
+                        ${(NEXT[order.status] ?? []).includes('cancelled')
+                            ? html`<platform-button
+                                icon-only density="dense" variant="ghost" class="act-cancel"
+                                title=${this.t('orders.action.cancelled')}
+                                ?loading=${this._statusOp.busy}
+                                @click=${() => this._setStatus(order, 'cancelled')}
+                            ><platform-icon name="close" size="14"></platform-icon></platform-button>`
+                            : nothing}
+                    </span>
                 </div>
                 <span class="meta">${order.customer_phone === '' ? order.customer_name : `${order.customer_name} · ${order.customer_phone}`}</span>
                 <span class="meta">
@@ -310,14 +339,14 @@ export class ShopOrdersPage extends PlatformPage {
                 </div>
                 <div class="card-actions">
                     ${(NEXT[order.status] ?? [])
-                        .filter((next) => !(order.delivery_type === 'onsite' && next === 'delivering'))
-                        .map((next) => html`
+                        .filter((next) => next !== 'cancelled')
+                        .filter((next) => !(order.delivery_type !== 'delivery' && next === 'delivering'))
+                        .map((next, i) => html`
                         <platform-button
-                            size="sm"
-                            variant=${next === 'cancelled' ? 'ghost-danger' : 'primary'}
+                            variant=${i === 0 ? 'primary' : 'secondary'}
                             ?loading=${this._statusOp.busy}
                             @click=${() => this._setStatus(order, next)}
-                        >${this.t(`orders.action.${next}`)}</platform-button>
+                        ><platform-icon name=${ACTION_ICON[next] ?? 'check'} size="14"></platform-icon><span>${this.t(`orders.action.${next}`)}</span></platform-button>
                         `)}
                 </div>
             </div>

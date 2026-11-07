@@ -427,6 +427,9 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             # зеркало продового <slug>.linnex.io без правки /etc/hosts.
             "STOREFRONT_DOMAIN_SUFFIX": "lvh.me",
             "AGGREGATOR_HOST": "shop.lvh.me",
+            # Сюит создаёт заказы с одного IP (127.0.0.1); прод-лимит 10/мин иначе
+            # даёт флаки 429 посреди прогона. Лимитер покрыт доменным тестом.
+            "ORDER_RATE_LIMIT_PER_MINUTE": "1000",
         },
     ),
     GranianService(

@@ -333,6 +333,7 @@ def storefront_html(
     pwa_head = "\n".join(
         [
             '<meta name="mobile-web-app-capable" content="yes">',
+            f'<link rel="icon" type="image/svg+xml" href="/shop/api/v1/public/storefront/{escape(slug)}/icon.svg">' if slug else "",
             f'<link rel="manifest" href="/shop/api/v1/public/storefront/{escape(slug)}/manifest.webmanifest">' if slug else "",
         ]
     )

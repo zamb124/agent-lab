@@ -51,11 +51,9 @@ body.acct #acct{display:block}
 .stchip.cancelled{background:rgba(255,255,255,.08);color:var(--muted)}
 .stchip.live{animation:pulse 1.6s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
-.abanner{position:sticky;top:0;z-index:50;margin:0 auto;max-width:760px;padding:10px 16px 0}
-.abanner>div{display:flex;align-items:center;gap:10px;background:color-mix(in srgb,var(--accent) 18%,var(--card));
-  border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:14px;
-  padding:10px 14px;cursor:pointer;font:600 13px/1.3 inherit}
-.abanner .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
+[data-tab=orders]{position:relative}
+.acctnav [data-tab=orders].has-active::after{content:'';position:absolute;top:5px;right:calc(50% - 23px);width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
+.ahead [data-tab=orders].has-active::after{content:'';position:absolute;top:4px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
 .atl{position:relative;margin:14px 0 4px;padding-left:22px}
 .atl::before{content:'';position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:var(--line)}
 .atl .ev{position:relative;padding:7px 0;font:500 13px/1.4 inherit;color:var(--muted)}
@@ -186,8 +184,6 @@ const acct=el('div','');acct.id='acct';
 const appEl=document.getElementById('app');
 appEl.parentElement.insertBefore(ahead,appEl);
 appEl.parentElement.appendChild(acct);
-const banner=el('div','abanner');banner.style.display='none';
-appEl.parentElement.insertBefore(banner,ahead.nextSibling);
 document.body.classList.add('has-nav');
 if(EMBED){ahead.style.display='none';}
 
@@ -223,7 +219,7 @@ async function loadOrders(force){
  ordersCache=d.items||[];
  renderOrders(ordersCache);
 }
-window.loginThen=async()=>{const c=await ensureAuth();if(c){me=await fetchMe();renderView(cur);refreshBanner();loadPersonal();}};
+window.loginThen=async()=>{const c=await ensureAuth();if(c){me=await fetchMe();renderView(cur);refreshActiveDot();loadPersonal();}};
 window.loadOrders=loadOrders;
 window.openOrder=openOrder;
 function loyaltyCard(){
@@ -268,7 +264,7 @@ function applyOrderStatus(code,st,label){
  if(curOrder!==code||!st)return;
  const chip=document.querySelector('.od-st');
  if(chip){chip.textContent=label||st;chip.className='stchip od-st '+stCls(st)+' live';}
- refreshBanner();
+ refreshActiveDot();
 }
 function pollOrder(code){
  if(curOrder!==code)return;
@@ -341,7 +337,7 @@ async function openOrder(code){
  const fbc=fbCard(o,code);if(fbc)v.appendChild(fbc);
  /* actions */
  if(o.can_cancel){const cb=el('button','abtn danger','Отменить заказ');
-  cb.onclick=async()=>{try{await jpost(API+'/my/orders/'+encodeURIComponent(code)+'/cancel');openOrder(code);refreshBanner();}catch(e){toast('Не удалось отменить');}};
+  cb.onclick=async()=>{try{await jpost(API+'/my/orders/'+encodeURIComponent(code)+'/cancel');openOrder(code);refreshActiveDot();}catch(e){toast('Не удалось отменить');}};
   v.appendChild(cb);}
  const rb=el('button','abtn ghost','Повторить заказ');
  rb.onclick=()=>reorder(o);v.appendChild(rb);
@@ -522,7 +518,7 @@ async function renderProfile(){
   v.appendChild(nb);
   const lb=el('button','abtn danger','Выйти');
   lb.onclick=async()=>{try{await fetch(authApi+'/logout',{method:'POST',credentials:'same-origin'});}catch(e){}
-   me=null;ordersCache=null;refreshBanner();renderProfile();};
+   me=null;ordersCache=null;refreshActiveDot();renderProfile();};
   v.appendChild(lb);
  }
  acct.innerHTML='';acct.appendChild(v);
@@ -555,20 +551,16 @@ async function loadPersonal(){
  }catch(e){}
 }
 
-/* --- banner --- */
-let bannerTimer=0;
-async function refreshBanner(){
+/* --- active-order dot на табе «Заказы»: пульсирует, пока есть живой заказ --- */
+let dotTimer=0;
+async function refreshActiveDot(){
  try{
   if(!me)await fetchMe();
-  if(!me){banner.style.display='none';return;}
-  const d=await jget(API+'/my/orders?active=true&limit=1');
-  const o=(d.items||[])[0];
-  if(!o){banner.style.display='none';return;}
-  banner.innerHTML='<div><span class="dot"></span><span>Заказ #'+esc(o.public_code)+' — '+(o.status_label||o.status)+' · '+esc(o.shop.name||'')+'</span></div>';
-  banner.style.display='';
-  banner.onclick=()=>{markTab('orders');openOrder(o.public_code);};
+  const on=!!(me&&((await jget(API+'/my/orders?active=true&limit=1')).items||[])[0]);
+  document.querySelectorAll('[data-tab=orders]').forEach(b=>b.classList.toggle('has-active',on));
+  if(!on)return;
  }catch(e){}
- clearTimeout(bannerTimer);bannerTimer=setTimeout(refreshBanner,60000);
+ clearTimeout(dotTimer);dotTimer=setTimeout(refreshActiveDot,60000);
 }
 
 /* --- view switch --- */
@@ -589,7 +581,7 @@ const reorderCode=qs.get('reorder');
 if(order){openOrder(order);}
 else if(reorderCode){reorderByCode(reorderCode);}
 else if(tab&&TABS.some(t=>t.id===tab))go(tab);
-refreshBanner();
+refreshActiveDot();
 loadPersonal();
 
 /* --- PWA: service worker только на витринном хосте (scope '/') --- */

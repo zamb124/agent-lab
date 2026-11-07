@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 from collections.abc import AsyncIterator
+from html import escape
 from typing import Annotated
 
 import segno
@@ -515,7 +516,13 @@ def _manifest_payload(shop: Shop) -> dict[str, object]:
         "display": "standalone",
         "background_color": theme.get("bg") or "#ffffff",
         "theme_color": theme.get("accent_color") or "#111827",
-        "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
+        "icons": [
+            {
+                "src": f"/shop/api/v1/public/storefront/{shop.slug}/icon.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+            }
+        ],
     }
 
 
@@ -530,7 +537,7 @@ def _manifest_response(shop: Shop) -> JSONResponse:
 def _icon_svg(shop: Shop) -> str:
     theme = normalize_shop_theme(shop.theme or {})
     accent = theme.get("accent_color") or "#111827"
-    letter = (shop.name[:1] or "S").upper()
+    letter = escape((shop.name[:1] or "S").upper())
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
         f'<rect width="512" height="512" rx="96" fill="{accent}"/>'

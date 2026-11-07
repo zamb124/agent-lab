@@ -432,8 +432,8 @@ async def test_builder_web_preview_shows_desktop_layout(
         timeout=30_000
     )
     devices = ui_page_system.locator("shop-builder-page .devices button")
-    await expect(devices.nth(1)).to_be_visible(timeout=30_000)
-    await devices.nth(1).click()
+    await expect(devices.nth(2)).to_be_visible(timeout=30_000)
+    await devices.nth(2).click()
     frame = ui_page_system.locator("shop-builder-page iframe.desktop")
     await expect(frame).to_be_visible()
     src = await frame.get_attribute("src")

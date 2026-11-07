@@ -529,7 +529,10 @@ class TestDeliveryCheckServiceChain:
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
         service = ShopOrderService(
-            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+            shop_di.settings,
+            _emu_geocoder(shop_di),
+            shop_di.service_client,
+            shop_di.loyalty_service,
         )
         result = await service.check_delivery(shop, "55.75,37.62")
         assert result["ok"] is True
@@ -551,7 +554,10 @@ class TestDeliveryCheckServiceChain:
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
         service = ShopOrderService(
-            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+            shop_di.settings,
+            _emu_geocoder(shop_di),
+            shop_di.service_client,
+            shop_di.loyalty_service,
         )
         result = await service.check_delivery(shop, "55.50,37.20")
         assert result["ok"] is False
@@ -573,7 +579,10 @@ class TestDeliveryCheckServiceChain:
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
         service = ShopOrderService(
-            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+            shop_di.settings,
+            _emu_geocoder(shop_di),
+            shop_di.service_client,
+            shop_di.loyalty_service,
         )
         result = await service.check_delivery(shop, f"Нет такого {unique_id}")
         assert result["ok"] is False
@@ -935,6 +944,7 @@ class TestCourierEta:
                 settings=shop_di.settings,
                 geocoder=_emu_geocoder(shop_di),
                 service_client=ServiceClient(),
+                loyalty_service=shop_di.loyalty_service,
             )
             shop = Shop(
                 shop_id=f"eta-{unique_id[:8]}",
@@ -985,6 +995,7 @@ class TestCourierEta:
                 settings=shop_di.settings,
                 geocoder=_emu_geocoder(shop_di),
                 service_client=ServiceClient(),
+                loyalty_service=shop_di.loyalty_service,
             )
             shop = Shop(
                 shop_id=f"etad-{unique_id[:8]}",

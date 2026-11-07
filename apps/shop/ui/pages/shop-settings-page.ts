@@ -106,6 +106,8 @@ export class ShopSettingsPage extends PlatformPage {
     declare _loadAttempted: boolean;
     private _hydrated = false;
     private _saved: FormSnapshot | null = null;
+    /** Одноразовый перелёт камеры к точке — потребляется при сборке конфига карты. */
+    private _flyTo: LngLat | null = null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -227,7 +229,16 @@ export class ShopSettingsPage extends PlatformPage {
                 backdrop-filter: blur(12px);
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
                 pointer-events: none;
+            }
+            .zone-map-wrap .empty-badge.point {
+                color: var(--accent);
+                font-weight: var(--font-semibold);
+                border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+                box-shadow: 0 6px 22px color-mix(in srgb, var(--text-primary) 14%, transparent);
             }
             .zone-map-wrap .open-editor {
                 position: absolute;
@@ -752,7 +763,7 @@ export class ShopSettingsPage extends PlatformPage {
     }
 
     private _zoneMapConfig(): PlatformMapConfig {
-        const zone = this._zoneGeometry();
+        const zone = this._deliveryEnabled ? this._zoneGeometry() : null;
         const overlays: NonNullable<PlatformMapConfig['overlays']> = [];
         if (zone) {
             overlays.push({
@@ -766,13 +777,18 @@ export class ShopSettingsPage extends PlatformPage {
         if (this._shopPoint) {
             markers.push({ key: 'shop', lngLat: this._shopPoint, color: '#f2542d', draggable: true });
         }
+        const flyTo = this._flyTo;
+        this._flyTo = null;
         return {
             interactive: true,
+            ...(this._shopPoint !== null ? { center: this._shopPoint, zoom: 15 } : {}),
             controls: { zoom: true, layers: false },
             layers: { fetch: true },
-            featureCards: { hover: true, click: true },
+            // Клик по карте ставит точку магазина — карточки фич только на hover.
+            featureCards: { hover: true, click: false },
             markers,
             overlays,
+            locateTo: flyTo !== null ? { lngLat: flyTo, zoom: 16 } : false,
         };
     }
 
@@ -794,7 +810,10 @@ export class ShopSettingsPage extends PlatformPage {
         try {
             const res = await this._addressSuggestOp.run({ q, limit: 1 });
             const hit = res?.items?.[0];
-            if (hit) this._shopPoint = [hit.lng, hit.lat];
+            if (hit) {
+                this._shopPoint = [hit.lng, hit.lat];
+                this._flyTo = this._shopPoint;
+            }
         } finally {
             this._zoneLocating = false;
         }
@@ -1087,45 +1106,56 @@ export class ShopSettingsPage extends PlatformPage {
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._courierMode = typeof e.detail.value === 'string' ? e.detail.value : 'scooter'; }}
                             ></platform-field>
                         </div>
-                    </div>
-                    <div class="card">
-                        <div class="option-title" style="margin-bottom: var(--space-1)">${this.t('settings.zone_title')}</div>
-                        <div class="option-desc" style="margin-bottom: var(--space-3)">${this.t('settings.zone_desc')}</div>
-                        <div class="zone-map-wrap">
-                            <platform-map .config=${this._zoneMapConfig()}
-                                @pm-marker-drag=${(e: CustomEvent<{ key: string; lngLat: LngLat }>) => {
-                                    if (e.detail.key === 'shop') this._shopPoint = [e.detail.lngLat[0], e.detail.lngLat[1]];
-                                }}></platform-map>
-                            ${!this._zoneGeometry()
-                                ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>`
-                                : nothing}
+                    </div>`
+                : nothing}
+            <div class="card">
+                <div class="option-title" style="margin-bottom: var(--space-1)">${this.t('settings.zone_title')}</div>
+                <div class="option-desc" style="margin-bottom: var(--space-3)">${this.t('settings.zone_desc')}</div>
+                <div class="zone-map-wrap">
+                    <platform-map .config=${this._zoneMapConfig()}
+                        @pm-marker-drag=${(e: CustomEvent<{ key: string; lngLat: LngLat }>) => {
+                            if (e.detail.key === 'shop') this._shopPoint = [e.detail.lngLat[0], e.detail.lngLat[1]];
+                        }}
+                        @pm-click=${(e: CustomEvent<{ lngLat: LngLat }>) => {
+                            this._shopPoint = [e.detail.lngLat[0], e.detail.lngLat[1]];
+                        }}></platform-map>
+                    ${this._shopPoint === null
+                        ? html`<div class="empty-badge point">
+                              <platform-icon name="pin" size="14"></platform-icon>
+                              ${this.t('settings.zone_point_missing')}
+                          </div>`
+                        : this._deliveryEnabled && !this._zoneGeometry()
+                          ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>`
+                          : nothing}
+                    ${this._deliveryEnabled
+                        ? html`
                             <button type="button" class="open-editor" @click=${() => this._openZoneEditor()}>
                                 <platform-icon name="edit" size="14"></platform-icon>
                                 ${this._zoneGeometry() ? this.t('settings.zone_edit') : this.t('settings.zone_set')}
-                            </button>
-                        </div>
-                        <div class="hint" style="margin: var(--space-2) 0">${this.t('settings.zone_pin_hint')}</div>
-                        <div class="option-fields">
-                            <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lat')} .value=${this._shopPoint?.[1] ?? ''}
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lat', e.detail.value)}
-                            ></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lng')} .value=${this._shopPoint?.[0] ?? ''}
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lng', e.detail.value)}
-                            ></platform-field>
-                        </div>
-                        <div class="zone-toolbar">
-                            ${[this._city, this._address].filter(Boolean).join(', ').trim()
-                                ? html`
-                                    <platform-button size="sm" variant="secondary"
-                                        ?busy=${this._zoneLocating}
-                                        @click=${() => this._locateShopAddress()}>
-                                        <platform-icon name="pin" size="14"></platform-icon>
-                                        ${this.t('settings.zone_locate')}
-                                    </platform-button>`
-                                : nothing}
-                        </div>
-                    </div>`
-                : nothing}
+                            </button>`
+                        : nothing}
+                </div>
+                <div class="hint" style="margin: var(--space-2) 0">${this.t('settings.zone_pin_hint')}</div>
+                <div class="option-fields">
+                    <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lat')} .value=${this._shopPoint?.[1] ?? ''}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lat', e.detail.value)}
+                    ></platform-field>
+                    <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lng')} .value=${this._shopPoint?.[0] ?? ''}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lng', e.detail.value)}
+                    ></platform-field>
+                </div>
+                <div class="zone-toolbar">
+                    ${[this._city, this._address].filter(Boolean).join(', ').trim()
+                        ? html`
+                            <platform-button size="sm" variant="secondary"
+                                ?busy=${this._zoneLocating}
+                                @click=${() => this._locateShopAddress()}>
+                                <platform-icon name="pin" size="14"></platform-icon>
+                                ${this.t('settings.zone_locate')}
+                            </platform-button>`
+                        : nothing}
+                </div>
+            </div>
         `;
     }
 

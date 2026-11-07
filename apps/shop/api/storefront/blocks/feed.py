@@ -32,7 +32,7 @@ CSS: str = """.bnrs{display:flex;gap:10px;overflow-x:auto;padding:14px 2px 4px;s
 /* Полка hero — врезанная accent-панель: градиент с тенью, белые
    заголовки на акценте, товары — плитки поверх, rail до краёв панели.
    Селектор по data-layout: класс «hero» занят страничной шапкой. */
-.sh[data-layout=hero]{margin-top:26px;border-radius:calc(var(--radius) + 6px);padding:20px 16px 18px;background:linear-gradient(150deg,var(--accent) 0%,color-mix(in srgb,var(--accent) 74%,#120c08) 100%);box-shadow:0 16px 36px color-mix(in srgb,var(--accent) 30%,transparent),inset 0 1px 0 rgba(255,255,255,.16)}
+.sh[data-layout=hero]{margin-top:26px;border-radius:calc(var(--radius) + 6px);padding:20px 16px 18px;background:linear-gradient(150deg,var(--accent) 0%,color-mix(in srgb,var(--accent) 74%,#120c08) 100%);box-shadow:0 14px 30px color-mix(in srgb,var(--accent) 22%,transparent),inset 0 1px 0 rgba(255,255,255,.16)}
 .sh[data-layout=hero] .sh-h{padding:0}
 .sh[data-layout=hero] .sh-h h2{color:var(--on-accent);text-shadow:0 1px 12px rgba(0,0,0,.32)}
 .sh[data-layout=hero] .sh-h .sub{color:color-mix(in srgb,var(--on-accent) 80%,transparent)}

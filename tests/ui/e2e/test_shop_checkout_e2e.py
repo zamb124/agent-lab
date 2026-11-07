@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import httpx2
 import pytest
 import pytest_asyncio
@@ -18,15 +16,14 @@ from playwright.async_api import Page, ViewportSize, expect
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.e2e.test_shop_customer_auth_e2e import _page_url
 from tests.ui.e2e.test_shop_delivery_e2e import (
-    _ZONE,
     _cart_to_sheet,
     _emulator_auth,
     zoned_storefront,  # noqa: F401 — фикстура
 )
-from tests.ui.e2e.test_shop_storefront_desktop import Storefront, _create_storefront
 from tests.ui.e2e.test_shop_feed_e2e import _PHONE, _shot
-from tests.ui.harness import AppUI
+from tests.ui.e2e.test_shop_storefront_desktop import Storefront, _create_storefront
 from tests.ui.e2e_worker import ui_e2e_scope_headers
+from tests.ui.harness import AppUI
 
 _SHOP_UI = AppUI(SERVICE_UI_REGISTRY["shop"])
 
@@ -186,6 +183,14 @@ async def test_details_reach_order(
     await _emulator_auth(page, f"+7999{int(unique_id[:8], 16) % 10**7:07d}")
     await expect(page.locator(".done .code")).to_be_visible(timeout=20_000)
     await _shot(page, "phone-done", zoned_storefront.slug)
+
+    # Активный заказ сигналит пульсирующей точкой на табе «Заказы» —
+    # висящего баннера над контентом больше нет.
+    _ = await page.goto(_page_url(zoned_storefront.slug), wait_until="load")
+    orders_tab = page.locator('.acctnav [data-tab="orders"]')
+    await expect(orders_tab).to_have_class("has-active", timeout=15_000)
+    await expect(page.locator(".abanner")).to_have_count(0)
+    await _shot(page, "phone-active-dot", zoned_storefront.slug)
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import httpx2
 import pytest_asyncio
@@ -24,6 +25,7 @@ from tests.ui.e2e_worker import ui_e2e_scope_headers
 from tests.ui.harness import AppUI
 
 _SHOP_UI = AppUI(SERVICE_UI_REGISTRY["shop"])
+_ARTIFACTS = Path(__file__).resolve().parents[3] / "artifacts" / "shop-board"
 _PRODUCTS_PER_CATEGORY = 6
 
 
@@ -44,9 +46,14 @@ def _order_body(product_ids: list[str], **overrides: object) -> dict[str, object
     }
 
 
-async def _create_order(public_client: httpx2.AsyncClient, slug: str, product_ids: list[str]) -> dict[str, object]:
+async def _create_order(
+    public_client: httpx2.AsyncClient,
+    slug: str,
+    product_ids: list[str],
+    **overrides: object,
+) -> dict[str, object]:
     resp = await public_client.post(
-        f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(product_ids)
+        f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(product_ids, **overrides)
     )
     assert resp.status_code == 200, resp.text
     return dict(resp.json())
@@ -102,7 +109,13 @@ class TestOrdersBoardLayout:
         assert isinstance(storefront, Storefront)
         product_ids = board_storefront["product_ids"]
         assert isinstance(product_ids, list)
-        created = await _create_order(shop_public_client, storefront.slug, product_ids[:6])
+        created = await _create_order(
+            shop_public_client,
+            storefront.slug,
+            product_ids[:6],
+            delivery_type="delivery",
+            address="Москва, Тверская 1",
+        )
 
         await ui_page_system.goto(_board_url(storefront.shop_id), wait_until="load")
         await expect(_col(ui_page_system, "new").locator(".card").first).to_be_visible()
@@ -116,14 +129,14 @@ class TestOrdersBoardLayout:
         new_box = await _col(ui_page_system, "new").bounding_box()
         assert new_box is not None and new_box["width"] >= 200
 
-        # Действия карточки — одна строка, две кнопки.
+        # Действия карточки: основная кнопка в строке + иконка отмены в шапке.
         card = _card(ui_page_system, str(created["public_code"]))
         buttons = card.locator(".card-actions platform-button")
-        await expect(buttons).to_have_count(2)
-        b0 = await buttons.nth(0).bounding_box()
-        b1 = await buttons.nth(1).bounding_box()
-        assert b0 is not None and b1 is not None
-        assert abs(b0["y"] - b1["y"]) < 2, "кнопки не в одной строке"
+        await expect(buttons).to_have_count(1)
+        cancel_btn = card.locator(".card-top platform-button.act-cancel")
+        await expect(cancel_btn).to_have_count(1)
+        cancel_box = await cancel_btn.bounding_box()
+        assert cancel_box is not None and cancel_box["width"] <= 32
 
         # Шесть позиций: .items ограничен по высоте и скроллится.
         items_box = card.locator(".items")
@@ -136,6 +149,30 @@ class TestOrdersBoardLayout:
         # Клик по свёрнутой колонке разворачивает её.
         await _col(ui_page_system, "done").locator("button.col-title.done").click()
         await expect(_col(ui_page_system, "done")).not_to_have_class(re.compile(r"collapsed"))
+
+        # Карточка в preparing: два действия колонкой с иконками + иконка отмены в шапке.
+        await buttons.nth(0).click()
+        prep_card = _col(ui_page_system, "accepted").locator(".card", has_text=f"#{created['public_code']}")
+        await expect(prep_card).to_be_visible(timeout=15_000)
+        await prep_card.locator(".card-actions platform-button").first.click()
+        prep_card = _col(ui_page_system, "preparing").locator(".card", has_text=f"#{created['public_code']}")
+        await expect(prep_card).to_be_visible(timeout=15_000)
+        prep_actions = prep_card.locator(".card-actions platform-button")
+        await expect(prep_actions).to_have_count(2)
+        await expect(prep_actions.nth(0).locator("platform-icon svg")).to_be_attached()
+        icon_box = await prep_actions.nth(0).locator("platform-icon").bounding_box()
+        assert icon_box is not None and icon_box["width"] > 0, "иконка действия схлопнулась"
+        card_box = await prep_card.bounding_box()
+        for i in range(2):
+            btn = await prep_actions.nth(i).bounding_box()
+            assert btn is not None and card_box is not None
+            assert btn["x"] >= card_box["x"] and btn["x"] + btn["width"] <= card_box["x"] + card_box["width"], (
+                "кнопка вылезает за карточку"
+            )
+
+        _ARTIFACTS.mkdir(parents=True, exist_ok=True)
+        await ui_page_system.wait_for_timeout(500)
+        await prep_card.screenshot(path=str(_ARTIFACTS / "order-card-actions.png"))
 
 
 class TestOrdersBoardLive:
@@ -182,7 +219,7 @@ class TestOrdersBoardLive:
         card = _card(ui_page_system, f"#{code}")
         await expect(card).to_be_visible()
 
-        await card.locator("platform-button").first.click()
+        await card.locator(".card-actions platform-button").first.click()
         moved = _col(ui_page_system, "accepted").locator(".card.moved", has_text=f"#{code}")
         await expect(moved).to_be_visible(timeout=15_000)
 
