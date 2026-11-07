@@ -1,0 +1,225 @@
+{
+  "uid": "product-pulse",
+  "title": "Product Pulse",
+  "tags": ["platform", "product"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(service)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Active Companies (24h)",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "count(count by (company_id) (count_over_time({service=~\"$service\"} | json | message=\"ws_command_finished\" [24h])))",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "title": "Commands 24h",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({service=~\"$service\"} | json | message=\"ws_command_finished\" [24h]))",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "title": "Command Errors 24h",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({service=~\"$service\"} | json | message=\"ws_command_finished\" | ws_command_status=\"error\" [24h]))",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}
+        }
+      }
+    },
+    {
+      "title": "P95 Command Latency (1h)",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"ws_command_finished\" | unwrap ws_command_duration_ms [1h])",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    },
+    {
+      "title": "Command Rate by Domain",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (domain) (rate({service=~\"$service\"} | json | message=\"ws_command_finished\" | label_format domain=`{{ regexReplaceAll \"^([a-z]+)/.*\" .ws_command \"${1}\" }}` [5m]))",
+          "legendFormat": "{{domain}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 15, "stacking": {"mode": "normal"}}}}
+    },
+    {
+      "title": "Error Rate % by Domain",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (domain) (rate({service=~\"$service\"} | json | message=\"ws_command_finished\" | ws_command_status=\"error\" | label_format domain=`{{ regexReplaceAll \"^([a-z]+)/.*\" .ws_command \"${1}\" }}` [5m])) / sum by (domain) (rate({service=~\"$service\"} | json | message=\"ws_command_finished\" | label_format domain=`{{ regexReplaceAll \"^([a-z]+)/.*\" .ws_command \"${1}\" }}` [5m])) * 100",
+          "legendFormat": "{{domain}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "title": "Mutation Rate by Domain (create/update/delete/send/order/pay)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (domain) (rate({service=~\"$service\"} | json | message=\"ws_command_finished\" | ws_command=~\".*(create|update|delete|send|order|pay|cancel|invite|approve|reject).*\" | label_format domain=`{{ regexReplaceAll \"^([a-z]+)/.*\" .ws_command \"${1}\" }}` [5m]))",
+          "legendFormat": "{{domain}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 15, "stacking": {"mode": "normal"}}}}
+    },
+    {
+      "title": "P95 Latency by Domain",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"ws_command_finished\" | label_format domain=`{{ regexReplaceAll \"^([a-z]+)/.*\" .ws_command \"${1}\" }}` | unwrap ws_command_duration_ms [15m]) by (domain)",
+          "legendFormat": "{{domain}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "title": "Top Commands (24h)",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 21},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "topk(20, sum by (ws_command) (count_over_time({service=~\"$service\"} | json | message=\"ws_command_finished\" [24h])))",
+          "refId": "A",
+          "queryType": "instant",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true}, "renameByName": {"ws_command": "Command", "Value": "Count 24h"}}}
+      ]
+    },
+    {
+      "title": "Top Error Commands (24h)",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 21},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "topk(20, sum by (ws_command) (count_over_time({service=~\"$service\"} | json | message=\"ws_command_finished\" | ws_command_status=\"error\" [24h])))",
+          "refId": "A",
+          "queryType": "instant",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true}, "renameByName": {"ws_command": "Command", "Value": "Errors 24h"}}}
+      ]
+    },
+    {
+      "title": "Platform Events by Type",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (platform_event_type) (rate({service=~\"$service\"} | json | message=\"platform_event_published\" [5m])))",
+          "legendFormat": "{{platform_event_type}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 15, "stacking": {"mode": "normal"}}}}
+    },
+    {
+      "title": "Shop Orders (created/status_changed)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (platform_event_type) (count_over_time({service=~\"$service\"} | json | message=\"platform_event_published\" | platform_event_type=~\"shop/order/(created|status_changed)\" [1h]))",
+          "legendFormat": "{{platform_event_type}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 15}}}
+    },
+    {
+      "title": "Recent Command Errors",
+      "type": "logs",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 39},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | message=\"ws_command_finished\" | ws_command_status=\"error\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending"}
+    }
+  ]
+}
