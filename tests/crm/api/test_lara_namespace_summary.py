@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import uuid
 from datetime import datetime, timezone
 from typing import cast
@@ -131,7 +132,7 @@ async def test_lara_namespace_summary_note_draft_not_applied(
         )
         note = await CRMEntity.create(note)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             note,
             replace=False,
         )

@@ -17,6 +17,7 @@ from core.ai.company_settings.schema import CUSTOM_PROVIDER_SLUG
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import PROVIDER_LITSERVE, AICapability
 from core.ai.resolver import resolve_ai_model
+from core.billing.service import BillingService
 from core.config.base import BaseSettings, get_settings
 from core.config.models import RAGProviderConfig
 from core.config.openai_v1_base_url import openai_v1_base_url
@@ -180,6 +181,7 @@ def get_rag_provider(
     provider_name: str | None = None,
     *,
     settings: BaseSettings | None = None,
+    billing_service: BillingService,
 ) -> "BaseRAGProvider":
     """
     Создаёт RAG провайдер из ``get_settings()``: активный ключ, ``RAGProviderConfig.model_dump()``,
@@ -207,6 +209,7 @@ def get_rag_provider(
         instance = PgVectorProvider(
             bundle.provider_config,
             embedding_runtime=bundle.embedding_runtime,
+            billing_service=billing_service,
         )
     else:
         instance = provider_class(bundle.provider_config)

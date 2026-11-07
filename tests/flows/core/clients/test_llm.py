@@ -13,6 +13,7 @@ from a2a.types.a2a_pb2 import ROLE_USER, Role
 from core.a2a import get_part_text, mapping_from_struct
 from core.clients.llm import MockLLM, setup_mock_responses
 from core.clients.llm.mock import split_mock_stream_text
+from tests.fixtures.billing import make_test_billing_service
 
 
 def test_split_mock_stream_text_keeps_multiple_chunks_without_tiny_tokens() -> None:
@@ -179,7 +180,8 @@ class TestSetupMockResponses:
     @pytest.mark.asyncio
     async def test_setup_returns_configured_mock(self):
         """setup_mock_responses возвращает настроенный mock."""
-        mock = setup_mock_responses(default_response="Configured!")
+        mock = setup_mock_responses(default_response="Configured!",
+        billing_service=make_test_billing_service())
 
         content = ""
         async for event in mock.stream([_msg("test")]):
@@ -194,8 +196,8 @@ class TestSetupMockResponses:
         mock = setup_mock_responses(
             response_queue=[
                 {"type": "text", "content": "Queued response"},
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
 
         content = ""
         async for event in mock.stream([_msg("test")]):
@@ -208,8 +210,8 @@ class TestSetupMockResponses:
     async def test_setup_with_tool_responses(self):
         """setup_mock_responses с tool ответами."""
         mock = setup_mock_responses(
-            tool_responses={"calc": {"tool": "calculator", "args": {"expr": "2+2"}}}
-        )
+            tool_responses={"calc": {"tool": "calculator", "args": {"expr": "2+2"}}},
+        billing_service=make_test_billing_service())
 
         events = []
         async for event in mock.stream([_msg("calc something")]):

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import pytest
 
 from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
@@ -89,7 +90,7 @@ async def test_share_requires_can_share(
     )
     entity = await CRMEntity.create(entity)
     await index_crm_entity(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), entity, replace=False,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()), entity, replace=False,
     )
     access = CrmEntityAccessService(authz=authz_service)
     await access.sync_entity_created(entity)
@@ -147,7 +148,7 @@ async def test_public_projection_via_fga_list_users(
     )
     entity = await CRMEntity.create(entity)
     await index_crm_entity(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), entity, replace=False,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()), entity, replace=False,
     )
     access = CrmEntityAccessService(authz=authz_service)
     await access.sync_entity_created(entity)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import uuid
 
 import pytest
@@ -85,7 +86,7 @@ async def test_rag_memory_store_writes_and_recalls_scoped_episode(
     namespace_id = f"ctx-memory-{uuid.uuid4().hex[:10]}"
     marker = f"MEMORY_STORE_MARKER_{uuid.uuid4().hex[:10]}"
     store = RAGLLMContextMemoryStore(
-        rag_provider=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        rag_provider=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
 
         namespace_service=di.namespace_service,
         namespace_id=namespace_id,
@@ -137,7 +138,7 @@ async def test_rag_memory_store_writes_and_recalls_scoped_episode(
         assert missing == []
     finally:
         with service_client_asgi_auth_context(auth_headers_system):
-            await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).delete_namespace(namespace_id)
+            await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()).delete_namespace(namespace_id)
             await di.namespace_service.delete(namespace_id)
 
 

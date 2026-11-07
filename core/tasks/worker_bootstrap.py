@@ -14,7 +14,6 @@ from typing import Protocol
 from taskiq import TaskiqState
 from taskiq_redis import RedisStreamBroker
 
-from core.billing import set_billing_service
 from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
 from core.clients.redis_client import RedisClient
 from core.config import BaseSettings, get_settings
@@ -116,7 +115,6 @@ def build_worker(
             open_di(di_class, settings=settings, identity=identity, database=database, lifecycle=lifecycle)
         )
         if isinstance(di, PlatformDi):
-            set_billing_service(di.billing_service)
             init_worker_testing_mock_llm(di.redis_client, service_name=service_name)
         set_task_di(state, di)
         await store_registered_platform_events()

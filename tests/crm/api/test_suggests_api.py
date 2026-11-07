@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 from datetime import datetime, timezone
 from typing import cast
 
@@ -88,11 +89,11 @@ async def test_suggests_lifecycle(
         )
         survivor = await CRMEntity.create(survivor)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), survivor, replace=False,
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()), survivor, replace=False,
         )
         source = await CRMEntity.create(source)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), source, replace=False,
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()), source, replace=False,
         )
 
         now = datetime.now(timezone.utc)
@@ -232,7 +233,7 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
         )
         note = await CRMEntity.create(note)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), note, replace=False,
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()), note, replace=False,
         )
 
         summary = await crm_di.suggest_service.generate_namespace_suggests(

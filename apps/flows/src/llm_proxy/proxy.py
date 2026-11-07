@@ -64,6 +64,7 @@ from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
 from core.authz.service import AuthzService
 from core.billing.exceptions import BillingBalanceBlockedError
+from core.billing.service import BillingService
 from core.clients.llm.client import LLMClient
 from core.clients.llm.context_layer import openai_messages_to_a2a_messages
 from core.clients.llm.messages import LLMToolCall
@@ -402,9 +403,11 @@ async def _prepare_llm_proxy_client(
     *,
     body: OpenAIChatCompletionsRequest,
     resolved: ResolvedAIModel,
+    billing_service: BillingService,
 ) -> LLMClient | MockLLM:
     llm = create_llm_client_from_ai_model(
         resolved,
+        billing_service=billing_service,
         max_tokens=body.max_tokens,
         temperature=body.temperature,
         top_p=body.top_p,
@@ -867,6 +870,7 @@ async def dispatch_chat_completions(
     flow_ui_share_service: FlowUIShareService,
     hitl_conversation_service: HitlConversationService,
     files_service: FilesService,
+    billing_service: BillingService,
 ) -> JSONResponse | StreamingResponse:
     if not body.messages:
         raise WsCommandError(
@@ -942,7 +946,7 @@ async def dispatch_chat_completions(
         )
 
     resolved = _resolve_llm_proxy_model(requested_model)
-    llm = await _prepare_llm_proxy_client(body=body, resolved=resolved)
+    llm = await _prepare_llm_proxy_client(body=body, resolved=resolved, billing_service=billing_service)
 
     response_model_id = requested_model
     if body.stream:
@@ -1004,6 +1008,7 @@ async def dispatch_images_generations(
     *,
     body: OpenAIImagesGenerationsRequest,
     shared_storage: SharedStorage,
+    billing_service: BillingService,
 ) -> JSONResponse:
     _ = body.size
     model_id = body.model.strip() if body.model.strip() else IMAGE_AUTO_MODEL_ID
@@ -1029,7 +1034,7 @@ async def dispatch_images_generations(
             error_code="image_gen_unavailable",
         )
 
-    client = NanoBananaClient()
+    client = NanoBananaClient(billing_service)
     try:
         file_ids = await client.generate_images(prompt=body.prompt, num_images=num_images)
     except BillingBalanceBlockedError as exc:

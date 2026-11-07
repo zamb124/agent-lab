@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from core.billing import get_billing_service
+from core.billing.service import BillingService
 from core.config import get_settings
 from core.context import clear_context, set_context
 from core.context.job_context import build_job_context, pick_company_billing_user
@@ -30,6 +30,7 @@ async def execute_reembed_tick(
     *,
     channel: str,
     schedule_task_id: str,
+    billing_service: BillingService,
 ) -> RAGReembedTickResult:
     """
     Запускает один тик перевекторизации для воркера.
@@ -52,7 +53,9 @@ async def execute_reembed_tick(
             "by_company_written": {},
         }
 
-    provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider_raw = get_rag_provider(
+        RAG_IN_PROCESS_PROVIDER_ID, billing_service=billing_service
+    )
     if not isinstance(provider_raw, PgVectorProvider):
         raise TypeError('execute_reembed_tick requires the pgvector RAG provider')
     provider = provider_raw
@@ -65,6 +68,7 @@ async def execute_reembed_tick(
         target_embedding_model=target_model,
         schedule_task_id=schedule_task_id,
         channel=channel,
+        billing_service=billing_service,
     )
 
     logger.info(
@@ -93,6 +97,7 @@ async def _run_reembed_round(
     target_embedding_model: str,
     schedule_task_id: str,
     channel: str,
+    billing_service: BillingService,
 ) -> tuple[int, dict[str, int]]:
     """Один SELECT batch_size кандидатов + группировка по company_id + embed-write."""
     if batch_size <= 0:
@@ -109,7 +114,7 @@ async def _run_reembed_round(
     for doc_id, content, cid in rows:
         groups[cid].append((doc_id, content))
 
-    billing = get_billing_service()
+    billing = billing_service
     embedding_client = provider.embedding_client
     total_written = 0
     by_company_written: dict[str, int] = defaultdict(int)

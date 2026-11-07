@@ -18,6 +18,7 @@ from core.ai.providers import AICapability
 from core.ai.requirements import AIRequestRequirements
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.billing.service import BillingService
 from core.clients.llm.client import LLMClient
 from core.clients.llm.mock import MockLLM
 from core.ui_document.document import FlowUIPage, iter_blocks
@@ -39,6 +40,9 @@ GRAMMAR_RULES = "\n".join(
 
 
 class FlowUIAssistService:
+    def __init__(self, billing_service: BillingService) -> None:
+        self._billing_service: BillingService = billing_service
+
     async def assist(self, request: FlowUIAssistRequest) -> FlowUIAssistResult:
         if request.block_id is None:
             return await self._describe_page(request, request.page())
@@ -54,7 +58,9 @@ class FlowUIAssistService:
             raise ValueError(
                 "flow_ui_assist: platform default for capability=llm_chat not configured"
             )
-        return create_llm_client_from_ai_model(resolved)
+        return create_llm_client_from_ai_model(
+            resolved, billing_service=self._billing_service
+        )
 
     async def _describe_page(
         self, request: FlowUIAssistRequest, page: FlowUIPage

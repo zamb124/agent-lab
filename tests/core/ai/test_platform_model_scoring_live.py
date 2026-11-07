@@ -44,6 +44,7 @@ from tests.core.clients.live_llm_provider_helpers import (
     skip_provider_transient_unavailable,
     smoke_message,
 )
+from tests.fixtures.billing import make_test_billing_service
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(180)]
 
@@ -209,7 +210,8 @@ async def test_live_free_pool_top_n_chat_smoke(provider: str) -> None:
                 provider=record.provider,
                 temperature=0.0,
                 max_tokens=SMOKE_MAX_TOKENS,
-            )
+        billing_service=make_test_billing_service(),
+    )
         assert isinstance(llm, LLMClient)
         await egress_prefer_proxy_delete(normalized_http_origin(llm.base_url))
         try:

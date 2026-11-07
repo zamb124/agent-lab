@@ -157,6 +157,7 @@ from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model, create_llm_client_from_call_config
+from core.billing.service import BillingService
 from core.clients.llm import LLMClient, MockLLM
 from core.context import get_context, require_active_company
 from core.errors.boundary import PlatformNotFoundError
@@ -337,12 +338,14 @@ class EvaluationLabService:
         workflow_runtime: DurableWorkflowRuntime,
         tool_registry: ToolRegistry,
         node_constructor: NodeConstructor,
+        billing_service: BillingService,
     ):
         self._flow_factory: FlowFactory = flow_factory
         self._node_registry: NodeRegistry = node_registry
         self._workflow_runtime: DurableWorkflowRuntime = workflow_runtime
         self._tool_registry: ToolRegistry = tool_registry
         self._node_constructor: NodeConstructor = node_constructor
+        self._billing_service: BillingService = billing_service
         self._event_locks: dict[str, asyncio.Lock] = {}
 
     async def create_suite(self, request: EvaluationSuiteCreateRequest) -> EvaluationSuite:
@@ -3885,6 +3888,7 @@ class EvaluationLabService:
                 effective: EffectiveLLMConfig = resolve_effective_llm_config_for_node(node_config)
                 return create_llm_client_from_call_config(
                     effective.config,
+                    billing_service=self._billing_service,
                     variables=state.variables if state is not None else None,
                     fallback_models=effective.config.fallback_models,
                     cost_origin=effective.cost_origin,
@@ -3896,7 +3900,9 @@ class EvaluationLabService:
         )
         if resolved is None:
             raise EvaluationLabValidationError("evaluation LLM is not available")
-        return create_llm_client_from_ai_model(resolved)
+        return create_llm_client_from_ai_model(
+            resolved, billing_service=self._billing_service
+        )
 
     async def _judge_pairwise_with_llm(
         self,

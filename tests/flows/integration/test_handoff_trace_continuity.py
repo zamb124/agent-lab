@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.fixtures.billing import make_test_billing_service
 from tests.flows.api.test_a2a import _validate_jsonrpc_response
 from tests.flows.api.test_handoff_a2a import (
     _handoff_parent_child_configs,
@@ -75,7 +76,8 @@ class TestHandoffTraceContinuity:
         })
         from core.clients.llm import setup_mock_responses
 
-        setup_mock_responses(response_queue=["child done"])
+        setup_mock_responses(response_queue=["child done"],
+        billing_service=make_test_billing_service())
         result = await _run(di, parent_fid, ctx, "go", ["child done"])
         parent_context_id = f"context-{ctx}"
         child_session = f"{child_fid}:{parent_context_id}:handoff:{child_fid}"

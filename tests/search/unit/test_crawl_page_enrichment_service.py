@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -73,6 +74,7 @@ def _taxonomy() -> SearchIndexCrawlTaxonomy:
 def test_resolve_enrichment_llm_structured_output_requirements() -> None:
     service = CrawlPageEnrichmentService(
         SearchCrawlEnrichmentConfig(provider=LINNEX_LLM_PROVIDER, model="auto"),
+        make_test_billing_service(),
     )
     resolved_mock = ResolvedAIModel(
         capability=AICapability.LLM_CHAT,
@@ -105,6 +107,7 @@ def test_resolve_enrichment_llm_structured_output_requirements() -> None:
 async def test_invoke_enrichment_llm_allows_paid_fallback() -> None:
     service = CrawlPageEnrichmentService(
         SearchCrawlEnrichmentConfig(provider=LINNEX_LLM_PROVIDER, model="auto"),
+        make_test_billing_service(),
     )
     resolved_mock = ResolvedAIModel(
         capability=AICapability.LLM_CHAT,

@@ -58,6 +58,7 @@ from core.http.egress_route_preference import (
     egress_prefer_proxy_delete,
     normalized_http_origin,
 )
+from tests.fixtures.billing import make_test_billing_service
 
 PLACEHOLDER_PREFIXES = ("YOUR_",)
 PLACEHOLDER_KEYS = {"sk-test-key", "test-key", "placeholder"}
@@ -695,7 +696,8 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
                 provider=provider,
                 temperature=0.0,
                 max_tokens=128,
-            )
+        billing_service=make_test_billing_service(),
+    )
         if not isinstance(llm, LLMClient):
             return ProviderLiveProbe(
                 provider=provider,

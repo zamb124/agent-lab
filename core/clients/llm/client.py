@@ -25,6 +25,7 @@ from core.a2a.codec import mapping_from_struct, part_has_text, struct_from_mappi
 from core.ai.free_pool import PLATFORM_FREE_MODEL_SOURCE
 from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.ai.provider_error import AI_PROVIDER_IO_ERRORS
+from core.billing.service import BillingService
 from core.clients.llm.billing import (
     LLMCallMeter,
     LLMClientBilling,
@@ -125,8 +126,11 @@ class LLMClient:
         extra_request_headers: dict[str, str] | None = None,
         context_length: int | None = None,
         max_candidates_total: int | None = None,
+        *,
+        billing_service: BillingService,
         billing: LLMClientBilling | None = None,
     ):
+        self.billing_service: BillingService = billing_service
         self.model: str = model
         self.api_key: str = api_key
         self.base_url: str = base_url or "https://api.openai.com/v1"
@@ -209,6 +213,7 @@ class LLMClient:
             extra_request_headers=candidate.extra_request_headers,
             context_length=candidate.context_length,
             max_candidates_total=self.max_candidates_total,
+            billing_service=self.billing_service,
             billing=self.billing.copy(),
         )
 
@@ -411,6 +416,7 @@ class LLMClient:
         """Pre-flight баланса. Повторный вызов на том же клиенте идемпотентен."""
         return await prepare_llm_client_billing(
             self.billing,
+            billing_service=self.billing_service,
             platform_default_free_pool=self.platform_default_free_pool,
             platform_paid_fallback_enabled=self.platform_paid_fallback_enabled,
         )

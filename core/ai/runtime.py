@@ -21,6 +21,7 @@ from core.ai.providers import (
 from core.ai.requirements import AIRequestRequirements, AISelection
 from core.ai.rerank_client import AIRerankerHTTPClient
 from core.ai.resolver import resolve_ai_model
+from core.billing.service import BillingService
 from core.clients.llm.billing import LLMClientBilling, billing_from_resolved_model
 from core.clients.llm.client import LLMClient
 from core.clients.llm.messages import MessageInput, StreamEvent
@@ -91,6 +92,7 @@ def _with_llm_billing(
 def create_llm_client_from_ai_model(
     resolved: ResolvedAIModel,
     *,
+    billing_service: BillingService,
     temperature: float | None = None,
     max_tokens: int | None = None,
     variables: JsonObject | None = None,
@@ -136,6 +138,7 @@ def create_llm_client_from_ai_model(
             extra_request_headers=_string_headers(resolved.headers),
             extra_request_body=resolved.body or None,
             fallback_models=list(resolved.fallback_models or ()) or None,
+            billing_service=billing_service,
         ),
         billing_from_resolved_model(resolved),
     )
@@ -144,6 +147,7 @@ def create_llm_client_from_ai_model(
 def create_llm_client_for_capability(
     capability: AICapability,
     *,
+    billing_service: BillingService,
     include_platform_default: bool = True,
     fallback_provider: str | None = None,
     fallback_model: str | None = None,
@@ -179,6 +183,7 @@ def create_llm_client_for_capability(
     )
     return create_llm_client_from_ai_model(
         resolved_with_fallbacks,
+        billing_service=billing_service,
         temperature=temperature,
         max_tokens=max_tokens,
         allow_platform_paid_fallback=allow_platform_paid_fallback,
@@ -194,6 +199,7 @@ def create_llm_client_for_capability(
 def create_llm_client_from_call_config(
     config: LLMCallConfig | None,
     *,
+    billing_service: BillingService,
     variables: JsonObject | None = None,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
@@ -210,6 +216,7 @@ def create_llm_client_from_call_config(
             create_llm_transport_client(
                 variables=variables,
                 allow_platform_paid_fallback=allow_platform_paid_fallback,
+                billing_service=billing_service,
             ),
             billing,
         )
@@ -233,6 +240,7 @@ def create_llm_client_from_call_config(
             extra_request_headers=config.extra_request_headers,
             extra_request_body=config.extra_request_body,
             fallback_models=list(fallback_models or ()) or None,
+            billing_service=billing_service,
         ),
         billing,
     )
@@ -285,7 +293,11 @@ def resolve_vision_ai_model(model_name: str | None = None) -> ResolvedAIModel:
     return platform_default
 
 
-def create_vision_llm_client(resolved: ResolvedAIModel) -> LLMClient | MockLLM:
+def create_vision_llm_client(
+    resolved: ResolvedAIModel,
+    *,
+    billing_service: BillingService,
+) -> LLMClient | MockLLM:
     """Create a vision LLM client from the canonical ``llm_vision`` model."""
     if resolved.capability != AICapability.LLM_VISION:
         raise ValueError(f"capability {resolved.capability.value!r} is not executable as vision")
@@ -295,6 +307,7 @@ def create_vision_llm_client(resolved: ResolvedAIModel) -> LLMClient | MockLLM:
         return get_or_create_global_mock_llm(resolved.model)
     return create_llm_client_from_ai_model(
         resolved,
+        billing_service=billing_service,
         temperature=0.1,
         allow_platform_paid_fallback=True,
     )
@@ -302,6 +315,7 @@ def create_vision_llm_client(resolved: ResolvedAIModel) -> LLMClient | MockLLM:
 
 def create_embedding_client_from_runtime(
     *,
+    billing_service: BillingService,
     provider: str,
     model: str,
     base_url: str | None,
@@ -325,6 +339,7 @@ def create_embedding_client_from_runtime(
     client_class = DeterministicAIEmbeddingClient if deterministic else AIEmbeddingClient
     return client_class(
         api_key=resolved_api_key,
+        billing_service=billing_service,
         model=model,
         base_url=base_url,
         timeout=timeout,
@@ -337,6 +352,7 @@ def create_embedding_client_from_runtime(
 def create_embedding_client_from_ai_model(
     resolved: ResolvedAIModel,
     *,
+    billing_service: BillingService,
     timeout: int = 15,
 ) -> AIEmbeddingClient:
     """Create an embedding client from the unified AI resolver contract."""
@@ -347,6 +363,7 @@ def create_embedding_client_from_ai_model(
     if resolved.provider is None or not resolved.provider.strip():
         raise ValueError("embedding provider is empty")
     return create_embedding_client_from_runtime(
+        billing_service=billing_service,
         provider=resolved.provider,
         model=resolved.model,
         base_url=resolved.base_url,
@@ -361,6 +378,7 @@ def create_embedding_client_from_ai_model(
 async def embed_texts(
     texts: list[str],
     *,
+    billing_service: BillingService,
     requirements: AIRequestRequirements | None = None,
     selection: AISelection | None = None,
     timeout: int = 15,
@@ -374,7 +392,9 @@ async def embed_texts(
     )
     if resolved is None:
         raise ValueError('AI capability embedding: route is not configured')
-    client = create_embedding_client_from_ai_model(resolved, timeout=timeout)
+    client = create_embedding_client_from_ai_model(
+        resolved, billing_service=billing_service, timeout=timeout
+    )
     return await client.generate_embeddings(texts)
 
 
@@ -406,12 +426,14 @@ async def chat_for_capability(
     capability: AICapability,
     messages: MessageInput,
     *,
+    billing_service: BillingService,
     include_platform_default: bool = True,
     llm_context: JsonObject | None = None,
 ) -> Message:
     """Convenience one-shot chat through capability resolution."""
     client = create_llm_client_for_capability(
         capability,
+        billing_service=billing_service,
         include_platform_default=include_platform_default,
     )
     return await client.chat(messages, llm_context=llm_context)

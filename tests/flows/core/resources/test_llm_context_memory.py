@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import pytest
 
 from apps.flows.src.durable_execution import SideEffectPolicy
@@ -165,7 +166,7 @@ def _runner(
         prompt="You are a memory writer.",
         workflow_runtime=workflow_runtime,
         memory_store=store,
-        text_transform_service=TextTransformService(),
+        text_transform_service=TextTransformService(make_test_billing_service()),
         emitter_factory=EmitterFactory.__new__(EmitterFactory),
         redis_client=RedisClient.__new__(RedisClient),
         tool_registry=_ClosedToolRegistry(),

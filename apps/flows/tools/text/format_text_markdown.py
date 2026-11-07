@@ -32,7 +32,9 @@ class FormatTextMarkdownArgs(BaseModel):
 async def format_text_markdown(
     text: str,
     state: ExecutionState | None = None,
+    *,
+    text_client: TextClient,
 ) -> JsonObject:
     del state
-    markdown = await TextClient().format_markdown(text)
+    markdown = await text_client.format_markdown(text)
     return {"markdown": markdown}

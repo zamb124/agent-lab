@@ -16,8 +16,7 @@ import tiktoken
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import core.tracing.attributes as trace_attributes
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
+from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING, BillingService
 from core.config import get_settings
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
@@ -81,6 +80,8 @@ class AIEmbeddingClient:
     def __init__(
         self,
         api_key: str,
+        *,
+        billing_service: BillingService,
         model: str = "openai/text-embedding-3-small",
         base_url: str | None = None,
         timeout: int = 15,
@@ -94,6 +95,7 @@ class AIEmbeddingClient:
             raise ValueError('Embedding model is required for AIEmbeddingClient')
 
         self.api_key: str = api_key
+        self.billing_service: BillingService = billing_service
         self.model_name: str = model.strip()
         self.timeout: int = timeout
         self.dimension: int | None = dimension
@@ -253,7 +255,7 @@ class AIEmbeddingClient:
         if not user_id:
             raise ValueError('Context with user is required for generate_embeddings (billing and notifications)')
 
-        await get_billing_service().require_balance_for_billable_operation(
+        await self.billing_service.require_balance_for_billable_operation(
             actx.active_company.company_id,
             user_id,
             operation_code=BALANCE_BLOCK_OPERATION_EMBEDDING,

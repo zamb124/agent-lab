@@ -47,6 +47,7 @@ from apps.sync.realtime.task_names import (
 )
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from apps.sync.services.livekit_client import LiveKitClient
+from core.billing.service import BillingService
 from core.clients.files_client import FilesClient
 from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
@@ -158,7 +159,11 @@ def _normalize_storage_url_for_worker(*, storage_url: str, testing: bool) -> str
 
 
 async def _resolve_livekit_egress_result(
-    *, room_name: str, timeout_seconds: float, expected_egress_id: str | None = None
+    *,
+    room_name: str,
+    timeout_seconds: float,
+    billing_service: BillingService,
+    expected_egress_id: str | None = None,
 ) -> tuple[str, str]:
     if room_name == "":
         raise ValueError("livekit room_name is required to look up the egress result.")
@@ -176,6 +181,7 @@ async def _resolve_livekit_egress_result(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
+        billing_service=billing_service,
     )
     logger.info(
         "sync.resolve_egress_result",
@@ -565,6 +571,7 @@ async def sync_finalize_recording_task(
             provider_job_id, raw_storage_url = await _resolve_livekit_egress_result(
                 room_name=call.livekit_room_name,
                 timeout_seconds=egress_timeout_seconds,
+                billing_service=di.billing_service,
                 expected_egress_id=recording.provider_job_id,
             )
             finalize_span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, provider_job_id)

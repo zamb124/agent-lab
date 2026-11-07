@@ -43,6 +43,7 @@ from apps.sync.services.message_service import SyncMessageService
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.config import get_settings
 from core.events.contract import PlatformEvent
 from core.files.service import FilesService
@@ -127,6 +128,7 @@ async def handle_call_invite(
     company_id: str,
     channel_access: SyncChannelAccessService,
     authz: AuthzService,
+    billing_service: BillingService,
     resolve_user: bool = False,
 ) -> tuple[CallRead, list[PlatformEvent]]:
     """Создаёт звонок и событие call.incoming только для участников канала."""
@@ -159,6 +161,7 @@ async def handle_call_invite(
             url=settings.calls.livekit_url,
             api_key=settings.calls.livekit_api_key,
             api_secret=settings.calls.livekit_api_secret,
+            billing_service=billing_service,
         )
         persistent = await SyncCallLink.find_persistent_for_channel(
             company_id, payload.channel_id
@@ -318,6 +321,7 @@ async def handle_call_hangup(
     channel_access: SyncChannelAccessService,
     files_service: FilesService,
     message_service: SyncMessageService,
+    billing_service: BillingService,
 ) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     call = await SyncCall.require_company_call(payload.call_id, company_id)
@@ -359,12 +363,14 @@ async def handle_call_hangup(
                 actor_user_id=actor_user_id,
                 files_service=files_service,
                 message_service=message_service,
+                billing_service=billing_service,
             )
             settings = get_settings()
             lk = LiveKitClient(
                 url=settings.calls.livekit_url,
                 api_key=settings.calls.livekit_api_key,
                 api_secret=settings.calls.livekit_api_secret,
+                billing_service=billing_service,
             )
             try:
                 await lk.delete_room(

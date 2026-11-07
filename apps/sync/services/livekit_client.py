@@ -25,10 +25,10 @@ from livekit.protocol.models import AudioCodec
 from livekit.protocol.room import CreateRoomRequest, DeleteRoomRequest
 
 import core.tracing.attributes as trace_attributes
-from core.billing import get_billing_service
 from core.billing.service import (
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
+    BillingService,
 )
 from core.tracing.operation_span import traced_operation
 from core.types import OtelAttributeValue
@@ -56,7 +56,14 @@ def _livekit_traced_attrs(
 class LiveKitClient:
     """Тонкая обёртка над livekit-api SDK для управления SFU-комнатами."""
 
-    def __init__(self, *, url: str, api_key: str, api_secret: str) -> None:
+    def __init__(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        billing_service: BillingService,
+    ) -> None:
         if not api_key:
             raise ValueError('livekit_api_key is not set in configuration')
         if not api_secret:
@@ -64,6 +71,7 @@ class LiveKitClient:
         self._url: str = url
         self._api_key: str = api_key
         self._api_secret: str = api_secret
+        self._billing_service: BillingService = billing_service
 
     def _api_url(self) -> str:
         """Преобразует ws(s):// → http(s):// для server-side Twirp API."""
@@ -76,7 +84,7 @@ class LiveKitClient:
 
     async def create_room(self, room_name: str, *, company_id: str, user_id: str) -> None:
         """Создаёт LiveKit комнату. Если уже существует — не ошибка."""
-        await get_billing_service().require_balance_for_billable_operation(
+        await self._billing_service.require_balance_for_billable_operation(
             company_id,
             user_id,
             operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
@@ -186,7 +194,7 @@ class LiveKitClient:
                 )
             ],
         )
-        await get_billing_service().require_balance_for_billable_operation(
+        await self._billing_service.require_balance_for_billable_operation(
             company_id,
             user_id,
             operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
@@ -273,7 +281,7 @@ class LiveKitClient:
                 audio_bitrate=128,
             ),
         )
-        await get_billing_service().require_balance_for_billable_operation(
+        await self._billing_service.require_balance_for_billable_operation(
             company_id,
             user_id,
             operation_code=BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,

@@ -14,8 +14,6 @@ from apps.crm.tasks.crm_context import set_crm_context
 from apps.crm.tasks.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN
 from core.config import get_settings
 from core.logging import get_logger
-from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
-from core.rag.factory import get_rag_provider
 from core.tasks import platform_task
 from core.text_transforms import TextTransformService
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -150,7 +148,7 @@ async def format_note_description_markdown_task(
     chunk_lim = int(get_settings().text_transforms.markdown_max_chunk_chars)
     chunks_total = len(split_text_into_markdown_chunks(str(desc).strip(), chunk_lim)) or 1
     try:
-        markdown_raw = await TextTransformService().format_markdown(str(desc).strip())
+        markdown_raw = await TextTransformService(di.billing_service).format_markdown(str(desc).strip())
     except Exception as exc:
         logger.warning(
             "note_markdown_format_failed",
@@ -206,7 +204,7 @@ async def format_note_description_markdown_task(
         return {"status": "skipped_stale", "note_id": note_id}
 
     await index_crm_entity(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         merged,
         replace=True,
     )

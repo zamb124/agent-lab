@@ -25,35 +25,6 @@ from .service import (
     BillingService,
 )
 
-_billing_service: BillingService | None = None
-
-
-def set_billing_service(service: BillingService) -> None:
-    """
-    Устанавливает глобальный BillingService.
-    Вызывается при старте сервиса из recipe платформенного DI.
-    """
-    global _billing_service
-    _billing_service = service
-
-
-def get_billing_service() -> BillingService:
-    """
-    Получает глобальный BillingService.
-
-    Возвращает:
-        BillingService
-
-    Исключения:
-        RuntimeError: если сервис не инициализирован
-    """
-    if _billing_service is None:
-        raise RuntimeError(
-            'BillingService is not initialized. Call set_billing_service() at service startup.'
-        )
-    return _billing_service
-
-
 __all__ = [
     "BALANCE_BLOCK_OPERATION_EMBEDDING",
     "BALANCE_BLOCK_OPERATION_GUEST_RUNTIME",
@@ -67,8 +38,6 @@ __all__ = [
     "BillingBalanceBlockedError",
     "BillingService",
     "cbr_rate_refresh_loop_coro",
-    "get_billing_service",
     "get_cbr_usd_to_rub_rate",
     "refresh_cbr_rate",
-    "set_billing_service",
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 from datetime import date
 
 import pytest
@@ -57,7 +58,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             kind=NamespaceKind.COMPANY_WORKSPACE,
         )
         _, _ = await upsert_canonical_by_external_ref(
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
@@ -70,7 +71,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             account_key="sub_amocrm",
         )
         _, _ = await upsert_canonical_by_external_ref(
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
@@ -85,7 +86,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
 
         service = AmoCRMIntegrationService(
             oauth_service=crm_di.oauth_service,
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_service=crm_di.entity_service,
             namespace_service=crm_di.namespace_service,
             task_service=crm_di.task_service,
@@ -214,7 +215,7 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
     try:
         service = AmoCRMIntegrationService(
             oauth_service=crm_di.oauth_service,
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_service=crm_di.entity_service,
             namespace_service=crm_di.namespace_service,
             task_service=crm_di.task_service,

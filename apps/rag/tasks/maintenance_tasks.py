@@ -235,11 +235,14 @@ async def rag_cleanup_expired_documents_tick(
 async def rag_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> RAGReembedTickResult:
     _ = company_id
     return await execute_reembed_tick(
         channel="rag_worker",
         schedule_task_id=schedule_task_id,
+        billing_service=di.billing_service,
     )
 
 

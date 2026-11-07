@@ -37,6 +37,7 @@ async def test_search_posts_to_rag_api_with_search_options(
     monkeypatch.setattr(ServiceClient, "post", fake_post)
 
     r = RAGResource(
+        billing_service=di.billing_service,
         namespace="ns-a",
         company_id="system",
         search_options={"channels": {"semantic": True, "lexical": True}},

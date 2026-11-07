@@ -345,6 +345,9 @@ async def op_llm_model_scores_probe_providers(
 ) -> LLMModelScoreListResponse:
     _ = payload
     _ = await require_system_admin(di.authz_service)
-    snapshots = await probe_platform_free_providers(settings=get_settings())
+    snapshots = await probe_platform_free_providers(
+        settings=get_settings(),
+        billing_service=di.billing_service,
+    )
     logger.info("frontend.llm_model_score_providers_probed", actor_user_id=user.user_id, count=len(snapshots))
     return await _score_list_response(await _build_score_catalog_rows())

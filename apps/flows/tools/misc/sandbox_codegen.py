@@ -15,6 +15,7 @@ from core.ai.providers import AICapability, split_provider_prefixed_model
 from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.billing.service import BillingService
 from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
 from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.config import get_settings
@@ -212,6 +213,7 @@ async def sandbox_codegen(
     model: str = "",
     *,
     state: ExecutionState,
+    billing_service: BillingService,
 ) -> JsonObject:
     capability_language = language
     if capability_language not in _LANGUAGES:
@@ -222,6 +224,7 @@ async def sandbox_codegen(
     docs = await _language_docs(capability_language, max_doc_chars)
     llm = create_llm_client_from_ai_model(
         resolved_llm,
+        billing_service=billing_service,
         variables=exec_state.variables,
     )
     runner = CodeRunnerClient(language=capability_language)

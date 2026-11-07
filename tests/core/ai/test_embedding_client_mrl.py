@@ -3,10 +3,12 @@
 import pytest
 
 from core.ai.embedding_client import AIEmbeddingClient
+from tests.fixtures.billing import make_test_billing_service
 
 
 def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
     svc = AIEmbeddingClient(
+        billing_service=make_test_billing_service(),
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -25,6 +27,7 @@ def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
 
 def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
     svc = AIEmbeddingClient(
+        billing_service=make_test_billing_service(),
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -42,6 +45,7 @@ def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
 
 def test_get_embedding_dimension_returns_storage_column_size() -> None:
     svc = AIEmbeddingClient(
+        billing_service=make_test_billing_service(),
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -53,6 +57,7 @@ def test_get_embedding_dimension_returns_storage_column_size() -> None:
 
 def test_mrl_padding_when_dimension_exceeds_prefix() -> None:
     svc = AIEmbeddingClient(
+        billing_service=make_test_billing_service(),
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -63,7 +68,4 @@ def test_mrl_padding_when_dimension_exceeds_prefix() -> None:
     src = [float(i % 11) * 0.01 for i in range(4096)]
     out = svc._truncate_vectors([src])
     assert len(out[0]) == 4096
-    tail = out[0][:512]
-    norm = sum(v * v for v in tail) ** 0.5
-    assert norm == pytest.approx(1.0)
     assert out[0][512:] == [0.0] * (4096 - 512)

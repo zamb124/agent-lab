@@ -9,6 +9,7 @@ from a2a.types import Message, Part, Role
 from core.ai.providers import AICapability
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.billing.service import BillingService
 from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
 from core.files.models import FileRecord
@@ -29,7 +30,8 @@ class NanoBananaClient:
     Клиент для генерации изображений через platform LLM capability.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, billing_service: BillingService) -> None:
+        self._billing_service: BillingService = billing_service
         self._llm: _ChatLLM | None = None
 
     def _create_image_generation_client(self) -> _ChatLLM:
@@ -40,7 +42,9 @@ class NanoBananaClient:
                 include_platform_default=True,
             )
             if resolved is not None:
-                self._llm = create_llm_client_from_ai_model(resolved)
+                self._llm = create_llm_client_from_ai_model(
+                    resolved, billing_service=self._billing_service
+                )
             else:
                 raise ValueError(
                     "NanoBananaClient: platform default for capability=image_gen is not configured"
@@ -147,11 +151,11 @@ class NanoBananaClientFactory:
     """Фабрика для создания Nano Banana клиентов"""
 
     @staticmethod
-    def create_client() -> NanoBananaClient:
+    def create_client(*, billing_service: BillingService) -> NanoBananaClient:
         """Создает клиент на основе конфигурации"""
         settings = get_settings()
 
         if not settings.nano_banana.enabled:
             raise ValueError("Nano Banana is not configured")
 
-        return NanoBananaClient()
+        return NanoBananaClient(billing_service)

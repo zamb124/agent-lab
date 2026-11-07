@@ -28,6 +28,7 @@ from apps.sync.services.channel_service import SyncChannelService
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.config import get_settings
 from core.models.identity_models import User
 from core.pagination import OffsetPage
@@ -56,11 +57,13 @@ class SyncCallLinkService:
         channel_access: SyncChannelAccessService,
         short_links: ShortLinkService,
         channels: SyncChannelService,
+        billing_service: BillingService,
     ) -> None:
         self._authz: AuthzService = authz
         self._channel_access: SyncChannelAccessService = channel_access
         self._short_links: ShortLinkService = short_links
         self._channels: SyncChannelService = channels
+        self._billing_service: BillingService = billing_service
 
     async def _participant_names_for_call(self, call: SyncCall) -> dict[str, str]:
         out: dict[str, str] = {}
@@ -507,7 +510,7 @@ class SyncCallLinkService:
                         "Ended call has no LiveKit room.",
                               error_code='internal',
                           )
-                await livekit_client(settings).create_room(
+                await livekit_client(settings, self._billing_service).create_room(
                     livekit_room,
                     company_id=link.company_id,
                     user_id=participant_identity,
@@ -528,7 +531,7 @@ class SyncCallLinkService:
                 call = new_call
         else:
             livekit_room_name = f"link-{payload.link_token[:16]}"
-            await livekit_client(settings).create_room(
+            await livekit_client(settings, self._billing_service).create_room(
                 livekit_room_name,
                 company_id=link.company_id,
                 user_id=participant_identity,
@@ -550,7 +553,7 @@ class SyncCallLinkService:
         if not call.livekit_room_name:
             raise WsCommandError("internal", "Call has no LiveKit room.", error_code='internal')
 
-        token = livekit_client(settings).generate_token(
+        token = livekit_client(settings, self._billing_service).generate_token(
             room_name=call.livekit_room_name, identity=participant_identity
         )
         participant_names = await self._participant_names_for_call(call)

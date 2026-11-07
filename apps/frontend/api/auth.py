@@ -111,11 +111,12 @@ async def auth_callback(
     # Устанавливаем cookie для всех субдоменов базового домена
     cookie_domain = get_cookie_domain(target_host)
 
+    # SESSION JWT = Centrifugo connection JWT; client reads auth_token via document.cookie.
     response.set_cookie(
         key="auth_token",
         value=token,
         domain=cookie_domain,
-        httponly=True,
+        httponly=False,
         secure=is_production,
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,

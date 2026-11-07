@@ -19,11 +19,13 @@ def attach_session_auth_cookie(response: Response, request: Request, token: str)
     settings = get_settings()
     cookie_domain = get_cookie_domain(request.headers.get("host", ""))
     is_production = settings.server.env == "production"
+    # SESSION JWT = Centrifugo connection JWT: centrifuge-js читает cookie через
+    # document.cookie (getToken), поэтому auth_token не HttpOnly — как при login.
     response.set_cookie(
         key="auth_token",
         value=token,
         domain=cookie_domain,
-        httponly=True,
+        httponly=False,
         secure=is_production,
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,

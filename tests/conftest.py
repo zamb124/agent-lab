@@ -10,6 +10,8 @@ TaskIQ worker запускается автоматически для тест�
 
 import os
 
+from tests.fixtures.billing import make_test_billing_service
+
 os.environ.setdefault("LOGGING__LEVEL", "WARNING")
 
 import asyncio
@@ -774,7 +776,8 @@ def mock_llm() -> MockLLM:
     Единственный мок в тестах - имитация ответов LLM.
     Все остальное (state, flow, nodes, tools) - реальные объекты.
     """
-    return setup_mock_responses(default_response="Test response")
+    return setup_mock_responses(default_response="Test response",
+        billing_service=make_test_billing_service())
 
 
 @pytest.fixture
@@ -793,7 +796,8 @@ def mock_llm_with_queue():
     """
 
     def _factory(responses: List[Any]) -> MockLLM:
-        return setup_mock_responses(response_queue=responses)
+        return setup_mock_responses(response_queue=responses,
+        billing_service=make_test_billing_service())
 
     return _factory
 
@@ -1708,7 +1712,8 @@ async def rag_provider_pgvector():
         settings.llm,
         openai_v1_base_url(settings.server.get_service_url("provider_litserve")),
     )
-    provider = PgVectorProvider(config, embedding_runtime)
+    provider = PgVectorProvider(config, embedding_runtime,
+        billing_service=make_test_billing_service())
     async with rag_application.router.lifespan_context(rag_application):
         FileReader.configure_asset_persist(require_di(rag_application, RagDi).files_service)
         yield provider

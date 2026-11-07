@@ -7,21 +7,20 @@ from collections.abc import AsyncIterator
 import pytest_asyncio
 
 from apps.flows.di import FlowsDi
-from core.billing import set_billing_service
+from core.billing.service import BillingService
 from tests.fixtures.service_processes import ServiceProcesses
 
 
 @pytest_asyncio.fixture(scope="session")
 async def llm_billing_service(
     service_processes: ServiceProcesses, setup_database_before_tests: None
-) -> AsyncIterator[None]:
-    """Глобальный BillingService из FlowsDi для production-пути LLM.
+) -> AsyncIterator[BillingService]:
+    """BillingService из FlowsDi для production-пути LLM без process-global.
 
-    ``_production_llm_env`` выключает testing-режим: billing идёт через
-    ``get_billing_service()`` — без открытого DI глобаль пуста и вызов падает.
-    Применять через ``@pytest.mark.usefixtures("llm_billing_service")``.
+    ``_production_llm_env`` выключает testing-режим: LLMClient требует явный
+    ``billing_service``. Применять через
+    ``@pytest.mark.usefixtures("llm_billing_service")`` или как аргумент фикстуры.
     """
     _ = setup_database_before_tests
     di = await service_processes.di(FlowsDi)
-    set_billing_service(di.billing_service)
-    yield
+    yield di.billing_service

@@ -46,6 +46,7 @@ from core.config.models import (
     PlatformFreePoolPaidFallbackConfig,
 )
 from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
+from tests.fixtures.billing import make_test_billing_service
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,7 @@ def _candidate(
 
 def _client_for(server: _OpenAICompatibleTestServer, candidates: list[LLMCallConfig]) -> LLMClient:
     return LLMClient(
+        billing_service=make_test_billing_service(),
         model=candidates[0].model,
         api_key=candidates[0].api_key,
         base_url=candidates[0].base_url,
@@ -686,6 +688,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_tools() -> N
             source="platform_free",
         )
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=str(candidate.model),
             api_key=str(candidate.api_key),
             base_url=candidate.base_url,
@@ -801,7 +804,8 @@ def test_create_transport_llm_client_builds_explicit_fallback_candidates_from_re
                         "extra_request_headers": {"X-Fallback": "openai"},
                     },
                 ],
-            )
+        billing_service=make_test_billing_service(),
+    )
     finally:
         set_settings(old_settings)
 
@@ -860,7 +864,7 @@ def test_create_transport_llm_client_without_model_uses_platform_default_pool_in
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = create_transport_llm_client()
+            client = create_transport_llm_client(billing_service=make_test_billing_service())
     finally:
         set_settings(old_settings)
 
@@ -904,7 +908,8 @@ def test_create_transport_llm_client_default_pool_can_disable_paid_fallback_for_
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = create_transport_llm_client(allow_platform_paid_fallback=False)
+            client = create_transport_llm_client(allow_platform_paid_fallback=False,
+        billing_service=make_test_billing_service())
     finally:
         set_settings(old_settings)
 
@@ -954,7 +959,8 @@ def test_linnex_llm_provider_uses_dynamic_pool_independent_of_default_strategy()
                 provider=LINNEX_LLM_PROVIDER,
                 model_name=LINNEX_LLM_AUTO_MODEL,
                 allow_platform_paid_fallback=False,
-            )
+        billing_service=make_test_billing_service(),
+    )
     finally:
         set_settings(old_settings)
 
@@ -993,7 +999,8 @@ def test_create_transport_llm_client_uses_linnex_default_provider_as_platform_ro
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = create_transport_llm_client(allow_platform_paid_fallback=False)
+            client = create_transport_llm_client(allow_platform_paid_fallback=False,
+        billing_service=make_test_billing_service())
     finally:
         set_settings(old_settings)
 
@@ -1026,7 +1033,8 @@ def test_linnex_llm_accepts_concrete_free_pool_model() -> None:
                 provider=LINNEX_LLM_PROVIDER,
                 model_name="openrouter:qwen/qwen3-coder:free",
                 allow_platform_paid_fallback=False,
-            )
+        billing_service=make_test_billing_service(),
+    )
     finally:
         set_settings(old_settings)
 
@@ -1065,7 +1073,8 @@ def test_explicit_platform_provider_accepts_linnex_llms_fallback() -> None:
                         model=LINNEX_LLM_AUTO_MODEL,
                     )
                 ],
-            )
+        billing_service=make_test_billing_service(),
+    )
     finally:
         set_settings(old_settings)
 
@@ -1181,6 +1190,7 @@ async def test_all_free_fail_then_paid_succeeds(unique_id: str) -> None:
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=free_model,
             api_key="test-key",
             base_url=server.base_url,
@@ -1215,6 +1225,7 @@ async def test_all_free_and_paid_fail_raises_last_http_error(unique_id: str) -> 
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=free_model,
             api_key="test-key",
             base_url=server.base_url,
@@ -1250,6 +1261,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_files() -> N
             source="platform_free",
         )
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=str(candidate.model),
             api_key=str(candidate.api_key),
             base_url=candidate.base_url,
@@ -1292,6 +1304,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_response_for
             source="platform_free",
         )
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=str(candidate.model),
             api_key=str(candidate.api_key),
             base_url=candidate.base_url,
@@ -1325,6 +1338,7 @@ async def test_paid_fallback_used_when_free_has_no_tools() -> None:
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="free-no-tools",
             api_key="test-key",
             base_url=server.base_url,
@@ -1367,6 +1381,7 @@ async def test_paid_without_tools_does_not_guess() -> None:
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="free-no-tools",
             api_key="test-key",
             base_url=server.base_url,
@@ -1409,6 +1424,7 @@ async def test_authored_fallback_used_when_free_has_no_tools() -> None:
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="free-no-tools",
             api_key="test-key",
             base_url=server.base_url,
@@ -1448,6 +1464,7 @@ async def test_explicit_byok_without_tools_uses_first_candidate() -> None:
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="byok-no-tools",
             api_key="test-key",
             base_url=server.base_url,
@@ -1475,6 +1492,7 @@ async def test_explicit_byok_without_tools_uses_first_candidate() -> None:
 @pytest.mark.asyncio
 async def test_empty_candidates_platform_pool_without_paid_raises() -> None:
     client = LLMClient(
+        billing_service=make_test_billing_service(),
         model="unused",
         api_key="test-key",
         base_url="https://example.invalid/v1",
@@ -1502,6 +1520,7 @@ async def test_filter_then_cap_keeps_tool_capable_platform_free_beyond_global_ra
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="no-tools-0",
             api_key="test-key",
             base_url=server.base_url,
@@ -1552,6 +1571,7 @@ async def test_filter_then_cap_keeps_file_capable_platform_free_beyond_global_ra
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="text-0",
             api_key="test-key",
             base_url=server.base_url,
@@ -1610,6 +1630,7 @@ async def test_filter_then_cap_keeps_json_capable_platform_free_beyond_global_ra
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="plain-0",
             api_key="test-key",
             base_url=server.base_url,
@@ -1666,6 +1687,7 @@ async def test_filter_then_cap_limits_matching_platform_free_candidates() -> Non
     await server.start()
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model="tools-0",
             api_key="test-key",
             base_url=server.base_url,
@@ -1766,6 +1788,7 @@ async def test_stream_uses_redis_cooldown_and_retry_after(unique_id: str) -> Non
     ok_on_server = _candidate(ok_model, base_url=server.base_url)
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=fail_model,
             api_key="test-key",
             base_url=server.base_url,
@@ -1811,6 +1834,7 @@ async def test_stream_uses_redis_cooldown_and_http_date_retry_after(unique_id: s
     ok_on_server = _candidate(ok_model, base_url=server.base_url)
     try:
         client = LLMClient(
+        billing_service=make_test_billing_service(),
             model=fail_model,
             api_key="test-key",
             base_url=server.base_url,

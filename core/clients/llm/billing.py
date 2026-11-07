@@ -16,13 +16,14 @@ from core.ai.free_pool import PLATFORM_PAID_FALLBACK_SOURCE
 from core.ai.llm_config import LLMCallConfig
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability
-from core.billing import get_billing_service, get_cbr_usd_to_rub_rate
+from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import (
     BALANCE_BLOCK_OPERATION_IMAGE,
     BALANCE_BLOCK_OPERATION_LLM,
     BALANCE_BLOCK_OPERATION_VISION,
     COST_ORIGIN_COMPANY,
     COST_ORIGIN_PLATFORM,
+    BillingService,
 )
 from core.clients.llm.messages import StreamEvent
 from core.config import get_settings
@@ -190,6 +191,7 @@ def filter_paid_fallback_candidates(
 async def prepare_llm_client_billing(
     billing: LLMClientBilling,
     *,
+    billing_service: BillingService,
     platform_default_free_pool: bool,
     platform_paid_fallback_enabled: bool,
 ) -> bool:
@@ -212,14 +214,14 @@ async def prepare_llm_client_billing(
     if not user_id:
         raise ValueError("Context with user is required for LLM (billing)")
     if platform_default_free_pool:
-        allow_charge = await get_billing_service().company_may_incur_billable_operation_charge(
+        allow_charge = await billing_service.company_may_incur_billable_operation_charge(
             actx.active_company.company_id
         )
         paid_fallback = paid_fallback and allow_charge
         billing.prepared = True
         billing.paid_fallback_allowed = paid_fallback
         return paid_fallback
-    await get_billing_service().require_balance_for_billable_operation(
+    await billing_service.require_balance_for_billable_operation(
         actx.active_company.company_id,
         user_id,
         operation_code=billing.operation_code,

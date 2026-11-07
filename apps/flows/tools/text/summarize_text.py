@@ -53,9 +53,11 @@ async def summarize_text(
     provider: str | None = None,
     model: str | None = None,
     state: ExecutionState | None = None,
+    *,
+    text_client: TextClient,
 ) -> JsonObject:
     del state
-    summary = await TextClient().summarize(
+    summary = await text_client.summarize(
         text,
         max_output_tokens=max_output_tokens,
         instruction=instruction,

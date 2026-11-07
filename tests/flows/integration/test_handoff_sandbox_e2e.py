@@ -9,13 +9,15 @@ import pytest
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.state.interrupt import HandoffInterrupt, InterruptKind
 from core.clients.llm import setup_mock_responses
+from tests.fixtures.billing import make_test_billing_service
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
 
 
 async def _run(di, flow_id, unique_id, content, mock_responses, **extra):
-    setup_mock_responses(response_queue=mock_responses)
+    setup_mock_responses(response_queue=mock_responses,
+        billing_service=make_test_billing_service())
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content=content, **extra)
     flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     return await run_flow(di=di, flow=flow, state=state)

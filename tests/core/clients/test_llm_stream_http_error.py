@@ -10,6 +10,7 @@ from a2a.types import Role
 from core.clients.llm.client import LLMClient
 from core.clients.llm.transport import stream_once
 from tests.core.http_proxy_helpers import install_mock_httpx_client, unread_json_response
+from tests.fixtures.billing import make_test_billing_service
 
 
 @pytest.mark.asyncio
@@ -29,6 +30,7 @@ async def test_stream_unread_http_400_raises_http_status_error_with_body(
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
 
     client = LLMClient(
+        billing_service=make_test_billing_service(),
         model="nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4",
         api_key="test-key",
         base_url="https://router.huggingface.co/v1",

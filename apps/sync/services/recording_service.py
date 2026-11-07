@@ -20,6 +20,7 @@ from apps.sync.services.livekit_usage_spans import trace_livekit_egress_composit
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.config import get_settings
 from core.events import publish_events
 from core.files.create_spec import FileSourceKind
@@ -53,12 +54,13 @@ def normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
         netloc = f"{hostname}:{parsed.port}"
     return f"{parsed.scheme}://{netloc}"
 
-def build_livekit_recording_client() -> LiveKitClient:
+def build_livekit_recording_client(billing_service: BillingService) -> LiveKitClient:
     settings = get_settings()
     return LiveKitClient(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
+        billing_service=billing_service,
     )
 
 async def stop_and_finalize_recording(
@@ -67,6 +69,7 @@ async def stop_and_finalize_recording(
     recording: SyncCallRecording,
     company_id: str,
     actor_user_id: str,
+    billing_service: BillingService,
 ) -> CallRecordingRead:
     if recording.provider_job_id is None or recording.provider_job_id == "":
         raise ValueError(
@@ -85,7 +88,7 @@ async def stop_and_finalize_recording(
             max_end_at=max_end_at.isoformat(),
             now=datetime.now(UTC).isoformat(),
         )
-    livekit_client = build_livekit_recording_client()
+    livekit_client = build_livekit_recording_client(billing_service)
     logger.info(
         "call.recording.stop",
         call_id=call.call_id,
@@ -148,9 +151,11 @@ class SyncCallRecordingService:
         self,
         authz: AuthzService,
         channel_access: SyncChannelAccessService,
+        billing_service: BillingService,
     ) -> None:
         self._authz: AuthzService = authz
         self._channel_access: SyncChannelAccessService = channel_access
+        self._billing_service: BillingService = billing_service
 
     async def stop_if_started_by_actor(
         self,
@@ -167,6 +172,7 @@ class SyncCallRecordingService:
             recording=active,
             company_id=company_id,
             actor_user_id=actor_user_id,
+            billing_service=self._billing_service,
         )
 
     async def start(
@@ -237,7 +243,7 @@ class SyncCallRecordingService:
             ) from exc
         recording_id = uuid4().hex
         egress_filepath = f"sync-recordings/{company_id}/{call.call_id}/{recording_id}.mp4"
-        livekit_client = build_livekit_recording_client()
+        livekit_client = build_livekit_recording_client(self._billing_service)
         await livekit_client.create_room(
             call.livekit_room_name, company_id=company_id, user_id=user_id
         )
@@ -316,6 +322,7 @@ class SyncCallRecordingService:
             recording=active,
             company_id=company_id,
             actor_user_id=user_id,
+            billing_service=self._billing_service,
         )
         recipients = await channel_recipient_user_ids(self._channel_access, call.channel_id)
         await publish_events(

@@ -18,8 +18,7 @@ from core.files.models import FileRecord
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.models import StrictBaseModel
-from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
-from core.rag.factory import get_rag_provider
+from core.rag.base_provider import BaseRAGProvider
 from core.types import JsonObject
 
 EXPORT_PAGE_SIZE = 500
@@ -43,6 +42,7 @@ async def export_entities_to_file(
     entity_service: EntityService,
     crm_work_item_service: CrmWorkItemService,
     files_service: FilesService,
+    rag_provider: BaseRAGProvider,
     payload: CrmEntitiesExportPayload,
 ) -> FileRecord:
     """Постранично собирает сущности (ACL учитывается в `list_entities`) и кладёт выгрузку в S3."""
@@ -91,7 +91,7 @@ async def export_entities_to_file(
                 )
         else:
             enriched = await build_entity_responses_with_semantic_index(
-                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+                rag_provider,
                 batch,
                 crm_work_item_service=crm_work_item_service,
             )

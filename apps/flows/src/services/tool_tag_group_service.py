@@ -18,6 +18,7 @@ from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.ai.providers import AICapability
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.billing.service import BillingService
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue
 
@@ -30,6 +31,9 @@ _FLOW_SCAN_LIMIT = 200
 
 class ToolTagGroupService:
     """Platform catalog описаний tag-групп + idle LLM refresh."""
+
+    def __init__(self, billing_service: BillingService) -> None:
+        self._billing_service: BillingService = billing_service
 
     async def describe_all_platform_tags(self) -> ToolTagGroupTickStats:
         tools_by_tag = self._collect_builtin_tools_by_tag()
@@ -159,7 +163,9 @@ class ToolTagGroupService:
             raise ValueError(
                 "tool_tag_groups_describe: platform default for capability=llm_chat not configured"
             )
-        llm = create_llm_client_from_ai_model(resolved)
+        llm = create_llm_client_from_ai_model(
+            resolved, billing_service=self._billing_service
+        )
         tools_block = "\n".join(
             f"- {tool_id}: {description}" if description else f"- {tool_id}"
             for tool_id, description in tools

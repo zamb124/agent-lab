@@ -36,6 +36,7 @@ from apps.sync.realtime.livekit_sdk_boundary import (
 from apps.sync.services.livekit_client import LiveKitClient
 from apps.sync.services.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from apps.sync.services.message_service import SyncMessageService
+from core.billing.service import BillingService
 from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
@@ -64,6 +65,8 @@ class SpeechPollDeps(Protocol):
     def files_service(self) -> FilesService: ...
     @property
     def message_service(self) -> SyncMessageService: ...
+    @property
+    def billing_service(self) -> BillingService: ...
 
 _SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -696,6 +699,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str,
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
+        billing_service=di.billing_service,
     )
     room_name = call.livekit_room_name
     base_http = _livekit_http_base(settings.calls.livekit_url)
@@ -804,6 +808,7 @@ async def stop_speech_egresses_for_call_room(
     actor_user_id: str,
     files_service: FilesService,
     message_service: SyncMessageService,
+    billing_service: BillingService,
 ) -> None:
     rows = await SyncCallSpeechEgressTrack.list_by_created_at_asc_for_call(call_id, company_id)
     if len(rows) == 0:
@@ -816,6 +821,7 @@ async def stop_speech_egresses_for_call_room(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
+        billing_service=billing_service,
     )
     base_http = _livekit_http_base(settings.calls.livekit_url)
     lk_timeout = settings.calls.speech_to_chat.livekit_client_timeout_seconds

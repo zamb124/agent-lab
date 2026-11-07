@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -92,7 +93,7 @@ async def _set_note_attachment_ids(
         note.attachment_ids = attachment_ids
         note = await CRMEntity.update_loaded(note)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             note,
             replace=True,
         )

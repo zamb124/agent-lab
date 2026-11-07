@@ -38,6 +38,7 @@ from core.tracing.config import TracingConfig
 from core.tracing.models import Span
 from core.tracing.provider import set_tracing_enabled
 from core.tracing.tracer import set_tracing_service_name
+from tests.fixtures.billing import make_test_billing_service
 
 logger = get_logger(__name__)
 
@@ -144,7 +145,8 @@ class TestLlmNodeTracing:
                 "args": {"expression": "2 + 2"},
             },
             "Результат вычисления 2+2 равен 4",
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         # Отправляем запрос через A2A API
         response = await client.post(
@@ -244,7 +246,8 @@ class TestLlmNodeTracing:
                 "tool": "ask_user",
                 "args": {"question": "Как вас зовут?"},
             },
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_react",
@@ -318,7 +321,8 @@ class TestLlmNodeTracing:
                 "tool": "ask_user",
                 "args": {"question": "Какая информация нужна?"},
             },
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_react",
@@ -389,7 +393,8 @@ class TestGraphFlowTracing:
         """
         setup_mock_responses(response_queue=[
             "Ваш заказ находится в обработке. Номер: ORD-12345",
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_graph",
@@ -467,7 +472,8 @@ class TestGraphFlowTracing:
         """
         setup_mock_responses(response_queue=[
             "Ваша жалоба зарегистрирована. Номер: CMP-67890",
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_graph",
@@ -536,7 +542,8 @@ class TestGraphFlowTracing:
         """
         setup_mock_responses(response_queue=[
             "Здравствуйте! Чем могу помочь?",
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_graph",
@@ -613,7 +620,8 @@ class TestSpanAttributes:
         """
         Тест наличия обязательных атрибутов в spans.
         """
-        setup_mock_responses(response_queue=["Test response"])
+        setup_mock_responses(response_queue=["Test response"],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_react",
@@ -687,7 +695,8 @@ class TestSpanHierarchy:
         setup_mock_responses(response_queue=[
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "1+1"}},
             "Результат: 2",
-        ])
+        ],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_react",
@@ -760,7 +769,8 @@ class TestTracingAPI:
         """
         Тест API GET /traces/search?task_id=... (platform_tracing).
         """
-        setup_mock_responses(response_queue=["API test response"])
+        setup_mock_responses(response_queue=["API test response"],
+        billing_service=make_test_billing_service())
 
         response = await client.post(
             "/flows/api/v1/example_react",
@@ -821,7 +831,8 @@ class TestTracingAPI:
         """
         Тест API GET /traces/search?flow_id=... (platform_tracing).
         """
-        setup_mock_responses(response_queue=["Agent API test"])
+        setup_mock_responses(response_queue=["Agent API test"],
+        billing_service=make_test_billing_service())
 
         post_resp = await client.post(
             "/flows/api/v1/example_react",
@@ -873,7 +884,8 @@ class TestTracingAPI:
         """
         Тест API /api/v1/traces/search
         """
-        setup_mock_responses(response_queue=["Search API test"])
+        setup_mock_responses(response_queue=["Search API test"],
+        billing_service=make_test_billing_service())
 
         await client.post(
             "/flows/api/v1/example_react",

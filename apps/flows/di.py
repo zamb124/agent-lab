@@ -37,6 +37,7 @@ from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from core.ai.llm_models_service import LLMModelsService
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.clients.loki_client import LokiClient
 from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
@@ -57,6 +58,7 @@ from core.namespace.service import NamespaceService
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.short_links.service import ShortLinkService
+from core.text_transforms import TextTransformService
 from core.variables.service import VariablesService
 from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.queue_access import WorkQueueAccessPort
@@ -89,8 +91,8 @@ def tool_approval_redis(redis_client: RedisClient) -> ToolApprovalRedisClient:
 
 
 @recipe
-def rag_provider() -> BaseRAGProvider:
-    return get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+def rag_provider(billing_service: BillingService) -> BaseRAGProvider:
+    return get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=billing_service)
 
 
 @recipe
@@ -121,6 +123,8 @@ def tool_registry(
     tool_approval_store: ToolApprovalStore,
     node_constructor: NodeConstructor,
     flow_factory: FlowFactory,
+    billing_service: BillingService,
+    text_transform_service: TextTransformService,
 ) -> ToolRegistry:
     registry = ToolRegistry(
         clients=builtin_tool_clients(
@@ -131,6 +135,8 @@ def tool_registry(
             company_credentials=company_credentials,
             lara_facade=lara_facade,
             tool_approval_store=tool_approval_store,
+            billing_service=billing_service,
+            text_transform_service=text_transform_service,
         ),
         node_constructor=node_constructor,
         flow_factory=flow_factory,

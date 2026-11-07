@@ -23,19 +23,25 @@ set_files_route_segment(resolve_files_route_segment("rag_worker"))
 from apps.rag.di import RagDi
 from apps.worker_manifest import wire_worker
 from core.di import recipe
+from core.billing.service import BillingService
 from core.files.reader.service import FileReader
 from core.files.service import FilesService
 from core.logging import get_logger
 from core.tasks.worker_bootstrap import build_worker
+from core.text_transforms import TextTransformService
 
 _ = importlib.import_module("apps.rag.events")
 
 logger = get_logger(__name__)
 
 
-async def configure_rag_file_reader(files_service: FilesService) -> None:
-    """Persist ассетов FileReader тем же FilesService, что и HTTP-процесс."""
+async def configure_rag_file_reader(
+    files_service: FilesService,
+    billing_service: BillingService,
+) -> None:
+    """Persist ассетов FileReader и text transform тем же процессом, что HTTP."""
     FileReader.configure_asset_persist(files_service)
+    FileReader.configure_text_transform(TextTransformService(billing_service))
     logger.info("worker.rag_provider_initialized", service="rag_worker")
 
 

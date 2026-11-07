@@ -27,6 +27,7 @@ from tests.core.clients.test_llm_candidate_fallback_integration import (
     _production_llm_env,
     _write_sse_text,
 )
+from tests.fixtures.billing import make_test_billing_service
 
 
 def _groq_record(*, unique_id: str) -> PlatformFreeModelRecord:
@@ -329,6 +330,7 @@ async def test_empty_redis_authored_fallback_http_only_openai(
         set_settings(settings)
         with _production_llm_env():
             client = create_llm_transport_client(
+                billing_service=make_test_billing_service(),
                 provider=LINNEX_LLM_PROVIDER,
                 model_name=LINNEX_LLM_AUTO_MODEL,
                 fallback_models=[
@@ -390,6 +392,7 @@ def test_constructor_without_pool_and_without_fallbacks_raises() -> None:
         with _production_llm_env():
             with pytest.raises(ValueError, match="linnex_llm is unavailable"):
                 create_llm_transport_client(
+                billing_service=make_test_billing_service(),
                     provider=LINNEX_LLM_PROVIDER,
                     model_name=LINNEX_LLM_AUTO_MODEL,
                 )
@@ -415,6 +418,7 @@ def test_constructor_without_pool_uses_authored_fallback() -> None:
         set_settings(settings)
         with _production_llm_env():
             client = create_llm_transport_client(
+                billing_service=make_test_billing_service(),
                 provider=LINNEX_LLM_PROVIDER,
                 model_name=LINNEX_LLM_AUTO_MODEL,
                 fallback_models=[

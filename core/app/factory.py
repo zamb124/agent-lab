@@ -46,7 +46,6 @@ from core.app.health_payload import build_health_payload
 from core.app.i18n_routes import register_platform_i18n_routes
 from core.app.pwa_routes import register_platform_pwa_routes
 from core.authz.errors import AuthzConfigError, AuthzDenied, AuthzUnavailable
-from core.billing import set_billing_service
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
 from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -341,8 +340,6 @@ def create_service_app(
                         lifecycle=lifecycle,
                     )
                 )
-                if isinstance(di, PlatformDi):
-                    set_billing_service(di.billing_service)
                 outer_di = set_app_di(app, di)
                 logger.info("service.started", service=service_name)
             yield

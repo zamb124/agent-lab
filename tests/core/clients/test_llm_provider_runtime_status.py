@@ -27,6 +27,7 @@ from tests.core.clients.test_llm_candidate_fallback_integration import (
     _write_json_response,
     _write_sse_text,
 )
+from tests.fixtures.billing import make_test_billing_service
 
 
 def _groq_settings(*, api_key: str, base_url: str, smoke_model: str) -> LLMConfig:
@@ -151,7 +152,7 @@ async def test_probe_platform_free_providers_smoke_chat(
     )
     redis = RedisClient(get_settings().database.redis_url)
     try:
-        snapshots = await probe_platform_free_providers(settings=settings)
+        snapshots = await probe_platform_free_providers(settings=settings, billing_service=make_test_billing_service())
         assert len(snapshots) == 1
         assert snapshots[0].provider == "groq"
         assert snapshots[0].ok is True
@@ -209,7 +210,7 @@ async def test_probe_platform_free_providers_writes_cooldown_on_402(
     redis = RedisClient(get_settings().database.redis_url)
     cooldown_keys = [cooldown_redis_key(candidate) for candidate in candidates]
     try:
-        snapshots = await probe_platform_free_providers(settings=settings)
+        snapshots = await probe_platform_free_providers(settings=settings, billing_service=make_test_billing_service())
         assert len(snapshots) == 1
         assert snapshots[0].ok is False
         assert snapshots[0].error_class == AIProviderErrorClass.PAYMENT_REQUIRED

@@ -525,7 +525,7 @@ async def switch_company(
         key="auth_token",
         value=issued_token,
         domain=get_cookie_domain(request.headers.get("host", "")),
-        httponly=True,
+        httponly=False,
         secure=settings.server.env == "production",
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,

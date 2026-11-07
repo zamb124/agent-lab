@@ -29,6 +29,7 @@ from apps.rag.namespace_access import (
 from apps.rag.tasks.task_names import RAG_INDEX_DOCUMENT_S3
 from core.ai.rerank_client import AIRerankerClientError
 from core.authz.models import AuthzObject
+from core.billing.service import BillingService
 from core.context import require_active_company, require_context
 from core.db.models.rag import DocumentProcessingStatus
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
@@ -116,12 +117,14 @@ class RagGlobalSearchPayload(RAGGlobalSearchRequest):
 
 
 
-def _resolve_provider(provider: str | None) -> tuple[BaseRAGProvider, str]:
+def _resolve_provider(
+    provider: str | None, *, billing_service: BillingService
+) -> tuple[BaseRAGProvider, str]:
     settings = get_rag_settings()
     rag_provider = (
-        get_rag_provider(provider, settings=settings)
+        get_rag_provider(provider, settings=settings, billing_service=billing_service)
         if provider
-        else get_rag_provider(settings=settings)
+        else get_rag_provider(settings=settings, billing_service=billing_service)
     )
     provider_name = provider if provider is not None else settings.rag.default_provider
     return rag_provider, provider_name
@@ -160,7 +163,7 @@ async def op_namespaces_create(
 ) -> Namespace:
     _ = user
     company_id = await _company_admin(di)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     try:
         _ = await rag_provider.create_namespace(
             name=payload.name, description=payload.description
@@ -182,7 +185,7 @@ async def op_namespaces_remove(
 ) -> NamespaceDeleteResponse:
     _ = user
     company_id = await _company_admin(di)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     provider_deleted = await rag_provider.delete_namespace(payload.name)
     ns_from_repo = await di.namespace_service.get(payload.name)
     if not provider_deleted and ns_from_repo is None:
@@ -200,7 +203,7 @@ async def op_documents_list(
 ) -> OffsetPage[RAGDocument]:
     _ = user
     await _namespace(di, payload.namespace_id)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     completed_docs = await rag_provider.list_documents(payload.namespace_id, limit=payload.limit)
     processing_statuses = await DocumentProcessingStatus.list_for_namespace_by_updated_at_desc(
         payload.namespace_id, status=["pending", "processing", "failed"], limit=payload.limit
@@ -255,7 +258,7 @@ async def op_documents_ingest_text(
         )
     except ValueError as exc:
         raise_invalid(exc)
-    rag_provider, provider_name = _resolve_provider(payload.provider)
+    rag_provider, provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     doc = await rag_provider.upload_document_from_text(
         namespace_id=payload.namespace_id,
         text=text,
@@ -378,7 +381,7 @@ async def op_documents_remove(
         _ = await di.files_service.delete(payload.document_id)
     if status is not None:
         _ = await DocumentProcessingStatus.delete_by_id(payload.document_id)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None and file_record is None:
         raise WsCommandError("not_found", "Document not found", error_code='not_found')
@@ -396,7 +399,7 @@ async def op_documents_index_remove(
     status = await DocumentProcessingStatus.get(payload.document_id)
     if status is not None:
         _ = await DocumentProcessingStatus.delete_by_id(payload.document_id)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None:
         raise WsCommandError("not_found", "Document index not found", error_code='not_found')
@@ -411,7 +414,7 @@ async def op_documents_content(
 ) -> RAGDocumentContent:
     _ = user
     await _namespace(di, payload.namespace_id)
-    rag_provider, _provider_name = _resolve_provider(payload.provider)
+    rag_provider, _provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     try:
         content = await rag_provider.get_document_content(payload.namespace_id, payload.document_id)
     except ValueError as exc:
@@ -487,7 +490,7 @@ async def op_search_namespace(
             validate_metadata_filters(payload.filters)
         except ValueError as exc:
             raise_invalid(exc)
-    rag_provider, provider_name = _resolve_provider(payload.provider)
+    rag_provider, provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     settings = get_rag_settings()
     resolved_search_options = resolve_platform_search_options(
         settings=settings,
@@ -550,7 +553,7 @@ async def op_search_global(
             validate_metadata_filters(payload.filters)
         except ValueError as exc:
             raise_invalid(exc)
-    rag_provider, provider_name = _resolve_provider(payload.provider)
+    rag_provider, provider_name = _resolve_provider(payload.provider, billing_service=di.billing_service)
     settings = get_rag_settings()
     resolved_search_options = resolve_platform_search_options(
         settings=settings,

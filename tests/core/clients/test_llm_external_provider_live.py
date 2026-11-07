@@ -59,6 +59,7 @@ from tests.core.clients.live_llm_provider_helpers import (
     skip_provider_transient_unavailable,
     smoke_message,
 )
+from tests.fixtures.billing import make_test_billing_service
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(120)]
 
@@ -148,7 +149,8 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
                 provider=provider,
                 temperature=0.0,
                 max_tokens=SMOKE_MAX_TOKENS,
-            )
+        billing_service=make_test_billing_service(),
+    )
 
         assert isinstance(llm, LLMClient)
         assert llm.llm_provider == provider

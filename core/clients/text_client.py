@@ -10,8 +10,8 @@ class TextClient:
 
     _service: TextTransformService
 
-    def __init__(self, service: TextTransformService | None = None) -> None:
-        self._service = service if service is not None else TextTransformService()
+    def __init__(self, service: TextTransformService) -> None:
+        self._service = service
 
     async def summarize(
         self,

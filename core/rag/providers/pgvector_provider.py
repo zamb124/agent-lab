@@ -11,6 +11,7 @@ from typing import Literal, override
 from apps.rag.upload_profile_binding import UploadProfileBinding
 from core.ai.embedding_client import AIEmbeddingClient
 from core.ai.runtime import create_embedding_client_from_runtime
+from core.billing.service import BillingService
 from core.config import get_settings
 from core.config.llm_openai_compat import (
     llm_provider_block,
@@ -397,6 +398,8 @@ class PgVectorProvider(BaseRAGProvider):
         self,
         config: RAGProviderConfig,
         embedding_runtime: RagEmbeddingRuntime | None = None,
+        *,
+        billing_service: BillingService,
     ) -> None:
         super().__init__(config)
 
@@ -438,6 +441,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         use_deterministic_embeddings = deterministic_embeddings_enabled()
         self._embedding_client: AIEmbeddingClient = create_embedding_client_from_runtime(
+            billing_service=billing_service,
             provider=embedding_runtime.provider,
             model=model,
             base_url=embedding_base_url or None,

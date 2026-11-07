@@ -25,6 +25,7 @@ from core.ai.providers import AICapability
 from core.ai.requirements import AIRequestRequirements, AISelection
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.billing.service import BillingService
 from core.clients.llm.client import LLMClient
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from core.tracing.operation_span import traced_operation
@@ -54,8 +55,13 @@ _CRAWL_ENRICHMENT_LLM_CONTEXT: JsonObject = {"profile": "off", "budget": "max"}
 
 
 class CrawlPageEnrichmentService:
-    def __init__(self, enrichment_config: SearchCrawlEnrichmentConfig) -> None:
+    def __init__(
+        self,
+        enrichment_config: SearchCrawlEnrichmentConfig,
+        billing_service: BillingService,
+    ) -> None:
         self._enrichment_config: SearchCrawlEnrichmentConfig = enrichment_config
+        self._billing_service: BillingService = billing_service
 
     def _resolve_enrichment_model(self, profile: CrawlProfile) -> str:
         if profile.enrichment_model is not None and profile.enrichment_model.strip():
@@ -173,6 +179,7 @@ class CrawlPageEnrichmentService:
         )
         llm_client = create_llm_client_from_ai_model(
             resolved,
+            billing_service=self._billing_service,
             temperature=0.0,
             max_tokens=4096,
             allow_platform_paid_fallback=True,

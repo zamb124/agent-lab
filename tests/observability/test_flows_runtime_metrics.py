@@ -26,6 +26,7 @@ from core.logging.attributes import (
     LOG_TOOL_DURATION_MS,
     LOG_TOOL_NAME,
 )
+from tests.fixtures.billing import make_test_billing_service
 from tests.fixtures.mcp_modes_stub import MCPStubMode, default_stub_tools
 from tests.fixtures.observability_log_capture import (
     caplog_record_dict,
@@ -148,8 +149,8 @@ async def test_flow_react_completed_emitted_after_llm_node(
         response_queue=[
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "1+1"}},
             "4",
-        ]
-    )
+        ],
+        billing_service=make_test_billing_service())
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="calc")
     flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     _ = await run_flow(di=di, flow=flow, state=state)
@@ -199,8 +200,8 @@ async def test_tool_call_finished_emitted_for_builtin_tool(
         response_queue=[
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
             "4",
-        ]
-    )
+        ],
+        billing_service=make_test_billing_service())
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="calc")
     flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     _ = await run_flow(di=di, flow=flow, state=state)

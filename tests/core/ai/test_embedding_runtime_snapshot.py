@@ -1,10 +1,12 @@
 """Снимок параметров эмбеддинга для ``indexing_runtime``."""
 
 from core.ai.embedding_client import AIEmbeddingClient
+from tests.fixtures.billing import make_test_billing_service
 
 
 def test_runtime_snapshot_uses_configured_model() -> None:
     svc = AIEmbeddingClient(
+        billing_service=make_test_billing_service(),
         api_key="test-key",
         base_url="https://example.com/v1",
         model="openai/text-embedding-3-small",

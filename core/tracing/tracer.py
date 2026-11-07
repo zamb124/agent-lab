@@ -831,8 +831,8 @@ class PlatformTracer:
         attributes[attr.ATTR_TOOL_NAME] = tool_name
         attributes[attr.ATTR_TOOL_CALL_ID] = tool_call_id
         attributes[attr.ATTR_TOOL_IS_AGENT] = nested_flow_tool
-        # Обрезаем args для безопасности
-        args_str = str(args)[:500]
+        # JSON (не str(dict)): UI парсит platform.tool.args; обрезка — лимит атрибута.
+        args_str = json.dumps(args, ensure_ascii=False, default=str)[:500]
         attributes[attr.ATTR_TOOL_ARGS] = args_str
 
         with self._otel_tracer.start_as_current_span(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 from datetime import UTC, datetime
 
 import pytest
@@ -96,7 +97,7 @@ async def test_fetch_marks_skipped_on_extract_too_short(unique_id: str) -> None:
                 browser_fetch_client=BrowserFetchClient(ServiceClient()),
                 browser_fetch_timeout_seconds=crawl_config.browser_fetch_timeout_seconds,
             ),
-            page_enrichment_service=CrawlPageEnrichmentService(crawl_config.enrichment),
+            page_enrichment_service=CrawlPageEnrichmentService(crawl_config.enrichment, make_test_billing_service()),
             politeness_service=CrawlPolitenessService(
                 redis_client=RedisClient(get_settings().database.redis_url),
                 crawl_config=crawl_config,

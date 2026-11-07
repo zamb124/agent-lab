@@ -28,12 +28,13 @@ alwaysApply: false
 3. `span_billing_settlement_tick` (idle, `billing.span_settlement`: `lookback_minutes`, `batch_limit`, `cron`) читает `list_pending_billing_settlement`, правила компании кэшируются на тик; `settle_pending_span_in_job` списывает по совпавшим правилам, без совпадения — warning без списания; пустые правила — `ValueError`; span без `company_id` — ошибка в лог и пропуск.
 4. Правила компании материализует `load_settlement_rules_document_for_company` (нет ключа — пишет дефолт); старт frontend — `ensure_settlement_rules_materialized_for_all_companies`.
 5. Pre-flight перед платной операцией — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=BALANCE_BLOCK_OPERATION_*, ...)`: `balance <= 0` → `notify_user` + `BillingBalanceBlockedError` (403 `billing_balance_blocked`). Флаги — `billing.balance_enforcement_enabled`, `billing.balance_enforcement_exempt_company_ids` (по умолчанию `system`).
-6. LLM (включая vision и image gen) — только `LLMClient.prepare_billing()` + `record_llm_client_response` (`core/clients/llm/billing.py`); call-site pre-flight и span не пишет; HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`; BYOK (`cost_origin=company`) pre-flight не делает.
-7. Фоновые операции без пользователя (reembed RAG) — `company_may_incur_billable_operation_charge(company_id)` вместо pre-flight с уведомлением.
-8. Voice: pre-flight `BALANCE_BLOCK_OPERATION_SPEECH` при открытии сессии; STT/TTS — `record_stt_usage_span`/`record_tts_usage_span` (`core/billing/speech_usage.py`); TTS считается по тексту после pronunciation pipeline → `voice.mdc`.
-9. OpenRouter: при `provider_reported_cost > 0` `LLMClient` пишет `platform.billing.settlement_quantity_rub` = `round(USD × курс ЦБ)`; правило `llm_openrouter_usd_to_rub` (`first_win`) списывает `billing:rub`; без USD — правило по токенам. Курс — `core/billing/cbr_rate_provider.py` (обновление каждые 5 минут).
-10. Pre-flight не заменяет settlement: usage выполненной операции пишется и при нулевом балансе; баланс может уходить в минус.
-11. Только трейсинг, без `pending_settlement`: старт комнаты и egress LiveKit, `sync.stt.*`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`; категория `tool` в прайсе запрещена (`PUT` — 422).
+6. `BillingService` — только через Service Kit DI: recipe `billing_service`, поле `PlatformDi.billing_service` для boundary (`di.billing_service`), иначе конструктор/параметр фабрики (`LLMClient`, `AIEmbeddingClient`, `TextTransformService`, `LiveKitClient`, `GuestFarmService`, `create_llm_*` / `create_embedding_*`, `get_rag_provider`).
+7. LLM (включая vision и image gen) — только `LLMClient.prepare_billing()` + `record_llm_client_response` (`core/clients/llm/billing.py`); call-site pre-flight и span не пишет; HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`; BYOK (`cost_origin=company`) pre-flight не делает.
+8. Фоновые операции без пользователя (reembed RAG) — `company_may_incur_billable_operation_charge(company_id)` вместо pre-flight с уведомлением.
+9. Voice: pre-flight `BALANCE_BLOCK_OPERATION_SPEECH` при открытии сессии; STT/TTS — `record_stt_usage_span`/`record_tts_usage_span` (`core/billing/speech_usage.py`); TTS считается по тексту после pronunciation pipeline → `voice.mdc`.
+10. OpenRouter: при `provider_reported_cost > 0` `LLMClient` пишет `platform.billing.settlement_quantity_rub` = `round(USD × курс ЦБ)`; правило `llm_openrouter_usd_to_rub` (`first_win`) списывает `billing:rub`; без USD — правило по токенам. Курс — `core/billing/cbr_rate_provider.py` (обновление каждые 5 минут).
+11. Pre-flight не заменяет settlement: usage выполненной операции пишется и при нулевом балансе; баланс может уходить в минус.
+12. Только трейсинг, без `pending_settlement`: старт комнаты и egress LiveKit, `sync.stt.*`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`; категория `tool` в прайсе запрещена (`PUT` — 422).
 
 ### Админка
 
@@ -58,6 +59,7 @@ alwaysApply: false
 2. Span с `pending_settlement` без правила settlement; разовое списание за факт старта LiveKit.
 3. Оценка стоимости LLM до вызова вместо проверки `balance > 0`.
 4. `monkeypatch` HTTP к банку в тестах платежей.
+5. Process-global `BillingService`.
 
 ## Исключения
 

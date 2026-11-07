@@ -161,7 +161,9 @@ async def index_rag_document_s3_task(
                 }
 
             rag_provider = (
-                get_rag_provider(provider, settings=settings)
+                get_rag_provider(
+                    provider, settings=settings, billing_service=di.billing_service
+                )
                 if provider is not None
                 else di.rag_provider
             )

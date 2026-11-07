@@ -33,7 +33,9 @@ async def op_dashboard_stats(
     _ = payload, user
     scope = require_company()
     flow_index = await FlowConfig.list_current_flow_index_by_created_at_desc()
-    rag_namespaces = await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).list_namespaces()
+    rag_namespaces = await get_rag_provider(
+        RAG_IN_PROCESS_PROVIDER_ID, billing_service=di.billing_service
+    ).list_namespaces()
     documents_total = await FileRecord.count_alive(scope.company_id)
     litserve_total: int | None = None
     if scope.company_id == SYSTEM_COMPANY_ID:

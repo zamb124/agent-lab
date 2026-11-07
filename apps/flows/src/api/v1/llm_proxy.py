@@ -50,6 +50,7 @@ async def _run_chat_completions(
         flow_ui_share_service=di.flow_ui_share_service,
         hitl_conversation_service=di.hitl_conversation_service,
         files_service=di.files_service,
+        billing_service=di.billing_service,
     )
 
 
@@ -100,7 +101,11 @@ async def llm_proxy_images_generations(
 ) -> JSONResponse:
     _ = await require_llm_proxy_auth(request)
     _ = require_context()
-    return await dispatch_images_generations(body=body, shared_storage=di.shared_storage)
+    return await dispatch_images_generations(
+        body=body,
+        shared_storage=di.shared_storage,
+        billing_service=di.billing_service,
+    )
 
 
 @router.post(
@@ -197,6 +202,7 @@ async def llm_proxy_onlyoffice_proxy(
         return await dispatch_images_generations(
             body=images_body,
             shared_storage=di.shared_storage,
+            billing_service=di.billing_service,
         )
 
     raise WsCommandError(

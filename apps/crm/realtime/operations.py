@@ -122,8 +122,6 @@ from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.models.identity_models import Namespace, NamespaceCRMSettings, NamespaceKind, User
 from core.pagination import CursorPage, ListResponse, OffsetPage
-from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
-from core.rag.factory import get_rag_provider
 from core.request_scope import CompanyScope, require_company
 from core.types import JsonObject
 from core.websocket import (
@@ -1144,7 +1142,7 @@ class CrmEntitiesAggregatePayload(StrictBaseModel):
 
 async def build_entity_response(di: Di, entity: CRMEntity) -> EntityResponse:
     items = await build_entity_responses_with_semantic_index(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         [entity],
         crm_work_item_service=di.crm_work_item_service,
     )
@@ -1302,7 +1300,7 @@ async def op_entities_query(
                 cursor=payload.cursor,
             )
             items = await build_entity_responses_with_semantic_index(
-                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+                di.crm_rag_provider,
                 entities,
                 crm_work_item_service=di.crm_work_item_service,
             )
@@ -1325,7 +1323,7 @@ async def op_entities_query(
                 limit=payload.limit,
             )
             items = await build_entity_responses_with_semantic_index(
-                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+                di.crm_rag_provider,
                 [row[0] for row in hybrid_rows],
                 crm_work_item_service=di.crm_work_item_service,
             )
@@ -1344,7 +1342,7 @@ async def op_entities_query(
                 limit=payload.limit,
             )
             items = await build_entity_responses_with_semantic_index(
-                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+                di.crm_rag_provider,
                 [row[0] for row in text_rows],
                 crm_work_item_service=di.crm_work_item_service,
             )
@@ -1362,7 +1360,7 @@ async def op_entities_query(
             limit=payload.limit,
         )
         items = await build_entity_responses_with_semantic_index(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            di.crm_rag_provider,
             [row[0] for row in semantic_rows],
             crm_work_item_service=di.crm_work_item_service,
         )
@@ -1391,7 +1389,7 @@ async def op_entities_mentions_search(
     except ValueError as exc:
         _raise_service_error(exc)
     items = await build_entity_responses_with_semantic_index(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         entities,
         crm_work_item_service=di.crm_work_item_service,
     )
@@ -1428,7 +1426,7 @@ async def op_entities_merge(
     except ValueError as exc:
         _raise_service_error(exc)
     status_by_id = await semantic_text_index_status_by_entity(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         [merged],
     )
     merge_entity_resp = EntityResponse.model_validate(filtered).model_copy(
@@ -1466,7 +1464,7 @@ async def op_entities_bulk_create(
         except (ValueError, SchemaValidationError) as exc:
             errors.append(BulkErrorItem(index=idx, error=str(exc)))
     created = await build_entity_responses_with_semantic_index(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         created_entities,
         crm_work_item_service=di.crm_work_item_service,
     )
@@ -1492,7 +1490,7 @@ async def op_entities_bulk_update(
         except ValueError as exc:
             errors.append(BulkErrorItem(index=idx, entity_id=item.entity_id, error=str(exc)))
     updated = await build_entity_responses_with_semantic_index(
-        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        di.crm_rag_provider,
         updated_entities,
         crm_work_item_service=di.crm_work_item_service,
     )
@@ -1569,6 +1567,7 @@ async def op_entities_export(
         di.entity_service,
         di.crm_work_item_service,
         di.files_service,
+        di.crm_rag_provider,
         payload,
     )
 

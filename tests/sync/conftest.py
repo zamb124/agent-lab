@@ -121,7 +121,6 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[None]:
     config_base._settings_instance = None
 
     from apps.sync.di import SyncDi
-    from core.billing import set_billing_service
     from core.config import get_settings
     from core.di import open_di
     from core.di.kit import ProcessIdentity
@@ -141,7 +140,6 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[None]:
         ),
         database="sync_url",
     ) as di:
-        set_billing_service(di.billing_service)
         global _SYNC_DI
         _SYNC_DI = di
         yield

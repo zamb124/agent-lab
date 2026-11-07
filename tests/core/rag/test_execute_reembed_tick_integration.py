@@ -15,6 +15,7 @@ from core.models.identity_models import Company, User
 from core.rag.reembed_stale_documents import _run_reembed_round, execute_reembed_tick
 from core.types import require_json_object
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
+from tests.fixtures.billing import make_test_billing_service
 
 
 async def _seed_solvent_company(frontend_di, *, cid: str, balance: float = 50.0) -> str:
@@ -111,6 +112,7 @@ async def _run_rounds_until_chunk_embedded(
             target_embedding_model=target,
             schedule_task_id=schedule_task_id,
             channel="test_worker",
+            billing_service=make_test_billing_service(balance_enforcement_enabled=True),
         )
     model, has_emb, _ = await _chunk_state(chunk_id)
     raise AssertionError(
@@ -162,7 +164,8 @@ async def test_run_reembed_round_skips_low_balance_company(
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
-    )
+            billing_service=make_test_billing_service(balance_enforcement_enabled=True),
+        )
     model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
@@ -194,7 +197,8 @@ async def test_run_reembed_round_skips_company_without_billing_owner(
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
-    )
+            billing_service=make_test_billing_service(balance_enforcement_enabled=True),
+        )
     model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
@@ -219,7 +223,8 @@ async def test_run_reembed_round_skips_chunk_with_missing_company(
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
-    )
+            billing_service=make_test_billing_service(balance_enforcement_enabled=True),
+        )
     model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
@@ -266,10 +271,12 @@ async def test_execute_reembed_tick_requires_schedule_task_id(frontend_di) -> No
     with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
             channel="t", schedule_task_id="  ",
+            billing_service=make_test_billing_service(),
         )
     with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
             channel="t", schedule_task_id="",
+            billing_service=make_test_billing_service(),
         )
 
 
@@ -278,6 +285,7 @@ async def test_execute_reembed_tick_requires_channel(frontend_di) -> None:
     with pytest.raises(ValueError, match="channel"):
         await execute_reembed_tick(
             channel="  ", schedule_task_id="t",
+            billing_service=make_test_billing_service(),
         )
 
 
@@ -313,7 +321,7 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     assert stale_has_emb is False
     assert stale_model is None
 
-    provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     assert isinstance(provider_raw, PgVectorProvider)
     assert provider_raw.embedding_model_name() == rag_provider_pgvector.embedding_model_name()
 
@@ -325,6 +333,7 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
         result = await execute_reembed_tick(
             channel="test_worker_e2e",
             schedule_task_id=f"e2e_{unique_id}",
+            billing_service=make_test_billing_service(),
         )
         if result["skipped"]:
             pytest.fail(f"execute_reembed_tick skipped unexpectedly: {result}")

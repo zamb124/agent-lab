@@ -21,6 +21,7 @@ from apps.crm.services.suggest_service import SuggestService
 from apps.crm.services.task_service import TaskService
 from apps.crm.services.user_person_service import UserPersonService
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.clients.a2a_client import A2AClient
 from core.clients.redis_client import RedisClient
 from core.clients.scheduler_client import SchedulerClient
@@ -40,8 +41,8 @@ from core.worktracker.queue_access import WorkQueueAccessPort
 
 
 @recipe
-def crm_rag_provider() -> BaseRAGProvider:
-    return get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+def crm_rag_provider(billing_service: BillingService) -> BaseRAGProvider:
+    return get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=billing_service)
 
 
 @recipe
@@ -115,6 +116,7 @@ class CrmDi(PlatformDi, recipes=CRM_RECIPES):
     attachment_service: AttachmentService
     company_init_service: CompanyInitService
     crm_entity_access_service: CrmEntityAccessService
+    crm_rag_provider: BaseRAGProvider
     crm_work_item_service: CrmWorkItemService
     entity_service: EntityService
     graph_service: GraphService

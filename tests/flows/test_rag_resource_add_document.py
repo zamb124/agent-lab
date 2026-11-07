@@ -40,6 +40,7 @@ async def test_add_document_stores_metadata(
     namespace_id = f"rag_res_{unique_id}"
     document_id = f"fid-{unique_id}"
     resource = RAGResource(
+        billing_service=di.billing_service,
         namespace=namespace_id,
         namespace_service=di.namespace_service,
     )
@@ -67,6 +68,7 @@ async def test_add_document_merges_index_profile_config(
     namespace_id = f"rag_ipc_{unique_id}"
     document_id = f"fid-{unique_id}"
     resource = RAGResource(
+        billing_service=di.billing_service,
         namespace=namespace_id,
         namespace_service=di.namespace_service,
         index_profile_config={"split": {"chunk_size": 256}},

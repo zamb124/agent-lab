@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import uuid as uuid_std
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -123,7 +124,7 @@ async def test_batch_semantic_text_index_status_three_states(
     sem_idx_namespace: str,
     sem_idx_company: str,
 ) -> None:
-    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     provider = _pgvector_provider(rag)
 
     ns = sem_idx_namespace
@@ -189,7 +190,7 @@ async def test_build_entity_responses_single_batch_provider_call(
     sem_idx_namespace: str,
     sem_idx_company: str,
 ) -> None:
-    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     provider = _pgvector_provider(rag)
     ns = sem_idx_namespace
     cid = sem_idx_company
@@ -227,7 +228,7 @@ async def test_pgvector_provider_pending_with_mixed_chunks(
     sem_idx_company: str,
 ) -> None:
     """Если один chunk без embedding и один с embedding — статус pending_embedding."""
-    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     provider = _pgvector_provider(rag)
     ns = sem_idx_namespace
     cid = sem_idx_company

@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+from apps.crm.di import Di
 from apps.crm.models.task import CRMTask
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
 from apps.crm.tasks.task_names import CRM_REEMBED_STALE_DOCUMENTS
@@ -22,6 +23,8 @@ from core.tasks import platform_task
 async def crm_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> RAGReembedTickResult:
     """
     ``company_id`` приходит из ``SchedulerService.create`` в ``task.payload``
@@ -31,6 +34,7 @@ async def crm_reembed_stale_documents_tick(
     result = await execute_reembed_tick(
         channel="crm_worker",
         schedule_task_id=schedule_task_id,
+        billing_service=di.billing_service,
     )
 
     now = datetime.now(timezone.utc)

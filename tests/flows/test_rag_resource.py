@@ -1,5 +1,6 @@
 """Контракт RAGResource: поиск через HTTP RAG API (ASGI); add_document через pgvector в той же БД."""
 
+from tests.fixtures.billing import make_test_billing_service
 import uuid
 
 import pytest
@@ -27,6 +28,7 @@ async def test_search_via_rag_asgi_hybrid_channels(
     body = f"{marker} Cats are wonderful pets that love to sleep and play."
 
     r = RAGResource(
+        billing_service=di.billing_service,
         namespace=ns,
         company_id="system",
         search_options={
@@ -37,7 +39,7 @@ async def test_search_via_rag_asgi_hybrid_channels(
     )
     await r.add_document("d1", body, metadata={"category": "pets"}, name="n.txt")
 
-    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     stored = await prov.get_document(ns, "d1")
     assert stored is not None
     assert stored.metadata["total_chunks"] == 1
@@ -55,7 +57,11 @@ async def test_add_document_passes_metadata_through(
     di: FlowsDi,
 ) -> None:
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"
-    r = RAGResource(namespace=ns, namespace_service=di.namespace_service)
+    r = RAGResource(
+        namespace=ns,
+        namespace_service=di.namespace_service,
+        billing_service=di.billing_service,
+    )
     await r.add_document(
         "fid",
         "hello",
@@ -63,7 +69,7 @@ async def test_add_document_passes_metadata_through(
         name="n.txt",
     )
 
-    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     stored = await prov.get_document(ns, "fid")
     assert stored is not None
     assert stored.metadata.get("tag") == "t"
@@ -76,6 +82,7 @@ async def test_add_document_merges_index_profile_config(
 ) -> None:
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"
     r = RAGResource(
+        billing_service=di.billing_service,
         namespace=ns,
         namespace_service=di.namespace_service,
         index_profile_config={"split": {"chunk_size": 256}},
@@ -88,7 +95,7 @@ async def test_add_document_merges_index_profile_config(
         index_profile_config={"lexical": {"enabled": True}},
     )
 
-    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service())
     stored = await prov.get_document(ns, "fid")
     assert stored is not None
     ir = stored.metadata["indexing_runtime"]

@@ -101,7 +101,7 @@ def _enclosing_function(tree: ast.AST) -> dict[int, ast.AsyncFunctionDef | ast.F
         if isinstance(node, ast.AsyncFunctionDef | ast.FunctionDef):
             for inner in ast.walk(node):
                 if isinstance(inner, ast.Call):
-                    by_call_line.setdefault(inner.lineno, node)
+                    _ = by_call_line.setdefault(inner.lineno, node)
     return by_call_line
 
 

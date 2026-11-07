@@ -16,6 +16,7 @@ from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from core.clients.llm import setup_mock_responses
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from tests.fixtures.billing import make_test_billing_service
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 # Базовая директория агентов
@@ -272,7 +273,8 @@ class TestAllFlowsExecution:
 
         # Настраиваем mock LLM
         expected_response = f"Mock response for {config.name}"
-        _ = setup_mock_responses(default_response=expected_response)
+        _ = setup_mock_responses(default_response=expected_response,
+        billing_service=make_test_billing_service())
 
         # Получаем flow из БД (где уже загружены промпты и инлайнены tools)
         flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)

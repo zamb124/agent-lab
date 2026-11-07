@@ -158,6 +158,7 @@ async def index_rag_document(
     rag = RAGResource(
         namespace,
         di.namespace_service,
+        billing_service=di.billing_service,
         company_id="system",
         search_options={"channels": {"semantic": True, "lexical": True}, "rerank": False},
     )

@@ -323,13 +323,14 @@ def test_zai_openai_compat_root_keeps_v4_suffix():
 
 
 def test_candidate_supports_request_vision_and_json():
+    from core.ai.free_pool import PLATFORM_FREE_MODEL_SOURCE, PLATFORM_PAID_FALLBACK_SOURCE
     from core.ai.llm_config import LLMCallConfig
     from core.clients.llm.candidates import candidate_supports_request
 
     text_only = LLMCallConfig(
         provider="groq",
         model="text-only",
-        source="platform_free",
+        source=PLATFORM_FREE_MODEL_SOURCE,
         input_modalities=frozenset({"text"}),
         supported_parameters=frozenset({"temperature"}),
         capability_metadata_verified=True,
@@ -343,6 +344,11 @@ def test_candidate_supports_request_vision_and_json():
     structured = text_only.model_copy(
         update={"supported_parameters": frozenset({"structured_outputs"})}
     )
+    paid_fallback_text = LLMCallConfig(
+        provider="openrouter",
+        model="qwen/qwen-2.5-7b-instruct",
+        source=PLATFORM_PAID_FALLBACK_SOURCE,
+    )
     assert (
         candidate_supports_request(
             text_only, has_files=True, has_tools=False, has_response_format=False
@@ -352,6 +358,24 @@ def test_candidate_supports_request_vision_and_json():
     assert (
         candidate_supports_request(
             vision, has_files=True, has_tools=False, has_response_format=False
+        )
+        is True
+    )
+    assert (
+        candidate_supports_request(
+            paid_fallback_text,
+            has_files=True,
+            has_tools=False,
+            has_response_format=False,
+        )
+        is False
+    )
+    assert (
+        candidate_supports_request(
+            paid_fallback_text,
+            has_files=False,
+            has_tools=False,
+            has_response_format=False,
         )
         is True
     )

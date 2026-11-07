@@ -19,6 +19,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType as RuntimeNodeType
+from tests.fixtures.billing import make_test_billing_service
 
 
 @contextmanager
@@ -208,7 +209,8 @@ class TestLLMTransportWithCustomCredentials:
                     model_name="gpt-4",
                     api_key="sk-custom-user-key",
                     base_url="https://api.openai.com/v1",
-                )
+        billing_service=make_test_billing_service(),
+    )
 
                 assert isinstance(client, LLMClient)
                 assert client.api_key == "sk-custom-user-key"
@@ -247,7 +249,8 @@ class TestLLMTransportWithCustomCredentials:
                     api_key="@var:user_api_key",
                     base_url="@var:user_base_url",
                     variables=state.variables,
-                )
+        billing_service=make_test_billing_service(),
+    )
 
                 assert isinstance(client, LLMClient)
                 assert client.api_key == "sk-from-variable"
@@ -275,7 +278,8 @@ class TestLLMTransportWithCustomCredentials:
                     model_name="gpt-4",
                     api_key="sk-openrouter-key",
                     base_url="https://openrouter.ai/api/v1",
-                )
+        billing_service=make_test_billing_service(),
+    )
 
                 assert isinstance(client, LLMClient)
                 # Должны быть openrouter headers
@@ -302,7 +306,8 @@ class TestLLMTransportWithCustomCredentials:
                     api_key="sk-bothub-key",
                     base_url="https://bothub.chat/api/v2/openai/v1",
                     provider="bothub",
-                )
+        billing_service=make_test_billing_service(),
+    )
 
                 assert isinstance(client, LLMClient)
                 assert client.api_key == "sk-bothub-key"
@@ -850,7 +855,8 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
                 mock_settings.return_value.llm.platform_free_pool.enabled = False
-                client = create_transport_llm_client(model_name="yandexgpt")
+                client = create_transport_llm_client(model_name="yandexgpt",
+        billing_service=make_test_billing_service())
                 assert isinstance(client, LLMClient)
                 assert client.default_headers["Authorization"] == "Api-Key AQVN-key"
                 assert client.default_headers["x-folder-id"] == "folder-1"
@@ -875,7 +881,8 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.openai = None
                 mock_settings.return_value.llm.platform_free_pool.enabled = False
                 with pytest.raises(ValueError, match="folder_id"):
-                    create_transport_llm_client(model_name="m")
+                    create_transport_llm_client(model_name="m",
+        billing_service=make_test_billing_service())
 
     def test_llm_transport_yandex_custom_key_uses_override_folder_and_uri(self):
         with disable_testing_mode():
@@ -902,7 +909,8 @@ class TestLLMTransportYandex:
                     provider="yandex",
                     base_url="https://llm.api.cloud.yandex.net/v1",
                     folder_id="user-folder",
-                )
+        billing_service=make_test_billing_service(),
+    )
                 assert isinstance(client, LLMClient)
                 assert client.default_headers["x-folder-id"] == "user-folder"
                 assert client.model == "gpt://user-folder/yandexgpt-5.1/latest"
@@ -933,7 +941,8 @@ class TestLLMTransportYandex:
                         api_key="user-key",
                         provider="yandex",
                         base_url="https://llm.api.cloud.yandex.net/v1",
-                    ),
+        billing_service=make_test_billing_service(),
+    ),
                 )
                 assert client.default_headers["x-folder-id"] == "platform-folder"
                 assert client.model == "gpt://platform-folder/yandexgpt-5.1/latest"
@@ -959,7 +968,8 @@ class TestLLMTransportYandex:
                         api_key="user-key",
                         provider="yandex",
                         base_url="https://llm.api.cloud.yandex.net/v1",
-                    )
+        billing_service=make_test_billing_service(),
+    )
 
 
 class TestGetDefaultBaseUrl:

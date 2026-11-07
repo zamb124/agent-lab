@@ -28,8 +28,7 @@ from apps.guest_runtime.services.slots import (
     start_inprocess_slot,
     stop_slot,
 )
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_GUEST_RUNTIME
+from core.billing.service import BALANCE_BLOCK_OPERATION_GUEST_RUNTIME, BillingService
 from core.capabilities.models import CapabilityExecutionContext
 from core.clients.files_client import FilesClient
 from core.config import get_settings
@@ -98,10 +97,12 @@ class GuestFarmService:
         lease_store: GuestLeaseStore,
         files_client: FilesClient,
         farm: GuestRuntimeFarmConfig,
+        billing_service: BillingService,
     ) -> None:
         self._leases: GuestLeaseStore = lease_store
         self._files: FilesClient = files_client
         self._farm_config: GuestRuntimeFarmConfig = farm
+        self._billing_service: BillingService = billing_service
         self._slots: dict[str, GuestSlot] = {}
 
     @property
@@ -139,7 +140,7 @@ class GuestFarmService:
         self, body: GuestEnsureLeaseRequest
     ) -> GuestEnsureLeaseResponse:
         farm = self._farm_config
-        await get_billing_service().require_balance_for_billable_operation(
+        await self._billing_service.require_balance_for_billable_operation(
             body.company_id,
             body.user_id,
             operation_code=BALANCE_BLOCK_OPERATION_GUEST_RUNTIME,

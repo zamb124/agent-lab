@@ -18,6 +18,7 @@ from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.clients.llm import setup_mock_responses
 from core.types import JsonObject
+from tests.fixtures.billing import make_test_billing_service
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 EMPTY_PARAMETERS_SCHEMA: JsonObject = {
@@ -155,8 +156,8 @@ class TestFlowWithSubagentInterrupt:
                     "tool": "ask_user",
                     "args": {"question": "Какой у вас номер заказа?"},
                 },
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
         config = FlowConfig.model_validate(main_agent_config)
         flow = await Flow.from_config(
             config.model_dump(mode="json"),
@@ -194,8 +195,8 @@ class TestFlowWithSubagentInterrupt:
                 {"type": "tool_call", "tool": "ask_user", "args": {"question": "Номер заказа?"}},
                 "Ваш заказ #12345 отправлен!",
                 "Готово! Ваш заказ отправлен.",
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
         config = FlowConfig.model_validate(main_agent_config)
         flow = await Flow.from_config(
             config.model_dump(mode="json"),
@@ -293,8 +294,8 @@ class TestSubagentMessagesIntegrity:
                 {"type": "tool_call", "tool": "ask_user", "args": {"question": "Email?"}},
                 "Email получен: test@test.com",
                 "Данные собраны успешно!",
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
         config = FlowConfig.model_validate(main_flow_with_subagent)
         flow = await Flow.from_config(
             config.model_dump(mode="json"),
@@ -443,8 +444,8 @@ class TestFilesPassingToSubnode:
                 {"type": "tool_call", "tool": "check_files", "args": {}},
                 "Файлы проверены: 1 файл найден, test.jpg",
                 "Обработка завершена. Файл test.jpg обработан.",
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
         config = FlowConfig.model_validate(agent_with_file_tool)
         flow = await Flow.from_config(
             config.model_dump(mode="json"),

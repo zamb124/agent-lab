@@ -49,6 +49,7 @@ from apps.sync.services.sync_channel_access_service import SyncChannelAccessServ
 from apps.sync.services.turn import generate_turn_credentials
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.config import BaseSettings, get_settings
 from core.events import publish_events
 from core.events.contract import PlatformEvent
@@ -61,11 +62,12 @@ from core.websocket import WsCommandError
 logger = get_logger(__name__)
 
 
-def livekit_client(settings: BaseSettings) -> LiveKitClient:
+def livekit_client(settings: BaseSettings, billing_service: BillingService) -> LiveKitClient:
     return LiveKitClient(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
+        billing_service=billing_service,
     )
 
 
@@ -134,12 +136,14 @@ class SyncCallService:
         call_recording_service: SyncCallRecordingService,
         files_service: FilesService,
         message_service: SyncMessageService,
+        billing_service: BillingService,
     ) -> None:
         self._authz: AuthzService = authz
         self._channel_access: SyncChannelAccessService = channel_access
         self._recordings: SyncCallRecordingService = call_recording_service
         self._files: FilesService = files_service
         self._messages: SyncMessageService = message_service
+        self._billing_service: BillingService = billing_service
 
     async def invite(
         self,
@@ -155,6 +159,7 @@ class SyncCallService:
                 company_id=company_id,
                 channel_access=self._channel_access,
                 authz=self._authz,
+                billing_service=self._billing_service,
                 resolve_user=True,
             )
         except PermissionError as exc:
@@ -270,6 +275,7 @@ class SyncCallService:
                 channel_access=self._channel_access,
                 files_service=self._files,
                 message_service=self._messages,
+                billing_service=self._billing_service,
             )
         except ValueError as exc:
             raise WsCommandError("conflict", str(exc), error_code="conflict") from exc
@@ -361,7 +367,7 @@ class SyncCallService:
                 f"No access to call channel {call_id}.",
                 error_code="forbidden",
             )
-        access_token = livekit_client(settings).generate_token(
+        access_token = livekit_client(settings, self._billing_service).generate_token(
             room_name=call.livekit_room_name, identity=user_id
         )
         return access_token, livekit_public_url(settings)

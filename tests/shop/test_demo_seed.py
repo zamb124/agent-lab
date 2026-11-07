@@ -18,7 +18,6 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from apps.shop.di import ShopDi
 from apps.shop.models.banner import ShopBanner
 from apps.shop.models.enums import (
     ShopLoyaltyRewardKind,
@@ -162,7 +161,7 @@ SeedCtx = tuple[ShopSeedService, Company, User]
 
 @pytest_asyncio.fixture
 async def seed_company_ctx(
-    shop_di: ShopDi, unique_id: str
+    shop_di, unique_id: str
 ) -> AsyncIterator[SeedCtx]:
     """Свежая компания + owner + FGA-гранты (как `_ensure_test_company_member`)."""
     suffix = unique_id[:8]
@@ -325,7 +324,7 @@ class TestDemoSeedService:
         assert nested_found, "pizza demo must show nested modifier groups"
 
     async def test_seeded_feed_content(
-        self, seed_company_ctx: SeedCtx, shop_di: ShopDi
+        self, seed_company_ctx: SeedCtx, shop_di
     ) -> None:
         """Новая витринная функциональность посеяна: КБЖУ, недоступные
         позиции, фото и дельты опций, полки резолвятся в снапшоте,
@@ -479,7 +478,7 @@ class TestDemoSeedRoute:
 
     @pytest.mark.timeout(180)
     async def test_admin_seed_scheduled(
-        self, shop_app: FastAPI, shop_di: ShopDi, seed_company_ctx: SeedCtx
+        self, shop_app: FastAPI, shop_di, seed_company_ctx: SeedCtx
     ) -> None:
         _ = shop_di
         _, company, user = seed_company_ctx
@@ -520,7 +519,7 @@ class TestDemoSeedRoute:
     async def test_member_seed_forbidden(
         self,
         shop_app: FastAPI,
-        shop_di: ShopDi,
+        shop_di,
         auth_headers_company2_user2: dict[str, str],
     ) -> None:
         _ = shop_di

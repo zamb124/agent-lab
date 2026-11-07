@@ -2,6 +2,7 @@
 
 from typing import Annotated
 
+from core.billing.service import BillingService
 from core.clients.redis_client import RedisClient
 from core.config import BaseSettings
 from core.di import http_di, recipe, task_di
@@ -12,9 +13,9 @@ from core.rag.post_retrieval_rerank import RerankScoreCache
 
 
 @recipe
-def rag_provider(settings: BaseSettings) -> BaseRAGProvider:
+def rag_provider(settings: BaseSettings, billing_service: BillingService) -> BaseRAGProvider:
     """Активный провайдер ``rag.default_provider``. ``BaseRAGProvider`` — ABC, экземпляр даёт фабрика."""
-    return get_rag_provider(settings=settings)
+    return get_rag_provider(settings=settings, billing_service=billing_service)
 
 
 @recipe

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 import pytest
 
 from core.ai.company_settings import (
@@ -157,7 +158,7 @@ def test_linnex_llm_company_override_supports_vision_capability():
 
 def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     monkeypatch.setattr("core.ai.company_settings.resolver.decrypt_secret", lambda token: "plain-key")
-    service = TextTransformService()
+    service = TextTransformService(make_test_billing_service())
 
     resolved = service._resolve_company_llm_args(
         AICapability.LLM_SUMMARIZE,
@@ -176,7 +177,7 @@ def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
 
 
 def test_text_transform_uses_linnex_default_without_company_override():
-    service = TextTransformService()
+    service = TextTransformService(make_test_billing_service())
 
     resolved = service._resolve_company_llm_args(
         AICapability.LLM_SUMMARIZE,

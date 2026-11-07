@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.a2a import get_part_text, make_task_status, part_has_text
 from core.a2a.task_projection import build_task_projection
 from core.clients.llm import MockLLM, setup_mock_responses
+from tests.fixtures.billing import make_test_billing_service
 
 
 def _msg(text: str, role: Role = ROLE_USER) -> Message:
@@ -286,8 +287,8 @@ class TestMockLLMReasoning:
                     "content": "Answer",
                     "reasoning": "Reasoning text",
                 }
-            ]
-        )
+            ],
+        billing_service=make_test_billing_service())
 
         events = []
         async for event in mock.stream([_msg("Question")]):

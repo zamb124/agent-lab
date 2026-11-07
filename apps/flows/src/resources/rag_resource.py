@@ -9,6 +9,7 @@ from typing import override
 
 from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 from apps.flows.src.resources.index_profile_merge import merge_index_profile_dict_overlays
+from core.billing.service import BillingService
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
@@ -41,6 +42,7 @@ class RAGResource:
         namespace: str,
         namespace_service: NamespaceService,
         *,
+        billing_service: BillingService,
         provider: str = RAG_IN_PROCESS_PROVIDER_ID,
         default_top_k: int = 5,
         company_id: str | None = None,
@@ -50,6 +52,7 @@ class RAGResource:
         rag_client: RagClient | None = None,
     ) -> None:
         self._namespace_service: NamespaceService = namespace_service
+        self._billing_service: BillingService = billing_service
         self._rag_client: RagClient = rag_client if rag_client is not None else RagClient()
         self._bind: RagResourceBindParams = RagResourceBindParams(
             namespace=namespace,
@@ -160,7 +163,9 @@ class RAGResource:
         if ipc:
             doc_metadata["index_profile_config"] = ipc
 
-        doc = await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).upload_document_from_text(
+        doc = await get_rag_provider(
+            RAG_IN_PROCESS_PROVIDER_ID, billing_service=self._billing_service
+        ).upload_document_from_text(
             namespace_id=self._bind.namespace,
             text=content,
             document_name=name or document_id,

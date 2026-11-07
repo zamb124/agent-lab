@@ -18,6 +18,7 @@ from core.ai.providers import (
     LINNEX_LLM_PROVIDER,
     split_provider_prefixed_model,
 )
+from core.billing.service import BillingService
 from core.clients.llm.client import LLMClient
 from core.clients.llm.errors import LLMStreamIdleTimeoutError, LLMStreamUserCancelledError
 from core.clients.llm.messages import (
@@ -108,6 +109,8 @@ def create_llm_transport_client(
     reasoning_effort: ReasoningEffort | None = None,
     extra_request_body: JsonObject | None = None,
     extra_request_headers: dict[str, str] | None = None,
+    *,
+    billing_service: BillingService,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент.
@@ -228,6 +231,7 @@ def create_llm_transport_client(
             extra_request_body=extra_request_body,
             extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
             context_length=primary_candidate.context_length,
+            billing_service=billing_service,
         )
 
     if testing and _is_linnex_llm_provider(provider):
@@ -317,6 +321,7 @@ def create_llm_transport_client(
             extra_request_body=extra_request_body,
             extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
             context_length=primary_candidate.context_length,
+            billing_service=billing_service,
         )
 
     model = model or settings.llm.default_model
@@ -421,6 +426,7 @@ def create_llm_transport_client(
         extra_request_body=extra_request_body,
         extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
         context_length=primary_candidate.context_length,
+        billing_service=billing_service,
     )
 
 
@@ -430,9 +436,11 @@ def setup_mock_responses(
     default_response: str | None = None,
     response_queue: list[MockLLMQueuedResponse] | None = None,
     model_name: str = "mock-gpt-4",
+    *,
+    billing_service: BillingService,
 ) -> MockLLM:
     """Настройка mock ответов для тестов (локальная очередь)."""
-    _ = create_llm_transport_client(model_name)
+    _ = create_llm_transport_client(model_name, billing_service=billing_service)
     mock_llm = get_global_mock_llm(model_name)
     if mock_llm is None:
         raise RuntimeError(f"Mock LLM is not registered: {model_name}")

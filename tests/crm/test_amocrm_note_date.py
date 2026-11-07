@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.fixtures.billing import make_test_billing_service
 from datetime import date, datetime, timezone
 
 import pytest
@@ -66,7 +67,7 @@ async def test_upsert_note_without_note_date_sets_today(
     set_context(ctx)
     try:
         ent, created = await upsert_canonical_by_external_ref(
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
@@ -118,13 +119,13 @@ async def test_upsert_note_update_backfills_null_note_date(
         )
         ent0 = await CRMEntity.create(ent0)
         await index_crm_entity(
-            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             ent0,
             replace=False,
         )
 
         ent1, created1 = await upsert_canonical_by_external_ref(
-            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID, billing_service=make_test_billing_service()),
             entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",

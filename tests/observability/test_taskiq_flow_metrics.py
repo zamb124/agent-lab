@@ -20,6 +20,7 @@ from core.logging.attributes import LOG_TASK_NAME, LOG_TASK_QUEUE_WAIT_MS
 from core.tasks.logging_middleware import LoggingMiddleware
 from core.tasks.message_contract import set_task_message_string_label
 from core.types import JsonValue
+from tests.fixtures.billing import make_test_billing_service
 from tests.fixtures.observability_log_capture import (
     find_caplog_record,
     require_log_fields,
@@ -116,7 +117,8 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
     task_id = state.task_id
     await record_flow_task_enqueued(di.redis_client, task_id=task_id, flow_id=flow_id)
 
-    setup_mock_responses(response_queue=["hello from worker"])
+    setup_mock_responses(response_queue=["hello from worker"],
+        billing_service=make_test_billing_service())
     ctx = system_member_context.model_copy(update={"session_id": state.session_id})
     set_context(ctx)
 
