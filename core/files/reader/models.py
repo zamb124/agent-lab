@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -197,6 +197,15 @@ class ReadFileArgs(BaseModel):
             "пустое — только дефолт. При nested images модель видит и картинки."
         ),
     )
+    summarization_schema: JsonObject | None = Field(
+        default=None,
+        description=(
+            "JSON Schema object root для structured page summary. "
+            "Требует page_summarizations=true. Внутри — forced tool_choice "
+            "submit_page_summary; PageResult.result — JSON arguments tool. "
+            "Без schema — обычная prose-суммаризация."
+        ),
+    )
     summarization_model: str = Field(
         default="",
         description="Модель LLM для суммаризации; пустое — дефолт платформы.",
@@ -278,6 +287,18 @@ class ReadFileArgs(BaseModel):
             patched: JsonObject = {**payload, "recursive": False}
             return patched
         return payload
+
+    @model_validator(mode="after")
+    def summarization_schema_requires_flag(self) -> Self:
+        schema = self.summarization_schema
+        if schema is None:
+            return self
+        if not self.page_summarizations:
+            raise ValueError("summarization_schema requires page_summarizations=true")
+        schema_type = schema.get("type")
+        if schema_type != "object":
+            raise ValueError("summarization_schema.type must be 'object'")
+        return self
 
     @field_validator(
         "summarization_prompt",

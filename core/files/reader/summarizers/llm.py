@@ -2,12 +2,14 @@
 
 При nested image на странице (bytes_b64) суммаризация multimodal: текст страницы
 + interleaved Image {anchor}: / Part(raw). Маршрут — llm_vision; без картинок —
-llm_summarize.
+llm_summarize. При ``schema`` — по одной странице через forced tool
+``submit_page_summary``; result — JSON arguments.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 from collections.abc import Sequence
 
 from a2a.types import Part
@@ -20,6 +22,7 @@ from core.files.reader.nested import nested_bytes
 from core.files.reader.parts import nested_image_label, nested_to_raw_part
 from core.files.reader.service import FileReader
 from core.files.reader.vision import prepare_visual_payload
+from core.types import JsonObject
 
 _DEFAULT_SUMMARY_CONTEXT_TOKENS: int = 32_000
 _CHARS_PER_TOKEN: int = 3
@@ -155,9 +158,18 @@ async def summarize_llm_pages(
     prompt: str,
     model: str,
     compression: CompressionMode = CompressionMode.NEVER,
+    schema: JsonObject | None = None,
 ) -> list[str]:
     if not pages:
         return []
+    if schema is not None:
+        return await _summarize_structured_pages(
+            pages,
+            prompt=prompt,
+            model=model,
+            compression=compression,
+            schema=schema,
+        )
     batch_chars = _resolve_context_chars(model)
     service = FileReader.require_text_transform()
     instruction = _SEGMENT_INSTRUCTION
@@ -194,3 +206,41 @@ async def summarize_llm_pages(
                 results[page.index] = chunk
 
     return [results.get(page.index, "") for page in pages]
+
+
+async def _summarize_structured_pages(
+    pages: Sequence[UniversalPage],
+    *,
+    prompt: str,
+    model: str,
+    compression: CompressionMode,
+    schema: JsonObject,
+) -> list[str]:
+    """Одна страница — один forced tool call; result — JSON arguments."""
+    service = FileReader.require_text_transform()
+    focus = prompt.strip()
+    out: list[str] = []
+    for page in pages:
+        page_text = f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}"
+        images = _page_image_items(page)
+        if images:
+            media_parts: list[Part] = [Part(text=page_text)]
+            for item in images:
+                media_parts.append(Part(text=nested_image_label(item.anchor)))
+                media_parts.append(_prepared_image_part(item, compression=compression))
+            payload = await service.summarize_structured(
+                "",
+                schema=schema,
+                instruction=focus or None,
+                model=model or None,
+                media_parts=media_parts,
+            )
+        else:
+            payload = await service.summarize_structured(
+                page_text,
+                schema=schema,
+                instruction=focus or None,
+                model=model or None,
+            )
+        out.append(json.dumps(payload, ensure_ascii=False))
+    return out

@@ -152,6 +152,7 @@ async def render_file_result(
             prompt=args.summarization_prompt,
             model=args.summarization_model,
             compression=args.compression,
+            schema=args.summarization_schema,
         )
         candidates = [
             _Candidate(

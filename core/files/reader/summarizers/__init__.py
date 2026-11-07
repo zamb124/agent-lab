@@ -23,6 +23,7 @@ from core.files.reader.summarizers.structural import (
     summarize_outline_pages,
     summarize_tabular_pages,
 )
+from core.types import JsonObject
 
 _TABULAR_EXTENSIONS: frozenset[str] = frozenset({".csv", ".tsv"})
 _TREE_EXTENSIONS: frozenset[str] = frozenset({".json", ".ndjson", ".xml", ".yaml", ".yml"})
@@ -58,10 +59,20 @@ async def summarize_pages(
     prompt: str,
     model: str,
     compression: CompressionMode = CompressionMode.NEVER,
+    schema: JsonObject | None = None,
 ) -> list[PageResult]:
-    summarizer = resolve_summarizer(kind=kind, file_name=file_name)
+    # JSON Schema / tool_choice — только LLM-путь; structural стратегии schema не умеют.
+    summarizer = (
+        DEFAULT_SUMMARIZER
+        if schema is not None
+        else resolve_summarizer(kind=kind, file_name=file_name)
+    )
     summaries = await summarizer(
-        pages, prompt=prompt, model=model, compression=compression
+        pages,
+        prompt=prompt,
+        model=model,
+        compression=compression,
+        schema=schema,
     )
     results: list[PageResult] = []
     for page, summary in zip(pages, summaries, strict=True):

@@ -168,6 +168,8 @@ def _read_file_capability_kwargs(args: ReadFileArgs, file_ids: list[str]) -> Jso
         "nested_mode=refs (default): nested → FileRef в state.files; "
         "nested_mode=parts: markdown + interleaved Image {anchor}: и Part(raw) в tool-result. "
         "page_summarizations=true: LLM-суммаризация страниц (текст + nested images multimodal). "
+        "summarization_schema: JSON Schema object — structured summary через forced tool "
+        "submit_page_summary (page_summarizations=true обязателен); result страницы — JSON. "
         "recursive=true (default, только refs): один уровень авто-read nested в окне; "
         "при parts recursive выключается. "
         "Vision/OCR страницы — если текст layout непригоден; nested OCR — recursive/parts. "
@@ -183,6 +185,7 @@ async def read_file(
     page_end: int = -1,
     page_summarizations: bool = False,
     summarization_prompt: str = "",
+    summarization_schema: JsonObject | None = None,
     summarization_model: str = "",
     vision_prompt: str = "",
     vision_model: str | None = None,
@@ -218,6 +221,7 @@ async def read_file(
         page_end=page_end,
         page_summarizations=page_summarizations,
         summarization_prompt=summarization_prompt,
+        summarization_schema=summarization_schema,
         summarization_model=summarization_model,
         vision_prompt=vision_prompt,
         vision_model=vision_model,

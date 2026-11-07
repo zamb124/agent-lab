@@ -1264,7 +1264,8 @@ class CapabilityRegistry:
                 title="Read persisted files as ReadFileEnvelope",
                 description=(
                     "Читает persisted-файлы по file_ids через read_files_to_envelope "
-                    "(тот же контракт, что tool read_file): page_summarizations, nested_mode, "
+                    "(тот же контракт, что tool read_file): page_summarizations, "
+                    "summarization_schema (forced submit_page_summary), nested_mode, "
                     "budget, recursive, compression, vision_*. Ответ — ReadFileEnvelope "
                     "(files[].results, continuation, nested)."
                 ),

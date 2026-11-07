@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from core.files.reader.models import CompressionMode, UniversalPage
-from core.types import JsonValue, parse_json_value
+from core.types import JsonObject, JsonValue, parse_json_value
 
 _MAX_STRUCT_ROWS: int = 5
 _MAX_KEYS: int = 40
@@ -99,7 +99,10 @@ async def summarize_tabular_pages(
     prompt: str,
     model: str,
     compression: CompressionMode = CompressionMode.NEVER,
+    schema: JsonObject | None = None,
 ) -> list[str]:
+    if schema is not None:
+        raise ValueError("structural summarizer does not support summarization_schema")
     _ = (prompt, model, compression)
     return [summarize_tabular(page.text) for page in pages]
 
@@ -110,7 +113,10 @@ async def summarize_json_pages(
     prompt: str,
     model: str,
     compression: CompressionMode = CompressionMode.NEVER,
+    schema: JsonObject | None = None,
 ) -> list[str]:
+    if schema is not None:
+        raise ValueError("structural summarizer does not support summarization_schema")
     _ = (prompt, model, compression)
     return [summarize_json(page.text) for page in pages]
 
@@ -121,6 +127,9 @@ async def summarize_outline_pages(
     prompt: str,
     model: str,
     compression: CompressionMode = CompressionMode.NEVER,
+    schema: JsonObject | None = None,
 ) -> list[str]:
+    if schema is not None:
+        raise ValueError("structural summarizer does not support summarization_schema")
     _ = (prompt, model, compression)
     return [summarize_outline(page.text) for page in pages]
