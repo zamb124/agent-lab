@@ -155,6 +155,24 @@ describe('flow-ui conversation surface', () => {
         expect(q(shadow(conversation!), '.typing')).to.not.equal(null);
     });
 
+    it('attaches a dropped file in the composer', async () => {
+        const element = await fixture<TestEl>(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
+        await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.composer') !== null, 'composer did not render');
+        const conversation = conversationEl(element)!;
+        const root = shadow(conversation);
+        const composer = qs(root!, '.composer');
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['menu'], 'menu.txt', { type: 'text/plain' }));
+        composer.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        await elementUpdated(conversation);
+        expect(composer.hasAttribute('data-drop-active')).to.equal(true);
+        expect(qs(root!, '.composer-drop-hint').textContent).to.equal('Drop files here or browse');
+        composer.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        await elementUpdated(conversation);
+        expect(composer.hasAttribute('data-drop-active')).to.equal(false);
+        expect(qs(root!, '.composer-file-chip').textContent).to.contain('menu.txt');
+    });
+
     it('shows icon-only copy, tracing and logs actions on a settled assistant turn', async () => {
         const document = {
             ...CHAT_DOCUMENT,

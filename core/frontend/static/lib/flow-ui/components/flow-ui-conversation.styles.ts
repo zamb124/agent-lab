@@ -147,6 +147,7 @@ export const conversationStyles = css`
     .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
     @keyframes fu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .28; } }
     .composer {
+        position: relative;
         flex: 0 0 auto; width: min(100% - 24px, var(--flow-ui-feed-width, 760px));
         box-sizing: border-box; margin: 4px auto 16px; padding: 10px 12px 10px 16px;
         display: flex; flex-direction: column; gap: 6px;
@@ -159,6 +160,18 @@ export const conversationStyles = css`
     .composer:focus-within {
         border-color: color-mix(in srgb, var(--flow-ui-accent) 50%, var(--flow-ui-border));
         box-shadow: var(--flow-ui-composer-shadow), var(--flow-ui-focus-ring);
+    }
+    .composer[data-drop-active] {
+        border-color: color-mix(in srgb, var(--flow-ui-accent) 55%, var(--flow-ui-border));
+        background: var(--flow-ui-accent-muted);
+        box-shadow: var(--flow-ui-composer-shadow), var(--flow-ui-focus-ring);
+    }
+    .composer-drop-hint {
+        position: absolute; inset: 0; z-index: 1; pointer-events: none;
+        display: grid; place-items: center; border-radius: inherit;
+        padding: 12px; text-align: center;
+        background: color-mix(in srgb, var(--flow-ui-accent-muted) 85%, transparent);
+        color: var(--flow-ui-accent); font-size: var(--flow-ui-font-size-sm, 13px); font-weight: 550;
     }
     .composer textarea {
         width: 100%; min-height: 24px; max-height: 200px; resize: none; border: 0;

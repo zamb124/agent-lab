@@ -109,8 +109,10 @@ export class FlowUIConversation extends LitElement {
     declare _text: string;
     declare _files: File[];
     declare _copiedTaskId: string;
+    declare _dropActive: boolean;
     private _unsubscribe: (() => void) | null;
     private _stickToBottom: boolean;
+    private _dragDepth: number;
 
     static override properties = {
         host: { attribute: false },
@@ -120,6 +122,7 @@ export class FlowUIConversation extends LitElement {
         _text: { state: true },
         _files: { state: true },
         _copiedTaskId: { state: true },
+        _dropActive: { state: true },
     };
 
     static override styles = [blockStyles, conversationStyles];
@@ -133,8 +136,10 @@ export class FlowUIConversation extends LitElement {
         this._text = '';
         this._files = [];
         this._copiedTaskId = '';
+        this._dropActive = false;
         this._unsubscribe = null;
         this._stickToBottom = true;
+        this._dragDepth = 0;
     }
 
     override connectedCallback() {
@@ -146,6 +151,8 @@ export class FlowUIConversation extends LitElement {
         super.disconnectedCallback();
         if (this._unsubscribe) this._unsubscribe();
         this._unsubscribe = null;
+        this._dragDepth = 0;
+        this._dropActive = false;
     }
 
     override updated(changed: PropertyValues<this>) {
@@ -219,6 +226,65 @@ export class FlowUIConversation extends LitElement {
         this._text = target.value;
         target.style.height = 'auto';
         target.style.height = `${Math.min(target.scrollHeight, COMPOSER_MAX_PX)}px`;
+    }
+
+    private _appendComposerFiles(files: File[]) {
+        if (files.length === 0) return;
+        this._files = [...this._files, ...files];
+    }
+
+    private _dragHasFiles(transfer: DataTransfer | null): boolean {
+        if (transfer === null) return false;
+        return Array.from(transfer.types).includes('Files');
+    }
+
+    private _resetDropTarget() {
+        this._dragDepth = 0;
+        this._dropActive = false;
+    }
+
+    private _onComposerDragEnter(event: DragEvent, filesAllowed: boolean) {
+        if (!filesAllowed || !this._dragHasFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        this._dragDepth += 1;
+        if (!this._dropActive) this._dropActive = true;
+    }
+
+    private _onComposerDragOver(event: DragEvent, filesAllowed: boolean) {
+        if (!filesAllowed || !this._dragHasFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        const transfer = event.dataTransfer;
+        if (transfer !== null) transfer.dropEffect = 'copy';
+    }
+
+    private _onComposerDragLeave(_event: DragEvent, filesAllowed: boolean) {
+        if (!filesAllowed) return;
+        this._dragDepth = Math.max(0, this._dragDepth - 1);
+        if (this._dragDepth === 0) this._dropActive = false;
+    }
+
+    private _onComposerDrop(event: DragEvent, filesAllowed: boolean) {
+        event.preventDefault();
+        this._resetDropTarget();
+        if (!filesAllowed) return;
+        const transfer = event.dataTransfer;
+        const list = transfer === null ? null : transfer.files;
+        this._appendComposerFiles(list === null ? [] : Array.from(list));
+    }
+
+    private _onComposerPaste(event: ClipboardEvent, filesAllowed: boolean) {
+        if (!filesAllowed) return;
+        const clipboard = event.clipboardData;
+        if (clipboard === null) return;
+        const files: File[] = [];
+        for (const item of Array.from(clipboard.items)) {
+            if (item.kind !== 'file') continue;
+            const file = item.getAsFile();
+            if (file !== null) files.push(file);
+        }
+        if (files.length === 0) return;
+        event.preventDefault();
+        this._appendComposerFiles(files);
     }
 
     private async _copy(turn: ConversationTurn) {
@@ -350,7 +416,15 @@ export class FlowUIConversation extends LitElement {
             && (editing || (host.capabilities.voice === true && host.hitlMode === null && host.voiceSessionReady()));
         const canSend = !editing && !waitingOperator && (this._text.trim() !== '' || this._files.length > 0) && !turnActive && !streaming;
         const voiceLabel = flowUIText(locale, host.voiceSessionActive ? 'voice_stop' : 'voice_start');
-        return html`<div class="composer" data-editing=${editing ? 'true' : nothing}>
+        return html`<div class="composer" data-editing=${editing ? 'true' : nothing}
+            ?data-drop-active=${filesAllowed && this._dropActive}
+            @dragenter=${(event: DragEvent) => this._onComposerDragEnter(event, filesAllowed)}
+            @dragover=${(event: DragEvent) => this._onComposerDragOver(event, filesAllowed)}
+            @dragleave=${(event: DragEvent) => this._onComposerDragLeave(event, filesAllowed)}
+            @drop=${(event: DragEvent) => this._onComposerDrop(event, filesAllowed)}>
+            ${filesAllowed && this._dropActive
+                ? html`<div class="composer-drop-hint" aria-hidden="true">${flowUIText(locale, 'file_upload_hint')}</div>`
+                : nothing}
             ${this._files.length > 0 ? html`<div class="files">${this._files.map((file: File, index: number) => html`<span class="composer-file-chip">
                 ${file.name} · ${formatFileSize(file.size)}
                 <button type="button" aria-label=${flowUIText(locale, 'remove_file', { name: file.name })}
@@ -359,14 +433,15 @@ export class FlowUIConversation extends LitElement {
             <textarea data-canon="composer" rows="1" .value=${this._text} placeholder=${placeholder} ?readonly=${waitingOperator}
                 aria-label=${flowUIText(locale, 'conversation_feed')}
                 @input=${(event: Event) => this._growComposer(event)}
-                @keydown=${(event: KeyboardEvent) => this._onKeydown(event)}></textarea>
+                @keydown=${(event: KeyboardEvent) => this._onKeydown(event)}
+                @paste=${(event: ClipboardEvent) => this._onComposerPaste(event, filesAllowed)}></textarea>
             <div class="actions">
                 ${filesAllowed ? html`<label class="icon-btn" title=${flowUIText(locale, 'attach_files')}>
                     ${flowUIGlyph('paperclip', 16, host.platformUiOrigin)}
                     <input type="file" multiple hidden @change=${(event: Event) => {
                         const input = fileInput(event);
                         const picked = input.files;
-                        this._files = [...this._files, ...(picked === null ? [] : Array.from(picked))];
+                        this._appendComposerFiles(picked === null ? [] : Array.from(picked));
                         input.value = '';
                     }}>
                 </label>` : ''}
