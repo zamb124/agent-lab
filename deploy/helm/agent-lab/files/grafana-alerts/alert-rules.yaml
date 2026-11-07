@@ -185,6 +185,216 @@ groups:
       description: Task failure rate is {{ printf "%.2f" $values.B.Value }}% for worker {{ $labels.service }}
     labels:
       severity: warning
+  - uid: billing-settlement-errors
+    title: Billing Settlement Errors
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform"} | json | message="idle.span_billing_settlement_tick" | level="ERROR" [15m])) > 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    keepFiringFor: 30m
+    annotations:
+      summary: Billing settlement errors detected
+      description: '{{ printf "%.0f" $values.B.Value }} settlement errors in the last 15m — charges are being skipped'
+    labels:
+      severity: critical
+      service: idle-worker
+  - uid: payment-webhook-anomalies
+    title: Payment Webhook Anomalies
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (message) (count_over_time({namespace="platform"} | json | message=~"payments.webhook_(invalid|provider_missing)" [15m])) > 3
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    keepFiringFor: 30m
+    annotations:
+      summary: 'Payment webhook anomalies: {{ $labels.message }}'
+      description: '{{ printf "%.0f" $values.B.Value }} bad payment webhook events in 15m — signature failures or missing provider'
+    labels:
+      severity: warning
+      service: frontend
+  - uid: mail-sync-errors
+    title: Mail Sync Errors
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform"} | json | message="idle.mail_sync_tick" | level="ERROR" [15m])) > 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    keepFiringFor: 30m
+    annotations:
+      summary: Mail sync errors detected
+      description: '{{ printf "%.0f" $values.B.Value }} mailbox sync errors in 15m — bindings failing inside successful ticks'
+    labels:
+      severity: warning
+      service: idle-worker
+  - uid: company-init-failed
+    title: Company Init Failed
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (message) (count_over_time({namespace="platform"} | json | message=~"company_init.(system_)?failed" [15m])) > 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    keepFiringFor: 60m
+    annotations:
+      summary: 'Company init failed: {{ $labels.message }}'
+      description: '{{ printf "%.0f" $values.B.Value }} company init failures in 15m — new company onboarding is broken'
+    labels:
+      severity: critical
+      service: idle-worker
+  - uid: calendar-sync-errors
+    title: Calendar Sync Errors
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform"} | json | message=~"idle.calendar_sync.*" | level="ERROR" [15m])) > 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    keepFiringFor: 30m
+    annotations:
+      summary: Calendar sync errors detected
+      description: '{{ printf "%.0f" $values.B.Value }} calendar sync errors in 15m — integrations failing inside successful ticks'
+    labels:
+      severity: warning
+      service: idle-worker
   - uid: llm-errors
     title: LLM Errors
     condition: C
