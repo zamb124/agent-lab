@@ -10,6 +10,7 @@ from __future__ import annotations
 from httpx2 import AsyncClient
 
 from apps.shop.models.back_in_stock import ShopBackInStock
+from apps.shop.models.favorite import ShopFavorite
 from core.types import JsonObject, JsonValue, parse_json_object
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX, auth_customer
 
@@ -494,3 +495,119 @@ class TestPersonal:
         usual = _rows(parse_json_object(resp.text, "personal"), "usual")
         assert usual[0]["product_id"] == latte_id
         assert usual[0]["count"] == 3
+
+
+class TestFavorites:
+    """Избранное покупателя: сердечко, ``/personal``, полка ``favorites``."""
+
+    async def test_anonymous_favorite_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"fan-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        product = await _product(shop_client, _id(shop, "shop_id"), "Латте")
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/favorites",
+            json={"product_id": _id(product, "shop_product_id"), "favorite": True},
+        )
+        assert resp.status_code in (401, 403), resp.text
+
+    async def test_favorite_set_unset_idempotent(
+        self,
+        shop_client: AsyncClient,
+        shop_public_client: AsyncClient,
+        unique_id: str,
+    ) -> None:
+        slug = f"fav-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        shop_id = _id(shop, "shop_id")
+        latte = await _product(shop_client, shop_id, "Латте")
+        latte_id = _id(latte, "shop_product_id")
+        raf = await _product(shop_client, shop_id, "Раф")
+        raf_id = _id(raf, "shop_product_id")
+
+        customer = await auth_customer(shop_public_client, slug)
+        customer_id = str(customer["customer_id"])
+        fav_url = f"{PUBLIC_PREFIX}/storefront/{slug}/favorites"
+
+        resp = await shop_public_client.post(
+            fav_url, json={"product_id": latte_id, "favorite": True}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["favorite"] is True
+        resp = await shop_public_client.post(
+            fav_url, json={"product_id": raf_id, "favorite": True}
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Повторный set идемпотентен — одна строка на пару.
+        resp = await shop_public_client.post(
+            fav_url, json={"product_id": latte_id, "favorite": True}
+        )
+        assert resp.status_code == 200, resp.text
+        favorites = await ShopFavorite.list_by_shop_customer_by_created_desc(
+            shop_id, customer_id
+        )
+        assert [f.product_id for f in favorites] == [raf_id, latte_id]
+
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/personal"
+        )
+        assert resp.status_code == 200, resp.text
+        body = parse_json_object(resp.text, "personal")
+        assert _str_rows(body, "favorite_ids") == [raf_id, latte_id]
+
+        resp = await shop_public_client.post(
+            fav_url, json={"product_id": latte_id, "favorite": False}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["favorite"] is False
+        # Повторный unset тоже идемпотентен.
+        resp = await shop_public_client.post(
+            fav_url, json={"product_id": latte_id, "favorite": False}
+        )
+        assert resp.status_code == 200, resp.text
+        favorites = await ShopFavorite.list_by_shop_customer_by_created_desc(
+            shop_id, customer_id
+        )
+        assert [f.product_id for f in favorites] == [raf_id]
+
+    async def test_favorite_foreign_product_rejected(
+        self,
+        shop_client: AsyncClient,
+        shop_public_client: AsyncClient,
+        unique_id: str,
+    ) -> None:
+        """Сердечко на товар чужой витрины — 404, строка не создаётся."""
+        slug = f"fx-{unique_id[:8]}"
+        _ = await _published_shop(shop_client, slug)
+        other = await _published_shop(shop_client, f"fy-{unique_id[:8]}")
+        foreign = await _product(shop_client, _id(other, "shop_id"), "Чужой")
+        foreign_id = _id(foreign, "shop_product_id")
+
+        _ = await auth_customer(shop_public_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/favorites",
+            json={"product_id": foreign_id, "favorite": True},
+        )
+        assert resp.status_code == 404, resp.text
+        assert (
+            await ShopFavorite.find_by_product_and_customer(foreign_id, "x") is None
+        )
+
+    async def test_favorites_shelf_anonymous_empty(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Полка ``favorites`` в анонимном снапшоте — без id'шников."""
+        slug = f"fsh-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        shop_id = _id(shop, "shop_id")
+        _ = await _product(shop_client, shop_id, "Латте")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/shelves",
+            json={"kind": "favorites", "title": "Избранное"},
+        )
+        assert resp.status_code == 200, resp.text
+        snap = await _snapshot(shop_public_client, slug)
+        shelf = next(s for s in _rows(snap, "shelves") if s["kind"] == "favorites")
+        assert _str_rows(shelf, "product_ids") == []

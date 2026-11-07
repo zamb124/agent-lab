@@ -39,7 +39,7 @@ type Device = (typeof DEVICES)[number];
 
 const DEVICE_ICONS: Record<Device, string> = { phone: 'smartphone', tablet: 'tablet', desktop: 'monitor' };
 
-const FEATURES = ['nutrition', 'back_in_stock'] as const;
+const FEATURES = ['nutrition', 'back_in_stock', 'favorites'] as const;
 type FeatureKey = (typeof FEATURES)[number];
 
 interface ShelfRow {
@@ -87,6 +87,7 @@ export class ShopBuilderPage extends PlatformPage {
     declare _backdrop: Backdrop;
     declare _nutrition: boolean;
     declare _backInStock: boolean;
+    declare _favorites: boolean;
     declare _device: Device;
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
@@ -95,6 +96,7 @@ export class ShopBuilderPage extends PlatformPage {
     private _savedBackdrop: Backdrop = 'solid';
     private _savedNutrition = false;
     private _savedBackInStock = true;
+    private _savedFavorites = true;
     declare _loadAttempted: boolean;
     private _hydrated = false;
     private _feedShopId = '';
@@ -318,6 +320,7 @@ export class ShopBuilderPage extends PlatformPage {
         this._backdrop = 'solid';
         this._nutrition = false;
         this._backInStock = true;
+        this._favorites = true;
         this._device = 'phone';
         this._loadAttempted = false;
         this._shops = this.useResource('shop/shops', { autoload: true });
@@ -384,6 +387,7 @@ export class ShopBuilderPage extends PlatformPage {
         const features = (shop.features ?? {}) as Record<string, unknown>;
         this._nutrition = features.nutrition === true;
         this._backInStock = features.back_in_stock !== false;
+        this._favorites = features.favorites !== false;
         this._savedPreset = this._preset;
         this._savedAccent = this._accent;
         this._savedMode = this._mode;
@@ -391,7 +395,18 @@ export class ShopBuilderPage extends PlatformPage {
         this._savedBackdrop = this._backdrop;
         this._savedNutrition = this._nutrition;
         this._savedBackInStock = this._backInStock;
+        this._savedFavorites = this._favorites;
         return true;
+    }
+
+    private _featureValue(f: FeatureKey): boolean {
+        return f === 'nutrition' ? this._nutrition : f === 'back_in_stock' ? this._backInStock : this._favorites;
+    }
+
+    private _setFeature(f: FeatureKey, v: boolean): void {
+        if (f === 'nutrition') this._nutrition = v;
+        else if (f === 'back_in_stock') this._backInStock = v;
+        else this._favorites = v;
     }
 
     private get _dirty(): boolean {
@@ -401,7 +416,8 @@ export class ShopBuilderPage extends PlatformPage {
             || this._heroStyle !== this._savedHeroStyle
             || this._backdrop !== this._savedBackdrop
             || this._nutrition !== this._savedNutrition
-            || this._backInStock !== this._savedBackInStock;
+            || this._backInStock !== this._savedBackInStock
+            || this._favorites !== this._savedFavorites;
     }
 
     private _wireframe(preset: string) {
@@ -432,6 +448,7 @@ export class ShopBuilderPage extends PlatformPage {
             features: {
                 nutrition: this._nutrition,
                 back_in_stock: this._backInStock,
+                favorites: this._favorites,
             },
         });
         if (result !== null) {
@@ -442,6 +459,7 @@ export class ShopBuilderPage extends PlatformPage {
             this._savedBackdrop = this._backdrop;
             this._savedNutrition = this._nutrition;
             this._savedBackInStock = this._backInStock;
+            this._savedFavorites = this._favorites;
             await this._shops.load();
             this._refreshPreview();
         }
@@ -684,10 +702,9 @@ export class ShopBuilderPage extends PlatformPage {
                                     <div class="fdesc">${this.t(`builder.feature_${f}_desc`)}</div>
                                 </div>
                                 <platform-switch
-                                    ?checked=${f === 'nutrition' ? this._nutrition : this._backInStock}
+                                    ?checked=${this._featureValue(f)}
                                     @change=${(e: CustomEvent<{ value?: unknown }>) => {
-                                        if (f === 'nutrition') this._nutrition = Boolean(e.detail.value);
-                                        else this._backInStock = Boolean(e.detail.value);
+                                        this._setFeature(f, Boolean(e.detail.value));
                                     }}
                                 ></platform-switch>
                             </div>
@@ -709,6 +726,7 @@ export class ShopBuilderPage extends PlatformPage {
                             this._backdrop = this._savedBackdrop;
                             this._nutrition = this._savedNutrition;
                             this._backInStock = this._savedBackInStock;
+                            this._favorites = this._savedFavorites;
                         }}>
                             ${this.t('builder.reset')}
                         </platform-button>

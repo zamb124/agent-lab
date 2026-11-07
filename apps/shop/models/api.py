@@ -72,13 +72,15 @@ class ShopFeatures(StrictBaseModel):
 
     Каждый флаг выключаем без следа в UI и данных: ``nutrition`` —
     полоса КБЖУ в карточке и поля в редакторе товара; ``back_in_stock`` —
-    кнопка «Сообщить о появлении» и подписки на возврат позиций.
-    Управляемые фичи (полки, баннеры) флага не требуют: нет данных —
-    нет блока на витрине.
+    кнопка «Сообщить о появлении» и подписки на возврат позиций;
+    ``favorites`` — сердечки на карточках и полка «Избранное» (только
+    для авторизованных покупателей). Управляемые фичи (полки, баннеры)
+    флага не требуют: нет данных — нет блока на витрине.
     """
 
     nutrition: bool = False
     back_in_stock: bool = True
+    favorites: bool = True
 
 
 def normalize_shop_features(features: JsonObject) -> JsonObject:
@@ -759,7 +761,7 @@ class ShopShelfResponse(StrictBaseModel):
 
 
 class ShopShelfCreateRequest(StrictBaseModel):
-    kind: str = Field(default="manual", pattern=r"^(manual|category|new|hits|comeback|usual|upsell)$")
+    kind: str = Field(default="manual", pattern=r"^(manual|category|new|hits|comeback|usual|favorites|upsell)$")
     layout: str = Field(default="rail", pattern=r"^(rail|rows|grid|hero)$")
     placement: str = Field(default="feed", pattern=r"^(feed|cart)$")
     title: str = Field(default="", max_length=120)
@@ -851,3 +853,15 @@ class ShopNotifyBackRequest(StrictBaseModel):
 
 class ShopNotifyBackResponse(StrictBaseModel):
     subscribed: bool
+
+
+class ShopFavoriteSetRequest(StrictBaseModel):
+    """Сердечко на витрине — slug идёт из path, состояние задано явно
+    (идемпотентно: повтор того же состояния — no-op)."""
+
+    product_id: str = Field(min_length=1)
+    favorite: bool
+
+
+class ShopFavoriteResponse(StrictBaseModel):
+    favorite: bool

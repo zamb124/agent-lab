@@ -100,6 +100,11 @@ async def test_address_map_sheet_pick_point(
     await expect(sheet.locator("#amapPin")).to_be_visible()
     # maplibre-бандл ленивый: ждём реальную карту с канвой.
     await expect(sheet.locator("platform-map canvas")).to_be_visible(timeout=45_000)
+    # Скриншот — после reverse-lookup имени и прогрузки тайлов.
+    await expect(sheet.locator("#amapName")).not_to_contain_text(
+        "Определяем", timeout=20_000
+    )
+    await page.wait_for_timeout(3000)
     await _shot(page, "phone-map-sheet", zoned_storefront.slug)
 
     confirm = sheet.locator("#amapBtn")
@@ -125,6 +130,7 @@ async def test_dtype_switch_resets_address_state(
 
     await page.locator(".seg button", has_text="Самовывоз").click()
     await expect(page.locator("#ca")).to_have_count(0)
+    await _shot(page, "phone-pickup", zoned_storefront.slug)
 
     await page.locator(".seg button", has_text="Доставка").click()
     await expect(page.locator("#ca")).to_be_visible()
@@ -171,26 +177,17 @@ async def test_admin_settings_delivery_section(
         f"{_SHOP_UI.spa_url()}{zoned_storefront.shop_id}/settings",
         wait_until="load",
     )
-    ui_page_system.on(
-        "console",
-        lambda m: print("SPA CONSOLE:", m.type, m.text[:200])
-        if m.type in ("error", "warning")
-        else None,
-    )
-    try:
-        await expect(ui_page_system.locator(".nav")).to_be_visible(timeout=45_000)
-    except AssertionError:
-        await _shot(ui_page_system, "admin-settings-debug", zoned_storefront.slug)
-        print("PAGE URL:", ui_page_system.url)
-        raise
-    nav = ui_page_system.locator(".nav-item", has_text="Выдача заказов")
+    await expect(ui_page_system.locator(".nav")).to_be_visible(timeout=45_000)
+    nav = ui_page_system.locator('.nav-item:has(platform-icon[name="truck"])')
     await expect(nav).to_be_visible(timeout=30_000)
     await nav.click()
     # Карта зоны с draggable-пином магазина + пара координатных полей.
-    await expect(ui_page_system.locator(".zone-map-wrap platform-map")).to_be_visible(
-        timeout=45_000
-    )
+    zone_map = ui_page_system.locator(".zone-map-wrap platform-map")
+    await expect(zone_map).to_be_visible(timeout=45_000)
     await expect(ui_page_system.locator(".zone-map-wrap .open-editor")).to_be_visible()
     fields = ui_page_system.locator(".option-fields platform-field")
     await expect(fields).to_have_count(6, timeout=15_000)
+    # Скролл к карте и пауза на подгрузку тайлов перед скриншотом.
+    await zone_map.scroll_into_view_if_needed()
+    await ui_page_system.wait_for_timeout(2500)
     await _shot(ui_page_system, "admin-delivery", zoned_storefront.slug)

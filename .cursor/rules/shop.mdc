@@ -96,5 +96,6 @@ alwaysApply: false
 - `tests/shop/test_shop_customer_account.py` — кабинет: сквозная лента двух компаний, ownership-isolation, отмена, `/me`, geo и PWA.
 - `tests/shop/test_shop_feed.py` — полки/баннеры CRUD+реордер, источники `new`/`comeback`/`manual`, `features`, КБЖУ в снапшоте, `notify-back` подписка.
 - `tests/ui/e2e/test_shop_feed_e2e.py` — лента в браузере (баннеры/полки/comeback/КБЖУ/upsell), скриншот-матрица phone/tablet/desktop/embed в `artifacts/shop-feed/`; `full_page=True` перезапускает fade-анимации витрины — перед снимком `add_style_tag("*{animation:none!important}")`.
+- `tests/ui/e2e/test_shop_checkout_e2e.py` — чекаут с адресом в браузере: автокомплит (ввод/клавиатура/пусто), зона-статус, шит карты с центр-пином, сброс при смене типа выдачи (самовывоз без адреса), детали заказа, заказ с customer-сессией, секция доставки в SPA настроек; скриншоты `phone-*/admin-*` в `artifacts/shop-feed/`.
 - `tests/shop/test_shop_admin.py`, `tests/shop/test_shop_modifiers.py`, `tests/shop/test_shop_distribution.py`, `tests/shop/test_shop_infra.py` — slug, модификаторы, QR/sitemap/Telegram/инвалидация, очередь и маршруты.
 - `tests/frontend_core/browser/shop/` — меню, дерево категорий, шапка страницы.

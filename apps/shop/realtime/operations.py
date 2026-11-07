@@ -49,6 +49,7 @@ from apps.shop.models.api import (
     ShopModifierGroupUpdateRequest,
     ShopModifierOptionCreateRequest,
     ShopModifierOptionResponse,
+    ShopFavoriteResponse,
     ShopModifierOptionUpdateRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
@@ -282,6 +283,14 @@ class ShopPersonalPayload(StrictBaseModel):
     """Персональные данные покупателя на витрине — ``/personal``."""
 
     slug: str = Field(min_length=3, max_length=40)
+
+
+class ShopFavoriteSetPayload(StrictBaseModel):
+    """Сердечко покупателя — slug витрины + товар + целевое состояние."""
+
+    slug: str = Field(min_length=3, max_length=40)
+    product_id: str = Field(min_length=1)
+    favorite: bool
 
 
 class ShopPromoCreatePayload(ShopPromoCreateRequest):
@@ -1040,6 +1049,22 @@ async def op_public_personal(
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return await di.feed_service.personal(shop.shop_id, customer.customer_id)
+
+
+async def op_public_favorite_set(
+    payload: ShopFavoriteSetPayload, *, user: User, di: Di
+) -> ShopFavoriteResponse:
+    """Сердечко «в избранное» — идемпотентное состояние (customer-сессия)."""
+    _ = user
+    customer = require_customer()
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+        favorite = await di.feed_service.set_favorite(
+            shop.shop_id, payload.product_id, customer.customer_id, payload.favorite
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopFavoriteResponse(favorite=favorite)
 
 
 # --- Столы зала ---

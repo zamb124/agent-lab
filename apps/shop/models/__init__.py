@@ -4,6 +4,7 @@ from apps.shop.models.back_in_stock import ShopBackInStock
 from apps.shop.models.banner import ShopBanner
 from apps.shop.models.category import ShopCategory
 from apps.shop.models.domain import ShopDomain
+from apps.shop.models.favorite import ShopFavorite
 from apps.shop.models.enums import (
     ModifierGroupKind,
     ModifierPriceMode,
@@ -43,6 +44,7 @@ __all__ = [
     "ShopDeliveryType",
     "ShopDomain",
     "ShopDomainStatus",
+    "ShopFavorite",
     "ShopKind",
     "ShopModifierGroup",
     "ShopModifierOption",

@@ -122,7 +122,9 @@
   "device_phone": "Phone",
   "device_desktop": "Desktop",
   "shop_not_found": "Shop not found or unavailable",
-  "retry": "Retry"
+  "retry": "Retry",
+  "feature_favorites": "Favorites",
+  "feature_favorites_desc": "Hearts on items and a favorites shelf for signed-in customers"
  },
  "orders": {
   "title": "Orders",
@@ -317,10 +319,12 @@
   "shelf_created": "Shelf created",
   "shelf_updated": "Shelf updated",
   "shelf_removed": "Shelf removed",
+  "shelves_reordered": "Shelf order saved",
   "shelf_failed": "Failed to save shelf: {detail}",
   "banner_created": "Banner created",
   "banner_updated": "Banner updated",
   "banner_removed": "Banner removed",
+  "banners_reordered": "Banner order saved",
   "banner_failed": "Failed to save banner: {detail}",
   "demos_seed_scheduled": "Example storefronts are being added — they will appear in the list in a minute",
   "demos_seed_failed": "Failed to add examples: {detail}",
@@ -476,5 +480,72 @@
  },
  "context": {
   "open_storefront": "Open storefront"
+ },
+ "feed": {
+  "kind": {
+   "manual": "Curated",
+   "category": "Catalog section",
+   "new": "New",
+   "hits": "Bestsellers",
+   "comeback": "Back on menu",
+   "usual": "The usual",
+   "favorites": "Favorites",
+   "upsell": "Upsell"
+  },
+  "layout": {
+   "rail": "Rail",
+   "rows": "Rows",
+   "grid": "Grid",
+   "hero": "Hero"
+  },
+  "placement": {
+   "feed": "Feed",
+   "cart": "Cart"
+  },
+  "link": {
+   "none": "None",
+   "product": "Product",
+   "category": "Section",
+   "shelf": "Shelf",
+   "url": "External link"
+  },
+  "shelves_label": "Feed shelves",
+  "shelf_add": "Shelf",
+  "shelves_empty": "No shelves configured — the feed shows the catalog",
+  "shelf_new": "New shelf",
+  "shelf_edit": "Edit shelf",
+  "field_kind": "Source",
+  "field_layout": "Layout",
+  "field_placement": "Placement",
+  "field_limit": "Item limit",
+  "field_title": "Title",
+  "field_subtitle": "Subtitle",
+  "field_category": "Section",
+  "field_active": "Show on storefront",
+  "products_title": "Items",
+  "hint_new": "Automatic: recently added items",
+  "hint_hits": "Automatic: most ordered items",
+  "hint_comeback": "Automatic: items back in stock",
+  "hint_usual": "Automatic: the customer's usual order — signed-in only",
+  "hint_favorites": "Automatic: hearted items — signed-in only",
+  "banners_label": "Banners",
+  "banner_add": "Banner",
+  "banners_empty": "No banners added",
+  "banner_new": "New banner",
+  "banner_edit": "Edit banner",
+  "banner_photo": "Photo",
+  "banner_untitled": "Untitled",
+  "field_link_type": "Link type",
+  "field_link_target": "Target",
+  "field_link_url": "URL",
+  "window_toggle": "Show on schedule",
+  "field_time_from": "From",
+  "field_time_to": "To",
+  "move_up": "Up",
+  "move_down": "Down",
+  "edit": "Edit",
+  "remove": "Remove",
+  "off": "hidden",
+  "link_title": "Tap action"
  }
 }

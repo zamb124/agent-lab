@@ -176,6 +176,12 @@ async def feed_storefront(
     _ = await _post(
         shop_client_http,
         headers,
+        f"/shops/{shop_id}/shelves",
+        {"kind": "favorites"},
+    )
+    _ = await _post(
+        shop_client_http,
+        headers,
         f"/shops/{shop_id}/banners",
         {"title": "Дегустация", "subtitle": "Каждую пятницу", "link": f"product:{product_id}"},
     )
@@ -186,7 +192,7 @@ async def feed_storefront(
     )
     assert resp.status_code == 200, resp.text
     _ = await _post(shop_client_http, headers, f"/shops/{shop_id}/publish", {})
-    await _wait_snapshot_feed(shop_client_http, slug, shelves=3, banners=1)
+    await _wait_snapshot_feed(shop_client_http, slug, shelves=4, banners=1)
     return FeedStorefront(
         slug=slug,
         shop_id=shop_id,
@@ -205,7 +211,13 @@ async def _shot(page: Page, name: str, slug: str) -> None:
     _ARTIFACTS.mkdir(parents=True, exist_ok=True)
     # Анимации fade-in (.sh/.item/.mchunk) при full_page-захвате перезапускаются
     # и ловятся на середине — для детерминированного снимка выключаем их.
-    _ = await page.add_style_tag(content="*{animation:none!important;transition:none!important}")
+    # Fixed-элементы (нав, корзина, шиты) в full_page дорисовываются на месте
+    # вьюпорта — переводим в absolute, чтобы легли по краю документа.
+    _ = await page.add_style_tag(
+        content="*{animation:none!important;transition:none!important}"
+        + "body{position:relative!important}"
+        + ".acctnav,.cart,.sheet,.toast,.bdrop{position:absolute!important}"
+    )
     _ = await page.screenshot(path=str(_ARTIFACTS / f"{slug}-{name}.png"), full_page=True)
 
 
@@ -313,6 +325,48 @@ async def test_cart_upsell_shelf(
     await expect(panel.locator(".sh h2")).to_have_text("Добавить к заказу")
     await expect(panel.locator(".shcard")).to_have_count(1)
     await _shot(page, "phone-cart-upsell", feed_storefront.slug)
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(90)
+async def test_favorites_heart_auth_and_shelf(
+    page: Page, feed_storefront: FeedStorefront, unique_id: str
+) -> None:
+    """features.favorites: сердечко → авторизация эмулятором → полка «Избранное»."""
+    await page.set_viewport_size(_PHONE)
+    _ = await page.goto(_url(feed_storefront), wait_until="load")
+    # Сердечки на карточках полки и каталога; полка «Избранное» пуста и скрыта.
+    heart = page.locator(
+        f".shcard[data-pid='{feed_storefront.product_id}'] .fav"
+    ).first
+    await expect(heart).to_be_visible()
+    await expect(
+        page.locator(f".item[data-pid='{feed_storefront.product_id}'] .fav")
+    ).to_be_visible()
+    fav_shelf = page.locator(".sh", has_text="Избранное")
+    await expect(fav_shelf).to_have_count(0)
+
+    # Тап по сердечку открывает customer-auth; эмулятор подтверждает сам.
+    await heart.click()
+    auth = page.locator("platform-customer-auth")
+    await expect(auth.locator(".sheet")).to_be_visible()
+    await auth.locator("input[type=tel]").fill(f"+7999{int(unique_id[:8], 16) % 10**7:07d}")
+    await auth.locator("button.primary").click()
+    await auth.locator("button.method", has_text="Эмулятор").click()
+    await expect(heart).to_have_class("fav on", timeout=15_000)
+    await expect(
+        page.locator(f".item[data-pid='{feed_storefront.product_id}'] .fav")
+    ).to_have_class("fav on")
+
+    # Полка «Избранное» дорисовалась с позицией — без перезагрузки.
+    await expect(fav_shelf.locator(".shcard")).to_have_count(1)
+    await _shot(page, "phone-favorites", feed_storefront.slug)
+
+    # Повторный тап снимает отметку — полка снова пустая.
+    await heart.click()
+    await expect(heart).not_to_have_class("fav on")
+    await expect(fav_shelf.locator(".shcard")).to_have_count(0)
 
 
 @pytest.mark.asyncio

@@ -37,7 +37,9 @@ from apps.shop.realtime.operations import (
     ShopModifierOptionUpdatePayload,
     ShopMyOrderCodePayload,
     ShopMyOrdersListPayload,
+    ShopFavoriteSetPayload,
     ShopNotifyBackPayload,
+    ShopPersonalPayload,
     ShopOrderCreatePayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
@@ -110,10 +112,12 @@ from apps.shop.realtime.operations import (
     op_promos_remove,
     op_promos_update,
     op_public_cart_price,
+    op_public_favorite_set,
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
     op_public_notify_back,
+    op_public_personal,
     op_public_order_create,
     op_public_order_status,
     op_public_storefront_geo,
@@ -266,6 +270,12 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/public/notify_back_requested": Operation(
         payload_model=ShopNotifyBackPayload, fn=op_public_notify_back
+    ),
+    "shop/public/favorite_set_requested": Operation(
+        payload_model=ShopFavoriteSetPayload, fn=op_public_favorite_set
+    ),
+    "shop/public/personal_requested": Operation(
+        payload_model=ShopPersonalPayload, fn=op_public_personal
     ),
     "shop/public/cart_price_requested": Operation(
         payload_model=ShopCartPricePayload, fn=op_public_cart_price

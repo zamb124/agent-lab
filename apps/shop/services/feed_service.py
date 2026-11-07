@@ -14,6 +14,7 @@ from apps.shop.models import (
     ShopBackInStock,
     ShopBanner,
     ShopCategory,
+    ShopFavorite,
     ShopOrder,
     ShopOrderItem,
     ShopOrderStatus,
@@ -190,7 +191,7 @@ class FeedService:
             products = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
             back = [p for p in products if not p.is_available]
             return [p.shop_product_id for p in back[: shelf.limit]]
-        if shelf.kind == ShopShelfKind.USUAL:
+        if shelf.kind == ShopShelfKind.USUAL or shelf.kind == ShopShelfKind.FAVORITES:
             return []
         return []
 
@@ -337,6 +338,39 @@ class FeedService:
     async def pending_back_in_stock(self, product_id: str) -> list[ShopBackInStock]:
         return await ShopBackInStock.list_pending_by_product(product_id)
 
+    # --- Избранное покупателя ---
+
+    async def set_favorite(
+        self, shop_id: str, product_id: str, customer_id: str, on: bool
+    ) -> bool:
+        """Сердечко покупателя; идемпотентно по целевому состоянию.
+
+        Товар ищется по ``shop_id`` опубликованной витрины: чужой товар
+        избранное не принимает.
+        """
+        product = await ShopProduct.get_by_id(product_id)
+        if product is None or product.shop_id != shop_id:
+            raise PlatformNotFoundError("Product not found", error_code="product_not_found")
+        existing = await ShopFavorite.find_by_product_and_customer(
+            product_id, customer_id
+        )
+        if on:
+            if existing is not None:
+                return True
+            _ = await ShopFavorite.create(
+                ShopFavorite(
+                    shop_favorite_id=new_id("shopfav"),
+                    shop_id=shop_id,
+                    product_id=product_id,
+                    customer_id=customer_id,
+                    created_at=utcnow(),
+                )
+            )
+            return True
+        if existing is not None:
+            _ = await existing.delete()
+        return False
+
     # --- Персонализация покупателя (/personal) ---
 
     async def personal(self, shop_id: str, customer_id: str) -> ShopPersonalResponse:
@@ -401,8 +435,11 @@ class FeedService:
             await ShopProduct.list_many_by_ids(sub_product_ids) if sub_product_ids else []
         )
         own = {p.shop_product_id for p in sub_products if p.shop_id == shop_id}
+        favorites = await ShopFavorite.list_by_shop_customer_by_created_desc(
+            shop_id, customer_id
+        )
         return ShopPersonalResponse(
-            favorite_ids=[],
+            favorite_ids=[f.product_id for f in favorites],
             usual=usual,
             back_in_stock_ids=[pid for pid in sub_product_ids if pid in own],
         )

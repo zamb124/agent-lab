@@ -360,12 +360,21 @@ async function loadPersonal(){
   if(!me)return;
   const d=await jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/personal');
   (d.back_in_stock_ids||[]).forEach(id=>SUBS.add(id));
+  (d.favorite_ids||[]).forEach(id=>FAVS.add(id));
   const usual=SHELVES.find(s=>s.kind==='usual');
   if(usual&&(d.usual||[]).length){
    usual.product_ids=d.usual.map(u=>u.product_id);
    const holder=document.getElementById('sh-'+usual.id);
    if(holder)holder.outerHTML=shelfHtml(usual);
   }
+  const fav=SHELVES.find(s=>s.kind==='favorites');
+  if(fav&&(d.favorite_ids||[]).length){
+   fav.product_ids=d.favorite_ids;
+   const fh=document.getElementById('sh-'+fav.id);
+   if(fh)fh.outerHTML=shelfHtml(fav);
+  }
+  if(FAVS.size)document.querySelectorAll('[data-fav]').forEach(el=>{
+   el.classList.toggle('on',FAVS.has(el.dataset.fav));});
  }catch(e){}
 }
 

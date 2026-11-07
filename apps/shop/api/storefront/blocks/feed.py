@@ -35,15 +35,40 @@ CSS: str = """.bnrs{display:flex;gap:10px;overflow-x:auto;padding:14px 2px 4px;s
 .soon{display:inline-block;font-size:12px;font-weight:650;color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);padding:6px 12px;border-radius:99px;white-space:nowrap}
 .na img{filter:saturate(.35) brightness(.82)}
 .na h3,.na p{opacity:.55}
+.fav{position:absolute;top:9px;right:9px;width:36px;height:36px;border-radius:50%;border:0;display:grid;place-items:center;background:rgba(16,15,18,.5);backdrop-filter:blur(10px);color:rgba(255,255,255,.92);cursor:pointer;transition:transform .12s ease,color .15s ease,background .15s;z-index:2}
+.fav svg{width:19px;height:19px;fill:currentColor}
+.fav:hover{background:rgba(16,15,18,.68)}
+.fav:active{transform:scale(.82)}
+.fav.on{color:var(--accent)}
+.gcard{position:relative}
+.gcard .fav{top:10px;right:10px}
 .bdrop{position:fixed;inset:0;z-index:-1;pointer-events:none}
 body[data-backdrop=blur] .bdrop{background-size:cover;background-position:center 18%;filter:blur(64px) saturate(1.2);opacity:.5}
 body[data-backdrop=blur] .bdrop::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 34%,transparent) 0%,var(--bg) 72%)}
-body[data-backdrop=gradient] .bdrop{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 24%,var(--bg)) 0%,var(--bg) 480px)}"""
+body[data-backdrop=gradient] .bdrop{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 24%,var(--bg)) 0%,var(--bg) 480px)}
+body:not([data-backdrop=solid]) .sh-h h2,body:not([data-backdrop=solid]) .sh-h .sub,body:not([data-backdrop=solid]) .sh-h .more,body:not([data-backdrop=solid]) .shcard h3,body:not([data-backdrop=solid]) .shcard .price,body:not([data-backdrop=solid]) .cat.sub,body:not([data-backdrop=solid]) .item h3,body:not([data-backdrop=solid]) .item p,body:not([data-backdrop=solid]) .item .price,body:not([data-backdrop=solid]) .portion{text-shadow:0 1px 12px color-mix(in srgb,var(--bg) 72%,transparent),0 0 4px color-mix(in srgb,var(--bg) 55%,transparent)}
+body:not([data-backdrop=solid]) .sh-h .sub,body:not([data-backdrop=solid]) .cat.sub,body:not([data-backdrop=solid]) .item p,body:not([data-backdrop=solid]) .portion{color:color-mix(in srgb,var(--text) 88%,transparent)}"""
 
 JS: str = """const SHELVES=Array.isArray(S.shelves)?S.shelves:[];
 const BANNERS=Array.isArray(S.banners)?S.banners:[];
 const SUBS=new Set();
-const SHELF_TITLES={new:'Новинки',hits:'Популярное',comeback:'Скоро вернётся',usual:'Как всегда',upsell:'Добавить к заказу'};
+const FAVS=new Set();
+const FAV_ON=!!(S.features&&S.features.favorites);
+const PERSONAL_SHELVES=new Set(['usual','favorites']);
+const SHELF_TITLES={new:'Новинки',hits:'Популярное',comeback:'Скоро вернётся',usual:'Как всегда',favorites:'Избранное',upsell:'Добавить к заказу'};
+function favBtn(p){return FAV_ON?`<button class="fav${FAVS.has(p.id)?' on':''}" data-fav="${p.id}" onclick="event.stopPropagation();toggleFav('${p.id}')" aria-label="В избранное">${ic('heart')}</button>`:'';}
+window.toggleFav=async pid=>{
+  const customer=await ensureAuth();if(!customer)return;
+  const on=!FAVS.has(pid);
+  const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/favorites`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:pid,favorite:on})});
+  if(!r.ok)return;
+  const d=await r.json();
+  if(d.favorite)FAVS.add(pid);else FAVS.delete(pid);
+  document.querySelectorAll(`[data-fav="${pid}"]`).forEach(el=>el.classList.toggle('on',d.favorite));
+  const favShelf=SHELVES.find(s=>s.kind==='favorites');
+  if(favShelf){favShelf.product_ids=[...FAVS];
+    const h=document.getElementById('sh-'+favShelf.id);if(h)h.outerHTML=shelfHtml(favShelf);}
+  toast(d.favorite?'В избранном':'Убрано из избранного');};
 function bannerLive(b){const w=b.window||{};const now=Date.now();
   if(w.from&&Date.parse(w.from)>now)return false;
   if(w.to&&Date.parse(w.to)<now)return false;return true;}
@@ -55,12 +80,12 @@ window.bannerGo=id=>{const b=BANNERS.find(x=>x.id===id);if(!b)return;const link=
 function bannerHtml(b){const t=b.title||'',st=b.subtitle||'';
   return `<div class="bnr${b.link?'':' nt'}" onclick="bannerGo('${b.id}')">${photo(b.image_file_id,'bg','md')}${t||st?`<div class="bveil"></div><div class="btxt">${t?`<b>${esc(t)}</b>`:''}${st?`<span>${esc(st)}</span>`:''}</div>`:''}</div>`;}
 function shCard(p){const na=p.is_available===false;
-  return `<div class="shcard${na?' na':''}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')"><div class="ph">${photo(p.photo_file_id,'','md!sq')}</div><h3>${esc(p.name)}</h3><div class="row" ${STOP}><span class="price">${priceLabel(p)}</span>${na?'<span class="soon">Скоро</span>':`<span data-qty="${p.id}">${qtyCtl(p)}</span>`}</div></div>`;}
+  return `<div class="shcard${na?' na':''}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')"><div class="ph">${photo(p.photo_file_id,'','md!sq')}${favBtn(p)}</div><h3>${esc(p.name)}</h3><div class="row" ${STOP}><span class="price">${priceLabel(p)}</span>${na?'<span class="soon">Скоро</span>':`<span data-qty="${p.id}">${qtyCtl(p)}</span>`}</div></div>`;}
 function shelfTitle(s){if(s.title)return s.title;
   if(s.kind==='category'&&s.category_id){const c=S.categories.find(x=>x.id===s.category_id);if(c)return c.name;}
   return SHELF_TITLES[s.kind]||'Подборка';}
 function shelfHtml(s){const items=(s.product_ids||[]).map(byId).filter(Boolean);
-  if(!items.length)return s.kind==='usual'
+  if(!items.length)return PERSONAL_SHELVES.has(s.kind)
     ?`<div class="sh" id="sh-${s.id}" hidden></div>`:'';
   const catJump=s.kind==='category'&&s.category_id&&S.categories.some(c=>c.id===s.category_id)
     ?`<span class="more" onclick="jump('${s.category_id}')">Все →</span>`:'';

@@ -11,6 +11,9 @@ CSS: str = """.cl{display:flex;justify-content:space-between;align-items:center;
 .cl .s{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .mg{margin:16px 0}
 .mg.nest{margin:12px 0 4px 14px;padding-left:12px;border-left:2px solid var(--line)}
+.pfav{right:60px}
+.pfav.on{color:var(--accent)}
+.pfav svg{width:18px;height:18px;fill:currentColor}
 .mg-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
 .mg-h b{font-size:15px}
 .mg-r{font-size:12px;color:var(--warn);white-space:nowrap}
@@ -114,6 +117,7 @@ function renderCust(){if(!cust)return;const p=byId(cust.pid);if(!p)return;
   const unavailable=p.is_available===false;
   document.getElementById('cpanel').innerHTML=
     `<button class="pshare" onclick="shareProduct('${p.id}')" aria-label="Поделиться">${SHARE_ICON}</button>`+
+    (FAV_ON?`<button class="pshare pfav${FAVS.has(p.id)?' on':''}" data-fav="${p.id}" onclick="toggleFav('${p.id}')" aria-label="В избранное">${ic('heart')}</button>`:'')+
     `${photo(p.photo_file_id,'phero','lg')}<h2>${esc(p.name)}${tags(p)}${portionOf(p)}</h2>`+
     `${p.description?`<p class="pdesc">${esc(p.description)}</p>`:''}`+
     nutriHtml(p,cust.sel)+

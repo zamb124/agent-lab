@@ -622,6 +622,7 @@ export const shopShelfUpdateOp = createAsyncOp({
 
 export const shopShelvesReorderOp = createAsyncOp({
     name: 'shop/shelves_reorder',
+    successToastKey: 'shop:toast.shelves_reordered',
     errorToastKey: 'shop:toast.shelf_failed',
     commandType: 'shop/shelves/reorder_requested',
     transport: 'ws',
@@ -681,6 +682,7 @@ export const shopBannerUpdateOp = createAsyncOp({
 
 export const shopBannersReorderOp = createAsyncOp({
     name: 'shop/banners_reorder',
+    successToastKey: 'shop:toast.banners_reordered',
     errorToastKey: 'shop:toast.banner_failed',
     commandType: 'shop/banners/reorder_requested',
     transport: 'ws',

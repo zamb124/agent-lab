@@ -50,12 +50,22 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 .gcard p{font-size:12.5px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .gcard .row{display:flex;justify-content:space-between;align-items:center;margin-top:auto;gap:8px}
 .compact .item{padding:12px 2px}
-.compact .item img{width:52px;height:52px}"""
+.compact .item img{width:52px;height:52px}
+.item .pimg{position:relative;flex-shrink:0;width:92px;height:92px;border-radius:var(--radius);background:var(--card2);overflow:hidden}
+.gcard .gph{position:relative;display:block;aspect-ratio:4/3;background:var(--card2);overflow:hidden}
+.gcard .gph img{position:absolute;inset:0;height:100%}
+.item .pimg img{display:block}
+.item .fav{top:6px;right:6px;width:30px;height:30px}
+.item .fav svg{width:16px;height:16px}
+.compact .item .pimg{width:52px;height:52px}
+.compact .item .fav{top:4px;right:4px;width:24px;height:24px}
+.compact .item .fav svg{width:13px;height:13px}"""
 
 JS: str = """function na(p){return p.is_available===false?' na':'';}
-function rowList(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','sm!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
-function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','md!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
-function rowCompact(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${photo(p.photo_file_id,'','sm!sq')}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
+function pimgWrap(p){return p.photo_file_id||FAV_ON?`<span class="pimg">${photo(p.photo_file_id,'','sm!sq')}${favBtn(p)}</span>`:'';}
+function rowList(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
+function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${p.photo_file_id||FAV_ON?`<span class="gph">${photo(p.photo_file_id,'','md!sq')}${favBtn(p)}</span>`:''}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
+function rowCompact(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){
   const hb=hoursBadge();

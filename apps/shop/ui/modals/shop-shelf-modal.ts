@@ -16,7 +16,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 
-const KINDS = ['manual', 'category', 'new', 'hits', 'comeback', 'upsell'] as const;
+const KINDS = ['manual', 'category', 'new', 'hits', 'comeback', 'usual', 'favorites', 'upsell'] as const;
 type ShelfKind = (typeof KINDS)[number];
 
 const LAYOUTS = ['rail', 'rows', 'grid', 'hero'] as const;
@@ -250,7 +250,7 @@ export class ShopShelfModal extends PlatformModal {
                         `)}
                     </div>
                 ` : nothing}
-                ${this._kind === 'comeback' || this._kind === 'new' || this._kind === 'hits' ? html`
+                ${this._kind !== 'manual' && this._kind !== 'category' && this._kind !== 'upsell' ? html`
                     <div class="hint">${this.t(`feed.hint_${this._kind}`)}</div>
                 ` : nothing}
                 ${this._editing ? html`

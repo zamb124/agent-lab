@@ -24,6 +24,8 @@ from apps.shop.models import Shop
 from apps.shop.models.api import (
     ShopCartPriceRequest,
     ShopCartPriceResponse,
+    ShopFavoriteResponse,
+    ShopFavoriteSetRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
     ShopNotifyBackRequest,
@@ -38,6 +40,7 @@ from apps.shop.models.api import (
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
     ShopCartPricePayload,
+    ShopFavoriteSetPayload,
     ShopMyOrderCodePayload,
     ShopMyOrdersListPayload,
     ShopNotifyBackPayload,
@@ -46,6 +49,7 @@ from apps.shop.realtime.operations import (
     ShopPublicOrderStatusPayload,
     ShopStorefrontGeoPayload,
     op_public_cart_price,
+    op_public_favorite_set,
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
@@ -299,6 +303,20 @@ async def get_personal(slug: str, di: Di) -> ShopPersonalResponse:
     """«Как всегда» и подписки покупателя витрины (customer-сессия)."""
     return await op_public_personal(
         ShopPersonalPayload(slug=slug),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/storefront/{slug}/favorites", response_model=ShopFavoriteResponse)
+async def favorite_set(
+    slug: str, payload: ShopFavoriteSetRequest, di: Di
+) -> ShopFavoriteResponse:
+    """Сердечко «в избранное» — идемпотентное состояние (customer-сессия)."""
+    return await op_public_favorite_set(
+        ShopFavoriteSetPayload(
+            slug=slug, product_id=payload.product_id, favorite=payload.favorite
+        ),
         user=require_context().user,
         di=di,
     )

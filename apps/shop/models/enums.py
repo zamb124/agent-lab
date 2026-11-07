@@ -135,9 +135,9 @@ class ShopShelfKind(StrEnum):
     """Источник товаров витринной полки.
 
     ``manual`` — ручная выборка ``product_ids``; ``category`` — зеркало
-    раздела каталога; ``new``/``hits``/``comeback``/``usual`` —
-    вычисляемые полки (данные собирает снапшот/персональный endpoint);
-    ``upsell`` — полка «добавить к заказу» внутри корзины.
+    раздела каталога; ``new``/``hits``/``comeback`` — вычисляемые полки
+    снапшота; ``usual``/``favorites`` — персональные, id'шники резолвит
+    ``/personal``; ``upsell`` — полка «добавить к заказу» внутри корзины.
     """
 
     MANUAL = "manual"
@@ -146,6 +146,7 @@ class ShopShelfKind(StrEnum):
     HITS = "hits"
     COMEBACK = "comeback"
     USUAL = "usual"
+    FAVORITES = "favorites"
     UPSELL = "upsell"
 
 
