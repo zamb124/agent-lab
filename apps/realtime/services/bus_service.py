@@ -18,6 +18,7 @@ from core.events.contract import (
 )
 from core.events.redis_client import events_redis_client
 from core.logging import get_logger
+from core.logging.attributes import EVENT_PLATFORM_EVENT_PUBLISHED
 from core.push.delivery import deliver_offline_push
 from core.realtime.centrifugo_client import centrifugo_presence_stats, centrifugo_publish
 from core.realtime.channels import centrifugo_channels_for_delivery, user_channel
@@ -63,6 +64,11 @@ class RealtimeBusService:
         await _xadd_platform_event(event)
         await self._publish_to_centrifugo(event)
         await self._maybe_offline_push(event)
+        logger.info(
+            EVENT_PLATFORM_EVENT_PUBLISHED,
+            platform_event_type=event.type,
+            company_id=event.company_id,
+        )
 
         if is_command_event_type(event.type):
             await self._dispatch_command(event)
