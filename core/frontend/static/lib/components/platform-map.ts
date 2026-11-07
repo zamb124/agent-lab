@@ -283,6 +283,8 @@ export class PlatformMapEl extends PlatformElement {
     private _suggestTimer: number | null = null;
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
     private _cardPopup: { remove(): void } | null = null;
+    private _pinnedBuilding: GeoJSON.Feature | null = null;
+    private _hoverBuilding: GeoJSON.Feature | null = null;
     private _zoneDraw: ZoneDraw | null = null;
     private _locateMarker: { remove(): void } | null = null;
     private _domMarkers: { remove(): void }[] = [];
@@ -1694,6 +1696,29 @@ export class PlatformMapEl extends PlatformElement {
 
     private _installSources(map: PlatformMap): void {
         const cluster = this.config.markersCluster === true;
+        // Подсветка контуров зданий под ховером/кликом адресной фичи (Яндекс-стиль).
+        // Слой ставится под базовые подписи (symbol), чтобы текст читался поверх заливки.
+        map.addSource('pm-building-hl', { type: 'geojson', data: _EMPTY_FC } as never);
+        const firstSymbol = ((map.getStyle() as { layers?: { id?: string; type?: string }[] }).layers ?? [])
+            .find((l) => l.type === 'symbol' && typeof l.id === 'string' && l.id.length > 0)?.id;
+        map.addLayer(
+            {
+                id: 'pm-building-hl-fill',
+                type: 'fill',
+                source: 'pm-building-hl',
+                paint: { 'fill-color': '#2563eb', 'fill-opacity': 0.14 },
+            } as never,
+            firstSymbol,
+        );
+        map.addLayer(
+            {
+                id: 'pm-building-hl-line',
+                type: 'line',
+                source: 'pm-building-hl',
+                paint: { 'line-color': '#2563eb', 'line-width': 2, 'line-opacity': 0.85 },
+            } as never,
+            firstSymbol,
+        );
         map.addSource('pm-markers', {
             type: 'geojson',
             data: _EMPTY_FC,
@@ -1990,6 +2015,12 @@ export class PlatformMapEl extends PlatformElement {
                 return;
             }
             const feats = this._featuresAt(map, e.point);
+            if (feats.some((f) => f.layer === 'addresses')) {
+                this._pinnedBuilding = this._buildingAt(map, e.point);
+                this._setBuildingHighlight(map, this._pinnedBuilding);
+            } else {
+                this._pinnedBuilding = null;
+            }
             const detail = {
                 lngLat: [e.lngLat.lng, e.lngLat.lat] as LngLat,
                 features: feats.map((f) => ({ layer: f.layer, properties: f.properties })),
@@ -2026,6 +2057,11 @@ export class PlatformMapEl extends PlatformElement {
                 }
                 const feats = this._featuresAt(map, e.point);
                 const markerHit = this._markerAt(map, e.point);
+                if (feats.some((f) => f.layer === 'addresses')) {
+                    this._setBuildingHighlight(map, this._buildingAt(map, e.point));
+                } else {
+                    this._setBuildingHighlight(map, this._pinnedBuilding);
+                }
                 map.getCanvas().style.cursor = feats.length > 0 || markerHit ? 'pointer' : '';
                 let hintText =
                     feats.length > 0
@@ -2046,7 +2082,10 @@ export class PlatformMapEl extends PlatformElement {
                 }
                 this._hideHint();
             });
-            map.getCanvas().addEventListener('mouseleave', () => this._hideHint());
+            map.getCanvas().addEventListener('mouseleave', () => {
+                this._hideHint();
+                this._setBuildingHighlight(map, this._pinnedBuilding);
+            });
         }
     }
 
@@ -2150,6 +2189,39 @@ export class PlatformMapEl extends PlatformElement {
                 properties: { ...(h.properties ?? {}) },
             }))
             .filter((h) => h.layer !== '');
+    }
+
+    /** Контур здания базовой карты под точкой — для подсветки адресных фич. */
+    private _buildingAt(map: PlatformMap, point: { x: number; y: number }): GeoJSON.Feature | null {
+        if (!map.getLayer('buildings')) return null;
+        type QF = (p: [number, number], o?: { layers?: string[] }) => { geometry?: GeoJSON.Geometry | null }[];
+        const query = (map as unknown as { queryRenderedFeatures: QF }).queryRenderedFeatures.bind(map);
+        const hits = query([point.x, point.y], { layers: ['buildings'] });
+        const hit = hits.find(
+            (h) => h.geometry && (h.geometry.type === 'Polygon' || h.geometry.type === 'MultiPolygon'),
+        );
+        if (!hit?.geometry) return null;
+        return { type: 'Feature', geometry: hit.geometry, properties: {} };
+    }
+
+    private _setBuildingHighlight(map: PlatformMap, feature: GeoJSON.Feature | null): void {
+        const prev = this._hoverBuilding;
+        if (
+            feature === prev
+            || (feature !== null
+                && prev !== null
+                && JSON.stringify(feature.geometry) === JSON.stringify(prev.geometry))
+        ) {
+            return;
+        }
+        this._hoverBuilding = feature;
+        const src = map.getSource('pm-building-hl') as { setData(d: GeoJSON.FeatureCollection): void } | undefined;
+        if (!src) return;
+        src.setData(
+            feature
+                ? { type: 'FeatureCollection', features: [feature] }
+                : ({ type: 'FeatureCollection', features: [] } as GeoJSON.FeatureCollection),
+        );
     }
 
     private _markerAt(map: PlatformMap, point: { x: number; y: number }): { key: string; lngLat: LngLat; title: string } | null {
@@ -2638,11 +2710,15 @@ export class PlatformMapEl extends PlatformElement {
         .pm-hint {
             font-size: 12px;
         }
-        :host .pm-card-popup .maplibregl-popup-content,
-        :host .pm-hint .maplibregl-popup-content {
+        :host .pm-card-popup .maplibregl-popup-content {
             border-radius: 12px;
             box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
             padding: 0;
+        }
+        :host .pm-hint .maplibregl-popup-content {
+            border-radius: 10px;
+            box-shadow: 0 4px 18px rgba(15, 23, 42, 0.16);
+            padding: 7px 11px;
         }
         .pm-card {
             font-family: inherit;

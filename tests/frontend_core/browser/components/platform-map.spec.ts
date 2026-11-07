@@ -64,6 +64,12 @@ type TestMap = {
     getCenter?(): { lng: number; lat: number };
     getSource(id: string): { setData(d: unknown): void; _data?: { geojson?: { features?: unknown[] } } } | undefined;
     getLayer(id: string): unknown;
+    addSource(id: string, def: unknown): void;
+    addLayer(def: unknown, beforeId?: string): void;
+    queryRenderedFeatures(
+        pointOrBox: unknown,
+        opts?: { layers?: string[] },
+    ): Array<{ geometry: { type: string }; sourceLayer?: string; properties?: Record<string, unknown> }>;
     setBearing(b: number): void;
     getBearing(): number;
     fire(name: string): void;
@@ -94,6 +100,7 @@ type MapEl = HTMLElement & {
 
 type ModalEl = HTMLElement & {
     shadowRoot: ShadowRoot;
+    open: boolean;
     zone: unknown;
     address: string;
     onApply: ((zone: unknown) => void) | null;
@@ -346,6 +353,99 @@ describe('platform-map', function () {
         await aTimeout(50);
         expect(clicks.length, 'pm-click эмитнут').to.be.greaterThan(0);
         expect(clicks[0]!.lngLat[0]).to.be.closeTo(37.6, 0.05);
+    });
+
+    it('ховер по адресной фиче → подсветка контура здания pm-building-hl', async () => {
+        const el = await mapEl({ interactive: true, layers: { fetch: true }, featureCards: { hover: true } });
+        await waitUntil(
+            () => {
+                const src = el.getMap()!.getSource('pm-src-addresses') as
+                    | { serialize(): { data?: { features?: unknown[] } } }
+                    | undefined;
+                return (src?.serialize().data?.features?.length ?? 0) > 0;
+            },
+            'адресные фичи в источнике',
+            { timeout: 10_000 },
+        );
+        const map = el.getMap()!;
+        // Базовый 'buildings' в WTR-стиле отсутствует — добавляем боевым способом
+        // (queryRenderedFeatures не отличает источник).
+        map.addSource('test-buildings', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: [
+                    {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [
+                                [
+                                    [37.59, 55.745],
+                                    [37.61, 55.745],
+                                    [37.61, 55.755],
+                                    [37.59, 55.755],
+                                    [37.59, 55.745],
+                                ],
+                            ],
+                        },
+                        properties: {},
+                    },
+                ],
+            },
+        } as never);
+        map.addLayer({ id: 'buildings', type: 'fill', source: 'test-buildings' } as never);
+
+        // queryRenderedFeatures работает только по уже отрисованным тайлам —
+        // ждём фактическую отрисовку адресной точки и полигона здания.
+        await waitUntil(
+            () => {
+                const pt = map.project([37.6, 55.75]);
+                const addrHit = (el as unknown as {
+                    _featuresAt(m: unknown, p: { x: number; y: number }): { layer: string }[];
+                })._featuresAt(map, pt).some((f) => f.layer === 'addresses');
+                const bldHit = map
+                    .queryRenderedFeatures([pt.x, pt.y], { layers: ['buildings'] })
+                    .some((f) => f.geometry.type === 'Polygon');
+                return addrHit && bldHit;
+            },
+            'адресная фича и здание отрисованы',
+            { timeout: 10_000 },
+        );
+
+        const canvas = map.getCanvas();
+        const rect = canvas.getBoundingClientRect();
+        const pt = map.project([37.6, 55.75]);
+        canvas.dispatchEvent(
+            new MouseEvent('mousemove', {
+                clientX: rect.left + pt.x,
+                clientY: rect.top + pt.y,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await aTimeout(80);
+        const src = map.getSource('pm-building-hl') as
+            | { serialize(): { data?: { features?: unknown[] } } }
+            | undefined;
+        const count = src?.serialize().data?.features?.length ?? 0;
+        expect(count, 'контур здания в pm-building-hl').to.equal(1);
+        expect(map.getLayer('pm-building-hl-fill'), 'fill-слой подсветки').to.exist;
+        expect(map.getLayer('pm-building-hl-line'), 'line-слой подсветки').to.exist;
+
+        canvas.dispatchEvent(
+            new MouseEvent('mousemove', {
+                clientX: rect.left + pt.x,
+                clientY: rect.top + pt.y + 60,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await aTimeout(80);
+        const countAfter = (map.getSource('pm-building-hl') as
+            | { serialize(): { data?: { features?: unknown[] } } }
+            | undefined)?.serialize().data?.features?.length;
+        expect(countAfter, 'подсветка снята вне адресной фичи').to.equal(0);
     });
 
     it('клик по фиче → читаемая .pm-card с заголовком и координатами', async () => {
@@ -1155,6 +1255,19 @@ describe('platform.zone_editor', function () {
         );
         await aTimeout(80);
     }
+
+    it('смонтированная модалка видима: fixed + open + data-portal (стили PlatformModal)', async () => {
+        const modal = await openEditor({ zone: null, address: '', onApply: null });
+        await elementUpdated(modal);
+        // Регрессия: потерянные PlatformModal.styles превращали модалку в невидимый
+        // inline-элемент в конце body — open=true был, а на экране ничего не было.
+        expect(modal.open, 'open=true').to.equal(true);
+        expect(modal.parentNode, 'портал в body').to.equal(document.body);
+        expect(modal.hasAttribute('data-portal'), 'data-portal').to.equal(true);
+        const cs = getComputedStyle(modal);
+        expect(cs.display, 'display:block').to.equal('block');
+        expect(cs.position, 'position:fixed').to.equal('fixed');
+    });
 
     it('открытие без зоны → карта + terra-draw, «Применить» отдаёт null', async () => {
         const applied: unknown[] = [];

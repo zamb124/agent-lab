@@ -759,7 +759,7 @@ export class ShopSettingsPage extends PlatformPage {
         }
         return {
             interactive: true,
-            controls: { zoom: true },
+            controls: { zoom: true, layers: false },
             layers: { fetch: true },
             featureCards: { hover: true, click: true },
             markers,

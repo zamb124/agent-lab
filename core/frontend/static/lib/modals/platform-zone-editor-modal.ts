@@ -318,7 +318,9 @@ export class PlatformZoneEditorModal extends PlatformModal {
         `;
     }
 
-    static override styles = css`
+    static override styles = [
+        PlatformModal.styles,
+        css`
         .zwrap {
             position: relative;
             display: flex;
@@ -380,7 +382,8 @@ export class PlatformZoneEditorModal extends PlatformModal {
         .zwarn {
             color: var(--color-danger, #dc2626);
         }
-    `;
+        `,
+    ];
 }
 
 customElements.define('platform-zone-editor-modal', PlatformZoneEditorModal);
