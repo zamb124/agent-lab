@@ -116,6 +116,7 @@ class ShopResponse(StrictBaseModel):
     status: ShopStatus
     telegram_chat_id: str | None
     telegram_connected: bool
+    demo_template: str | None
     storefront_url: str
     plan: str
     products_count: int = 0

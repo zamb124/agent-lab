@@ -61,6 +61,7 @@ class Shop(PlatformModel):
     telegram_bind_token_hash: str | None = DbField(default=None, max_length=128)
     telegram_bot_token: str | None = DbField(default=None, max_length=128)
     telegram_webhook_secret: str | None = DbField(default=None, max_length=128)
+    demo_template: str | None = DbField(default=None, max_length=40)
     plan: str = DbField(default="free", max_length=32)
     created_by_user_id: str = DbField(max_length=100)
     created_at: datetime = DbField()

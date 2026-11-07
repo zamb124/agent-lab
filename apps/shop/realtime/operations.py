@@ -379,6 +379,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         status=shop.status,
         telegram_chat_id=shop.telegram_chat_id,
         telegram_connected=bool(shop.telegram_bot_token),
+        demo_template=shop.demo_template,
         storefront_url=f"https://{shop.slug}.{di.settings.storefront_domain_suffix}",
         plan=shop.plan,
         products_count=products_count,
