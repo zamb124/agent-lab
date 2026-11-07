@@ -137,7 +137,7 @@ apps/<svc>/
 
 `core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/gates/backend/cross_service_imports.py`.
 
-`core/` — общая библиотека и wire-контракты платформы. Состав top-level модулей документируется здесь: новый модуль — сначала запись в этом списке. Канон: `a2a`, `ai`, `api`, `app`, `app_state`, `auth`, `authz`, `billing`, `cache`, `calendar`, `capabilities`, `clients`, `code_contract`, `config`, `context`, `customers`, `data_tables`, `datasources`, `db`, `di`, `docs`, `documents`, `errors`, `events`, `facet_query`, `files`, `frontend`, `guest_runtime`, `http`, `i18n`, `identity`, `imports`, `integrations`, `internal_context_headers`, `lanes`, `llm_context`, `logging`, `mail`, `middleware`, `models`, `namespace`, `observability`, `office`, `pagination`, `payments`, `platform_brand`, `push`, `rag`, `rag_indexing_schema`, `realtime`, `redis_inventory`, `request_scope`, `scheduler`, `search`, `secrets`, `short_links`, `tasks`, `test_scope`, `text_transforms`, `tracing`, `types`, `ui_document` (wire-грамматика Flow UI: `document`, `protocol`, `interface`, `json_patch`; машинерия мутаций state — `apps/flows/src/flow_ui`), `utils`, `variables`, `viz`, `voice`, `websocket`, `worktracker`. Клиенты к сервисам и внешним API — только `core/clients/`. Код с единственным потребителем-сервисом живёт в `apps/<svc>`: `ExecutionState` и контракты его полей — `apps/flows/src/state`, звонки LiveKit — `apps/sync`, схема поисковых провайдеров компании — `apps/search`.
+`core/` — общая библиотека и wire-контракты платформы. Состав top-level модулей документируется здесь: новый модуль — сначала запись в этом списке. Канон: `a2a`, `ai`, `api`, `app`, `app_state`, `auth`, `authz`, `billing`, `cache`, `calendar`, `calls`, `capabilities`, `clients`, `code_contract`, `company_ai`, `compiler`, `config`, `container`, `context`, `customers`, `data_tables`, `datasources`, `db`, `di`, `docs`, `documents`, `errors`, `events`, `facet_query`, `files`, `frontend`, `guest_runtime`, `http`, `i18n`, `identity`, `imports`, `integrations`, `internal_context_headers`, `lanes`, `llm_context`, `logging`, `mail`, `middleware`, `models`, `namespace`, `observability`, `office`, `pagination`, `payments`, `platform_brand`, `push`, `rag`, `rag_indexing_schema`, `realtime`, `redis_inventory`, `registry`, `request_scope`, `scheduler`, `search`, `secrets`, `short_links`, `state`, `tasks`, `test_scope`, `text_transforms`, `tracing`, `types`, `ui_document` (wire-грамматика Flow UI: `document`, `protocol`, `interface`, `json_patch`; машинерия мутаций state — `apps/flows/src/flow_ui`), `ui_events`, `utils`, `variables`, `viz`, `voice`, `websocket`, `worktracker`. Клиенты к сервисам и внешним API — только `core/clients/`. Код с единственным потребителем-сервисом живёт в `apps/<svc>`: `ExecutionState` и контракты его полей — `apps/flows/src/state`, звонки LiveKit — `apps/sync`, схема поисковых провайдеров компании — `apps/search`.
 
 ## Типизация
 
@@ -197,7 +197,13 @@ apps/<svc>/
 
 ## Lint gate
 
-Изменения в `core/`, `apps/`, `tests/`, `scripts/`, UI или i18n не завершены, пока линтер не зелёный: всё — `make lint`; frontend — `make lint-ts`; файл — `make lint <path>`; минимум backend — `uv run basedpyright --level warning --warnings apps core`. CI `make test` → `test-static`: warning = fail. Каталог гейтов → `.cursor/skills/refactor-engineer/references/gates.md`.
+После правки в `core/`, `apps/`, `tests/`, `scripts/`, UI, i18n или `.cursor/rules` агент сразу прогоняет статику по **своим** путям этого контекста и чинит до зелёного — не ждёт просьбы и не отвечает «готово» на красном своих файлов (`mk/lint.mk`). Чужие незавершённые правки в working tree и падения вне своего diff не чинит и не откатывает.
+
+1. Свой файл — `make lint <path>` (`.py`: ruff + basedpyright; `.ts`/`.js`: `lint-ts`).
+2. Свой срез / перед завершением — `make lint` по затронутому контуру: ruff → `scripts.gates --suite lint` → basedpyright (`apps`/`core`, warning = fail) → `analyze_imports.py` → `make lint-ts` (`tsc` + `scripts.gates --suite lint_ts`); красное вне своего diff — сообщить, не править.
+3. CI `make test` → `test-static` — тот же контур; warning = fail.
+
+Каталог гейтов → `.cursor/skills/refactor-engineer/references/gates.md`. `[без гейта]`
 
 ## Сервисы и стек
 

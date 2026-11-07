@@ -70,7 +70,7 @@ Flows (`apps/flows`, порт 8001, база `platform_agents`) — владел
 
 ### Bundles
 
-1. `apps/flows/bundles/<id>/flow.json` → `FlowConfig.source == "file"`; `POST .../reload-from-bundle` → `FlowsLoader.reload_flow_bundle` — тот же путь, что `company/init`; перезапись — `can_edit`, установка каталожного bundle — член компании с dual-write; нет tuples и нет каталога — 403.
+1. `apps/flows/bundles/<id>/flow.json` → `FlowConfig.source == "file"`; `POST .../reload-from-bundle` (`FlowReloadFromBundleRequest`: `flow_id`, опционально `bundle_id`/`name`/`description`) → `FlowsLoader.reload_flow_bundle` — тот же путь, что `company/init`; `bundle_id` пуст — каталог = `flow_id`; иначе установка под другим `flow_id` (`source=api`, зависимости без remap); перезапись — `can_edit`, установка каталожного bundle — член компании с dual-write; нет tuples и нет каталога — 403.
 2. `depends_on_flow_ids` ставит зависимости до зависимого flow; `FlowsLoader` инлайнит `prompt` (`prompts/*.md`), `output_schema_file`, `store_card_image` (→ S3, `store_card_image_url`).
 
 ### Evaluation Lab

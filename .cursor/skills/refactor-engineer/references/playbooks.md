@@ -109,7 +109,7 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 1. Найти всех вызывающих геттера; каждый — boundary (`di.<field>`) или внутренний класс (constructor dependency).
 2. Компонент становится полем `<Process>Di` нужных процессов; ресурс с teardown или конфиг → примитивы — `@recipe` в `di.py`.
 3. Удалить геттер и module-global; `scripts/gates/backend/dependency_injection.py` зелёный; `check_di(<Process>Di)` в тесте.
-4. Исключение одно: `set_billing_service` (`architecture.mdc` § Service Kit DI).
+4. `BillingService` — только через DI / конструктор / параметр фабрики (`billing.mdc`).
 
 ## Дрейф правил
 

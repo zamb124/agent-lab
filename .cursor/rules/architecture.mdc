@@ -122,10 +122,6 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 6. `*Deps`, `*Context`, `*Runtime`, прячущий длинный constructor; допустим только cohesive контракт одного lifecycle домена (`FlowExecutionContext`), не раздающий сервисы.
 7. Маскировка цикла импортов или object graph через `TYPE_CHECKING`, lazy, provider, setter: цикл чинится слоями.
 
-### Исключения
-
-- Исключение: runner привязывает process-global `set_billing_service(di.billing_service)` для settlement spans; других process-global компонентов нет. `[без гейта]`
-
 ## Межсервисный доступ
 
 1. Модель владельца приоритетнее: процесс с доступом к БД peer-домена читает `await Model.method(...)`, а не REST за теми же строками и не поле DI.

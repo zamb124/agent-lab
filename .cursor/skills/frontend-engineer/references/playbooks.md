@@ -47,7 +47,7 @@ Playbook устраняет класс находок целиком, а не о
 
 Признак: § Мосты — `lit-shim`, «импорт vendored-копии npm-пакета», «import map при бандле», «переписывание vendored-путей при сборке»; WTR печатает `Multiple versions of Lit loaded`.
 
-1. Импорты Lit — `from 'lit'` и `from 'lit/directives/<name>.js'`; `lit-shim` снимается вместе со всеми импортами на него.
+1. Импорты Lit — `from 'lit'` и `from 'lit/directives/<name>'` (в TS ESM к пути добавляют суффикс расширения JS-модуля); `lit-shim` снимается вместе со всеми импортами на него.
 2. Embed-автолоады собираются самодостаточно в `core/frontend/embed-dist/`: проверка, требовавшая относительных vendored-путей в замыкании embed, и `exempt_in_embed_closure` удаляются; вместо них — проверка собранного embed-бандла на отсутствие голых спецификаторов.
 3. Import map в `apps/*/ui/index.html`, в HTML, который отдаёт `core/app`, и в `web-test-runner.config.ts` удаляется; WTR резолвит npm `lit`.
 4. Переписывание vendored-путей в `scripts/build/ui.ts`, vendored-копии Lit, `marked`, `centrifuge` и их записи в precache `core/frontend/static/lib/pwa/sw.ts` удаляются; DOMPurify и прочие — тем же шагом, если пакет есть в npm.

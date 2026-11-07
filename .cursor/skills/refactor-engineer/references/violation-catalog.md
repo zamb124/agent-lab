@@ -67,7 +67,7 @@ rg --files apps core | rg '/(dependencies|container|components)\.py$'
 rg -n '^def get_\w+_service\(' apps core
 ```
 
-**D2. Module-global singleton.** Норма: `architecture.mdc` § Service Kit DI и его «Исключения» (`set_billing_service`). Цель: компонент DI.
+**D2. Module-global singleton.** Норма: `architecture.mdc` § Service Kit DI; `billing.mdc` — `BillingService` только через DI. Цель: компонент DI.
 
 ```bash
 rg -n '^\s*global \w+' apps core -g '*.py'

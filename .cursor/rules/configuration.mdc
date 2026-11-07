@@ -26,7 +26,7 @@ alwaysApply: false
 7. Хосты, порты и URL в коде не хардкодятся: межсервисные URL — `server.*_service_url` (`settings.server.get_service_url(...)`), публичный origin — `server.platform_public_base_url`.
 8. Воркеры настраиваются через ENV; плейсхолдеры `${...}` в JSON запрещены.
 9. Комментарии в JSON (`_docs_*`) запрещены; объяснение ключа — в правиле-владельце секции.
-10. Kubernetes монтирует `deploy/helm/agent-lab/files/app-conf.json`, собранный `deploy/scripts/render_helm_app_conf.py` из `conf.json` и `app-conf.k8s-overlay.json`; `server.*_service_url` в кластере задаёт Helm ENV, а не overlay.
+10. Kubernetes ConfigMap `app-conf` собирает `deploy/scripts/render_helm_app_conf.py` из `conf.json` и `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `server.*_service_url` в кластере задаёт Helm ENV, а не overlay.
 11. Кука сессии — домен из `get_cookie_domain()` (`core/utils/domain.py`); исходящий HTTP и OAuth — `ProxyStrategy` (`core/http/client.py`) → `integrations.mdc`.
 
 ### Бренды

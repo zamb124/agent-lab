@@ -95,4 +95,4 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/gates/repo/rules_drift.py` (`make lint`) — frontmatter и globs, бюджеты, разделы шаблона, нумерация, пути и символы в обратных кавычках, пары `Symbol (path)`, make-цели и модули, маски `*.js` при `.ts` на диске, таблицы `main.mdc` против `_default_ports`, `core/*` и `.cursor/rules`, ссылки `.mdc` и `§ <Раздел>` из правил, скилов, `AGENTS.md` и кода, запрещённые слова вне обратных кавычек; процедура — `refactor-engineer` → `references/discovery.md`.
+- `scripts/gates/repo/rules_drift.py` (`make lint`) — frontmatter и globs, бюджеты, разделы шаблона, нумерация, пути и символы в обратных кавычках, пары `Symbol (path)`, make-цели и модули, маски JS-расширения при TS-файле на диске, таблицы `main.mdc` против `_default_ports`, `core/*` и `.cursor/rules`, ссылки `.mdc` и `§ <Раздел>` из правил, скилов, `AGENTS.md` и кода, запрещённые слова вне обратных кавычек; процедура — `refactor-engineer` → `references/discovery.md`.
