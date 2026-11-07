@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import ClassVar, Self, override
 
 from oxyde import Field as DbField
-from oxyde import Index, atomic
+from oxyde import Index, atomic, execute_raw
 from pydantic import ConfigDict
 
 from core.mail.models.contracts import (
@@ -83,6 +83,11 @@ class StoredMailboxFolder(PlatformModel):
             for folder in folders
         ]
         async with atomic(using="shared"):
+            _ = await execute_raw(
+                "SELECT pg_advisory_xact_lock(hashtext($1))",
+                [binding_id],
+                using="shared",
+            )
             _ = await cls.objects.filter(mailbox_binding_id=binding_id).delete()
             for row in rows:
                 _ = await cls.objects.create(instance=row)
