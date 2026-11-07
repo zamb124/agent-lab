@@ -13,8 +13,8 @@ from core.logging.attributes import (
     LOG_WS_ONLINE_USERS,
     LOG_WS_PRESENCE_DURATION_MS,
 )
+from core.realtime.models import PresenceStatsResponse
 from core.tasks import platform_task
-from core.types import parse_json_object
 
 logger = get_logger("platform.realtime_presence")
 
@@ -29,16 +29,15 @@ async def realtime_presence_tick(
     """Снимок Centrifugo-каналов → событие ws_presence_snapshot для дашборда WebSocket."""
     _ = schedule_task_id, company_id
     started = time.perf_counter()
-    stats = parse_json_object(
+    stats = PresenceStatsResponse.model_validate(
         await di.service_client.get(
             "realtime",
             "/realtime/api/v1/internal/presence/stats",
             timeout=10.0,
         ),
-        "realtime.presence.stats",
     )
-    online_users = int(stats["online_users"])
-    active_channels = int(stats["active_channels"])
+    online_users = stats.online_users
+    active_channels = stats.active_channels
     duration_ms = round((time.perf_counter() - started) * 1000.0, 3)
     logger.info(
         EVENT_WS_PRESENCE_SNAPSHOT,
