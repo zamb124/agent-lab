@@ -133,16 +133,28 @@ spec:
                   name: {{ .Values.platformSecretName }}
                   key: alerts-telegram-chat-id
                   optional: true
+            # api.telegram.org недоступен напрямую из сети кластера —
+            # исходящий прокси платформы (proxy-proxies[0]).
+            {{- if .Values.platformSecrets.proxyUrl }}
+            - name: HTTPS_PROXY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: proxy-url
+                  optional: true
+            - name: NO_PROXY
+              value: "localhost,127.0.0.1,.svc,.cluster.local,10.0.0.0/8"
+            {{- end }}
           ports:
             - name: http
               containerPort: 3000
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 192Mi
             limits:
               cpu: 1
-              memory: 1Gi
+              memory: 768Mi
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources

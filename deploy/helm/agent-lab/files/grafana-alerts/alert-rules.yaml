@@ -1,964 +1,930 @@
 apiVersion: 1
 
-# Алерты платформы поверх Loki.
+# Алерты платформы поверх Loki и Prometheus.
 #
 # Селекторы всегда включают namespace="platform" — не сканируем чужие
 # namespace и не ловим сторонние сервисы. service-лейбл в Loki —
 # kubernetes.io/service-name/имя Deployment'а (дефисы, не snake_case).
 #
-# Две группы: быстрые ratio/count-правила раз в 120s и дорогие
-# квантильные unwrap-запросы раз в 300s — иначе весь набор правил за
-# минуту кладёт Loki в DeadlineExceeded.
+# Две группы Loki: быстрые ratio/count раз в 120s и дорогие
+# квантильные unwrap раз в 300s — иначе весь набор за минуту кладёт
+# Loki в DeadlineExceeded. Инфра-группа на Prometheus раз в 60s.
+#
+# Пороги — math-выражения $B <op> N после reduce(last, A): threshold-
+# условие не умеет multi-frame и падает с "frame cannot uniquely be
+# identified"; math сохраняет labels для per-service инстансов.
 
 groups:
+- orgId: 1
+  name: platform_alerts
+  folder: Platform
+  interval: 120s
+  rules:
+  - uid: high-error-rate
+    title: High Error Rate
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (service) (rate({namespace="platform"} | json | level="ERROR" [5m])) / sum by (service) (rate({namespace="platform"} [5m]))
+          * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 5
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: High error rate on {{ $labels.service }}
+      description: Error rate is {{ $values.B }}% for service {{ $labels.service }}
+    labels:
+      severity: critical
+  - uid: log-ingest-stalled
+    title: Log Ingest Stalled
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform"} [5m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B < 50
+        refId: C
+        type: math
+    noDataState: Alerting
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Log pipeline stalled or cluster down
+      description: Only {{ $values.B }} log lines across all platform services in 5m
+    labels:
+      severity: critical
+  - uid: high-5xx-rate
+    title: High 5xx Rate
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (service) (rate({namespace="platform"} | json | message="http_request" | http_status_code >= 500 [5m])) / sum by (service)
+          (rate({namespace="platform"} | json | message="http_request" [5m])) * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 1
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: High 5xx rate on {{ $labels.service }}
+      description: 5xx rate is {{ $values.B }}% for service {{ $labels.service }}
+    labels:
+      severity: warning
+  - uid: taskiq-failures
+    title: TaskIQ High Failure Rate
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (service) (rate({namespace="platform"} | json | message="task_failed" [10m])) / sum by (service) (rate({namespace="platform"}
+          | json | message="task_started" [10m])) * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 5
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: High TaskIQ failure rate on {{ $labels.service }}
+      description: Task failure rate is {{ $values.B }}% for worker {{ $labels.service }}
+    labels:
+      severity: warning
+  - uid: llm-errors
+    title: LLM Errors
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (service) (count_over_time({namespace="platform"} | json | message=~"llm[.]api_error|llm[.]api_http_error|llm[.]invoke_error|clients[.]llm[.]stream[.]idle[.]timeout[.]s"
+          [5m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 10
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: High LLM error count on {{ $labels.service }}
+      description: '{{ $values.B }} LLM errors in the last 5 minutes'
+    labels:
+      severity: warning
+  - uid: log-contract-violations
+    title: Log Contract Violations
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 60
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (service) (count_over_time({namespace="platform"} | json | message="logging.contract_violation" [1m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Log contract violation detected
+      description: '{{ $values.B }} contract violations in the last minute'
+    labels:
+      severity: critical
+  - uid: crawl-url-failure-rate-high
+    title: Crawl URL Failure Rate High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.url.outcome" | crawl_outcome=~"failed|enrichment_failed"
+          [15m])) / sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.url.outcome" [15m])) * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 10
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    annotations:
+      summary: High crawl URL failure rate on search-worker
+      description: Crawl URL failure rate is {{ $values.B }}%
+    labels:
+      severity: warning
+  - uid: crawl-enrichment-failure-spike
+    title: Crawl Enrichment Failure Spike
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.enrich.failed" [15m])) / (sum(rate({namespace="platform",
+          service="search-worker"} | json | message=~"crawl[.]enrich[.](completed|failed)" [15m])) + 1e-10) * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 20
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    annotations:
+      summary: High crawl enrichment failure rate
+      description: Enrichment failure rate is {{ $values.B }}%
+    labels:
+      severity: warning
+  - uid: crawl-sitemap-errors
+    title: Crawl Sitemap Discovery Errors
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.discover.failed" [5m])) * 60
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 5
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: Elevated crawl sitemap discovery failures
+      description: 'Sitemap failures per minute: {{ $values.B }}'
+    labels:
+      severity: warning
+  - uid: mcp-error-rate-high
+    title: MCP Error Rate High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(rate({namespace="platform", service=~"flows-worker"} | json | message="operation_finished" | operation_name="flows.mcp.tool_call"
+          | operation_status="error" [5m])) / sum(rate({namespace="platform", service=~"flows-worker"} | json | message="operation_finished" |
+          operation_name="flows.mcp.tool_call" [5m])) * 100
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 10
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: MCP tool call error rate > 10%
+      description: MCP error rate is {{ $values.B }}%
+    labels:
+      severity: warning
+- orgId: 1
+  name: platform_alerts_slow
+  folder: Platform
+  interval: 300s
+  rules:
+  - uid: slow-http-p99
+    title: Slow HTTP P99
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform"} | json | message="http_request" | unwrap http_duration_ms [5m]) by (service)
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 5000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Slow HTTP P99 on {{ $labels.service }}
+      description: P99 latency is {{ $values.B }}ms for service {{ $labels.service }}
+    labels:
+      severity: warning
+  - uid: flow-task-pickup-p99-high
+    title: Flow Task Pickup P99 High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="task_started" | task_name="process_flow_task"
+          | unwrap task_queue_wait_ms [5m])
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 30000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Flow task queue pickup P99 > 30s
+      description: P99 queue wait for process_flow_task is {{ $values.B }}ms
+    labels:
+      severity: warning
+  - uid: llm-ttft-p99-high
+    title: LLM TTFT P99 High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform"} | json | message="llm_stream_response" | unwrap llm_ttft_ms [5m])
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 10000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: LLM TTFT P99 > 10s
+      description: P99 time-to-first-token is {{ $values.B }}ms
+    labels:
+      severity: warning
+  - uid: stt-p99-high
+    title: STT P99 High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform"} | json | message="voice_stt_response" | unwrap stt_duration_ms [5m])
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 60000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: STT P99 > 60s
+      description: P99 STT latency is {{ $values.B }}ms
+    labels:
+      severity: warning
+  - uid: flow-e2e-terminal-p99-high
+    title: Flow E2E Terminal P99 High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="flow_terminal" | unwrap flow_terminal_ms
+          [5m])
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 120000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Flow E2E terminal P99 > 120s
+      description: P99 flow terminal latency is {{ $values.B }}ms
+    labels:
+      severity: warning
+  - uid: tool-call-p99-high
+    title: Tool Call P99 High
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="tool_call_finished" | unwrap platform_tool_duration_ms
+          [5m])
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 30000
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Tool call P99 > 30s
+      description: P99 tool call latency is {{ $values.B }}ms
+    labels:
+      severity: warning
+- orgId: 1
+  name: platform_infra_alerts
+  folder: Platform
+  interval: 60s
+  rules:
+  - uid: scrape-target-down
+    title: Scrape Target Down
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: up{job=~"platform-granian|kubelet.*|node-exporter|kube-state-metrics"} == 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: 'Scrape target down: {{ $labels.job }}/{{ $labels.service }}{{ $labels.pod }}{{ $labels.node }}'
+      description: Prometheus cannot scrape {{ $labels.job }} target {{ $labels.instance }}
+    labels:
+      severity: critical
+  - uid: pod-crashloop
+    title: Pod Crashloop
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: increase(kube_pod_container_status_restarts_total{namespace="platform"}[15m]) > 3
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    annotations:
+      summary: 'Crashlooping: {{ $labels.pod }}/{{ $labels.container }}'
+      description: '{{ $values.B }} restarts in 15m'
+    labels:
+      severity: critical
+  - uid: pod-phase-failed
+    title: Pod Failed/Unknown
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: kube_pod_status_phase{namespace="platform", phase=~"Failed|Unknown"} == 1
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: Pod {{ $labels.pod }} in phase {{ $labels.phase }}
+      description: Platform pod stuck in {{ $labels.phase }} phase
+    labels:
+      severity: warning
+  - uid: node-disk-low
+    title: Node Disk Low
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: 100 * node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}
+          < 10
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Root filesystem almost full on {{ $labels.node }}
+      description: Only {{ $values.B }}% free on /
+    labels:
+      severity: critical
+  - uid: pvc-almost-full
+    title: PVC Almost Full
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: 100 * kubelet_volume_stats_used_bytes{namespace="platform"} / kubelet_volume_stats_capacity_bytes{namespace="platform"} > 85
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: PVC {{ $labels.persistentvolumeclaim }} >85% used
+      description: Volume is {{ $values.B }}% full
+    labels:
+      severity: warning
+  - uid: node-mem-pressure
+    title: Node Memory Pressure
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 92
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: Node memory >92% used
+      description: Memory usage is {{ $values.B }}%
+    labels:
+      severity: warning
+
+deleteRules:
   - orgId: 1
-    name: platform_alerts
-    folder: Platform
-    interval: 120s
-    rules:
-      - uid: high-error-rate
-        title: High Error Rate
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum by (service) (rate({namespace="platform"} | json | level="ERROR" [5m])) / sum by (service) (rate({namespace="platform"} [5m])) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [5]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "High error rate on {{ $labels.service }}"
-          description: "Error rate is {{ $values.A }}% for service {{ $labels.service }}"
-        labels:
-          severity: critical
-
-      # Детект «платформа перестала писать логи»: Alloy упал, Loki переполнен
-      # или кластер мёртв. Пер-сервисное «сервис лежит» через отсутствие
-      # серии в sum() невозможно — нет серии → нечего сравнивать с 1.
-      # Up/availability по сервисам придёт из Prometheus (tick 1).
-      - uid: log-ingest-stalled
-        title: Log Ingest Stalled
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum(count_over_time({namespace="platform"} [5m]))'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [50]
-                    type: lt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: Alerting
-        execErrState: Error
-        for: 2m
-        annotations:
-          summary: "Log pipeline stalled or cluster down"
-          description: "Only {{ $values.A }} log lines across all platform services in 5m"
-        labels:
-          severity: critical
-
-      - uid: high-5xx-rate
-        title: High 5xx Rate
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum by (service) (rate({namespace="platform"} | json | message="http_request" | http_status_code >= 500 [5m])) / sum by (service) (rate({namespace="platform"} | json | message="http_request" [5m])) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [1]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "High 5xx rate on {{ $labels.service }}"
-          description: "5xx rate is {{ $values.A }}% for service {{ $labels.service }}"
-        labels:
-          severity: warning
-
-      - uid: taskiq-failures
-        title: TaskIQ High Failure Rate
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum by (service) (rate({namespace="platform"} | json | message="task_failed" [10m])) / sum by (service) (rate({namespace="platform"} | json | message="task_started" [10m])) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [5]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 10m
-        annotations:
-          summary: "High TaskIQ failure rate on {{ $labels.service }}"
-          description: "Task failure rate is {{ $values.A }}% for worker {{ $labels.service }}"
-        labels:
-          severity: warning
-
-      # Реальные error-события LLM-транспорта (core/clients/llm/transport.py):
-      # llm.api_error (non-200 stream), llm.api_http_error, llm.invoke_error,
-      # clients.llm.stream.idle.timeout.s. События llm_request не существует —
-      # это billing usage_category, не log event.
-      - uid: llm-errors
-        title: LLM Errors
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum by (service) (count_over_time({namespace="platform"} | json | message=~"llm[.]api_error|llm[.]api_http_error|llm[.]invoke_error|clients[.]llm[.]stream[.]idle[.]timeout[.]s" [5m]))'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [10]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "High LLM error count on {{ $labels.service }}"
-          description: "{{ $values.A }} LLM errors in the last 5 minutes"
-        labels:
-          severity: warning
-
-      - uid: log-contract-violations
-        title: Log Contract Violations
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 60
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum by (service) (count_over_time({namespace="platform"} | json | message="logging.contract_violation" [1m]))'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 1m
-        annotations:
-          summary: "Log contract violation detected"
-          description: "{{ $values.A }} contract violations in the last minute"
-        labels:
-          severity: critical
-
-      - uid: crawl-url-failure-rate-high
-        title: Crawl URL Failure Rate High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 900
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.url.outcome" | crawl_outcome=~"failed|enrichment_failed" [15m])) / sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.url.outcome" [15m])) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [10]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 15m
-        annotations:
-          summary: "High crawl URL failure rate on search-worker"
-          description: "Crawl URL failure rate is {{ $values.A }}%"
-        labels:
-          severity: warning
-
-      - uid: crawl-enrichment-failure-spike
-        title: Crawl Enrichment Failure Spike
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 900
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.enrich.failed" [15m])) / (sum(rate({namespace="platform", service="search-worker"} | json | message=~"crawl[.]enrich[.](completed|failed)" [15m])) + 1e-10) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [20]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 15m
-        annotations:
-          summary: "High crawl enrichment failure rate"
-          description: "Enrichment failure rate is {{ $values.A }}%"
-        labels:
-          severity: warning
-
-      - uid: crawl-sitemap-errors
-        title: Crawl Sitemap Discovery Errors
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum(rate({namespace="platform", service="search-worker"} | json | message="crawl.discover.failed" [5m])) * 60'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [5]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 10m
-        annotations:
-          summary: "Elevated crawl sitemap discovery failures"
-          description: "Sitemap failures per minute: {{ $values.A }}"
-        labels:
-          severity: warning
-
-      - uid: mcp-error-rate-high
-        title: MCP Error Rate High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'sum(rate({namespace="platform", service=~"flows-worker"} | json | message="operation_finished" | operation_name="flows.mcp.tool_call" | operation_status="error" [5m])) / sum(rate({namespace="platform", service=~"flows-worker"} | json | message="operation_finished" | operation_name="flows.mcp.tool_call" [5m])) * 100'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [10]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "MCP tool call error rate > 10%"
-          description: "MCP error rate is {{ $values.A }}%"
-        labels:
-          severity: warning
-
-  # Дорогие квантильные unwrap-запросы — отдельная группа с редким
-  # интервалом, чтобы не конкурировать с быстрыми правилами за Loki CPU.
+    uid: service-down
   - orgId: 1
-    name: platform_alerts_slow
-    folder: Platform
-    interval: 300s
-    rules:
-      - uid: slow-http-p99
-        title: Slow HTTP P99
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform"} | json | message="http_request" | unwrap http_duration_ms [5m]) by (service)'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [5000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Slow HTTP P99 on {{ $labels.service }}"
-          description: "P99 latency is {{ $values.A }}ms for service {{ $labels.service }}"
-        labels:
-          severity: warning
-
-      - uid: flow-task-pickup-p99-high
-        title: Flow Task Pickup P99 High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="task_started" | task_name="process_flow_task" | unwrap task_queue_wait_ms [5m])'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [30000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Flow task queue pickup P99 > 30s"
-          description: "P99 queue wait for process_flow_task is {{ $values.A }}ms"
-        labels:
-          severity: warning
-
-      - uid: llm-ttft-p99-high
-        title: LLM TTFT P99 High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform"} | json | message="llm_stream_response" | unwrap llm_ttft_ms [5m])'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [10000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "LLM TTFT P99 > 10s"
-          description: "P99 time-to-first-token is {{ $values.A }}ms"
-        labels:
-          severity: warning
-
-      - uid: stt-p99-high
-        title: STT P99 High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform"} | json | message="voice_stt_response" | unwrap stt_duration_ms [5m])'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [60000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "STT P99 > 60s"
-          description: "P99 STT latency is {{ $values.A }}ms"
-        labels:
-          severity: warning
-
-      - uid: flow-e2e-terminal-p99-high
-        title: Flow E2E Terminal P99 High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="flow_terminal" | unwrap flow_terminal_ms [5m])'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [120000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Flow E2E terminal P99 > 120s"
-          description: "P99 flow terminal latency is {{ $values.A }}ms"
-        labels:
-          severity: warning
-
-      - uid: tool-call-p99-high
-        title: Tool Call P99 High
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: loki
-            model:
-              expr: 'quantile_over_time(0.99, {namespace="platform", service=~"flows-worker"} | json | message="tool_call_finished" | unwrap platform_tool_duration_ms [5m])'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [30000]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Tool call P99 > 30s"
-          description: "P99 tool call latency is {{ $values.A }}ms"
-        labels:
-          severity: warning
-
-  # Инфра-алерты на Prometheus (PromQL): scrape health, поды, диски,
-  # память ноды. Это единственный надёжный «service down» детектор —
-  # отсутствие метрик/пода видно прямо, в отличие от отсутствия логов.
-  - orgId: 1
-    name: platform_infra_alerts
-    folder: Platform
-    interval: 60s
-    rules:
-      - uid: scrape-target-down
-        title: Scrape Target Down
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: 'up{job=~"platform-granian|kubelet.*|node-exporter|kube-state-metrics"} == 0'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Scrape target down: {{ $labels.job }}/{{ $labels.service }}{{ $labels.pod }}{{ $labels.node }}"
-          description: "Prometheus cannot scrape {{ $labels.job }} target {{ $labels.instance }}"
-        labels:
-          severity: critical
-
-      - uid: pod-crashloop
-        title: Pod Crashloop
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 900
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: 'increase(kube_pod_container_status_restarts_total{namespace="platform"}[15m]) > 3'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 0m
-        annotations:
-          summary: "Crashlooping: {{ $labels.pod }}/{{ $labels.container }}"
-          description: "{{ $values.A }} restarts in 15m"
-        labels:
-          severity: critical
-
-      - uid: pod-phase-failed
-        title: Pod Failed/Unknown
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: 'kube_pod_status_phase{namespace="platform", phase=~"Failed|Unknown"} == 1'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 10m
-        annotations:
-          summary: "Pod {{ $labels.pod }} in phase {{ $labels.phase }}"
-          description: "Platform pod stuck in {{ $labels.phase }} phase"
-        labels:
-          severity: warning
-
-      - uid: node-disk-low
-        title: Node Disk Low
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: '100 * node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} < 10'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: "Root filesystem almost full on {{ $labels.node }}"
-          description: "Only {{ $values.A }}% free on /"
-        labels:
-          severity: critical
-
-      - uid: pvc-almost-full
-        title: PVC Almost Full
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: '100 * kubelet_volume_stats_used_bytes{namespace="platform"} / kubelet_volume_stats_capacity_bytes{namespace="platform"} > 85'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 10m
-        annotations:
-          summary: "PVC {{ $labels.persistentvolumeclaim }} >85% used"
-          description: "Volume is {{ $values.A }}% full"
-        labels:
-          severity: warning
-
-      - uid: node-mem-pressure
-        title: Node Memory Pressure
-        condition: C
-        data:
-          - refId: A
-            queryType: instant
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: prometheus
-            model:
-              expr: '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 92'
-              refId: A
-          - refId: C
-            relativeTimeRange:
-              from: 0
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    type: last
-                    type: query
-              expression: A
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 10m
-        annotations:
-          summary: "Node memory >92% used"
-          description: "Memory usage is {{ $values.A }}%"
-        labels:
-          severity: warning
+    uid: high-db-latency

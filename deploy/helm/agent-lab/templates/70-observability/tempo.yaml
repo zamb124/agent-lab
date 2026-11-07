@@ -65,8 +65,8 @@ spec:
               containerPort: 4318
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 192Mi
             limits:
               cpu: 1
               memory: 1Gi

@@ -9,7 +9,7 @@ apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: default
+    name: telegram
     receivers:
       - uid: telegram-alerts
         type: telegram

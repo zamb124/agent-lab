@@ -90,6 +90,7 @@ jq -n \
   --arg tinkoffTerminalPassword "${TINKOFF_TERMINAL_PASSWORD:-}" \
   --arg proxyEnabled "$PROXY_ENABLED" \
   --arg proxyProxies "$PROXY_PROXIES" \
+  --arg proxyUrl "$(echo "$PROXY_PROXIES" | jq -r '.[0] // ""')" \
   --arg searchTinyfishApiKey "${SEARCH__TINYFISH__API_KEY:-}" \
   --arg searchLinkupApiKey "${SEARCH__LINKUP__API_KEY:-}" \
   --arg searchSerperApiKey "${SEARCH__SERPER__API_KEY:-}" \
@@ -185,6 +186,7 @@ jq -n \
     tinkoffTerminalPassword: $tinkoffTerminalPassword,
     proxyEnabled: $proxyEnabled,
     proxyProxies: $proxyProxies,
+    proxyUrl: $proxyUrl,
     searchTinyfishApiKey: $searchTinyfishApiKey,
     searchLinkupApiKey: $searchLinkupApiKey,
     searchSerperApiKey: $searchSerperApiKey,

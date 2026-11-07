@@ -57,11 +57,11 @@ spec:
           # отъедают ядра master-ноды (наблюдали 2.8 CPU без лимитов).
           resources:
             requests:
-              cpu: 250m
-              memory: 768Mi
+              cpu: 100m
+              memory: 512Mi
             limits:
-              cpu: 3
-              memory: 3Gi
+              cpu: 2
+              memory: 2Gi
           volumeMounts:
             - name: config
               mountPath: /etc/loki

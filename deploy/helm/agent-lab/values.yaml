@@ -1318,6 +1318,7 @@ platformSecrets:
   tinkoffTerminalPassword: ""
   proxyEnabled: ""
   proxyProxies: ""
+  proxyUrl: ""
   searchTinyfishApiKey: ""
   searchLinkupApiKey: ""
   searchSerperApiKey: ""
