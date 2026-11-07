@@ -7,8 +7,14 @@ from core.types import SqlParameterValue
 
 
 @platform_task(GEO_OSM_DIFF_TICK)
-async def geo_osm_diff_tick(di: Di) -> dict[str, SqlParameterValue]:
+async def geo_osm_diff_tick(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+    *,
+    di: Di,
+) -> dict[str, SqlParameterValue]:
     """Replication state.txt → enqueue полного синка при устаревании
     (см. OsmDiffService.run_tick)."""
+    _ = (schedule_task_id, company_id)
     result = await di.osm_diff_service.run_tick()
     return result.model_dump()

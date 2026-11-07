@@ -7,6 +7,12 @@ from core.types import SqlParameterValue
 
 
 @platform_task(GEO_TILES_SYNC)
-async def geo_tiles_sync(di: Di) -> dict[str, SqlParameterValue]:
+async def geo_tiles_sync(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+    *,
+    di: Di,
+) -> dict[str, SqlParameterValue]:
     """См. ``GeoTilesService.sync``."""
+    _ = (schedule_task_id, company_id)
     return await di.geo_tiles_service.sync()

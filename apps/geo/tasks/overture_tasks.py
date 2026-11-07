@@ -7,8 +7,14 @@ from core.types import SqlParameterValue
 
 
 @platform_task(GEO_OVERTURE_SYNC)
-async def geo_overture_sync(di: Di) -> dict[str, SqlParameterValue]:
+async def geo_overture_sync(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+    *,
+    di: Di,
+) -> dict[str, SqlParameterValue]:
     """Row-groups релиза Overture → gen-0 адреса и ``geo_buildings``
     (см. OvertureImportService.run_sync)."""
+    _ = (schedule_task_id, company_id)
     result = await di.overture_import_service.run_sync()
     return result.model_dump()

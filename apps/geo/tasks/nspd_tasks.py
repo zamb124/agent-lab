@@ -7,8 +7,14 @@ from core.types import SqlParameterValue
 
 
 @platform_task(GEO_NSPD_CRAWL)
-async def geo_nspd_crawl(di: Di) -> dict[str, SqlParameterValue]:
+async def geo_nspd_crawl(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+    *,
+    di: Di,
+) -> dict[str, SqlParameterValue]:
     """НСПД intersects-сетка по регионам → ``geo_buildings`` + cadastral
     (см. NspdCrawlService.run_crawl)."""
+    _ = (schedule_task_id, company_id)
     result = await di.nspd_crawl_service.run_crawl()
     return result.model_dump()
