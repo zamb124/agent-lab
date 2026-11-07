@@ -129,6 +129,34 @@ def _tiles_root(di: Di) -> Path:
     return Path(di.settings.tiles_dir).resolve()
 
 
+def _font_candidates(root: Path, fontstack: str) -> list[Path]:
+    """Кандидаты glyph-каталога в порядке предпочтения.
+
+    1. Каталог самого стека («A,B» — готовый merged-набор).
+    2. Шрифты стека по порядку — семантика fontstack: глиф берётся из
+       первого доступного шрифта цепочки.
+    3. Любой локальный шрифт (Regular в приоритете) — последняя деградация:
+       лучше чужие глифы, чем 404 и исчезнувшие подписи — так любой стек
+       (дефолт MapLibre «Open Sans Regular,Arial Unicode MS Regular»)
+       рендерится даже без синхронизированного набора.
+    """
+    fonts_dir = (root / "fonts").resolve()
+    names = [fontstack, *(s.strip() for s in fontstack.split(","))]
+    if fonts_dir.is_dir():
+        local = sorted((p.name for p in fonts_dir.iterdir() if p.is_dir()), key=str.lower)
+        names += sorted(local, key=lambda n: "regular" not in n.lower())
+    seen: set[str] = set()
+    candidates: list[Path] = []
+    for name in names:
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        target = (fonts_dir / name).resolve()
+        if target.parent == fonts_dir:
+            candidates.append(target)
+    return candidates
+
+
 @router.api_route("/tiles/basemap.pmtiles", methods=["GET", "HEAD"])
 async def tiles_basemap(request: Request, di: Di) -> Response:
     """PMTiles-архив региона покрытия — Range GET читает pmtiles.js."""
@@ -143,10 +171,24 @@ async def tiles_basemap(request: Request, di: Di) -> Response:
 
 @router.api_route("/tiles/fonts/{fontstack}/{pbf_range}", methods=["GET", "HEAD"])
 async def tiles_fonts(request: Request, di: Di, fontstack: str, pbf_range: str) -> Response:
-    """Glyph-стеки MapLibre: ``{fontstack}/{range}.pbf``."""
+    """Glyph-стеки MapLibre: ``{fontstack}/{range}.pbf``.
+
+    Стек резолвится каскадом ``_font_candidates``: сам стек → шрифты
+    стека → локальный fallback. Запрошенный range, отсутствующий во
+    всех кандидатах, — честный 404.
+    """
     if not _FONTSTACK_RE.match(fontstack) or not _RANGE_RE.match(pbf_range):
         raise PlatformNotFoundError("Font asset not found", error_code="tile_not_found")
-    path = _safe_path(_tiles_root(di), "fonts", fontstack, pbf_range)
+    path = next(
+        (
+            c / pbf_range
+            for c in _font_candidates(_tiles_root(di), fontstack)
+            if (c / pbf_range).is_file()
+        ),
+        None,
+    )
+    if path is None:
+        raise PlatformNotFoundError("Font asset not found", error_code="tile_not_found")
     return await _serve_file(
         path,
         request,

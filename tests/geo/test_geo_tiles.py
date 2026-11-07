@@ -102,6 +102,36 @@ async def test_fonts_composite_stack_get(geo_client: AsyncClient) -> None:
     assert resp.content == b"glyphs-0-255-composite-fixture"
 
 
+async def test_fonts_stack_member_fallback(geo_client: AsyncClient) -> None:
+    """Шрифт стека, отсутствующий на диске, → следующий шрифт стека.
+
+    Семантика fontstack: первый доступный шрифт цепочки. «Noto Sans Bold»
+    локально нет — отдаём range из «Noto Sans Regular».
+    """
+    resp = await geo_client.get(f"{_BASE}/fonts/Noto%20Sans%20Bold,Noto%20Sans%20Regular/0-255.pbf")
+    assert resp.status_code == 200
+    assert resp.content == b"glyphs-0-255-fixture"
+
+
+async def test_fonts_unknown_stack_local_fallback(geo_client: AsyncClient) -> None:
+    """Полностью чужой стек (дефолт MapLibre) → локальный Regular-шрифт.
+
+    Деградация вместо 404: лучше глифы другого шрифта, чем исчезнувшие
+    подписи у любого стороннего слоя/стиля.
+    """
+    resp = await geo_client.get(
+        f"{_BASE}/fonts/Open%20Sans%20Regular,Arial%20Unicode%20MS%20Regular/0-255.pbf"
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"glyphs-0-255-fixture"
+
+
+async def test_fonts_missing_range_404_despite_fallback(geo_client: AsyncClient) -> None:
+    # Range, отсутствующий во всех кандидатах, — честный 404.
+    resp = await geo_client.get(f"{_BASE}/fonts/Open%20Sans%20Regular/65280-65535.pbf")
+    assert resp.status_code == 404
+
+
 async def test_fonts_bad_stack_404(geo_client: AsyncClient) -> None:
     # Пустые сегменты вокруг запятой и битые диапазоны — 404, не 500.
     for bad in ("Noto%20Sans%20Regular,", ",Noto%20Sans%20Regular", "Noto,,Sans"):
