@@ -14,16 +14,19 @@ import json
 from apps.shop.config import ShopSettings
 from apps.shop.models import (
     Shop,
+    ShopBanner,
     ShopCategory,
     ShopDomain,
     ShopDomainStatus,
     ShopProduct,
     ShopPromo,
+    ShopShelf,
     ShopStatus,
     ShopTable,
 )
-from apps.shop.models.api import normalize_shop_theme
+from apps.shop.models.api import normalize_shop_features, normalize_shop_theme
 from apps.shop.models.badge_icons import BADGE_ICONS
+from apps.shop.services.feed_service import FeedService
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.geocoding.base import Geocoder
@@ -48,11 +51,13 @@ class StorefrontService:
         settings: ShopSettings,
         redis: RedisClient,
         shop_service: ShopService,
+        feed_service: FeedService,
         geocoder: Geocoder,
     ) -> None:
         self._settings: ShopSettings = settings
         self._redis: RedisClient = redis
         self._shops: ShopService = shop_service
+        self._feed: FeedService = feed_service
         self._geocoder: Geocoder = geocoder
 
     async def resolve_shop_by_host(self, host: str) -> Shop | None:
@@ -73,12 +78,16 @@ class StorefrontService:
         return f"https://{shop.slug}.{self._settings.storefront_domain_suffix}"
 
     async def shop_geo(self, shop: Shop) -> JsonObject:
-        """Точка магазина для карты: geocode адреса, кэш в Redis на сутки.
+        """Точка магазина для карты: сохранённая ``lat``/``lng`` или geocode.
 
-        Деградация: адрес не геокодится или апстрим недоступен →
+        Сохранённая точка (пин в настройках) отдаётся сразу — без кэша и
+        геокодера. Иначе geocode адреса с Redis-кэшем на сутки. Деградация:
+        адрес не геокодится или апстрим недоступен →
         {address, lat: None, lng: None} — карта рисует зону без маркера
         магазина; ошибка апстрима уже залогирована геокодером.
         """
+        if shop.lat is not None and shop.lng is not None:
+            return {"address": shop.address, "lat": shop.lat, "lng": shop.lng}
         key = f"{_SHOP_GEO_KEY_PREFIX}{shop.shop_id}"
         cached = await self._redis.get(key)
         if cached is not None:
@@ -160,12 +169,34 @@ class StorefrontService:
         return snapshot
 
     async def build_snapshot(self, shop: Shop) -> JsonObject:
-        """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API."""
+        """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API.
+
+        Включает недоступные позиции (``is_available: false``): лента
+        рисует их «скоро вернётся» с подпиской, каталог — приглушённой
+        карточкой без кнопки заказа.
+        """
         categories = await ShopCategory.list_by_shop_by_sort_asc(shop.shop_id)
-        products = await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
+        products = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
         modifier_tree = await load_modifier_tree_by_sort_asc([p.shop_product_id for p in products])
         promos = await ShopPromo.list_active_by_shop_by_priority_desc(shop.shop_id)
         tables = await ShopTable.list_by_shop_by_created_asc(shop.shop_id)
+        shelves = await ShopShelf.list_active_by_shop_by_sort_asc(shop.shop_id)
+        shelf_items = [
+            {
+                "id": shelf.shop_shelf_id,
+                "kind": shelf.kind.value,
+                "layout": shelf.layout.value,
+                "placement": shelf.placement.value,
+                "title": shelf.title,
+                "subtitle": shelf.subtitle,
+                "category_id": shelf.category_id or "",
+                "product_ids": await self._feed.resolve_shelf_products(
+                    shop.shop_id, shelf
+                ),
+            }
+            for shelf in shelves
+        ]
+        banners = await ShopBanner.list_active_by_shop_by_sort_asc(shop.shop_id)
         return {
             "slug": shop.slug,
             "company_id": shop.company_id,
@@ -177,6 +208,8 @@ class StorefrontService:
             "phone": shop.phone,
             "city": shop.city,
             "address": shop.address,
+            "shop_lat": shop.lat,
+            "shop_lng": shop.lng,
             "working_hours": shop.working_hours,
             "timezone": shop.timezone,
             "delivery_enabled": shop.delivery_enabled,
@@ -190,6 +223,19 @@ class StorefrontService:
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
             "theme": normalize_shop_theme(shop.theme),
+            "features": normalize_shop_features(shop.features),
+            "shelves": shelf_items,
+            "banners": [
+                {
+                    "id": banner.shop_banner_id,
+                    "title": banner.title,
+                    "subtitle": banner.subtitle,
+                    "image_file_id": banner.image_file_id,
+                    "link": banner.link,
+                    "window": dict(banner.window),
+                }
+                for banner in banners
+            ],
             "badge_defs": {
                 b["key"]: {"label": b["label"], "icon_path": BADGE_ICONS.get(b["icon"], "")}
                 for b in shop.badges
@@ -217,6 +263,8 @@ class StorefrontService:
                             "id": o.shop_modifier_option_id,
                             "name": o.name,
                             "price_minor": o.price_minor,
+                            "photo_file_id": o.photo_file_id,
+                            "nutrition_delta": dict(o.nutrition_delta),
                             "is_default": o.is_default,
                             "max_per_option": o.max_per_option,
                             "nested_group_id": o.nested_group_id,
@@ -250,6 +298,8 @@ class StorefrontService:
                         p, modifier_tree.get(p.shop_product_id, [])
                     ),
                     "photo_file_id": p.photo_file_id,
+                    "nutrition": dict(p.nutrition),
+                    "is_available": p.is_available,
                     "modifier_groups": [
                         {
                             "id": ag.group.shop_modifier_group_id,
@@ -264,6 +314,8 @@ class StorefrontService:
                                     "id": o.shop_modifier_option_id,
                                     "name": o.name,
                                     "price_minor": o.price_minor,
+                                    "photo_file_id": o.photo_file_id,
+                                    "nutrition_delta": dict(o.nutrition_delta),
                                     "is_default": o.is_default,
                                     "max_per_option": o.max_per_option,
                                     "nested_group_id": o.nested_group_id,

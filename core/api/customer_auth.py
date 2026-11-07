@@ -253,10 +253,14 @@ async def customer_addresses_list(di: Di) -> AddressListView:
 
 @customer_auth_router.post("/addresses", response_model=CustomerAddressView)
 async def customer_addresses_create(payload: AddressCreatePayload, di: Di) -> CustomerAddressView:
-    """Сохранить адрес; координаты — из геокодера (best effort)."""
+    """Сохранить адрес; явная точка клиента, иначе геокодер (best effort)."""
     scope = require_customer()
     row = await di.customer_address_service.add(
-        scope.customer_id, address=payload.address, label=payload.label
+        scope.customer_id,
+        address=payload.address,
+        label=payload.label,
+        lat=payload.lat,
+        lng=payload.lng,
     )
     return _address_view(row)
 

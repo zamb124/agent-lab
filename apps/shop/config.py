@@ -61,9 +61,17 @@ class ShopSettings(BaseSettings):
         le=600.0,
         description="Бюджет ожидания A2A при вызове веток системного flow ``shop`` (describe/suggest_options), сек.",
     )
+    demo_seed_enabled: bool = Field(
+        default=True,
+        description="Сеять эталонные demo-витрины (DEMO_TEMPLATES) при инициализации компании и по команде досева.",
+    )
     order_rate_limit_per_minute: int = Field(
         default=10,
         description="Заказов в минуту с одного IP на витрину (Redis-счётчик).",
+    )
+    address_snap_max_m: int = Field(
+        default=150,
+        description="Reverse-геокод пина на карте: имя ближайшего адреса показываем, если оно не дальше этого порога, м.",
     )
     telegram_bot_token: str = Field(
         default="",

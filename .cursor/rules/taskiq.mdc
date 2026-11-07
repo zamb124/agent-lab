@@ -29,7 +29,7 @@ alwaysApply: false
 8. `retry=True` — только для идемпотентного flaky IO; многоэтапная задача с UI/WS без идемпотентности шагов — без retry.
 9. Очередь `idle` — общие домены (каталог моделей, почта, календарь, платежи, settlement, retention, company init); `a2a_push` — доставка A2A webhook; задачи с runtime flows (MCP catalog, `dispatch_email_triggers`, `tool_tag_groups_describe_tick`) объявлены в `apps/flows/src/tasks/task_names.py` и исполняются `flows_worker`.
 10. `process_flow_task` (`TASK_PROCESS_FLOW`, `apps/flows/src/tasks/flow_tasks.py`) — выполнение flow, в проде `context_data` обязателен; запланированный запуск flow — `TASK_EXECUTE_SCHEDULED`.
-11. Company init: новая компания — idle `company_init_new_company` → `op_flows_company_init` → `init_company_resources` (`TASK_INIT_COMPANY_RESOURCES`); system — `company_init_system` из старта idle (не в TESTING).
+11. Company init: новая компания — idle `company_init_new_company` → внутренний `POST /{svc}/api/v1/internal/company/init` сервисов (flows, crm, sync, stock, shop) → `op_*_company_init` каждого ставит свои задачи (flows — `init_company_resources` `TASK_INIT_COMPANY_RESOURCES`, shop — `shop_seed_demo_company` `SHOP_SEED_DEMO_COMPANY`); system — `company_init_system` из старта idle (не в TESTING).
 12. Retention: `TasksConfig.stream_maxlen_by_queue` (sync без trim), result backend TTL 3600 с, GC расписаний — `platform_schedules_gc_tick`, XLEN — `redis_inventory_tick`.
 
 ### Scheduler

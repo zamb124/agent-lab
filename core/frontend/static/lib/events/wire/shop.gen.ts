@@ -15,6 +15,14 @@ export type EmptyPayload = {
 export type JsonValue = unknown;
 
 /**
+ * ListResponse[ShopBannerResponse]
+ */
+export interface ListResponse_ShopBannerResponse_ {
+    "items": ShopBannerResponse[];
+    [key: string]: unknown;
+}
+
+/**
  * ListResponse[ShopCategoryResponse]
  */
 export interface ListResponse_ShopCategoryResponse_ {
@@ -35,6 +43,14 @@ export interface ListResponse_ShopProductResponse_ {
  */
 export interface ListResponse_ShopResponse_ {
     "items": ShopResponse[];
+    [key: string]: unknown;
+}
+
+/**
+ * ListResponse[ShopShelfResponse]
+ */
+export interface ListResponse_ShopShelfResponse_ {
+    "items": ShopShelfResponse[];
     [key: string]: unknown;
 }
 
@@ -236,6 +252,68 @@ export interface ShopBadgeResponse {
 }
 
 /**
+ * ShopBannerCreatePayload
+ */
+export interface ShopBannerCreatePayload {
+    "title"?: string | undefined;
+    "subtitle"?: string | undefined;
+    "image_file_id"?: string | null | undefined;
+    "link"?: string | undefined;
+    "window"?: Record<string, JsonValue> | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopBannerIdPayload
+ */
+export interface ShopBannerIdPayload {
+    "shop_id": string;
+    "shop_banner_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Сторис-баннер верха ленты: картинка, подпись, deeplink, окно показа.
+ */
+export interface ShopBannerResponse {
+    "shop_banner_id": string;
+    "shop_id": string;
+    "title": string;
+    "subtitle": string;
+    "image_file_id": string | null;
+    "link": string;
+    "window": Record<string, JsonValue>;
+    "sort": number;
+    "is_active": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopBannerUpdatePayload
+ */
+export interface ShopBannerUpdatePayload {
+    "title"?: string | null | undefined;
+    "subtitle"?: string | null | undefined;
+    "image_file_id"?: string | null | undefined;
+    "link"?: string | null | undefined;
+    "window"?: Record<string, JsonValue> | null | undefined;
+    "is_active"?: boolean | null | undefined;
+    "shop_id": string;
+    "shop_banner_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopBannersReorderPayload
+ */
+export interface ShopBannersReorderPayload {
+    "banner_ids": string[];
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * ShopCartPriceLineResponse
  */
 export interface ShopCartPriceLineResponse {
@@ -341,6 +419,14 @@ export interface ShopCategoryUpdatePayload {
 }
 
 /**
+ * ShopCompanyInitPayload
+ */
+export interface ShopCompanyInitPayload {
+    "company_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * ShopCreateRequest
  */
 export interface ShopCreateRequest {
@@ -400,6 +486,21 @@ export interface ShopDomainIdPayload {
  * Статус подключения кастомного домена.
  */
 export type ShopDomainStatus = "pending_dns" | "awaiting_dns" | "provisioning" | "active" | "failed";
+
+/**
+ * Функциональные флаги витрины: «включил → получил функционал».
+ * 
+ * Каждый флаг выключаем без следа в UI и данных: ``nutrition`` —
+ * полоса КБЖУ в карточке и поля в редакторе товара; ``back_in_stock`` —
+ * кнопка «Сообщить о появлении» и подписки на возврат позиций.
+ * Управляемые фичи (полки, баннеры) флага не требуют: нет данных —
+ * нет блока на витрине.
+ */
+export interface ShopFeatures {
+    "nutrition"?: boolean | undefined;
+    "back_in_stock"?: boolean | undefined;
+    [key: string]: unknown;
+}
 
 /**
  * ShopIdPayload
@@ -488,6 +589,8 @@ export interface ShopModifierGroupsResponse {
 export interface ShopModifierOptionCreatePayload {
     "name": string;
     "price_minor"?: number | undefined;
+    "photo_file_id"?: string | null | undefined;
+    "nutrition_delta"?: ShopNutrition | undefined;
     "is_default"?: boolean | undefined;
     "max_per_option"?: number | undefined;
     "nested_group_id"?: string | null | undefined;
@@ -514,6 +617,8 @@ export interface ShopModifierOptionResponse {
     "group_id": string;
     "name": string;
     "price_minor": number;
+    "photo_file_id": string | null;
+    "nutrition_delta": ShopNutrition;
     "is_default": boolean;
     "is_available": boolean;
     "max_per_option": number;
@@ -528,6 +633,8 @@ export interface ShopModifierOptionResponse {
 export interface ShopModifierOptionUpdatePayload {
     "name"?: string | null | undefined;
     "price_minor"?: number | null | undefined;
+    "photo_file_id"?: string | null | undefined;
+    "nutrition_delta"?: ShopNutrition | null | undefined;
     "is_default"?: boolean | null | undefined;
     "is_available"?: boolean | null | undefined;
     "max_per_option"?: number | null | undefined;
@@ -575,6 +682,10 @@ export interface ShopMyOrderDetailResponse {
     "can_cancel"?: boolean | undefined;
     "delivery_lat"?: number | null | undefined;
     "delivery_lng"?: number | null | undefined;
+    "delivery_flat"?: string | undefined;
+    "delivery_entrance"?: string | undefined;
+    "delivery_floor"?: string | undefined;
+    "delivery_intercom"?: string | undefined;
     "delivery_route"?: Record<string, JsonValue> | undefined;
     "delivery_zone"?: Record<string, JsonValue> | undefined;
     [key: string]: unknown;
@@ -635,6 +746,39 @@ export interface ShopMyOrdersListPayload {
 }
 
 /**
+ * Подписка «сообщить о появлении» — slug витрины + товар.
+ */
+export interface ShopNotifyBackPayload {
+    "slug": string;
+    "product_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopNotifyBackResponse
+ */
+export interface ShopNotifyBackResponse {
+    "subscribed": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * Пищевая ценность позиции на порцию.
+ * 
+ * Все поля опциональны: владелец заполняет то, что знает (вручную
+ * или AI-оценкой). Отсутствие всего блока — полоса КБЖУ на витрине
+ * не рисуется. ``nutrition_delta`` опции прибавляется к этим значениям
+ * при выборе модификатора.
+ */
+export interface ShopNutrition {
+    "kcal"?: number | null | undefined;
+    "protein_g"?: number | null | undefined;
+    "fat_g"?: number | null | undefined;
+    "carb_g"?: number | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Заказ с витрины: магазин резолвится по slug — анонимный вызов.
  */
 export interface ShopOrderCreatePayload {
@@ -643,6 +787,12 @@ export interface ShopOrderCreatePayload {
     "delivery_type": ShopDeliveryType;
     "address"?: string | undefined;
     "customer_address_id"?: string | undefined;
+    "delivery_lat"?: number | null | undefined;
+    "delivery_lng"?: number | null | undefined;
+    "delivery_flat"?: string | undefined;
+    "delivery_entrance"?: string | undefined;
+    "delivery_floor"?: string | undefined;
+    "delivery_intercom"?: string | undefined;
     "table_id"?: string | null | undefined;
     "comment"?: string | undefined;
     "source"?: ShopOrderSource | undefined;
@@ -771,6 +921,10 @@ export interface ShopOrderResponse {
     "delivery_type": ShopDeliveryType;
     "address": string;
     "delivery_eta_minutes"?: number | null | undefined;
+    "delivery_flat"?: string | undefined;
+    "delivery_entrance"?: string | undefined;
+    "delivery_floor"?: string | undefined;
+    "delivery_intercom"?: string | undefined;
     "table_id": string;
     "table_label": string;
     "comment": string;
@@ -841,6 +995,7 @@ export interface ShopProductCreatePayload {
     "badges"?: string[] | undefined;
     "price_minor": number;
     "photo_file_id"?: string | null | undefined;
+    "nutrition"?: ShopNutrition | undefined;
     "shop_id": string;
     [key: string]: unknown;
 }
@@ -900,6 +1055,7 @@ export interface ShopProductResponse {
     "badges": string[];
     "price_minor": number;
     "photo_file_id": string | null;
+    "nutrition": ShopNutrition;
     "is_available": boolean;
     "sort": number;
     [key: string]: unknown;
@@ -916,6 +1072,7 @@ export interface ShopProductUpdatePayload {
     "badges"?: string[] | null | undefined;
     "price_minor"?: number | null | undefined;
     "photo_file_id"?: string | null | undefined;
+    "nutrition"?: ShopNutrition | null | undefined;
     "is_available"?: boolean | null | undefined;
     "sort"?: number | null | undefined;
     "shop_id": string;
@@ -1049,6 +1206,8 @@ export interface ShopResponse {
     "phone": string;
     "city": string;
     "address": string;
+    "lat": number | null;
+    "lng": number | null;
     "timezone": string;
     "working_hours": Record<string, string>;
     "delivery_enabled": boolean;
@@ -1061,13 +1220,94 @@ export interface ShopResponse {
     "courier_mode": string;
     "currency": string;
     "theme": ShopTheme;
+    "features": ShopFeatures;
     "badges": ShopBadgeResponse[];
     "status": ShopStatus;
     "telegram_chat_id": string | null;
     "telegram_connected": boolean;
+    "demo_template": string | null;
     "storefront_url": string;
     "plan": string;
     "products_count"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Постановка фоновой задачи: демо-сид идёт в очереди ``shop``.
+ */
+export interface ShopScheduledResponse {
+    "task_id": string;
+    "status"?: "scheduled" | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopShelfCreatePayload
+ */
+export interface ShopShelfCreatePayload {
+    "kind"?: string | undefined;
+    "layout"?: string | undefined;
+    "placement"?: string | undefined;
+    "title"?: string | undefined;
+    "subtitle"?: string | undefined;
+    "product_ids"?: string[] | undefined;
+    "category_id"?: string | null | undefined;
+    "limit"?: number | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopShelfIdPayload
+ */
+export interface ShopShelfIdPayload {
+    "shop_id": string;
+    "shop_shelf_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Полка ленты витрины — секция товаров с источником и раскладкой.
+ */
+export interface ShopShelfResponse {
+    "shop_shelf_id": string;
+    "shop_id": string;
+    "kind": string;
+    "layout": string;
+    "placement": string;
+    "title": string;
+    "subtitle": string;
+    "product_ids": string[];
+    "category_id": string | null;
+    "limit": number;
+    "sort": number;
+    "is_active": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopShelfUpdatePayload
+ */
+export interface ShopShelfUpdatePayload {
+    "layout"?: string | null | undefined;
+    "placement"?: string | null | undefined;
+    "title"?: string | null | undefined;
+    "subtitle"?: string | null | undefined;
+    "product_ids"?: string[] | null | undefined;
+    "category_id"?: string | null | undefined;
+    "limit"?: number | null | undefined;
+    "is_active"?: boolean | null | undefined;
+    "shop_id": string;
+    "shop_shelf_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopShelvesReorderPayload
+ */
+export interface ShopShelvesReorderPayload {
+    "shelf_ids": string[];
+    "shop_id": string;
     [key: string]: unknown;
 }
 
@@ -1154,11 +1394,19 @@ export interface ShopTelegramConnectPayload {
 
 /**
  * Визуальная тема витрины: акцентный цвет, пресет раскладки и режим.
+ * 
+ * ``hero_style`` — подача шапки: ``card`` — карточка поверх обложки,
+ * ``cover`` — иммерсивный full-bleed с градиентом, ``minimal`` —
+ * компактный заголовок без обложки. ``backdrop`` — фон страницы:
+ * ``solid`` — цвет темы, ``blur`` — размытая обложка под контентом,
+ * ``gradient`` — мягкий акцентный градиент.
  */
 export interface ShopTheme {
     "accent_color"?: string | undefined;
     "preset"?: string | undefined;
     "mode"?: string | undefined;
+    "hero_style"?: string | undefined;
+    "backdrop"?: string | undefined;
     "custom"?: ShopThemeCustom | undefined;
     [key: string]: unknown;
 }
@@ -1206,7 +1454,10 @@ export interface ShopUpdatePayload {
     "min_order_minor"?: number | null | undefined;
     "prep_minutes"?: number | null | undefined;
     "courier_mode"?: "car" | "foot" | "bike" | "scooter" | null | undefined;
+    "lat"?: number | null | undefined;
+    "lng"?: number | null | undefined;
     "theme"?: ShopTheme | null | undefined;
+    "features"?: ShopFeatures | null | undefined;
     "badges"?: ShopBadge[] | null | undefined;
     "shop_id": string;
     [key: string]: unknown;
@@ -1228,11 +1479,18 @@ export interface ShopCommandMap {
     "shop/ai/parse_menu_requested": { payload: ShopAiParseMenuPayload; result: ShopAiParseMenuResponse },
     "shop/ai/suggest_options_requested": { payload: ShopAiSuggestOptionsPayload; result: ShopAiSuggestOptionsResponse },
     "shop/badge_icons/list_requested": { payload: EmptyPayload; result: ShopBadgeIconsResponse },
+    "shop/banners/create_requested": { payload: ShopBannerCreatePayload; result: ShopBannerResponse },
+    "shop/banners/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopBannerResponse_ },
+    "shop/banners/remove_requested": { payload: ShopBannerIdPayload; result: EmptyPayload },
+    "shop/banners/reorder_requested": { payload: ShopBannersReorderPayload; result: EmptyPayload },
+    "shop/banners/update_requested": { payload: ShopBannerUpdatePayload; result: ShopBannerResponse },
     "shop/categories/create_requested": { payload: ShopCategoryCreatePayload; result: ShopCategoryResponse },
     "shop/categories/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopCategoryResponse_ },
     "shop/categories/remove_requested": { payload: ShopCategoryIdPayload; result: EmptyPayload },
     "shop/categories/reorder_requested": { payload: ShopCategoriesReorderPayload; result: EmptyPayload },
     "shop/categories/update_requested": { payload: ShopCategoryUpdatePayload; result: ShopCategoryResponse },
+    "shop/company/init_requested": { payload: ShopCompanyInitPayload; result: ShopScheduledResponse },
+    "shop/demos/seed_requested": { payload: EmptyPayload; result: ShopScheduledResponse },
     "shop/domains/add_requested": { payload: ShopDomainAddPayload; result: ShopDomain },
     "shop/domains/provision_requested": { payload: ShopDomainIdPayload; result: ShopDomain },
     "shop/domains/remove_requested": { payload: ShopDomainIdPayload; result: EmptyPayload },
@@ -1262,9 +1520,15 @@ export interface ShopCommandMap {
     "shop/public/my_order_cancel_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_order_get_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_orders_list_requested": { payload: ShopMyOrdersListPayload; result: OffsetPage_ShopMyOrderListItemResponse_ },
+    "shop/public/notify_back_requested": { payload: ShopNotifyBackPayload; result: ShopNotifyBackResponse },
     "shop/public/order_create_requested": { payload: ShopOrderCreatePayload; result: ShopOrderCreatedResponse },
     "shop/public/order_status_requested": { payload: ShopPublicOrderStatusPayload; result: ShopOrderStatusResponse },
     "shop/public/storefront_geo_requested": { payload: ShopStorefrontGeoPayload; result: ShopStorefrontGeoResponse },
+    "shop/shelves/create_requested": { payload: ShopShelfCreatePayload; result: ShopShelfResponse },
+    "shop/shelves/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopShelfResponse_ },
+    "shop/shelves/remove_requested": { payload: ShopShelfIdPayload; result: EmptyPayload },
+    "shop/shelves/reorder_requested": { payload: ShopShelvesReorderPayload; result: EmptyPayload },
+    "shop/shelves/update_requested": { payload: ShopShelfUpdatePayload; result: ShopShelfResponse },
     "shop/shops/create_requested": { payload: ShopCreateRequest; result: ShopResponse },
     "shop/shops/item_requested": { payload: ShopIdPayload; result: ShopResponse },
     "shop/shops/list_requested": { payload: EmptyPayload; result: ListResponse_ShopResponse_ },
@@ -1317,6 +1581,21 @@ export interface ShopEventMap {
     "shop/badge_icons/list_failed": PlatformCommandEventPayload,
     "shop/badge_icons/list_requested": PlatformCommandEventPayload,
     "shop/badge_icons/list_succeeded": PlatformCommandEventPayload,
+    "shop/banners/create_failed": PlatformCommandEventPayload,
+    "shop/banners/create_requested": PlatformCommandEventPayload,
+    "shop/banners/create_succeeded": PlatformCommandEventPayload,
+    "shop/banners/list_failed": PlatformCommandEventPayload,
+    "shop/banners/list_requested": PlatformCommandEventPayload,
+    "shop/banners/list_succeeded": PlatformCommandEventPayload,
+    "shop/banners/remove_failed": PlatformCommandEventPayload,
+    "shop/banners/remove_requested": PlatformCommandEventPayload,
+    "shop/banners/remove_succeeded": PlatformCommandEventPayload,
+    "shop/banners/reorder_failed": PlatformCommandEventPayload,
+    "shop/banners/reorder_requested": PlatformCommandEventPayload,
+    "shop/banners/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/banners/update_failed": PlatformCommandEventPayload,
+    "shop/banners/update_requested": PlatformCommandEventPayload,
+    "shop/banners/update_succeeded": PlatformCommandEventPayload,
     "shop/catalog/changed": ShopCatalogChangedEventPayload,
     "shop/categories/create_failed": PlatformCommandEventPayload,
     "shop/categories/create_requested": PlatformCommandEventPayload,
@@ -1333,6 +1612,12 @@ export interface ShopEventMap {
     "shop/categories/update_failed": PlatformCommandEventPayload,
     "shop/categories/update_requested": PlatformCommandEventPayload,
     "shop/categories/update_succeeded": PlatformCommandEventPayload,
+    "shop/company/init_failed": PlatformCommandEventPayload,
+    "shop/company/init_requested": PlatformCommandEventPayload,
+    "shop/company/init_succeeded": PlatformCommandEventPayload,
+    "shop/demos/seed_failed": PlatformCommandEventPayload,
+    "shop/demos/seed_requested": PlatformCommandEventPayload,
+    "shop/demos/seed_succeeded": PlatformCommandEventPayload,
     "shop/domains/add_failed": PlatformCommandEventPayload,
     "shop/domains/add_requested": PlatformCommandEventPayload,
     "shop/domains/add_succeeded": PlatformCommandEventPayload,
@@ -1422,6 +1707,9 @@ export interface ShopEventMap {
     "shop/public/my_orders_list_failed": PlatformCommandEventPayload,
     "shop/public/my_orders_list_requested": PlatformCommandEventPayload,
     "shop/public/my_orders_list_succeeded": PlatformCommandEventPayload,
+    "shop/public/notify_back_failed": PlatformCommandEventPayload,
+    "shop/public/notify_back_requested": PlatformCommandEventPayload,
+    "shop/public/notify_back_succeeded": PlatformCommandEventPayload,
     "shop/public/order_create_failed": PlatformCommandEventPayload,
     "shop/public/order_create_requested": PlatformCommandEventPayload,
     "shop/public/order_create_succeeded": PlatformCommandEventPayload,
@@ -1431,6 +1719,21 @@ export interface ShopEventMap {
     "shop/public/storefront_geo_failed": PlatformCommandEventPayload,
     "shop/public/storefront_geo_requested": PlatformCommandEventPayload,
     "shop/public/storefront_geo_succeeded": PlatformCommandEventPayload,
+    "shop/shelves/create_failed": PlatformCommandEventPayload,
+    "shop/shelves/create_requested": PlatformCommandEventPayload,
+    "shop/shelves/create_succeeded": PlatformCommandEventPayload,
+    "shop/shelves/list_failed": PlatformCommandEventPayload,
+    "shop/shelves/list_requested": PlatformCommandEventPayload,
+    "shop/shelves/list_succeeded": PlatformCommandEventPayload,
+    "shop/shelves/remove_failed": PlatformCommandEventPayload,
+    "shop/shelves/remove_requested": PlatformCommandEventPayload,
+    "shop/shelves/remove_succeeded": PlatformCommandEventPayload,
+    "shop/shelves/reorder_failed": PlatformCommandEventPayload,
+    "shop/shelves/reorder_requested": PlatformCommandEventPayload,
+    "shop/shelves/reorder_succeeded": PlatformCommandEventPayload,
+    "shop/shelves/update_failed": PlatformCommandEventPayload,
+    "shop/shelves/update_requested": PlatformCommandEventPayload,
+    "shop/shelves/update_succeeded": PlatformCommandEventPayload,
     "shop/shop/created": ShopShopEventPayload,
     "shop/shop/published": ShopShopEventPayload,
     "shop/shop/updated": ShopShopEventPayload,

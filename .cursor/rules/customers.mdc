@@ -26,7 +26,7 @@ alwaysApply: false
 - Контракты и enum'ы — `core/customers/contracts.py`, `core/customers/enums.py`; ошибки — `CustomerAuthError` + `PhoneVerificationErrorCode` (`core/customers/errors.py`).
 - `CustomerSessionService` (`core/customers/session.py`) — JWT `TokenType.CUSTOMER` в httpOnly cookie `customer_token`; прав платформенного пользователя не даёт. Verify перевыпускает токен с merge `scope_company_ids` (`merge_scope_company_ids`) — silent rescope без реальной верификации запрещён.
 - `CustomerAuthService` (`core/customers/auth_service.py`) — сценарии start/choose/verify/status/webhook/OAuth, rate limits и дневной бюджет SMS в Redis.
-- `CustomerAddress` (`core/customers/models/customer_address.py`) — сохранённый адрес покупателя с координатами; CRUD и геокодинг — `CustomerAddressService` (`core/customers/address_service.py`, DI `customer_address_service`).
+- `CustomerAddress` (`core/customers/models/customer_address.py`) — сохранённый адрес покупателя с координатами; CRUD и резолв точки — `CustomerAddressService` (`core/customers/address_service.py`, DI `customer_address_service`): `create` принимает `lat`/`lng` выбранной подсказки/пина, без координат резолвит текст серверно (geo suggest → geocoder).
 - Конфиг — `CustomerAuthConfig` (`core/config/models.py`), секция `customer_auth` в conf.json; креды провайдеров — платформенные, per-apex `brands`.
 
 ## Инварианты

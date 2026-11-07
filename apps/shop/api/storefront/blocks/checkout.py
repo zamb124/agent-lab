@@ -22,12 +22,24 @@ button.big:disabled{opacity:.45;cursor:default}
 .zstat.ok{color:#1f9d55}
 .zstat.bad{color:#d24545}
 .zstat.wait{color:var(--muted)}
-.sug{display:none;margin-top:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;box-shadow:0 8px 24px color-mix(in srgb,var(--afg) 14%,transparent)}
+.sug{display:none;margin-top:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden auto;max-height:288px;box-shadow:0 8px 24px color-mix(in srgb,var(--afg) 14%,transparent);overscroll-behavior:contain}
 .sug.open{display:block}
 .sugrow{padding:11px 14px;font-size:14px;font-weight:550;color:var(--text);cursor:pointer;border-bottom:1px solid var(--line);line-height:1.35}
 .sugrow:last-child{border-bottom:0}
 .sugrow:hover,.sugrow.on{background:color-mix(in srgb,var(--accent) 10%,transparent)}
-.sugrow small{display:block;font-size:11.5px;color:var(--muted);font-weight:500}"""
+.sugrow b{font-weight:800}
+.sugrow small{display:block;font-size:11.5px;color:var(--muted);font-weight:500}
+.sugrow.sugempty{cursor:default;color:var(--muted);font-weight:500}
+.sugrow.sugempty:hover{background:transparent}
+.zstat svg{width:16px;height:16px;fill:currentColor;flex-shrink:0}
+.aaddr{display:flex;gap:8px;align-items:stretch;margin:6px 0}
+.aaddr input.f{margin:0;flex:1;min-width:0}
+.amapbtn{flex-shrink:0;width:54px;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;display:grid;place-items:center;transition:border-color .15s,color .15s}
+.amapbtn svg{width:20px;height:20px;fill:currentColor}
+.amapbtn:hover{border-color:var(--afg);color:var(--afg)}
+.dgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.dgrid input.f{margin:0;padding:12px 10px;font-size:13.5px;text-align:center}
+@media (max-width:480px){.dgrid{grid-template-columns:repeat(2,1fr)}}"""
 
 JS: str = """let dtype='';
 let tableId=TABLE_ID&&TABLES.some(t=>t.id===TABLE_ID)?TABLE_ID:'';
@@ -37,7 +49,11 @@ window.openSheet=()=>{
   renderSheet();
   sheetOpen(document.getElementById('sheet'));
 };
-window.setDtype=t=>{dtype=t;renderSheet();};
+window.setDtype=t=>{dtype=t;
+  // Смена способа выдачи сбрасывает адресное состояние: точка и результат
+  // зоновой проверки относятся к прежнему выбору и не наследуются.
+  addrPoint=null;pickedAddrId='';zoneOk=null;sugItems=[];
+  renderSheet();};
 window.setTable=t=>{tableId=t;};
 function renderSheet(){
   const p=document.getElementById('panel');
@@ -49,13 +65,14 @@ function renderSheet(){
   p.innerHTML=`<h2>Ваш заказ</h2>`+[...cart.entries()].map(([key,l])=>{const x=byId(l.pid);if(!x)return'';
     const mods=modsText(x,l.sel);const u=unitPrice(x,l.sel);
     return `<div class="cl">${photo(x.photo_file_id,'climg','sm!sq')}<span class="n">${esc(x.name)}${mods?`<span class="mods">${esc(mods)}</span>`:''}</span><span class="stepper"><button class="ghost" onclick="addLine('${key}',-1);renderSheet()">−</button><span>${l.qty}</span><button onclick="addLine('${key}',1);renderSheet()">+</button></span><b class="s">${fmt(u*l.qty)}</b></div>`;}).join('')+
+  cartUpsellHtml()+
   seg+
   `<div id="savings"></div>`+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${fmt(fee)}</b></div>`:'')+
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${fmt(sub+fee)}</b></div>
   <input class="f" id="cn" placeholder="Ваше имя">
   ${dtype==='onsite'?`<select class="f" id="ct" onchange="setTable(this.value)"><option value="">Выберите стол</option>${TABLES.map(t=>`<option value="${t.id}"${t.id===tableId?' selected':''}>${esc(t.label)}</option>`).join('')}</select>`:''}
-  ${dtype==='delivery'?`<div class="achips" id="addrChips"></div><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()"><div class="sug" id="caSug"></div><div class="zstat" id="zoneStat"></div>`:''}<input class="f" id="cc" placeholder="Комментарий к заказу">
+  ${dtype==='delivery'?`<div class="achips" id="addrChips"></div><div class="aaddr"><input class="f" id="ca" placeholder="Адрес доставки" autocomplete="street-address" oninput="onAddrInput()" onkeydown="onAddrKey(event)" role="combobox" aria-expanded="false" aria-controls="caSug"><button class="amapbtn" type="button" onclick="openAddrMap()" title="Выбрать точку на карте" aria-label="Выбрать точку на карте">${ic('pin')}</button></div><div class="sug" id="caSug" role="listbox"></div><div class="dgrid"><input class="f" id="dflat" placeholder="Кв/офис" autocomplete="off"><input class="f" id="dentrance" placeholder="Подъезд" autocomplete="off"><input class="f" id="dfloor" placeholder="Этаж" autocomplete="off"><input class="f" id="dintercom" placeholder="Домофон" autocomplete="off"></div><div class="zstat" id="zoneStat"></div>`:''}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${below?`<div class="minwarn">Минимальный заказ — ${fmt(S.min_order_minor)}</div>`:''}
   ${hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — ${hb.t}</div>`:''}
   <button class="big" id="payBtn" ${(below||(hb&&!hb.open))?'disabled':''} onclick="submit()">Оформить заказ · ${fmt(sub+fee)}</button>`;
@@ -86,6 +103,8 @@ async function refreshSavings(){
 // ——— Адреса покупателя и зона доставки ———
 let savedAddrs=[];        // список сохранённых адресов из customer-auth API
 let pickedAddrId='';      // выбранный чип (customer_address_id) или '' — ручной ввод
+let addrPoint=null;       // {lat,lng} точки подсказки/пина карты/сохранённого — едет в заказ
+let sugItems=[];          // последняя выдача автокомплита (для pickSug по индексу)
 let zoneOk=null;          // null — зона не проверялась / не требуется; true/false — результат
 const zoneRequired=()=>!!(S.delivery_zone&&S.delivery_zone.coordinates&&S.delivery_zone.coordinates.length);
 async function loadAddresses(){
@@ -110,22 +129,48 @@ window.pickAddr=id=>{
   const a=savedAddrs.find(x=>x.customer_address_id===pickedAddrId);
   const inp=document.getElementById('ca');
   if(inp)inp.value=a?a.address:'';
+  // Координаты сохранённого адреса — та же точка, что проверит сервер.
+  addrPoint=a&&a.lat!=null&&a.lng!=null?{lat:a.lat,lng:a.lng}:null;
   renderAddrChips();
-  // сохранённый адрес уже геокодирован на сервере — зону не дёргаем,
-  // но если зона настроена и координат нет — всё равно проверим по тексту.
-  if(zoneRequired()){zoneOk=null;clearTimeout(zTimer);zTimer=setTimeout(zoneCheck,150);}
-  else{zoneOk=null;updatePayBtn();}
+  zoneOk=null;clearTimeout(zTimer);zTimer=setTimeout(zoneCheck,150);
 };
-let zTimer=0,zReq=0,sugTimer=0,sugReq=0;
-function hideSug(){const el=document.getElementById('caSug');if(el)el.classList.remove('open');}
+let zTimer=0,zReq=0,sugTimer=0,sugReq=0,sugIdx=-1;
+function hideSug(){const el=document.getElementById('caSug');if(el)el.classList.remove('open');
+  const inp=document.getElementById('ca');if(inp)inp.setAttribute('aria-expanded','false');
+  sugIdx=-1;}
 window.pickSug=(i)=>{
-  const el=document.getElementById('caSug');
-  const row=el?.querySelector(`[data-i="${i}"]`);
+  const it=sugItems[i];
   const inp=document.getElementById('ca');
-  if(inp&&row)inp.value=row.dataset.name||'';
+  if(inp&&it)inp.value=it.display_name||'';
+  // Точка выбранной подсказки — сервер проверяет именно её, без перегеокода.
+  addrPoint=it?{lat:it.lat,lng:it.lng}:null;
   hideSug();
   if(pickedAddrId){pickedAddrId='';renderAddrChips();}
   zoneOk=null;clearTimeout(zTimer);zoneCheck();
+};
+function hlq(name,q){
+  const i=name.toLowerCase().indexOf(q.toLowerCase());
+  if(i<0)return esc(name);
+  return esc(name.slice(0,i))+'<b>'+esc(name.slice(i,i+q.length))+'</b>'+esc(name.slice(i+q.length));
+}
+window.onAddrKey=e=>{
+  const el=document.getElementById('caSug');
+  if(!el||!el.classList.contains('open')){
+    if(e.key==='ArrowDown'){clearTimeout(sugTimer);addrSuggest();}
+    return;}
+  const rows=[...el.querySelectorAll('.sugrow:not(.sugempty)')];
+  if(!rows.length)return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    sugIdx=e.key==='ArrowDown'?(sugIdx+1)%rows.length:(sugIdx-1+rows.length)%rows.length;
+    rows.forEach((r,i)=>r.classList.toggle('on',i===sugIdx));
+    rows[sugIdx].scrollIntoView({block:'nearest'});
+  }else if(e.key==='Enter'&&sugIdx>=0){
+    e.preventDefault();
+    pickSug(Number(rows[sugIdx].dataset.i));
+  }else if(e.key==='Escape'){
+    e.preventDefault();hideSug();
+  }
 };
 async function addrSuggest(){
   const inp=document.getElementById('ca');
@@ -135,17 +180,23 @@ async function addrSuggest(){
   if(q.length<3){hideSug();return;}
   const my=++sugReq;
   try{
-    const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/address-suggest?q=${encodeURIComponent(q)}`);
+    let url=`/shop/api/v1/public/storefront/${S.slug}/address-suggest?q=${encodeURIComponent(q)}`;
+    if(addrPoint)url+=`&lat=${addrPoint.lat}&lng=${addrPoint.lng}`;
+    const r=await fetch(url);
     if(my!==sugReq)return;
     const d=await r.json();
     const items=Array.isArray(d.items)?d.items:[];
-    if(!items.length){hideSug();return;}
-    el.innerHTML=items.map((a,i)=>`<div class="sugrow" data-i="${i}" data-name="${esc(a.display_name||'')}" onclick="pickSug(${i})">${esc(a.display_name||'')}<small>${esc(a.city||'')}</small></div>`).join('');
+    sugItems=items;sugIdx=-1;
+    el.innerHTML=items.length
+      ?items.map((a,i)=>`<div class="sugrow" role="option" data-i="${i}" data-name="${esc(a.display_name||'')}" onclick="pickSug(${i})">${hlq(a.display_name||'',q)}<small>${esc(a.city||'')}</small></div>`).join('')
+      :`<div class="sugrow sugempty">Адрес не найден — укажите точку на карте</div>`;
     el.classList.add('open');
+    if(inp)inp.setAttribute('aria-expanded','true');
   }catch(e){hideSug();}
 }
 window.onAddrInput=()=>{
   if(pickedAddrId){pickedAddrId='';renderAddrChips();}
+  addrPoint=null;
   clearTimeout(zTimer);
   clearTimeout(sugTimer);
   const st=document.getElementById('zoneStat');
@@ -158,19 +209,24 @@ async function zoneCheck(){
   const inp=document.getElementById('ca');
   const q=(inp?.value||'').trim();
   const st=document.getElementById('zoneStat');
-  if(q.length<5){zoneOk=null;updatePayBtn();return;}
+  if(q.length<5&&!addrPoint){zoneOk=null;updatePayBtn();return;}
   const my=++zReq;
   if(st){st.className='zstat wait';st.textContent='Проверяем зону доставки…';}
   try{
-    const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/delivery-check?address=${encodeURIComponent(q)}`);
+    let url=`/shop/api/v1/public/storefront/${S.slug}/delivery-check?address=${encodeURIComponent(q)}`;
+    if(addrPoint)url+=`&lat=${addrPoint.lat}&lng=${addrPoint.lng}`;
+    const r=await fetch(url);
     if(my!==zReq)return;
     const d=await r.json();
     zoneOk=d.ok===true?true:(d.ok===false?false:null);
+    // Точку, которую подтвердил сервер, фиксируем — в заказ едет она же.
+    if(zoneOk===true&&d.lat!=null&&d.lng!=null)addrPoint={lat:d.lat,lng:d.lng};
     if(st){
       if(zoneOk===true){st.className='zstat ok';
         const eta=d.eta_minutes?` ~${d.eta_minutes} мин`:'';
-        st.textContent='Доставим'+eta+(d.inside_zone===false?'':' ✓ '+((d.normalized||'').split(',')[0]));}
-      else if(zoneOk===false){st.className='zstat bad';st.textContent=d.reason==='out_of_delivery_zone'?'Адрес вне зоны доставки':'Адрес не удалось проверить';}
+        st.innerHTML=ic('check')+esc('Доставим'+eta+(d.inside_zone===false?'':' · '+((d.normalized||'').split(',')[0])));}
+      else if(zoneOk===false){st.className='zstat bad';
+        st.innerHTML=ic('warn')+esc(d.reason==='out_of_delivery_zone'?'Адрес вне зоны доставки':'Адрес не удалось проверить');}
       else{st.className='zstat';st.textContent='';}
     }
     updatePayBtn();
@@ -188,7 +244,8 @@ function updatePayBtn(){
 }
 async function saveAddress(text){
   try{await fetch('/shop/api/v1/public/customer-auth/addresses',{method:'POST',credentials:'same-origin',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({address:text})});}catch(e){}
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({address:text,
+      lat:addrPoint?addrPoint.lat:null,lng:addrPoint?addrPoint.lng:null})});}catch(e){}
 }
 window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
 document.addEventListener('click',e=>{
@@ -218,9 +275,11 @@ window.submit=async()=>{
     await zoneCheck();
     if(zoneOk!==true){toast(zoneOk===false?'Адрес вне зоны доставки':'Укажите адрес доставки');return;}
   }
+  const addrText=dtype==='delivery'?(document.getElementById('ca')?.value||'').trim():'';
+  if(dtype==='delivery'&&!addrText&&!pickedAddrId){toast('Укажите адрес доставки');return;}
   const customer=await ensureAuth();
   if(!customer)return;
-  const addrText=dtype==='delivery'?(document.getElementById('ca')?.value||''):'';
+  const val=id=>(document.getElementById(id)?.value||'').trim();
   const body={items:[...cart.values()].map(l=>({product_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({option_id,qty}))})),
     customer_name:document.getElementById('cn').value||customer.phone_e164,
@@ -228,6 +287,12 @@ window.submit=async()=>{
     table_id:dtype==='onsite'?tableId:null,
     address:addrText,
     customer_address_id:dtype==='delivery'?pickedAddrId:'',
+    delivery_lat:dtype==='delivery'&&addrPoint?addrPoint.lat:null,
+    delivery_lng:dtype==='delivery'&&addrPoint?addrPoint.lng:null,
+    delivery_flat:dtype==='delivery'?val('dflat'):'',
+    delivery_entrance:dtype==='delivery'?val('dentrance'):'',
+    delivery_floor:dtype==='delivery'?val('dfloor'):'',
+    delivery_intercom:dtype==='delivery'?val('dintercom'):'',
     comment:document.getElementById('cc').value,
     source:EMBED?'embed':'web',
     idempotency_key:crypto.randomUUID()};
@@ -237,6 +302,7 @@ window.submit=async()=>{
     try{const e=await r.json();
       const code=e&&(e.error_code||e.detail);
       if(code==='out_of_delivery_zone')msg='Адрес вне зоны доставки';
+      else if(code==='address_unverifiable')msg='Адрес не удалось проверить — уточните или выберите точку на карте';
       else if(code==='shop_closed'){const np=e.error_params&&e.error_params.next_open;msg='Сейчас закрыто'+(np?' — откроемся '+np:'');}
     }catch(_){}
     toast(msg);return;

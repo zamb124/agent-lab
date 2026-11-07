@@ -23,11 +23,13 @@ Shell — каркас (`<head>`, тема, DOM-скелет, точки мон�
 """
 
 from apps.shop.api.storefront.blocks import (
+    addressmap,
     base,
     boot,
     cart,
     catalog,
     checkout,
+    feed,
     hero,
     product,
     responsive,
@@ -43,11 +45,13 @@ from core.types import JsonObject
 STOREFRONT_BLOCKS = (
     "base",
     "hero",
+    "feed",
     "catalog",
     "cart",
     "sheets",
     "product",
     "checkout",
+    "addressmap",
     "tracking",
     "responsive",
     "ui",
@@ -58,11 +62,13 @@ STOREFRONT_BLOCKS = (
 _BLOCK_CSS: tuple[str, ...] = (
     base.CSS,
     hero.CSS,
+    feed.CSS,
     catalog.CSS,
     cart.CSS,
     sheets.CSS,
     product.CSS,
     checkout.CSS,
+    addressmap.CSS,
     tracking.CSS,
     responsive.CSS,
 )
@@ -70,9 +76,11 @@ _BLOCK_CSS: tuple[str, ...] = (
 _BLOCK_JS: tuple[str, ...] = (
     base.JS,
     ui.JS,
+    feed.JS,
     catalog.JS,
     cart.JS,
     checkout.JS,
+    addressmap.JS,
     tracking.JS,
     product.JS,
     sheets.JS,

@@ -42,6 +42,7 @@ export interface GeoAddressHit {
     "postcode"?: string | undefined;
     "lat": number;
     "lng": number;
+    "distance_m"?: number | null | undefined;
     [key: string]: unknown;
 }
 

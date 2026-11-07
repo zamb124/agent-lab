@@ -1,23 +1,71 @@
 /**
- * Внешний вид витрины: шаблонные пресеты + акцентный цвет + живое превью.
- * Директор выбирает шаблон и цвет — витрина пересобирается автоматически.
+ * Внешний вид витрины: тема, функциональные флаги и лента.
+ *
+ * Директор собирает витрину без кода: шаблон и оформление шапки,
+ * акцентный цвет, флаги «включил → функционал есть» (КБЖУ, возврат
+ * в наличие), полки ленты и сторис-баннеры с реордером. Живое превью
+ * справа — телефон / планшет / десктоп через theme-preview query.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
 import '../components/shop-page-head.js';
 import { shopHeadRow } from '../components/shop-page-head.js';
+import '../modals/shop-shelf-modal.js';
+import '../modals/shop-banner-modal.js';
+import type { ShelfDraft } from '../modals/shop-shelf-modal.js';
+import type { BannerDraft } from '../modals/shop-banner-modal.js';
 
 const PRESETS = ['menu', 'grid', 'compact'] as const;
 
 const MODES = ['dark', 'light'] as const;
 
+const HERO_STYLES = ['card', 'cover', 'minimal'] as const;
+type HeroStyle = (typeof HERO_STYLES)[number];
+
+const BACKDROPS = ['solid', 'blur', 'gradient'] as const;
+type Backdrop = (typeof BACKDROPS)[number];
+
 const ACCENTS = ['#e2553f', '#f2a33c', '#34c47c', '#3f8cff', '#9b5de5', '#ef476f', '#111827', '#0f766e'];
+
+const DEVICES = ['phone', 'tablet', 'desktop'] as const;
+type Device = (typeof DEVICES)[number];
+
+const DEVICE_ICONS: Record<Device, string> = { phone: 'smartphone', tablet: 'tablet', desktop: 'monitor' };
+
+const FEATURES = ['nutrition', 'back_in_stock'] as const;
+type FeatureKey = (typeof FEATURES)[number];
+
+interface ShelfRow {
+    shop_shelf_id: string;
+    kind: string;
+    layout: string;
+    placement: string;
+    title: string;
+    subtitle: string;
+    product_ids: string[];
+    category_id: string | null;
+    limit: number;
+    sort: number;
+    is_active: boolean;
+}
+
+interface BannerRow {
+    shop_banner_id: string;
+    title: string;
+    subtitle: string;
+    image_file_id: string | null;
+    link: string;
+    window: Record<string, unknown>;
+    sort: number;
+    is_active: boolean;
+}
 
 export class ShopBuilderPage extends PlatformPage {
     static i18nNamespace = 'shop';
@@ -26,21 +74,40 @@ export class ShopBuilderPage extends PlatformPage {
 
     private _shops: ResourceController;
     private _updateOp: OpController;
+    private _shelvesOp: OpController;
+    private _bannersOp: OpController;
+    private _shelfRemoveOp: OpController;
+    private _shelfReorderOp: OpController;
+    private _bannerRemoveOp: OpController;
+    private _bannerReorderOp: OpController;
     declare _preset: string;
     declare _accent: string;
     declare _mode: string;
-    declare _device: string;
+    declare _heroStyle: HeroStyle;
+    declare _backdrop: Backdrop;
+    declare _nutrition: boolean;
+    declare _backInStock: boolean;
+    declare _device: Device;
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
     private _savedMode = 'dark';
+    private _savedHeroStyle: HeroStyle = 'card';
+    private _savedBackdrop: Backdrop = 'solid';
+    private _savedNutrition = false;
+    private _savedBackInStock = true;
     declare _loadAttempted: boolean;
     private _hydrated = false;
+    private _feedShopId = '';
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
         _preset: { state: true },
         _accent: { state: true },
         _mode: { state: true },
+        _heroStyle: { state: true },
+        _backdrop: { state: true },
+        _nutrition: { state: true },
+        _backInStock: { state: true },
         _device: { state: true },
         _loadAttempted: { state: true },
     };
@@ -51,7 +118,7 @@ export class ShopBuilderPage extends PlatformPage {
             :host { display: block; height: 100%; overflow: hidden; }
             .layout {
                 display: grid;
-                grid-template-columns: 340px 1fr;
+                grid-template-columns: 360px 1fr;
                 height: 100%;
             }
             .panel {
@@ -123,6 +190,43 @@ export class ShopBuilderPage extends PlatformPage {
                 gap: var(--space-2);
             }
             .mode.active { background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+            .feature {
+                display: flex; align-items: center; gap: var(--space-3);
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-surface);
+            }
+            .feature + .feature { margin-top: var(--space-2); }
+            .feature .ftext { flex: 1; min-width: 0; }
+            .feature .fname { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-primary); }
+            .feature .fdesc { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 2px; line-height: 1.4; }
+            .feed-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+            .feed-row {
+                display: flex; align-items: center; gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--bg-surface);
+                margin-bottom: var(--space-1);
+            }
+            .feed-row .fthumb {
+                width: 44px; height: 32px; border-radius: var(--radius-sm);
+                object-fit: cover; flex-shrink: 0;
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+            }
+            .feed-row .finfo { flex: 1; min-width: 0; }
+            .feed-row .finfo .fname { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .feed-row .finfo .fsub { font-size: var(--text-xs); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .feed-row .fbtns { display: flex; gap: 2px; flex-shrink: 0; }
+            .feed-row .fbtns button {
+                border: 0; background: transparent; color: var(--text-tertiary);
+                width: 22px; height: 22px; border-radius: var(--radius-sm);
+                cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+            }
+            .feed-row .fbtns button:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+            .feed-row .fbtns button.danger:hover { color: var(--error); }
+            .feed-empty { font-size: var(--text-xs); color: var(--text-tertiary); padding: var(--space-2) 0; }
             .actions { display: flex; gap: var(--space-2); }
             .preview {
                 position: relative;
@@ -142,6 +246,7 @@ export class ShopBuilderPage extends PlatformPage {
                 box-shadow: 0 24px 60px rgba(0,0,0,.35);
                 transition: width 0.2s ease;
             }
+            .preview iframe.tablet { width: 834px; }
             .preview iframe.desktop {
                 position: absolute;
                 top: 0;
@@ -209,10 +314,20 @@ export class ShopBuilderPage extends PlatformPage {
         this._preset = 'menu';
         this._accent = '#e2553f';
         this._mode = 'dark';
+        this._heroStyle = 'card';
+        this._backdrop = 'solid';
+        this._nutrition = false;
+        this._backInStock = true;
         this._device = 'phone';
         this._loadAttempted = false;
         this._shops = this.useResource('shop/shops', { autoload: true });
         this._updateOp = this.useOp('shop/shop_update');
+        this._shelvesOp = this.useOp('shop/shelves_list');
+        this._bannersOp = this.useOp('shop/banners_list');
+        this._shelfRemoveOp = this.useOp('shop/shelf_remove');
+        this._shelfReorderOp = this.useOp('shop/shelves_reorder');
+        this._bannerRemoveOp = this.useOp('shop/banner_remove');
+        this._bannerReorderOp = this.useOp('shop/banners_reorder');
     }
 
     override connectedCallback(): void {
@@ -222,13 +337,37 @@ export class ShopBuilderPage extends PlatformPage {
 
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
-        if (changed.has('shopId')) this._hydrated = false;
+        if (changed.has('shopId')) {
+            this._hydrated = false;
+            this._feedShopId = '';
+        }
         if (!this._hydrated) this._hydrated = this._hydrate();
+        if (this.shopId !== '' && this._feedShopId !== this.shopId) {
+            this._feedShopId = this.shopId;
+            void this._loadFeed();
+        }
+    }
+
+    private async _loadFeed(): Promise<void> {
+        await Promise.all([
+            this._shelvesOp.run({ shop_id: this.shopId }),
+            this._bannersOp.run({ shop_id: this.shopId }),
+        ]);
     }
 
     private _shop(): Record<string, unknown> | null {
         const row = this._shops.items.find((s) => (s as Record<string, unknown>).shop_id === this.shopId);
         return row === undefined ? null : (row as Record<string, unknown>);
+    }
+
+    private _shelves(): ShelfRow[] {
+        const result = this._shelvesOp.lastResult as { items?: ShelfRow[] } | null;
+        return Array.isArray(result?.items) ? result.items : [];
+    }
+
+    private _banners(): BannerRow[] {
+        const result = this._bannersOp.lastResult as { items?: BannerRow[] } | null;
+        return Array.isArray(result?.items) ? result.items : [];
     }
 
     private _hydrate(): boolean {
@@ -238,14 +377,31 @@ export class ShopBuilderPage extends PlatformPage {
         this._preset = typeof theme.preset === 'string' ? theme.preset : 'menu';
         this._accent = typeof theme.accent_color === 'string' ? theme.accent_color : '#e2553f';
         this._mode = theme.mode === 'light' ? 'light' : 'dark';
+        const hero = typeof theme.hero_style === 'string' ? theme.hero_style : 'card';
+        this._heroStyle = (HERO_STYLES as readonly string[]).includes(hero) ? (hero as HeroStyle) : 'card';
+        const backdrop = typeof theme.backdrop === 'string' ? theme.backdrop : 'solid';
+        this._backdrop = (BACKDROPS as readonly string[]).includes(backdrop) ? (backdrop as Backdrop) : 'solid';
+        const features = (shop.features ?? {}) as Record<string, unknown>;
+        this._nutrition = features.nutrition === true;
+        this._backInStock = features.back_in_stock !== false;
         this._savedPreset = this._preset;
         this._savedAccent = this._accent;
         this._savedMode = this._mode;
+        this._savedHeroStyle = this._heroStyle;
+        this._savedBackdrop = this._backdrop;
+        this._savedNutrition = this._nutrition;
+        this._savedBackInStock = this._backInStock;
         return true;
     }
 
     private get _dirty(): boolean {
-        return this._preset !== this._savedPreset || this._accent !== this._savedAccent || this._mode !== this._savedMode;
+        return this._preset !== this._savedPreset
+            || this._accent !== this._savedAccent
+            || this._mode !== this._savedMode
+            || this._heroStyle !== this._savedHeroStyle
+            || this._backdrop !== this._savedBackdrop
+            || this._nutrition !== this._savedNutrition
+            || this._backInStock !== this._savedBackInStock;
     }
 
     private _wireframe(preset: string) {
@@ -259,26 +415,182 @@ export class ShopBuilderPage extends PlatformPage {
     }
 
     private _previewSrc(base: string): string {
-        const q = `tpreset=${this._preset}&taccent=${encodeURIComponent(this._accent)}&tmode=${this._mode}`;
+        const q = `tpreset=${this._preset}&taccent=${encodeURIComponent(this._accent)}&tmode=${this._mode}&thero=${this._heroStyle}&tbackdrop=${this._backdrop}`;
         return `${base}${base.includes('?') ? '&' : '?'}${q}`;
     }
 
     private async _save() {
         const result = await this._updateOp.run({
             shop_id: this.shopId,
-            theme: { preset: this._preset, accent_color: this._accent, mode: this._mode },
+            theme: {
+                preset: this._preset,
+                accent_color: this._accent,
+                mode: this._mode,
+                hero_style: this._heroStyle,
+                backdrop: this._backdrop,
+            },
+            features: {
+                nutrition: this._nutrition,
+                back_in_stock: this._backInStock,
+            },
         });
         if (result !== null) {
             this._savedPreset = this._preset;
             this._savedAccent = this._accent;
             this._savedMode = this._mode;
+            this._savedHeroStyle = this._heroStyle;
+            this._savedBackdrop = this._backdrop;
+            this._savedNutrition = this._nutrition;
+            this._savedBackInStock = this._backInStock;
             await this._shops.load();
-            const frame = this.renderRoot?.querySelector<HTMLIFrameElement>('.preview iframe');
-            if (frame !== null && frame !== undefined && frame.src !== '') {
-                const src = frame.src.split('#')[0] ?? frame.src;
-                frame.src = `${src}${src.includes('?') ? '&' : '?'}v=${Date.now()}`;
-            }
+            this._refreshPreview();
         }
+    }
+
+    private _refreshPreview(): void {
+        const frame = this.renderRoot?.querySelector<HTMLIFrameElement>('.preview iframe');
+        if (frame !== null && frame !== undefined && frame.src !== '') {
+            frame.src = this._previewSrc(frame.src.split('?')[0] ?? frame.src);
+        }
+    }
+
+    private _openShelfModal(shelf?: ShelfRow) {
+        const draft: ShelfDraft | null = shelf === undefined
+            ? null
+            : {
+                shop_shelf_id: shelf.shop_shelf_id,
+                kind: shelf.kind as ShelfDraft['kind'],
+                layout: shelf.layout as ShelfDraft['layout'],
+                placement: shelf.placement as ShelfDraft['placement'],
+                title: shelf.title,
+                subtitle: shelf.subtitle,
+                product_ids: [...shelf.product_ids],
+                category_id: shelf.category_id,
+                limit: shelf.limit,
+                is_active: shelf.is_active,
+            };
+        this.openModal('shop.shelf', {
+            shopId: this.shopId,
+            shelf: draft,
+        });
+    }
+
+    private _openBannerModal(banner?: BannerRow) {
+        const draft: BannerDraft | null = banner === undefined
+            ? null
+            : {
+                shop_banner_id: banner.shop_banner_id,
+                title: banner.title,
+                subtitle: banner.subtitle,
+                image_file_id: banner.image_file_id,
+                link: banner.link,
+                window: { ...banner.window },
+                is_active: banner.is_active,
+            };
+        this.openModal('shop.banner', {
+            shopId: this.shopId,
+            banner: draft,
+        });
+    }
+
+    private async _moveShelf(shelf: ShelfRow, dir: -1 | 1) {
+        const rows = this._shelves();
+        const idx = rows.findIndex((s) => s.shop_shelf_id === shelf.shop_shelf_id);
+        const swap = idx + dir;
+        if (idx < 0 || swap < 0 || swap >= rows.length) return;
+        const ids = rows.map((s) => s.shop_shelf_id);
+        [ids[idx], ids[swap]] = [ids[swap] as string, ids[idx] as string];
+        await this._shelfReorderOp.run({ shop_id: this.shopId, shelf_ids: ids });
+        await this._loadFeed();
+    }
+
+    private async _removeShelf(shelf: ShelfRow) {
+        await this._shelfRemoveOp.run({ shop_id: this.shopId, shop_shelf_id: shelf.shop_shelf_id });
+        await this._loadFeed();
+    }
+
+    private async _moveBanner(banner: BannerRow, dir: -1 | 1) {
+        const rows = this._banners();
+        const idx = rows.findIndex((b) => b.shop_banner_id === banner.shop_banner_id);
+        const swap = idx + dir;
+        if (idx < 0 || swap < 0 || swap >= rows.length) return;
+        const ids = rows.map((b) => b.shop_banner_id);
+        [ids[idx], ids[swap]] = [ids[swap] as string, ids[idx] as string];
+        await this._bannerReorderOp.run({ shop_id: this.shopId, banner_ids: ids });
+        await this._loadFeed();
+    }
+
+    private async _removeBanner(banner: BannerRow) {
+        await this._bannerRemoveOp.run({ shop_id: this.shopId, shop_banner_id: banner.shop_banner_id });
+        await this._loadFeed();
+    }
+
+    private _shelfTitle(s: ShelfRow): string {
+        return s.title !== '' ? s.title : this.t(`feed.kind.${s.kind}`);
+    }
+
+    private _shelfMeta(s: ShelfRow): string {
+        const parts = [this.t(`feed.kind.${s.kind}`), this.t(`feed.layout.${s.layout}`)];
+        if (s.placement === 'cart') parts.push(this.t('feed.placement.cart'));
+        if (!s.is_active) parts.push(this.t('feed.off'));
+        return parts.join(' · ');
+    }
+
+    private _renderFeed() {
+        const shelves = this._shelves();
+        const banners = this._banners();
+        return html`
+            <div class="section">
+                <div class="feed-head">
+                    <div class="label" style="margin-bottom:0">${this.t('feed.shelves_label')}</div>
+                    <platform-button size="sm" variant="secondary" @click=${() => this._openShelfModal()}>
+                        <platform-icon name="plus" size="14"></platform-icon> ${this.t('feed.shelf_add')}
+                    </platform-button>
+                </div>
+                ${shelves.length === 0
+                    ? html`<div class="feed-empty">${this.t('feed.shelves_empty')}</div>`
+                    : shelves.map((s) => html`
+                        <div class="feed-row">
+                            <div class="finfo">
+                                <div class="fname">${this._shelfTitle(s)}</div>
+                                <div class="fsub">${this._shelfMeta(s)}</div>
+                            </div>
+                            <div class="fbtns">
+                                <button title=${this.t('feed.move_up')} @click=${() => this._moveShelf(s, -1)}><platform-icon name="chevron-up" size="14"></platform-icon></button>
+                                <button title=${this.t('feed.move_down')} @click=${() => this._moveShelf(s, 1)}><platform-icon name="chevron-down" size="14"></platform-icon></button>
+                                <button title=${this.t('feed.edit')} @click=${() => this._openShelfModal(s)}><platform-icon name="edit" size="14"></platform-icon></button>
+                                <button class="danger" title=${this.t('feed.remove')} @click=${() => this._removeShelf(s)}><platform-icon name="trash" size="14"></platform-icon></button>
+                            </div>
+                        </div>
+                    `)}
+            </div>
+            <div class="section">
+                <div class="feed-head">
+                    <div class="label" style="margin-bottom:0">${this.t('feed.banners_label')}</div>
+                    <platform-button size="sm" variant="secondary" @click=${() => this._openBannerModal()}>
+                        <platform-icon name="plus" size="14"></platform-icon> ${this.t('feed.banner_add')}
+                    </platform-button>
+                </div>
+                ${banners.length === 0
+                    ? html`<div class="feed-empty">${this.t('feed.banners_empty')}</div>`
+                    : banners.map((b) => html`
+                        <div class="feed-row">
+                            ${b.image_file_id !== null
+                                ? html`<img class="fthumb" src="/shop/api/v1/files/download/${b.image_file_id}?v=sm!sq" alt="">`
+                                : html`<div class="fthumb"></div>`}
+                            <div class="finfo">
+                                <div class="fname">${b.title !== '' ? b.title : this.t('feed.banner_untitled')}</div>
+                                <div class="fsub">${b.subtitle}${b.is_active ? '' : ` · ${this.t('feed.off')}`}</div>
+                            </div>
+                            <div class="fbtns">
+                                <button title=${this.t('feed.move_up')} @click=${() => this._moveBanner(b, -1)}><platform-icon name="chevron-up" size="14"></platform-icon></button>
+                                <button title=${this.t('feed.move_down')} @click=${() => this._moveBanner(b, 1)}><platform-icon name="chevron-down" size="14"></platform-icon></button>
+                                <button title=${this.t('feed.edit')} @click=${() => this._openBannerModal(b)}><platform-icon name="edit" size="14"></platform-icon></button>
+                                <button class="danger" title=${this.t('feed.remove')} @click=${() => this._removeBanner(b)}><platform-icon name="trash" size="14"></platform-icon></button>
+                            </div>
+                        </div>
+                    `)}
+            </div>`;
     }
 
     override render() {
@@ -330,6 +642,28 @@ export class ShopBuilderPage extends PlatformPage {
                         </div>
                     </div>
                     <div class="section">
+                        <div class="label">${this.t('builder.hero_label')}</div>
+                        <div class="modes">
+                            ${HERO_STYLES.map((key) => html`
+                                <button
+                                    class="mode ${this._heroStyle === key ? 'active' : ''}"
+                                    @click=${() => { this._heroStyle = key; }}
+                                >${this.t(`builder.hero_${key}`)}</button>
+                            `)}
+                        </div>
+                    </div>
+                    <div class="section">
+                        <div class="label">${this.t('builder.backdrop_label')}</div>
+                        <div class="modes">
+                            ${BACKDROPS.map((key) => html`
+                                <button
+                                    class="mode ${this._backdrop === key ? 'active' : ''}"
+                                    @click=${() => { this._backdrop = key; }}
+                                >${this.t(`builder.backdrop_${key}`)}</button>
+                            `)}
+                        </div>
+                    </div>
+                    <div class="section">
                         <div class="label">${this.t('builder.accent_label')}</div>
                         <div class="swatches">
                             ${ACCENTS.map((c) => html`
@@ -341,6 +675,25 @@ export class ShopBuilderPage extends PlatformPage {
                             `)}
                         </div>
                     </div>
+                    <div class="section">
+                        <div class="label">${this.t('builder.features_label')}</div>
+                        ${FEATURES.map((f) => html`
+                            <div class="feature">
+                                <div class="ftext">
+                                    <div class="fname">${this.t(`builder.feature_${f}`)}</div>
+                                    <div class="fdesc">${this.t(`builder.feature_${f}_desc`)}</div>
+                                </div>
+                                <platform-switch
+                                    ?checked=${f === 'nutrition' ? this._nutrition : this._backInStock}
+                                    @change=${(e: CustomEvent<{ value?: unknown }>) => {
+                                        if (f === 'nutrition') this._nutrition = Boolean(e.detail.value);
+                                        else this._backInStock = Boolean(e.detail.value);
+                                    }}
+                                ></platform-switch>
+                            </div>
+                        `)}
+                    </div>
+                    ${this._renderFeed()}
                     <div class="actions">
                         <platform-button
                             variant="primary"
@@ -348,7 +701,15 @@ export class ShopBuilderPage extends PlatformPage {
                             ?disabled=${!this._dirty}
                             @click=${() => this._save()}
                         >${this.t('builder.save')}</platform-button>
-                        <platform-button variant="secondary" ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; this._mode = this._savedMode; }}>
+                        <platform-button variant="secondary" ?disabled=${!this._dirty} @click=${() => {
+                            this._preset = this._savedPreset;
+                            this._accent = this._savedAccent;
+                            this._mode = this._savedMode;
+                            this._heroStyle = this._savedHeroStyle;
+                            this._backdrop = this._savedBackdrop;
+                            this._nutrition = this._savedNutrition;
+                            this._backInStock = this._savedBackInStock;
+                        }}>
                             ${this.t('builder.reset')}
                         </platform-button>
                     </div>
@@ -356,18 +717,17 @@ export class ShopBuilderPage extends PlatformPage {
                 <div class="preview">
                     <div class="preview-bar">
                         <div class="devices">
-                            <button class=${this._device === 'phone' ? 'active' : ''} title=${this.t('builder.device_phone')}
-                                @click=${() => { this._device = 'phone'; }}
-                            ><platform-icon name="smartphone" size="14"></platform-icon></button>
-                            <button class=${this._device === 'desktop' ? 'active' : ''} title=${this.t('builder.device_desktop')}
-                                @click=${() => { this._device = 'desktop'; }}
-                            ><platform-icon name="monitor" size="14"></platform-icon></button>
+                            ${DEVICES.map((d) => html`
+                                <button class=${this._device === d ? 'active' : ''} title=${this.t(`builder.device_${d}`)}
+                                    @click=${() => { this._device = d; }}
+                                ><platform-icon name=${DEVICE_ICONS[d]} size="14"></platform-icon></button>
+                            `)}
                         </div>
                         <span class="preview-url">${storefrontUrl}</span>
                     </div>
                     ${previewPath === ''
                         ? html`<platform-empty-state icon="store" title=${this.t('builder.preview_unavailable')}></platform-empty-state>`
-                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${this._previewSrc(previewPath)} title="storefront"></iframe>`}
+                        : html`<iframe class=${this._device === 'phone' ? '' : this._device} src=${this._previewSrc(previewPath)} title="storefront"></iframe>`}
                 </div>
             </div>
         `;

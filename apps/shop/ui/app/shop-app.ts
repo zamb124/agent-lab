@@ -71,6 +71,17 @@ import {
     shopTableRemoveOp,
     shopTelegramConnectOp,
     shopTelegramDisconnectOp,
+    shopDemosSeedOp,
+    shopShelvesListOp,
+    shopShelfCreateOp,
+    shopShelfUpdateOp,
+    shopShelvesReorderOp,
+    shopShelfRemoveOp,
+    shopBannersListOp,
+    shopBannerCreateOp,
+    shopBannerUpdateOp,
+    shopBannersReorderOp,
+    shopBannerRemoveOp,
 } from '../events/resources/shop.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -166,6 +177,17 @@ export class ShopApp extends PlatformApp {
         shopTableRemoveOp,
         shopTelegramConnectOp,
         shopTelegramDisconnectOp,
+        shopDemosSeedOp,
+        shopShelvesListOp,
+        shopShelfCreateOp,
+        shopShelfUpdateOp,
+        shopShelvesReorderOp,
+        shopShelfRemoveOp,
+        shopBannersListOp,
+        shopBannerCreateOp,
+        shopBannerUpdateOp,
+        shopBannersReorderOp,
+        shopBannerRemoveOp,
         platformFileCreateOp,
     ];
 

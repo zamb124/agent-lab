@@ -51,7 +51,7 @@ body.light{{--bg:#f5f4f2;--card:#ffffff;--card2:#eeebe7;--text:#1d1a16;--muted:#
 {custom_css}
 </style>
 </head>
-<body class="{body_class}" data-preset="{preset}">
+<body class="{body_class}" data-preset="{preset}" data-hero="{hero_style}" data-backdrop="{backdrop}">
 {custom_top}
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
@@ -309,11 +309,15 @@ def storefront_html(
     accent = _DEFAULT_ACCENT
     preset = "menu"
     mode = "dark"
+    hero_style = "card"
+    backdrop = "solid"
     theme = snapshot.get("theme")
     if isinstance(theme, dict):
         accent = str(theme.get("accent_color", accent))
         preset = str(theme.get("preset", preset))
         mode = str(theme.get("mode", mode))
+        hero_style = str(theme.get("hero_style", hero_style))
+        backdrop = str(theme.get("backdrop", backdrop))
     tokens = accent_vars(accent)
     body_class = " ".join(
         part
@@ -351,6 +355,8 @@ def storefront_html(
         afg_light=tokens["afg_light"],
         body_class=escape(body_class),
         preset=escape(preset),
+        hero_style=escape(hero_style),
+        backdrop=escape(backdrop),
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),
         pwa_head=pwa_head,
         blocks_css=page_css(),

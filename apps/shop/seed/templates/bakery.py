@@ -11,8 +11,12 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopKind,
     ShopOrderStatus,
+    ShopShelfKind,
+    ShopShelfLayout,
+    ShopShelfPlacement,
 )
 from apps.shop.seed.spec import (
+    DemoBannerSpec,
     DemoCategorySpec,
     DemoModifierGroupSpec,
     DemoOptionSpec,
@@ -20,6 +24,7 @@ from apps.shop.seed.spec import (
     DemoOrderSpec,
     DemoProductSpec,
     DemoPromoSpec,
+    DemoShelfSpec,
     DemoShopSpec,
 )
 
@@ -37,7 +42,13 @@ BAKERY = DemoShopSpec(
     city="Москва",
     address="ул. Маросейка, 9",
     timezone="Europe/Moscow",
-    theme={"accent_color": "#d98324", "preset": "grid", "mode": "light"},
+    theme={
+        "accent_color": "#d98324",
+        "preset": "grid",
+        "mode": "light",
+        "hero_style": "card",
+        "backdrop": "gradient",
+    },
     working_hours={
         "0": "07:00-20:00",
         "1": "07:00-20:00",
@@ -90,7 +101,10 @@ BAKERY = DemoShopSpec(
             max_selected=1,
             options=(
                 DemoOptionSpec(key="plain", name="Обычная", price_minor=0, is_default=True),
-                DemoOptionSpec(key="gift", name="Подарочная коробка", price_minor=15000),
+                DemoOptionSpec(
+                    key="gift", name="Подарочная коробка", price_minor=15000,
+                    photo="opt_gift.jpg",
+                ),
             ),
         ),
         DemoModifierGroupSpec(
@@ -113,6 +127,7 @@ BAKERY = DemoShopSpec(
             description="Ржаной на закваске, с кориандром и солодом. Нарежем под тосты или по просьбе.",
             badges=("hit",),
             modifier_group_keys=("slice", "pack"),
+            nutrition={'kcal': 1250, 'protein_g': 36, 'fat_g': 9, 'carb_g': 240},
         ),
         DemoProductSpec(
             key="campagne", category_key="bread", name="Кампань",
@@ -120,12 +135,14 @@ BAKERY = DemoShopSpec(
             description="Пшенично-ржаной деревенский хлеб на трёхдневной закваске.",
             badges=("sign", "vegan"),
             modifier_group_keys=("slice", "pack"),
+            nutrition={'kcal': 1610, 'protein_g': 49, 'fat_g': 8, 'carb_g': 315},
         ),
         DemoProductSpec(
             key="brioche", category_key="bread", name="Бриошь",
             price_minor=25000, portion="400 г", photo="brioche.jpg",
             description="Сдобный хлеб на сливочном масле — к джему и фуа-гра.",
             modifier_group_keys=("slice",),
+            nutrition={'kcal': 1560, 'protein_g': 32, 'fat_g': 64, 'carb_g': 208},
         ),
         DemoProductSpec(
             key="baguette", category_key="bread", name="Багет",
@@ -133,6 +150,7 @@ BAKERY = DemoShopSpec(
             description="Хрустящий с тонким мякишем, печём к утру и к вечеру.",
             badges=("vegan",),
             modifier_group_keys=("slice",),
+            nutrition={'kcal': 680, 'protein_g': 22, 'fat_g': 3, 'carb_g': 138},
         ),
         DemoProductSpec(
             key="almond", category_key="pastry", name="Круассан миндальный",
@@ -140,6 +158,7 @@ BAKERY = DemoShopSpec(
             description="Двойной выпечки: франжипан внутри и хлопья миндаля сверху.",
             badges=("hit",),
             modifier_group_keys=("pack",),
+            nutrition={'kcal': 480, 'protein_g': 9, 'fat_g': 30, 'carb_g': 44},
         ),
         DemoProductSpec(
             key="cinnamon", category_key="pastry", name="Синнабон",
@@ -147,29 +166,34 @@ BAKERY = DemoShopSpec(
             description="С корицей и сливочным крем-чизом — подаём тёплым.",
             badges=("hit",),
             modifier_group_keys=("pack",),
+            nutrition={'kcal': 440, 'protein_g': 6, 'fat_g': 16, 'carb_g': 68},
         ),
         DemoProductSpec(
             key="eclair", category_key="pastry", name="Эклер ванильный",
             price_minor=22000, portion="80 г", photo="eclair.jpg",
             description="Заварной крем с бурбонской ванилью и глазурь.",
             modifier_group_keys=("pack",),
+            nutrition={'kcal': 240, 'protein_g': 5, 'fat_g': 14, 'carb_g': 24},
         ),
         DemoProductSpec(
             key="cookie", category_key="pastry", name="Печенье овсяное",
             price_minor=12000, portion="70 г", photo="cookie.jpg",
             description="С изюмом и корицей — к чаю и какао.",
             badges=("vegan",),
+            nutrition={'kcal': 310, 'protein_g': 5, 'fat_g': 12, 'carb_g': 46},
         ),
         DemoProductSpec(
             key="potato", category_key="pastry", name="Пирожное «Картошка»",
             price_minor=15000, portion="80 г", photo="potato.jpg",
             description="По ГОСТу: бисквитная крошка, сливочный крем, какао.",
+            nutrition={'kcal': 330, 'protein_g': 5, 'fat_g': 19, 'carb_g': 36},
         ),
         DemoProductSpec(
             key="honeycake", category_key="desserts", name="Медовик",
             price_minor=29000, portion="140 г", photo="honeycake.jpg",
             description="Тонкие медовые коржи и сметанный крем — пропитан насквозь.",
             badges=("hit", "sign"),
+            nutrition={'kcal': 430, 'protein_g': 7, 'fat_g': 18, 'carb_g': 60},
         ),
         DemoProductSpec(
             key="napoleon", category_key="desserts", name="Торт «Наполеон»",
@@ -177,23 +201,35 @@ BAKERY = DemoShopSpec(
             description="Классика на заказ: 14 слоёв слоёного теста и заварной крем. Печём за сутки.",
             badges=("sign",),
             modifier_group_keys=("writing", "pack"),
+            nutrition={'kcal': 3360, 'protein_g': 48, 'fat_g': 180, 'carb_g': 384},
         ),
         DemoProductSpec(
             key="lemontart", category_key="desserts", name="Тарт лимонный",
             price_minor=27000, portion="110 г", photo="lemontart.jpg",
             description="Лимонный курд на песочной основе и подпаленная меренга.",
             badges=("new",),
+            nutrition={'kcal': 340, 'protein_g': 5, 'fat_g': 16, 'carb_g': 44},
         ),
         DemoProductSpec(
             key="cacao", category_key="drinks", name="Какао",
             price_minor=21000, portion="300 мл", photo="cacao.jpg",
             description="Тёмный шоколад на молоке — без сиропов и смесей.",
+            nutrition={'kcal': 210, 'protein_g': 9, 'fat_g': 9, 'carb_g': 24},
         ),
         DemoProductSpec(
             key="lemonade", category_key="drinks", name="Лимонад домашний",
             price_minor=19000, portion="400 мл", photo="lemonade.jpg",
             description="Цитрусовый лимонад с розмарином, наливаем холодным.",
             badges=("vegan",),
+            nutrition={'kcal': 96, 'carb_g': 24},
+        ),
+        DemoProductSpec(
+            key="berrycake", category_key="desserts", name="Торт «Ягодный праздник»",
+            price_minor=52000, portion="150 г", photo="berrycake.jpg",
+            description="Ограниченная серия: бисквит, ягодный конфи и крем-чиз. Сезон закончился — вернём летом.",
+            nutrition={"kcal": 380, "protein_g": 6, "fat_g": 19, "carb_g": 48},
+            badges=("sign",),
+            is_available=False,
         ),
     ),
     promos=(
@@ -214,6 +250,67 @@ BAKERY = DemoShopSpec(
         ),
     ),
     tables=(),
+    features={"nutrition": True},
+    shelves=(
+        DemoShelfSpec(
+            key="hits",
+            kind=ShopShelfKind.HITS,
+            layout=ShopShelfLayout.RAIL,
+            title="Свежее из печи",
+        ),
+        DemoShelfSpec(
+            key="pastry",
+            kind=ShopShelfKind.CATEGORY,
+            category_key="pastry",
+            layout=ShopShelfLayout.RAIL,
+            title="Выпечка",
+            subtitle="Выпекаем каждое утро",
+        ),
+        DemoShelfSpec(
+            key="desserts",
+            kind=ShopShelfKind.CATEGORY,
+            category_key="desserts",
+            layout=ShopShelfLayout.ROWS,
+            title="Десерты и торты",
+        ),
+        DemoShelfSpec(
+            key="comeback",
+            kind=ShopShelfKind.COMEBACK,
+            layout=ShopShelfLayout.RAIL,
+            title="Скоро вернётся",
+            subtitle="Ограниченные серии и сезонное",
+        ),
+        DemoShelfSpec(
+            key="upsell",
+            kind=ShopShelfKind.UPSELL,
+            placement=ShopShelfPlacement.CART,
+            product_keys=("cacao", "lemonade", "cookie"),
+            title="Добавить к заказу?",
+        ),
+    ),
+    banners=(
+        DemoBannerSpec(
+            key="honeycake",
+            photo="honeycake.jpg",
+            title="Медовик",
+            subtitle="Фирменный — на гречишном мёде",
+            link="product:honeycake",
+        ),
+        DemoBannerSpec(
+            key="morning",
+            photo="banner_morning.jpg",
+            title="Свежее к открытию",
+            subtitle="Хлеб и выпечка — с 7:00 каждый день",
+            link="category:bread",
+        ),
+        DemoBannerSpec(
+            key="evening",
+            photo="banner_evening.jpg",
+            title="Вечерние −25%",
+            subtitle="На выпечку после 19:00",
+            link="category:pastry",
+        ),
+    ),
     orders=(
         DemoOrderSpec(
             status=ShopOrderStatus.DONE,

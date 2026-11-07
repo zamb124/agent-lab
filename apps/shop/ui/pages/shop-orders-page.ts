@@ -42,6 +42,10 @@ interface OrderRow {
     table_label: string;
     address: string;
     delivery_eta_minutes?: number | null;
+    delivery_flat?: string;
+    delivery_entrance?: string;
+    delivery_floor?: string;
+    delivery_intercom?: string;
     comment: string;
     items_total_minor: number;
     delivery_fee_minor: number;
@@ -267,8 +271,22 @@ export class ShopOrdersPage extends PlatformPage {
         });
     }
 
+    private _deliveryDetails(order: OrderRow): string {
+        // «кв. 12, подъезд 2, этаж 3, домофон 45» — подробности для курьера.
+        return [
+            [this.t('orders.addr_flat'), order.delivery_flat],
+            [this.t('orders.addr_entrance'), order.delivery_entrance],
+            [this.t('orders.addr_floor'), order.delivery_floor],
+            [this.t('orders.addr_intercom'), order.delivery_intercom],
+        ]
+            .filter(([, v]) => typeof v === 'string' && v !== '')
+            .map(([k, v]) => `${k} ${v}`)
+            .join(', ');
+    }
+
     private _card(order: OrderRow) {
         const fee = order.delivery_fee_minor;
+        const details = this._deliveryDetails(order);
         return html`
             <div class="card ${this._moved.has(order.shop_order_id) ? 'moved' : ''}">
                 <div class="card-top">
@@ -279,6 +297,7 @@ export class ShopOrdersPage extends PlatformPage {
                 <span class="meta">
                     ${this.t(`orders.delivery.${order.delivery_type}`)}${order.delivery_type === 'delivery' && order.delivery_eta_minutes ? ` · ${this.t('orders.eta', { min: order.delivery_eta_minutes })}` : ''}${order.delivery_type === 'onsite' && order.table_label !== '' ? ` · ${order.table_label}` : ''}${order.delivery_type === 'delivery' && order.address !== '' ? ` · ${order.address}` : ''}
                 </span>
+                ${details === '' ? nothing : html`<span class="meta">${details}</span>`}
                 ${order.comment === '' ? nothing : html`<span class="comment">«${order.comment}»</span>`}
                 <div class="items">
                     ${order.items.map((item) => html`

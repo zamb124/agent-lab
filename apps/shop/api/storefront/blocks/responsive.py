@@ -7,7 +7,9 @@
 CSS: str = """@media(min-width:1024px){
 .wrap{max-width:1240px;padding:0 24px calc(140px + env(safe-area-inset-bottom))}
 .hero{margin:0 calc(50% - 50vw);height:340px}
+body[data-hero=minimal] .hero{margin:0}
 .hero .head{left:50%;right:auto;transform:translateX(-50%);width:min(1240px,100%);bottom:28px;padding:0 24px}
+body[data-hero=minimal] .hero .head{left:auto;right:auto;transform:none;width:auto;bottom:auto;padding:0 2px}
 .hero .logo{width:84px;height:84px;border-radius:22px}
 .hero h1{font-size:40px}
 .hero .desc{font-size:15.5px;-webkit-line-clamp:3;max-width:680px}
@@ -48,5 +50,21 @@ body[data-preset=compact] .item{padding-left:12px;padding-right:12px}
 #csheet .panel{position:relative;inset:auto;transform:none;width:min(620px,94vw);max-height:88vh;border-radius:26px;padding:18px 24px 30px;animation:zoomIn .2s ease}
 @keyframes zoomIn{from{transform:scale(.95) translateY(14px);opacity:0}}
 .toast{bottom:44px}
+.bnrs{gap:14px}
+.bnr{width:340px}
+.shcard{width:176px}
+.sh.hero .shcard{width:min(400px,52vw)}
 }
-@media(max-width:520px){.hero{height:210px}.hero h1{font-size:26px}.grid{grid-template-columns:1fr 1fr;gap:10px}}"""
+@media(min-width:721px) and (max-width:1023px){
+.wrap{max-width:920px;padding:0 24px calc(150px + env(safe-area-inset-bottom))}
+.hero{height:300px}
+.hero h1{font-size:36px}
+body[data-hero=cover] .hero{height:340px}
+.grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.bnr{width:330px}
+.shcard{width:168px}
+.sh.hero .shcard{width:min(360px,60vw)}
+.tabs{top:calc(env(safe-area-inset-top) + 4px)}
+.panel{width:min(640px,100vw)}
+}
+@media(max-width:520px){.hero{height:210px}body[data-hero=cover] .hero{height:250px}.hero h1{font-size:26px}.grid{grid-template-columns:1fr 1fr;gap:10px}}"""

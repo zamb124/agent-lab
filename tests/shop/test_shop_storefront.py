@@ -84,9 +84,11 @@ class TestStorefrontSnapshot:
         resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert resp.status_code == 404
 
-    async def test_unavailable_product_not_in_snapshot(
+    async def test_unavailable_product_stays_flagged_for_notify(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
+        """Недоступная позиция остаётся в снапшоте с ``is_available: false`` —
+        витрина рисует её приглушённой с кнопкой «Сообщить о появлении»."""
         slug = f"hide-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
         resp = await shop_client.post(
@@ -100,8 +102,10 @@ class TestStorefrontSnapshot:
         )
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200
-        names = [p["name"] for p in snap.json()["products"]]
-        assert "Скрытый" not in names
+        p = next(x for x in snap.json()["products"] if x["name"] == "Скрытый")
+        assert p["is_available"] is False
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert "notifyBack" in html.text
 
     async def test_categories_hierarchy_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

@@ -580,6 +580,134 @@ export const shopTableRemoveOp = createAsyncOp({
     restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/tables/{shop_table_id}' },
 });
 
+export const shopShelvesListOp = createAsyncOp({
+    name: 'shop/shelves_list',
+    silent: true,
+    commandType: 'shop/shelves/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/shelves' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
+            return false;
+        }
+        const pushedShopId = event.payload.shop_id;
+        return rerunLastRequest(ctx, shopShelvesListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && payload.shop_id === pushedShopId,
+        });
+    },
+});
+
+export const shopShelfCreateOp = createAsyncOp({
+    name: 'shop/shelf_create',
+    successToastKey: 'shop:toast.shelf_created',
+    errorToastKey: 'shop:toast.shelf_failed',
+    commandType: 'shop/shelves/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/shelves' },
+});
+
+export const shopShelfUpdateOp = createAsyncOp({
+    name: 'shop/shelf_update',
+    successToastKey: 'shop:toast.shelf_updated',
+    errorToastKey: 'shop:toast.shelf_failed',
+    commandType: 'shop/shelves/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/shelves/{shop_shelf_id}' },
+});
+
+export const shopShelvesReorderOp = createAsyncOp({
+    name: 'shop/shelves_reorder',
+    errorToastKey: 'shop:toast.shelf_failed',
+    commandType: 'shop/shelves/reorder_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PUT', path: '/shop/api/v1/shops/{shop_id}/shelves/order' },
+});
+
+export const shopShelfRemoveOp = createAsyncOp({
+    name: 'shop/shelf_remove',
+    successToastKey: 'shop:toast.shelf_removed',
+    errorToastKey: 'shop:toast.shelf_failed',
+    commandType: 'shop/shelves/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/shelves/{shop_shelf_id}' },
+});
+
+export const shopBannersListOp = createAsyncOp({
+    name: 'shop/banners_list',
+    silent: true,
+    commandType: 'shop/banners/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/banners' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
+            return false;
+        }
+        const pushedShopId = event.payload.shop_id;
+        return rerunLastRequest(ctx, shopBannersListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && payload.shop_id === pushedShopId,
+        });
+    },
+});
+
+export const shopBannerCreateOp = createAsyncOp({
+    name: 'shop/banner_create',
+    successToastKey: 'shop:toast.banner_created',
+    errorToastKey: 'shop:toast.banner_failed',
+    commandType: 'shop/banners/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/banners' },
+});
+
+export const shopBannerUpdateOp = createAsyncOp({
+    name: 'shop/banner_update',
+    successToastKey: 'shop:toast.banner_updated',
+    errorToastKey: 'shop:toast.banner_failed',
+    commandType: 'shop/banners/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/banners/{shop_banner_id}' },
+});
+
+export const shopBannersReorderOp = createAsyncOp({
+    name: 'shop/banners_reorder',
+    errorToastKey: 'shop:toast.banner_failed',
+    commandType: 'shop/banners/reorder_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PUT', path: '/shop/api/v1/shops/{shop_id}/banners/order' },
+});
+
+export const shopBannerRemoveOp = createAsyncOp({
+    name: 'shop/banner_remove',
+    successToastKey: 'shop:toast.banner_removed',
+    errorToastKey: 'shop:toast.banner_failed',
+    commandType: 'shop/banners/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/banners/{shop_banner_id}' },
+});
+
+export const shopDemosSeedOp = createAsyncOp({
+    name: 'shop/demos_seed',
+    successToastKey: 'shop:toast.demos_seed_scheduled',
+    errorToastKey: 'shop:toast.demos_seed_failed',
+    commandType: 'shop/demos/seed_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/demos/seed' },
+});
+
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
     successToastKey: 'shop:toast.telegram_connected',
@@ -652,5 +780,16 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/table_remove': typeof shopTableRemoveOp;
         'shop/telegram_connect': typeof shopTelegramConnectOp;
         'shop/telegram_disconnect': typeof shopTelegramDisconnectOp;
+        'shop/demos_seed': typeof shopDemosSeedOp;
+        'shop/shelves_list': typeof shopShelvesListOp;
+        'shop/shelf_create': typeof shopShelfCreateOp;
+        'shop/shelf_update': typeof shopShelfUpdateOp;
+        'shop/shelves_reorder': typeof shopShelvesReorderOp;
+        'shop/shelf_remove': typeof shopShelfRemoveOp;
+        'shop/banners_list': typeof shopBannersListOp;
+        'shop/banner_create': typeof shopBannerCreateOp;
+        'shop/banner_update': typeof shopBannerUpdateOp;
+        'shop/banners_reorder': typeof shopBannersReorderOp;
+        'shop/banner_remove': typeof shopBannerRemoveOp;
     }
 }

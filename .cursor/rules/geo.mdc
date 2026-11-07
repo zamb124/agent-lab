@@ -61,8 +61,8 @@ alwaysApply: false
 `GEO_OPERATIONS` (`apps/geo/realtime/command_router.py`), REST-зеркала — `apps/geo/api/geo.py`. Все — `require_company`, платформенные (нет scope по namespace).
 
 - `geo/addresses/in_zone` — точный список адресов внутри GeoJSON-полигона: `ST_Covers` (граница считается внутри), `q`+`limit`/`offset`, `GeoAddressListResponse`.
-- `geo/addresses/suggest` — автокомплит (pg_trgm), опционально внутри зоны.
-- `geo/addresses/nearest` — KNN ближайшие адреса к точке.
+- `geo/addresses/suggest` — автокомплит (pg_trgm), опционально внутри зоны; `lat`/`lng` — bias близости (KNN-ранжирование по `geom`), хиты несут `distance_m`.
+- `geo/addresses/nearest` — KNN ближайшие адреса к точке; `GeoAddressHit.distance_m` — расстояние до запрошенной точки (обратный геокод пина карты).
 - `geo/route/calculate` — dijkstra: `distance_m`, `duration_s`, геометрия LineString.
 - `geo/route/matrix` — N×M `durations_s`.
 - `geo/route/optimal_order` — `pgr_TSP` порядок точек.
@@ -74,7 +74,7 @@ alwaysApply: false
 
 ## Интеграции
 
-- `apps/shop`: зона доставки — `geo/addresses/in_zone` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `route/calculate` по `Shop.courier_mode`; ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.
+- `apps/shop`: зона доставки — `geo/addresses/in_zone` op → `GeoClient.addresses_in_zone`; checkout — `address-suggest` внутри зоны + `addresses/nearest` для пина карты и геолокации + `route/calculate` по `Shop.courier_mode` от `Shop.lat/lng`; точка доставки — координаты подсказки/пина либо серверный резолв текста (`suggest` → geocoder фолбэк, fail-closed `address_unverifiable`); ETA заказа = `Shop.prep_minutes` + `duration_s` маршрута (снапшот в `ShopOrder.delivery_eta_minutes`). Geo недоступен → чек/заказ работают без метрик.
 
 ### Прод
 

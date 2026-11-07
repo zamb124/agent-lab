@@ -12,7 +12,13 @@ from __future__ import annotations
 import secrets
 
 from apps.shop.config import ShopSettings
-from apps.shop.models import Shop, ShopOrder, ShopOrderItem, order_status_label
+from apps.shop.models import (
+    Shop,
+    ShopOrder,
+    ShopOrderItem,
+    delivery_details_label,
+    order_status_label,
+)
 from core.errors.boundary import (
     PlatformNotFoundError,
     PlatformUnavailableError,
@@ -42,7 +48,10 @@ def order_notify_text(order: ShopOrder, items: list[ShopOrderItem]) -> str:
         f"Клиент: {order.customer_name} {order.customer_phone}",
     ]
     if order.delivery_type.value == "delivery":
-        lines.append(f"Доставка: {order.address}")
+        details = delivery_details_label(order)
+        lines.append(
+            f"Доставка: {order.address}" + (f" ({details})" if details else "")
+        )
     elif order.delivery_type.value == "onsite":
         lines.append(f"В заведении: {order.table_label}")
     if order.comment:

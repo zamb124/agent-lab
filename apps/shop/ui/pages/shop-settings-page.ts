@@ -65,6 +65,7 @@ interface FormSnapshot {
     prepMinutes: string;
     courierMode: string;
     deliveryZone: Record<string, unknown>;
+    shopPoint: LngLat | null;
     hours: ShopDayHours[];
 }
 
@@ -545,6 +546,9 @@ export class ShopSettingsPage extends PlatformPage {
         this._deliveryZone = zone !== null && typeof zone === 'object'
             ? (zone as Record<string, unknown>)
             : {};
+        this._shopPoint = shop.lat !== null && shop.lng !== null
+            ? [Number(shop.lng), Number(shop.lat)]
+            : null;
         const wh = shop.working_hours !== null && typeof shop.working_hours === 'object'
             ? shop.working_hours as Record<string, unknown>
             : {};
@@ -576,6 +580,7 @@ export class ShopSettingsPage extends PlatformPage {
             prepMinutes: this._prepMinutes,
             courierMode: this._courierMode,
             deliveryZone: this._deliveryZone,
+            shopPoint: this._shopPoint,
             hours: this._hours.map((d) => ({ ...d })),
         };
     }
@@ -600,6 +605,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._prepMinutes = s.prepMinutes;
         this._courierMode = s.courierMode;
         this._deliveryZone = s.deliveryZone;
+        this._shopPoint = s.shopPoint;
         this._hours = s.hours.map((d) => ({ ...d }));
     }
 
@@ -678,6 +684,8 @@ export class ShopSettingsPage extends PlatformPage {
             prep_minutes: this._toInt(this._prepMinutes),
             courier_mode: this._courierMode,
             delivery_zone: this._deliveryZone,
+            lat: this._shopPoint?.[1] ?? null,
+            lng: this._shopPoint?.[0] ?? null,
             working_hours: this._collectHours(),
         });
         if (result !== null) {
@@ -755,7 +763,7 @@ export class ShopSettingsPage extends PlatformPage {
         }
         const markers: NonNullable<PlatformMapConfig['markers']> = [];
         if (this._shopPoint) {
-            markers.push({ key: 'shop', lngLat: this._shopPoint, color: '#f2542d' });
+            markers.push({ key: 'shop', lngLat: this._shopPoint, color: '#f2542d', draggable: true });
         }
         return {
             interactive: true,
@@ -789,6 +797,20 @@ export class ShopSettingsPage extends PlatformPage {
         } finally {
             this._zoneLocating = false;
         }
+    }
+
+    private _setShopCoord(axis: 'lat' | 'lng', raw: unknown): void {
+        // Поля точки хранятся парой: пустая/невалидная ось сбрасывает весь пин.
+        const text = String(raw ?? '').trim();
+        const num = text === '' ? NaN : Number(text);
+        const [min, max] = axis === 'lat' ? [-90, 90] : [-180, 180];
+        const valid = Number.isFinite(num) && num >= min && num <= max;
+        const cur: [number | null, number | null] = this._shopPoint !== null
+            ? [this._shopPoint[0], this._shopPoint[1]]
+            : [null, null];
+        if (axis === 'lat') cur[1] = valid ? num : null;
+        else cur[0] = valid ? num : null;
+        this._shopPoint = cur[0] !== null && cur[1] !== null ? [cur[0], cur[1]] : null;
     }
 
     private _copyLink(url: string) {
@@ -1069,7 +1091,10 @@ export class ShopSettingsPage extends PlatformPage {
                         <div class="option-title" style="margin-bottom: var(--space-1)">${this.t('settings.zone_title')}</div>
                         <div class="option-desc" style="margin-bottom: var(--space-3)">${this.t('settings.zone_desc')}</div>
                         <div class="zone-map-wrap">
-                            <platform-map .config=${this._zoneMapConfig()}></platform-map>
+                            <platform-map .config=${this._zoneMapConfig()}
+                                @pm-marker-drag=${(e: CustomEvent<{ key: string; lngLat: LngLat }>) => {
+                                    if (e.detail.key === 'shop') this._shopPoint = [e.detail.lngLat[0], e.detail.lngLat[1]];
+                                }}></platform-map>
                             ${!this._zoneGeometry()
                                 ? html`<div class="empty-badge">${this.t('settings.zone_empty_badge')}</div>`
                                 : nothing}
@@ -1077,6 +1102,15 @@ export class ShopSettingsPage extends PlatformPage {
                                 <platform-icon name="edit" size="14"></platform-icon>
                                 ${this._zoneGeometry() ? this.t('settings.zone_edit') : this.t('settings.zone_set')}
                             </button>
+                        </div>
+                        <div class="hint" style="margin: var(--space-2) 0">${this.t('settings.zone_pin_hint')}</div>
+                        <div class="option-fields">
+                            <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lat')} .value=${this._shopPoint?.[1] ?? ''}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lat', e.detail.value)}
+                            ></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lng')} .value=${this._shopPoint?.[0] ?? ''}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lng', e.detail.value)}
+                            ></platform-field>
                         </div>
                         <div class="zone-toolbar">
                             ${[this._city, this._address].filter(Boolean).join(', ').trim()

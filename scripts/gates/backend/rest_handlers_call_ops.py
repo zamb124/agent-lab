@@ -64,8 +64,10 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/shop/api/public.py::list_aggregate_shops_by_score_desc",
         "apps/shop/api/public.py::search_aggregate",
         "apps/shop/api/public.py::aggregate_geocode",
+        "apps/shop/api/public.py::aggregate_address_suggest",
         "apps/shop/api/public.py::delivery_check",
         "apps/shop/api/public.py::address_suggest",
+        "apps/shop/api/public.py::address_reverse",
         # внутренний резолв Host → slug для прокси/shell слоя
         "apps/shop/api/public.py::resolve_host",
         # SSE-стрим статусов заказа: внешний протокол, не REST-команда

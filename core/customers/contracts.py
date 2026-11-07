@@ -179,6 +179,10 @@ class AddressCreatePayload(StrictBaseModel):
 
     address: str = Field(min_length=3, max_length=500)
     label: str = Field(default="", max_length=64)
+    # Точка, выбранная покупателем в чекауте (подсказка/пин): сохраняется как
+    # есть — без повторного геокода строки.
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
 
 
 class AddressListView(StrictBaseModel):

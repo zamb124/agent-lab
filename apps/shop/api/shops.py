@@ -17,6 +17,10 @@ from apps.shop.models.api import (
     ShopAiSuggestOptionsRequest,
     ShopAiSuggestOptionsResponse,
     ShopBadgeIconsResponse,
+    ShopBannerCreateRequest,
+    ShopBannerResponse,
+    ShopBannersReorderRequest,
+    ShopBannerUpdateRequest,
     ShopCategoriesReorderRequest,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
@@ -42,6 +46,10 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopShelfCreateRequest,
+    ShopShelfResponse,
+    ShopShelfUpdateRequest,
+    ShopShelvesReorderRequest,
     ShopTableCreateRequest,
     ShopTableResponse,
     ShopTableUpdateRequest,
@@ -60,6 +68,10 @@ from apps.shop.realtime.operations import (
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopAiTextResponse,
+    ShopBannerCreatePayload,
+    ShopBannerIdPayload,
+    ShopBannersReorderPayload,
+    ShopBannerUpdatePayload,
     ShopCategoriesReorderPayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
@@ -86,6 +98,10 @@ from apps.shop.realtime.operations import (
     ShopPromoCreatePayload,
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
+    ShopShelfCreatePayload,
+    ShopShelfIdPayload,
+    ShopShelfUpdatePayload,
+    ShopShelvesReorderPayload,
     ShopTableCreatePayload,
     ShopTableIdPayload,
     ShopTableUpdatePayload,
@@ -102,6 +118,11 @@ from apps.shop.realtime.operations import (
     op_ai_parse_menu,
     op_ai_suggest_options,
     op_badge_icons_list,
+    op_banners_create,
+    op_banners_list,
+    op_banners_remove,
+    op_banners_reorder,
+    op_banners_update,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -132,6 +153,11 @@ from apps.shop.realtime.operations import (
     op_promos_list,
     op_promos_remove,
     op_promos_update,
+    op_shelves_create,
+    op_shelves_list,
+    op_shelves_remove,
+    op_shelves_reorder,
+    op_shelves_update,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -747,6 +773,114 @@ async def update_promo(
 async def remove_promo(shop_id: str, promo_id: str, di: Di) -> EmptyPayload:
     return await op_promos_remove(
         ShopPromoIdPayload(shop_id=shop_id, shop_promo_id=promo_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/{shop_id}/shelves", response_model=ListResponse[ShopShelfResponse])
+async def list_shelves(shop_id: str, di: Di) -> ListResponse[ShopShelfResponse]:
+    return await op_shelves_list(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
+
+
+@router.post("/{shop_id}/shelves", response_model=ShopShelfResponse)
+async def create_shelf(shop_id: str, payload: ShopShelfCreateRequest, di: Di) -> ShopShelfResponse:
+    return await op_shelves_create(
+        ShopShelfCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch("/{shop_id}/shelves/{shelf_id}", response_model=ShopShelfResponse)
+async def update_shelf(
+    shop_id: str, shelf_id: str, payload: ShopShelfUpdateRequest, di: Di
+) -> ShopShelfResponse:
+    return await op_shelves_update(
+        ShopShelfUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_shelf_id": shelf_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.put("/{shop_id}/shelves/order", response_model=EmptyPayload)
+async def reorder_shelves(
+    shop_id: str, payload: ShopShelvesReorderRequest, di: Di
+) -> EmptyPayload:
+    return await op_shelves_reorder(
+        ShopShelvesReorderPayload(shop_id=shop_id, shelf_ids=payload.shelf_ids),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/shelves/{shelf_id}", response_model=EmptyPayload)
+async def remove_shelf(shop_id: str, shelf_id: str, di: Di) -> EmptyPayload:
+    return await op_shelves_remove(
+        ShopShelfIdPayload(shop_id=shop_id, shop_shelf_id=shelf_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/{shop_id}/banners", response_model=ListResponse[ShopBannerResponse])
+async def list_banners(shop_id: str, di: Di) -> ListResponse[ShopBannerResponse]:
+    return await op_banners_list(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
+
+
+@router.post("/{shop_id}/banners", response_model=ShopBannerResponse)
+async def create_banner(
+    shop_id: str, payload: ShopBannerCreateRequest, di: Di
+) -> ShopBannerResponse:
+    return await op_banners_create(
+        ShopBannerCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch("/{shop_id}/banners/{banner_id}", response_model=ShopBannerResponse)
+async def update_banner(
+    shop_id: str, banner_id: str, payload: ShopBannerUpdateRequest, di: Di
+) -> ShopBannerResponse:
+    return await op_banners_update(
+        ShopBannerUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_banner_id": banner_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.put("/{shop_id}/banners/order", response_model=EmptyPayload)
+async def reorder_banners(
+    shop_id: str, payload: ShopBannersReorderRequest, di: Di
+) -> EmptyPayload:
+    return await op_banners_reorder(
+        ShopBannersReorderPayload(shop_id=shop_id, banner_ids=payload.banner_ids),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/banners/{banner_id}", response_model=EmptyPayload)
+async def remove_banner(shop_id: str, banner_id: str, di: Di) -> EmptyPayload:
+    return await op_banners_remove(
+        ShopBannerIdPayload(shop_id=shop_id, shop_banner_id=banner_id),
         user=require_context().user,
         di=di,
     )

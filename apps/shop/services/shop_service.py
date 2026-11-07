@@ -353,6 +353,7 @@ class ShopService:
             badges=self._validate_product_badges(shop, payload.badges),
             price_minor=payload.price_minor,
             photo_file_id=payload.photo_file_id,
+            nutrition=payload.nutrition.model_dump(exclude_none=True),
             sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),
             created_at=now,
             updated_at=now,
@@ -399,6 +400,9 @@ class ShopService:
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
         _ = patch.pop("shop_product_id", None)
+        nutrition = patch.get("nutrition")
+        if isinstance(nutrition, dict):
+            patch["nutrition"] = {k: v for k, v in nutrition.items() if v is not None}
         if "badges" in patch:
             patch["badges"] = self._validate_product_badges(shop, payload.badges or [])
         if "category_id" in patch and patch["category_id"] != product.category_id:
@@ -568,6 +572,8 @@ class ShopService:
             group_id=group_id,
             name=payload.name,
             price_minor=payload.price_minor,
+            photo_file_id=payload.photo_file_id,
+            nutrition_delta=payload.nutrition_delta.model_dump(exclude_none=True),
             is_default=payload.is_default,
             max_per_option=payload.max_per_option,
             nested_group_id=payload.nested_group_id,
@@ -590,6 +596,11 @@ class ShopService:
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
         _ = patch.pop("shop_modifier_option_id", None)
+        nutrition_delta = patch.get("nutrition_delta")
+        if isinstance(nutrition_delta, dict):
+            patch["nutrition_delta"] = {
+                k: v for k, v in nutrition_delta.items() if v is not None
+            }
         for field, value in patch.items():
             setattr(option, field, value)
         option.updated_at = utcnow()

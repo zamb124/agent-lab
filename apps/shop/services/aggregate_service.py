@@ -14,8 +14,11 @@ from oxyde import execute_raw
 from apps.shop.models import Shop, ShopStatus
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.storefront_service import StorefrontService
+from core.clients.geo_client import GeoClient
+from core.clients.service_client import ServiceClient, ServiceClientError
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import OffsetPage
-from core.types import JsonValue
+from core.types import JsonObject, JsonValue
 
 _SEARCH_WHERE = """
     FROM shop_products
@@ -68,8 +71,40 @@ def _badge_keys(row: dict[str, JsonValue]) -> list[str]:
 class AggregateService:
     """Агрегатор: каталог published-витрин и поиск по товарам."""
 
-    def __init__(self, storefront: StorefrontService) -> None:
+    def __init__(
+        self, storefront: StorefrontService, service_client: ServiceClient
+    ) -> None:
         self._storefront: StorefrontService = storefront
+        self._service_client: ServiceClient = service_client
+
+    async def address_suggest(
+        self, query: str, *, lat: float | None = None, lng: float | None = None
+    ) -> JsonObject:
+        """Автокомплит адреса на /market: geo-справочник без зоны.
+
+        Агрегатор кросс-компанийный — GeoClient идёт от system-компании.
+        Деградация: geo недоступен → пустой список, страница откатывается
+        на `/aggregate/geocode` (Enter без выбора подсказки).
+        """
+        try:
+            hits = await GeoClient(
+                http=self._service_client, company_id=SYSTEM_COMPANY_ID
+            ).suggest(q=query, lat=lat, lng=lng, limit=8)
+        except ServiceClientError:
+            return {"items": [], "geo_unavailable": True}
+        return {
+            "items": [
+                {
+                    "display_name": h.display_name,
+                    "lat": h.lat,
+                    "lng": h.lng,
+                    "city": h.city,
+                    "street": h.street,
+                    "housenumber": h.housenumber,
+                }
+                for h in hits.items
+            ]
+        }
 
     async def list_shops(self, *, city: str | None = None) -> list[Shop]:
         shops = await Shop.list_published()

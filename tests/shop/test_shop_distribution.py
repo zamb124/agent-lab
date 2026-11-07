@@ -203,11 +203,12 @@ class TestSnapshotInvalidation:
         products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}/products/{products[0]['shop_product_id']}",
-            json={"is_available": False},
+            json={"name": "Наполеон"},
         )
         assert resp.status_code == 200
         fresh = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert fresh.status_code == 200
+        assert "Наполеон" in fresh.text
         assert "Маргарита" not in fresh.text
 
     async def test_suspend_hides_storefront_immediately(

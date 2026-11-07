@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from apps.shop.di import ShopDi
 from apps.shop.models.api import ShopCreateRequest
+from apps.shop.realtime.company_operations import (
+    ShopCompanyInitPayload,
+    op_demos_seed,
+    op_shop_company_init,
+)
 from apps.shop.realtime.operations import (
     ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
@@ -12,6 +17,10 @@ from apps.shop.realtime.operations import (
     ShopAiParseMenuPayload,
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
+    ShopBannerCreatePayload,
+    ShopBannerIdPayload,
+    ShopBannersReorderPayload,
+    ShopBannerUpdatePayload,
     ShopCartPricePayload,
     ShopCategoriesReorderPayload,
     ShopCategoryCreatePayload,
@@ -28,6 +37,7 @@ from apps.shop.realtime.operations import (
     ShopModifierOptionUpdatePayload,
     ShopMyOrderCodePayload,
     ShopMyOrdersListPayload,
+    ShopNotifyBackPayload,
     ShopOrderCreatePayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
@@ -43,6 +53,10 @@ from apps.shop.realtime.operations import (
     ShopPromoIdPayload,
     ShopPromoUpdatePayload,
     ShopPublicOrderStatusPayload,
+    ShopShelfCreatePayload,
+    ShopShelfIdPayload,
+    ShopShelfUpdatePayload,
+    ShopShelvesReorderPayload,
     ShopStorefrontGeoPayload,
     ShopTableCreatePayload,
     ShopTableIdPayload,
@@ -60,6 +74,11 @@ from apps.shop.realtime.operations import (
     op_ai_parse_menu,
     op_ai_suggest_options,
     op_badge_icons_list,
+    op_banners_create,
+    op_banners_list,
+    op_banners_remove,
+    op_banners_reorder,
+    op_banners_update,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -94,9 +113,15 @@ from apps.shop.realtime.operations import (
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
+    op_public_notify_back,
     op_public_order_create,
     op_public_order_status,
     op_public_storefront_geo,
+    op_shelves_create,
+    op_shelves_list,
+    op_shelves_remove,
+    op_shelves_reorder,
+    op_shelves_update,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -114,6 +139,12 @@ from apps.shop.realtime.operations import (
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
 SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
+    "shop/company/init_requested": Operation(
+        payload_model=ShopCompanyInitPayload, fn=op_shop_company_init
+    ),
+    "shop/demos/seed_requested": Operation(
+        payload_model=EmptyPayload, fn=op_demos_seed
+    ),
     "shop/shops/list_requested": Operation(payload_model=EmptyPayload, fn=op_shops_list),
     "shop/badge_icons/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_badge_icons_list
@@ -202,6 +233,39 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/promos/remove_requested": Operation(
         payload_model=ShopPromoIdPayload, fn=op_promos_remove
+    ),
+    "shop/shelves/list_requested": Operation(
+        payload_model=ShopIdPayload, fn=op_shelves_list
+    ),
+    "shop/shelves/create_requested": Operation(
+        payload_model=ShopShelfCreatePayload, fn=op_shelves_create
+    ),
+    "shop/shelves/update_requested": Operation(
+        payload_model=ShopShelfUpdatePayload, fn=op_shelves_update
+    ),
+    "shop/shelves/reorder_requested": Operation(
+        payload_model=ShopShelvesReorderPayload, fn=op_shelves_reorder
+    ),
+    "shop/shelves/remove_requested": Operation(
+        payload_model=ShopShelfIdPayload, fn=op_shelves_remove
+    ),
+    "shop/banners/list_requested": Operation(
+        payload_model=ShopIdPayload, fn=op_banners_list
+    ),
+    "shop/banners/create_requested": Operation(
+        payload_model=ShopBannerCreatePayload, fn=op_banners_create
+    ),
+    "shop/banners/update_requested": Operation(
+        payload_model=ShopBannerUpdatePayload, fn=op_banners_update
+    ),
+    "shop/banners/reorder_requested": Operation(
+        payload_model=ShopBannersReorderPayload, fn=op_banners_reorder
+    ),
+    "shop/banners/remove_requested": Operation(
+        payload_model=ShopBannerIdPayload, fn=op_banners_remove
+    ),
+    "shop/public/notify_back_requested": Operation(
+        payload_model=ShopNotifyBackPayload, fn=op_public_notify_back
     ),
     "shop/public/cart_price_requested": Operation(
         payload_model=ShopCartPricePayload, fn=op_public_cart_price

@@ -24,6 +24,7 @@ export class ShopHomePage extends PlatformPage {
     private _createOp: OpController;
     private _publishOp: OpController;
     private _autofillOp: OpController;
+    private _demosOp: OpController;
     declare _newName: string;
     declare _newSlug: string;
     private _slugTouched = false;
@@ -76,6 +77,21 @@ export class ShopHomePage extends PlatformPage {
             .check-item.done { color: var(--text-secondary); }
             .check-item.done platform-icon { color: var(--success); }
             .check-item platform-icon { flex-shrink: 0; }
+            .demo-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--accent);
+                border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
+                border-radius: var(--radius-full);
+                padding: 1px var(--space-2);
+                white-space: nowrap;
+            }
+            .page-head { display: flex; align-items: baseline; gap: var(--space-3); }
+            .page-head h1 { flex: 1; }
             .publish-cta {
                 border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
                 background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -97,6 +113,7 @@ export class ShopHomePage extends PlatformPage {
         this._createOp = this.useOp('shop/shop_create');
         this._publishOp = this.useOp('shop/shop_publish');
         this._autofillOp = this.useOp('shop/ai_autofill');
+        this._demosOp = this.useOp('shop/demos_seed');
     }
 
     private _transliterate(text: string): string {
@@ -159,11 +176,26 @@ export class ShopHomePage extends PlatformPage {
         return this.t(`status.${status}`);
     }
 
+    private async _seedDemos() {
+        const result = await this._demosOp.run({});
+        if (result === null) return;
+        for (const delayMs of [8_000, 20_000, 45_000]) {
+            setTimeout(() => {
+                void this._shops.load();
+            }, delayMs);
+        }
+    }
+
     override render() {
         const items = this._shops.items;
         return html`
             <div class="wrap">
-                <h1>${this.t('home.title')}</h1>
+                <div class="page-head">
+                    <h1>${this.t('home.title')}</h1>
+                    <platform-button size="sm" variant="secondary" ?loading=${this._demosOp.busy} @click=${() => this._seedDemos()}>
+                        <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('home.demos_add')}
+                    </platform-button>
+                </div>
                 <div class="sub">${this.t('home.subtitle')}</div>
                 ${this._shops.loading && items.length === 0
                     ? html`<platform-empty-state loading></platform-empty-state>`
@@ -179,6 +211,11 @@ export class ShopHomePage extends PlatformPage {
                                     <div class="card">
                                         <div class="card-head">
                                             <span class="card-name">${shop.name}</span>
+                                            ${typeof shop.demo_template === 'string' && shop.demo_template !== ''
+                                                ? html`<span class="demo-badge" title=${this.t('home.demo_hint')}>
+                                                      <platform-icon name="sparkle" size="11"></platform-icon>${this.t('home.demo_badge')}
+                                                  </span>`
+                                                : nothing}
                                             <span class="status" style="color:${STATUS_TONES[status] ?? 'var(--text-tertiary)'}">
                                                 ${this._statusLabel(status)}
                                             </span>

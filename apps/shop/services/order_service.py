@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from apps.shop.config import ShopSettings
 from apps.shop.events import (
     SHOP_ORDER_CREATED,
     SHOP_ORDER_STATUS_CHANGED,
@@ -91,6 +92,15 @@ class _CourierRoute:
     shop_lng: float
 
 
+@dataclass
+class _ResolvedPoint:
+    """Точка доставки: координаты + каноническое имя адреса источника резолва."""
+
+    lat: float
+    lng: float
+    normalized: str
+
+
 # Допустимые переходы статуса: каждый ключ — из каких статусов можно в него перейти.
 _ALLOWED_TRANSITIONS: dict[ShopOrderStatus, frozenset[ShopOrderStatus]] = {
     ShopOrderStatus.ACCEPTED: frozenset({ShopOrderStatus.NEW}),
@@ -106,7 +116,13 @@ _ALLOWED_TRANSITIONS: dict[ShopOrderStatus, frozenset[ShopOrderStatus]] = {
 class ShopOrderService:
     """Заказы витрины: приём анонимного заказа и жизненный цикл для владельца."""
 
-    def __init__(self, geocoder: Geocoder, service_client: ServiceClient) -> None:
+    def __init__(
+        self,
+        settings: ShopSettings,
+        geocoder: Geocoder,
+        service_client: ServiceClient,
+    ) -> None:
+        self._settings: ShopSettings = settings
         self._geocoder: Geocoder = geocoder
         self._service_client: ServiceClient = service_client
 
@@ -114,13 +130,42 @@ class ShopOrderService:
         """GeoClient от имени компании витрины — для анонимных вызовов покупателя."""
         return GeoClient(http=self._service_client, company_id=shop.company_id)
 
-    async def _resolve_delivery_point(
-        self, payload: ShopOrderCreateRequest, customer: CustomerScope
-    ) -> tuple[float | None, float | None]:
-        """Точка доставки заказа: сохранённый адрес покупателя или геокод строки.
+    async def _resolve_point(
+        self, shop: Shop, *, address: str, lat: float | None, lng: float | None
+    ) -> _ResolvedPoint | None:
+        """Точка доставки: явные координаты → geo-справочник → внешний геокодер.
 
-        Возвращает (lat, lng); (None, None) — адрес не геокодится. Побочно
-        подменяет ``payload.address`` текстом сохранённого адреса (снапшот).
+        Свободный текст резолвится сначала тем же адресным справочником geo,
+        что и автокомплит витрины — один источник истины; при промахе или
+        недоступности geo — ``Geocoder`` (Nominatim). ``None`` — точку
+        установить не удалось.
+        """
+        if lat is not None and lng is not None:
+            return _ResolvedPoint(lat=lat, lng=lng, normalized=address)
+        if not address.strip():
+            return None
+        zone = shop.delivery_zone if is_valid_delivery_zone(shop.delivery_zone) else None
+        try:
+            hits = await self._geo(shop).suggest(q=address.strip(), zone=zone, limit=1)
+        except ServiceClientError:
+            hits = None
+        if hits is not None and hits.items:
+            hit = hits.items[0]
+            return _ResolvedPoint(lat=hit.lat, lng=hit.lng, normalized=hit.display_name)
+        geo = await self._geocoder.geocode(address)
+        if geo is None:
+            return None
+        return _ResolvedPoint(
+            lat=geo.lat, lng=geo.lng, normalized=geo.normalized_address or address
+        )
+
+    async def _resolve_delivery_point(
+        self, shop: Shop, payload: ShopOrderCreateRequest, customer: CustomerScope
+    ) -> _ResolvedPoint | None:
+        """Точка заказа: сохранённый адрес покупателя, иначе общий резолвер.
+
+        Побочно подменяет ``payload.address`` текстом сохранённого адреса
+        (снапшот). Координаты сохранённого адреса авторитетнее клиентских.
         """
         if payload.customer_address_id:
             row = await CustomerAddress.get_for_customer(
@@ -133,21 +178,27 @@ class ShopOrderService:
             payload.address = row.address
             await CustomerAddress.touch_used(row.customer_address_id)
             if row.lat is not None and row.lng is not None:
-                return row.lat, row.lng
-        if not payload.address.strip():
-            return None, None
-        geo = await self._geocoder.geocode(payload.address)
-        if geo is None:
-            return None, None
-        return geo.lat, geo.lng
+                return _ResolvedPoint(lat=row.lat, lng=row.lng, normalized=row.address)
+        return await self._resolve_point(
+            shop,
+            address=payload.address,
+            lat=payload.delivery_lat,
+            lng=payload.delivery_lng,
+        )
 
-    async def check_delivery(self, shop: Shop, address: str) -> JsonObject:
+    async def check_delivery(
+        self,
+        shop: Shop,
+        address: str,
+        lat: float | None = None,
+        lng: float | None = None,
+    ) -> JsonObject:
         """Живой чек «доставим ли по адресу» для витрины до оформления заказа."""
         if not shop.delivery_enabled:
             return {"ok": False, "reason": "delivery_disabled"}
         ring = polygon_ring(shop.delivery_zone)
-        geo = await self._geocoder.geocode(address)
-        if geo is None:
+        point = await self._resolve_point(shop, address=address, lat=lat, lng=lng)
+        if point is None:
             return {
                 "ok": ring is None,
                 "reason": "address_unverifiable" if ring is not None else "ok",
@@ -155,20 +206,43 @@ class ShopOrderService:
             }
         result: JsonObject = {
             "ok": True,
-            "normalized": geo.normalized_address,
-            "lat": geo.lat,
-            "lng": geo.lng,
+            "normalized": point.normalized,
+            "lat": point.lat,
+            "lng": point.lng,
             "requires_zone": ring is not None,
         }
         if ring is not None:
-            inside = point_in_polygon(geo.lng, geo.lat, ring)
+            inside = point_in_polygon(point.lng, point.lat, ring)
             result["ok"] = inside
             result["inside_zone"] = inside
             if not inside:
                 result["reason"] = "out_of_delivery_zone"
         if result["ok"]:
-            await self._enrich_route(shop, geo.lat, geo.lng, result)
+            await self._enrich_route(shop, point.lat, point.lng, result)
         return result
+
+    async def address_reverse(self, shop: Shop, *, lat: float, lng: float) -> JsonObject:
+        """Ближайший адрес к точке пина — имя для отображения в чекауте.
+
+        Координаты пина остаются точкой заказа; имя адреса — только подпись,
+        дальше ``address_snap_max_m`` считается нерелевантной.
+        """
+        try:
+            hits = await self._geo(shop).nearest(lat=lat, lng=lng, limit=1)
+        except ServiceClientError:
+            return {"found": False, "geo_unavailable": True}
+        if not hits.items:
+            return {"found": False}
+        hit = hits.items[0]
+        if hit.distance_m is not None and hit.distance_m > self._settings.address_snap_max_m:
+            return {"found": False}
+        return {
+            "found": True,
+            "display_name": hit.display_name,
+            "lat": hit.lat,
+            "lng": hit.lng,
+            "distance_m": hit.distance_m,
+        }
 
     async def _courier_route(
         self, shop: Shop, cust_lat: float, cust_lng: float
@@ -177,15 +251,19 @@ class ShopOrderService:
 
         Деградация: geo недоступен → ``None``; чек и заказ остаются рабочими.
         """
-        if not shop.address.strip():
-            return None
-        shop_geo = await self._geocoder.geocode(shop.address)
-        if shop_geo is None:
-            return None
+        shop_lat: float | None = shop.lat
+        shop_lng: float | None = shop.lng
+        if shop_lat is None or shop_lng is None:
+            if not shop.address.strip():
+                return None
+            shop_geo = await self._geocoder.geocode(shop.address)
+            if shop_geo is None:
+                return None
+            shop_lat, shop_lng = shop_geo.lat, shop_geo.lng
         try:
             route = await self._geo(shop).route_calculate(
-                from_lat=shop_geo.lat,
-                from_lng=shop_geo.lng,
+                from_lat=shop_lat,
+                from_lng=shop_lng,
                 to_lat=cust_lat,
                 to_lng=cust_lng,
                 mode=shop.courier_mode,
@@ -196,8 +274,8 @@ class ShopOrderService:
             distance_m=route.distance_m,
             duration_s=route.duration_s,
             geometry=route.geometry,
-            shop_lat=shop_geo.lat,
-            shop_lng=shop_geo.lng,
+            shop_lat=shop_lat,
+            shop_lng=shop_lng,
         )
 
     async def _enrich_route(
@@ -220,15 +298,23 @@ class ShopOrderService:
             -(-(shop.prep_minutes * 60 + routed.duration_s) // 60)
         )
 
-    async def address_suggest(self, shop: Shop, query: str) -> JsonObject:
+    async def address_suggest(
+        self,
+        shop: Shop,
+        query: str,
+        *,
+        lat: float | None = None,
+        lng: float | None = None,
+    ) -> JsonObject:
         """Автокомплит адреса покупателя по справочнику внутри зоны доставки.
 
-        Деградация: geo недоступен → пустой список, витрина откатывается
-        на свободный ввод (чек всё равно геокодирует строку).
+        ``lat``/``lng`` — необязательная точка покупателя (геолокация/пин):
+        сортировка выдачи по близости. Деградация: geo недоступен → пустой
+        список, витрина откатывается на свободный ввод.
         """
         zone = shop.delivery_zone if is_valid_delivery_zone(shop.delivery_zone) else None
         try:
-            hits = await self._geo(shop).suggest(q=query, zone=zone, limit=8)
+            hits = await self._geo(shop).suggest(q=query, zone=zone, lat=lat, lng=lng, limit=8)
         except ServiceClientError:
             return {"items": [], "geo_unavailable": True}
         return {
@@ -240,6 +326,7 @@ class ShopOrderService:
                     "city": h.city,
                     "street": h.street,
                     "housenumber": h.housenumber,
+                    "postcode": h.postcode,
                 }
                 for h in hits.items
             ]
@@ -295,28 +382,31 @@ class ShopOrderService:
                 raise PlatformConflictError(
                     "Delivery address is required", error_code="address_required"
                 )
-            lat, lng = await self._resolve_delivery_point(payload, customer)
-            delivery_lat, delivery_lng = lat, lng
-            if lat is not None and lng is not None:
-                routed = await self._courier_route(shop, lat, lng)
+            point = await self._resolve_delivery_point(shop, payload, customer)
+            if point is not None:
+                delivery_lat, delivery_lng = point.lat, point.lng
+                if point.normalized.strip():
+                    payload.address = point.normalized
+            ring = polygon_ring(shop.delivery_zone)
+            if ring is not None:
+                if point is None:
+                    raise PlatformConflictError(
+                        "Delivery address could not be verified",
+                        error_code="address_unverifiable",
+                    )
+                if not point_in_polygon(point.lng, point.lat, ring):
+                    raise PlatformConflictError(
+                        "Address is outside the delivery zone",
+                        error_code="out_of_delivery_zone",
+                    )
+            if point is not None:
+                routed = await self._courier_route(shop, point.lat, point.lng)
                 if routed is not None:
                     delivery_eta = int(
                         -(-(shop.prep_minutes * 60 + routed.duration_s) // 60)
                     )
                     delivery_route = routed.geometry or {}
                     shop_lat, shop_lng = routed.shop_lat, routed.shop_lng
-            ring = polygon_ring(shop.delivery_zone)
-            if ring is not None:
-                if lat is None or lng is None:
-                    raise PlatformConflictError(
-                        "Delivery address could not be verified",
-                        error_code="address_unverifiable",
-                    )
-                if not point_in_polygon(lng, lat, ring):
-                    raise PlatformConflictError(
-                        "Address is outside the delivery zone",
-                        error_code="out_of_delivery_zone",
-                    )
         elif payload.delivery_type == ShopDeliveryType.PICKUP:
             if not shop.pickup_enabled:
                 raise PlatformConflictError(
@@ -388,6 +478,10 @@ class ShopOrderService:
             delivery_lng=delivery_lng,
             shop_lat=shop_lat,
             shop_lng=shop_lng,
+            delivery_flat=payload.delivery_flat,
+            delivery_entrance=payload.delivery_entrance,
+            delivery_floor=payload.delivery_floor,
+            delivery_intercom=payload.delivery_intercom,
             table_id=table_id,
             table_label=table_label,
             comment=payload.comment,
@@ -659,6 +753,10 @@ class ShopOrderService:
             delivery_type=order.delivery_type,
             address=order.address,
             delivery_eta_minutes=order.delivery_eta_minutes,
+            delivery_flat=order.delivery_flat,
+            delivery_entrance=order.delivery_entrance,
+            delivery_floor=order.delivery_floor,
+            delivery_intercom=order.delivery_intercom,
             table_id=order.table_id,
             table_label=order.table_label,
             comment=order.comment,
@@ -830,6 +928,10 @@ class ShopOrderService:
                 "can_cancel": ShopOrderStatus(order.status) == ShopOrderStatus.NEW,
                 "delivery_lat": order.delivery_lat,
                 "delivery_lng": order.delivery_lng,
+                "delivery_flat": order.delivery_flat,
+                "delivery_entrance": order.delivery_entrance,
+                "delivery_floor": order.delivery_floor,
+                "delivery_intercom": order.delivery_intercom,
                 "delivery_route": order.delivery_route or {},
                 "delivery_zone": (shop.delivery_zone if shop is not None else {}) or {},
             }

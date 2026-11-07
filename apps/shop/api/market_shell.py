@@ -61,10 +61,17 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .pcard .price{{margin-top:6px;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}}
 .pcard .from{{margin-top:6px;font-size:12px;color:var(--muted);display:inline-block;background:var(--card2);border-radius:99px;padding:3px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .empty{{text-align:center;color:var(--muted);padding:56px 20px;font-size:15px}}
-.addrbar{{max-width:560px;margin:12px auto 0;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:6px 6px 6px 18px}}
+.addrwrap{{position:relative;max-width:560px;margin:12px auto 0}}
+.addrbar{{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:6px 6px 6px 18px}}
 .addrbar input{{flex:1;min-width:0;font:inherit;font-size:14px;background:transparent;border:0;color:var(--text);outline:none}}
 .addrbar input::placeholder{{color:var(--muted)}}
 .addrbar button{{font:inherit;font-size:13px;font-weight:650;padding:8px 16px;border-radius:99px;border:0;background:var(--card);color:var(--text);cursor:pointer}}
+.asug{{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:none;box-shadow:0 14px 44px rgba(0,0,0,.5);z-index:8;text-align:left}}
+.asug.open{{display:block}}
+.asugrow{{padding:11px 16px;font-size:14px;font-weight:550;cursor:pointer;border-bottom:1px solid var(--line);line-height:1.35}}
+.asugrow:last-child{{border-bottom:0}}
+.asugrow:hover{{background:color-mix(in srgb,var(--accent) 10%,transparent)}}
+.asugrow small{{display:block;font-size:11.5px;color:var(--muted);font-weight:500}}
 .cov{{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700}}
 .cov.yes{{background:rgba(31,157,85,.15);color:#3ddc84}}
 .cov.no{{background:rgba(210,69,69,.13);color:#ff8f8f}}
@@ -83,9 +90,12 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
       <input id="q" type="search" placeholder="{search_placeholder}" autocomplete="off" oninput="debounced()">
       <button class="go" type="submit">Найти</button>
     </form>
-    <div class="addrbar">
-      <input id="addr" type="text" placeholder="Ваш адрес — покажем, кто доставит" autocomplete="street-address">
-      <button type="button" onclick="applyAddress()">Показать</button>
+    <div class="addrwrap">
+      <div class="addrbar">
+        <input id="addr" type="text" placeholder="Ваш адрес — покажем, кто доставит" autocomplete="off" oninput="onAddrIn()" onkeydown="if(event.key==='Enter'){{event.preventDefault();applyAddress();}}">
+        <button type="button" onclick="applyAddress()">Показать</button>
+      </div>
+      <div class="asug" id="addrSug"></div>
     </div>
   </div>
   <div id="hits" class="sec" style="display:none"><h2 id="hitsTitle"></h2><div class="results" id="hitsGrid"></div>
@@ -133,17 +143,57 @@ function renderChips(){{
   chips('cityChips',[{{k:'',t:'Все города'}},...cities],fCity,v=>fCity=v);
 }}
 renderChips();renderShops();
-// ——— «Кто доставит сюда»: адрес → точка → coverage от сервера ———
+// ——— «Кто доставит сюда»: автокомплит geo → точка → coverage от сервера ———
 let userPoint=null;
+let addrSugItems=[],addrSugTimer=0,addrSugReq=0;
+function hideAddrSug(){{const el=document.getElementById('addrSug');if(el)el.classList.remove('open');}}
+window.onAddrIn=()=>{{
+  userPoint=null;
+  clearTimeout(addrSugTimer);
+  const q=(document.getElementById('addr').value||'').trim();
+  if(q.length<3){{hideAddrSug();return;}}
+  addrSugTimer=setTimeout(addrSuggest,250);
+}};
+async function addrSuggest(){{
+  const el=document.getElementById('addrSug');if(!el)return;
+  const q=(document.getElementById('addr').value||'').trim();
+  const my=++addrSugReq;
+  try{{
+    const r=await fetch(`/shop/api/v1/public/aggregate/address-suggest?q=${{encodeURIComponent(q)}}`);
+    if(my!==addrSugReq)return;
+    const d=await r.json();
+    const items=Array.isArray(d.items)?d.items:[];
+    addrSugItems=items;
+    if(!items.length){{hideAddrSug();return;}}
+    el.innerHTML=items.map((a,i)=>`<div class="asugrow" onclick="pickAddrSug(${{i}})">${{esc(a.display_name||'')}}<small>${{esc(a.city||'')}}</small></div>`).join('');
+    el.classList.add('open');
+  }}catch(e){{hideAddrSug();}}
+}}
+window.pickAddrSug=i=>{{
+  const it=addrSugItems[i];if(!it)return;
+  document.getElementById('addr').value=it.display_name||'';
+  userPoint={{lat:it.lat,lng:it.lng}};
+  localStorage.setItem('mkt_addr',it.display_name||'');
+  localStorage.setItem('mkt_pt',JSON.stringify(userPoint));
+  hideAddrSug();
+  loadCoverage();
+}};
+document.addEventListener('click',e=>{{
+  const t=e.target;
+  if(t&&t.id!=='addr'&&!t.closest?.('#addrSug'))hideAddrSug();
+}});
 window.applyAddress=async()=>{{
   const q=(document.getElementById('addr').value||'').trim();
+  hideAddrSug();
   if(q.length<5)return;
+  if(userPoint){{loadCoverage();return;}}
   try{{
     const r=await fetch(`/shop/api/v1/public/aggregate/geocode?address=${{encodeURIComponent(q)}}`);
     if(!r.ok){{toastAddr('Адрес не найден — попробуйте точнее');return;}}
     const d=await r.json();
     userPoint={{lat:d.lat,lng:d.lng}};
     localStorage.setItem('mkt_addr',q);
+    localStorage.setItem('mkt_pt',JSON.stringify(userPoint));
     loadCoverage();
   }}catch(e){{}}
 }};
@@ -164,7 +214,11 @@ async function loadCoverage(){{
 }}
 (function(){{
   const saved=localStorage.getItem('mkt_addr');
-  if(saved){{document.getElementById('addr').value=saved;applyAddress();}}
+  if(saved)document.getElementById('addr').value=saved;
+  const pt=localStorage.getItem('mkt_pt');
+  if(pt){{try{{userPoint=JSON.parse(pt);}}catch(e){{}}}}
+  if(userPoint&&userPoint.lat!=null){{loadCoverage();}}
+  else if(saved){{applyAddress();}}
 }})();
 let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}

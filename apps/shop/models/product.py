@@ -38,6 +38,7 @@ class ShopProduct(PlatformModel):
     badges: list[str] = DbField(default_factory=list, db_type="JSONB")
     price_minor: int = DbField(ge=0)
     photo_file_id: str | None = DbField(default=None, max_length=64)
+    nutrition: dict[str, float] = DbField(default_factory=dict, db_type="JSONB")
     is_available: bool = DbField(default=True)
     sort: int = DbField(default=0)
     created_at: datetime = DbField()

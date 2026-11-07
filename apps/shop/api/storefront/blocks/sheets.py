@@ -4,7 +4,7 @@
 в shell как есть — без экранирования скобок.
 """
 
-CSS: str = """.sheet{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);display:none;z-index:20}
+CSS: str = """.sheet{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);display:none;z-index:70}
 .sheet.show{display:block}
 .panel{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease;box-shadow:var(--shadow-lg)}
 .panel.drag{transition:none}
@@ -13,7 +13,7 @@ CSS: str = """.sheet{position:fixed;inset:0;background:var(--overlay);backdrop-f
 .panel h2{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}
 .pshare{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(18,18,20,.55);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;z-index:2}
 .pshare svg{width:18px;height:18px;fill:currentColor}
-.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:calc(90px + env(safe-area-inset-bottom));background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.08);font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:calc(90px + env(safe-area-inset-bottom));background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.08);font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}"""
 
 JS: str = """document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCust();closeSheet();}});

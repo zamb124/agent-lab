@@ -111,17 +111,6 @@ async function fetchMe(){try{const r=await fetch(authApi+'/me',{credentials:'sam
 async function jget(u){const r=await fetch(u,{credentials:'same-origin'});if(!r.ok)throw r;return r.json();}
 async function jpost(u,b){const r=await fetch(u,{method:'POST',credentials:'same-origin',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});if(!r.ok)throw r;return r.json();}
-/* map-бандл (maplibre ~1.7МБ) — только когда витрина реально рисует карту */
-let _mapJs=null;
-function loadMap(){
- if(!_mapJs)_mapJs=new Promise((res,rej)=>{
-  if(customElements.get('platform-map'))return res();
-  const s=document.createElement('script');s.type='module';
-  s.src='/static/core/lib/map/autoload.js';
-  s.onload=()=>customElements.whenDefined('platform-map').then(res);
-  s.onerror=rej;document.head.appendChild(s);});
- return _mapJs;
-}
 
 /* --- tabs --- */
 const TABS=[
@@ -175,7 +164,7 @@ async function loadOrders(force){
  ordersCache=d.items||[];
  renderOrders(ordersCache);
 }
-window.loginThen=async()=>{const c=await ensureAuth();if(c){me=await fetchMe();renderView(cur);refreshBanner();}};
+window.loginThen=async()=>{const c=await ensureAuth();if(c){me=await fetchMe();renderView(cur);refreshBanner();loadPersonal();}};
 window.loadOrders=loadOrders;
 window.openOrder=openOrder;
 function renderOrders(items){
@@ -241,7 +230,10 @@ async function openOrder(code){
  /* delivery + map */
  if(o.delivery_type==='delivery'&&o.address){
   const dbox=el('div','acard');dbox.style.cursor='default';
+  const ddet=[['кв.',o.delivery_flat],['подъезд',o.delivery_entrance],['этаж',o.delivery_floor],['домофон',o.delivery_intercom]]
+   .filter(p=>p[1]).map(p=>p[0]+' '+esc(p[1])).join(', ');
   dbox.innerHTML='<div class="arow">'+ic('pin')+' <b>'+esc(o.address)+'</b></div>'
+   +(ddet?'<div class="arow">'+ic('pin')+' '+ddet+'</div>':'')
    +(o.delivery_eta_minutes?'<div class="arow">'+ic('clock')+' ETA ≈ '+o.delivery_eta_minutes+' мин</div>':'')
    +(o.shop.address?'<div class="arow">'+ic('store')+' '+esc(o.shop.address)+'</div>':'');
   v.appendChild(dbox);
@@ -361,6 +353,22 @@ async function renderProfile(){
  acct.innerHTML='';acct.appendChild(v);
 }
 
+/* --- personal: «как всегда» и подписки «сообщить о появлении» --- */
+async function loadPersonal(){
+ try{
+  if(!me&&await fetchMe()===null)return;
+  if(!me)return;
+  const d=await jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/personal');
+  (d.back_in_stock_ids||[]).forEach(id=>SUBS.add(id));
+  const usual=SHELVES.find(s=>s.kind==='usual');
+  if(usual&&(d.usual||[]).length){
+   usual.product_ids=d.usual.map(u=>u.product_id);
+   const holder=document.getElementById('sh-'+usual.id);
+   if(holder)holder.outerHTML=shelfHtml(usual);
+  }
+ }catch(e){}
+}
+
 /* --- banner --- */
 let bannerTimer=0;
 async function refreshBanner(){
@@ -395,6 +403,7 @@ if(order){openOrder(order);}
 else if(reorderCode){reorderByCode(reorderCode);}
 else if(tab&&TABS.some(t=>t.id===tab))go(tab);
 refreshBanner();
+loadPersonal();
 
 /* --- PWA: service worker только на витринном хосте (scope '/') --- */
 if('serviceWorker' in navigator&&location.pathname==='/'){

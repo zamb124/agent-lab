@@ -25,6 +25,21 @@ def new_public_code(length: int = 8) -> str:
     return "".join(secrets.choice(_PUBLIC_CODE_ALPHABET) for _ in range(length))
 
 
+def delivery_details_label(order: "ShopOrder") -> str:
+    """«кв. 12, подъезд 2, этаж 3, домофон 45» — подробности адреса для курьера."""
+    parts = [
+        f"{label} {value}"
+        for label, value in (
+            ("кв.", order.delivery_flat),
+            ("подъезд", order.delivery_entrance),
+            ("этаж", order.delivery_floor),
+            ("домофон", order.delivery_intercom),
+        )
+        if value
+    ]
+    return ", ".join(parts)
+
+
 class ShopOrder(PlatformModel):
     """Заказ анонимного покупателя. Таблица ``shop_orders``.
 
@@ -74,6 +89,11 @@ class ShopOrder(PlatformModel):
     delivery_route: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     shop_lat: float | None = DbField(default=None)
     shop_lng: float | None = DbField(default=None)
+    # Детали доставки для курьера: адрес-точка отдельно, подробности — полями.
+    delivery_flat: str = DbField(default="", max_length=32)
+    delivery_entrance: str = DbField(default="", max_length=32)
+    delivery_floor: str = DbField(default="", max_length=32)
+    delivery_intercom: str = DbField(default="", max_length=64)
     created_at: datetime = DbField()
     updated_at: datetime = DbField()
     status_changed_at: datetime = DbField()
@@ -137,6 +157,18 @@ class ShopOrder(PlatformModel):
         if statuses:
             qs = qs.filter(status__in=statuses)
         return await qs.count()
+
+    @classmethod
+    async def list_by_customer_shop_by_created_desc(
+        cls, customer_id: str, shop_id: str, *, limit: int = 50
+    ) -> list[Self]:
+        """Заказы покупателя конкретной витрины — источник полки «как всегда»."""
+        return (
+            await cls.objects.filter(customer_id=customer_id, shop_id=shop_id)
+            .order_by("-created_at")
+            .limit(limit)
+            .all()
+        )
 
     @classmethod
     async def create(cls, order: Self) -> Self:

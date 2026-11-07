@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from apps.shop.models.enums import (
     ShopDeliveryType,
@@ -38,11 +38,20 @@ class ShopThemeCustom(StrictBaseModel):
 
 
 class ShopTheme(StrictBaseModel):
-    """Визуальная тема витрины: акцентный цвет, пресет раскладки и режим."""
+    """Визуальная тема витрины: акцентный цвет, пресет раскладки и режим.
+
+    ``hero_style`` — подача шапки: ``card`` — карточка поверх обложки,
+    ``cover`` — иммерсивный full-bleed с градиентом, ``minimal`` —
+    компактный заголовок без обложки. ``backdrop`` — фон страницы:
+    ``solid`` — цвет темы, ``blur`` — размытая обложка под контентом,
+    ``gradient`` — мягкий акцентный градиент.
+    """
 
     accent_color: str = Field(default="#e2553f", max_length=16)
     preset: str = Field(default="menu", max_length=32)
     mode: str = Field(default="dark", pattern=r"^(dark|light)$")
+    hero_style: str = Field(default="card", pattern=r"^(card|cover|minimal)$")
+    backdrop: str = Field(default="solid", pattern=r"^(solid|blur|gradient)$")
     custom: ShopThemeCustom = Field(default_factory=ShopThemeCustom)
 
 
@@ -56,6 +65,27 @@ def normalize_shop_theme(theme: JsonObject) -> JsonObject:
     else:
         _ = normalized.pop("accent", None)
     return normalized
+
+
+class ShopFeatures(StrictBaseModel):
+    """Функциональные флаги витрины: «включил → получил функционал».
+
+    Каждый флаг выключаем без следа в UI и данных: ``nutrition`` —
+    полоса КБЖУ в карточке и поля в редакторе товара; ``back_in_stock`` —
+    кнопка «Сообщить о появлении» и подписки на возврат позиций.
+    Управляемые фичи (полки, баннеры) флага не требуют: нет данных —
+    нет блока на витрине.
+    """
+
+    nutrition: bool = False
+    back_in_stock: bool = True
+
+
+def normalize_shop_features(features: JsonObject) -> JsonObject:
+    """Сырые `shop.features` → канон: только известные флаги, bool."""
+    return ShopFeatures.model_validate(
+        {k: v for k, v in features.items() if isinstance(v, bool)}
+    ).model_dump()
 
 
 class ShopWorkingHours(StrictBaseModel):
@@ -100,6 +130,8 @@ class ShopResponse(StrictBaseModel):
     phone: str
     city: str
     address: str
+    lat: float | None
+    lng: float | None
     timezone: str
     working_hours: dict[str, str]
     delivery_enabled: bool
@@ -112,6 +144,7 @@ class ShopResponse(StrictBaseModel):
     courier_mode: str
     currency: str
     theme: ShopTheme
+    features: ShopFeatures
     badges: list[ShopBadgeResponse]
     status: ShopStatus
     telegram_chat_id: str | None
@@ -154,8 +187,18 @@ class ShopUpdateRequest(StrictBaseModel):
     min_order_minor: int | None = Field(default=None, ge=0)
     prep_minutes: int | None = Field(default=None, ge=0, le=600)
     courier_mode: CourierMode | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
     theme: ShopTheme | None = None
+    features: ShopFeatures | None = None
     badges: list[ShopBadge] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def _lat_lng_pair(self) -> Self:
+        """Точка магазина пишется парой: lat без lng (и наоборот) — ошибка ввода."""
+        if ("lat" in self.model_fields_set) != ("lng" in self.model_fields_set):
+            raise ValueError("lat and lng must be provided together")
+        return self
 
 
 class ShopTableResponse(StrictBaseModel):
@@ -193,6 +236,21 @@ class ShopCategoryUpdateRequest(StrictBaseModel):
     is_active: bool | None = None
 
 
+class ShopNutrition(StrictBaseModel):
+    """Пищевая ценность позиции на порцию.
+
+    Все поля опциональны: владелец заполняет то, что знает (вручную
+    или AI-оценкой). Отсутствие всего блока — полоса КБЖУ на витрине
+    не рисуется. ``nutrition_delta`` опции прибавляется к этим значениям
+    при выборе модификатора.
+    """
+
+    kcal: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+    carb_g: float | None = Field(default=None, ge=0)
+
+
 class ShopProductResponse(StrictBaseModel):
     shop_product_id: str
     shop_id: str
@@ -203,6 +261,7 @@ class ShopProductResponse(StrictBaseModel):
     badges: list[str]
     price_minor: int
     photo_file_id: str | None
+    nutrition: ShopNutrition
     is_available: bool
     sort: int
 
@@ -215,6 +274,7 @@ class ShopProductCreateRequest(StrictBaseModel):
     badges: list[str] = Field(default_factory=list, max_length=5)
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
+    nutrition: ShopNutrition = Field(default_factory=ShopNutrition)
 
 
 class ShopProductUpdateRequest(StrictBaseModel):
@@ -225,6 +285,7 @@ class ShopProductUpdateRequest(StrictBaseModel):
     badges: list[str] | None = Field(default=None, max_length=5)
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
+    nutrition: ShopNutrition | None = None
     is_available: bool | None = None
     sort: int | None = None
 
@@ -360,6 +421,8 @@ class ShopAiParseMenuResponse(StrictBaseModel):
 class ShopModifierOptionCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=200)
     price_minor: int = Field(default=0, ge=0, le=10_000_000)
+    photo_file_id: str | None = None
+    nutrition_delta: ShopNutrition = Field(default_factory=ShopNutrition)
     is_default: bool = False
     max_per_option: int = Field(default=1, ge=1, le=20)
     nested_group_id: str | None = Field(default=None, max_length=64)
@@ -369,6 +432,8 @@ class ShopModifierOptionCreateRequest(StrictBaseModel):
 class ShopModifierOptionUpdateRequest(StrictBaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     price_minor: int | None = Field(default=None, ge=0, le=10_000_000)
+    photo_file_id: str | None = None
+    nutrition_delta: ShopNutrition | None = None
     is_default: bool | None = None
     is_available: bool | None = None
     max_per_option: int | None = Field(default=None, ge=1, le=20)
@@ -380,6 +445,8 @@ class ShopModifierOptionResponse(StrictBaseModel):
     group_id: str
     name: str
     price_minor: int
+    photo_file_id: str | None
+    nutrition_delta: ShopNutrition
     is_default: bool
     is_available: bool
     max_per_option: int
@@ -445,6 +512,10 @@ class ShopOrderResponse(StrictBaseModel):
     delivery_type: ShopDeliveryType
     address: str
     delivery_eta_minutes: int | None = None
+    delivery_flat: str = ""
+    delivery_entrance: str = ""
+    delivery_floor: str = ""
+    delivery_intercom: str = ""
     table_id: str
     table_label: str
     comment: str
@@ -472,11 +543,28 @@ class ShopOrderCreateRequest(StrictBaseModel):
     delivery_type: ShopDeliveryType
     address: str = Field(default="", max_length=500)
     customer_address_id: str = Field(default="", max_length=64)
+    # Точка, выбранная покупателем (подсказка geo или пин на карте) — сервер
+    # проверяет её зоной и не перегеокодирует текст.
+    delivery_lat: float | None = Field(default=None, ge=-90, le=90)
+    delivery_lng: float | None = Field(default=None, ge=-180, le=180)
+    delivery_flat: str = Field(default="", max_length=32)
+    delivery_entrance: str = Field(default="", max_length=32)
+    delivery_floor: str = Field(default="", max_length=32)
+    delivery_intercom: str = Field(default="", max_length=64)
     table_id: str | None = Field(default=None, max_length=64)
     comment: str = Field(default="", max_length=1000)
     source: ShopOrderSource = ShopOrderSource.WEB
     idempotency_key: str = Field(default="", max_length=128)
     honeypot: str = Field(default="", max_length=64)
+
+    @model_validator(mode="after")
+    def _delivery_point_pair(self) -> Self:
+        """Координаты доставки едут парой: половина точки — ошибка ввода."""
+        if ("delivery_lat" in self.model_fields_set) != (
+            "delivery_lng" in self.model_fields_set
+        ):
+            raise ValueError("delivery_lat and delivery_lng must be provided together")
+        return self
 
 
 class ShopOrderCreatedResponse(StrictBaseModel):
@@ -633,6 +721,10 @@ class ShopMyOrderDetailResponse(ShopMyOrderListItemResponse):
     can_cancel: bool = False
     delivery_lat: float | None = None
     delivery_lng: float | None = None
+    delivery_flat: str = ""
+    delivery_entrance: str = ""
+    delivery_floor: str = ""
+    delivery_intercom: str = ""
     delivery_route: JsonObject = Field(default_factory=dict)
     delivery_zone: JsonObject = Field(default_factory=dict)
 
@@ -644,3 +736,118 @@ class ShopStorefrontGeoResponse(StrictBaseModel):
     lng: float | None = None
     address: str = ""
     delivery_zone: JsonObject = Field(default_factory=dict)
+
+
+# --- Витринная лента: полки и баннеры ---
+
+
+class ShopShelfResponse(StrictBaseModel):
+    """Полка ленты витрины — секция товаров с источником и раскладкой."""
+
+    shop_shelf_id: str
+    shop_id: str
+    kind: str
+    layout: str
+    placement: str
+    title: str
+    subtitle: str
+    product_ids: list[str]
+    category_id: str | None
+    limit: int
+    sort: int
+    is_active: bool
+
+
+class ShopShelfCreateRequest(StrictBaseModel):
+    kind: str = Field(default="manual", pattern=r"^(manual|category|new|hits|comeback|usual|upsell)$")
+    layout: str = Field(default="rail", pattern=r"^(rail|rows|grid|hero)$")
+    placement: str = Field(default="feed", pattern=r"^(feed|cart)$")
+    title: str = Field(default="", max_length=120)
+    subtitle: str = Field(default="", max_length=200)
+    product_ids: list[str] = Field(default_factory=list, max_length=50)
+    category_id: str | None = Field(default=None, max_length=64)
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class ShopShelfUpdateRequest(StrictBaseModel):
+    layout: str | None = Field(default=None, pattern=r"^(rail|rows|grid|hero)$")
+    placement: str | None = Field(default=None, pattern=r"^(feed|cart)$")
+    title: str | None = Field(default=None, max_length=120)
+    subtitle: str | None = Field(default=None, max_length=200)
+    product_ids: list[str] | None = Field(default=None, max_length=50)
+    category_id: str | None = Field(default=None, max_length=64)
+    limit: int | None = Field(default=None, ge=1, le=50)
+    is_active: bool | None = None
+
+
+class ShopShelvesReorderRequest(StrictBaseModel):
+    """Новый порядок полок ленты — все полки магазина по разу."""
+
+    shelf_ids: list[str] = Field(min_length=1, max_length=50)
+
+
+class ShopBannerResponse(StrictBaseModel):
+    """Сторис-баннер верха ленты: картинка, подпись, deeplink, окно показа."""
+
+    shop_banner_id: str
+    shop_id: str
+    title: str
+    subtitle: str
+    image_file_id: str | None
+    link: str
+    window: JsonObject
+    sort: int
+    is_active: bool
+
+
+class ShopBannerCreateRequest(StrictBaseModel):
+    title: str = Field(default="", max_length=120)
+    subtitle: str = Field(default="", max_length=200)
+    image_file_id: str | None = None
+    link: str = Field(default="", max_length=300)
+    window: JsonObject = Field(default_factory=dict)
+
+
+class ShopBannerUpdateRequest(StrictBaseModel):
+    title: str | None = Field(default=None, max_length=120)
+    subtitle: str | None = Field(default=None, max_length=200)
+    image_file_id: str | None = None
+    link: str | None = Field(default=None, max_length=300)
+    window: JsonObject | None = None
+    is_active: bool | None = None
+
+
+class ShopBannersReorderRequest(StrictBaseModel):
+    """Новый порядок баннеров — все баннеры магазина по разу."""
+
+    banner_ids: list[str] = Field(min_length=1, max_length=50)
+
+
+# --- Персонализация и подписки покупателя ---
+
+
+class ShopPersonalUsualItem(StrictBaseModel):
+    """Позиция полки «как всегда»: товар + выбор модификаторов из заказов."""
+
+    product_id: str
+    count: int
+    selections: list[ShopOrderItemSelection]
+
+
+class ShopPersonalResponse(StrictBaseModel):
+    """`GET /public/storefront/{slug}/personal` — данные авторизованного
+    покупателя на витрине: избранное, «как всегда», подписки на возврат."""
+
+    favorite_ids: list[str]
+    usual: list[ShopPersonalUsualItem]
+    back_in_stock_ids: list[str]
+
+
+class ShopNotifyBackRequest(StrictBaseModel):
+    """Подписка «сообщить о появлении» — slug витрины идёт из path."""
+
+    product_id: str = Field(min_length=1)
+
+
+class ShopNotifyBackResponse(StrictBaseModel):
+    subscribed: bool

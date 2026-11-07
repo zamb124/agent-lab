@@ -14,6 +14,7 @@ from apps.shop.events import (
 )
 from apps.shop.models import (
     Shop,
+    ShopBanner,
     ShopCategory,
     ShopDomain,
     ShopModifierGroup,
@@ -21,6 +22,7 @@ from apps.shop.models import (
     ShopProduct,
     ShopProductModifierGroup,
     ShopPromo,
+    ShopShelf,
     ShopTable,
     order_status_label,
 )
@@ -29,6 +31,10 @@ from apps.shop.models.api import (
     ShopAiSuggestOptionsResponse,
     ShopBadgeIconsResponse,
     ShopBadgeResponse,
+    ShopBannerCreateRequest,
+    ShopBannerResponse,
+    ShopBannersReorderRequest,
+    ShopBannerUpdateRequest,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
     ShopCategoriesReorderRequest,
@@ -36,6 +42,7 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopFeatures,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
@@ -45,11 +52,14 @@ from apps.shop.models.api import (
     ShopModifierOptionUpdateRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
+    ShopNotifyBackResponse,
+    ShopNutrition,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
     ShopOrderItemPreview,
     ShopOrderResponse,
     ShopOrderStatusResponse,
+    ShopPersonalResponse,
     ShopProductCreateRequest,
     ShopProductResponse,
     ShopProductsImportRequest,
@@ -61,18 +71,24 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopShelfCreateRequest,
+    ShopShelfResponse,
+    ShopShelfUpdateRequest,
+    ShopShelvesReorderRequest,
     ShopStorefrontGeoResponse,
     ShopTableCreateRequest,
     ShopTableResponse,
     ShopTableUpdateRequest,
     ShopTheme,
     ShopUpdateRequest,
+    normalize_shop_features,
     normalize_shop_theme,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
+    SHOP_NOTIFY_BACK_IN_STOCK,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
 )
@@ -219,6 +235,55 @@ class ShopProductModifierDetachPayload(StrictBaseModel):
     group_id: str = Field(min_length=1)
 
 
+class ShopShelfIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_shelf_id: str = Field(min_length=1)
+
+
+class ShopShelfCreatePayload(ShopShelfCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopShelfUpdatePayload(ShopShelfUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_shelf_id: str = Field(min_length=1)
+
+
+class ShopShelvesReorderPayload(ShopShelvesReorderRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopBannerIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_banner_id: str = Field(min_length=1)
+
+
+class ShopBannerCreatePayload(ShopBannerCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopBannerUpdatePayload(ShopBannerUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_banner_id: str = Field(min_length=1)
+
+
+class ShopBannersReorderPayload(ShopBannersReorderRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopNotifyBackPayload(StrictBaseModel):
+    """Подписка «сообщить о появлении» — slug витрины + товар."""
+
+    slug: str = Field(min_length=3, max_length=40)
+    product_id: str = Field(min_length=1)
+
+
+class ShopPersonalPayload(StrictBaseModel):
+    """Персональные данные покупателя на витрине — ``/personal``."""
+
+    slug: str = Field(min_length=3, max_length=40)
+
+
 class ShopPromoCreatePayload(ShopPromoCreateRequest):
     shop_id: str = Field(min_length=1)
 
@@ -355,6 +420,8 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         phone=shop.phone,
         city=shop.city,
         address=shop.address,
+        lat=shop.lat,
+        lng=shop.lng,
         timezone=shop.timezone,
         working_hours={str(day): str(hours) for day, hours in shop.working_hours.items()},
         delivery_enabled=shop.delivery_enabled,
@@ -367,6 +434,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         courier_mode=shop.courier_mode,
         currency=shop.currency,
         theme=ShopTheme.model_validate(normalize_shop_theme(shop.theme or {})),
+        features=ShopFeatures.model_validate(normalize_shop_features(shop.features or {})),
         badges=[
             ShopBadgeResponse(
                 key=b["key"],
@@ -416,8 +484,40 @@ def _product_response(product: ShopProduct) -> ShopProductResponse:
         badges=list(product.badges),
         price_minor=product.price_minor,
         photo_file_id=product.photo_file_id,
+        nutrition=ShopNutrition.model_validate(product.nutrition or {}),
         is_available=product.is_available,
         sort=product.sort,
+    )
+
+
+def _shelf_response(shelf: ShopShelf) -> ShopShelfResponse:
+    return ShopShelfResponse(
+        shop_shelf_id=shelf.shop_shelf_id,
+        shop_id=shelf.shop_id,
+        kind=shelf.kind.value,
+        layout=shelf.layout.value,
+        placement=shelf.placement.value,
+        title=shelf.title,
+        subtitle=shelf.subtitle,
+        product_ids=list(shelf.product_ids),
+        category_id=shelf.category_id,
+        limit=shelf.limit,
+        sort=shelf.sort,
+        is_active=shelf.is_active,
+    )
+
+
+def _banner_response(banner: ShopBanner) -> ShopBannerResponse:
+    return ShopBannerResponse(
+        shop_banner_id=banner.shop_banner_id,
+        shop_id=banner.shop_id,
+        title=banner.title,
+        subtitle=banner.subtitle,
+        image_file_id=banner.image_file_id,
+        link=banner.link,
+        window=dict(banner.window),
+        sort=banner.sort,
+        is_active=banner.is_active,
     )
 
 
@@ -682,6 +782,10 @@ async def op_products_update(
         raise_not_found(exc)
     if before is not None and product.photo_file_id != before.photo_file_id:
         await _delete_orphaned_file(di, before.photo_file_id)
+    if before is not None and product.is_available and not before.is_available:
+        _ = await enqueue(
+            SHOP_NOTIFY_BACK_IN_STOCK, product_id=product.shop_product_id
+        )
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return _product_response(product)
@@ -734,6 +838,208 @@ async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: D
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return EmptyPayload()
+
+
+# --- Витринная лента: полки ---
+
+
+async def op_shelves_list(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ListResponse[ShopShelfResponse]:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        shelves = await di.feed_service.list_shelves(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ListResponse(items=[_shelf_response(s) for s in shelves])
+
+
+async def op_shelves_create(
+    payload: ShopShelfCreatePayload, *, user: User, di: Di
+) -> ShopShelfResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        shelf = await di.feed_service.create_shelf(
+            scope.company_id, payload.shop_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _shelf_response(shelf)
+
+
+async def op_shelves_update(
+    payload: ShopShelfUpdatePayload, *, user: User, di: Di
+) -> ShopShelfResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        shelf = await di.feed_service.update_shelf(
+            scope.company_id, payload.shop_id, payload.shop_shelf_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _shelf_response(shelf)
+
+
+async def op_shelves_reorder(
+    payload: ShopShelvesReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.feed_service.reorder_shelves(
+            scope.company_id, payload.shop_id, payload.shelf_ids
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
+async def op_shelves_remove(payload: ShopShelfIdPayload, *, user: User, di: Di) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.feed_service.delete_shelf(
+            scope.company_id, payload.shop_id, payload.shop_shelf_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
+# --- Витринная лента: баннеры ---
+
+
+async def op_banners_list(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ListResponse[ShopBannerResponse]:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        banners = await di.feed_service.list_banners(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ListResponse(items=[_banner_response(b) for b in banners])
+
+
+async def op_banners_create(
+    payload: ShopBannerCreatePayload, *, user: User, di: Di
+) -> ShopBannerResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        banner = await di.feed_service.create_banner(
+            scope.company_id, payload.shop_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _banner_response(banner)
+
+
+async def op_banners_update(
+    payload: ShopBannerUpdatePayload, *, user: User, di: Di
+) -> ShopBannerResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    before = await ShopBanner.get_by_id(payload.shop_banner_id)
+    try:
+        banner = await di.feed_service.update_banner(
+            scope.company_id, payload.shop_id, payload.shop_banner_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    if before is not None and banner.image_file_id != before.image_file_id:
+        await _delete_orphaned_file(di, before.image_file_id)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return _banner_response(banner)
+
+
+async def op_banners_reorder(
+    payload: ShopBannersReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.feed_service.reorder_banners(
+            scope.company_id, payload.shop_id, payload.banner_ids
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
+async def op_banners_remove(payload: ShopBannerIdPayload, *, user: User, di: Di) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        banner = await di.feed_service.delete_banner(
+            scope.company_id, payload.shop_id, payload.shop_banner_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _delete_orphaned_file(di, banner.image_file_id)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug)
+    return EmptyPayload()
+
+
+# --- Подписки покупателя ---
+
+
+async def op_public_notify_back(
+    payload: ShopNotifyBackPayload, *, user: User, di: Di
+) -> ShopNotifyBackResponse:
+    """«Сообщить о появлении»: подписка на недоступный товар (customer-сессия)."""
+    _ = user
+    customer = require_customer()
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+        subscribed = await di.feed_service.subscribe_back_in_stock(
+            shop.shop_id, payload.product_id, customer.customer_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopNotifyBackResponse(subscribed=subscribed)
+
+
+async def op_public_personal(
+    payload: ShopPersonalPayload, *, user: User, di: Di
+) -> ShopPersonalResponse:
+    """``/personal``: «как всегда» и подписки покупателя (customer-сессия)."""
+    _ = user
+    customer = require_customer()
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return await di.feed_service.personal(shop.shop_id, customer.customer_id)
 
 
 # --- Столы зала ---
@@ -1282,6 +1588,8 @@ def _option_response(option: ShopModifierOption) -> ShopModifierOptionResponse:
         group_id=option.group_id,
         name=option.name,
         price_minor=option.price_minor,
+        photo_file_id=option.photo_file_id,
+        nutrition_delta=ShopNutrition.model_validate(option.nutrition_delta or {}),
         is_default=option.is_default,
         is_available=option.is_available,
         max_per_option=option.max_per_option,

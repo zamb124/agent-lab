@@ -23,6 +23,11 @@ CSS: str = """.cl{display:flex;justify-content:space-between;align-items:center;
 .opt i{font-style:normal;font-size:12.5px;opacity:.85}
 .opt .stepper{padding:2px}
 .opt .stepper button{width:24px;height:24px;font-size:15px}
+.opt .oimg{width:32px;height:32px;border-radius:9px;object-fit:cover;background:var(--card);flex-shrink:0}
+.opt.hasimg{padding:5px 14px 5px 5px}
+.nutri{display:flex;flex-wrap:wrap;gap:6px 16px;margin:14px 0 2px;padding:13px 16px;border-radius:14px;background:var(--card2);font-size:13px;color:var(--muted)}
+.nutri b{color:var(--text);font-weight:650;margin-right:5px;font-variant-numeric:tabular-nums}
+button.big svg{width:18px;height:18px;vertical-align:-4px;margin-right:6px;fill:currentColor}
 .crow{display:flex;justify-content:flex-end;margin-top:18px}"""
 
 JS: str = """let cust=null;
@@ -79,23 +84,57 @@ function groupHtml(p,g,depth){const n=groupSelectedQty(g);const req=g.min_select
   for(const o of g.options){const q=cust.sel.get(o.id)||0;
     const pr=o.price_minor?`<i>${g.price_mode==='absolute'?fmt(o.price_minor):'+'+fmt(o.price_minor)}</i>`:'';
     const maxed=g.max_selected!=null&&n>=g.max_selected&&!q;
+    const oimg=o.photo_file_id?photo(o.photo_file_id,'oimg','sm!sq'):'';
+    const cls=`opt${oimg?' hasimg':''}`;
     if(o.max_per_option>1&&q)
-      h+=`<span class="opt on"><span class="stepper"><button class="ghost" onclick="optQty('${p.id}','${g.id}','${o.id}',-1)">−</button><span>${q}</span><button onclick="optQty('${p.id}','${g.id}','${o.id}',1)">+</button></span>${esc(o.name)}${pr}</span>`;
+      h+=`<span class="${cls} on"><span class="stepper"><button class="ghost" onclick="optQty('${p.id}','${g.id}','${o.id}',-1)">−</button><span>${q}</span><button onclick="optQty('${p.id}','${g.id}','${o.id}',1)">+</button></span>${oimg}${esc(o.name)}${pr}</span>`;
     else
-      h+=`<button class="opt${q?' on':''}${maxed?' dis':''}" onclick="optToggle('${p.id}','${g.id}','${o.id}')">${esc(o.name)}${pr}</button>`;}
+      h+=`<button class="${cls}${q?' on':''}${maxed?' dis':''}" onclick="optToggle('${p.id}','${g.id}','${o.id}')">${oimg}${esc(o.name)}${pr}</button>`;}
   h+='</div>';
   for(const o of g.options){const q=cust.sel.get(o.id)||0;
     if(q&&o.nested_group_id&&NEST[o.nested_group_id])h+=groupHtml(p,NEST[o.nested_group_id],depth+1);}
   return h+'</div>';}
+function nutriSum(p,sel){const base=p.nutrition||{};
+  const sum={kcal:base.kcal||0,protein_g:base.protein_g||0,fat_g:base.fat_g||0,carb_g:base.carb_g||0};
+  const walk=groups=>{for(const g of groups)for(const o of g.options){const q=sel.get(o.id)||0;
+    if(!q)continue;const d=o.nutrition_delta||{};
+    sum.kcal+=(d.kcal||0)*q;sum.protein_g+=(d.protein_g||0)*q;
+    sum.fat_g+=(d.fat_g||0)*q;sum.carb_g+=(d.carb_g||0)*q;
+    if(o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}};
+  walk(p.modifier_groups||[]);
+  return sum;}
+function nutriHtml(p,sel){
+  if(!(S.features||{}).nutrition)return'';
+  const n=nutriSum(p,sel);
+  if(!n.kcal&&!n.protein_g&&!n.fat_g&&!n.carb_g)return'';
+  const r=v=>Math.round(v*10)/10;
+  return `<div class="nutri"><span><b>${r(n.kcal)}</b>ккал</span><span><b>${r(n.protein_g)}</b>белки</span><span><b>${r(n.fat_g)}</b>жиры</span><span><b>${r(n.carb_g)}</b>углеводы</span></div>`;}
 function renderCust(){if(!cust)return;const p=byId(cust.pid);if(!p)return;
   const ok=selValid(p);const u=unitPrice(p,cust.sel);
+  const unavailable=p.is_available===false;
   document.getElementById('cpanel').innerHTML=
     `<button class="pshare" onclick="shareProduct('${p.id}')" aria-label="Поделиться">${SHARE_ICON}</button>`+
     `${photo(p.photo_file_id,'phero','lg')}<h2>${esc(p.name)}${tags(p)}${portionOf(p)}</h2>`+
     `${p.description?`<p class="pdesc">${esc(p.description)}</p>`:''}`+
+    nutriHtml(p,cust.sel)+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
-    `<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${cust.qty}</span><button onclick="custQty(1)">+</button></span></div>`+
-    `<button class="big"${ok?'':' disabled'} onclick="addCustom()">В корзину · ${fmt(u*cust.qty)}</button>`;}
+    (unavailable
+      ?(SUBS.has(p.id)
+        ?`<div class="nutri"><span>${ic('bell')} Вы в списке — сообщим о появлении</span></div>`
+        :(S.features||{}).back_in_stock!==false
+        ?`<button class="big" onclick="notifyBack('${p.id}')">${ic('bell')} Сообщить о появлении</button>`
+        :`<div class="nutri"><span>Нет в наличии</span></div>`)
+      :`<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${cust.qty}</span><button onclick="custQty(1)">+</button></span></div>`+
+        `<button class="big"${ok?'':' disabled'} onclick="addCustom()">В корзину · ${fmt(u*cust.qty)}</button>`);}
+window.notifyBack=async pid=>{
+  const customer=await ensureAuth();if(!customer)return;
+  try{
+    const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/notify-back`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:pid})});
+    if(r.ok){const d=await r.json();
+      if(d.subscribed){SUBS.add(pid);renderCust();toast('Сообщим, когда позиция появится');}
+      else toast('Уже в продаже');}
+    else toast('Не удалось подписаться');
+  }catch(e){toast('Не удалось подписаться');}};
 window.addCustom=()=>{if(!cust)return;const p=byId(cust.pid);
   if(!p||!selValid(p))return;
   const key=cust.pid+'#'+selHash(cust.sel);

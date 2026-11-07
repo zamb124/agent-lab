@@ -11,6 +11,7 @@ from apps.shop.di import Di
 from apps.shop.events import publish_shop_catalog_changed
 from apps.shop.models import (
     Shop,
+    ShopBackInStock,
     ShopCategory,
     ShopDomain,
     ShopDomainStatus,
@@ -20,6 +21,7 @@ from apps.shop.models import (
 )
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
+    SHOP_NOTIFY_BACK_IN_STOCK,
     SHOP_NOTIFY_CUSTOMER,
     SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
@@ -111,6 +113,40 @@ async def shop_notify_customer(
             apex=di.settings.storefront_domain_suffix,
         )
         return JsonObject({"shop_order_id": shop_order_id, "delivered": delivered})
+    finally:
+        clear_context()
+
+
+@platform_task(SHOP_NOTIFY_BACK_IN_STOCK)
+async def shop_notify_back_in_stock(
+    product_id: str,
+    *,
+    di: Di,
+) -> JsonObject:
+    """DM подписчикам «сообщить о появлении»: товар снова доступен.
+
+    Отработанная подписка удаляется — повторный возврат обслуживает
+    новый виток записей ``shop_back_in_stock``.
+    """
+    await _enter_worker_context(trace_id=f"shop:back-in-stock:{product_id}")
+    try:
+        product = await ShopProduct.get_by_id(product_id)
+        if product is None or not product.is_available:
+            return JsonObject({"notified": 0})
+        shop = await Shop.get_by_id(product.shop_id)
+        shop_name = shop.name if shop is not None else ""
+        notified = 0
+        for sub in await ShopBackInStock.list_pending_by_product(product_id):
+            text = f"«{product.name}» снова в наличии.\n{shop_name}"
+            delivered = await di.customer_notify_service.send_text(
+                sub.customer_id,
+                text,
+                apex=di.settings.storefront_domain_suffix,
+            )
+            if delivered:
+                notified += 1
+            _ = await sub.delete()
+        return JsonObject({"product_id": product_id, "notified": notified})
     finally:
         clear_context()
 

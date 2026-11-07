@@ -1,9 +1,10 @@
 """Зоны доставки: полигон директора, live delivery-check, изоляция адресов.
 
-В тестовом окружении `GEOCODING__ENABLED=false` — геокодер детерминированно
-возвращает None, поэтому зоновые проверки идут через сохранённые адреса
-покупателя (`customer_address_id`, координаты в строке БД) — тот же путь,
-что прод использует для адресов из чипов чекаута.
+Резолв точки заказа (`ShopOrderService._resolve_point`): явные координаты
+клиента/сохранённого адреса → адресный справочник geo → `Geocoder`
+(`GEOCODING__ENABLED=false` — детерминированный None). Тестовый стек несёт
+реальный OSM-экстракт, поэтому московские адреса резолвятся geo, а
+нерезолвимые строки детерминированно дают `address_unverifiable`.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from oxyde import execute_raw
 
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.shop.di import ShopDi
+from apps.shop.models.order import ShopOrder
 from apps.shop.models.shop import Shop
 from apps.shop.services.order_service import ShopOrderService
 from core.clients.geocoding.nominatim import NominatimGeocoder
@@ -101,7 +103,7 @@ class TestDeliveryZoneEnforcement:
         )
         customer = await auth_customer(shop_public_client, slug)
         row = await _save_address(
-            customer["customer_id"], *_INSIDE, address="Москва, Тверская 1"
+            str(customer["customer_id"]), *_INSIDE, address="Москва, Тверская 1"
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
@@ -121,7 +123,7 @@ class TestDeliveryZoneEnforcement:
         )
         customer = await auth_customer(shop_public_client, slug)
         row = await _save_address(
-            customer["customer_id"], *_OUTSIDE, address="Московская обл, Одинцово"
+            str(customer["customer_id"]), *_OUTSIDE, address="Московская обл, Одинцово"
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
@@ -152,8 +154,26 @@ class TestDeliveryZoneEnforcement:
     async def test_zone_with_unverifiable_address_rejected(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
-        """Текстовый адрес + зона: без рабочего геокода — address_unverifiable, не пропуск."""
+        """Нерезолвимый текст + зона — address_unverifiable, не тихий пропуск."""
         slug = f"zunv-{unique_id[:8]}"
+        _, product = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        await auth_customer(shop_public_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(
+                product["shop_product_id"], address=f"Нет такого {unique_id}"
+            ),
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error_code"] == "address_unverifiable"
+
+    async def test_text_resolved_by_geo_inside_zone_delivers(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Свободный текст резолвится справочником geo в точку внутри зоны."""
+        slug = f"ztxt-{unique_id[:8]}"
         _, product = await _shop_with_product(
             shop_client, slug, patch={"delivery_zone": _ZONE}
         )
@@ -164,8 +184,82 @@ class TestDeliveryZoneEnforcement:
                 product["shop_product_id"], address="Москва, Тверская 1"
             ),
         )
+        assert resp.status_code == 200, resp.text
+
+    async def test_coords_inside_zone_deliver_without_geocode(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Точка от подсказки/пина: зона проверяется по координатам, текст не геокодится."""
+        slug = f"zcoord-{unique_id[:8]}"
+        shop, product = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        await auth_customer(shop_public_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(
+                product["shop_product_id"],
+                address="Точка с карты",
+                delivery_lat=_INSIDE[0],
+                delivery_lng=_INSIDE[1],
+                delivery_flat="12",
+                delivery_entrance="3",
+                delivery_floor="5",
+                delivery_intercom="123К4567",
+            ),
+        )
+        assert resp.status_code == 200, resp.text
+        code = resp.json()["public_code"]
+
+        orders = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")
+        assert orders.status_code == 200
+        order = next(o for o in orders.json()["items"] if o["public_code"] == code)
+        assert order["delivery_flat"] == "12"
+        assert order["delivery_entrance"] == "3"
+        assert order["delivery_floor"] == "5"
+        assert order["delivery_intercom"] == "123К4567"
+        row = await ShopOrder.get_by_id(order["shop_order_id"])
+        assert row is not None
+        assert row.delivery_lat == pytest.approx(_INSIDE[0])
+        assert row.delivery_lng == pytest.approx(_INSIDE[1])
+
+    async def test_coords_outside_zone_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Даже валидная точка клиента не пролезает мимо полигона."""
+        slug = f"zcout-{unique_id[:8]}"
+        _, product = await _shop_with_product(
+            shop_client, slug, patch={"delivery_zone": _ZONE}
+        )
+        await auth_customer(shop_public_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(
+                product["shop_product_id"],
+                address="Точка с карты",
+                delivery_lat=_OUTSIDE[0],
+                delivery_lng=_OUTSIDE[1],
+            ),
+        )
         assert resp.status_code == 409
-        assert resp.json()["error_code"] == "address_unverifiable"
+        assert resp.json()["error_code"] == "out_of_delivery_zone"
+
+    async def test_coords_half_pair_rejected(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Половина точки (только lat) — ошибка валидации, не тихий пропуск."""
+        slug = f"zhalf-{unique_id[:8]}"
+        _, product = await _shop_with_product(shop_client, slug)
+        await auth_customer(shop_public_client, slug)
+        resp = await shop_public_client.post(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+            json=_order_body(
+                product["shop_product_id"],
+                address="Москва",
+                delivery_lat=_INSIDE[0],
+            ),
+        )
+        assert resp.status_code == 422
 
 
 class TestDeliveryCheckEndpoint:
@@ -190,7 +284,7 @@ class TestDeliveryCheckEndpoint:
         await _shop_with_product(shop_client, slug, patch={"delivery_zone": _ZONE})
         resp = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/storefront/{slug}/delivery-check",
-            params={"address": "Москва, Тверская 1"},
+            params={"address": f"Нет такого {unique_id}"},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -209,6 +303,91 @@ class TestDeliveryCheckEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["reason"] == "delivery_disabled"
+
+    async def test_coords_inside_zone_ok(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Чек по координатам пина: зона покрывает точку без геокода."""
+        slug = f"chkpt-{unique_id[:8]}"
+        await _shop_with_product(shop_client, slug, patch={"delivery_zone": _ZONE})
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/delivery-check",
+            params={"lat": _INSIDE[0], "lng": _INSIDE[1], "address": "Пин"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["inside_zone"] is True
+        assert body["lat"] == pytest.approx(_INSIDE[0])
+
+    async def test_coords_outside_zone_not_ok(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"chkpo-{unique_id[:8]}"
+        await _shop_with_product(shop_client, slug, patch={"delivery_zone": _ZONE})
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/delivery-check",
+            params={"lat": _OUTSIDE[0], "lng": _OUTSIDE[1], "address": "Пин"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["reason"] == "out_of_delivery_zone"
+
+
+class TestAddressSuggestEndpoints:
+    """Автокомплит и обратный геокод: контракт ответа при живом/пустом geo."""
+
+    async def test_storefront_suggest_shape(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"sug-{unique_id[:8]}"
+        await _shop_with_product(shop_client, slug, patch={"delivery_zone": _ZONE})
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/address-suggest",
+            params={"q": "Тверская", "lat": _INSIDE[0], "lng": _INSIDE[1]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert isinstance(body["items"], list)
+        for hit in body["items"]:
+            assert "display_name" in hit and "lat" in hit and "lng" in hit
+
+    async def test_storefront_suggest_short_query_empty(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"sugq-{unique_id[:8]}"
+        await _shop_with_product(shop_client, slug)
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/address-suggest", params={"q": "а"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
+
+    async def test_address_reverse_shape(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"rev-{unique_id[:8]}"
+        await _shop_with_product(shop_client, slug)
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}/address-reverse",
+            params={"lat": _INSIDE[0], "lng": _INSIDE[1]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert "found" in body
+        if body["found"]:
+            assert "display_name" in body
+
+    async def test_market_suggest_shape(
+        self, shop_public_client: AsyncClient
+    ) -> None:
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/aggregate/address-suggest",
+            params={"q": "Тверская", "lat": _INSIDE[0], "lng": _INSIDE[1]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert isinstance(resp.json()["items"], list)
 
 
 class TestCustomerScopeInvariant:
@@ -276,6 +455,25 @@ class TestCustomerAddressesApi:
         ids = [a["customer_address_id"] for a in listed.json()["addresses"]]
         assert view["customer_address_id"] not in ids
 
+    async def test_create_with_coords(
+        self, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Точка выбранной подсказки/пина сохраняется вместе с адресом."""
+        await auth_customer(shop_public_client, company_id="system")
+        resp = await shop_public_client.post(
+            f"{_AUTH}/addresses",
+            json={
+                "address": f"Москва, Пин {unique_id[:6]}",
+                "label": "Пин",
+                "lat": _INSIDE[0],
+                "lng": _INSIDE[1],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        view = resp.json()
+        assert view["lat"] == pytest.approx(_INSIDE[0])
+        assert view["lng"] == pytest.approx(_INSIDE[1])
+
     async def test_duplicate_address_dedup(
         self, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
@@ -330,7 +528,9 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
+        service = ShopOrderService(
+            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+        )
         result = await service.check_delivery(shop, "55.75,37.62")
         assert result["ok"] is True
         assert result["inside_zone"] is True
@@ -350,7 +550,9 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
+        service = ShopOrderService(
+            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+        )
         result = await service.check_delivery(shop, "55.50,37.20")
         assert result["ok"] is False
         assert result["inside_zone"] is False
@@ -370,7 +572,9 @@ class TestDeliveryCheckServiceChain:
         )
         shop = await Shop.get_by_slug(slug)
         assert shop is not None
-        service = ShopOrderService(_emu_geocoder(shop_di), shop_di.service_client)
+        service = ShopOrderService(
+            shop_di.settings, _emu_geocoder(shop_di), shop_di.service_client
+        )
         result = await service.check_delivery(shop, f"Нет такого {unique_id}")
         assert result["ok"] is False
         assert result["reason"] == "address_unverifiable"
@@ -386,7 +590,7 @@ class TestDeliveryCheckServiceChain:
         slug = f"touch-{unique_id[:8]}"
         _, product = await _shop_with_product(shop_client, slug)
         customer = await auth_customer(shop_public_client, slug)
-        row = await _save_address(customer["customer_id"], *_INSIDE, address="Дом")
+        row = await _save_address(str(customer["customer_id"]), *_INSIDE, address="Дом")
         before = row.last_used_at
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
@@ -396,7 +600,7 @@ class TestDeliveryCheckServiceChain:
         )
         assert resp.status_code == 200, resp.text
         fresh = await CustomerAddress.get_for_customer(
-            customer["customer_id"], row.customer_address_id
+            str(customer["customer_id"]), row.customer_address_id
         )
         assert fresh is not None and fresh.last_used_at >= before
 
@@ -728,7 +932,9 @@ class TestCourierEta:
         previous = await self._seed_graph()
         try:
             svc = ShopOrderService(
-                geocoder=_emu_geocoder(shop_di), service_client=ServiceClient()
+                settings=shop_di.settings,
+                geocoder=_emu_geocoder(shop_di),
+                service_client=ServiceClient(),
             )
             shop = Shop(
                 shop_id=f"eta-{unique_id[:8]}",
@@ -776,7 +982,9 @@ class TestCourierEta:
                 using="geo",
             )
             svc = ShopOrderService(
-                geocoder=_emu_geocoder(shop_di), service_client=ServiceClient()
+                settings=shop_di.settings,
+                geocoder=_emu_geocoder(shop_di),
+                service_client=ServiceClient(),
             )
             shop = Shop(
                 shop_id=f"etad-{unique_id[:8]}",

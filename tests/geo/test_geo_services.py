@@ -217,6 +217,28 @@ async def test_nearest(geo_seed, addresses: GeoAddressService) -> None:
     hits = await addresses.nearest_by_distance(lat=55.75010, lng=37.61732, limit=1)
     assert len(hits) == 1
     assert hits[0].display_name == "Тверская улица, 1"
+    assert hits[0].distance_m is not None
+    assert hits[0].distance_m < 50
+
+
+async def test_nearest_distance_m_grows(
+    geo_seed, addresses: GeoAddressService
+) -> None:
+    """KNN-раскладка: distance_m монотонно растёт по мере удаления хитов."""
+    hits = await addresses.nearest_by_distance(lat=55.75010, lng=37.61732, limit=3)
+    distances = [h.distance_m for h in hits]
+    assert all(d is not None for d in distances)
+    assert distances == sorted(distances)
+
+
+async def test_suggest_bias_by_distance(
+    geo_seed, addresses: GeoAddressService
+) -> None:
+    """При равном pg_trgm-скоре lat/lng-тай-брейк поднимает ближний адрес."""
+    hits = await addresses.suggest_by_score_desc(
+        query="Тверская", zone_geojson=None, lat=55.75000, lng=37.61750, limit=5
+    )
+    assert hits[0].display_name == "Тверская улица, 7"
 
 
 async def test_route_modes_differ(geo_seed, routing: GeoRoutingService) -> None:

@@ -14,6 +14,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 interface ShopBadgeDef {
@@ -21,6 +22,13 @@ interface ShopBadgeDef {
     label: string;
     icon: string;
     icon_path: string;
+}
+
+interface NutritionValue {
+    kcal?: number;
+    protein_g?: number;
+    fat_g?: number;
+    carb_g?: number;
 }
 
 export interface ProductDraft {
@@ -31,6 +39,8 @@ export interface ProductDraft {
     portion: string;
     badges: string[];
     photo_file_id: string | null;
+    nutrition: NutritionValue;
+    is_available: boolean;
 }
 
 function _str(e: CustomEvent<{ value?: unknown }>): string {
@@ -46,6 +56,7 @@ export class ShopProductModal extends PlatformModal {
     declare categoryId: string | null;
     declare product: ProductDraft | null;
     declare badgeDefs: ShopBadgeDef[];
+    declare nutritionEnabled: boolean;
     declare onSaved: (() => void) | null;
 
     private _createOp: OpController;
@@ -62,6 +73,11 @@ export class ShopProductModal extends PlatformModal {
     declare _badges: string[];
     declare _photoFileId: string;
     declare _photoPreview: string;
+    declare _kcal: string;
+    declare _protein: string;
+    declare _fat: string;
+    declare _carb: string;
+    declare _isAvailable: boolean;
 
     static override properties = {
         ...PlatformModal.properties,
@@ -69,6 +85,7 @@ export class ShopProductModal extends PlatformModal {
         categoryId: { attribute: false },
         product: { attribute: false },
         badgeDefs: { attribute: false },
+        nutritionEnabled: { type: Boolean, attribute: 'nutrition-enabled' },
         onSaved: { attribute: false },
         _name: { state: true },
         _price: { state: true },
@@ -77,6 +94,11 @@ export class ShopProductModal extends PlatformModal {
         _badges: { state: true },
         _photoFileId: { state: true },
         _photoPreview: { state: true },
+        _kcal: { state: true },
+        _protein: { state: true },
+        _fat: { state: true },
+        _carb: { state: true },
+        _isAvailable: { state: true },
     };
 
     static override styles = [
@@ -110,6 +132,10 @@ export class ShopProductModal extends PlatformModal {
             .bchip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
             .bchip svg { width: 13px; height: 13px; fill: currentColor; }
             .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+            .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+            .nutri-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+            .toggle-row { display: flex; align-items: center; gap: var(--space-2); }
+            .toggle-row span { font-size: var(--text-sm); color: var(--text-primary); }
             @media (max-width: 560px) {
                 .top { grid-template-columns: 1fr; }
                 .photo-box { width: 100%; height: 160px; }
@@ -126,6 +152,11 @@ export class ShopProductModal extends PlatformModal {
         this._badges = [];
         this._photoFileId = '';
         this._photoPreview = '';
+        this._kcal = '';
+        this._protein = '';
+        this._fat = '';
+        this._carb = '';
+        this._isAvailable = true;
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
@@ -150,7 +181,32 @@ export class ShopProductModal extends PlatformModal {
             this._photoPreview = p.photo_file_id !== null
                 ? `/shop/api/v1/files/download/${p.photo_file_id}?v=md!sq`
                 : '';
+            const n = p.nutrition;
+            this._kcal = n.kcal !== undefined ? String(n.kcal) : '';
+            this._protein = n.protein_g !== undefined ? String(n.protein_g) : '';
+            this._fat = n.fat_g !== undefined ? String(n.fat_g) : '';
+            this._carb = n.carb_g !== undefined ? String(n.carb_g) : '';
+            this._isAvailable = p.is_available;
         }
+    }
+
+    private _num(raw: string): number | undefined {
+        const v = parseFloat(raw.replace(',', '.'));
+        return Number.isFinite(v) && v >= 0 ? v : undefined;
+    }
+
+    private _nutrition(): NutritionValue {
+        if (!this.nutritionEnabled) return {};
+        const n: NutritionValue = {};
+        const kcal = this._num(this._kcal);
+        const protein = this._num(this._protein);
+        const fat = this._num(this._fat);
+        const carb = this._num(this._carb);
+        if (kcal !== undefined) n.kcal = kcal;
+        if (protein !== undefined) n.protein_g = protein;
+        if (fat !== undefined) n.fat_g = fat;
+        if (carb !== undefined) n.carb_g = carb;
+        return n;
     }
 
     private get _editing(): boolean {
@@ -188,6 +244,9 @@ export class ShopProductModal extends PlatformModal {
             if (JSON.stringify(this._badges) !== JSON.stringify(p.badges)) payload.badges = this._badges;
             if (this._description !== p.description) payload.description = this._description;
             if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId === '' ? null : this._photoFileId;
+            const nutrition = this._nutrition();
+            if (JSON.stringify(nutrition) !== JSON.stringify(p.nutrition)) payload.nutrition = nutrition;
+            if (this._isAvailable !== p.is_available) payload.is_available = this._isAvailable;
             if (Object.keys(payload).length > 2) ok = (await this._updateOp.run(payload)) !== null;
         } else {
             ok = (await this._createOp.run({
@@ -199,6 +258,7 @@ export class ShopProductModal extends PlatformModal {
                 badges: this._badges,
                 price_minor: price,
                 photo_file_id: this._photoFileId === '' ? null : this._photoFileId,
+                nutrition: this._nutrition(),
             })) !== null;
         }
         if (!ok) return;
@@ -314,6 +374,28 @@ export class ShopProductModal extends PlatformModal {
                     ? html`<div class="badges">${badges.map((b) => html`
                           <button type="button" class="bchip ${this._badges.includes(b.key) ? 'on' : ''}"
                               @click=${() => this._toggleBadge(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`)}</div>`
+                    : nothing}
+                ${this.nutritionEnabled
+                    ? html`
+                        <div class="sec-title">${this.t('menu.nutrition_title')}</div>
+                        <div class="nutri-grid">
+                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_kcal')} .value=${this._kcal}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._kcal = _str(e); }}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_protein')} .value=${this._protein}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._protein = _str(e); }}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_fat')} .value=${this._fat}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._fat = _str(e); }}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_carb')} .value=${this._carb}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._carb = _str(e); }}></platform-field>
+                        </div>`
+                    : nothing}
+                ${this._editing
+                    ? html`
+                        <div class="toggle-row">
+                            <platform-switch ?checked=${this._isAvailable}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isAvailable = Boolean(e.detail.value); }}></platform-switch>
+                            <span>${this.t('menu.field_available')}</span>
+                        </div>`
                     : nothing}
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>

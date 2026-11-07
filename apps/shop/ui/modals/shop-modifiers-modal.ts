@@ -17,6 +17,7 @@ import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
+import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
@@ -26,6 +27,8 @@ interface OptionRow {
     shop_modifier_option_id: string;
     name: string;
     price_minor: number;
+    photo_file_id: string | null;
+    nutrition_delta: { kcal?: number; protein_g?: number; fat_g?: number; carb_g?: number };
     is_default: boolean;
     is_available: boolean;
     max_per_option: number;
@@ -62,6 +65,7 @@ export class ShopModifiersModal extends PlatformModal {
     declare shopId: string;
     declare productId: string;
     declare productName: string;
+    declare nutritionEnabled: boolean;
 
     private _groupsOp: OpController;
     private _groupCreateOp: OpController;
@@ -73,6 +77,7 @@ export class ShopModifiersModal extends PlatformModal {
     private _attachOp: OpController;
     private _detachOp: OpController;
     private _suggestOp: OpController;
+    private _uploadOp: OpController;
     private _locale: SelectController<string>;
 
     declare _groups: GroupRow[];
@@ -87,6 +92,7 @@ export class ShopModifiersModal extends PlatformModal {
         shopId: { type: String, attribute: 'shop-id' },
         productId: { type: String, attribute: 'product-id' },
         productName: { type: String, attribute: 'product-name' },
+        nutritionEnabled: { type: Boolean, attribute: 'nutrition-enabled' },
         _groups: { state: true },
         _openGroupId: { state: true },
         _newGroupName: { state: true },
@@ -126,12 +132,27 @@ export class ShopModifiersModal extends PlatformModal {
             .group-body { border-top: 1px solid var(--glass-border-subtle); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
             .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); align-items: end; }
             .opt-row {
-                display: grid; grid-template-columns: 2fr 90px auto auto auto;
+                display: grid; grid-template-columns: 30px 2fr 90px auto auto auto;
                 gap: var(--space-2); align-items: center;
                 padding: var(--space-1) 0;
                 border-bottom: 1px solid var(--glass-border-subtle);
             }
             .opt-row:last-child { border-bottom: 0; }
+            .opt-photo {
+                width: 28px; height: 28px; border-radius: var(--radius-sm);
+                border: 1px dashed var(--glass-border-subtle);
+                background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+                cursor: pointer; overflow: hidden; padding: 0;
+                display: flex; align-items: center; justify-content: center;
+                color: var(--text-tertiary);
+            }
+            .opt-photo:hover { border-color: var(--accent); color: var(--accent); }
+            .opt-photo img { width: 100%; height: 100%; object-fit: cover; }
+            .opt-nutri {
+                display: grid; grid-template-columns: repeat(4, 1fr);
+                gap: var(--space-2); padding: 0 0 var(--space-1) 38px;
+                border-bottom: 1px solid var(--glass-border-subtle);
+            }
             .opt-add { display: grid; grid-template-columns: 2fr 90px auto; gap: var(--space-2); align-items: end; margin-top: var(--space-2); }
             .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
             .group-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
@@ -157,6 +178,7 @@ export class ShopModifiersModal extends PlatformModal {
         this._attachOp = this.useOp('shop/product_modifier_attach');
         this._detachOp = this.useOp('shop/product_modifier_detach');
         this._suggestOp = this.useOp('shop/ai_suggest_options');
+        this._uploadOp = this.useOp('platform/file_create');
         this._locale = this.select((state) => (state.i18n.locale === '' ? 'en' : state.i18n.locale));
     }
 
@@ -249,6 +271,36 @@ export class ShopModifiersModal extends PlatformModal {
             this._newOptionPrice = '';
             await this._reload();
         }
+    }
+
+    private async _uploadOptionPhoto(o: OptionRow, e: Event) {
+        const input = e.target as HTMLInputElement;
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const result = await this._uploadOp.run({
+            file,
+            spec: buildShopProductFileCreateSpecJson({ shopId: this.shopId }),
+        });
+        if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
+            const fileId = (result as { file_id?: unknown }).file_id;
+            if (typeof fileId === 'string') await this._patchOption(o, { photo_file_id: fileId });
+        }
+        input.value = '';
+    }
+
+    private _patchNutritionDelta(o: OptionRow, field: 'kcal' | 'protein_g' | 'fat_g' | 'carb_g', raw: string) {
+        const v = parseFloat(raw.replace(',', '.'));
+        const delta = { ...o.nutrition_delta };
+        if (raw.trim() === '' || !Number.isFinite(v)) {
+            delete delta[field];
+        } else {
+            delta[field] = v;
+        }
+        void this._patchOption(o, { nutrition_delta: delta });
+    }
+
+    private _numStr(v: number | undefined): string {
+        return v === undefined ? '' : String(v);
     }
 
     private async _patchOption(o: OptionRow, patch: Record<string, unknown>) {
@@ -390,6 +442,15 @@ export class ShopModifiersModal extends PlatformModal {
                 <div class="sec-title">${this.t('modifiers.options_title')} · ${priceLabel}</div>
                 ${g.options.map((o) => html`
                     <div class="opt-row">
+                        <button class="opt-photo" title=${this.t('modifiers.option_photo')}
+                            ?disabled=${this._uploadOp.busy}
+                            @click=${() => this.renderRoot.querySelector<HTMLInputElement>(`#opt-file-${o.shop_modifier_option_id}`)?.click()}>
+                            ${o.photo_file_id !== null
+                                ? html`<img src="/shop/api/v1/files/download/${o.photo_file_id}?v=sm!sq" alt="">`
+                                : html`<platform-icon name="image" size="14"></platform-icon>`}
+                        </button>
+                        <input id="opt-file-${o.shop_modifier_option_id}" type="file" accept="image/*" style="display:none"
+                            @change=${(e: Event) => this._uploadOptionPhoto(o, e)}>
                         <platform-field
                             type="string"
                             mode="edit"
@@ -421,7 +482,22 @@ export class ShopModifiersModal extends PlatformModal {
                         <platform-button size="sm" variant="ghost" @click=${() => void this._removeOption(o)}>
                             <platform-icon name="trash" size="14"></platform-icon>
                         </platform-button>
-                    </div>`)}
+                    </div>
+                    ${this.nutritionEnabled ? html`
+                        <div class="opt-nutri">
+                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_kcal')}
+                                .value=${this._numStr(o.nutrition_delta.kcal)}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'kcal', _str(e))}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_protein')}
+                                .value=${this._numStr(o.nutrition_delta.protein_g)}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'protein_g', _str(e))}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_fat')}
+                                .value=${this._numStr(o.nutrition_delta.fat_g)}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'fat_g', _str(e))}></platform-field>
+                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_carb')}
+                                .value=${this._numStr(o.nutrition_delta.carb_g)}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'carb_g', _str(e))}></platform-field>
+                        </div>` : ''}`)}
                 <div class="opt-add">
                     <platform-field
                         type="string"

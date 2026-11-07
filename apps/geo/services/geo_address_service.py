@@ -126,8 +126,14 @@ class GeoAddressService:
         """Ближайшие адреса к точке (GiST KNN по ``geom <->``)."""
         generation = await GeoImportState.active_generation()
         rows = await execute_raw(
-            _ADDRESS_SELECT
-            + """
+            """
+            SELECT id, osm_type, osm_id, display_name, city, street, housenumber,
+                   postcode, lat, lng,
+                   ST_Distance(
+                       geom::geography,
+                       ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography
+                   ) AS distance_m
+            FROM geo_addresses
             WHERE generation IN (0, $1)
             ORDER BY geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)
             LIMIT $4

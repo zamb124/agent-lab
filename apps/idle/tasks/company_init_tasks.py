@@ -89,6 +89,7 @@ async def initialize_new_company_task(
     2. crm: `/crm/api/v1/internal/company/init` — системные типы, шаблоны, personal namespace.
     3. sync: `/sync/api/v1/channels/` — создаёт дефолтный topic-канал.
     4. stock: `/stock/api/v1/internal/company/init` — виртуальные локации и ЕИ.
+    5. shop: `/shop/api/v1/internal/company/init` — ставит сид demo-витрин в очередь.
 
     Каждая ошибка peer-сервиса пробрасывается → TaskIQ retry. После исчерпания
     retry — задача падает, `Company.metadata.initialization_status` = "failed".
@@ -177,6 +178,24 @@ async def initialize_new_company_task(
             "company_init.stock_init_done",
             company_id=company_id,
             result=stock_init_payload.get("result"),
+        )
+
+        shop_response = await service_client.post(
+            "shop",
+            "/shop/api/v1/internal/company/init",
+            json={"company_id": company_id},
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=owner_user_id,
+            ),
+        )
+        shop_init_payload = require_json_object(
+            shop_response, "shop /shop/api/v1/internal/company/init response"
+        )
+        logger.info(
+            "company_init.shop_init_scheduled",
+            company_id=company_id,
+            task_id=shop_init_payload.get("task_id"),
         )
     except ServiceClientError as service_error:
         await _set_company_initialization_status(

@@ -16,4 +16,12 @@ CSS: str = """.hero{position:relative;margin:0 -16px;height:260px;overflow:hidde
 .meta svg{width:15px;height:15px;fill:currentColor;flex-shrink:0;opacity:.85}
 .ob-open,.ob-closed{font-weight:650}
 .ob-open{color:var(--success)}
-.ob-closed{color:var(--warn)}"""
+.ob-closed{color:var(--warn)}
+body[data-hero=minimal] .hero{height:auto;background:none;margin:0;padding:20px 0 2px}
+body[data-hero=minimal] .hero .bg,body[data-hero=minimal] .hero .veil{display:none}
+body[data-hero=minimal] .hero .head{position:static;padding:0 2px}
+body[data-hero=minimal] .hero h1{color:var(--text);text-shadow:none;font-size:26px}
+body[data-hero=minimal] .hero .desc{color:var(--muted);text-shadow:none}
+body[data-hero=minimal] .hero .logo{border-color:var(--line);box-shadow:var(--shadow-sm)}
+body[data-hero=cover] .hero{height:320px}
+body[data-hero=cover] .hero .veil{background:linear-gradient(180deg,rgba(16,14,12,.04) 30%,rgba(16,14,12,.94) 100%)}"""

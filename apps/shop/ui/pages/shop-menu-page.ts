@@ -41,6 +41,7 @@ interface ProductRow {
     description: string;
     price_minor: number;
     photo_file_id: string | null;
+    nutrition: { kcal?: number; protein_g?: number; fat_g?: number; carb_g?: number };
     is_available: boolean;
     portion: string;
     badges: string[];
@@ -56,6 +57,7 @@ interface ShopBadgeDef {
 
 interface ShopRow extends ShopHeadRow {
     badges: ShopBadgeDef[];
+    features?: Record<string, unknown>;
 }
 
 export class ShopMenuPage extends PlatformPage {
@@ -304,11 +306,20 @@ export class ShopMenuPage extends PlatformPage {
         const head = shopHeadRow(raw);
         if (head === null) return null;
         const badges = (raw as { badges?: unknown }).badges;
-        return { ...head, badges: Array.isArray(badges) ? (badges as ShopBadgeDef[]) : [] };
+        const features = (raw as { features?: unknown }).features;
+        return {
+            ...head,
+            badges: Array.isArray(badges) ? (badges as ShopBadgeDef[]) : [],
+            features: typeof features === 'object' && features !== null ? (features as Record<string, unknown>) : {},
+        };
     }
 
     private _shopBadges(): ShopBadgeDef[] {
         return this._shop()?.badges ?? [];
+    }
+
+    private _nutritionEnabled(): boolean {
+        return this._shop()?.features?.nutrition === true;
     }
 
     private async _openBadgeEditor() {
@@ -445,12 +456,15 @@ export class ShopMenuPage extends PlatformPage {
                 portion: product.portion,
                 badges: [...product.badges],
                 photo_file_id: product.photo_file_id,
+                nutrition: { ...product.nutrition },
+                is_available: product.is_available,
             };
         this.openModal('shop.product', {
             shopId: this.shopId,
             categoryId: product === undefined ? this._activeCategory : product.category_id,
             product: draft,
             badgeDefs: this._shopBadges(),
+            nutritionEnabled: this._nutritionEnabled(),
             onSaved: () => void this._reload(),
         });
     }
@@ -583,6 +597,7 @@ export class ShopMenuPage extends PlatformPage {
             shopId: this.shopId,
             productId: product.shop_product_id,
             productName: product.name,
+            nutritionEnabled: this._nutritionEnabled(),
         });
     }
 

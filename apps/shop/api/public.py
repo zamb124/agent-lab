@@ -26,9 +26,12 @@ from apps.shop.models.api import (
     ShopCartPriceResponse,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
+    ShopNotifyBackRequest,
+    ShopNotifyBackResponse,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
     ShopOrderStatusResponse,
+    ShopPersonalResponse,
     ShopStorefrontGeoResponse,
     normalize_shop_theme,
 )
@@ -37,15 +40,19 @@ from apps.shop.realtime.operations import (
     ShopCartPricePayload,
     ShopMyOrderCodePayload,
     ShopMyOrdersListPayload,
+    ShopNotifyBackPayload,
     ShopOrderCreatePayload,
+    ShopPersonalPayload,
     ShopPublicOrderStatusPayload,
     ShopStorefrontGeoPayload,
     op_public_cart_price,
     op_public_my_order_cancel,
     op_public_my_order_get,
     op_public_my_orders_list,
+    op_public_notify_back,
     op_public_order_create,
     op_public_order_status,
+    op_public_personal,
     op_public_storefront_geo,
 )
 from core.context import require_context
@@ -71,6 +78,8 @@ _THEME_PREVIEW_KEYS: dict[str, str] = {
     "tpreset": "preset",
     "taccent": "accent_color",
     "tmode": "mode",
+    "thero": "hero_style",
+    "tbackdrop": "backdrop",
 }
 
 
@@ -147,19 +156,59 @@ async def create_order(
 
 
 @router.get("/storefront/{slug}/delivery-check", response_model=None)
-async def delivery_check(slug: str, address: str, di: Di) -> JsonObject:
-    """Живой чек «доставим ли по адресу»: геокод + полигон зоны магазина."""
+async def delivery_check(
+    slug: str,
+    di: Di,
+    address: str = "",
+    lat: float | None = None,
+    lng: float | None = None,
+) -> JsonObject:
+    """Живой чек «доставим ли по адресу»: точка клиента или резолв текста.
+
+    ``lat``/``lng`` — координаты выбранной подсказки или пина карты: сервер
+    проверяет именно их, текст адреса остаётся подписью. Без точки адрес
+    резолвится geo-справочником внутри зоны, затем внешним геокодером.
+    """
     shop = await di.order_service.resolve_published_shop(slug)
-    return await di.order_service.check_delivery(shop, address)
+    return await di.order_service.check_delivery(shop, address, lat=lat, lng=lng)
 
 
 @router.get("/storefront/{slug}/address-suggest", response_model=None)
-async def address_suggest(slug: str, q: str, di: Di) -> JsonObject:
-    """Автокомплит адреса по справочнику geo внутри зоны доставки витрины."""
+async def address_suggest(
+    slug: str,
+    q: str,
+    di: Di,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> JsonObject:
+    """Автокомплит адреса по справочнику geo внутри зоны доставки витрины.
+
+    ``lat``/``lng`` — точка покупателя для сортировки выдачи по близости.
+    """
     shop = await di.order_service.resolve_published_shop(slug)
     if len(q.strip()) < 2:
         return {"items": []}
-    return await di.order_service.address_suggest(shop, q.strip())
+    return await di.order_service.address_suggest(shop, q.strip(), lat=lat, lng=lng)
+
+
+@router.get("/storefront/{slug}/address-reverse", response_model=None)
+async def address_reverse(slug: str, lat: float, lng: float, di: Di) -> JsonObject:
+    """Ближайший адрес к пину карты — имя для подписи выбранной точки."""
+    shop = await di.order_service.resolve_published_shop(slug)
+    return await di.order_service.address_reverse(shop, lat=lat, lng=lng)
+
+
+@router.get("/aggregate/address-suggest", response_model=None)
+async def aggregate_address_suggest(
+    q: str,
+    di: Di,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> JsonObject:
+    """Автокомплит адреса на /market: geo-справочник без зоны (все города)."""
+    if len(q.strip()) < 2:
+        return {"items": []}
+    return await di.aggregate_service.address_suggest(q.strip(), lat=lat, lng=lng)
 
 
 @router.get("/aggregate/geocode", response_model=None)
@@ -228,6 +277,28 @@ async def cancel_my_order(public_code: str, di: Di) -> ShopMyOrderDetailResponse
     """Отмена покупателем — только пока заказ `new`."""
     return await op_public_my_order_cancel(
         ShopMyOrderCodePayload(public_code=public_code),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/storefront/{slug}/notify-back", response_model=ShopNotifyBackResponse)
+async def notify_back(
+    slug: str, payload: ShopNotifyBackRequest, di: Di
+) -> ShopNotifyBackResponse:
+    """«Сообщить о появлении»: подписка покупателя на недоступный товар."""
+    return await op_public_notify_back(
+        ShopNotifyBackPayload(slug=slug, product_id=payload.product_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/storefront/{slug}/personal", response_model=ShopPersonalResponse)
+async def get_personal(slug: str, di: Di) -> ShopPersonalResponse:
+    """«Как всегда» и подписки покупателя витрины (customer-сессия)."""
+    return await op_public_personal(
+        ShopPersonalPayload(slug=slug),
         user=require_context().user,
         di=di,
     )

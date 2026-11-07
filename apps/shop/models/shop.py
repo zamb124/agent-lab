@@ -43,6 +43,9 @@ class Shop(PlatformModel):
     phone: str = DbField(default="", max_length=32)
     city: str = DbField(default="", max_length=120)
     address: str = DbField(default="", max_length=300)
+    # Точка магазина для маршрута курьера и карт; None — резолв по ``address``.
+    lat: float | None = DbField(default=None)
+    lng: float | None = DbField(default=None)
     timezone: str = DbField(default="Europe/Moscow", max_length=64)
     working_hours: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     delivery_enabled: bool = DbField(default=True)
@@ -55,6 +58,7 @@ class Shop(PlatformModel):
     courier_mode: str = DbField(default="scooter", max_length=16)
     currency: str = DbField(default="RUB", max_length=3)
     theme: JsonObject = DbField(default_factory=dict, db_type="JSONB")
+    features: JsonObject = DbField(default_factory=dict, db_type="JSONB")
     badges: list[dict[str, str]] = DbField(default_factory=list, db_type="JSONB")
     status: ShopStatus = DbField(default=ShopStatus.DRAFT)
     telegram_chat_id: str | None = DbField(default=None, max_length=64)
@@ -76,6 +80,11 @@ class Shop(PlatformModel):
         if row is None or row.deleted_at is not None:
             return None
         return row
+
+    @classmethod
+    async def get_by_id_with_deleted(cls, shop_id: str) -> Self | None:
+        """Магазин по PK включая soft-deleted — demo-сид не воскрешает удалённое."""
+        return await cls.objects.filter(shop_id=shop_id).get_or_none()
 
     @classmethod
     async def get_by_slug(cls, slug: str) -> Self | None:

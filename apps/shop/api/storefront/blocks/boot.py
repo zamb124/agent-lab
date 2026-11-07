@@ -4,7 +4,8 @@
 в shell как есть — без экранирования скобок.
 """
 
-JS: str = """render();
+JS: str = """mountBackdrop();
+render();
 loadCart();for(const l of cart.values())refreshQty(l.pid);draw();
 const deeplink=new URLSearchParams(location.search).get('p');
 if(deeplink){const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');

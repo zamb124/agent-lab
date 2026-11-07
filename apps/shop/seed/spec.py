@@ -22,18 +22,29 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopKind,
     ShopOrderStatus,
+    ShopShelfKind,
+    ShopShelfLayout,
+    ShopShelfPlacement,
 )
 from core.types import JsonObject
 
 
 @dataclass(frozen=True)
 class DemoOptionSpec:
-    """Опция группы модификаторов."""
+    """Опция группы модификаторов.
+
+    ``photo`` — имя файла в ``assets/<tpl>/`` (пусто — без фото);
+    ``nutrition_delta`` — прибавка КБЖУ при выборе опции, wire-форма
+    ``ShopNutrition`` без None-полей.
+    """
 
     key: str
     name: str
     price_minor: int = 0
     is_default: bool = False
+    max_per_option: int = 1
+    photo: str = ""
+    nutrition_delta: dict[str, float] = field(default_factory=dict)
     nested_group_key: str | None = None
 
 
@@ -62,7 +73,12 @@ class DemoCategorySpec:
 
 @dataclass(frozen=True)
 class DemoProductSpec:
-    """Позиция каталога с фото из ``assets/<tpl>/<photo>``."""
+    """Позиция каталога с фото из ``assets/<tpl>/<photo>``.
+
+    ``nutrition`` — КБЖУ порции (wire-форма ``ShopNutrition`` без
+    None-полей); ``is_available=False`` — витрина рисует «скоро
+    вернётся» с подпиской вместо кнопки заказа.
+    """
 
     key: str
     category_key: str
@@ -72,6 +88,8 @@ class DemoProductSpec:
     photo: str
     description: str = ""
     badges: tuple[str, ...] = ()
+    nutrition: dict[str, float] = field(default_factory=dict)
+    is_available: bool = True
     modifier_group_keys: tuple[str, ...] = ()
 
 
@@ -95,6 +113,43 @@ class DemoTableSpec:
 
     key: str
     label: str
+
+
+@dataclass(frozen=True)
+class DemoShelfSpec:
+    """Полка витринной ленты: источник ``kind`` + раскладка + место.
+
+    ``product_keys`` — для ``manual``/``upsell``; ``category_key`` —
+    для ``category``; вычисляемые ``new``/``hits``/``comeback``/
+    ``usual`` источника не требуют (данные собирает FeedService).
+    """
+
+    key: str
+    kind: ShopShelfKind = ShopShelfKind.MANUAL
+    layout: ShopShelfLayout = ShopShelfLayout.RAIL
+    placement: ShopShelfPlacement = ShopShelfPlacement.FEED
+    title: str = ""
+    subtitle: str = ""
+    product_keys: tuple[str, ...] = ()
+    category_key: str = ""
+    limit: int = 10
+
+
+@dataclass(frozen=True)
+class DemoBannerSpec:
+    """Сторис-баннер верха ленты с картинкой из ``assets/<tpl>/``.
+
+    ``link`` — deeplink: ``product:<key>``, ``category:<key>``,
+    ``shelf:<key>`` (ключи сида, резолвятся в реальные id) либо
+    ``url:<https…>`` (внешняя ссылка); ``window`` — JSONB-окно показа.
+    """
+
+    key: str
+    photo: str
+    title: str = ""
+    subtitle: str = ""
+    link: str = ""
+    window: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -152,6 +207,7 @@ class DemoShopSpec:
     timezone: str
     theme: JsonObject
     working_hours: JsonObject
+    features: JsonObject
     delivery_enabled: bool
     pickup_enabled: bool
     onsite_enabled: bool
@@ -161,10 +217,12 @@ class DemoShopSpec:
     prep_minutes: int
     courier_mode: str
     cover_photo: str
-    badges: tuple[JsonObject, ...]
+    badges: tuple[dict[str, str], ...]
     categories: tuple[DemoCategorySpec, ...]
     modifier_groups: tuple[DemoModifierGroupSpec, ...]
     products: tuple[DemoProductSpec, ...]
     promos: tuple[DemoPromoSpec, ...]
     tables: tuple[DemoTableSpec, ...]
+    shelves: tuple[DemoShelfSpec, ...]
+    banners: tuple[DemoBannerSpec, ...]
     orders: tuple[DemoOrderSpec, ...]

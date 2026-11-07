@@ -131,3 +131,41 @@ class PromoStacking(StrEnum):
     EXCLUSIVE = "exclusive"
 
 
+class ShopShelfKind(StrEnum):
+    """Источник товаров витринной полки.
+
+    ``manual`` — ручная выборка ``product_ids``; ``category`` — зеркало
+    раздела каталога; ``new``/``hits``/``comeback``/``usual`` —
+    вычисляемые полки (данные собирает снапшот/персональный endpoint);
+    ``upsell`` — полка «добавить к заказу» внутри корзины.
+    """
+
+    MANUAL = "manual"
+    CATEGORY = "category"
+    NEW = "new"
+    HITS = "hits"
+    COMEBACK = "comeback"
+    USUAL = "usual"
+    UPSELL = "upsell"
+
+
+class ShopShelfLayout(StrEnum):
+    """Визуальная раскладка полки на витрине.
+
+    ``rail`` — горизонтальная карусель карточек; ``rows`` — компактные
+    строки; ``grid`` — двухколоночная сетка; ``hero`` — крупные карточки.
+    """
+
+    RAIL = "rail"
+    ROWS = "rows"
+    GRID = "grid"
+    HERO = "hero"
+
+
+class ShopShelfPlacement(StrEnum):
+    """Где полка показывается: лента витрины или внутри корзины."""
+
+    FEED = "feed"
+    CART = "cart"
+
+

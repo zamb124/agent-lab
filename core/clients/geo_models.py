@@ -21,6 +21,8 @@ class GeoAddressHit(StrictBaseModel):
     postcode: str = ""
     lat: float
     lng: float
+    # Заполняет только /addresses/nearest — дистанция от запрошенной точки, м.
+    distance_m: float | None = None
 
 
 class GeoAddressListResult(StrictBaseModel):

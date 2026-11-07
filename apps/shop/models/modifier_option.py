@@ -28,6 +28,8 @@ class ShopModifierOption(PlatformModel):
     group_id: str = DbField(max_length=64)
     name: str = DbField(max_length=200)
     price_minor: int = DbField(default=0, ge=0)
+    photo_file_id: str | None = DbField(default=None, max_length=64)
+    nutrition_delta: dict[str, float] = DbField(default_factory=dict, db_type="JSONB")
     is_default: bool = DbField(default=False)
     is_available: bool = DbField(default=True)
     max_per_option: int = DbField(default=1, ge=1)

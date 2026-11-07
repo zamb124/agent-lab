@@ -12,10 +12,24 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest_asyncio
-from httpx2 import ASGITransport, AsyncClient
+from fastapi import FastAPI
+from httpx2 import URL, ASGITransport, AsyncClient, Response
+from httpx2._client import USE_CLIENT_DEFAULT, UseClientDefault
+from httpx2._types import (
+    AuthTypes,
+    CookieTypes,
+    HeaderTypes,
+    QueryParamTypes,
+    RequestContent,
+    RequestData,
+    RequestExtensions,
+    RequestFiles,
+    TimeoutTypes,
+)
 
 from apps.shop.di import ShopDi
 from core.di import require_di
+from core.types import JsonObject, parse_json_object
 
 API_PREFIX = "/shop/api/v1"
 PUBLIC_PREFIX = f"{API_PREFIX}/public"
@@ -28,7 +42,7 @@ async def auth_customer(
     phone: str | None = None,
     *,
     company_id: str | None = None,
-) -> dict:
+) -> JsonObject:
     """Эмуляторный customer-auth: start → method=emulator → verify → cookie.
 
     `customer_token` остаётся в cookie jar клиента — последующие заказы
@@ -44,12 +58,16 @@ async def auth_customer(
         assert slug is not None, "slug or company_id required"
         snap_resp = await client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap_resp.status_code == 200, snap_resp.text
-        company_id = snap_resp.json()["company_id"]
+        raw_company_id = parse_json_object(snap_resp.text, "storefront")["company_id"]
+        assert isinstance(raw_company_id, str)
+        company_id = raw_company_id
     resp = await client.post(
         f"{CUSTOMER_AUTH_PREFIX}/start", json={"company_id": company_id, "phone": phone}
     )
     assert resp.status_code == 200, resp.text
-    challenge_id = resp.json()["challenge_id"]
+    raw_challenge_id = parse_json_object(resp.text, "auth start")["challenge_id"]
+    assert isinstance(raw_challenge_id, str)
+    challenge_id = raw_challenge_id
     resp = await client.post(
         f"{CUSTOMER_AUTH_PREFIX}/method",
         json={
@@ -72,13 +90,15 @@ async def auth_customer(
         },
     )
     assert resp.status_code == 200, resp.text
-    return resp.json()["customer"]
+    customer = parse_json_object(resp.text, "customer verify")["customer"]
+    assert isinstance(customer, dict)
+    return customer
 _PLATFORM_ASGI_BASE_URL = "http://linnex.io"
 _PLATFORM_ASGI_HOST_HEADERS = {"Host": "linnex.io"}
 
 
 @pytest_asyncio.fixture
-async def shop_app():
+async def shop_app() -> FastAPI:
     """ASGI-приложение сервиса."""
     from apps.shop.main import app
 
@@ -86,7 +106,9 @@ async def shop_app():
 
 
 @pytest_asyncio.fixture
-async def shop_di(shop_app, setup_database_before_tests: None) -> AsyncIterator[ShopDi]:
+async def shop_di(
+    shop_app: FastAPI, setup_database_before_tests: None
+) -> AsyncIterator[ShopDi]:
     _ = setup_database_before_tests
     async with shop_app.router.lifespan_context(shop_app):
         yield require_di(shop_app, ShopDi)
@@ -94,7 +116,7 @@ async def shop_di(shop_app, setup_database_before_tests: None) -> AsyncIterator[
 
 @pytest_asyncio.fixture
 async def shop_client(
-    shop_app, shop_di, auth_headers_system
+    shop_app: FastAPI, shop_di, auth_headers_system: dict[str, str]
 ) -> AsyncIterator[AsyncClient]:
     """HTTP клиент для Shop API (ASGI transport, владелец system)."""
     _ = shop_di
@@ -108,7 +130,7 @@ async def shop_client(
 
 @pytest_asyncio.fixture
 async def shop_client_company2(
-    shop_app, shop_di, auth_headers_company2
+    shop_app: FastAPI, shop_di, auth_headers_company2: dict[str, str]
 ) -> AsyncIterator[AsyncClient]:
     """Пользователь другой компании: данные `system` ему недоступны."""
     _ = shop_di
@@ -121,7 +143,9 @@ async def shop_client_company2(
 
 
 @pytest_asyncio.fixture
-async def shop_public_client(shop_app, shop_di, unique_id: str) -> AsyncIterator[AsyncClient]:
+async def shop_public_client(
+    shop_app: FastAPI, shop_di, unique_id: str
+) -> AsyncIterator[AsyncClient]:
     """Анонимный клиент без Authorization: публичная витрина и агрегатор.
 
     Уникальный ``X-Forwarded-For`` на тест — IP-лимит заказов считается
@@ -137,7 +161,21 @@ async def shop_public_client(shop_app, shop_di, unique_id: str) -> AsyncIterator
     ) as client:
         original_post = client.post
 
-        async def post_with_customer_auth(url: str, **kw):  # type: ignore[no-untyped-def]
+        async def post_with_customer_auth(
+            url: URL | str,
+            *,
+            content: RequestContent | None = None,
+            data: RequestData | None = None,
+            files: RequestFiles | None = None,
+            json: object = None,
+            params: QueryParamTypes | None = None,
+            headers: HeaderTypes | None = None,
+            cookies: CookieTypes | None = None,
+            auth: AuthTypes | UseClientDefault = USE_CLIENT_DEFAULT,
+            follow_redirects: bool | UseClientDefault = USE_CLIENT_DEFAULT,
+            timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
+            extensions: RequestExtensions | None = None,
+        ) -> Response:
             # Заказ требует customer-сессии (customers.mdc): до первого заказа
             # тест проходит эмуляторную авторизацию по slug из URL.
             if (
@@ -146,8 +184,21 @@ async def shop_public_client(shop_app, shop_di, unique_id: str) -> AsyncIterator
                 and client.cookies.get("customer_token") is None
             ):
                 slug = str(url).split("/storefront/")[1].split("/")[0]
-                await auth_customer(client, slug)
-            return await original_post(url, **kw)
+                _ = await auth_customer(client, slug)
+            return await original_post(
+                url,
+                content=content,
+                data=data,
+                files=files,
+                json=json,
+                params=params,
+                headers=headers,
+                cookies=cookies,
+                auth=auth,
+                follow_redirects=follow_redirects,
+                timeout=timeout,
+                extensions=extensions,
+            )
 
-        client.post = post_with_customer_auth  # type: ignore[method-assign]
+        client.post = post_with_customer_auth
         yield client
