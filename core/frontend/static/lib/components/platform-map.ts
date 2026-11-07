@@ -284,6 +284,7 @@ export class PlatformMapEl extends PlatformElement {
     private _hintPopup: { remove(): void; setLngLat(l: unknown): unknown } | null = null;
     private _cardPopup: { remove(): void } | null = null;
     private _pinnedBuilding: GeoJSON.Feature | null = null;
+    private _buildingGrowRaf = 0;
     private _hoverBuilding: GeoJSON.Feature | null = null;
     private _zoneDraw: ZoneDraw | null = null;
     private _locateMarker: { remove(): void } | null = null;
@@ -1697,10 +1698,12 @@ export class PlatformMapEl extends PlatformElement {
     private _installSources(map: PlatformMap): void {
         const cluster = this.config.markersCluster === true;
         // Подсветка контуров зданий под ховером/кликом адресной фичи (Яндекс-стиль).
-        // Слой ставится под базовые подписи (symbol), чтобы текст читался поверх заливки.
-        map.addSource('pm-building-hl', { type: 'geojson', data: _EMPTY_FC } as never);
+        // Слои ставятся под базовые подписи (symbol), чтобы текст читался поверх заливки.
+        // pm-building-hl — плоская подсветка на hover; pm-building-hl-3d — экструзия
+        // с анимацией роста на закреплённом кликом здании.
         const firstSymbol = ((map.getStyle() as { layers?: { id?: string; type?: string }[] }).layers ?? [])
             .find((l) => l.type === 'symbol' && typeof l.id === 'string' && l.id.length > 0)?.id;
+        map.addSource('pm-building-hl', { type: 'geojson', data: _EMPTY_FC } as never);
         map.addLayer(
             {
                 id: 'pm-building-hl-fill',
@@ -1716,6 +1719,22 @@ export class PlatformMapEl extends PlatformElement {
                 type: 'line',
                 source: 'pm-building-hl',
                 paint: { 'line-color': '#2563eb', 'line-width': 2, 'line-opacity': 0.85 },
+            } as never,
+            firstSymbol,
+        );
+        map.addSource('pm-building-hl-3d', { type: 'geojson', data: _EMPTY_FC } as never);
+        map.addLayer(
+            {
+                id: 'pm-building-hl-3d',
+                type: 'fill-extrusion',
+                source: 'pm-building-hl-3d',
+                paint: {
+                    'fill-extrusion-color': '#2563eb',
+                    'fill-extrusion-height': ['coalesce', ['get', 'h'], 0],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 0.42,
+                    'fill-extrusion-vertical-gradient': true,
+                },
             } as never,
             firstSymbol,
         );
@@ -1795,13 +1814,25 @@ export class PlatformMapEl extends PlatformElement {
         } as never);
         map.addSource('pm-route', { type: 'geojson', data: _EMPTY_FC });
         map.addLayer({
+            id: 'pm-route-halo',
+            type: 'line',
+            source: 'pm-route',
+            paint: {
+                'line-color': this._routeCfg?.color ?? '#155dfc',
+                'line-width': 15,
+                'line-opacity': 0.16,
+                'line-blur': 4,
+            },
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+        } as never);
+        map.addLayer({
             id: 'pm-route-casing',
             type: 'line',
             source: 'pm-route',
             paint: {
                 'line-color': '#ffffff',
-                'line-width': 8,
-                'line-opacity': 0.85,
+                'line-width': 9.5,
+                'line-opacity': 0.9,
             },
             layout: { 'line-cap': 'round', 'line-join': 'round' },
         } as never);
@@ -1811,7 +1842,7 @@ export class PlatformMapEl extends PlatformElement {
             source: 'pm-route',
             paint: {
                 'line-color': this._routeCfg?.color ?? '#155dfc',
-                'line-width': 4.5,
+                'line-width': 5.5,
             },
             layout: { 'line-cap': 'round', 'line-join': 'round' },
         } as never);
@@ -2017,9 +2048,11 @@ export class PlatformMapEl extends PlatformElement {
             const feats = this._featuresAt(map, e.point);
             if (feats.some((f) => f.layer === 'addresses')) {
                 this._pinnedBuilding = this._buildingAt(map, e.point);
-                this._setBuildingHighlight(map, this._pinnedBuilding);
+                this._setBuildingHighlight(map, null);
+                this._setBuildingPinned(map, this._pinnedBuilding);
             } else {
                 this._pinnedBuilding = null;
+                this._setBuildingPinned(map, null);
             }
             const detail = {
                 lngLat: [e.lngLat.lng, e.lngLat.lat] as LngLat,
@@ -2060,7 +2093,7 @@ export class PlatformMapEl extends PlatformElement {
                 if (feats.some((f) => f.layer === 'addresses')) {
                     this._setBuildingHighlight(map, this._buildingAt(map, e.point));
                 } else {
-                    this._setBuildingHighlight(map, this._pinnedBuilding);
+                    this._setBuildingHighlight(map, null);
                 }
                 map.getCanvas().style.cursor = feats.length > 0 || markerHit ? 'pointer' : '';
                 let hintText =
@@ -2084,7 +2117,7 @@ export class PlatformMapEl extends PlatformElement {
             });
             map.getCanvas().addEventListener('mouseleave', () => {
                 this._hideHint();
-                this._setBuildingHighlight(map, this._pinnedBuilding);
+                this._setBuildingHighlight(map, null);
             });
         }
     }
@@ -2194,14 +2227,17 @@ export class PlatformMapEl extends PlatformElement {
     /** Контур здания базовой карты под точкой — для подсветки адресных фич. */
     private _buildingAt(map: PlatformMap, point: { x: number; y: number }): GeoJSON.Feature | null {
         if (!map.getLayer('buildings')) return null;
-        type QF = (p: [number, number], o?: { layers?: string[] }) => { geometry?: GeoJSON.Geometry | null }[];
+        type QF = (p: [number, number], o?: { layers?: string[] }) => {
+            geometry?: GeoJSON.Geometry | null;
+            properties?: Record<string, unknown> | null;
+        }[];
         const query = (map as unknown as { queryRenderedFeatures: QF }).queryRenderedFeatures.bind(map);
         const hits = query([point.x, point.y], { layers: ['buildings'] });
         const hit = hits.find(
             (h) => h.geometry && (h.geometry.type === 'Polygon' || h.geometry.type === 'MultiPolygon'),
         );
         if (!hit?.geometry) return null;
-        return { type: 'Feature', geometry: hit.geometry, properties: {} };
+        return { type: 'Feature', geometry: hit.geometry, properties: { ...(hit.properties ?? {}) } };
     }
 
     private _setBuildingHighlight(map: PlatformMap, feature: GeoJSON.Feature | null): void {
@@ -2222,6 +2258,31 @@ export class PlatformMapEl extends PlatformElement {
                 ? { type: 'FeatureCollection', features: [feature] }
                 : ({ type: 'FeatureCollection', features: [] } as GeoJSON.FeatureCollection),
         );
+    }
+
+    /** Закреплённое кликом здание «вырастает» в 3D — экструзия с анимацией высоты. */
+    private _setBuildingPinned(map: PlatformMap, feature: GeoJSON.Feature | null): void {
+        cancelAnimationFrame(this._buildingGrowRaf);
+        const src = map.getSource('pm-building-hl-3d') as { setData(d: GeoJSON.FeatureCollection): void } | undefined;
+        if (!src) return;
+        if (!feature) {
+            src.setData({ type: 'FeatureCollection', features: [] });
+            return;
+        }
+        const heightAttr = Number(feature.properties?.['height']);
+        const target = Number.isFinite(heightAttr) && heightAttr > 3 ? Math.min(heightAttr, 200) : 16;
+        const t0 = performance.now();
+        const duration = 340;
+        const tick = (now: number): void => {
+            const k = Math.min(1, (now - t0) / duration);
+            const eased = 1 - Math.pow(1 - k, 3);
+            src.setData({
+                type: 'FeatureCollection',
+                features: [{ ...feature, properties: { ...feature.properties, h: target * eased } }],
+            });
+            if (k < 1) this._buildingGrowRaf = requestAnimationFrame(tick);
+        };
+        this._buildingGrowRaf = requestAnimationFrame(tick);
     }
 
     private _markerAt(map: PlatformMap, point: { x: number; y: number }): { key: string; lngLat: LngLat; title: string } | null {
@@ -2245,7 +2306,9 @@ export class PlatformMapEl extends PlatformElement {
         lngLat: LngLat,
         feats: { layer: string; properties: Record<string, unknown> }[],
     ): void {
-        this._cardPopup?.remove();
+        const prevPopup = this._cardPopup;
+        this._cardPopup = null;
+        prevPopup?.remove();
         const t = (k: string, vars?: Record<string, string | number> | null, ns?: string) => this.t(k, vars, ns);
         const colorFor = (name: string): string | null => {
             const info = (this._layersOp?.lastResult?.layers ?? []).find((l) => l.name === name);
@@ -2261,10 +2324,19 @@ export class PlatformMapEl extends PlatformElement {
             .filter((c) => c !== '')
             .join('');
         if (cards === '') return;
-        this._cardPopup = new maplibre.Popup({ closeButton: true, className: 'pm-card-popup', maxWidth: '340px' })
+        const popup = new maplibre.Popup({ closeButton: true, className: 'pm-card-popup', maxWidth: '340px' })
             .setLngLat(lngLat)
             .setHTML(cards)
-            .addTo(map) as unknown as { remove(): void };
+            .addTo(map) as unknown as { remove(): void; on?(event: string, cb: () => void): void };
+        this._cardPopup = popup;
+        // Закрытие карточки снимает 3D-подсветку здания; replace remove() старого
+        // попапа тоже файрит close — игнорируем его (this._cardPopup уже null/новый).
+        popup.on?.('close', () => {
+            if (this._cardPopup !== popup) return;
+            this._cardPopup = null;
+            this._pinnedBuilding = null;
+            this._setBuildingPinned(map, null);
+        });
     }
 
     private _applyConfigHiddenLayers(): void {
@@ -2562,6 +2634,9 @@ export class PlatformMapEl extends PlatformElement {
         this._rulerPoints = [];
         this._configLayersApplied = false;
         this._mapLayers = new Set();
+        cancelAnimationFrame(this._buildingGrowRaf);
+        this._pinnedBuilding = null;
+        this._hoverBuilding = null;
     }
 
     static override styles = css`

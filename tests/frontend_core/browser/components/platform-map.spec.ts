@@ -446,6 +446,30 @@ describe('platform-map', function () {
             | { serialize(): { data?: { features?: unknown[] } } }
             | undefined)?.serialize().data?.features?.length;
         expect(countAfter, 'подсветка снята вне адресной фичи').to.equal(0);
+
+        // Клик по адресной фиче — здание «вырастает» в 3D (pm-building-hl-3d).
+        canvas.dispatchEvent(
+            new MouseEvent('click', {
+                clientX: rect.left + pt.x,
+                clientY: rect.top + pt.y,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        await aTimeout(600);
+        const pinned = (map.getSource('pm-building-hl-3d') as
+            | { serialize(): { data?: { features?: { properties?: { h?: number } }[] } } }
+            | undefined)?.serialize().data?.features?.[0];
+        expect(pinned, 'здание закреплено в pm-building-hl-3d').to.exist;
+        expect(pinned!.properties?.h ?? 0, 'экструзия выросла').to.be.greaterThan(10);
+        expect(map.getLayer('pm-building-hl-3d'), 'fill-extrusion слой').to.exist;
+        // Экструзия реально нарисована — фича видна queryRenderedFeatures на слое.
+        await waitUntil(
+            () =>
+                map.queryRenderedFeatures([pt.x, pt.y], { layers: ['pm-building-hl-3d'] }).length > 0,
+            '3D-здание отрендерено в вьюпорте',
+            { timeout: 5_000 },
+        );
     });
 
     it('клик по фиче → читаемая .pm-card с заголовком и координатами', async () => {
