@@ -153,6 +153,9 @@ LOG_BILLING_SETTLEMENT_LAG_MS = "platform.billing.settlement_lag_ms"
 # WS command duration
 LOG_WS_COMMAND_DURATION_MS = "ws.command_duration_ms"
 LOG_WS_COMMAND_STATUS = "ws.command_status"
+LOG_WS_ONLINE_USERS = "ws.online_users"
+LOG_WS_ACTIVE_CHANNELS = "ws.active_channels"
+LOG_WS_PRESENCE_DURATION_MS = "ws.presence_duration_ms"
 
 # Исключение
 LOG_EXCEPTION_TYPE = "exception.type"
@@ -170,6 +173,7 @@ EVENT_TASK_LOCK_ACQUIRED = "task_lock_acquired"
 EVENT_WS_CONNECTED = "ws_connected"
 EVENT_WS_DISCONNECTED = "ws_disconnected"
 EVENT_WS_COMMAND = "ws_command"
+EVENT_WS_PRESENCE_SNAPSHOT = "ws_presence_snapshot"
 EVENT_LLM_REQUEST = "llm_request"
 EVENT_LLM_RESPONSE = "llm_response"
 EVENT_LLM_STREAM_RESPONSE = "llm_stream_response"

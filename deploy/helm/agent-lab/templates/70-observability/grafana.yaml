@@ -115,9 +115,34 @@ spec:
               value: "false"
             - name: GF_USERS_ALLOW_ORG_CREATE
               value: "false"
+            # Алертинг: единичная оценка правила может быть дорогой (LogQL
+            # | json по 5-мин окну). Дефолтный таймаут оценки 30s даёт
+            # DeadlineExceeded на нагруженном Loki — поднимаем до 90s.
+            - name: GF_UNIFIED_ALERTING_EVALUATION_TIMEOUT
+              value: "90s"
+            # Telegram-ресивер из files/grafana-alerts/contact-points.yaml
+            - name: TELEGRAM_ALERTS_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: alerts-telegram-bot-token
+                  optional: true
+            - name: TELEGRAM_ALERTS_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: alerts-telegram-chat-id
+                  optional: true
           ports:
             - name: http
               containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources

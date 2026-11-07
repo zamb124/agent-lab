@@ -207,7 +207,7 @@
       },
       "targets": [
         {
-          "expr": "max by (redis_db) (last_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | scan_dbsize_mismatch=\"true\" [15m]))",
+          "expr": "sum(count_over_time({service=~\"$service\"} | json | message=\"redis.inventory.db_summary\" | redis_db=~\"$redis_db\" | scan_dbsize_mismatch=\"true\" [$__range]))",
           "legendFormat": "db{{redis_db}}",
           "refId": "A",
           "instant": true,

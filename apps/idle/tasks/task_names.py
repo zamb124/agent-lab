@@ -57,6 +57,8 @@ TASK_PLATFORM_SCHEDULES_GC_TICK = declare_task(
 
 TASK_REDIS_INVENTORY_TICK = declare_task("redis_inventory_tick", queue="idle", scheduled=True)
 
+TASK_REALTIME_PRESENCE_TICK = declare_task("realtime_presence_tick", queue="idle", scheduled=True)
+
 TASK_NAMESPACE_PERSONAL_BACKFILL = declare_task("namespace_personal_backfill", queue="idle")
 
 __all__ = [
@@ -74,6 +76,7 @@ __all__ = [
     "TASK_PUSH_CONFIG_LIST",
     "TASK_PUSH_CONFIG_SET",
     "TASK_PUSH_NOTIFICATION_SEND",
+    "TASK_REALTIME_PRESENCE_TICK",
     "TASK_REDIS_INVENTORY_TICK",
     "TASK_SEND_TASK_COMPLETED",
     "TASK_SEND_TASK_FAILED",

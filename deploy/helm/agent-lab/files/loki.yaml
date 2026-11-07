@@ -28,7 +28,17 @@ storage_config:
     directory: /loki/chunks
 
 limits_config:
-  retention_period: 168h  # 7 дней
+  retention_period: 24h  # логи — максимум сутки (короткий горизонт)
+  # Лёгкий стек: режем длинные/тяжёлые запросы, которые укладывали
+  # алерт-движок в DeadlineExceeded.
+  max_query_length: 25h
+  max_query_lookback: 0s
+  max_entries_limit_per_query: 5000
+  # Панели redis inventory топ-N префиксов разворачивают >500 серий
+  # (redis_db × prefix) до агрегации max by — поднимаем потолок до 2000.
+  max_query_series: 2000
+  split_queries_by_interval: 1h
+  max_cache_freshness_per_query: 5m
 
 compactor:
   working_directory: /loki/compactor

@@ -12,7 +12,7 @@ distributor:
 
 compactor:
   compaction:
-    block_retention: 48h
+    block_retention: 24h  # трейсы — максимум сутки
 
 storage:
   trace:

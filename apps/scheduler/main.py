@@ -28,6 +28,7 @@ from apps.idle.tasks.task_names import (
     TASK_FILE_RETENTION_PURGE_TICK,
     TASK_PAYMENT_SYNC_TICK,
     TASK_PLATFORM_SCHEDULES_GC_TICK,
+    TASK_REALTIME_PRESENCE_TICK,
     TASK_REDIS_INVENTORY_TICK,
     TASK_SPAN_BILLING_SETTLEMENT_TICK,
 )
@@ -706,6 +707,15 @@ async def ensure_platform_schedules(
             interval_seconds=settings.database.redis_inventory_interval_seconds,
             payload={},
             log_label="Redis inventory metrics",
+            run_now_on_start=True,
+        )
+        await _ensure_idle_interval_schedule(
+            scheduler_service=scheduler_service,
+            config_enabled=True,
+            task_name=TASK_REALTIME_PRESENCE_TICK.name,
+            interval_seconds=60,
+            payload={},
+            log_label="WebSocket presence metrics",
             run_now_on_start=True,
         )
     await _ensure_calendar_schedule(

@@ -1212,6 +1212,18 @@ observability:
   alloy:
     enabled: true
     image: grafana/alloy:v1.21.3
+  prometheus:
+    enabled: true
+    nodeName: master
+    image: prom/prometheus:v3.7.3
+    storage: 5Gi
+  nodeExporter:
+    enabled: true
+    image: prom/node-exporter:v1.9.1
+  kubeStateMetrics:
+    enabled: true
+    nodeName: master
+    image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.16.0
 
 ingress:
   enabled: true
@@ -1260,6 +1272,8 @@ platformSecrets:
   turnSecret: ""
   onlyofficeJwtSecret: ""
   grafanaAdminPassword: ""
+  telegramAlertsBotToken: ""
+  telegramAlertsChatId: ""
   llmOpenrouterApiKey: ""
   llmOpenrouterApiKeys: ""
   llmBothubApiKey: ""

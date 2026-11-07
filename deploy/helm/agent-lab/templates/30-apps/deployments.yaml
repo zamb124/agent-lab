@@ -30,6 +30,10 @@ spec:
       labels:
         app: {{ $app.serviceName }}
         app.kubernetes.io/component: application
+      annotations:
+        # Granian :9090/metrics — таргет job platform-granian в Prometheus.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
     spec:
 {{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
 {{- include "agentlab.nodeSchedule" (list $ $app.nodeName) | nindent 6 }}

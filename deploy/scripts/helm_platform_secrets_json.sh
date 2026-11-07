@@ -44,6 +44,8 @@ jq -n \
   --arg turnSecret "${TURN_SECRET:-}" \
   --arg onlyofficeJwtSecret "${ONLYOFFICE_JWT_SECRET:-}" \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
+  --arg telegramAlertsBotToken "${TELEGRAM_ALERTS_BOT_TOKEN:-}" \
+  --arg telegramAlertsChatId "${TELEGRAM_ALERTS_CHAT_ID:-}" \
   --arg llmOpenrouterApiKey "${LLM__OPENROUTER__API_KEY:-${LLM_OPENROUTER_API_KEY:-}}" \
   --arg llmOpenrouterApiKeys "${LLM__OPENROUTER__API_KEYS:-}" \
   --arg llmBothubApiKey "${LLM__BOTHUB__API_KEY:-${LLM_BOTHUB_API_KEY:-}}" \
@@ -137,6 +139,8 @@ jq -n \
     turnSecret: $turnSecret,
     onlyofficeJwtSecret: $onlyofficeJwtSecret,
     grafanaAdminPassword: $grafanaAdminPassword,
+    telegramAlertsBotToken: $telegramAlertsBotToken,
+    telegramAlertsChatId: $telegramAlertsChatId,
     llmOpenrouterApiKey: $llmOpenrouterApiKey,
     llmOpenrouterApiKeys: $llmOpenrouterApiKeys,
     llmBothubApiKey: $llmBothubApiKey,

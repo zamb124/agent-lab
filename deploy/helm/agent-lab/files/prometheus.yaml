@@ -1,0 +1,111 @@
+# Prometheus: лёгкий инфра- и app-metrics стек (retention 24h).
+#
+# Добыча данных:
+#   platform-granian  — Granian /metrics :9090 на app-подах (аннотация
+#                       prometheus.io/scrape=true + port=9090).
+#   kubelet           — /metrics узла (volume stats, pod lifecycle).
+#   kubelet-cadvisor  — /metrics/cadvisor (per-container cpu/mem/net/fs,
+#                       отфильтровано до namespace=platform).
+#   node-exporter     — хостовые диск/mem/network (DaemonSet :9100).
+#   kube-state-metrics— restarts, phase, replicas (KSM :8080).
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  scrape_timeout: 10s
+  external_labels:
+    monitor: platform
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: platform-granian
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [platform]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: keep
+        regex: \d+
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: keep
+        regex: Running
+      - source_labels:
+          [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        separator: ":"
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: service
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+
+  - job_name: kubelet
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_address_InternalIP]
+        target_label: __address__
+        replacement: ${1}:10250
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+
+  - job_name: kubelet-cadvisor
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    metrics_path: /metrics/cadvisor
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_address_InternalIP]
+        target_label: __address__
+        replacement: ${1}:10250
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+    metric_relabel_configs:
+      # cadvisor отдаёт все поды ноды — оставляем только платформенные.
+      - source_labels: [namespace]
+        regex: platform
+        action: keep
+
+  - job_name: node-exporter
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: [platform]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: node-exporter
+      - source_labels: [__meta_kubernetes_endpoint_node_name]
+        target_label: node
+
+  - job_name: kube-state-metrics
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: [platform]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: kube-state-metrics
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: http-metrics
