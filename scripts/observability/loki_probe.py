@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -375,7 +375,7 @@ def _print_report(results: list[ProbeResult], end: float) -> None:
 
 def _serialize(results: list[ProbeResult], end: float) -> dict:
     return {
-        "generated_at": datetime.fromtimestamp(end, UTC).isoformat(),
+        "generated_at": datetime.fromtimestamp(end, timezone.utc).isoformat(),
         "results": [
             {
                 "source": r.target.source,
