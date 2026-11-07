@@ -13,6 +13,9 @@ from pathlib import Path
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
+from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.reader.asset_persist import persist_extract_asset
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.extract_cache import (
@@ -23,6 +26,7 @@ from core.files.reader.extract_cache import (
     store_vision_image,
     store_vision_page,
 )
+from core.files.reader.markdown import strip_nested_bytes
 from core.files.reader.models import (
     DEFAULT_VIRTUAL_PAGE_SIZE,
     VISION_FULL_READ_MAX_PAGES,
@@ -34,6 +38,8 @@ from core.files.reader.models import (
     FileExtract,
     FileReadKind,
     FileResult,
+    NestedContent,
+    NestedMode,
     PageLayout,
     PageLayoutKind,
     ReadAsset,
@@ -46,6 +52,12 @@ from core.files.reader.models import (
     UniversalPage,
     merge_file_ref_read_options,
     resolved_page_label,
+)
+from core.files.reader.nested import (
+    compress_nested_image,
+    nested_bytes,
+    nested_from_page_assets,
+    persist_nested_content,
 )
 from core.files.reader.render import render_file_result
 from core.files.reader.service import (
@@ -325,6 +337,7 @@ async def _materialize_read_page(
     persist_namespace: str | None,
     force_vision: bool,
     forced_lane: ReadLane | None,
+    include_nested: bool,
 ) -> tuple[UniversalPage, bool]:
     merge_text = page_text_for_merge(page.text)
     text_usable = page_text_usable(page.text)
@@ -338,7 +351,13 @@ async def _materialize_read_page(
 
     vision_used = False
     ocr_blocks: list[str] = []
-    need_vision = bool(page.assets) and (force_vision or not text_usable)
+    # Page-level hybrid: OCR assets when text unusable or forced vision/hybrid.
+    # forced_lane=TEXT — только текст, без vision (даже если текст непригоден).
+    need_vision = (
+        forced_lane is not ReadLane.TEXT
+        and bool(page.assets)
+        and (force_vision or not text_usable)
+    )
     if need_vision:
         for image_index, asset in enumerate(page.assets, start=1):
             ocr_text = await _vision_ocr_image_bytes(
@@ -385,6 +404,9 @@ async def _materialize_read_page(
         content_mode = ContentMode.HYBRID
     else:
         content_mode = ContentMode.FULL
+    nested: list[NestedContent] = []
+    if include_nested:
+        nested = nested_from_page_assets(page, parent_name=file_name)
     return (
         UniversalPage(
             index=page.index,
@@ -393,9 +415,203 @@ async def _materialize_read_page(
             content_mode=content_mode,
             blocks=blocks,
             files=files,
+            nested=nested,
         ),
         vision_used,
     )
+
+
+def _strip_extract_for_cache(extract: FileExtract) -> FileExtract:
+    pages = [
+        page.model_copy(update={"nested": strip_nested_bytes(page.nested)})
+        for page in extract.pages
+    ]
+    return extract.model_copy(update={"pages": pages})
+
+
+async def _rehydrate_nested_from_raw(
+    extract: FileExtract,
+    *,
+    raw: bytes,
+    args: ReadFileArgs,
+    resolved_name: str,
+) -> FileExtract:
+    """Восстанавливает bytes_b64 nested после cache hit."""
+    if args.forced_lane is ReadLane.TEXT:
+        return extract
+    needs_bytes = any(
+        item.bytes_b64 is None for page in extract.pages for item in page.nested
+    )
+    if not needs_bytes and any(page.nested for page in extract.pages):
+        return extract
+    if extract.kind != FileReadKind.PDF:
+        opts = read_options_from_args(
+            args, source_file_id=extract.file_id, include_asset_bytes=True
+        )
+        reader = FileReader()
+        result = await reader.read_raw_bytes(raw, resolved_name, opts)
+        source_pages = read_pages_for_layout(result, file_name=extract.file_name)
+        by_index = {page.index: page for page in source_pages}
+        pages: list[UniversalPage] = []
+        for page in extract.pages:
+            source = by_index.get(page.index)
+            if source is None:
+                pages.append(page)
+                continue
+            nested = nested_from_page_assets(source, parent_name=extract.file_name)
+            pages.append(page.model_copy(update={"nested": nested}))
+        return extract.model_copy(update={"pages": pages})
+
+    warnings: list[str] = []
+    indices = {page.index for page in extract.pages}
+    source_pages = list(
+        iter_pdf_read_pages(
+            raw,
+            resolved_name,
+            page_indices=indices,
+            force_raster=False,
+            warnings=warnings,
+        )
+    )
+    by_index = {page.index: page for page in source_pages}
+    pages = []
+    for page in extract.pages:
+        source = by_index.get(page.index)
+        if source is None:
+            pages.append(page)
+            continue
+        nested = nested_from_page_assets(source, parent_name=extract.file_name)
+        pages.append(page.model_copy(update={"nested": nested}))
+    return extract.model_copy(update={"pages": pages})
+
+
+async def _deliver_nested(
+    extract: FileExtract,
+    args: ReadFileArgs,
+    *,
+    prompt: str,
+) -> tuple[FileExtract, list[NestedContent], dict[str, str], set[str], list[str]]:
+    """Persist/limit/compress nested; optional recursive OCR. Returns window nested for FileResult."""
+    warnings: list[str] = list(extract.warnings)
+    if args.forced_lane is ReadLane.TEXT:
+        cleared = [
+            page.model_copy(update={"nested": []}) for page in extract.pages
+        ]
+        return extract.model_copy(update={"pages": cleared}), [], {}, set(), warnings
+
+    start = args.page_start
+    end = (
+        extract.page_layout.pages_total - 1
+        if args.page_end == -1
+        else min(args.page_end, extract.page_layout.pages_total - 1)
+    )
+    window_nested: list[NestedContent] = []
+    for page in extract.pages:
+        if start <= page.index <= end:
+            window_nested.extend(page.nested)
+
+    omitted: set[str] = set()
+    limited = window_nested
+    if args.max_nested >= 0 and len(window_nested) > args.max_nested:
+        limited = window_nested[: args.max_nested]
+        for item in window_nested[args.max_nested :]:
+            omitted.add(item.anchor)
+        warnings.append(
+            f"nested truncated to max_nested={args.max_nested} "
+            + f"(had {len(window_nested)})"
+        )
+
+    compressed: list[NestedContent] = []
+    for item in limited:
+        if item.content_type.startswith("image/") and item.bytes_b64:
+            compressed.append(compress_nested_image(item))
+        else:
+            compressed.append(item)
+
+    # parts — bytes уходят в tool-result; page_summarizations — multimodal summarize
+    # видит nested images даже при nested_mode=refs (после render refs strip'ит bytes).
+    keep_bytes = (
+        args.nested_mode is NestedMode.PARTS or args.page_summarizations
+    )
+    delivered: list[NestedContent] = []
+    try:
+        _ = FileReader.require_files_service()
+        files_service_ready = True
+    except ValueError:
+        files_service_ready = False
+    if files_service_ready:
+        for item in compressed:
+            if item.bytes_b64 is None:
+                delivered.append(item)
+                continue
+            delivered.append(
+                await persist_nested_content(
+                    item,
+                    source_file_id=extract.file_id,
+                    namespace_id=args.persist_assets_namespace,
+                    keep_bytes=keep_bytes,
+                )
+            )
+    else:
+        delivered = compressed
+        if args.nested_mode is NestedMode.REFS and compressed:
+            warnings.append(
+                "nested refs not persisted: FileReader.configure_asset_persist was not called"
+            )
+
+    recursive_texts: dict[str, str] = {}
+    read_lane = extract.read_lane
+    if args.recursive:
+        for item in delivered:
+            if item.anchor in omitted:
+                continue
+            if not item.content_type.startswith("image/"):
+                continue
+            raw = nested_bytes(item) if item.bytes_b64 else None
+            if raw is None and item.file_id is not None:
+                record = await FileRecord.get(item.file_id)
+                if record is None:
+                    raise FileReadError(f"nested file not found: {item.file_id}")
+                handle = await FileGate().open_record(
+                    record, SystemPrincipal(company_id=record.company_id or "")
+                )
+                raw = await handle.read_bytes()
+            if raw is None:
+                continue
+            ocr = await _vision_ocr_image_bytes(
+                raw,
+                file_name=item.original_name,
+                mime=item.content_type,
+                prompt=prompt,
+                vision_model=args.vision_model,
+                compression=args.compression,
+                file_id=extract.file_id,
+                checksum=extract.source_checksum,
+                page_index=item.page_index,
+                image_checksum=item.checksum,
+            )
+            recursive_texts[item.anchor] = ocr
+        if recursive_texts:
+            read_lane = ReadLane.HYBRID
+
+    delivered_by_anchor = {item.anchor: item for item in delivered}
+    display: list[NestedContent] = []
+    for item in window_nested:
+        updated_item = delivered_by_anchor.get(item.anchor)
+        display.append(updated_item if updated_item is not None else item)
+
+    by_page: dict[int, list[NestedContent]] = {}
+    for item in display:
+        by_page.setdefault(item.page_index, []).append(item)
+    pages: list[UniversalPage] = []
+    for page in extract.pages:
+        page_nested = by_page.get(page.index)
+        if page_nested is None:
+            pages.append(page)
+            continue
+        pages.append(page.model_copy(update={"nested": page_nested}))
+    updated = extract.model_copy(update={"pages": pages, "read_lane": read_lane})
+    return updated, display, recursive_texts, omitted, warnings
 
 
 async def _extract_document(
@@ -472,6 +688,7 @@ async def _extract_document(
             f"hybrid: у {kind.value} нет ассетов на страницах, прочитан только текст"
         )
 
+    include_nested = forced_lane != ReadLane.TEXT
     universal: list[UniversalPage] = []
     any_vision_used = False
     for page in source_pages:
@@ -487,6 +704,7 @@ async def _extract_document(
             persist_namespace=persist_namespace,
             force_vision=force_vision,
             forced_lane=forced_lane,
+            include_nested=include_nested,
         )
         if vision_used:
             any_vision_used = True
@@ -516,7 +734,7 @@ async def _extract_document(
         source_checksum=checksum,
     )
     if not lazy:
-        await store_file_extract(extract)
+        await store_file_extract(_strip_extract_for_cache(extract))
     return extract
 
 
@@ -541,7 +759,12 @@ async def _get_or_extract(
 
     cached = await load_file_extract(file_id=file_id, checksum=None)
     if cached is not None and not cached_extract_is_stale(cached):
-        return cached
+        return await _rehydrate_nested_from_raw(
+            cached,
+            raw=resolved_raw,
+            args=args,
+            resolved_name=resolved_name,
+        )
 
     return await _extract_document(
         file_ref,
@@ -590,13 +813,26 @@ async def read_files_to_envelope(
 
     reader = FileReader()
     files: list[FileResult] = []
+    vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
+    prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
     for file_ref in file_refs:
         file_budget = per_file_budget + carryover
         try:
             extract = await reader.read(file_ref, args)
-            file_result = await render_file_result(
-                extract, args, tool_name=tool_name, budget=file_budget
+            extract, nested, recursive_texts, omitted, warn = await _deliver_nested(
+                extract, args, prompt=prompt
             )
+            file_result = await render_file_result(
+                extract,
+                args,
+                tool_name=tool_name,
+                budget=file_budget,
+                nested=nested,
+                recursive_texts=recursive_texts,
+                omitted_anchors=omitted,
+            )
+            if warn:
+                file_result = file_result.model_copy(update={"warnings": warn})
         except (FileReadError, ValueError) as exc:
             files.append(_error_file_result(file_ref, str(exc)))
             continue

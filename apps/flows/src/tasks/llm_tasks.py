@@ -7,6 +7,7 @@ TaskIQ tasks для LLM вызовов.
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
 import core.tracing.attributes as trace_attributes
+from apps.flows.di import Di
 from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
 from core.a2a import (
     coerce_usage_token_count,
@@ -37,6 +38,8 @@ async def invoke_llm(
     context_data: JsonObject | None = None,
     llm_context: JsonObject | None = None,
     llm_context_blocks: list[JsonObject] | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Вызывает LLM и возвращает результат.
@@ -74,7 +77,9 @@ async def invoke_llm(
             raise ValueError(
                 "invoke_llm: platform default for capability=llm_chat is not configured"
             )
-        llm = create_llm_client_from_ai_model(resolved)
+        llm = create_llm_client_from_ai_model(
+            resolved, billing_service=di.billing_service
+        )
         trace_extra[trace_attributes.ATTR_USER_ID] = uid
         trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
 

@@ -15,7 +15,7 @@ from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
 from core.types import JsonObject, require_json_object
 from tests.core.files.corpus.e2e_helpers import (
-    assert_file_extract_body,
+    assert_files_read_envelope_body,
     capability_files_read_request,
     execution_state_for_files,
     read_file_kwargs_for_entry,
@@ -50,7 +50,7 @@ async def test_capability_files_read_corpus_file(
     if entry.uses_vision_llm:
         mock_llm_with_queue([_MOCK_VISION_TEXT])
 
-    raw = require_corpus_bytes(entry)
+    _ = require_corpus_bytes(entry)
     file_ref = await store_corpus_in_files_service(
         frontend_di,
         entry,
@@ -63,7 +63,7 @@ async def test_capability_files_read_corpus_file(
     response = await registry.call(
         capability_files_read_request(
             user_id=system_user_id,
-            file_id=file_ref.file_id,
+            file_ids=[file_ref.file_id],
             page_end=read_kwargs.page_end,
             vision_prompt=read_kwargs.vision_prompt,
             transcription_company_id=read_kwargs.transcription_company_id,
@@ -71,7 +71,7 @@ async def test_capability_files_read_corpus_file(
     )
     assert response.status == "ok"
     body = require_json_object(response.result, "files.read.result")
-    assert_file_extract_body(body, entry=entry, file_ref=file_ref, raw=raw)
+    assert_files_read_envelope_body(body, entry=entry, file_ref=file_ref)
 
 
 @pytest.mark.asyncio

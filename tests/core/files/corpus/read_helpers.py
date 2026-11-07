@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
+from core.clients.llm.mock import MockLLM
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef
 from core.files.reader.models import (
@@ -19,8 +22,18 @@ from core.files.reader.models import (
 )
 from core.files.reader.service import FileReader
 from core.files.reader.universal import page_layout_kind_for_result, read_lane_for_kind
+from core.files.service import FilesService
+from core.types import JsonObject, JsonValue
 from tests.core.files.corpus.helpers import corpus_stt_company_id, require_heic_entry_supported
 from tests.core.files.corpus.manifest import CORPUS_DIR, CorpusFile
+
+
+class _FilesDi(Protocol):
+    @property
+    def files_service(self) -> FilesService: ...
+
+
+_MockLlmQueue = Callable[[list[JsonValue | str]], MockLLM]
 
 _MOCK_VISION_TEXT = "MOCK_VISION"
 
@@ -72,7 +85,7 @@ async def read_corpus_extract(
     entry: CorpusFile,
     *,
     unique_id: str,
-    mock_llm_with_queue,
+    mock_llm_with_queue: _MockLlmQueue,
     vision_prompt: str | None = None,
 ) -> FileExtract:
     if entry.skip_reason:
@@ -80,7 +93,7 @@ async def read_corpus_extract(
     require_heic_entry_supported(entry.relative_path)
     raw = require_corpus_bytes(entry)
     if entry.uses_vision_llm:
-        mock_llm_with_queue([_MOCK_VISION_TEXT])
+        _ = mock_llm_with_queue([_MOCK_VISION_TEXT])
     transcription_company_id: str | None = None
     if entry.uses_mock_stt_tier:
         transcription_company_id = corpus_stt_company_id(unique_id)
@@ -100,7 +113,7 @@ async def read_corpus_raw(
     entry: CorpusFile,
     *,
     unique_id: str,
-    mock_llm_with_queue,
+    mock_llm_with_queue: _MockLlmQueue,
     vision_prompt: str | None = None,
 ) -> FileReadResult:
     """Low-level parse без extract engine (unit-тесты парсера)."""
@@ -109,7 +122,7 @@ async def read_corpus_raw(
     require_heic_entry_supported(entry.relative_path)
     raw = require_corpus_bytes(entry)
     if entry.uses_vision_llm:
-        mock_llm_with_queue([_MOCK_VISION_TEXT])
+        _ = mock_llm_with_queue([_MOCK_VISION_TEXT])
     transcription_company_id: str | None = None
     if entry.uses_mock_stt_tier:
         transcription_company_id = corpus_stt_company_id(unique_id)
@@ -125,7 +138,7 @@ async def build_corpus_extract(
     entry: CorpusFile,
     *,
     unique_id: str,
-    mock_llm_with_queue,
+    mock_llm_with_queue: _MockLlmQueue,
     file_id: str = "test-file-id",
 ) -> FileExtract:
     extract = await read_corpus_extract(
@@ -136,8 +149,8 @@ async def build_corpus_extract(
     return extract
 
 
-def read_args_for(entry: CorpusFile, **overrides: object) -> ReadFileArgs:
-    base = {
+def read_args_for(entry: CorpusFile, **overrides: JsonValue) -> ReadFileArgs:
+    base: JsonObject = {
         "names": [entry.path.name],
         "budget": MAX_READ_BUDGET,
     }
@@ -146,7 +159,7 @@ def read_args_for(entry: CorpusFile, **overrides: object) -> ReadFileArgs:
 
 
 async def store_corpus_bytes_in_files_service(
-    di,
+    di: _FilesDi,
     *,
     relative_path: str,
     original_name: str | None = None,
@@ -168,8 +181,7 @@ async def store_corpus_bytes_in_files_service(
             "retention": default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
         }
     )
-    files_service = di.files_service  # type: ignore[attr-defined]
-    record = await files_service.create(
+    record = await di.files_service.create(
         spec,
         raw,
         original_name=name,
@@ -179,7 +191,7 @@ async def store_corpus_bytes_in_files_service(
 
 
 async def store_corpus_in_files_service(
-    di,
+    di: _FilesDi,
     entry: CorpusFile,
     *,
     unique_id: str,
@@ -195,8 +207,7 @@ async def store_corpus_in_files_service(
             "retention": default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
         }
     )
-    files_service = di.files_service  # type: ignore[attr-defined]
-    record = await files_service.create(
+    record = await di.files_service.create(
         spec,
         raw,
         original_name=entry.path.name,

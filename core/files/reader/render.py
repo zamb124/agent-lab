@@ -1,9 +1,10 @@
-"""Render-шаг: FileExtract + ReadFileArgs -> FileResult (срез страниц, budget, summarization)."""
+"""Render-шаг: FileExtract + ReadFileArgs -> FileResult (markdown, budget, summarization)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from core.files.reader.markdown import page_to_markdown, strip_nested_bytes
 from core.files.reader.models import (
     MAX_READ_BUDGET,
     TRUNCATION_MARKER,
@@ -11,6 +12,8 @@ from core.files.reader.models import (
     Continuation,
     FileExtract,
     FileResult,
+    NestedContent,
+    NestedMode,
     PageResult,
     ReadFileArgs,
     StopReason,
@@ -81,11 +84,22 @@ async def render_file_result(
     *,
     tool_name: str,
     budget: int,
+    nested: list[NestedContent] | None = None,
+    recursive_texts: dict[str, str] | None = None,
+    omitted_anchors: set[str] | None = None,
 ) -> FileResult:
     pages = extract.pages
     pages_total = extract.page_layout.pages_total
     warnings = list(extract.warnings)
     file_id = extract.file_id
+    nested_items = nested if nested is not None else []
+    ocr_map = recursive_texts if recursive_texts is not None else {}
+    omitted: set[str] = omitted_anchors if omitted_anchors is not None else set()
+    # parts: bytes живут до tool envelope (Part.raw); refs — только метаданные.
+    if args.nested_mode is NestedMode.PARTS:
+        nested_for_result = list(nested_items)
+    else:
+        nested_for_result = strip_nested_bytes(nested_items)
 
     base = FileResult(
         file_name=extract.file_name,
@@ -107,6 +121,9 @@ async def render_file_result(
         page_summarizations_used=False,
         results=[],
         continuation=Continuation(file_id=file_id, next_page_start=0, has_more=False, next_actions=[]),
+        nested_mode=args.nested_mode,
+        recursive=args.recursive,
+        nested=nested_for_result,
     )
 
     if pages_total > 0 and args.page_start >= pages_total:
@@ -134,6 +151,7 @@ async def render_file_result(
             file_name=extract.file_name,
             prompt=args.summarization_prompt,
             model=args.summarization_model,
+            compression=args.compression,
         )
         candidates = [
             _Candidate(
@@ -146,7 +164,17 @@ async def render_file_result(
         ]
     else:
         candidates = [
-            _Candidate(page=p.index, label=p.label, content_mode=p.content_mode, text=p.text)
+            _Candidate(
+                page=p.index,
+                label=p.label,
+                content_mode=p.content_mode,
+                text=page_to_markdown(
+                    p,
+                    nested=nested_items,
+                    recursive_texts=ocr_map,
+                    omitted_anchors=omitted,
+                ),
+            )
             for p in selected
         ]
 
@@ -202,6 +230,7 @@ async def render_file_result(
                 has_more=has_more,
                 next_actions=next_actions,
             ),
+            "nested": nested_for_result,
         }
     )
 

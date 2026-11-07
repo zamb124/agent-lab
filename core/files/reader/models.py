@@ -5,10 +5,17 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.files.file_ref import FileRef, file_id_from_download_url
-from core.types import JsonArray, JsonValue, parse_json_value, require_json_array
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_value,
+    require_json_array,
+    require_json_object,
+)
 
 # ---------------------------------------------------------------------------
 # Константы
@@ -22,6 +29,12 @@ TRUNCATION_MARKER: str = "\n…[truncated]"
 
 DEFAULT_VIRTUAL_PAGE_SIZE: int = 4_000
 """Размер виртуальной страницы для сплошных форматов (txt/csv/json/html/docx без нативных страниц)."""
+
+MAX_NESTED_DEFAULT: int = 32
+"""Максимум вложенных content на один read-вызов (Parts / recursive)."""
+
+NESTED_OMITTED_STUB: str = "(omitted:budget)"
+"""Заглушка якоря nested, не влезшего в budget / max_nested."""
 
 
 def default_page_label(index: int) -> str:
@@ -91,6 +104,13 @@ class CompressionMode(StrEnum):
     ON_ERROR = "on_error"
 
 
+class NestedMode(StrEnum):
+    """Как read_file отдаёт вложенный content другого content_type."""
+
+    REFS = "refs"
+    PARTS = "parts"
+
+
 # ---------------------------------------------------------------------------
 # Вспомогательные модели render-слоя
 # ---------------------------------------------------------------------------
@@ -133,6 +153,7 @@ class UniversalPage(BaseModel):
     content_mode: ContentMode
     blocks: list[ExtractBlock] = Field(default_factory=list)
     files: list[FileRef] = Field(default_factory=list)
+    nested: list["NestedContent"] = Field(default_factory=list)
 
 
 class PageResult(BaseModel):
@@ -164,11 +185,17 @@ class ReadFileArgs(BaseModel):
     page_end: int = Field(default=-1, description="-1 = до конца.")
     page_summarizations: bool = Field(
         default=False,
-        description="True — вместо текста страницы отдавать её LLM-суммаризацию.",
+        description=(
+            "True — вместо полного текста страницы отдавать LLM-суммаризацию: "
+            "текст страницы + nested images (multimodal), если bytes доступны."
+        ),
     )
     summarization_prompt: str = Field(
         default="",
-        description="Свой промпт суммаризации страниц; пустое — дефолтный.",
+        description=(
+            "Доп. фокус суммаризации страниц (поверх сегментной инструкции); "
+            "пустое — только дефолт. При nested images модель видит и картинки."
+        ),
     )
     summarization_model: str = Field(
         default="",
@@ -214,6 +241,58 @@ class ReadFileArgs(BaseModel):
         ge=0,
         description="Общий бюджет символов на чтение всех файлов вызова.",
     )
+    nested_mode: NestedMode = Field(
+        default=NestedMode.REFS,
+        description=(
+            "refs — якоря + FileRef в state.files; "
+            "parts — якоря + A2A Part(raw) в tool-result."
+        ),
+    )
+    recursive: bool = Field(
+        default=True,
+        description=(
+            "True (default) — один уровень авто-read вложенного content в окне страниц "
+            "(только с nested_mode=refs; при parts принудительно false)."
+        ),
+    )
+    max_nested: int = Field(
+        default=MAX_NESTED_DEFAULT,
+        ge=0,
+        description="Лимит вложенных content на вызов (Parts и recursive).",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def parts_disables_recursive(cls, data: JsonValue) -> JsonValue:
+        if not isinstance(data, dict):
+            return data
+        payload = require_json_object(data, "ReadFileArgs")
+        mode = payload.get("nested_mode", NestedMode.REFS.value)
+        if isinstance(mode, NestedMode):
+            mode_value = mode.value
+        elif isinstance(mode, str):
+            mode_value = mode
+        else:
+            return payload
+        if mode_value == NestedMode.PARTS.value:
+            patched: JsonObject = {**payload, "recursive": False}
+            return patched
+        return payload
+
+    @field_validator(
+        "summarization_prompt",
+        "summarization_model",
+        "vision_prompt",
+        mode="before",
+    )
+    @classmethod
+    def coerce_optional_prompt_strings(cls, value: JsonValue) -> str:
+        """LLM wire часто шлёт null вместо пустой строки для optional prompt/model."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        raise ValueError("must be a string or null")
 
     @field_validator("names", mode="before")
     @classmethod
@@ -291,6 +370,9 @@ class FileResult(BaseModel):
     page_summarizations_used: bool = False
     results: list[PageResult] = Field(default_factory=list)
     continuation: Continuation
+    nested_mode: NestedMode = NestedMode.REFS
+    recursive: bool = False
+    nested: list["NestedContent"] = Field(default_factory=list)
 
 
 class ReadFileEnvelope(BaseModel):
@@ -328,6 +410,7 @@ class ReadAssetKind(StrEnum):
     EMBEDDED_IMAGE = "embedded_image"
     PAGE_RASTER = "page_raster"
     ATTACHMENT = "attachment"
+    OFFICE_MEDIA = "office_media"
 
 
 class ReadAsset(BaseModel):
@@ -340,6 +423,24 @@ class ReadAsset(BaseModel):
     bytes_b64: str | None = Field(
         default=None,
         description="Base64 только при ReadOptions.include_asset_bytes=True",
+    )
+
+
+class NestedContent(BaseModel):
+    """Вложенный content внутри контейнера (image/*, вложения, будущие бинари)."""
+
+    anchor: str = Field(min_length=1)
+    original_name: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+    kind: ReadAssetKind
+    checksum: str = Field(description="SHA-256 hex сырых байт")
+    page_index: int = Field(ge=0)
+    file_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    bytes_b64: str | None = Field(
+        default=None,
+        description="Ephemeral base64; strip перед Redis extract-cache",
     )
 
 

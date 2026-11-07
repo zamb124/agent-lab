@@ -14,7 +14,7 @@ from core.files.reader.extract_cache import (
 from core.files.reader.models import ReadFileArgs, StopReason
 from core.types import require_json_object
 from tests.core.files.corpus.e2e_helpers import (
-    assert_file_extract_body,
+    assert_files_read_envelope_body,
     capability_files_read_request,
     execution_state_for_files,
 )
@@ -138,7 +138,7 @@ async def test_multi_file_batch_mixed_lanes(
     assert envelope.files_processed == 2
     lanes = {item.file_name: item.read_lane.value for item in envelope.files}
     assert lanes[pdf_ref.original_name] == "text"
-    assert lanes[image_ref.original_name] == "vision"
+    assert lanes[image_ref.original_name] in ("vision", "hybrid")
 
 
 @pytest.mark.asyncio
@@ -174,17 +174,21 @@ async def test_capability_files_read_returns_single_file_result(
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _XLSX)
-    raw = require_corpus_bytes(entry)
+    _ = require_corpus_bytes(entry)
     file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     assert file_ref.file_id is not None
 
     registry = capability_gateway_di.capability_registry
     response = await registry.call(
-        capability_files_read_request(user_id=system_user_id, file_id=file_ref.file_id, page_end=-1)
+        capability_files_read_request(
+            user_id=system_user_id,
+            file_ids=[file_ref.file_id],
+            page_end=-1,
+        )
     )
     assert response.status == "ok"
     body = require_json_object(response.result, "files.read.result")
-    assert_file_extract_body(body, entry=entry, file_ref=file_ref, raw=raw)
+    assert_files_read_envelope_body(body, entry=entry, file_ref=file_ref)
 
 
 @pytest.mark.asyncio

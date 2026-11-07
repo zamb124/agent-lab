@@ -13,7 +13,7 @@ import json
 import time
 from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timezone
-from typing import ClassVar, override
+from typing import ClassVar, NotRequired, TypedDict, override
 
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
@@ -23,6 +23,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
+from pydantic import ValidationError
 
 from apps.flows.src.contracts import ToolRegistryProtocol
 from apps.flows.src.durable_execution import (
@@ -100,6 +101,7 @@ from core.a2a import (
 )
 from core.ai.providers import AICapability
 from core.ai.runtime import create_llm_client_from_call_config
+from core.billing.service import BillingService
 from core.clients.llm import (
     LLMClient,
     LLMStreamIdleTimeoutError,
@@ -120,6 +122,8 @@ from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
+from core.files.reader.models import ReadFileEnvelope
+from core.files.reader.parts import parts_from_file_results, strip_envelope_nested_bytes
 from core.llm_context import (
     LLMContextBlock,
     LLMContextProfile,
@@ -260,11 +264,45 @@ def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> No
             target[key] = value
 
 
+class ToolResultPayload(TypedDict):
+    tool_call_id: str
+    content: str
+    parts: NotRequired[list[Part]]
+
+
 def _format_tool_result_content(result: JsonValue) -> str:
     """Строка tool_result для LLM history и SSE: JSON для объектов, не Python repr."""
     if isinstance(result, str):
         return result
     return json.dumps(result, ensure_ascii=False)
+
+
+def _tool_result_extra_parts(payload: ToolResultPayload) -> Sequence[Part] | None:
+    parts = payload.get("parts")
+    if parts is None:
+        return None
+    return parts
+
+
+def _split_tool_result_parts(result: JsonValue) -> tuple[JsonValue, list[Part]]:
+    """read_file nested_mode=parts → interleaved Image {anchor}: + Part(raw); JSON без bytes."""
+    if not isinstance(result, dict):
+        return result, []
+    tool_name = result.get("tool")
+    if tool_name != "read_file":
+        return result, []
+    try:
+        envelope = ReadFileEnvelope.model_validate(result)
+    except ValidationError:
+        return result, []
+    parts = parts_from_file_results(envelope.files)
+    if not parts:
+        return result, []
+    stripped = strip_envelope_nested_bytes(envelope)
+    return (
+        require_json_object(stripped.model_dump(mode="json"), "read_file.stripped"),
+        parts,
+    )
 
 
 class LlmNodeRunner(BaseLlmNodeRunner):
@@ -288,6 +326,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         workflow_runtime: DurableWorkflowRuntime,
         memory_store: LLMContextMemoryStore,
         text_transform_service: TextTransformService,
+        billing_service: BillingService,
         emitter_factory: EmitterFactory,
         redis_client: RedisClient,
         tool_registry: ToolRegistryProtocol,
@@ -305,6 +344,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
         self.memory_store: LLMContextMemoryStore = memory_store
         self.text_transform_service: TextTransformService = text_transform_service
+        self.billing_service: BillingService = billing_service
         self.emitter_factory: EmitterFactory = emitter_factory
         self.redis_client: RedisClient = redis_client
         self.tool_registry: ToolRegistryProtocol = tool_registry
@@ -681,7 +721,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             and bool(ref.file_id.strip())
             and ref.content_type.startswith("image/")
         ]
-        file_ids = await NanoBananaClient().generate_images(
+        file_ids = await NanoBananaClient(self.billing_service).generate_images(
             prompt=prompt,
             reference_file_ids=[ref.file_id for ref in references if ref.file_id is not None]
             or None,
@@ -833,6 +873,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             sid,
                             context_id=context_id,
                             task_id=task_id,
+                            extra_parts=_tool_result_extra_parts(tr),
                         )
                     )
                 InterruptManager.clear_interrupt_path(state)
@@ -1154,6 +1195,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             sid,
                                             context_id=context_id,
                                             task_id=task_id,
+                                            extra_parts=_tool_result_extra_parts(tr),
                                         )
                                     )
                                     tool_call_id = tr["tool_call_id"]
@@ -1437,6 +1479,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return mock_llm_client, max_tok
         llm = create_llm_client_from_call_config(
             llm_config,
+            billing_service=self.billing_service,
             variables=state.variables,
             fallback_models=llm_config.fallback_models,
             cost_origin=effective_llm.cost_origin,
@@ -1602,7 +1645,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
-    ) -> list[dict[str, str]]:
+    ) -> list[ToolResultPayload]:
         """
         Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
 
@@ -1629,7 +1672,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Собираем результаты и мержим state
-        tool_results: list[dict[str, str]] = []
+        tool_results: list[ToolResultPayload] = []
         deferred_interrupt: FlowInterrupt | None = None
         deferred_error: Exception | None = None
         for tc, result, state_copy in zip(tool_calls, results, state_copies):
@@ -1738,7 +1781,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
-    ) -> list[dict[str, str]]:
+    ) -> list[ToolResultPayload]:
         """Выполняет один tool."""
         tracer = get_tracer()
         tool_name = tc.name
@@ -1876,13 +1919,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     state=state,
                     reasoning_count_before=reasoning_count_before,
                 )
-                state.tool_results[tool_name] = result
+                message_result, tool_parts = _split_tool_result_parts(result)
+                state.tool_results[tool_name] = message_result
 
                 tool_duration = (time.time() - tool_start) * 1000
-                tracer.record_tool_result(tool_span, result, tool_duration)
+                tracer.record_tool_result(tool_span, message_result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state.model_dump(mode="json", exclude_none=False))
                 state_delta = build_state_delta(before_tool_state, state)
-                tool_result_content = _format_tool_result_content(result)
+                tool_result_content = _format_tool_result_content(message_result)
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,
                     result_json={
@@ -1896,12 +1940,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if not completed:
                     raise RuntimeError(f"Failed to mark tool activity as completed: {activity_id!r}")
 
-                return [
-                    {
-                        "tool_call_id": tool_call_id,
-                        "content": tool_result_content,
-                    }
-                ]
+                payload: ToolResultPayload = {
+                    "tool_call_id": tool_call_id,
+                    "content": tool_result_content,
+                }
+                if tool_parts:
+                    payload["parts"] = tool_parts
+                return [payload]
             except FlowInterrupt:
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,

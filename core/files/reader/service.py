@@ -74,6 +74,7 @@ from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
 from core.imports import module_sdk, typed_view
+from core.text_transforms import TextTransformService
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue
 
@@ -580,6 +581,7 @@ class FileReader:
     """Чтение файлов: read() — полный extract (FileExtract); read_raw() — low-level parse."""
 
     _process_files_service: ClassVar[FilesService | None] = None
+    _process_text_transform: ClassVar[TextTransformService | None] = None
 
     @classmethod
     def configure_asset_persist(cls, files_service: FilesService) -> None:
@@ -593,6 +595,19 @@ class FileReader:
                 + "call FileReader.configure_asset_persist at process start"
             )
         return cls._process_files_service
+
+    @classmethod
+    def configure_text_transform(cls, text_transform: TextTransformService) -> None:
+        cls._process_text_transform = text_transform
+
+    @classmethod
+    def require_text_transform(cls) -> TextTransformService:
+        if cls._process_text_transform is None:
+            raise ValueError(
+                "FileReader text transform is not configured — "
+                + "call FileReader.configure_text_transform at process start"
+            )
+        return cls._process_text_transform
 
     def recognize_file_type(self, *, file_name: str, head: bytes | None = None) -> FileTypeInfo:
         ext = _normalize_extension(file_name)
@@ -780,7 +795,10 @@ async def run_vision_on_image_bytes(
         ],
     )
     resolved_llm = resolve_vision_ai_model(vision_model)
-    llm = create_vision_llm_client(resolved_llm)
+    llm = create_vision_llm_client(
+        resolved_llm,
+        billing_service=FileReader.require_text_transform().billing_service,
+    )
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Context with active_company is required for vision image reading")

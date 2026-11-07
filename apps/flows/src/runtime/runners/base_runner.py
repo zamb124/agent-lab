@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from a2a.types import Message, Part
@@ -193,14 +193,24 @@ class BaseLlmNodeRunner(ABC):
         )
         self.add_message(state, message)
 
-    def add_tool_message(self, state: "ExecutionState", tool_call_id: str, content: str) -> None:
-        """Добавляет сообщение от tool."""
+    def add_tool_message(
+        self,
+        state: "ExecutionState",
+        tool_call_id: str,
+        content: str,
+        *,
+        extra_parts: Sequence[Part] | None = None,
+    ) -> None:
+        """Добавляет сообщение от tool (text + optional multimodal Parts)."""
         if not self.node_config:
             raise ValueError("add_tool_message: node_config required")
+        parts: list[Part] = [Part(text=content)]
+        if extra_parts:
+            parts.extend(extra_parts)
         message = Message(
             message_id=str(uuid.uuid4()),
             role=ROLE_AGENT,
-            parts=[Part(text=content)],
+            parts=parts,
             metadata=struct_from_mapping(
                 {
                     "tool_call_id": tool_call_id,

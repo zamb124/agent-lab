@@ -1,17 +1,25 @@
-"""Default LLM-суммаризатор с батч-паковкой страниц в контекстное окно модели."""
+"""Default LLM-суммаризатор с батч-паковкой страниц в контекстное окно модели.
+
+При nested image на странице (bytes_b64) суммаризация multimodal: текст страницы
++ interleaved Image {anchor}: / Part(raw). Маршрут — llm_vision; без картинок —
+llm_summarize.
+"""
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Sequence
+
+from a2a.types import Part
 
 from core.ai.providers import AICapability, split_provider_prefixed_model
 from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
-from core.files.reader.models import UniversalPage
-from core.logging import get_logger
-from core.text_transforms.service import TextTransformService
-
-logger = get_logger(__name__)
+from core.files.reader.models import CompressionMode, NestedContent, UniversalPage
+from core.files.reader.nested import nested_bytes
+from core.files.reader.parts import nested_image_label, nested_to_raw_part
+from core.files.reader.service import FileReader
+from core.files.reader.vision import prepare_visual_payload
 
 _DEFAULT_SUMMARY_CONTEXT_TOKENS: int = 32_000
 _CHARS_PER_TOKEN: int = 3
@@ -20,9 +28,11 @@ _MIN_BATCH_CHARS: int = 4_000
 _PAGE_MARKER_PREFIX: str = "===PAGE "
 _SEGMENT_INSTRUCTION: str = (
     "You summarize document pages. The input contains several pages, each starting with a "
-    "marker line of the form ===PAGE n===. For every page return exactly one marker line "
-    "===PAGE n=== followed by a concise summary of that page in its original language. "
-    "Do not merge pages. Output only the marker lines and summaries."
+    "marker line of the form ===PAGE n===. Images that belong to a page follow that page's "
+    "text as Image {anchor}: labels and image parts. For every page return exactly one marker "
+    "line ===PAGE n=== followed by a concise summary of that page in its original language, "
+    "using both the text and the images. Do not merge pages. Output only the marker lines "
+    "and summaries."
 )
 
 
@@ -41,13 +51,32 @@ def _resolve_context_chars(model_override: str) -> int:
     return max(budget_chars, _MIN_BATCH_CHARS)
 
 
+def _page_image_items(page: UniversalPage) -> list[NestedContent]:
+    items: list[NestedContent] = []
+    for item in page.nested:
+        if not item.content_type.startswith("image/"):
+            continue
+        if item.bytes_b64 is None or not item.bytes_b64.strip():
+            continue
+        items.append(item)
+    return items
+
+
 def _pack_batches(
     pages: Sequence[UniversalPage], *, batch_chars: int
 ) -> list[list[UniversalPage]]:
+    """Текст пакуется по символам; страница с nested images — отдельный батч."""
     batches: list[list[UniversalPage]] = []
     current: list[UniversalPage] = []
     current_len = 0
     for page in pages:
+        if _page_image_items(page):
+            if current:
+                batches.append(current)
+                current = []
+                current_len = 0
+            batches.append([page])
+            continue
         page_len = len(page.text) + len(_PAGE_MARKER_PREFIX) + 8
         if current and current_len + page_len > batch_chars:
             batches.append(current)
@@ -87,26 +116,74 @@ def _fallback_split(response: str, count: int) -> list[str]:
     return [text[i * step : (i + 1) * step] if i < count - 1 else text[i * step :] for i in range(count)]
 
 
+def _prepared_image_part(
+    item: NestedContent, *, compression: CompressionMode
+) -> Part:
+    raw = nested_bytes(item)
+    payload, payload_mime = prepare_visual_payload(
+        raw,
+        file_name=item.original_name,
+        mime=item.content_type,
+        compression=compression,
+    )
+    prepared = item.model_copy(
+        update={
+            "bytes_b64": base64.b64encode(payload).decode("utf-8"),
+            "content_type": payload_mime,
+        }
+    )
+    return nested_to_raw_part(prepared)
+
+
+def _batch_media_parts(
+    batch: Sequence[UniversalPage], *, compression: CompressionMode
+) -> list[Part]:
+    """Interleaved text markers + Image {anchor}: + raw для страниц батча."""
+    parts: list[Part] = []
+    for page in batch:
+        page_text = f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}"
+        parts.append(Part(text=page_text))
+        for item in _page_image_items(page):
+            parts.append(Part(text=nested_image_label(item.anchor)))
+            parts.append(_prepared_image_part(item, compression=compression))
+    return parts
+
+
 async def summarize_llm_pages(
-    pages: Sequence[UniversalPage], *, prompt: str, model: str
+    pages: Sequence[UniversalPage],
+    *,
+    prompt: str,
+    model: str,
+    compression: CompressionMode = CompressionMode.NEVER,
 ) -> list[str]:
     if not pages:
         return []
     batch_chars = _resolve_context_chars(model)
-    service = TextTransformService()
+    service = FileReader.require_text_transform()
     instruction = _SEGMENT_INSTRUCTION
     if prompt.strip():
         instruction = f"{_SEGMENT_INSTRUCTION}\nAdditional focus: {prompt.strip()}"
 
     results: dict[int, str] = {}
     for batch in _pack_batches(pages, batch_chars=batch_chars):
-        marked_parts = [f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}" for page in batch]
-        marked = "\n\n".join(marked_parts)
-        response = await service.summarize(
-            marked,
-            instruction=instruction,
-            model=model or None,
-        )
+        has_images = any(_page_image_items(page) for page in batch)
+        if has_images:
+            media_parts = _batch_media_parts(batch, compression=compression)
+            # Первый Part — marker+text первой страницы; instruction передаём отдельно.
+            response = await service.summarize(
+                "",
+                instruction=instruction,
+                model=model or None,
+                media_parts=media_parts,
+            )
+        else:
+            marked_parts = [f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}" for page in batch]
+            marked = "\n\n".join(marked_parts)
+            response = await service.summarize(
+                marked,
+                instruction=instruction,
+                model=model or None,
+            )
         indices = [page.index for page in batch]
         parsed = _parse_segments(response, indices)
         if len(parsed) == len(batch):

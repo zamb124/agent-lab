@@ -16,6 +16,7 @@ class _NamedTool(Protocol):
 BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.misc.math_tools", "calculator"),
     ("apps.flows.tools.files.files", "create_file"),
+    ("apps.flows.tools.files.files", "files_materialize_image_regions"),
     ("apps.flows.tools.documents.documents", "documents_open_file"),
     ("apps.flows.tools.documents.documents", "documents_replace_text"),
     ("apps.flows.tools.documents.documents", "documents_append_text"),

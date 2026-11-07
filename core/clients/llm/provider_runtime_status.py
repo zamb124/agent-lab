@@ -17,6 +17,7 @@ from core.ai.provider_error import (
     classify_ai_provider_error,
 )
 from core.ai.providers import PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
+from core.billing.service import BillingService
 from core.clients.llm.candidate_cooldown import (
     CandidateCooldownState,
     candidate_cooldown_state_map,
@@ -278,6 +279,8 @@ async def collect_free_pool_runtime_status(
 async def probe_platform_free_provider(
     provider: str,
     settings: BaseSettings,
+    *,
+    billing_service: BillingService,
 ) -> LLMProviderProbeSnapshot:
     probed_at = datetime.now(timezone.utc)
     if not provider_is_configured_for_free_pool(settings.llm, provider):
@@ -305,6 +308,7 @@ async def probe_platform_free_provider(
         first_token_timeout=PROBE_TIMEOUT_SECONDS,
         candidate_cooldown_seconds=pool.candidate_cooldown_seconds,
         max_tokens=PROBE_SMOKE_MAX_TOKENS,
+        billing_service=billing_service,
     )
     try:
         _ = await asyncio.wait_for(
@@ -341,7 +345,11 @@ async def probe_platform_free_provider(
     )
 
 
-async def probe_platform_free_providers(*, settings: BaseSettings) -> list[LLMProviderProbeSnapshot]:
+async def probe_platform_free_providers(
+    *,
+    settings: BaseSettings,
+    billing_service: BillingService,
+) -> list[LLMProviderProbeSnapshot]:
     configured = [
         provider
         for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
@@ -352,7 +360,12 @@ async def probe_platform_free_providers(*, settings: BaseSettings) -> list[LLMPr
         return []
     snapshots = list(
         await asyncio.gather(
-            *[probe_platform_free_provider(provider, settings) for provider in configured]
+            *[
+                probe_platform_free_provider(
+                    provider, settings, billing_service=billing_service
+                )
+                for provider in configured
+            ]
         )
     )
     await save_provider_health_snapshots(snapshots)

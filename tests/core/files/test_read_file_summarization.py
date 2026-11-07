@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
+from core.files.checksum import compute_content_checksum_sha256
 from core.files.reader import MAX_READ_BUDGET, ContentMode
+from core.files.reader.models import NestedContent, ReadAssetKind, UniversalPage
 from core.files.reader.render import render_file_result
 from core.files.reader.summarizers import resolve_summarizer
 from core.files.reader.summarizers.llm import summarize_llm_pages
@@ -13,6 +17,7 @@ from tests.core.files.corpus.read_helpers import (
     build_corpus_extract,
     read_args_for,
 )
+from tests.core.files.golden.bytes import png_with_text
 
 _STRUCTURAL_CASES: tuple[tuple[str, str], ...] = (
     ("csv-with-escaped-commas.csv", "columns:"),
@@ -102,3 +107,46 @@ async def test_llm_summarization_batches_multiple_pages_in_one_call(
     assert summaries[0] == "Summary for page 0"
     assert summaries[1] == "Summary for page 1"
     assert summaries[2] == "Summary for page 2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
+@pytest.mark.usefixtures("file_reader_billing_service")
+async def test_llm_summarization_sends_nested_images_as_media_parts(
+    mock_llm_with_queue,
+    mock_llm_capture,
+    unique_id: str,
+) -> None:
+    png = png_with_text(f"chart-{unique_id}")
+    page = UniversalPage(
+        index=0,
+        label="1",
+        text="Figure caption about revenue",
+        content_mode=ContentMode.FULL,
+        nested=[
+            NestedContent(
+                anchor="p0_n1",
+                original_name=f"chart-{unique_id}.png",
+                content_type="image/png",
+                kind=ReadAssetKind.EMBEDDED_IMAGE,
+                checksum=compute_content_checksum_sha256(png),
+                page_index=0,
+                bytes_b64=base64.b64encode(png).decode("utf-8"),
+            )
+        ],
+    )
+    mock_llm_with_queue(["===PAGE 0===\nRevenue chart summary"])
+
+    summaries = await summarize_llm_pages([page], prompt="focus on numbers", model="")
+
+    assert summaries == ["Revenue chart summary"]
+    calls = await mock_llm_capture()
+    assert calls, "expected MockLLM capture for multimodal summarize"
+    parts = calls[0]["messages"][0].get("parts") or []
+    assert any(isinstance(part, dict) and part.get("type") == "file" for part in parts)
+    assert any(
+        isinstance(part, dict)
+        and part.get("type") == "text"
+        and "Image p0_n1:" in str(part.get("text", ""))
+        for part in parts
+    )

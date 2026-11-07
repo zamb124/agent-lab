@@ -293,6 +293,42 @@ def pdf_short_text_with_image(unique_id: str) -> bytes:
     return out
 
 
+def pdf_text_and_embedded_image(marker_text: str) -> bytes:
+    """Born-digital text layer + embedded PNG (usable text, nested image)."""
+    body = (
+        f"{marker_text} Readable PDF paragraph with enough characters "
+        "for the usable-text threshold on this page. "
+    ) * 2
+    document = pymupdf.open()
+    page = document.new_page()
+    _ = page.insert_text((72, 72), body, fontsize=11)
+    png = png_with_text(marker_text)
+    _ = page.insert_image(pymupdf.Rect(72, 420, 220, 520), stream=png)
+    out = document.tobytes()
+    document.close()
+    return out
+
+
+def pdf_multipage_nested(marker_text: str, *, pages: int = 3) -> bytes:
+    """≥3 pages: each page has unique text + embedded image for pagination tests."""
+    if pages < 2:
+        raise ValueError("pages must be >= 2")
+    document = pymupdf.open()
+    for index in range(pages):
+        page = document.new_page()
+        page_marker = f"{marker_text}_p{index}"
+        body = (
+            f"Page {index} {page_marker} Readable multipage nested PDF text "
+            "with enough characters for usable threshold. "
+        ) * 2
+        _ = page.insert_text((72, 72), body, fontsize=11)
+        png = png_with_text(page_marker)
+        _ = page.insert_image(pymupdf.Rect(72, 420, 220, 520), stream=png)
+    out = document.tobytes()
+    document.close()
+    return out
+
+
 def wav_corpus_bytes(unique_id: str) -> bytes:
     del unique_id
     path = CORPUS_DIR / _WAV_RELATIVE_PATH

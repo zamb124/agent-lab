@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Message, Part, Role
 
@@ -9,7 +11,12 @@ from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
 from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
-from core.ai.runtime import create_llm_client_from_ai_model
+from core.ai.runtime import (
+    create_llm_client_from_ai_model,
+    create_vision_llm_client,
+    resolve_vision_ai_model,
+)
+from core.billing.service import BillingService
 from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -33,9 +40,15 @@ class TextTransformService:
     Суммаризация резолвит company capability override и поддерживает явные
     provider/model аргументы только если override не задан.
 
+    Текст — ``AICapability.LLM_SUMMARIZE``; при ``media_parts`` (картинки) —
+    ``AICapability.LLM_VISION``, чтобы модель видела Part(raw).
+
     Форматирование Markdown всегда идёт через ``AICapability.LLM_FORMAT_MARKDOWN``.
     LitServe не является LLM-провайдером для markdown.
     """
+
+    def __init__(self, billing_service: BillingService) -> None:
+        self.billing_service: BillingService = billing_service
 
     async def summarize(
         self,
@@ -45,27 +58,49 @@ class TextTransformService:
         instruction: str | None = None,
         provider: str | None = None,
         model: str | None = None,
+        media_parts: Sequence[Part] | None = None,
     ) -> str:
         stripped = text.strip()
-        if not stripped:
+        media = list(media_parts) if media_parts is not None else []
+        if not stripped and not media:
             raise ValueError('summarize: text is empty')
 
-        resolved = self._resolve_company_llm_args(
-            AICapability.LLM_SUMMARIZE,
-            provider=provider,
-            model=model,
+        sys_text = (
+            instruction.strip()
+            if instruction is not None and instruction.strip()
+            else _DEFAULT_SUMMARY_INSTRUCTION
         )
-        llm = create_llm_client_from_ai_model(
-            resolved,
-            max_tokens=max_output_tokens,
-        )
-        sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
+        lead = sys_text if not stripped else f"{sys_text}\n\n{stripped}"
+        parts: list[Part] = [Part(text=lead), *media]
         messages: list[Message] = [
             build_a2a_message(
                 role=Role.ROLE_USER,
-                parts=[Part(text=sys_text + "\n\n" + stripped)],
+                parts=parts,
             ),
         ]
+        if media:
+            # Картинки — тот же vision-маршрут, что OCR страниц (в тестах → MockLLM).
+            if provider is not None and model is not None:
+                vision_model = f"{provider}:{model}"
+            elif model is not None:
+                vision_model = model
+            else:
+                vision_model = None
+            llm = create_vision_llm_client(
+                resolve_vision_ai_model(vision_model),
+                billing_service=self.billing_service,
+            )
+        else:
+            resolved = self._resolve_company_llm_args(
+                AICapability.LLM_SUMMARIZE,
+                provider=provider,
+                model=model,
+            )
+            llm = create_llm_client_from_ai_model(
+                resolved,
+                billing_service=self.billing_service,
+                max_tokens=max_output_tokens,
+            )
         out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
         summary = get_message_text(out).strip()
         if not summary:
@@ -89,7 +124,9 @@ class TextTransformService:
         text_transform_cfg = settings.text_transforms
         chunk_lim = int(text_transform_cfg.markdown_max_chunk_chars)
 
-        llm = create_llm_client_from_ai_model(resolved)
+        llm = create_llm_client_from_ai_model(
+            resolved, billing_service=self.billing_service
+        )
         chunks = split_text_into_markdown_chunks(stripped, int(chunk_lim))
         if not chunks:
             raise ValueError('format_markdown: no chunks after split')

@@ -2,6 +2,7 @@ import core.files.reader.engine  # noqa: F401  # pyright: ignore[reportUnusedImp
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
+    MAX_NESTED_DEFAULT,
     MAX_READ_BUDGET,
     VISION_FULL_READ_MAX_PAGES,
     CompressionMode,
@@ -10,6 +11,8 @@ from core.files.reader.models import (
     FileReadKind,
     FileReadResult,
     FileTypeInfo,
+    NestedContent,
+    NestedMode,
     PageLayoutKind,
     ReadAsset,
     ReadAssetKind,
@@ -23,6 +26,7 @@ from core.files.reader.models import (
 from core.files.reader.service import FileReader
 
 __all__ = [
+    "MAX_NESTED_DEFAULT",
     "MAX_READ_BUDGET",
     "VISION_FULL_READ_MAX_PAGES",
     "CompressionMode",
@@ -33,6 +37,8 @@ __all__ = [
     "FileReadResult",
     "FileReader",
     "FileTypeInfo",
+    "NestedContent",
+    "NestedMode",
     "PageLayoutKind",
     "ReadAsset",
     "ReadAssetKind",

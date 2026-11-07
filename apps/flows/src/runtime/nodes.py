@@ -131,6 +131,7 @@ from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_m
 from core.ai.providers import LLM_CAPABILITY_VALUES
 from core.ai.runtime import create_llm_client_from_call_config
 from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -1010,6 +1011,7 @@ class LlmNode(BaseNode):
         tool_registry: ToolRegistryProtocol,
         workflow_runtime: DurableWorkflowRuntime,
         text_transform_service: TextTransformService,
+        billing_service: BillingService,
         emitter_factory: EmitterFactory,
     ):
         super().__init__(
@@ -1025,6 +1027,7 @@ class LlmNode(BaseNode):
         self.tool_registry: ToolRegistryProtocol = tool_registry
         self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
         self.text_transform_service: TextTransformService = text_transform_service
+        self.billing_service: BillingService = billing_service
         self.emitter_factory: EmitterFactory = emitter_factory
         cfg = self.config
 
@@ -1175,6 +1178,7 @@ class LlmNode(BaseNode):
             workflow_runtime=self.workflow_runtime,
             memory_store=self.llm_context_memory_store,
             text_transform_service=self.text_transform_service,
+            billing_service=self.billing_service,
             emitter_factory=self.emitter_factory,
             redis_client=self.redis_client,
             tool_registry=self.tool_registry,
@@ -1295,6 +1299,7 @@ class LlmNode(BaseNode):
         )
         return create_llm_client_from_call_config(
             effective.config,
+            billing_service=self.billing_service,
             variables=state.variables if state is not None else None,
             fallback_models=effective.config.fallback_models,
         )
@@ -3384,8 +3389,10 @@ class ReflectionNode(BaseNode):
         *,
         execution: FlowExecutionContext,
         redis_client: RedisClient,
+        billing_service: BillingService,
     ) -> None:
         super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.billing_service: BillingService = billing_service
         policy_payload = _config_mapping(self.config, "critic_policy")
         if policy_payload is None:
             raise ValueError(f"reflection node {self.node_id}: critic_policy is required")
@@ -3575,6 +3582,7 @@ class ReflectionNode(BaseNode):
         llm_cfg = self.llm_config
         llm = create_llm_client_from_call_config(
             llm_cfg,
+            billing_service=self.billing_service,
             variables=state.variables,
             fallback_models=llm_cfg.fallback_models,
             allow_platform_paid_fallback=False,
@@ -3674,6 +3682,7 @@ class NodeConstructor:
         namespace_service: NamespaceService,
         authz_service: AuthzService,
         text_transform_service: TextTransformService,
+        billing_service: BillingService,
         handoff_orchestrator_service: HandoffOrchestratorService,
         a2a_client: A2AClient,
         code_agent_source_service: CodeAgentSourceService,
@@ -3693,6 +3702,7 @@ class NodeConstructor:
         self.namespace_service: NamespaceService = namespace_service
         self.authz_service: AuthzService = authz_service
         self.text_transform_service: TextTransformService = text_transform_service
+        self.billing_service: BillingService = billing_service
         self.handoff_orchestrator_service: HandoffOrchestratorService = handoff_orchestrator_service
         self.a2a_client: A2AClient = a2a_client
         self.code_agent_source_service: CodeAgentSourceService = code_agent_source_service
@@ -3730,6 +3740,7 @@ class NodeConstructor:
                 tool_registry=tool_registry,
                 workflow_runtime=self.workflow_runtime,
                 text_transform_service=self.text_transform_service,
+                billing_service=self.billing_service,
                 emitter_factory=emitter_factory,
             )
         if node_cls is CodeNode:
@@ -3807,7 +3818,13 @@ class NodeConstructor:
                 hitl_conversation_service=self.hitl_conversation_service,
             )
         if node_cls is ReflectionNode:
-            return ReflectionNode(node_id, config, execution=execution, redis_client=redis_client)
+            return ReflectionNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                billing_service=self.billing_service,
+            )
         if node_cls is ResourceNode:
             return ResourceNode(node_id, config, execution=execution, redis_client=redis_client)
         raise TypeError(f"Unknown node class: {node_cls!r}")

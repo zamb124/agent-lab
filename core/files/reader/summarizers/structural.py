@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from core.files.reader.models import UniversalPage
+from core.files.reader.models import CompressionMode, UniversalPage
 from core.types import JsonValue, parse_json_value
 
 _MAX_STRUCT_ROWS: int = 5
@@ -94,21 +94,33 @@ def summarize_outline(text: str) -> str:
 
 
 async def summarize_tabular_pages(
-    pages: Sequence[UniversalPage], *, prompt: str, model: str
+    pages: Sequence[UniversalPage],
+    *,
+    prompt: str,
+    model: str,
+    compression: CompressionMode = CompressionMode.NEVER,
 ) -> list[str]:
-    _ = (prompt, model)
+    _ = (prompt, model, compression)
     return [summarize_tabular(page.text) for page in pages]
 
 
 async def summarize_json_pages(
-    pages: Sequence[UniversalPage], *, prompt: str, model: str
+    pages: Sequence[UniversalPage],
+    *,
+    prompt: str,
+    model: str,
+    compression: CompressionMode = CompressionMode.NEVER,
 ) -> list[str]:
-    _ = (prompt, model)
+    _ = (prompt, model, compression)
     return [summarize_json(page.text) for page in pages]
 
 
 async def summarize_outline_pages(
-    pages: Sequence[UniversalPage], *, prompt: str, model: str
+    pages: Sequence[UniversalPage],
+    *,
+    prompt: str,
+    model: str,
+    compression: CompressionMode = CompressionMode.NEVER,
 ) -> list[str]:
-    _ = (prompt, model)
+    _ = (prompt, model, compression)
     return [summarize_outline(page.text) for page in pages]

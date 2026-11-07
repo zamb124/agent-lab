@@ -6,7 +6,7 @@ import base64
 import re
 import uuid
 from collections.abc import Mapping, Sequence
-from typing import Literal
+from typing import Literal, TypedDict
 
 from a2a.types import (
     Message,
@@ -15,7 +15,7 @@ from a2a.types import (
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
-from pydantic import Field
+from pydantic import Field, TypeAdapter, ValidationError
 
 from core.a2a.codec import (
     mapping_from_struct,
@@ -30,6 +30,27 @@ MessageInput = str | list[str] | Message | list[Message] | JsonObject | list[Jso
 
 
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
+
+
+class OpenAIImageUrlPayload(TypedDict):
+    url: str
+
+
+class OpenAITextContentPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class OpenAIImageContentPart(TypedDict):
+    type: Literal["image_url"]
+    image_url: OpenAIImageUrlPayload
+
+
+OpenAIContentPart = OpenAITextContentPart | OpenAIImageContentPart
+
+_OPENAI_CONTENT_PARTS_ADAPTER: TypeAdapter[list[OpenAIContentPart]] = TypeAdapter(
+    list[OpenAIContentPart]
+)
 
 
 class LLMToolCallFunction(StrictBaseModel):
@@ -67,16 +88,11 @@ def build_a2a_message(
     return message
 
 
-def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[JsonObject], bool]:
-    """
-    Извлекает content parts из списка A2A parts.
-
-    Возвращает:
-        Tuple (content_parts, has_files) где:
-        - content_parts: список OpenAI content parts
-        - has_files: True если есть файлы (нужен multimodal формат)
-    """
-    content_parts: list[JsonObject] = []
+def extract_content_parts(
+    parts: Sequence[Part | JsonObject],
+) -> tuple[list[OpenAIContentPart], bool]:
+    """A2A parts → OpenAI content parts; has_files=True при наличии raw/image."""
+    content_parts: list[OpenAIContentPart] = []
     has_files = False
 
     for part in parts:
@@ -115,6 +131,21 @@ def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[Json
             )
 
     return content_parts, has_files
+
+
+def _require_openai_content_parts(content: JsonValue, field_name: str) -> list[OpenAIContentPart]:
+    """Граница JSON → OpenAI content parts; неизвестный shape — raise."""
+    try:
+        return _OPENAI_CONTENT_PARTS_ADAPTER.validate_python(content)
+    except ValidationError as exc:
+        raise ValueError(f"{field_name} must be OpenAI content parts") from exc
+
+
+def _openai_content_as_json(parts: list[OpenAIContentPart], field_name: str) -> JsonValue:
+    return [
+        require_json_object(part, f"{field_name}[{index}]")
+        for index, part in enumerate(parts)
+    ]
 
 
 def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
@@ -193,14 +224,13 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
 
     content_parts, has_files = extract_content_parts(parts)
     if has_files:
-        content: JsonValue = content_parts
+        message_content: JsonValue = _openai_content_as_json(
+            content_parts, "openai.content"
+        )
     else:
-        text_chunks: list[str] = []
-        for content_part in content_parts:
-            text = content_part.get("text")
-            if content_part.get("type") == "text" and isinstance(text, str):
-                text_chunks.append(text)
-        content = "".join(text_chunks)
+        message_content = "".join(
+            part["text"] for part in content_parts if part["type"] == "text"
+        )
 
     is_system = metadata.get("system", False)
     openai_role = "system" if is_system else role_map.get(role, "user")
@@ -209,7 +239,7 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
 
     openai_message: JsonObject = {
         "role": openai_role,
-        "content": content,
+        "content": message_content,
     }
 
     if metadata.get("tool_calls"):
@@ -221,9 +251,53 @@ def message_to_openai(message: Message | JsonObject | str) -> JsonObject:
     return openai_message
 
 
+def _expand_openai_tool_multimodal(openai_message: JsonObject) -> list[JsonObject]:
+    """Chat Completions: role=tool только text; image_url → следующее user с interleaved labels.
+
+    A2A tool-result: Part(text=envelope), Part(text='Image p0_n1:'), Part(raw), …
+    Wire: tool(content=envelope) + user(content=[text label, image_url, …]).
+    """
+    if openai_message.get("role") != "tool":
+        return [openai_message]
+    content = openai_message.get("content")
+    if not isinstance(content, list):
+        return [openai_message]
+
+    parts = _require_openai_content_parts(content, "openai.tool.content")
+    if not parts:
+        raise ValueError("openai.tool.content must be non-empty")
+    first = parts[0]
+    if first["type"] != "text":
+        raise ValueError("multimodal tool message must start with a text content part")
+    if not any(part["type"] == "image_url" for part in parts):
+        raise ValueError("openai.tool.content list must include image_url")
+
+    expanded: list[JsonObject] = [
+        {
+            "role": "tool",
+            "tool_call_id": openai_message["tool_call_id"],
+            "content": first["text"],
+        }
+    ]
+    vision_content = parts[1:]
+    if vision_content:
+        expanded.append(
+            {
+                "role": "user",
+                "content": _openai_content_as_json(
+                    vision_content, "openai.tool.vision"
+                ),
+            }
+        )
+    return expanded
+
+
 def messages_to_openai(messages: Sequence[Message | JsonObject | str]) -> list[JsonObject]:
-    """Внутренняя функция - список A2A Message в формат OpenAI API."""
-    return [message_to_openai(message) for message in messages]
+    """Список A2A Message → OpenAI Chat Completions; multimodal tool → tool text + user images."""
+    openai_messages: list[JsonObject] = []
+    for message in messages:
+        openai_messages.extend(_expand_openai_tool_multimodal(message_to_openai(message)))
+    return openai_messages
 
 
 def normalize_messages(messages: MessageInput) -> list[Message]:
@@ -331,8 +405,8 @@ def messages_have_non_text_parts(openai_messages: list[JsonObject]) -> bool:
         content = message.get("content")
         if not isinstance(content, list):
             continue
-        for part in content:
-            if isinstance(part, dict) and part.get("type") != "text":
+        for part in _require_openai_content_parts(content, "openai.message.content"):
+            if part["type"] != "text":
                 return True
     return False
 
@@ -342,6 +416,10 @@ __all__ = [
     "StreamEvent",
     "LLMToolCall",
     "LLMToolCallFunction",
+    "OpenAIContentPart",
+    "OpenAIImageContentPart",
+    "OpenAIImageUrlPayload",
+    "OpenAITextContentPart",
     "build_a2a_message",
     "extract_content_parts",
     "message_to_openai",

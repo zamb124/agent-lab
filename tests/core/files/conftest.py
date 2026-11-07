@@ -1,14 +1,18 @@
 """Локальные фикстуры для tests/core/files/.
 
-Очистка каталога артефактов FileWriter и инициализация BillingService для vision-тестов.
+Очистка каталога артефактов FileWriter и TextTransformService для vision/summarize.
 """
 
 from __future__ import annotations
 
 import shutil
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
 
+from core.files.reader.service import FileReader
+from core.text_transforms import TextTransformService
 from tests.core.files.file_writer_artifacts import OUTPUT_DIR
 
 
@@ -17,16 +21,12 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         shutil.rmtree(OUTPUT_DIR)
 
 
-@pytest.fixture(scope="session")
-async def file_reader_billing_service(setup_database_before_tests, di):
-    """Регистрирует глобальный BillingService из FlowsDi.
+@pytest_asyncio.fixture(scope="session")
+async def file_reader_billing_service(setup_database_before_tests, di) -> AsyncIterator[None]:
+    """Конфигурирует FileReader.configure_text_transform для vision/summarize тестов.
 
-    Нужен FileReader._read_image_impl для проверки баланса.
-    Применяется явно через @pytest.mark.usefixtures("file_reader_billing_service")
-    в тестах, которым нужен vision (один раз на session).
+    Применяется явно через @pytest.mark.usefixtures("file_reader_billing_service").
     """
     _ = setup_database_before_tests
-    from core.billing import set_billing_service
-
-    set_billing_service(di.billing_service)
+    FileReader.configure_text_transform(TextTransformService(di.billing_service))
     yield

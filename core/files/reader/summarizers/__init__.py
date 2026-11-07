@@ -9,7 +9,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from core.files.reader.models import ContentMode, FileReadKind, PageResult, UniversalPage
+from core.files.reader.models import (
+    CompressionMode,
+    ContentMode,
+    FileReadKind,
+    PageResult,
+    UniversalPage,
+)
 from core.files.reader.summarizers.base import PageSummarizer
 from core.files.reader.summarizers.llm import summarize_llm_pages
 from core.files.reader.summarizers.structural import (
@@ -51,9 +57,12 @@ async def summarize_pages(
     file_name: str,
     prompt: str,
     model: str,
+    compression: CompressionMode = CompressionMode.NEVER,
 ) -> list[PageResult]:
     summarizer = resolve_summarizer(kind=kind, file_name=file_name)
-    summaries = await summarizer(pages, prompt=prompt, model=model)
+    summaries = await summarizer(
+        pages, prompt=prompt, model=model, compression=compression
+    )
     results: list[PageResult] = []
     for page, summary in zip(pages, summaries, strict=True):
         results.append(
