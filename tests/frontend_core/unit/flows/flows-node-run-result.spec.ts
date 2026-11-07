@@ -13,7 +13,6 @@ import {
     formatDiffPathLabel,
     getNodeRunResultPillHeight,
     isLatestNodeRun,
-    jsonTreeChildPath,
     nodeRunDiffHasPath,
     nodeRunResultExpandKey,
     nodeRunValueKindLabel,
@@ -283,11 +282,4 @@ describe('flows-node-run-result', () => {
         expect(() => nodeRunDiffHasPath(result, '')).toThrow(/non-empty/);
     });
 
-    it('jsonTreeChildPath строит path для объекта и массива', () => {
-        expect(jsonTreeChildPath('result', 'nested', false)).toBe('result.nested');
-        expect(jsonTreeChildPath('', 'root', false)).toBe('root');
-        expect(jsonTreeChildPath('hits', 2, true)).toBe('hits[2]');
-        expect(() => jsonTreeChildPath('hits', -1, true)).toThrow(/non-negative/);
-        expect(() => jsonTreeChildPath('result', '', false)).toThrow(/non-empty/);
-    });
 });

@@ -6,16 +6,21 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-code-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
+import '@platform/lib/components/platform-json-tree.js';
 import '@platform/lib/components/platform-markdown-editor.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { collectJsonImages, resolveBase64Image } from '@platform/lib/utils/base64-image.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import {
     classifyNodeRunValue,
     serializeNodeRunValue,
 } from '../_helpers/flows-node-run-result.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
-import './flows-json-tree.js';
-import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
+
+type StructureView = 'tree' | 'json' | 'images';
+type StringView = 'text' | 'image';
 
 export class FlowsNodeRunValueView extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -25,12 +30,14 @@ export class FlowsNodeRunValueView extends PlatformElement {
         rootPath: { type: String, attribute: 'root-path' },
         _structureView: { state: true },
         _treePath: { state: true },
-    }
-    declare value: any;
+        _stringView: { state: true },
+    };
+
+    declare value: unknown;
     declare rootPath: string;
-    declare _structureView: string;
+    declare _structureView: StructureView;
     declare _treePath: string;
-;
+    declare _stringView: StringView;
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
@@ -110,10 +117,40 @@ export class FlowsNodeRunValueView extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
+            .image-gallery {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                padding: var(--space-3);
+            }
+            .image-card {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                max-width: 640px;
+            }
+            .image-card-meta {
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                word-break: break-word;
+            }
+            .image-card img {
+                display: block;
+                max-width: 100%;
+                max-height: 360px;
+                object-fit: contain;
+                border-radius: var(--radius-sm);
+                background: var(--bg-primary);
+            }
             platform-markdown-editor,
             platform-code-editor,
             platform-json-editor,
-            flows-json-tree {
+            platform-json-tree {
                 flex: 1 1 auto;
                 min-height: 0;
             }
@@ -126,12 +163,13 @@ export class FlowsNodeRunValueView extends PlatformElement {
         this.rootPath = '';
         this._structureView = 'tree';
         this._treePath = '';
+        this._stringView = 'image';
     }
 
     /**
      * @param {CustomEvent<{ path?: unknown, value?: unknown }>} event
      */
-    _onTreeSelect(event: CustomEvent) {
+    _onTreeSelect(event: CustomEvent): void {
         const detail = event.detail;
         if (detail === null || typeof detail !== 'object' || typeof detail.path !== 'string') {
             throw new Error('flows-node-run-value-view: tree select requires detail.path');
@@ -143,46 +181,83 @@ export class FlowsNodeRunValueView extends PlatformElement {
     /**
      * @param {CustomEvent<{ value?: unknown }>} event
      */
-    _onStructureChange(event: CustomEvent) {
+    _onStructureChange(event: CustomEvent): void {
         const next = event.detail && event.detail.value;
-        if (next !== 'tree' && next !== 'json') {
-            throw new Error('flows-node-run-value-view: structure view must be tree or json');
+        if (next !== 'tree' && next !== 'json' && next !== 'images') {
+            throw new Error('flows-node-run-value-view: structure view must be tree, json or images');
         }
         this._structureView = next;
     }
 
     /**
+     * @param {CustomEvent<{ value?: unknown }>} event
+     */
+    _onStringViewChange(event: CustomEvent): void {
+        const next = event.detail && event.detail.value;
+        if (next !== 'text' && next !== 'image') {
+            throw new Error('flows-node-run-value-view: string view must be text or image');
+        }
+        this._stringView = next;
+    }
+
+    _renderImageGallery(parsed: unknown): TemplateResult {
+        const rootPath = typeof this.rootPath === 'string' ? this.rootPath : '';
+        const images = collectJsonImages(parsed, rootPath);
+        if (images.length === 0) {
+            return html`<p class="empty">${this.t('node_run_result_modal.images_empty')}</p>`;
+        }
+        return html`
+            <div class="image-gallery">
+                ${images.map((image) => html`
+                    <article class="image-card" data-path=${image.path}>
+                        <div class="image-card-meta">${image.path} · ${image.mimeType} · ${formatFileSize(image.byteLength)}</div>
+                        <img src=${image.src} alt=${image.path} />
+                    </article>
+                `)}
+            </div>
+        `;
+    }
+
+    /**
      * @param {unknown} parsed
      */
-    _renderStructure(parsed: any) {
+    _renderStructure(parsed: unknown): TemplateResult {
         const rootPath = typeof this.rootPath === 'string' ? this.rootPath : '';
+        const hasImages = collectJsonImages(parsed, rootPath).length > 0;
+        const structureView: StructureView = this._structureView === 'images' && !hasImages
+            ? 'tree'
+            : this._structureView;
+        const items = [
+            { value: 'tree', label: this.t('node_run_result_modal.view_tree') },
+            { value: 'json', label: this.t('node_run_result_modal.view_json') },
+        ];
+        if (hasImages) {
+            items.push({ value: 'images', label: this.t('node_run_result_modal.view_images') });
+        }
         return html`
             <div class="toolbar">
                 <platform-segmented-control
                     density="dense"
-                    .value=${this._structureView}
-                    .items=${[
-                        { value: 'tree', label: this.t('node_run_result_modal.view_tree') },
-                        { value: 'json', label: this.t('node_run_result_modal.view_json') },
-                    ]}
+                    .value=${structureView}
+                    .items=${items}
                     @change=${this._onStructureChange}
                 ></platform-segmented-control>
             </div>
             <div class="viewer">
-                ${this._structureView === 'json' ? html`
+                ${structureView === 'json' ? html`
                     <platform-json-editor
                         readonly
                         fill-parent
                         .showToolbar=${false}
                         .value=${formatJsonPretty(parsed)}
                     ></platform-json-editor>
-                ` : html`
-                    <flows-json-tree
+                ` : structureView === 'images' ? this._renderImageGallery(parsed) : html`
+                    <platform-json-tree
                         .value=${parsed}
                         .rootPath=${rootPath}
                         .selectedPath=${this._treePath}
                         @select=${this._onTreeSelect}
-                    ></flows-json-tree>
+                    ></platform-json-tree>
                 `}
             </div>
         `;
@@ -191,7 +266,7 @@ export class FlowsNodeRunValueView extends PlatformElement {
     /**
      * @param {Record<string, unknown>} value
      */
-    _renderStatusMap(value: Record<string, unknown>) {
+    _renderStatusMap(value: Record<string, unknown>): TemplateResult {
         const entries = Object.entries(value);
         return html`
             <div class="status-list">
@@ -219,6 +294,50 @@ export class FlowsNodeRunValueView extends PlatformElement {
         `;
     }
 
+    _renderString(parsed: string): TemplateResult {
+        const image = resolveBase64Image(parsed);
+        if (image === null) {
+            return html`
+                <platform-code-editor
+                    language="text"
+                    readonly
+                    fill-parent
+                    .value=${parsed}
+                ></platform-code-editor>
+            `;
+        }
+        return html`
+            <div class="toolbar">
+                <platform-segmented-control
+                    density="dense"
+                    .value=${this._stringView}
+                    .items=${[
+                        { value: 'image', label: this.t('node_run_result_modal.view_images') },
+                        { value: 'text', label: this.t('node_run_result_modal.view_text') },
+                    ]}
+                    @change=${this._onStringViewChange}
+                ></platform-segmented-control>
+            </div>
+            <div class="viewer">
+                ${this._stringView === 'text' ? html`
+                    <platform-code-editor
+                        language="text"
+                        readonly
+                        fill-parent
+                        .value=${parsed}
+                    ></platform-code-editor>
+                ` : html`
+                    <div class="image-gallery">
+                        <article class="image-card">
+                            <div class="image-card-meta">${image.mimeType} · ${formatFileSize(image.byteLength)}</div>
+                            <img src=${image.src} alt=${this.t('node_run_result_modal.image_alt')} />
+                        </article>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
     override render(): TemplateResult {
         const classified = classifyNodeRunValue(this.value);
         if (classified.kind === 'null' || classified.kind === 'empty') {
@@ -234,14 +353,10 @@ export class FlowsNodeRunValueView extends PlatformElement {
             return html`<p class="scalar">${serializeNodeRunValue(this.value)}</p>`;
         }
         if (classified.kind === 'string') {
-            return html`
-                <platform-code-editor
-                    language="text"
-                    readonly
-                    fill-parent
-                    .value=${classified.parsed}
-                ></platform-code-editor>
-            `;
+            if (typeof classified.parsed !== 'string') {
+                throw new Error('flows-node-run-value-view: string requires string parsed');
+            }
+            return this._renderString(classified.parsed);
         }
         if (classified.kind === 'markdown') {
             if (typeof classified.parsed !== 'string') {

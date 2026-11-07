@@ -1,0 +1,18 @@
+component: platform-json-tree
+doc_slug: platform-json-tree
+tier: T1
+title_ru: Json Tree
+title_en: Json Tree
+import: "@platform/lib/components/platform-json-tree.js"
+variants:
+  - id: default
+    props:
+      value:
+        leaf: hello
+        nested:
+          n: 1
+      rootPath: result
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

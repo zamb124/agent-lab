@@ -129,14 +129,14 @@ describe('flows-node-run-result-modal', () => {
 
         expect(q(shadow(modal), '.field-row[data-path="result"]')).to.not.equal(null);
         const valueView = qs(shadow(modal), 'flows-node-run-value-view');
-        expect(q(shadow(valueView)!, 'flows-json-tree')).to.not.equal(null);
+        expect(q(shadow(valueView)!, 'platform-json-tree')).to.not.equal(null);
 
-        const treeRow = qs(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]');
+        const treeRow = qs(shadow(qs(shadow(valueView)!, 'platform-json-tree')), '.row[data-path="result.nested"]');
         expect(treeRow).to.not.equal(null);
         (treeRow as TestEl).click();
         await elementUpdated(modal);
         await elementUpdated(valueView)!;
-        const nestedChildren = qs(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested.b"]');
+        const nestedChildren = qs(shadow(qs(shadow(valueView)!, 'platform-json-tree')), '.row[data-path="result.nested.b"]');
         expect(nestedChildren).to.not.equal(null);
 
         const jsonToggle = qs(shadow(valueView)!, 'platform-segmented-control');
@@ -208,14 +208,14 @@ describe('flows-node-run-result-modal', () => {
         `);
         await elementUpdated(modal);
         const valueView = qs(shadow(modal), 'flows-node-run-value-view');
-        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]')).to.not.equal(null);
+        expect(q(shadow(qs(shadow(valueView)!, 'platform-json-tree')), '.row[data-path="result.nested"]')).to.not.equal(null);
         const sideControl = qs(shadow(modal), '.viewer-toolbar platform-segmented-control');
         const oldSegment = q(shadow(sideControl), 'button.segment[aria-label="Before"]');
         (oldSegment as TestEl).click();
         await elementUpdated(modal);
         await elementUpdated(valueView)!;
-        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.nested"]')).to.equal(null);
-        expect(q(shadow(qs(shadow(valueView)!, 'flows-json-tree')), '.row[data-path="result.a"]')).to.not.equal(null);
+        expect(q(shadow(qs(shadow(valueView)!, 'platform-json-tree')), '.row[data-path="result.nested"]')).to.equal(null);
+        expect(q(shadow(qs(shadow(valueView)!, 'platform-json-tree')), '.row[data-path="result.a"]')).to.not.equal(null);
     });
 
     it('follows latest run only when the cursor was on previous latest', async () => {

@@ -244,6 +244,10 @@ components:
   doc_slug: platform-json-editor
   status: production
   tier: T1
+- component: platform-json-tree
+  doc_slug: platform-json-tree
+  status: production
+  tier: T1
 - component: platform-llm-config-editor
   doc_slug: platform-llm-config-editor
   status: backlog

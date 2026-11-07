@@ -97,6 +97,7 @@ alwaysApply: false
 |---|---|
 | дерево или timeline spans одного trace | `<platform-trace-viewer>` (`core/frontend/static/lib/components/platform-trace-viewer.ts`) |
 | список записей лога | `<platform-log-viewer>` (`core/frontend/static/lib/components/platform-log-viewer.ts`) |
+| дерево JSON-значения (ключи, листья, base64-картинки) | `<platform-json-tree>` (`core/frontend/static/lib/components/platform-json-tree.ts`) |
 | длинный текст, markdown | `<platform-markdown-editor>` |
 | JSON Schema object (`parameters_schema`, `output_schema`) | `<platform-schema-editor>` (`core/frontend/static/lib/components/schema/platform-schema-editor.ts`) |
 | тело письма | `<platform-mail-html-body>` → `mail.mdc` |

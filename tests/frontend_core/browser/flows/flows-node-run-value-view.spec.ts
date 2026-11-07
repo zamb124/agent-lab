@@ -4,15 +4,20 @@ import { collectFactories, getPlatformBus, CoreEvents } from '@platform/lib/even
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { bootstrapFlowsEditor, FLOW_CANVAS_FACTORIES } from '../../helpers/flows-dataflow-fixtures.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
+import platformEn from '../../../../core/i18n/translations/en/platform.json' with { type: 'json' };
 import '../../../../apps/flows/ui/components/flows-node-run-value-view.js';
 import {q, qs, shadow, type TestEl} from '../helpers/dom.js';
+
+/** 1×1 PNG */
+const TINY_PNG_B64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 function seedFlowsTranslations() {
     const bus = getPlatformBus();
     const previous = bus.getState().i18n.translations.en || {};
     bus.dispatch(
         CoreEvents.I18N_LOCALE_LOADED,
-        { locale: 'en', bundle: { ...previous, flows: flowsEn } },
+        { locale: 'en', bundle: { ...previous, flows: flowsEn, platform: platformEn } },
         { source: 'system' },
     );
     bus.dispatch(
@@ -62,10 +67,26 @@ describe('flows-node-run-value-view', () => {
         const objectView = await fixture<TestEl>(html`
             <flows-node-run-value-view .value=${{ title: 'x' }} .rootPath=${'result'}></flows-node-run-value-view>
         `);
-        expect(q(shadow(objectView), 'flows-json-tree')).to.not.equal(null);
+        expect(q(shadow(objectView), 'platform-json-tree')).to.not.equal(null);
+        const leaf = qs(shadow(qs(shadow(objectView), 'platform-json-tree')), '.row[data-path="result.title"]');
+        expect(leaf.textContent).to.include('x');
         const jsonSegment = qs(shadow(qs(shadow(objectView), 'platform-segmented-control')), 'button.segment[aria-label="JSON"]');
         (jsonSegment as TestEl).click();
         await elementUpdated(objectView);
         expect(q(shadow(objectView), 'platform-json-editor')).to.not.equal(null);
+
+        const imageView = await fixture<TestEl>(html`
+            <flows-node-run-value-view
+                .value=${{ content_type: 'image/png', bytes_b64: TINY_PNG_B64 }}
+                .rootPath=${'page'}
+            ></flows-node-run-value-view>
+        `);
+        const imagesSegment = qs(
+            shadow(qs(shadow(imageView), 'platform-segmented-control')),
+            'button.segment[aria-label="Images"]',
+        );
+        (imagesSegment as TestEl).click();
+        await elementUpdated(imageView);
+        expect(q(shadow(imageView), '.image-card img')).to.not.equal(null);
     });
 });
