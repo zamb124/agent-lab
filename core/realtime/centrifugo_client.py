@@ -94,3 +94,20 @@ async def centrifugo_presence_stats(channel: str) -> UserPresenceSnapshot:
         connected=num_clients_value > 0,
         num_clients=num_clients_value,
     )
+
+
+async def centrifugo_channels() -> JsonObject:
+    """Метод `channels` Centrifugo API → {channel: {num_clients, ...}}."""
+    path = "/channels"
+    async with get_httpx_client(timeout=10.0) as client:
+        try:
+            response = await client.post(
+                _api_url(path),
+                headers=_headers(),
+                json={},
+            )
+            _ = response.raise_for_status()
+        except httpx2.HTTPError as exc:
+            raise RuntimeError("Centrifugo channels failed") from exc
+    payload = parse_json_object(response.text, "centrifugo.channels.response")
+    return _raise_for_centrifugo_payload(payload, path=path)

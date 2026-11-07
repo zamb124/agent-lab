@@ -53,6 +53,15 @@ spec:
           ports:
             - name: http
               containerPort: 3100
+          # Лёгкий Loki: ограничиваем burst, иначе | json-запросы алертов
+          # отъедают ядра master-ноды (наблюдали 2.8 CPU без лимитов).
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: 3
+              memory: 3Gi
           volumeMounts:
             - name: config
               mountPath: /etc/loki

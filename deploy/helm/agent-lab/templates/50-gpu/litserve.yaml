@@ -49,6 +49,9 @@ spec:
       labels:
         app: {{ .Values.litserve.serviceName }}
         app.kubernetes.io/component: gpu-inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
     spec:
 {{- include "agentlab.podImagePullSecrets" . | nindent 6 }}
 {{- include "agentlab.nodeSchedule" (list . .Values.litserve.nodeName) | nindent 6 }}

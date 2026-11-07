@@ -55,6 +55,11 @@ class UserPresenceBatchResponse(BaseModel):
     items: list[UserPresenceSnapshot]
 
 
+class PresenceStatsResponse(BaseModel):
+    online_users: int = Field(ge=0)
+    active_channels: int = Field(ge=0)
+
+
 class RealtimeCommandAccepted(BaseModel):
     accepted: bool
     event_id: str

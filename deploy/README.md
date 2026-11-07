@@ -147,6 +147,7 @@ kubectl delete secret platform-secrets -n platform
 | `TURN_SECRET` | static-auth-secret для coturn |
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice DocumentServer JWT |
 | `GRAFANA_ADMIN_PASSWORD` | пароль admin@grafana |
+| `TELEGRAM_ALERTS_BOT_TOKEN` / `TELEGRAM_ALERTS_CHAT_ID` | (опционально) доставка Grafana-алертов в Telegram (бот @linnex_alerts_bot → группа LinnexAlerts) |
 | `LLM__OPENROUTER__API_KEY` / `LLM__BOTHUB__API_KEY` | (опционально) LLM провайдеры zero-price catalog |
 | `LLM__GROQ__API_KEY` / `LLM__CEREBRAS__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` / `LLM__NVIDIA__API_KEY` / `LLM__MISTRAL__API_KEY` / `LLM__ZAI__API_KEY` / `LLM__SAMBANOVA__API_KEY` | (опционально) LLM провайдеры |
 | `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__YANDEX__API_KEY` | (опционально) LLM провайдеры |

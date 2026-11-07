@@ -1,0 +1,82 @@
+{{- if .Values.observability.nodeExporter.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: node-exporter
+spec:
+  # Headless: endpoints = IP ноды (hostNetwork) для kubernetes_sd role endpoints.
+  clusterIP: None
+  selector:
+    app: node-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: node-exporter
+          image: {{ .Values.observability.nodeExporter.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --path.rootfs=/host/root
+            - --path.sysfs=/host/sys
+            - --path.procfs=/host/proc
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|snap|var/lib/(kubelet|containerd|docker|snapd).*)($|/)
+          ports:
+            - name: metrics
+              containerPort: 9100
+              hostPort: 9100
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          volumeMounts:
+            - name: root
+              mountPath: /host/root
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+      volumes:
+        - name: root
+          hostPath:
+            path: /
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: proc
+          hostPath:
+            path: /proc
+{{- end }}

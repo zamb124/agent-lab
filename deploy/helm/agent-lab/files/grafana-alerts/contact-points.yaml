@@ -1,16 +1,26 @@
 apiVersion: 1
 
-# Placeholder: настройте реальные контактные данные в Grafana UI
-# или замените этот файл через CI-секреты перед деплоем.
-# Для отправки уведомлений необходимо настроить SMTP в Grafana
-# (GF_SMTP_*) или использовать webhook (Slack/PagerDuty/...).
+# Доставка алертов — Telegram-группа LinnexAlerts через @linnex_alerts_bot.
+#
+# Токен и chat_id приходят из platform-secrets через env пода Grafana:
+#   TELEGRAM_ALERTS_BOT_TOKEN / TELEGRAM_ALERTS_CHAT_ID
+# (GitHub Secrets → helm_platform_secrets_json.sh → platform-secrets).
+# $ENV_VAR в settings раскрывается провижинингом Grafana при старте пода.
 
 contactPoints:
   - orgId: 1
     name: default
     receivers:
-      - uid: default-email
-        type: email
+      - uid: telegram-alerts
+        type: telegram
         settings:
-          addresses: "ops@linnex.io"
+          bottoken: ${TELEGRAM_ALERTS_BOT_TOKEN}
+          chatid: ${TELEGRAM_ALERTS_CHAT_ID}
+          message: |-
+            {{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} {{ .CommonLabels.alertname }}
+            {{ range .Alerts }}{{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            {{ end }}
+          parse_mode: HTML
+          disable_notifications: false
         disableResolveMessage: false

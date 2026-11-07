@@ -56,9 +56,10 @@ EXPECTED_DEPLOYMENTS=(
   flows frontend crm rag sync worktracker office wiki guest-runtime realtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp shop geo
   flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker shop-worker geo-worker
   livekit livekit-egress onlyoffice grafana provider-litserve openfga centrifugo
+  prometheus kube-state-metrics
 )
 EXPECTED_STATEFULSETS=(postgres redis redis-realtime loki tempo seaweedfs)
-EXPECTED_DAEMONSETS=(coturn alloy)
+EXPECTED_DAEMONSETS=(coturn alloy node-exporter)
 
 log_section "Cluster Health Check"
 
