@@ -593,6 +593,7 @@ class ShopOrderCreatedResponse(StrictBaseModel):
     status_label: str
     delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
     table_label: str = ""
+    loyalty_reward_minor: int = 0
     total_minor: int
     currency: str
 

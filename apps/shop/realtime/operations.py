@@ -43,19 +43,19 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopFavoriteResponse,
     ShopFeatures,
+    ShopLoyaltyProgramResponse,
+    ShopLoyaltyProgramSetRequest,
     ShopModifierGroupCreateRequest,
     ShopModifierGroupResponse,
     ShopModifierGroupsResponse,
     ShopModifierGroupUpdateRequest,
     ShopModifierOptionCreateRequest,
     ShopModifierOptionResponse,
-    ShopFavoriteResponse,
     ShopModifierOptionUpdateRequest,
     ShopMyOrderDetailResponse,
     ShopMyOrderListItemResponse,
-    ShopLoyaltyProgramResponse,
-    ShopLoyaltyProgramSetRequest,
     ShopNotifyBackResponse,
     ShopNutrition,
     ShopOrderCreatedResponse,
@@ -65,7 +65,6 @@ from apps.shop.models.api import (
     ShopOrderResponse,
     ShopOrderStatusResponse,
     ShopPersonalResponse,
-    ShopReviewsResponse,
     ShopProductCreateRequest,
     ShopProductResponse,
     ShopProductsImportRequest,
@@ -77,6 +76,7 @@ from apps.shop.models.api import (
     ShopPromosResponse,
     ShopPromoUpdateRequest,
     ShopResponse,
+    ShopReviewsResponse,
     ShopShelfCreateRequest,
     ShopShelfResponse,
     ShopShelfUpdateRequest,
@@ -115,9 +115,9 @@ from core.models import StrictBaseModel
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.request_scope import (
+    optional_customer,
     require_company_admin,
     require_company_viewer,
-    optional_customer,
     require_customer,
 )
 from core.tasks import enqueue
@@ -1349,6 +1349,7 @@ async def op_public_order_create(
         ),
         delivery_type=order.delivery_type,
         table_label=order.table_label,
+        loyalty_reward_minor=order.loyalty_reward_minor,
         total_minor=order.total_minor,
         currency=order.currency,
     )

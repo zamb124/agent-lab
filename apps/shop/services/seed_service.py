@@ -28,6 +28,7 @@ from apps.shop.models.enums import (
     ShopOrderStatus,
     ShopStatus,
 )
+from apps.shop.models.loyalty import ShopLoyaltyProgram
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder
@@ -189,6 +190,7 @@ class ShopSeedService:
         await self._seed_orders(
             shop_id, h16, tpl, prod_ids, group_ids, option_ids, table_ids
         )
+        await self._seed_loyalty(tpl.key, h16, shop_id, tpl)
         return "created"
 
     async def _pick_slug(self, tpl: DemoShopSpec, company: Company) -> str:
@@ -596,7 +598,10 @@ class ShopSeedService:
                     items_total_minor=items_total,
                     discount_minor=0,
                     delivery_fee_minor=delivery_fee,
-                    total_minor=items_total + delivery_fee,
+                    loyalty_reward_minor=order_spec.loyalty_reward_minor,
+                    total_minor=items_total
+                    + delivery_fee
+                    - order_spec.loyalty_reward_minor,
                     currency="RUB",
                     idempotency_key=f"demo:{tpl.key}:{shop_id}:{index}",
                     status_history=history,
@@ -647,6 +652,28 @@ class ShopSeedService:
                 comment=spec.comment,
                 created_at=written_at,
                 updated_at=written_at,
+            )
+        )
+
+    async def _seed_loyalty(
+        self, tpl_key: str, h16: str, shop_id: str, tpl: DemoShopSpec
+    ) -> None:
+        """Программа лояльности витрины — одна строка на ``shop_id``."""
+        spec = tpl.loyalty
+        if spec is None:
+            return
+        if await ShopLoyaltyProgram.get_by_shop(shop_id) is not None:
+            return
+        now = utcnow()
+        _ = await ShopLoyaltyProgram.create(
+            ShopLoyaltyProgram(
+                shop_loyalty_program_id=_child_id(tpl_key, h16, "lp", "main"),
+                shop_id=shop_id,
+                orders_goal=spec.orders_goal,
+                reward_kind=spec.reward_kind,
+                reward_value=spec.reward_value,
+                created_at=now,
+                updated_at=now,
             )
         )
 

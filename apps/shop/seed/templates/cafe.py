@@ -12,6 +12,7 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopFeedbackChip,
     ShopKind,
+    ShopLoyaltyRewardKind,
     ShopOrderStatus,
     ShopShelfKind,
     ShopShelfLayout,
@@ -23,6 +24,7 @@ from apps.shop.seed.spec import (
     DemoModifierGroupSpec,
     DemoOptionSpec,
     DemoFeedbackSpec,
+    DemoLoyaltySpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -56,7 +58,12 @@ CAFE = DemoShopSpec(
         "hero_style": "cover",
         "backdrop": "blur",
     },
-    features={"nutrition": True},
+    features={"nutrition": True, "loyalty": True},
+    loyalty=DemoLoyaltySpec(
+        orders_goal=5,
+        reward_kind=ShopLoyaltyRewardKind.DISCOUNT_MINOR,
+        reward_value=30000,
+    ),
     working_hours={
         "0": "08:00-21:00",
         "1": "08:00-21:00",
@@ -518,6 +525,7 @@ CAFE = DemoShopSpec(
             age_hours=22.0,
             history_minutes=(2, 9, 22, 41),
             comment="Позвонить за 10 минут",
+            loyalty_reward_minor=30000,
             feedback=DemoFeedbackSpec(
                 rating=5,
                 chips=(ShopFeedbackChip.QUALITY, ShopFeedbackChip.SPEED),

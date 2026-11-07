@@ -39,14 +39,72 @@ button.big:disabled{opacity:.45;cursor:default}
 .amapbtn:hover{border-color:var(--afg);color:var(--afg)}
 .dgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
 .dgrid input.f{margin:0;padding:12px 10px;font-size:13.5px;text-align:center}
-@media (max-width:480px){.dgrid{grid-template-columns:repeat(2,1fr)}}"""
+@media (max-width:480px){.dgrid{grid-template-columns:repeat(2,1fr)}}
+.cl.loy{cursor:pointer;user-select:none;border-radius:12px;margin:4px -6px;padding:8px 6px;transition:background .15s}
+.cl.loy:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cl.loy .n{display:flex;align-items:center;gap:9px}
+.cl.loy .n>svg{width:19px;height:19px;fill:var(--afg);flex-shrink:0}
+.cl.loy .loysub{color:var(--afg)}
+.lswt{flex-shrink:0;width:44px;height:26px;border-radius:13px;background:color-mix(in srgb,var(--text) 16%,transparent);position:relative;transition:background .18s}
+.lswt i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.lswt.on{background:var(--accent)}
+.lswt.on i{transform:translateX(18px)}
+.cl.loysave span{color:var(--afg)}
+.cl.loyhint{cursor:default;opacity:.85}
+.cl.loyhint .n>svg{width:17px;height:17px;fill:var(--muted);flex-shrink:0}
+.cl.loyhint .loyhintt{font-size:13px;color:var(--muted)}"""
 
 JS: str = """let dtype='';
 let tableId=TABLE_ID&&TABLES.some(t=>t.id===TABLE_ID)?TABLE_ID:'';
 const DTYPES=[['delivery','truck','Доставка',S.delivery_enabled],['pickup','store','Самовывоз',S.pickup_enabled],['onsite','restaurant','В заведении',S.onsite_enabled&&TABLES.length>0]].filter(d=>d[3]);
+/* Меню без заказов: все выдачи выключены — прячем корзину и лист оформления. */
+if(!DTYPES.length)document.documentElement.classList.add('no-order');
+/* Лояльность: undefined — personal ещё не грузили; null — нет сессии/фичи. */
+let LOYALTY=undefined,useLoyalty=false;
+const LOY_ON=(S.features||{}).loyalty===true;
+async function ensureLoyalty(){
+  if(!LOY_ON)return;
+  try{const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/personal`,{credentials:'same-origin'});
+    LOYALTY=r.ok?((await r.json()).loyalty||null):null;}catch(e){LOYALTY=null;}
+  if(!(LOYALTY&&LOYALTY.rewards_available>0))useLoyalty=false;
+}
+function loyaltyRow(){
+  const l=LOYALTY;
+  if(l===undefined)return'';
+  if(l&&l.rewards_available>0){
+    const lbl=l.reward_kind==='discount_percent'?('−'+l.reward_value+'%'):('−'+fmt(l.reward_value));
+    return `<div class="cl loy${useLoyalty?' on':''}" id="loyRow" onclick="toggleLoyalty()">
+      <span class="n">${ic('reward')}<span>Награда лояльности<span class="mods loysub">${useLoyalty?'Применена · '+esc(lbl):'Доступна '+esc(lbl)+' — нажмите, чтобы применить'}</span></span></span>
+      <span class="lswt${useLoyalty?' on':''}"><i></i></span></div>`;
+  }
+  const p=S.loyalty;
+  if(!p)return'';
+  const rl=p.reward_kind==='discount_percent'?('скидка '+p.reward_value+'%'):('скидка '+fmt(p.reward_value));
+  const hint=l&&l.orders_goal
+    ?`До награды ${esc(rl)} — прогресс ${l.progress}/${l.orders_goal}`
+    :`Каждый ${p.orders_goal}-й заказ — ${esc(rl)}`;
+  return `<div class="cl loyhint" id="loyRow"><span class="n">${ic('reward')}<span class="loyhintt">${hint}</span></span></div>`;
+}
+window.toggleLoyalty=()=>{useLoyalty=!useLoyalty;
+  const row=document.getElementById('loyRow');
+  if(row)row.outerHTML=loyaltyRow();
+  refreshSavings();};
+/* Ключ идемпотентности живёт на одно открытие листа: ретрай после обрыва
+   ответа и повторный тап по кнопке не создают второй заказ и не списывают
+   награду повторно. */
+let orderKey='',submitting=false;
 window.openSheet=()=>{
+  if(!DTYPES.length)return;
+  orderKey=crypto.randomUUID();
   if(!dtype)dtype=(tableId&&S.onsite_enabled)?'onsite':(DTYPES[0]?DTYPES[0][0]:'');
   renderSheet();
+  if(LOY_ON)ensureLoyalty().then(()=>{
+    const row=document.getElementById('loyRow');
+    if(row)row.outerHTML=loyaltyRow();
+    else{const sv=document.getElementById('savings');
+      if(sv&&loyaltyRow())sv.insertAdjacentHTML('afterend',loyaltyRow());}
+    refreshSavings();
+  });
   sheetOpen(document.getElementById('sheet'));
 };
 window.setDtype=t=>{dtype=t;
@@ -68,6 +126,7 @@ function renderSheet(){
   cartUpsellHtml()+
   seg+
   `<div id="savings"></div>`+
+  loyaltyRow()+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${fmt(fee)}</b></div>`:'')+
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${fmt(sub+fee)}</b></div>
   <input class="f" id="cn" placeholder="Ваше имя">
@@ -85,13 +144,15 @@ async function refreshSavings(){
   try{
     const body={items:[...cart.values()].map(l=>({product_id:l.pid,qty:l.qty,
       selections:[...l.sel.entries()].map(([option_id,qty])=>({option_id,qty}))})),
-      delivery_type:dtype};
+      delivery_type:dtype,use_loyalty_reward:useLoyalty};
     const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/cart/price`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(my!==priceReq||!r.ok)return;
     const d=await r.json();
     const el=document.getElementById('savings');
-    if(el)el.innerHTML=d.discount_minor>0
-      ?`<div class="cl save"><span>Выгода${d.applied_promos.length?' · '+esc(d.applied_promos.map(a=>a.name).join(', ')):''}</span><b class="s">−${fmt(d.discount_minor)}</b></div>`:'';
+    if(el)el.innerHTML=(d.discount_minor>0
+      ?`<div class="cl save"><span>Выгода${d.applied_promos.length?' · '+esc(d.applied_promos.map(a=>a.name).join(', ')):''}</span><b class="s">−${fmt(d.discount_minor)}</b></div>`:'')
+      +(d.loyalty_reward_minor>0
+      ?`<div class="cl save loysave"><span>Награда лояльности</span><b class="s">−${fmt(d.loyalty_reward_minor)}</b></div>`:'');
     const fv=document.getElementById('feeVal');
     if(fv&&dtype==='delivery')fv.textContent=fmt(d.delivery_fee_minor);
     const tot=document.getElementById('cartTotal');
@@ -267,6 +328,7 @@ function ensureAuth(){
   });
 }
 window.submit=async()=>{
+  if(submitting)return;
   const hbSub=hoursBadge();
   if(hbSub&&!hbSub.open){toast('Сейчас закрыто — '+(hbSub?hbSub.t:''));return;}
   if(dtype==='onsite'&&!tableId){toast('Выберите стол');return;}
@@ -294,9 +356,15 @@ window.submit=async()=>{
     delivery_floor:dtype==='delivery'?val('dfloor'):'',
     delivery_intercom:dtype==='delivery'?val('dintercom'):'',
     comment:document.getElementById('cc').value,
+    use_loyalty_reward:useLoyalty,
     source:EMBED?'embed':'web',
-    idempotency_key:crypto.randomUUID()};
-  const r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/orders`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    idempotency_key:orderKey||crypto.randomUUID()};
+  submitting=true;
+  const pb=document.getElementById('payBtn');if(pb)pb.disabled=true;
+  let r=null;
+  try{r=await fetch(`/shop/api/v1/public/storefront/${S.slug}/orders`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+  catch(e){submitting=false;if(pb)pb.disabled=false;toast('Нет связи — заказ не отправлен. Попробуйте ещё раз');return;}
+  submitting=false;if(pb)pb.disabled=false;
   if(!r.ok){
     let msg='Не удалось оформить заказ';
     try{const e=await r.json();
@@ -304,10 +372,13 @@ window.submit=async()=>{
       if(code==='out_of_delivery_zone')msg='Адрес вне зоны доставки';
       else if(code==='address_unverifiable')msg='Адрес не удалось проверить — уточните или выберите точку на карте';
       else if(code==='shop_closed'){const np=e.error_params&&e.error_params.next_open;msg='Сейчас закрыто'+(np?' — откроемся '+np:'');}
+      else if(code==='loyalty_reward_unavailable'){useLoyalty=false;LOYALTY=undefined;msg='Награда уже использована';}
+      else if(code==='loyalty_disabled'){useLoyalty=false;msg='Награды сейчас недоступны';}
     }catch(_){}
     toast(msg);return;
   }
   const d=await r.json();
+  LOYALTY=undefined;useLoyalty=false;orderKey='';
   if(dtype==='delivery'&&addrText&&!pickedAddrId)saveAddress(addrText);
   cart.clear();draw();
   trackOrder(d.public_code,d);

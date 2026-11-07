@@ -82,7 +82,7 @@ LARGE = frozenset({
 CROSS_CUTTING = frozenset({
     "database.mdc", "configuration.mdc", "events.mdc", "authorization.mdc", "logging.mdc",
     "tracing.mdc", "billing.mdc", "taskiq.mdc", "integrations.mdc", "infrastructure.mdc", "testing.mdc",
-    "code_search.mdc", "scripts.mdc",
+    "code_search.mdc", "scripts.mdc", "figma.mdc",
 })
 OUTSIDE_TEMPLATE = frozenset({"main.mdc", "architecture.mdc", "rules.mdc"})
 DOMAIN_SECTIONS = ("Модель", "Инварианты", "Контракты", "Интеграции", "UI", "Запреты", "Исключения", "Гейты")

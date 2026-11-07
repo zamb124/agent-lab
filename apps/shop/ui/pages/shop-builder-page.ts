@@ -256,7 +256,8 @@ export class ShopBuilderPage extends PlatformPage {
                 border-radius: var(--radius-md);
                 background: var(--bg-surface);
             }
-            .loyprog .lprow { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-2); align-items: end; }
+            .loyprog .lprow { display: flex; flex-direction: column; gap: var(--space-2); }
+            .loyprog .lprow .rpair { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); align-items: end; }
             .loyprog .lseg { display: flex; gap: 4px; padding: 3px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
             .loyprog .lseg button {
                 border: 0; background: transparent; color: var(--text-tertiary);
@@ -484,9 +485,11 @@ export class ShopBuilderPage extends PlatformPage {
     }
 
     private get _loyProgramDirty(): boolean {
-        return this._loyGoal !== this._savedLoyProgram.orders_goal
+        return this._loyalty && (
+            this._loyGoal !== this._savedLoyProgram.orders_goal
             || this._loyKind !== this._savedLoyProgram.reward_kind
-            || this._loyValue !== this._savedLoyProgram.reward_value;
+            || this._loyValue !== this._savedLoyProgram.reward_value
+        );
     }
 
     private get _dirty(): boolean {
@@ -825,6 +828,7 @@ export class ShopBuilderPage extends PlatformPage {
                                             if (Number.isFinite(n) && n >= 1) this._loyGoal = Math.round(n);
                                         }}
                                     ></platform-field>
+                                    <div class="rpair">
                                     <platform-field
                                         type="number"
                                         mode="edit"
@@ -846,6 +850,7 @@ export class ShopBuilderPage extends PlatformPage {
                                             class=${this._loyKind === 'discount_percent' ? 'on' : ''}
                                             @click=${() => { this._loyKind = 'discount_percent'; this._loyValue = 10; }}
                                         >%</button>
+                                    </div>
                                     </div>
                                 </div>
                                 <div class="fdesc">${this.t('builder.loyalty_hint')}</div>

@@ -1,5 +1,5 @@
 ---
-description: "Figma MCP: сервер figma-console (figma-console-mcp) и Desktop Bridge плагин — чтение и правка файлов Figma/FigJam из агента через Plugin API без REST-лимитов. Читать при работе с дизайнами и досками Figma"
+description: "Figma MCP: сервер figma-console и плагин Desktop Bridge — доступ агента к файлам и доскам Figma/FigJam через Plugin API. Читать при работе с дизайнами и досками Figma"
 globs:
   - ".cursor/mcp.json"
   - "scripts/tools/figma_mcp.py"

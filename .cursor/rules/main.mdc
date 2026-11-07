@@ -248,6 +248,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `testing.mdc` | реальная инфраструктура; единственный мок — `MockLLM`; тест — инвариант |
 | `code_search.mdc` | rule → граф → семантика → grep → read |
 | `scripts.mdc` | пакеты `scripts/`, реестр гейтов, запуск через `python -m` |
+| `figma.mdc` | Figma — `figma-console` + Desktop Bridge плагин, Plugin API без токена |
 | `namespace.mdc` | kind company_workspace/personal/technical |
 | `files.mdc` | байты — chunked Files API; Documents bind; `FileReader.read`; S3 URL наружу запрещены |
 | `office.mdc` | Documents; id документа — `file_id` |

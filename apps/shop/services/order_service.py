@@ -453,13 +453,15 @@ class ShopOrderService:
                 "Order total is below the minimum", error_code="below_min_order"
             )
         discount_total = sum(priced_cart.line_discounts) + priced_cart.order_discount_minor
-        # Награда лояльности оплачивает товары, не доставку: атомарный claim.
+        order_id = new_id("shoporder")
+        public_code = await self._allocate_public_code()
+        # Награда лояльности оплачивает товары, не доставку: атомарный claim
+        # последним перед вставкой — любое падение ниже компенсируется возвратом.
         loyalty_reward = 0
         if payload.use_loyalty_reward:
             loyalty_reward = await self._loyalty.claim_reward(
                 shop, customer.customer_id, items_total - discount_total
             )
-        order_id = new_id("shoporder")
         order_items = [
             ShopOrderItem(
                 shop_order_item_id=new_id("shoporderitem"),
@@ -477,7 +479,7 @@ class ShopOrderService:
         order = ShopOrder(
             shop_order_id=order_id,
             shop_id=shop.shop_id,
-            public_code=await self._allocate_public_code(),
+            public_code=public_code,
             customer_name=payload.customer_name,
             customer_phone=customer.phone_e164,
             customer_id=customer.customer_id,

@@ -11,6 +11,7 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopFeedbackChip,
     ShopKind,
+    ShopLoyaltyRewardKind,
     ShopOrderStatus,
     ShopShelfKind,
     ShopShelfLayout,
@@ -22,6 +23,7 @@ from apps.shop.seed.spec import (
     DemoModifierGroupSpec,
     DemoOptionSpec,
     DemoFeedbackSpec,
+    DemoLoyaltySpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -254,7 +256,12 @@ BAKERY = DemoShopSpec(
         ),
     ),
     tables=(),
-    features={"nutrition": True},
+    features={"nutrition": True, "loyalty": True},
+    loyalty=DemoLoyaltySpec(
+        orders_goal=4,
+        reward_kind=ShopLoyaltyRewardKind.DISCOUNT_PERCENT,
+        reward_value=10,
+    ),
     shelves=(
         DemoShelfSpec(
             key="hits",

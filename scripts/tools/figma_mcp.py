@@ -1,3 +1,6 @@
+# pyright: reportAny=false
+# JSON-RPC wire-данные подпроцесса по природе Any
+
 """Вызов figma-console-mcp без MCP-реестра.
 
 ``uv run python -m scripts.tools.figma_mcp <команда>`` поднимает
@@ -9,12 +12,19 @@
 Команды:
 
 - ``list`` — все инструменты сервера;
-- ``call <tool> '<json>'`` — один вызов ``tools/call``;
+- ``call <tool> '<json>'`` — один вызов ``tools/call``, напр.
+  ``call figjam_get_board_contents '{}'`` (доска целиком),
+  ``call figma_take_screenshot '{}'`` и ``call figma_capture_screenshot '{}'``
+  (снимки страницы и узла);
 - ``batch <file>`` — пакет вызовов: JSON-список ``[{"name", "arguments"}]``
   или JSONL ``{"name", "arguments"}``;
 - ``status`` — ``figma_get_status`` с ``probe: true``;
 - ``--wait-plugin SECONDS`` — перед вызовами поллить ``figma_get_status``,
   пока ``transport.active`` не станет ``websocket``.
+
+REST-инструменты сервера (комментарии, версии, библиотеки) читают env
+``FIGMA_ACCESS_TOKEN`` — персональный токен пользователя, в репозитории
+не хранится.
 
 ``--raw`` печатает полный JSON-RPC конверт; без флага — только
 ``content[].text`` (внутренний JSON разворачивается).
@@ -31,22 +41,25 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MCP_JSON = REPO_ROOT / ".cursor" / "mcp.json"
 DEFAULT_PIN = "1.46.0"
 PLUGIN_MANIFEST = Path.home() / ".figma-console-mcp" / "plugin" / "manifest.json"
 
+Json = dict[str, Any]  # pyright: ignore[reportExplicitAny] — wire-данные JSON-RPC
+
 
 def _server_argv() -> list[str]:
     pin = DEFAULT_PIN
     try:
-        cfg = json.loads(MCP_JSON.read_text())
+        cfg: Json = json.loads(MCP_JSON.read_text())
         args: list[str] = cfg["mcpServers"]["figma-console"]["args"]
         for arg in args:
-            m = re.fullmatch(r"figma-console-mcp@(.+)", arg)
-            if m:
-                pin = m.group(1)
+            match = re.fullmatch(r"figma-console-mcp@(.+)", arg)
+            if match:
+                pin = match.group(1)
     except Exception:
         pass
     return ["npx", "-y", f"figma-console-mcp@{pin}"]
@@ -54,7 +67,7 @@ def _server_argv() -> list[str]:
 
 class _Server:
     def __init__(self) -> None:
-        self._proc = subprocess.Popen(
+        self._proc: subprocess.Popen[str] = subprocess.Popen(
             _server_argv(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -62,14 +75,14 @@ class _Server:
             text=True,
             env=dict(os.environ),
         )
-        self._id = 0
+        self._id: int = 0
 
-    def _send(self, obj: dict) -> None:
+    def _send(self, obj: Json) -> None:
         assert self._proc.stdin is not None
-        self._proc.stdin.write(json.dumps(obj) + "\n")
+        _ = self._proc.stdin.write(json.dumps(obj) + "\n")
         self._proc.stdin.flush()
 
-    def _recv(self, rid: int, timeout: float) -> dict:
+    def _recv(self, rid: int, timeout: float) -> Json:
         assert self._proc.stdout is not None
         end = time.time() + timeout
         while time.time() < end:
@@ -87,7 +100,7 @@ class _Server:
                 return obj
         return {"error": "timeout"}
 
-    def call(self, method: str, params: dict, timeout: float = 280) -> dict:
+    def call(self, method: str, params: Json, timeout: float = 280) -> Json:
         self._id += 1
         self._send({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params})
         return self._recv(self._id, timeout)
@@ -106,17 +119,17 @@ class _Server:
         time.sleep(0.3)
         return "result" in resp
 
-    def tool(self, name: str, arguments: dict) -> dict:
+    def tool(self, name: str, arguments: Json) -> Json:
         return self.call("tools/call", {"name": name, "arguments": arguments})
 
     def stop(self) -> None:
         self._proc.terminate()
 
 
-def _status_active(resp: dict) -> str | None:
+def _status_active(resp: Json) -> str | None:
     for item in resp.get("result", {}).get("content", []):
         try:
-            data = json.loads(item.get("text", "{}"))
+            data: Json = json.loads(item.get("text", "{}"))
         except json.JSONDecodeError:
             continue
         active = data.get("transport", {}).get("active")
@@ -132,20 +145,19 @@ def _wait_plugin(server: _Server, seconds: float) -> bool:
         if active == "websocket":
             return True
         print(
-            f"[wait-plugin] transport={active or 'none'} — "
-            f"запустите Desktop Bridge в Figma ({PLUGIN_MANIFEST})",
+            f"[wait-plugin] transport={active or 'none'} — запустите Desktop Bridge в Figma ({PLUGIN_MANIFEST})",
             file=sys.stderr,
         )
         time.sleep(3)
     return False
 
 
-def _emit(resp: dict, raw: bool) -> None:
+def _emit(resp: Json, raw: bool) -> None:
     if raw:
         print(json.dumps(resp, ensure_ascii=False, indent=1))
         return
     for item in resp.get("result", {}).get("content", []):
-        text = item.get("text", "")
+        text = str(item.get("text", ""))
         try:
             print(json.dumps(json.loads(text), ensure_ascii=False, indent=1))
         except json.JSONDecodeError:
@@ -155,7 +167,7 @@ def _emit(resp: dict, raw: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     _ = parser.add_argument("command", choices=["list", "call", "batch", "status"])
     _ = parser.add_argument("name", nargs="?", help="tool name (call)")
     _ = parser.add_argument("args", nargs="?", help="JSON args (call) or batch file")
@@ -168,13 +180,14 @@ def main() -> int:
         help="poll figma_get_status until bridge connects",
     )
     ns = parser.parse_args()
+    args_opt = str(ns.args) if ns.args else ""
 
     server = _Server()
     try:
         if not server.start():
             print("figma-console-mcp не инициализировался", file=sys.stderr)
             return 2
-        if ns.wait_plugin and not _wait_plugin(server, ns.wait_plugin):
+        if ns.wait_plugin and not _wait_plugin(server, float(ns.wait_plugin)):
             return 3
         if ns.command == "list":
             resp = server.call("tools/list", {})
@@ -182,22 +195,24 @@ def main() -> int:
                 print(tool["name"])
             return 0
         if ns.command == "status":
-            _emit(server.tool("figma_get_status", {"probe": True}), ns.raw)
+            _emit(server.tool("figma_get_status", {"probe": True}), bool(ns.raw))
             return 0
         if ns.command == "call":
             if not ns.name:
                 parser.error("call требует имя инструмента")
-            _emit(server.tool(ns.name, json.loads(ns.args or "{}")), ns.raw)
+            _emit(server.tool(str(ns.name), json.loads(args_opt or "{}")), bool(ns.raw))
             return 0
-        if not ns.args:
+        if not args_opt:
             parser.error("batch требует файл с вызовами")
-        text = Path(ns.args).read_text()
-        batch = json.loads(text) if ns.args.endswith(".json") else [
-            json.loads(line) for line in text.splitlines() if line.strip()
-        ]
+        text = Path(args_opt).read_text()
+        batch: list[Json] = (
+            json.loads(text)
+            if args_opt.endswith(".json")
+            else [json.loads(line) for line in text.splitlines() if line.strip()]
+        )
         for item in batch:
             print(f"=== {item['name']} ===")
-            _emit(server.tool(item["name"], item.get("arguments", {})), ns.raw)
+            _emit(server.tool(str(item["name"]), item.get("arguments", {})), bool(ns.raw))
         return 0
     finally:
         server.stop()

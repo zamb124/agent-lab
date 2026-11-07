@@ -29,9 +29,20 @@ CSS: str = """.bnrs{display:flex;gap:10px;overflow-x:auto;padding:14px 2px 4px;s
 .shcard .row{display:flex;justify-content:space-between;align-items:center;margin-top:7px;gap:8px}
 .shcard .price{font-size:14.5px}
 .shcard .add{padding:8px 14px;font-size:13px}
-.sh.hero .shcard{width:min(320px,80vw)}
-.sh.hero .shcard .ph{aspect-ratio:16/10}
-.sh.hero .shcard h3{font-size:15.5px}
+/* Полка hero — врезанная accent-панель: градиент с тенью, белые
+   заголовки на акценте, товары — плитки поверх, rail до краёв панели.
+   Селектор по data-layout: класс «hero» занят страничной шапкой. */
+.sh[data-layout=hero]{margin-top:26px;border-radius:calc(var(--radius) + 6px);padding:20px 16px 18px;background:linear-gradient(150deg,var(--accent) 0%,color-mix(in srgb,var(--accent) 74%,#120c08) 100%);box-shadow:0 16px 36px color-mix(in srgb,var(--accent) 30%,transparent),inset 0 1px 0 rgba(255,255,255,.16)}
+.sh[data-layout=hero] .sh-h{padding:0}
+.sh[data-layout=hero] .sh-h h2{color:var(--on-accent);text-shadow:0 1px 12px rgba(0,0,0,.32)}
+.sh[data-layout=hero] .sh-h .sub{color:color-mix(in srgb,var(--on-accent) 80%,transparent)}
+.sh[data-layout=hero] .sh-h .more{color:var(--on-accent)}
+.sh[data-layout=hero] .rail{margin:2px -16px 0;padding:8px 16px 10px}
+.sh[data-layout=hero] .shcard{width:min(320px,80vw);background:var(--card);border-radius:calc(var(--radius) - 2px);overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.26);padding-bottom:12px}
+.sh[data-layout=hero] .shcard .ph{aspect-ratio:16/10;border-radius:0}
+.sh[data-layout=hero] .shcard h3{font-size:15.5px;padding:0 12px;margin-top:11px}
+.sh[data-layout=hero] .shcard .row{padding:0 12px}
+.sh[data-layout=hero] .shcard h3,.sh[data-layout=hero] .shcard .price{color:var(--text);text-shadow:none}
 .soon{display:inline-block;font-size:12px;font-weight:650;color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);padding:6px 12px;border-radius:99px;white-space:nowrap}
 .na img{filter:saturate(.35) brightness(.82)}
 .na h3,.na p{opacity:.55}
@@ -94,7 +105,7 @@ function shelfHtml(s){const items=(s.product_ids||[]).map(byId).filter(Boolean);
   if(s.layout==='rows')body=rowList(items);
   else if(s.layout==='grid')body=rowGrid(items);
   else body=`<div class="rail">`+items.map(shCard).join('')+`</div>`;
-  return `<div class="sh${s.layout==='hero'?' hero':''}" id="sh-${s.id}">${head}${body}</div>`;}
+  return `<div class="sh" data-layout="${s.layout||'rail'}" id="sh-${s.id}">${head}${body}</div>`;}
 function feedHtml(){const parts=[];
   const bnrs=BANNERS.filter(bannerLive);
   if(bnrs.length)parts.push(`<div class="bnrs">`+bnrs.map(bannerHtml).join('')+`</div>`);

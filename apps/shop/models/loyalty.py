@@ -17,10 +17,9 @@ from oxyde import Field as DbField
 from oxyde import Index, execute_raw
 
 from apps.shop.models.common import new_id
+from apps.shop.models.enums import ShopLoyaltyRewardKind
 from core.models.platform_model import PlatformModel
 from core.utils.time import utcnow
-
-from apps.shop.models.enums import ShopLoyaltyRewardKind
 
 DEFAULT_ORDERS_GOAL = 5
 DEFAULT_REWARD_MINOR = 50000
@@ -52,6 +51,10 @@ class ShopLoyaltyProgram(PlatformModel):
     updated_at: datetime = DbField()
 
     @classmethod
+    async def create(cls, program: Self) -> Self:
+        return await cls.objects.create(instance=program)
+
+    @classmethod
     async def get_by_shop(cls, shop_id: str) -> Self | None:
         return await cls.objects.filter(shop_id=shop_id).get_or_none()
 
@@ -77,7 +80,7 @@ class ShopLoyaltyProgram(PlatformModel):
                 created_at=now,
                 updated_at=now,
             )
-            return await cls.objects.create(instance=program)
+            return await cls.create(program)
         program.orders_goal = orders_goal
         program.reward_kind = reward_kind
         program.reward_value = reward_value
@@ -125,18 +128,8 @@ class ShopLoyaltyAccount(PlatformModel):
         Атомарный upsert: конкурентные заказы покупателя не теряют прогресс.
         """
         now = utcnow()
-        await execute_raw(
-            "INSERT INTO shop_loyalty_accounts"
-            " (shop_loyalty_account_id, shop_id, customer_id, progress,"
-            " rewards_available, created_at, updated_at)"
-            " VALUES ($1, $2, $3, $6, $7, $5, $5)"
-            " ON CONFLICT (shop_id, customer_id) DO UPDATE SET"
-            " progress = CASE WHEN shop_loyalty_accounts.progress + 1 >= $4"
-            "   THEN 0 ELSE shop_loyalty_accounts.progress + 1 END,"
-            " rewards_available = shop_loyalty_accounts.rewards_available"
-            "   + CASE WHEN shop_loyalty_accounts.progress + 1 >= $4"
-            "     THEN 1 ELSE 0 END,"
-            " updated_at = $5",
+        _ = await execute_raw(
+            "INSERT INTO shop_loyalty_accounts (shop_loyalty_account_id, shop_id, customer_id, progress, rewards_available, created_at, updated_at) VALUES ($1, $2, $3, $6, $7, $5, $5) ON CONFLICT (shop_id, customer_id) DO UPDATE SET progress = CASE WHEN shop_loyalty_accounts.progress + 1 >= $4 THEN 0 ELSE shop_loyalty_accounts.progress + 1 END, rewards_available = shop_loyalty_accounts.rewards_available + CASE WHEN shop_loyalty_accounts.progress + 1 >= $4 THEN 1 ELSE 0 END, updated_at = $5",
             [
                 new_id("shoployaltyaccount"),
                 shop_id,
@@ -153,10 +146,7 @@ class ShopLoyaltyAccount(PlatformModel):
     async def claim_reward(cls, shop_id: str, customer_id: str) -> bool:
         """Списать одну награду атомарно. ``False`` — доступных наград нет."""
         rows = await execute_raw(
-            "UPDATE shop_loyalty_accounts"
-            " SET rewards_available = rewards_available - 1, updated_at = $3"
-            " WHERE shop_id = $1 AND customer_id = $2 AND rewards_available > 0"
-            " RETURNING shop_loyalty_account_id",
+            "UPDATE shop_loyalty_accounts SET rewards_available = rewards_available - 1, updated_at = $3 WHERE shop_id = $1 AND customer_id = $2 AND rewards_available > 0 RETURNING shop_loyalty_account_id",
             [shop_id, customer_id, utcnow()],
             using="shop",
         )
@@ -165,10 +155,8 @@ class ShopLoyaltyAccount(PlatformModel):
     @classmethod
     async def refund_reward(cls, shop_id: str, customer_id: str) -> None:
         """Вернуть награду при отмене заказа (аккаунт существует, раз был claim)."""
-        await execute_raw(
-            "UPDATE shop_loyalty_accounts"
-            " SET rewards_available = rewards_available + 1, updated_at = $3"
-            " WHERE shop_id = $1 AND customer_id = $2",
+        _ = await execute_raw(
+            "UPDATE shop_loyalty_accounts SET rewards_available = rewards_available + 1, updated_at = $3 WHERE shop_id = $1 AND customer_id = $2",
             [shop_id, customer_id, utcnow()],
             using="shop",
         )

@@ -82,6 +82,8 @@ import {
     shopBannerUpdateOp,
     shopBannersReorderOp,
     shopBannerRemoveOp,
+    shopLoyaltyProgramGetOp,
+    shopLoyaltyProgramSetOp,
 } from '../events/resources/shop.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -188,6 +190,8 @@ export class ShopApp extends PlatformApp {
         shopBannerUpdateOp,
         shopBannersReorderOp,
         shopBannerRemoveOp,
+        shopLoyaltyProgramGetOp,
+        shopLoyaltyProgramSetOp,
         platformFileCreateOp,
     ];
 

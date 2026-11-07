@@ -31,7 +31,8 @@ CSS: str = """.cl{display:flex;justify-content:space-between;align-items:center;
 .nutri{display:flex;flex-wrap:wrap;gap:6px 16px;margin:14px 0 2px;padding:13px 16px;border-radius:14px;background:var(--card2);font-size:13px;color:var(--muted)}
 .nutri b{color:var(--text);font-weight:650;margin-right:5px;font-variant-numeric:tabular-nums}
 button.big svg{width:18px;height:18px;vertical-align:-4px;margin-right:6px;fill:currentColor}
-.crow{display:flex;justify-content:flex-end;margin-top:18px}"""
+.crow{display:flex;justify-content:flex-end;margin-top:18px}
+.crow .pprice{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}"""
 
 JS: str = """let cust=null;
 function findGroup(pid,gid){const p=byId(pid);
@@ -89,7 +90,8 @@ function groupHtml(p,g,depth){const n=groupSelectedQty(g);const req=g.min_select
     const maxed=g.max_selected!=null&&n>=g.max_selected&&!q;
     const oimg=o.photo_file_id?photo(o.photo_file_id,'oimg','sm!sq'):'';
     const cls=`opt${oimg?' hasimg':''}`;
-    if(o.max_per_option>1&&q)
+    if(!ORDER_ON)h+=`<span class="${cls}">${oimg}${esc(o.name)}${pr}</span>`;
+    else if(o.max_per_option>1&&q)
       h+=`<span class="${cls} on"><span class="stepper"><button class="ghost" onclick="optQty('${p.id}','${g.id}','${o.id}',-1)">−</button><span>${q}</span><button onclick="optQty('${p.id}','${g.id}','${o.id}',1)">+</button></span>${oimg}${esc(o.name)}${pr}</span>`;
     else
       h+=`<button class="${cls}${q?' on':''}${maxed?' dis':''}" onclick="optToggle('${p.id}','${g.id}','${o.id}')">${oimg}${esc(o.name)}${pr}</button>`;}
@@ -128,8 +130,10 @@ function renderCust(){if(!cust)return;const p=byId(cust.pid);if(!p)return;
         :(S.features||{}).back_in_stock!==false
         ?`<button class="big" onclick="notifyBack('${p.id}')">${ic('bell')} Сообщить о появлении</button>`
         :`<div class="nutri"><span>Нет в наличии</span></div>`)
-      :`<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${cust.qty}</span><button onclick="custQty(1)">+</button></span></div>`+
-        `<button class="big"${ok?'':' disabled'} onclick="addCustom()">В корзину · ${fmt(u*cust.qty)}</button>`);}
+      :ORDER_ON
+      ?`<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${cust.qty}</span><button onclick="custQty(1)">+</button></span></div>`+
+        `<button class="big"${ok?'':' disabled'} onclick="addCustom()">В корзину · ${fmt(u*cust.qty)}</button>`
+      :`<div class="crow"><span class="pprice">${fmt(u)}</span></div>`);}
 window.notifyBack=async pid=>{
   const customer=await ensureAuth();if(!customer)return;
   try{

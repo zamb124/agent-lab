@@ -4,11 +4,6 @@ from apps.shop.models.back_in_stock import ShopBackInStock
 from apps.shop.models.banner import ShopBanner
 from apps.shop.models.category import ShopCategory
 from apps.shop.models.domain import ShopDomain
-from apps.shop.models.favorite import ShopFavorite
-from apps.shop.models.loyalty import (
-    ShopLoyaltyAccount,
-    ShopLoyaltyProgram,
-)
 from apps.shop.models.enums import (
     ModifierGroupKind,
     ModifierPriceMode,
@@ -28,6 +23,11 @@ from apps.shop.models.enums import (
     feedback_chip_label,
     feedback_chip_labels,
     order_status_label,
+)
+from apps.shop.models.favorite import ShopFavorite
+from apps.shop.models.loyalty import (
+    ShopLoyaltyAccount,
+    ShopLoyaltyProgram,
 )
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption

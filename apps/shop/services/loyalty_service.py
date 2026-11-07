@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from core.errors.boundary import PlatformConflictError
-
 from apps.shop.models.api import ShopFeatures, normalize_shop_features
 from apps.shop.models.enums import ShopLoyaltyRewardKind
 from apps.shop.models.loyalty import (
@@ -20,6 +18,8 @@ from apps.shop.models.loyalty import (
 from apps.shop.models.order import ShopOrder
 from apps.shop.models.shop import Shop
 from apps.shop.services.shop_service import ShopService
+from core.errors.boundary import PlatformConflictError
+from core.utils.time import utcnow
 
 MAX_REWARD_MINOR = 10_000_000
 
@@ -50,9 +50,12 @@ class LoyaltyService:
         program = await ShopLoyaltyProgram.get_by_shop(shop_id)
         if program is not None:
             return program
+        now = utcnow()
         return ShopLoyaltyProgram(
             shop_loyalty_program_id="",
             shop_id=shop_id,
+            created_at=now,
+            updated_at=now,
         )
 
     async def get_program(

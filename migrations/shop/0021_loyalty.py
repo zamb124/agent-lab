@@ -12,11 +12,15 @@ depends_on = "0020_order_feedback"
 def upgrade(ctx):
     """Apply migration."""
     ctx.execute(
+        "CREATE TYPE shop_loyalty_reward_kind_enum AS ENUM "
+        "('discount_minor','discount_percent')"
+    )
+    ctx.execute(
         "CREATE TABLE IF NOT EXISTS shop_loyalty_programs ("
         "shop_loyalty_program_id varchar(64) PRIMARY KEY, "
         "shop_id varchar(64) NOT NULL, "
         "orders_goal integer NOT NULL, "
-        "reward_kind varchar(32) NOT NULL, "
+        "reward_kind shop_loyalty_reward_kind_enum NOT NULL DEFAULT 'discount_minor', "
         "reward_value integer NOT NULL, "
         "created_at timestamptz NOT NULL, "
         "updated_at timestamptz NOT NULL"
@@ -55,4 +59,5 @@ def downgrade(ctx):
     """Rollback migration."""
     ctx.execute("DROP TABLE IF EXISTS shop_loyalty_accounts")
     ctx.execute("DROP TABLE IF EXISTS shop_loyalty_programs")
+    ctx.execute("DROP TYPE IF EXISTS shop_loyalty_reward_kind_enum")
     ctx.execute("ALTER TABLE shop_orders DROP COLUMN IF EXISTS loyalty_reward_minor")

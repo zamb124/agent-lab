@@ -12,10 +12,9 @@ import hashlib
 import io
 import json
 from collections.abc import AsyncIterator
-
-import segno
 from typing import Annotated
 
+import segno
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 

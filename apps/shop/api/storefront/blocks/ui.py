@@ -32,7 +32,8 @@ lock:'M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58
 cart:'M280-80q-33 0-56.5-23.5T200-160q0-33 23.5-56.5T280-240q33 0 56.5 23.5T360-160q0 33-23.5 56.5T280-80Zm400 0q-33 0-56.5-23.5T600-160q0-33 23.5-56.5T680-240q33 0 56.5 23.5T760-160q0 33-23.5 56.5T680-80ZM208-800h590q23 0 35 20.5t1 41.5L692-482q-11 20-29.5 31T622-440H324l-44 80h480v80H280q-45 0-68-39.5t-2-78.5l54-98-144-304H40v-80h130l38 80Z',
 bell:'M160-200v-80h80v-296q0-83 50-147.5T420-799v-28q0-25 17.5-42.5T480-887q25 0 42.5 17.5T540-827v28q81 20 130.5 83.8T720-576v296h80v80H160ZM480-80q-33 0-56.5-23.5T400-160h160q0 33-23.5 56.5T480-80Z',
 heart:'M480-120l-58-52q-101-91-167-157T150-398.5Q111-460 95.5-512T80-584q0-94 63-157t157-63q52 0 99 22t81 62q34-40 81-62t99-22q94 0 157 63t63 157q0 46-15.5 71.5T810-398.5Q751-330 685-264T538-172l-58 52Z',
-star:'M233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'};
+star:'M233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z',
+reward:'m480-483-68 52q-6 5-12 .5t-4-11.5l26-84-70-56q-5-5-3-11.5t9-6.5h86l26-82q2-7 10-7t10 7l26 82h85q7 0 9.5 6.5T608-582l-71 56 26 84q2 7-4 11.5t-12-.5l-67-52Zm0 363L293-58q-20 7-36.5-5T240-95v-254q-38-42-59-96t-21-115q0-134 93-227t227-93q134 0 227 93t93 227q0 61-21 115t-59 96v254q0 20-16.5 32T667-58l-187-62Zm0-200q100 0 170-70t70-170q0-100-70-170t-170-70q-100 0-170 70t-70 170q0 100 70 170t170 70ZM320-159l160-41 160 41v-124q-35 20-75.5 31.5T480-240q-44 0-84.5-11.5T320-283v124Zm160-62Z'};
 const ic=n=>`<svg viewBox="0 -960 960 960"><path d="${_IC[n]}"/></svg>`;
 /* map-бандл (maplibre ~1.7МБ) — только когда витрина реально рисует карту */
 let _mapJs=null;
@@ -46,6 +47,7 @@ function loadMap(){
  return _mapJs;
 }
 function selHash(sel){return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}
+const ORDER_ON=[S.delivery_enabled,S.pickup_enabled,S.onsite_enabled&&TABLES.length>0].some(Boolean);
 function cartQty(pid){let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}
 function unitPrice(p,sel){let abs=0,delta=0;
   const walk=groups=>{for(const g of groups)for(const o of g.options){const q=sel.get(o.id)||0;
@@ -70,7 +72,8 @@ function tags(p){return (p.badges||[]).map(b=>{const d=DEFS[b];
   return d?`<span class="ptag">${d.icon_path?`<svg viewBox="0 -960 960 960"><path d="${d.icon_path}"/></svg>`:''}${esc(d.label)}</span>`:'';}).join('');}
 function badge(pid){const pr=(S.promos||[]).find(x=>promoApplies(x.action,pid));
   return pr?`<span class="pbadge">${esc(pr.name)}</span>`:'';}
-function qtyCtl(p){if(p.is_available===false)return `<span class="soon">Скоро</span>`;
+function qtyCtl(p){if(!ORDER_ON)return'';
+  if(p.is_available===false)return `<span class="soon">Скоро</span>`;
   const hasMod=p.modifier_groups&&p.modifier_groups.length;
   const q=cartQty(p.id);
   if(hasMod)return `<button class="add" onclick="customize('${p.id}')">${q?'Выбрать · '+q:'Выбрать'}</button>`;

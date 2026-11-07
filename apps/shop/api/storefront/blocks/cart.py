@@ -6,7 +6,8 @@
 
 CSS: str = """.cart{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));width:min(688px,92vw);background:var(--accent);color:var(--on-accent);border:0;font:inherit;font-size:16px;font-weight:650;padding:17px;border-radius:99px;cursor:pointer;display:none;box-shadow:var(--shadow-lg);z-index:10;letter-spacing:.01em}
 .cart.show{display:block;animation:pop .25s ease}
-@keyframes pop{from{transform:translateX(-50%) translateY(16px);opacity:0}}"""
+@keyframes pop{from{transform:translateX(-50%) translateY(16px);opacity:0}}
+.no-order .cart{display:none!important}"""
 
 JS: str = """window.haptic=()=>{if(navigator.vibrate)navigator.vibrate(8);};
 window.addPlain=(pid,d)=>{const key=pid+'#';const l=cart.get(key)||{pid,sel:new Map(),qty:0};

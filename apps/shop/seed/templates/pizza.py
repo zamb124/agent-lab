@@ -14,6 +14,7 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopFeedbackChip,
     ShopKind,
+    ShopLoyaltyRewardKind,
     ShopOrderStatus,
     ShopShelfKind,
     ShopShelfLayout,
@@ -26,6 +27,7 @@ from apps.shop.seed.spec import (
     DemoOptionSpec,
     DemoOrderGeoSpec,
     DemoFeedbackSpec,
+    DemoLoyaltySpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,
@@ -454,7 +456,12 @@ PIZZA = DemoShopSpec(
         ),
     ),
     tables=(),
-    features={"nutrition": True},
+    features={"nutrition": True, "loyalty": True},
+    loyalty=DemoLoyaltySpec(
+        orders_goal=6,
+        reward_kind=ShopLoyaltyRewardKind.DISCOUNT_MINOR,
+        reward_value=50000,
+    ),
     shelves=(
         DemoShelfSpec(
             key="hero",
@@ -611,6 +618,7 @@ PIZZA = DemoShopSpec(
             address="Москва, Петровский бул., 21, кв. 7",
             age_hours=26.0,
             history_minutes=(3, 12, 25, 47),
+            loyalty_reward_minor=50000,
             feedback=DemoFeedbackSpec(
                 rating=4,
                 chips=(ShopFeedbackChip.QUALITY, ShopFeedbackChip.PRICE),

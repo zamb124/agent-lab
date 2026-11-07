@@ -23,9 +23,10 @@ from tests.ui.e2e.test_shop_delivery_e2e import (
     _emulator_auth,
     zoned_storefront,  # noqa: F401 — фикстура
 )
-from tests.ui.e2e.test_shop_storefront_desktop import Storefront
+from tests.ui.e2e.test_shop_storefront_desktop import Storefront, _create_storefront
 from tests.ui.e2e.test_shop_feed_e2e import _PHONE, _shot
 from tests.ui.harness import AppUI
+from tests.ui.e2e_worker import ui_e2e_scope_headers
 
 _SHOP_UI = AppUI(SERVICE_UI_REGISTRY["shop"])
 
@@ -33,6 +34,28 @@ _SHOP_UI = AppUI(SERVICE_UI_REGISTRY["shop"])
 @pytest_asyncio.fixture
 async def _viewport(page: Page) -> None:
     await page.set_viewport_size(_PHONE)
+
+
+@pytest_asyncio.fixture
+async def menu_only_storefront(
+    shop_client_http: httpx2.AsyncClient,
+    shop_worker: None,
+    auth_headers_system: dict[str, str],
+    unique_id: str,
+) -> Storefront:
+    """Витрина-меню: все три способа выдачи выключены — заказов нет."""
+    return await _create_storefront(
+        shop_client_http,
+        {**auth_headers_system, **ui_e2e_scope_headers()},
+        f"menu{unique_id[:8]}",
+        categories=("Меню",),
+        products_per_category=2,
+        shop_patch={
+            "delivery_enabled": False,
+            "pickup_enabled": False,
+            "onsite_enabled": False,
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -163,6 +186,27 @@ async def test_details_reach_order(
     await _emulator_auth(page, f"+7999{int(unique_id[:8], 16) % 10**7:07d}")
     await expect(page.locator(".done .code")).to_be_visible(timeout=20_000)
     await _shot(page, "phone-done", zoned_storefront.slug)
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(90)
+async def test_menu_only_hides_ordering_ui(
+    page: Page, menu_only_storefront: Storefront, _viewport: None
+) -> None:
+    """Режим «витрина-меню»: без выдачи нет кнопок покупки, корзины и листа."""
+    _ = await page.goto(_page_url(menu_only_storefront.slug), wait_until="load")
+    await expect(page.locator(".item").first).to_be_visible()
+    await expect(page.locator(".add")).to_have_count(0)
+    await expect(page.locator(".stepper")).to_have_count(0)
+    await expect(page.locator("#cart")).not_to_be_visible()
+
+    await page.locator(".item").first.click()
+    csheet = page.locator("#csheet")
+    await expect(csheet).to_have_class("sheet show")
+    await expect(csheet.locator(".pprice")).to_be_visible()
+    await expect(csheet.locator(".big")).to_have_count(0)
+    await _shot(page, "phone-menu-only", menu_only_storefront.slug)
 
 
 @pytest.mark.asyncio

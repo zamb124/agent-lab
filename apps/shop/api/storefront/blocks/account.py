@@ -125,6 +125,17 @@ body.acct #acct{display:block}
 .ritem .fchip{padding:6px 11px;font-size:11.5px;cursor:default}
 .ritem .rcomment{margin-top:8px;font:400 13px/1.55 inherit}
 .ritem .rwhen{margin-top:8px;font:400 11.5px/1 inherit;color:var(--muted)}
+.loycard{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 13%,var(--card)),var(--card) 70%);
+ border-color:color-mix(in srgb,var(--accent) 26%,var(--line))}
+.loyhead{display:flex;align-items:center;gap:9px}
+.loyic{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex-shrink:0}
+.loyic svg{width:17px;height:17px;fill:var(--on-accent)}
+.loyhead b{font:700 14px/1.2 inherit;flex:1;min-width:0}
+.loybadge{font:700 11.5px/1 inherit;color:var(--on-accent);background:var(--accent);padding:5px 10px;border-radius:99px;white-space:nowrap}
+.loytxt{margin-top:9px;font:400 12.5px/1.45 inherit;color:var(--muted)}
+.loybar{height:6px;border-radius:3px;background:color-mix(in srgb,var(--text) 10%,transparent);margin-top:10px;overflow:hidden}
+.loybar i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .4s ease}
+.loyscale{margin-top:5px;font:500 11px/1 inherit;color:var(--muted);text-align:right}
 </style>
 """
 
@@ -194,21 +205,46 @@ window.goTab=go;
 /* --- orders --- */
 const stCls=s=>s==='done'?'done':s==='cancelled'?'cancelled':'';
 let ordersCache=null;
+/* Поколение представления: запоздалый ответ загрузчика не перетирает
+   другой таб — guard перед каждой записью в acct. */
+let viewSeq=0;
+const stale=seq=>seq!==viewSeq;
 async function loadOrders(force){
+ const seq=viewSeq;
  if(!me&&await fetchMe()===null){me=null;}
+ if(stale(seq))return;
  if(!me){acct.innerHTML='<div class="aview"><div class="aempty"><div class="big">'+ic('lock')+'</div>Войдите по номеру телефона,<br>чтобы видеть свои заказы<div><button class="abtn" style="max-width:280px;margin:18px auto 0" onclick="loginThen()">Войти</button></div></div></div>';return;}
  let d;
  try{d=await jget(API+'/my/orders?limit=50');}catch(e){
    if(e&&e.status===401){me=null;return loadOrders();}
+   if(stale(seq))return;
    acct.innerHTML='<div class="aview"><div class="aempty">Не удалось загрузить заказы</div></div>';return;}
+ if(stale(seq))return;
  ordersCache=d.items||[];
  renderOrders(ordersCache);
 }
 window.loginThen=async()=>{const c=await ensureAuth();if(c){me=await fetchMe();renderView(cur);refreshBanner();loadPersonal();}};
 window.loadOrders=loadOrders;
 window.openOrder=openOrder;
+function loyaltyCard(){
+ const l=LOYALTY;
+ if(!LOY_ON||!l)return null;
+ const left=Math.max(0,(l.orders_goal||1)-l.progress);
+ const pct=l.orders_goal>0?Math.min(100,Math.round(l.progress/l.orders_goal*100)):0;
+ const rl=l.reward_kind==='discount_percent'?('скидка '+l.reward_value+'%'):('скидка '+money(l.reward_value));
+ const c=el('div','acard loycard');c.style.cursor='default';
+ c.innerHTML='<div class="loyhead"><span class="loyic">'+ic('reward')+'</span><b>Лояльность</b>'
+  +(l.rewards_available>0?'<span class="loybadge">'+(l.rewards_available>1?l.rewards_available+' награды':'Награда доступна')+'</span>':'')
+  +'</div><div class="loytxt">'
+  +(l.rewards_available>0?'Включите награду при оформлении — сработает '+rl:'До награды '+rl+' — ещё '+left+' '+plural(left,['заказ','заказа','заказов']))
+  +'</div><div class="loybar"><i style="width:'+(l.rewards_available>0?100:pct)+'%"></i></div>'
+  +'<div class="loyscale">'+(l.rewards_available>0?'цель выполнена':l.progress+'/'+l.orders_goal)+'</div>';
+ return c;
+}
 function renderOrders(items){
  const v=el('div','aview');
+ const lc=loyaltyCard();
+ if(lc)v.appendChild(lc);
  if(!items.length){v.appendChild(el('div','aempty','<div class="big">'+ic('cart')+'</div>Заказов пока нет —<br>самое время выбрать что-нибудь вкусное'));}
  for(const o of items){
   const c=el('div','acard');
@@ -225,23 +261,42 @@ function renderOrders(items){
  }
  acct.innerHTML='';acct.appendChild(v);
 }
-let sse=null,curOrder=null;
-function stopSse(){if(sse){try{sse.close()}catch(e){}sse=null;}}
+let sse=null,curOrder=null,pollTimer=0;
+function stopSse(){if(sse){try{sse.close()}catch(e){}sse=null;}
+ if(pollTimer){clearTimeout(pollTimer);pollTimer=0;}}
+function applyOrderStatus(code,st,label){
+ if(curOrder!==code||!st)return;
+ const chip=document.querySelector('.od-st');
+ if(chip){chip.textContent=label||st;chip.className='stchip od-st '+stCls(st)+' live';}
+ refreshBanner();
+}
+function pollOrder(code){
+ if(curOrder!==code)return;
+ jget(API+'/my/orders/'+encodeURIComponent(code)).then(o=>{
+  if(curOrder!==code)return;
+  applyOrderStatus(code,o.status,o.status_label);
+  if(o.status==='done'||o.status==='cancelled')return;
+  pollTimer=setTimeout(()=>pollOrder(code),20000);
+ }).catch(()=>{if(curOrder===code)pollTimer=setTimeout(()=>pollOrder(code),20000);});
+}
 function watchOrder(code){
  stopSse();
  try{
   sse=new EventSource(API+'/orders/'+encodeURIComponent(code)+'/events');
   sse.onmessage=ev=>{try{const m=JSON.parse(ev.data);
-   if(curOrder===code&&m.status){const chip=document.querySelector('.od-st');if(chip){chip.textContent=m.status_label||m.status;chip.className='stchip od-st '+stCls(m.status)+' live';}
-    refreshBanner();}}catch(e){}};
-  sse.onerror=()=>{/* фолбэк — переопрос карточки каждые 20 c */};
- }catch(e){}
+   if(m.status)applyOrderStatus(code,m.status,m.status_label);}catch(e){}};
+  // Обрыв SSE — переопрос карточки раз в 20 с до терминального статуса.
+  sse.onerror=()=>{if(!pollTimer&&curOrder===code)pollOrder(code);};
+ }catch(e){pollOrder(code);}
 }
 async function openOrder(code){
+ const seq=viewSeq;
  curOrder=code;markTab('orders');
  let o;
  try{o=await jget(API+'/my/orders/'+encodeURIComponent(code));}catch(e){
+  if(stale(seq))return;
   acct.innerHTML='<div class="aview"><button class="aback" onclick="goTab(\'orders\');loadOrders()">← Назад</button><div class="aempty">Заказ не найден</div></div>';return;}
+ if(stale(seq))return;
  const v=el('div','aview');
  v.appendChild(el('button','aback','← Все заказы')).onclick=()=>{curOrder=null;stopSse();loadOrders();};
  const head=el('div','acard');
@@ -266,6 +321,7 @@ async function openOrder(code){
  rows+='</div>';
  rows+='<div class="trow"><span>Позиции</span><span>'+money(o.items_total_minor)+'</span></div>';
  if(o.discount_minor)rows+='<div class="trow"><span>Скидка</span><span>−'+money(o.discount_minor)+'</span></div>';
+ if(o.loyalty_reward_minor)rows+='<div class="trow"><span>Награда лояльности</span><span>−'+money(o.loyalty_reward_minor)+'</span></div>';
  if(o.delivery_fee_minor)rows+='<div class="trow"><span>Доставка</span><span>'+money(o.delivery_fee_minor)+'</span></div>';
  rows+='<div class="trow total"><span>Итого</span><span>'+money(o.total_minor)+'</span></div>';
  box.innerHTML=rows;v.appendChild(box);
@@ -361,10 +417,12 @@ function renderFbForm(c,code,fb){
 
 /* --- reviews: публичные отзывы витрины --- */
 async function renderReviews(){
+ const seq=viewSeq;
  const v=el('div','aview');
  let d;
  try{d=await jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/reviews?limit=50');}
- catch(e){acct.innerHTML='<div class="aview"><div class="aempty">Не удалось загрузить отзывы</div></div>';return;}
+ catch(e){if(stale(seq))return;acct.innerHTML='<div class="aview"><div class="aempty">Не удалось загрузить отзывы</div></div>';return;}
+ if(stale(seq))return;
  if(!d.count){v.appendChild(el('div','aempty','<div class="big">'+ic('star')+'</div>Отзывов пока нет —<br>закажите и станьте первым'));}
  else{
   const sum=el('div','acard rsum');
@@ -447,7 +505,9 @@ function renderContacts(){
 
 /* --- profile --- */
 async function renderProfile(){
+ const seq=viewSeq;
  if(!me)await fetchMe();
+ if(stale(seq))return;
  const v=el('div','aview');
  if(!me){v.appendChild(el('div','aempty','<div class="big">'+ic('person')+'</div>Вы не вошли<div><button class="abtn" style="max-width:280px;margin:18px auto 0" onclick="loginThen()">Войти по номеру</button></div>'));}
  else{
@@ -474,6 +534,8 @@ async function loadPersonal(){
   if(!me&&await fetchMe()===null)return;
   if(!me)return;
   const d=await jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/personal');
+  LOYALTY=d.loyalty||null;
+  if(cur==='orders'&&!curOrder&&ordersCache)renderOrders(ordersCache);
   (d.back_in_stock_ids||[]).forEach(id=>SUBS.add(id));
   (d.favorite_ids||[]).forEach(id=>FAVS.add(id));
   const usual=SHELVES.find(s=>s.kind==='usual');
@@ -512,7 +574,7 @@ async function refreshBanner(){
 /* --- view switch --- */
 let cur='menu';
 function renderView(id){
- cur=id;
+ cur=id;viewSeq++;
  if(id==='orders'){if(curOrder)openOrder(curOrder);else loadOrders();}
  else if(id==='reviews')renderReviews();
  else if(id==='contacts')renderContacts();

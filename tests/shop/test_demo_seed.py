@@ -20,7 +20,13 @@ from httpx import ASGITransport, AsyncClient
 
 from apps.shop.di import ShopDi
 from apps.shop.models.banner import ShopBanner
-from apps.shop.models.enums import ShopOrderStatus, ShopShelfKind, ShopStatus
+from apps.shop.models.enums import (
+    ShopLoyaltyRewardKind,
+    ShopOrderStatus,
+    ShopShelfKind,
+    ShopStatus,
+)
+from apps.shop.models.loyalty import MAX_REWARD_PERCENT, ShopLoyaltyProgram
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder
@@ -132,6 +138,23 @@ class TestDemoTemplatesIntegrity:
             assert any(
                 order.feedback is not None for order in tpl.orders
             ), f"{tpl.key}: no seeded feedback"
+
+    def test_loyalty_programs_consistent(self) -> None:
+        """Каждая demo-витрина несёт программу «N-я покупка — награда»:
+        флаг ``features.loyalty``, валидные пределы награды по виду, а
+        заказ с применённой наградой возможен только при программе."""
+        for tpl in DEMO_TEMPLATES:
+            spec = tpl.loyalty
+            assert spec is not None, f"{tpl.key}: no loyalty program"
+            assert tpl.features.get("loyalty") is True, tpl.key
+            assert spec.orders_goal >= 1
+            if spec.reward_kind is ShopLoyaltyRewardKind.DISCOUNT_PERCENT:
+                assert 1 <= spec.reward_value <= MAX_REWARD_PERCENT
+            else:
+                assert spec.reward_value > 0
+            for order in tpl.orders:
+                if order.loyalty_reward_minor > 0:
+                    assert order.status is ShopOrderStatus.DONE, tpl.key
 
 
 SeedCtx = tuple[ShopSeedService, Company, User]
@@ -252,6 +275,19 @@ class TestDemoSeedService:
 
             orders = await ShopOrder.list_by_shop_by_created_desc(shop.shop_id)
             assert len(orders) == len(tpl.orders)
+            loyalty_reward_expected = sum(
+                o.loyalty_reward_minor for o in tpl.orders
+            )
+            assert (
+                sum(o.loyalty_reward_minor for o in orders)
+                == loyalty_reward_expected
+            ), tpl.key
+            if tpl.loyalty is not None:
+                program = await ShopLoyaltyProgram.get_by_shop(shop.shop_id)
+                assert program is not None, tpl.key
+                assert program.orders_goal == tpl.loyalty.orders_goal
+                assert program.reward_kind == tpl.loyalty.reward_kind.value
+                assert program.reward_value == tpl.loyalty.reward_value
             feedback_expected = sum(
                 1 for o in tpl.orders if o.feedback is not None
             )
@@ -389,6 +425,12 @@ class TestDemoSeedService:
             chips_dict = snapshot["feedback_chips"]
             assert isinstance(chips_dict, dict)
             assert set(chips_dict) == {"pos", "neg"}, tpl.key
+            loyalty = snapshot["loyalty"]
+            assert isinstance(loyalty, dict), tpl.key
+            assert tpl.loyalty is not None
+            assert loyalty["orders_goal"] == tpl.loyalty.orders_goal
+            assert loyalty["reward_kind"] == tpl.loyalty.reward_kind.value
+            assert loyalty["reward_value"] == tpl.loyalty.reward_value
 
     async def test_seed_is_idempotent(self, seed_company_ctx: SeedCtx) -> None:
         service, company, user = seed_company_ctx

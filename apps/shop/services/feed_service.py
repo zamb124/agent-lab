@@ -13,11 +13,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 from apps.shop.models import (
+    Shop,
     ShopBackInStock,
     ShopBanner,
     ShopCategory,
     ShopFavorite,
-    Shop,
     ShopFeedbackChip,
     ShopLoyaltyRewardKind,
     ShopOrder,

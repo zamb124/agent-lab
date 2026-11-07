@@ -330,6 +330,7 @@ export interface ShopCartPriceLineResponse {
 export interface ShopCartPricePayload {
     "items": ShopOrderItemRequest[];
     "delivery_type"?: ShopDeliveryType | undefined;
+    "use_loyalty_reward"?: boolean | undefined;
     "slug": string;
     [key: string]: unknown;
 }
@@ -341,6 +342,7 @@ export interface ShopCartPriceResponse {
     "lines": ShopCartPriceLineResponse[];
     "items_total_minor": number;
     "discount_minor": number;
+    "loyalty_reward_minor"?: number | undefined;
     "delivery_fee_minor": number;
     "total_minor": number;
     "applied_promos": ShopPromoAppliedResponse[];
@@ -433,6 +435,8 @@ export interface ShopCreateRequest {
     "slug": string;
     "name": string;
     "kind"?: ShopKind | undefined;
+    "lat"?: number | null | undefined;
+    "lng"?: number | null | undefined;
     [key: string]: unknown;
 }
 
@@ -488,17 +492,61 @@ export interface ShopDomainIdPayload {
 export type ShopDomainStatus = "pending_dns" | "awaiting_dns" | "provisioning" | "active" | "failed";
 
 /**
+ * ShopFavoriteResponse
+ */
+export interface ShopFavoriteResponse {
+    "favorite": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * Сердечко покупателя — slug витрины + товар + целевое состояние.
+ */
+export interface ShopFavoriteSetPayload {
+    "slug": string;
+    "product_id": string;
+    "favorite": boolean;
+    [key: string]: unknown;
+}
+
+/**
  * Функциональные флаги витрины: «включил → получил функционал».
  * 
  * Каждый флаг выключаем без следа в UI и данных: ``nutrition`` —
  * полоса КБЖУ в карточке и поля в редакторе товара; ``back_in_stock`` —
- * кнопка «Сообщить о появлении» и подписки на возврат позиций.
- * Управляемые фичи (полки, баннеры) флага не требуют: нет данных —
- * нет блока на витрине.
+ * кнопка «Сообщить о появлении» и подписки на возврат позиций;
+ * ``favorites`` — сердечки на карточках и полка «Избранное» (только
+ * для авторизованных покупателей); ``reviews`` — оценка выполненного
+ * заказа, вкладка «Отзывы» и бейдж рейтинга витрины. Управляемые фичи
+ * (полки, баннеры) флага не требуют: нет данных — нет блока на витрине.
  */
 export interface ShopFeatures {
     "nutrition"?: boolean | undefined;
     "back_in_stock"?: boolean | undefined;
+    "favorites"?: boolean | undefined;
+    "reviews"?: boolean | undefined;
+    "loyalty"?: boolean | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Быстрый тег отзыва на заказ — единый словарь всех витрин.
+ * 
+ * Подпись зависит от полярности оценки: у 4–5 звёзд теги позитивные,
+ * у 1–3 — негативные; ключ тега в ответе один и тот же, текст даёт
+ * ``feedback_chip_label`` — локальные словари в коде и JS запрещены.
+ */
+export type ShopFeedbackChip = "quality" | "service" | "speed" | "packaging" | "accuracy" | "price";
+
+/**
+ * Оценка покупателем выполненного заказа — slug + публичный код.
+ */
+export interface ShopFeedbackSetPayload {
+    "slug": string;
+    "public_code": string;
+    "rating": number;
+    "chips"?: ShopFeedbackChip[] | undefined;
+    "comment"?: string | undefined;
     [key: string]: unknown;
 }
 
@@ -514,6 +562,41 @@ export interface ShopIdPayload {
  * Вид заведения: влияет на шаблон витрины и фильтры агрегатора.
  */
 export type ShopKind = "restaurant" | "cafe" | "bakery" | "shop" | "other";
+
+/**
+ * Программа лояльности магазина — get/set настроек владельцем.
+ */
+export interface ShopLoyaltyProgramPayload {
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopLoyaltyProgramResponse
+ */
+export interface ShopLoyaltyProgramResponse {
+    "shop_id": string;
+    "orders_goal": number;
+    "reward_kind": ShopLoyaltyRewardKind;
+    "reward_value": number;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopLoyaltyProgramSetPayload
+ */
+export interface ShopLoyaltyProgramSetPayload {
+    "orders_goal"?: number | undefined;
+    "reward_kind"?: ShopLoyaltyRewardKind | undefined;
+    "reward_value": number;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Тип награды программы лояльности за ``orders_goal`` выполненных заказов.
+ */
+export type ShopLoyaltyRewardKind = "discount_minor" | "discount_percent";
 
 /**
  * ShopModifierGroupCreatePayload
@@ -671,8 +754,11 @@ export interface ShopMyOrderDetailResponse {
     "items_preview"?: ShopOrderItemPreview[] | undefined;
     "items_count"?: number | undefined;
     "shop": ShopMyOrderShopBlock;
+    "can_review"?: boolean | undefined;
+    "feedback"?: ShopOrderFeedbackResponse | null | undefined;
     "items_total_minor": number;
     "discount_minor": number;
+    "loyalty_reward_minor"?: number | undefined;
     "delivery_fee_minor": number;
     "comment"?: string | undefined;
     "promos"?: ShopPromoAppliedResponse[] | undefined;
@@ -710,6 +796,8 @@ export interface ShopMyOrderListItemResponse {
     "items_preview"?: ShopOrderItemPreview[] | undefined;
     "items_count"?: number | undefined;
     "shop": ShopMyOrderShopBlock;
+    "can_review"?: boolean | undefined;
+    "feedback"?: ShopOrderFeedbackResponse | null | undefined;
     [key: string]: unknown;
 }
 
@@ -795,6 +883,7 @@ export interface ShopOrderCreatePayload {
     "delivery_intercom"?: string | undefined;
     "table_id"?: string | null | undefined;
     "comment"?: string | undefined;
+    "use_loyalty_reward"?: boolean | undefined;
     "source"?: ShopOrderSource | undefined;
     "idempotency_key"?: string | undefined;
     "honeypot"?: string | undefined;
@@ -828,6 +917,21 @@ export interface ShopOrderEventPayload {
     "delivery_type"?: ShopDeliveryType | undefined;
     "total_minor": number;
     "currency": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Отзыв покупателя на заказ — его карточка в кабинете.
+ * 
+ * ``chip_labels`` — подписи тегов в полярности его оценки (4–5 —
+ * позитивные, 1–3 — негативные), локальные словари в JS запрещены.
+ */
+export interface ShopOrderFeedbackResponse {
+    "rating": number;
+    "chips": string[];
+    "chip_labels"?: Record<string, string> | undefined;
+    "comment"?: string | undefined;
+    "created_at": string;
     [key: string]: unknown;
 }
 
@@ -930,6 +1034,7 @@ export interface ShopOrderResponse {
     "comment": string;
     "items_total_minor": number;
     "discount_minor": number;
+    "loyalty_reward_minor"?: number | undefined;
     "delivery_fee_minor": number;
     "total_minor": number;
     "promos"?: ShopPromoAppliedResponse[] | undefined;
@@ -981,6 +1086,48 @@ export interface ShopOrderStatusResponse {
     "delivery_type": ShopDeliveryType;
     "table_label": string;
     "created_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Состояние лояльности покупателя: прогресс и доступные награды.
+ */
+export interface ShopPersonalLoyalty {
+    "progress": number;
+    "orders_goal": number;
+    "rewards_available": number;
+    "reward_kind": ShopLoyaltyRewardKind;
+    "reward_value": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Персональные данные покупателя на витрине — ``/personal``.
+ */
+export interface ShopPersonalPayload {
+    "slug": string;
+    [key: string]: unknown;
+}
+
+/**
+ * `GET /public/storefront/{slug}/personal` — данные авторизованного
+ * покупателя на витрине: избранное, «как всегда», подписки на возврат.
+ */
+export interface ShopPersonalResponse {
+    "favorite_ids": string[];
+    "usual": ShopPersonalUsualItem[];
+    "back_in_stock_ids": string[];
+    "loyalty"?: ShopPersonalLoyalty | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Позиция полки «как всегда»: товар + выбор модификаторов из заказов.
+ */
+export interface ShopPersonalUsualItem {
+    "product_id": string;
+    "count": number;
+    "selections": ShopOrderItemSelection[];
     [key: string]: unknown;
 }
 
@@ -1229,6 +1376,39 @@ export interface ShopResponse {
     "storefront_url": string;
     "plan": string;
     "products_count"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Публичный отзыв на витрине — имя снапшотом из заказа, без PII.
+ */
+export interface ShopReviewItemResponse {
+    "rating": number;
+    "chips": string[];
+    "chip_labels"?: Record<string, string> | undefined;
+    "comment"?: string | undefined;
+    "customer_name"?: string | undefined;
+    "created_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Публичная лента отзывов витрины — анонимное чтение.
+ */
+export interface ShopReviewsListPayload {
+    "slug": string;
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * `GET /storefront/{slug}/reviews` — агрегат рейтинга + лента.
+ */
+export interface ShopReviewsResponse {
+    "avg_rating"?: number | null | undefined;
+    "count"?: number | undefined;
+    "items"?: ShopReviewItemResponse[] | undefined;
     [key: string]: unknown;
 }
 
@@ -1494,6 +1674,8 @@ export interface ShopCommandMap {
     "shop/domains/add_requested": { payload: ShopDomainAddPayload; result: ShopDomain },
     "shop/domains/provision_requested": { payload: ShopDomainIdPayload; result: ShopDomain },
     "shop/domains/remove_requested": { payload: ShopDomainIdPayload; result: EmptyPayload },
+    "shop/loyalty/program_get_requested": { payload: ShopLoyaltyProgramPayload; result: ShopLoyaltyProgramResponse },
+    "shop/loyalty/program_set_requested": { payload: ShopLoyaltyProgramSetPayload; result: ShopLoyaltyProgramResponse },
     "shop/modifiers/groups/create_requested": { payload: ShopModifierGroupCreatePayload; result: ShopModifierGroupResponse },
     "shop/modifiers/groups/list_requested": { payload: ShopIdPayload; result: ShopModifierGroupsResponse },
     "shop/modifiers/groups/remove_requested": { payload: ShopModifierGroupIdPayload; result: EmptyPayload },
@@ -1517,12 +1699,16 @@ export interface ShopCommandMap {
     "shop/promos/remove_requested": { payload: ShopPromoIdPayload; result: EmptyPayload },
     "shop/promos/update_requested": { payload: ShopPromoUpdatePayload; result: ShopPromoResponse },
     "shop/public/cart_price_requested": { payload: ShopCartPricePayload; result: ShopCartPriceResponse },
+    "shop/public/favorite_set_requested": { payload: ShopFavoriteSetPayload; result: ShopFavoriteResponse },
+    "shop/public/feedback_set_requested": { payload: ShopFeedbackSetPayload; result: ShopOrderFeedbackResponse },
     "shop/public/my_order_cancel_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_order_get_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_orders_list_requested": { payload: ShopMyOrdersListPayload; result: OffsetPage_ShopMyOrderListItemResponse_ },
     "shop/public/notify_back_requested": { payload: ShopNotifyBackPayload; result: ShopNotifyBackResponse },
     "shop/public/order_create_requested": { payload: ShopOrderCreatePayload; result: ShopOrderCreatedResponse },
     "shop/public/order_status_requested": { payload: ShopPublicOrderStatusPayload; result: ShopOrderStatusResponse },
+    "shop/public/personal_requested": { payload: ShopPersonalPayload; result: ShopPersonalResponse },
+    "shop/public/reviews_list_requested": { payload: ShopReviewsListPayload; result: ShopReviewsResponse },
     "shop/public/storefront_geo_requested": { payload: ShopStorefrontGeoPayload; result: ShopStorefrontGeoResponse },
     "shop/shelves/create_requested": { payload: ShopShelfCreatePayload; result: ShopShelfResponse },
     "shop/shelves/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopShelfResponse_ },
@@ -1627,6 +1813,12 @@ export interface ShopEventMap {
     "shop/domains/remove_failed": PlatformCommandEventPayload,
     "shop/domains/remove_requested": PlatformCommandEventPayload,
     "shop/domains/remove_succeeded": PlatformCommandEventPayload,
+    "shop/loyalty/program_get_failed": PlatformCommandEventPayload,
+    "shop/loyalty/program_get_requested": PlatformCommandEventPayload,
+    "shop/loyalty/program_get_succeeded": PlatformCommandEventPayload,
+    "shop/loyalty/program_set_failed": PlatformCommandEventPayload,
+    "shop/loyalty/program_set_requested": PlatformCommandEventPayload,
+    "shop/loyalty/program_set_succeeded": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_failed": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_requested": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_succeeded": PlatformCommandEventPayload,
@@ -1698,6 +1890,12 @@ export interface ShopEventMap {
     "shop/public/cart_price_failed": PlatformCommandEventPayload,
     "shop/public/cart_price_requested": PlatformCommandEventPayload,
     "shop/public/cart_price_succeeded": PlatformCommandEventPayload,
+    "shop/public/favorite_set_failed": PlatformCommandEventPayload,
+    "shop/public/favorite_set_requested": PlatformCommandEventPayload,
+    "shop/public/favorite_set_succeeded": PlatformCommandEventPayload,
+    "shop/public/feedback_set_failed": PlatformCommandEventPayload,
+    "shop/public/feedback_set_requested": PlatformCommandEventPayload,
+    "shop/public/feedback_set_succeeded": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_failed": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_requested": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_succeeded": PlatformCommandEventPayload,
@@ -1716,6 +1914,12 @@ export interface ShopEventMap {
     "shop/public/order_status_failed": PlatformCommandEventPayload,
     "shop/public/order_status_requested": PlatformCommandEventPayload,
     "shop/public/order_status_succeeded": PlatformCommandEventPayload,
+    "shop/public/personal_failed": PlatformCommandEventPayload,
+    "shop/public/personal_requested": PlatformCommandEventPayload,
+    "shop/public/personal_succeeded": PlatformCommandEventPayload,
+    "shop/public/reviews_list_failed": PlatformCommandEventPayload,
+    "shop/public/reviews_list_requested": PlatformCommandEventPayload,
+    "shop/public/reviews_list_succeeded": PlatformCommandEventPayload,
     "shop/public/storefront_geo_failed": PlatformCommandEventPayload,
     "shop/public/storefront_geo_requested": PlatformCommandEventPayload,
     "shop/public/storefront_geo_succeeded": PlatformCommandEventPayload,

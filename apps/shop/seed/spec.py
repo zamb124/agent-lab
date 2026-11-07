@@ -22,6 +22,7 @@ from apps.shop.models.enums import (
     ShopDeliveryType,
     ShopFeedbackChip,
     ShopKind,
+    ShopLoyaltyRewardKind,
     ShopOrderStatus,
     ShopShelfKind,
     ShopShelfLayout,
@@ -187,11 +188,28 @@ class DemoFeedbackSpec:
 
 
 @dataclass(frozen=True)
+class DemoLoyaltySpec:
+    """Программа лояльности «N-я покупка — награда» demo-витрины.
+
+    ``orders_goal`` done-заказов открывают награду; ``reward_kind`` —
+    фикс-скидка в minor-единицах или процент 1..90 от суммы позиций.
+    Одна строка на витрину (``shop_id`` уникален в модели); параметры
+    попадают в снапшот и кабинет покупателя.
+    """
+
+    orders_goal: int
+    reward_kind: ShopLoyaltyRewardKind
+    reward_value: int
+
+
+@dataclass(frozen=True)
 class DemoOrderSpec:
     """Демо-заказ: статус + лесенка переходов по минутам от created_at.
 
     ``history_minutes`` — смещения (мин) переходов между статусами
     ``new → … → status``; длина = номеру конечного статуса в цепочке.
+    ``loyalty_reward_minor`` — снапшот применённой награды лояльности
+    (строка «Награда лояльности» в итогах заказа).
     """
 
     status: ShopOrderStatus
@@ -206,6 +224,7 @@ class DemoOrderSpec:
     comment: str = ""
     geo: DemoOrderGeoSpec | None = None
     feedback: DemoFeedbackSpec | None = None
+    loyalty_reward_minor: int = 0
 
 
 @dataclass(frozen=True)
@@ -243,3 +262,4 @@ class DemoShopSpec:
     shelves: tuple[DemoShelfSpec, ...]
     banners: tuple[DemoBannerSpec, ...]
     orders: tuple[DemoOrderSpec, ...]
+    loyalty: DemoLoyaltySpec | None = None
