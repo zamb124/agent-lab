@@ -395,6 +395,48 @@ groups:
     labels:
       severity: warning
       service: idle-worker
+  - uid: llm-provider-sync-failed
+    title: LLM Provider Sync Failed
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (provider) (count_over_time({namespace="platform"} | json | message="ai.provider_sync_failed" [1h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 2
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    keepFiringFor: 60m
+    annotations:
+      summary: LLM provider {{ $labels.provider }} catalog sync failing
+      description: '{{ printf "%.0f" $values.B.Value }} sync failures in 1h for provider {{ $labels.provider }} — model catalog drifting'
+    labels:
+      severity: warning
+      service: idle-worker
   - uid: llm-errors
     title: LLM Errors
     condition: C

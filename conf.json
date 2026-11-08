@@ -411,13 +411,6 @@
       "models_url": "https://generativelanguage.googleapis.com/v1beta/openai/models",
       "smoke_model": "gemini-2.5-flash-lite"
     },
-    "github": {
-      "api_key": "YOUR_GITHUB_MODELS_API_KEY",
-      "base_url": "https://models.github.ai/inference",
-      "models_url": "https://models.github.ai/catalog/models",
-      "smoke_model": "openai/gpt-4o-mini",
-      "api_version": "2026-03-10"
-    },
     "huggingface": {
       "api_key": "YOUR_HUGGINGFACE_API_KEY",
       "base_url": "https://router.huggingface.co/v1",
