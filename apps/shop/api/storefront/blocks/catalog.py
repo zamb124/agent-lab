@@ -5,19 +5,19 @@
 """
 
 CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}
-.msearch{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px;transition:border-color .15s,box-shadow .15s}
-.msearch:focus-within{border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
-.msearch svg{opacity:.5;flex-shrink:0}
-.msearch input{flex:1;min-width:0;font:inherit;font-size:15px;background:transparent;border:0;color:var(--text);outline:none}
-.msearch input::placeholder{color:var(--muted)}
+.csearch{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px;transition:border-color .15s,box-shadow .15s}
+.csearch:focus-within{border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.csearch svg{opacity:.5;flex-shrink:0}
+.csearch input{flex:1;min-width:0;font:inherit;font-size:15px;background:transparent;border:0;color:var(--text);outline:none}
+.csearch input::placeholder{color:var(--muted)}
 .tabs::-webkit-scrollbar{display:none}
 .tabs button{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}
 .tabs button:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 25%,var(--line))}
 .tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
 .cat{font-size:21px;margin:28px 0 6px;letter-spacing:-.01em}
 .cat.sub{font-size:17px;margin:18px 0 4px;color:var(--muted);font-weight:600}
-.mchunk{animation:fade .3s ease}
-.msk{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+.cchunk{animation:fade .3s ease}
+.csk{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
 @keyframes shimmer{from{background-position:120% 0}to{background-position:-80% 0}}
 .cart.pop{animation:pop .28s ease}
 @keyframes pop{0%{transform:translateX(-50%) scale(1)}40%{transform:translateX(-50%) scale(1.06)}100%{transform:translateX(-50%) scale(1)}}
@@ -35,7 +35,8 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 .item p{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .item .row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
 .price{font-size:16.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
-.add{font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;white-space:nowrap;transition:transform .1s,box-shadow .15s}
+.add{display:inline-flex;align-items:center;gap:9px;font:inherit;font-size:14px;font-weight:650;padding:9px 16px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;white-space:nowrap;transition:transform .1s,box-shadow .15s}
+.add i{font-style:normal;font-weight:800;font-size:17px;line-height:1;margin-right:-3px}
 .add:hover{box-shadow:0 2px 12px color-mix(in srgb,var(--accent) 45%,transparent)}
 .add:active{transform:scale(.94)}
 .stepper{display:inline-flex;align-items:center;gap:2px;background:var(--card2);border-radius:99px;padding:3px}
@@ -63,19 +64,22 @@ CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;displ
 
 JS: str = """function na(p){return p.is_available===false?' na':'';}
 function pimgWrap(p){return p.photo_file_id||FAV_ON?`<span class="pimg">${photo(p.photo_file_id,'','sm!sq')}${favBtn(p)}</span>`:'';}
-function rowList(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
-function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${p.photo_file_id||FAV_ON?`<span class="gph">${photo(p.photo_file_id,'','md!sq')}${favBtn(p)}</span>`:''}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
-function rowCompact(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div><span class="price">${priceLabel(p)}</span><span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
+function rowList(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}>${priceCell(p)}<span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('');}
+function rowGrid(ps){return `<div class="grid">`+ps.map(p=>`<div class="gcard${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${p.photo_file_id||FAV_ON?`<span class="gph">${photo(p.photo_file_id,'','md!sq')}${favBtn(p)}</span>`:''}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}<div class="row" ${STOP}>${priceCell(p)}<span data-qty="${p.id}">${qtyCtl(p)}</span></div></div></div>`).join('')+`</div>`;}
+function rowCompact(ps){return ps.map(p=>`<div class="item${na(p)}" data-pid="${esc(p.id)}" onclick="openProduct('${p.id}')">${pimgWrap(p)}<div class="b"><h3>${esc(p.name)}${badge(p.id)}${tags(p)}${portionOf(p)}</h3>${p.description?`<p>${esc(p.description)}</p>`:''}</div>${priceCell(p)}<span data-qty="${p.id}" ${STOP}>${qtyCtl(p)}</span></div>`).join('');}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){
   const hb=hoursBadge();
-  let h=`${slot('hero:before')}<div class="hero">${photo(S.cover_file_id,'bg','lg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo','sm!sq')}<div><h1 class="serif">${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>${slot('hero:after')}
-  ${slot('meta:before')}<div class="meta">${(S.features||{}).reviews!==false&&S.rating&&S.rating.count?`<span class="rate" onclick="goTab('reviews')">${ic('star')}${Number(S.rating.avg).toFixed(1)} · ${S.rating.count}</span>`:''}${hb?`<span class="${hb.open?'ob-open':'ob-closed'}">${ic('clock')}${hb.t}</span>`:''}${S.city||S.address?`<span>${ic('pin')}${esc([S.city,S.address].filter(Boolean).join(', '))}</span>`:''}${S.phone?`<span>${ic('call')}${esc(S.phone)}</span>`:''}${S.delivery_enabled?`<span>${ic('truck')}Доставка</span>`:''}${S.pickup_enabled?`<span>${ic('store')}Самовывоз</span>`:''}${S.onsite_enabled?`<span>${ic('restaurant')}В заведении</span>`:''}</div>${slot('meta:after')}`;
-  if(!S.products.length){app.innerHTML=h+feedHtml()+slot('catalog:before')+`<div class="empty">Меню скоро появится</div>`+slot('catalog:after');return;}
-  h+=`${feedHtml()}${slot('catalog:before')}<div id="msw"></div><div id="menu"></div>${slot('catalog:after')}`;
+  /* Без обложки большая панель пуста и выглядит чужеродным блоком —
+     показываем компактную шапку (hero=minimal). */
+  if(!S.cover_file_id)document.body.dataset.hero='minimal';
+  let h=`${slot('hero:before')}<div class="hero">${photo(S.cover_file_id,'bg','lg')}<div class="veil"></div><div class="head">${photo(S.logo_file_id,'logo','sm!sq')}<div><h1>${esc(S.name)}</h1>${S.description?`<div class="desc">${esc(S.description)}</div>`:''}</div></div></div>${slot('hero:after')}
+  ${slot('meta:before')}<div class="meta">${(S.features||{}).reviews!==false&&S.rating&&S.rating.count?`<span class="rate" onclick="goTab('reviews')">${ic('star')}${Number(S.rating.avg).toFixed(1)} · ${S.rating.count}</span>`:''}${hb?`<span class="${hb.open?'ob-open':'ob-closed'}">${ic('clock')}${hb.t}</span>`:''}${S.city||S.address?`<span>${ic('pin')}${esc([S.city,S.address].filter(Boolean).join(', '))}</span>`:''}${S.phone?`<span>${ic('call')}${esc(S.phone)}</span>`:''}${dmodeHtml()}</div>${slot('meta:after')}`;
+  if(!S.products.length){app.innerHTML=h+feedHtml()+slot('catalog:before')+`<div class="empty">Каталог скоро появится</div>`+slot('catalog:after');return;}
+  h+=`${feedHtml()}${slot('catalog:before')}<div id="csw"></div><div id="catalog"></div>${slot('catalog:after')}`;
   app.innerHTML=h;
-  if(S.products.length>=6){document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}
-  renderMenu();
+  if(S.products.length>=6){document.getElementById('csw').innerHTML=`<div class="csearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по каталогу" autocomplete="off" oninput="catalogSearch(this.value)"></div>`;}
+  renderCatalog();
 }
 let queue=[],spyIO=null,moreIO=null;
 function spy(root){if(!spyIO)return;
@@ -84,15 +88,15 @@ function activate(id){document.querySelectorAll('.tabs button').forEach(b=>b.cla
   const t=document.querySelector(`.tabs button[data-cat="${CSS.escape(id)}"]`);
   t?.scrollIntoView({inline:'center',block:'nearest'});}
 function chunkHtml(b){const t=b.depth?3:2;
-  return `<div class="mchunk">${b.name?`<h${t} class="cat serif${b.depth?' sub':''}"${b.id?` id="${b.id}" data-root="${b.root}"`:""}${b.depth?` style="margin-left:${Math.min(b.depth,4)*16}px"`:''}>${esc(b.name)}</h${t}>`:''}${ITEMS(b.items)}</div>`;}
-function renderMenu(){
-  const menu=document.getElementById('menu');if(!menu)return;
+  return `<div class="cchunk">${b.name?`<h${t} class="cat${b.depth?' sub':''}"${b.id?` id="${b.id}" data-root="${b.root}"`:""}${b.depth?` style="margin-left:${Math.min(b.depth,4)*16}px"`:''}>${esc(b.name)}</h${t}>`:''}${ITEMS(b.items)}</div>`;}
+function renderCatalog(){
+  const root=document.getElementById('catalog');if(!root)return;
   spyIO?.disconnect();moreIO?.disconnect();queue=[];
   const other=S.products.filter(p=>!p.category_id);
   if(query){
     app.classList.add('flat');
     const hits=S.products.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
-    menu.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${esc(query)}» ничего не нашлось</div>`;
+    root.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${esc(query)}» ничего не нашлось</div>`;
     return;
   }
   // Прогрессивный рендер: табы сразу, тело дорисовывается чанками по мере скролла —
@@ -113,8 +117,8 @@ function renderMenu(){
   for(const r of roots){const walk=(c,depth)=>{push(c.id,c.name,depth,r.id,prods(c.id));
     for(const k of kids(c.id))if(subHas(k))walk(k,depth+1);};walk(r,0);}
   if(other.length)push('other','Ещё',0,'other',other);
-  menu.innerHTML=`<div class="tabs">${roots.map(c=>`<button data-cat="${c.id}" onclick="jump('${c.id}')">${esc(c.name)}</button>`).join('')}${other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
-  const body=menu.querySelector('#mbody'),sent=menu.querySelector('#msent');
+  root.innerHTML=`<div class="tabs">${roots.map(c=>`<button data-cat="${c.id}" onclick="jump('${c.id}')">${esc(c.name)}</button>`).join('')}${other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}</div><div id="cbody"></div><div id="csent"><div class="csk"></div><div class="csk"></div></div>`;
+  const body=root.querySelector('#cbody'),sent=root.querySelector('#csent');
   queue=blocks;
   const flush=()=>{const b=queue.shift();
     if(!b){sent.remove();moreIO?.disconnect();return;}
@@ -130,7 +134,7 @@ function renderMenu(){
 }
 window.jump=id=>{
   let el=document.getElementById('c-'+id);
-  const m=document.getElementById('mbody'),sent=document.getElementById('msent');
+  const m=document.getElementById('cbody'),sent=document.getElementById('csent');
   while(!el&&queue.length&&m&&sent){
     const b=queue.shift();
     m.insertAdjacentHTML('beforeend',chunkHtml(b));

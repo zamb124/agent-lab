@@ -59,7 +59,7 @@ MANIFEST: dict[tuple[str, str], tuple[str, str]] = {
     ("bakery", "campagne.jpg"): ("1589367920969-ab8e050bbb04", "country bread"),
     ("bakery", "almond.jpg"): ("1623334044303-241021148842", "almond croissant"),
     ("bakery", "cinnamon.jpg"): ("1509365465985-25d11c17e812", "cinnamon roll"),
-    ("bakery", "eclair.jpg"): ("1541783245831-57d6fb0926d3", "eclair"),
+    ("bakery", "eclair.jpg"): ("1774119649906-c82806125e23", "vanilla eclair"),
     ("bakery", "honeycake.jpg"): ("1571115177098-24ec42ed204d", "honey cake"),
     ("bakery", "lemontart.jpg"): ("1519915028121-7d3463d20b13", "lemon tart"),
     ("bakery", "napoleon.jpg"): ("1578985545062-69928b1d9587", "layer cake"),

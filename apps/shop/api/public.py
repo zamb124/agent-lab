@@ -123,8 +123,9 @@ async def get_storefront(slug: str, request: Request, di: Di) -> Response:
 async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLResponse:
     """SSR-lite HTML витрины: снапшот inline, меню и корзина — клиентский JS.
 
-    ``?tpreset=``, ``?taccent=``, ``?tmode=`` — мгновенный предпросмотр темы
-    из конструктора: переопределяют theme до сохранения; кэш отключается.
+    ``?tpreset=``, ``?taccent=``, ``?tmode=``, ``?thero=``, ``?tbackdrop=`` —
+    мгновенный предпросмотр темы из конструктора: переопределяют theme до
+    сохранения; кэш отключается, значения нормализуются к канону модели.
     """
     snapshot = await _snapshot_or_404(di, slug)
     preview = _theme_preview(request)
@@ -133,7 +134,9 @@ async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLRespon
         return HTMLResponse(status_code=304, headers={"ETag": etag})
     if preview is not None:
         theme = snapshot.get("theme")
-        snapshot["theme"] = {**(theme if isinstance(theme, dict) else {}), **preview}
+        snapshot["theme"] = normalize_shop_theme(
+            {**(theme if isinstance(theme, dict) else {}), **preview}
+        )
     canonical = f"https://{slug}.{di.settings.storefront_domain_suffix}"
     image_id = snapshot.get("cover_file_id") or snapshot.get("logo_file_id")
     image_url = (

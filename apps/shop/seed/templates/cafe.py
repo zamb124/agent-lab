@@ -21,10 +21,10 @@ from apps.shop.models.enums import (
 from apps.shop.seed.spec import (
     DemoBannerSpec,
     DemoCategorySpec,
-    DemoModifierGroupSpec,
-    DemoOptionSpec,
     DemoFeedbackSpec,
     DemoLoyaltySpec,
+    DemoModifierGroupSpec,
+    DemoOptionSpec,
     DemoOrderItemSpec,
     DemoOrderSpec,
     DemoProductSpec,

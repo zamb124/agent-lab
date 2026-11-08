@@ -209,7 +209,7 @@ def _url(sf: FeedStorefront, suffix: str = "") -> str:
 
 async def _shot(page: Page, name: str, slug: str) -> None:
     _ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    # Анимации fade-in (.sh/.item/.mchunk) при full_page-захвате перезапускаются
+    # Анимации fade-in (.sh/.item/.cchunk) при full_page-захвате перезапускаются
     # и ловятся на середине — для детерминированного снимка выключаем их.
     # Fixed-элементы (нав, корзина, шиты) в full_page дорисовываются на месте
     # вьюпорта — переводим в absolute, чтобы легли по краю документа.
@@ -409,7 +409,7 @@ async def test_hero_shelf_panel(
     auth_headers_system: dict[str, str],
     shop_worker: None,
 ) -> None:
-    """Hero-полка: врезанная accent-панель, читаемый подзаголовок, у каждой
+    """Hero-полка: рельс широких карточек, читаемый подзаголовок, у каждой
     карточки видны название, цена и кнопка. Регрессия клипа: класс ``hero``
     страничной шапки давал полке ``height:260px;overflow:hidden`` — низ
     карточек обрезался; теперь полка адресуется через ``data-layout``."""
@@ -455,7 +455,11 @@ async def test_hero_shelf_panel(
             card = cards.nth(i)
             await card.scroll_into_view_if_needed()
             await expect(card.locator("h3")).to_be_visible()
-            await expect(card.locator(".price")).to_be_visible()
+            # Цена зашита в кнопку добавления; у недоступной позиции — отдельным .price.
+            if i == 2:
+                await expect(card.locator(".price")).to_be_visible()
+            else:
+                await expect(card.locator(".add")).to_contain_text("₽")
             # Низ ряда «цена + кнопка» обязан лежать внутри рамки полки —
             # иначе это старый клип height+overflow от шапки.
             row_box = await card.locator(".row").bounding_box()

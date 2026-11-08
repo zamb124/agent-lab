@@ -140,7 +140,6 @@
     "backdrop_label": "Фон страницы",
     "backdrop_solid": "Плотный",
     "backdrop_blur": "Размытие",
-    "backdrop_gradient": "Градиент",
     "features_label": "Функции",
     "feature_nutrition": "КБЖУ",
     "feature_nutrition_desc": "Полоса пищевой ценности в карточке позиции с пересчётом от модификаторов",

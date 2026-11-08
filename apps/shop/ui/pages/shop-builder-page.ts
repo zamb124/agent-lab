@@ -30,7 +30,7 @@ const MODES = ['dark', 'light'] as const;
 const HERO_STYLES = ['card', 'cover', 'minimal'] as const;
 type HeroStyle = (typeof HERO_STYLES)[number];
 
-const BACKDROPS = ['solid', 'blur', 'gradient'] as const;
+const BACKDROPS = ['solid', 'blur'] as const;
 type Backdrop = (typeof BACKDROPS)[number];
 
 const ACCENTS = ['#e2553f', '#f2a33c', '#34c47c', '#3f8cff', '#9b5de5', '#ef476f', '#111827', '#0f766e'];

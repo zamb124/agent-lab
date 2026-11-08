@@ -4,10 +4,12 @@
 `<style>`/`<script>` парой: исходный шаблон витрины (f-string с двойными
 скобками) не трогаем — здесь строки сырые, экранирования не требуется.
 
-Архитектура: нижние табы на мобиле, верхний хидер на десктопе; «Меню» —
+Архитектура: нижние табы на мобиле, верхний хидер на десктопе; «Каталог» —
 существующий каталог `#app`, остальные вкладки рендерятся в `#acct`.
 `?embed=1`/`?table=` не теряются — вкладки переключают виды без навигации.
-Диплинки: `?tab=orders|contacts|profile`, `?order=<code>`, `?reorder=<code>`.
+«Профиль» — не таб: круглая иконка `.pbtn` (в хидере на десктопе,
+плавающая на мобиле); вид рендерится в `#acct` как у табов.
+Диплинки: `?tab=catalog|orders|reviews|profile`, `?order=<code>`, `?reorder=<code>`.
 """
 
 from __future__ import annotations
@@ -34,7 +36,15 @@ body.acct #acct{display:block}
 .ahead nav button{background:none;border:0;color:var(--muted);font:600 13px/1 inherit;
   padding:8px 14px;border-radius:10px;cursor:pointer}
 .ahead nav button.on{color:var(--afg,var(--accent));background:color-mix(in srgb,var(--accent) 14%,transparent)}
-@media(min-width:1024px){.ahead{display:flex}.acctnav{display:none}body.has-nav .wrap{padding-bottom:0}}
+.pbtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);flex-shrink:0;
+  background:var(--card);color:var(--muted);display:grid;place-items:center;
+  cursor:pointer;font:700 15px/1 inherit}
+.pbtn svg{width:19px;height:19px;fill:currentColor}
+.pbtn.on{color:var(--afg,var(--accent));border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.pbtn-float{position:fixed;top:10px;right:12px;z-index:70;
+  background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(14px);
+  box-shadow:0 2px 10px rgba(0,0,0,.18)}
+@media(min-width:1024px){.ahead{display:flex}.acctnav{display:none}body.has-nav .wrap{padding-bottom:0}.pbtn-float{display:none}}
 .aview{max-width:760px;margin:0 auto;padding:16px 16px 96px}
 .acard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:16px;margin-bottom:12px;cursor:pointer;transition:border-color .15s}
@@ -76,7 +86,7 @@ body.acct #acct{display:block}
 .trow.total{font-weight:700;font-size:15px;border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
 .amap{height:220px;border-radius:14px;overflow:hidden;margin-top:12px;border:1px solid var(--line)}
 .amap platform-map{display:block;width:100%;height:100%}
-.abtn{display:block;width:100%;margin-top:12px;padding:14px;border:0;border-radius:14px;cursor:pointer;
+.abtn{display:block;width:100%;margin-top:12px;padding:14px;border:0;border-radius:99px;cursor:pointer;
   background:var(--accent);color:var(--on-accent,#fff);font:700 14px/1 inherit}
 .abtn.ghost{background:transparent;color:var(--afg,var(--accent));border:1px solid var(--line)}
 .abtn.danger{background:transparent;color:#f87171;border:1px solid color-mix(in srgb,#f87171 45%,var(--line))}
@@ -154,19 +164,19 @@ const FBCHIP=S.feedback_chips||{};
 const plural=(n,f)=>f[(n%10===1&&n%100!==11)?0:(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?1:2];
 const starRow=(n,cls)=>'<span class="rstars'+(cls?' '+cls:'')+'">'+[1,2,3,4,5].map(i=>'<span class="'+(i<=n?'':'off')+'">'+ic('star')+'</span>').join('')+'</span>';
 let me=null;
+function paintPbtn(){const label=(me&&me.name)?esc(String(me.name).trim()[0].toUpperCase()):ic('person');
+ document.querySelectorAll('.pbtn').forEach(b=>b.innerHTML=label);}
 async function fetchMe(){try{const r=await fetch(authApi+'/me',{credentials:'same-origin'});
-  me=r.ok?await r.json():null;}catch(e){me=null;}return me;}
+  me=r.ok?await r.json():null;}catch(e){me=null;}paintPbtn();return me;}
 async function jget(u){const r=await fetch(u,{credentials:'same-origin'});if(!r.ok)throw r;return r.json();}
 async function jpost(u,b){const r=await fetch(u,{method:'POST',credentials:'same-origin',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});if(!r.ok)throw r;return r.json();}
 
 /* --- tabs --- */
 const TABS=[
- {id:'menu',label:'Меню',ic:'M280-80v-366h-80v-414h80v-40h80v40h80v-40h80v40h80v414h-80v366H280Zm80-446h240v-254h-80v160h-80v-160h-80v160h-80v-160Z'},
+ {id:'catalog',label:'Каталог',ic:'M280-600v-80h560v80H280Zm0 160v-80h560v80H280Zm0 160v-80h560v80H280Z'},
  {id:'orders',label:'Заказы',ic:'M280-80q-33 0-56.5-23.5T200-160q0-33 23.5-56.5T280-240q33 0 56.5 23.5T360-160q0 33-23.5 56.5T280-80Zm400 0q-33 0-56.5-23.5T600-160q0-33 23.5-56.5T680-240q33 0 56.5 23.5T760-160q0 33-23.5 56.5T680-80ZM208-800h590q23 0 35 20.5t1 41.5L692-482q-11 20-29.5 31T622-440H324l-44 80h480v80H280q-45 0-68-39.5t-2-78.5l54-98-144-304H40v-80h130l38 80Z'},
  {id:'reviews',label:'Отзывы',ic:'M233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z'},
- {id:'contacts',label:'Контакты',ic:'M480-480q33 0 56.5-23.5T560-560q0-33-23.5-56.5T480-640q-33 0-56.5 23.5T400-560q0 33 23.5 56.5T480-480Zm0 294q122-112 181-203.5T720-552q0-109-69.5-178.5T480-800q-141 0-210.5 69.5T200-552q0 71 59 162.5T480-186Z'},
- {id:'profile',label:'Профиль',ic:'M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47Zm0 320q-139 0-241-91.5T98-480q0-38 8-73.5t23-68.5q15 34 43.5 54.5T240-654q66 0 113 47t47 113-47 113-113 47q-34 0-63.5-17.5T146-440q-5 20-7.5 39.5T136-360q0 143 96 241.5T480-160Z'},
 ].filter(t=>t.id!=='reviews'||REV_ON);
 const nav=el('nav','acctnav');
 const ahead=el('header','ahead');
@@ -179,6 +189,14 @@ for(const t of TABS){
  b.dataset.tab=t.id;b.onclick=()=>go(t.id);nav.appendChild(b);
  const h=el('button','',t.label);h.dataset.tab=t.id;h.onclick=()=>go(t.id);aheadNav.appendChild(h);
 }
+/* «Профиль» — не таб: круглая иконка-аватар. На десктопе — в хидере,
+   на мобиле — плавающая кнопка сверху справа. */
+const pbtn=el('button','pbtn',ic('person'));
+pbtn.dataset.tab='profile';pbtn.onclick=()=>go('profile');
+pbtn.setAttribute('aria-label','Профиль');ahead.appendChild(pbtn);
+const pbtnM=el('button','pbtn pbtn-float',ic('person'));
+pbtnM.dataset.tab='profile';pbtnM.onclick=()=>go('profile');
+pbtnM.setAttribute('aria-label','Профиль');document.body.appendChild(pbtnM);
 document.body.appendChild(nav);
 const acct=el('div','');acct.id='acct';
 const appEl=document.getElementById('app');
@@ -189,11 +207,11 @@ if(EMBED){ahead.style.display='none';}
 
 function markTab(id){
  document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===id));
- document.body.classList.toggle('acct',id!=='menu');
+ document.body.classList.toggle('acct',id!=='catalog');
 }
 function setTab(id){
  markTab(id);
- if(id!=='menu'){renderView(id);}
+ if(id!=='catalog'){renderView(id);}
 }
 function go(id){stopSse();if(id==='orders')curOrder=null;setTab(id);}
 window.goTab=go;
@@ -452,51 +470,11 @@ async function reorder(o){
  }
  draw();
  toast(added?('В корзину добавлено: '+added):'Позиции недоступны');
- if(added)go('menu');
+ if(added)go('catalog');
 }
 async function reorderByCode(code){
  let o;try{o=await jget(API+'/my/orders/'+encodeURIComponent(code));}catch(e){toast('Заказ не найден');return;}
  reorder(o);
-}
-
-/* --- contacts --- */
-function renderContacts(){
- const v=el('div','aview');
- const card=el('div','acard');card.style.cursor='default';
- let h='<div class="shop" style="font-size:18px">'+esc(S.name||'Магазин')+'</div>';
- if(S.address)h+='<div class="arow">'+ic('pin')+' <b>'+esc(S.address)+'</b></div>';
- if(S.city)h+='<div class="arow">'+ic('pin')+' '+esc(S.city)+'</div>';
- if(S.phone)h+='<div class="arow">'+ic('call')+' <a style="color:var(--afg)" href="tel:'+esc(S.phone)+'">'+esc(S.phone)+'</a></div>';
- const hb=hoursBadge();if(hb)h+='<div class="arow">'+ic('clock')+' '+esc(hb.t)+'</div>';
- card.innerHTML=h;v.appendChild(card);
- jget(API+'/storefront/'+encodeURIComponent(S.slug)+'/geo').then(g=>{
-  if(!g)return;
-  const zone=(g.delivery_zone&&g.delivery_zone.type)?g.delivery_zone:null;
-  if(g.lat==null&&!zone)return;
-  const holder=el('div','amap');v.appendChild(holder);
-  loadMap().then(()=>{
-   const m=document.createElement('platform-map');
-   const ov=[];
-   if(zone)ov.push({name:'Зона доставки',data:zone,color:'#e2553f',opacity:.12,width:1});
-   const mk=[];
-   if(g.lat!=null)mk.push({lngLat:[g.lng,g.lat],color:'var(--accent)',title:S.name});
-   let box=null;
-   if(zone){
-    const pts=[];
-    (function walk(c){if(typeof c[0]==='number'){pts.push(c);return;}for(const x of c)walk(x);})(zone.coordinates);
-    let a=pts[0][0],b=a,c=pts[0][1],d=c;
-    for(const p of pts){if(p[0]<a)a=p[0];if(p[0]>b)b=p[0];if(p[1]<c)c=p[1];if(p[1]>d)d=p[1];}
-    box=[[a,c],[b,d]];
-   }
-   m.config={center:g.lat!=null?[g.lng,g.lat]:[(box[0][0]+box[1][0])/2,(box[0][1]+box[1][1])/2],zoom:12,
-    controls:{zoom:true,fit:true},
-    markers:mk,
-    overlays:ov,layers:{fetch:false},scheme:document.body.classList.contains('light')?'light':'dark'};
-   if(box)m.addEventListener('pm-ready',ev=>ev.detail.map.fitBounds(box,{padding:60,duration:400}),{once:true});
-   holder.appendChild(m);
-  }).catch(()=>{holder.remove();});
- }).catch(()=>{});
- acct.innerHTML='';acct.appendChild(v);
 }
 
 /* --- profile --- */
@@ -564,15 +542,14 @@ async function refreshActiveDot(){
 }
 
 /* --- view switch --- */
-let cur='menu';
+let cur='catalog';
 function renderView(id){
  cur=id;viewSeq++;
  if(id==='orders'){if(curOrder)openOrder(curOrder);else loadOrders();}
  else if(id==='reviews')renderReviews();
- else if(id==='contacts')renderContacts();
  else if(id==='profile')renderProfile();
 }
-setTab('menu');
+setTab('catalog');
 
 /* --- deeplinks --- */
 const tab=qs.get('tab');
@@ -580,7 +557,7 @@ const order=qs.get('order');
 const reorderCode=qs.get('reorder');
 if(order){openOrder(order);}
 else if(reorderCode){reorderByCode(reorderCode);}
-else if(tab&&TABS.some(t=>t.id===tab))go(tab);
+else if(tab&&(tab==='profile'||TABS.some(t=>t.id===tab)))go(tab);
 refreshActiveDot();
 loadPersonal();
 

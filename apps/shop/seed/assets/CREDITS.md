@@ -17,7 +17,7 @@
 | bakery/cinnamon.jpg | [photo-1509365465985-25d11c17e812](https://images.unsplash.com/photo-1509365465985-25d11c17e812) (cinnamon roll) |
 | bakery/cookie.jpg | [photo-1558961363-fa8fdf82db35](https://images.unsplash.com/photo-1558961363-fa8fdf82db35) (cookies) |
 | bakery/cover.jpg | [photo-1509440159596-0249088772ff](https://images.unsplash.com/photo-1509440159596-0249088772ff) (bread loaves) |
-| bakery/eclair.jpg | [photo-1541783245831-57d6fb0926d3](https://images.unsplash.com/photo-1541783245831-57d6fb0926d3) (eclair) |
+| bakery/eclair.jpg | [photo-1774119649906-c82806125e23](https://images.unsplash.com/photo-1774119649906-c82806125e23) (vanilla eclair) |
 | bakery/honeycake.jpg | [photo-1571115177098-24ec42ed204d](https://images.unsplash.com/photo-1571115177098-24ec42ed204d) (honey cake) |
 | bakery/lemonade.jpg | [photo-1523677011781-c91d1bbe2f9e](https://images.unsplash.com/photo-1523677011781-c91d1bbe2f9e) (lemonade) |
 | bakery/lemontart.jpg | [photo-1519915028121-7d3463d20b13](https://images.unsplash.com/photo-1519915028121-7d3463d20b13) (lemon tart) |

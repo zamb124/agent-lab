@@ -11,7 +11,7 @@ function loadCart(){try{const raw=localStorage.getItem(CART_KEY);if(!raw)return;
   for(const[k,l]of JSON.parse(raw)){if(l&&byId(l.pid))cart.set(k,{pid:l.pid,qty:l.qty||1,sel:new Map(l.sel||[])});}}catch(e){}}
 const app=document.getElementById('app');
 let query='';
-window.menuSearch=v=>{query=v.trim().toLowerCase();renderMenu();};
+window.catalogSearch=v=>{query=v.trim().toLowerCase();renderCatalog();};
 const NEST=S.modifier_nested_groups||{};
 const byId=id=>S.products.find(x=>x.id===id);
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -48,6 +48,20 @@ function loadMap(){
 }
 function selHash(sel){return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}
 const ORDER_ON=[S.delivery_enabled,S.pickup_enabled,S.onsite_enabled&&TABLES.length>0].some(Boolean);
+/* Способ получения — реальный селектор, не мета-строка: выбор живёт в
+   localStorage и синкается с чекаутом (setDtype — источник поведения). */
+const DTYPES=[['delivery','truck','Доставка',S.delivery_enabled],['pickup','store','Самовывоз',S.pickup_enabled],['onsite','restaurant','В заведении',S.onsite_enabled&&TABLES.length>0]].filter(d=>d[3]);
+const DTKEY='shopdtype:'+S.slug;
+function savedDtype(){try{const v=localStorage.getItem(DTKEY)||'';
+  return DTYPES.some(d=>d[0]===v)?v:'';}catch(e){return '';}}
+function dtypeCur(){return savedDtype()||((DTYPES[0]||[])[0]||'');}
+window.prefDtype=t=>{if(!DTYPES.some(d=>d[0]===t))return;
+  if(window.setDtype){setDtype(t);return;}
+  try{localStorage.setItem(DTKEY,t);}catch(e){}
+  document.querySelectorAll('.dmode button').forEach(b=>b.classList.toggle('on',b.dataset.d===t));};
+function dmodeHtml(){if(DTYPES.length<2)return'';
+  const cur=dtypeCur();
+  return `<span class="dmode" role="group" aria-label="Способ получения">${DTYPES.map(d=>`<button type="button" data-d="${d[0]}" class="${cur===d[0]?'on':''}" onclick="prefDtype('${d[0]}')">${ic(d[1])}${d[2]}</button>`).join('')}</span>`;}
 function cartQty(pid){let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}
 function unitPrice(p,sel){let abs=0,delta=0;
   const walk=groups=>{for(const g of groups)for(const o of g.options){const q=sel.get(o.id)||0;
@@ -72,13 +86,14 @@ function tags(p){return (p.badges||[]).map(b=>{const d=DEFS[b];
   return d?`<span class="ptag">${d.icon_path?`<svg viewBox="0 -960 960 960"><path d="${d.icon_path}"/></svg>`:''}${esc(d.label)}</span>`:'';}).join('');}
 function badge(pid){const pr=(S.promos||[]).find(x=>promoApplies(x.action,pid));
   return pr?`<span class="pbadge">${esc(pr.name)}</span>`:'';}
+function priceCell(p){return (!ORDER_ON||p.is_available===false)?`<span class="price">${priceLabel(p)}</span>`:'';}
 function qtyCtl(p){if(!ORDER_ON)return'';
   if(p.is_available===false)return `<span class="soon">Скоро</span>`;
   const hasMod=p.modifier_groups&&p.modifier_groups.length;
   const q=cartQty(p.id);
-  if(hasMod)return `<button class="add" onclick="customize('${p.id}')">${q?'Выбрать · '+q:'Выбрать'}</button>`;
+  if(hasMod)return `<button class="add" onclick="customize('${p.id}')"><span>${esc(priceLabel(p))}</span><i>${q?'×'+q:'+'}</i></button>`;
   const l=cart.get(p.id+'#');const n=l?l.qty:0;
-  if(!n)return `<button class="add" onclick="addPlain('${p.id}',1)">В корзину</button>`;
+  if(!n)return `<button class="add" onclick="addPlain('${p.id}',1)"><span>${esc(priceLabel(p))}</span><i>+</i></button>`;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${p.id}',-1)">−</button><span>${n}</span><button onclick="addPlain('${p.id}',1)">+</button></span>`;}
 function refreshQty(pid){document.querySelectorAll(`[data-qty="${pid}"]`).forEach(el=>{el.innerHTML=qtyCtl(byId(pid));});}
 const STOP=`onclick="event.stopPropagation()"`;"""

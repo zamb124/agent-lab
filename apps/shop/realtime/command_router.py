@@ -30,6 +30,8 @@ from apps.shop.realtime.operations import (
     ShopDomainIdPayload,
     ShopFavoriteSetPayload,
     ShopIdPayload,
+    ShopLoyaltyProgramPayload,
+    ShopLoyaltyProgramSetPayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
     ShopModifierGroupUpdatePayload,
@@ -89,6 +91,8 @@ from apps.shop.realtime.operations import (
     op_domains_add,
     op_domains_provision,
     op_domains_remove,
+    op_loyalty_program_get,
+    op_loyalty_program_set,
     op_modifier_groups_create,
     op_modifier_groups_list,
     op_modifier_groups_remove,
@@ -297,6 +301,12 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/telegram/disconnect_requested": Operation(
         payload_model=ShopIdPayload, fn=op_telegram_disconnect
+    ),
+    "shop/loyalty/program_get_requested": Operation(
+        payload_model=ShopLoyaltyProgramPayload, fn=op_loyalty_program_get
+    ),
+    "shop/loyalty/program_set_requested": Operation(
+        payload_model=ShopLoyaltyProgramSetPayload, fn=op_loyalty_program_set
     ),
     "shop/public/order_create_requested": Operation(
         payload_model=ShopOrderCreatePayload, fn=op_public_order_create

@@ -5,7 +5,9 @@
 """
 
 CSS: str = """@media(min-width:1024px){
-.wrap{max-width:1240px;padding:0 24px calc(140px + env(safe-area-inset-bottom))}
+/* 12-колоночная сетка: карточки занимают целые колонки, столбцы ровные. */
+.wrap{max-width:1240px;padding:0 24px calc(140px + env(safe-area-inset-bottom));
+  --cols:12;--colgap:16px;--colw:calc((100% - (var(--cols) - 1) * var(--colgap)) / var(--cols))}
 .hero{margin:0 calc(50% - 50vw);height:340px}
 body[data-hero=minimal] .hero{margin:0}
 .hero .head{left:50%;right:auto;transform:translateX(-50%);width:min(1240px,100%);bottom:28px;padding:0 24px}
@@ -14,12 +16,12 @@ body[data-hero=minimal] .hero .head{left:auto;right:auto;transform:none;width:au
 .hero h1{font-size:40px}
 .hero .desc{font-size:15.5px;-webkit-line-clamp:3;max-width:680px}
 .meta{padding:16px 2px 8px;font-size:14px;gap:18px}
-.msearch{margin:14px 0 4px;max-width:460px}
-#msw{margin-left:262px}
-#app.flat #msw{margin-left:0}
-#menu{display:grid;grid-template-columns:230px minmax(0,1fr);gap:0 32px;align-items:start;margin-top:10px}
-#menu>:not(.tabs){grid-column:2}
-#app.flat #menu{display:block}
+.csearch{margin:14px 0 4px;max-width:460px}
+#csw{margin-left:262px}
+#app.flat #csw{margin-left:0}
+#catalog{display:grid;grid-template-columns:230px minmax(0,1fr);gap:0 32px;align-items:start;margin-top:10px}
+#catalog>:not(.tabs){grid-column:2}
+#app.flat #catalog{display:block}
 .tabs{grid-column:1;grid-row:1;position:sticky;top:24px;z-index:5;flex-direction:column;align-items:stretch;gap:4px;padding:0;background:none;overflow-x:visible;overflow-y:auto;max-height:calc(100vh - 40px);scrollbar-width:thin}
 #app.flat .tabs{display:none}
 .tabs button{text-align:left;border:0;border-radius:12px;background:transparent;padding:11px 14px}
@@ -27,9 +29,9 @@ body[data-hero=minimal] .hero .head{left:auto;right:auto;transform:none;width:au
 .tabs button.on{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--afg);font-weight:650}
 .cat{font-size:24px;margin:34px 0 10px}
 .cat.sub{font-size:18px}
-#mbody>.mchunk:first-child>.cat{margin-top:0}
-body[data-preset=menu] .mchunk,body[data-preset=compact] .mchunk{display:grid;grid-template-columns:1fr 1fr;column-gap:40px}
-body[data-preset=menu] .mchunk>.cat,body[data-preset=compact] .mchunk>.cat{grid-column:1/-1}
+#cbody>.cchunk:first-child>.cat{margin-top:0}
+body[data-preset=menu] .cchunk,body[data-preset=compact] .cchunk{display:grid;grid-template-columns:1fr 1fr;column-gap:40px}
+body[data-preset=menu] .cchunk>.cat,body[data-preset=compact] .cchunk>.cat{grid-column:1/-1}
 body[data-preset=grid] .grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
 .gcard{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
 .gcard:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:var(--shadow-lg)}
@@ -52,18 +54,19 @@ body[data-preset=compact] .item{padding-left:12px;padding-right:12px}
 .toast{bottom:44px}
 .bnrs{gap:14px}
 .bnr{width:340px}
-.shcard{width:176px}
-.sh[data-layout=hero] .shcard{width:min(400px,52vw)}
+.shcard,.railcta{width:calc(var(--colw) * 2 + var(--colgap))}
+.sh[data-layout=hero] .shcard{width:calc(var(--colw) * 4 + var(--colgap) * 3)}
 }
 @media(min-width:721px) and (max-width:1023px){
-.wrap{max-width:920px;padding:0 24px calc(150px + env(safe-area-inset-bottom))}
+.wrap{max-width:920px;padding:0 24px calc(150px + env(safe-area-inset-bottom));
+  --cols:12;--colgap:16px;--colw:calc((100% - (var(--cols) - 1) * var(--colgap)) / var(--cols))}
 .hero{height:300px}
 .hero h1{font-size:36px}
 body[data-hero=cover] .hero{height:340px}
 .grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
 .bnr{width:330px}
-.shcard{width:168px}
-.sh[data-layout=hero] .shcard{width:min(360px,60vw)}
+.shcard,.railcta{width:calc(var(--colw) * 2 + var(--colgap))}
+.sh[data-layout=hero] .shcard{width:calc(var(--colw) * 4 + var(--colgap) * 3)}
 .tabs{top:calc(env(safe-area-inset-top) + 4px)}
 .panel{width:min(640px,100vw)}
 }

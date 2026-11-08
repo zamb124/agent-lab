@@ -18,7 +18,7 @@ CSS: str = """.done{text-align:center;padding:64px 20px}
 JS: str = """window.trackOrder=async(code,created)=>{
   const p=document.getElementById('panel');
   const render=d=>{const hall=d&&d.delivery_type==='onsite'&&d.table_label?`<br>Ваш стол: ${esc(d.table_label)}`:'';
-    p.innerHTML=`<div class="done"><h2 class="serif">Заказ принят!</h2><div class="code">#${code}</div><div class="st">${esc(d.status_label||d.status)}</div><p>Сохраните номер заказа — по нему можно проверить статус.${hall}<br>Мы свяжемся с вами для подтверждения.</p></div>`;};
+    p.innerHTML=`<div class="done"><h2>Заказ принят!</h2><div class="code">#${code}</div><div class="st">${esc(d.status_label||d.status)}</div><p>Сохраните номер заказа — по нему можно проверить статус.${hall}<br>Мы свяжемся с вами для подтверждения.</p></div>`;};
   render(created);
   const poll=async()=>{
     if(!document.getElementById('sheet').classList.contains('show'))return;

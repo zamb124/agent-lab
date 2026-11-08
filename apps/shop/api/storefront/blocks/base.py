@@ -11,7 +11,6 @@ img{background:var(--card2);transition:opacity .35s ease}
 img:not(.ld){opacity:0}
 body.lock{overflow:hidden}
 body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation;overflow-x:hidden;overflow-x:clip;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
-.serif{font-family:ui-serif,Georgia,'Times New Roman',serif}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}"""
 
 JS: str = """const S=JSON.parse(document.getElementById('snapshot').textContent);
@@ -34,21 +33,22 @@ function hoursBadge(){
   const range=v=>{if(typeof v!=='string')return null;const p=v.split('-');
     if(p.length<2)return null;const r={o:p[0],c:p[1],om:hm(p[0]),cm:hm(p[1])};
     return r.om===r.cm?null:r;};
+  const span=r=>r.o+'–'+r.c;
   const prev=range(wh[String((day+6)%7)]);
-  if(prev&&prev.om>prev.cm&&mins<prev.cm)return{t:'Открыто · до '+prev.c,open:true};
+  if(prev&&prev.om>prev.cm&&mins<prev.cm)return{t:'Открыто '+span(prev),open:true};
   const today=range(wh[String(day)]);
   if(today){
     if(today.om<today.cm){
-      if(mins>=today.om&&mins<today.cm)return{t:'Открыто · до '+today.c,open:true};
-      if(mins<today.om)return{t:'Откроемся в '+today.o,open:false};
+      if(mins>=today.om&&mins<today.cm)return{t:'Открыто '+span(today),open:true};
+      if(mins<today.om)return{t:'Откроемся '+span(today),open:false};
     }else{
-      if(mins>=today.om)return{t:'Открыто · до '+today.c,open:true};
-      return{t:'Откроемся в '+today.o,open:false};
+      if(mins>=today.om)return{t:'Открыто '+span(today),open:true};
+      return{t:'Откроемся '+span(today),open:false};
     }
   }
   for(let d=1;d<=7;d++){
     const nd=(day+d)%7,tr=range(wh[String(nd)]);
-    if(tr)return{t:'Откроемся '+DAYS[nd]+' в '+tr.o,open:false};
+    if(tr)return{t:'Откроемся '+DAYS[nd]+' '+span(tr),open:false};
   }
-  return{t:'временно не работает',open:false};
+  return{t:'Временно не работает',open:false};
 }"""

@@ -53,7 +53,7 @@ BAKERY = DemoShopSpec(
         "preset": "grid",
         "mode": "light",
         "hero_style": "card",
-        "backdrop": "gradient",
+        "backdrop": "solid",
     },
     working_hours={
         "0": "07:00-20:00",

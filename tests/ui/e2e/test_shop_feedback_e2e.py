@@ -162,7 +162,7 @@ async def test_feedback_order_done_rate_and_reviews_tab(
 
     # Витрина: бейдж рейтинга в мета-строке hero. Страница кэшируется
     # браузером 30 c — уходим от старого HTML свежим query-параметром.
-    await page.locator(".acctnav [data-tab='menu']").click()
+    await page.locator(".acctnav [data-tab='catalog']").click()
     _ = await page.goto(_page_url(sf.slug) + "?fresh=1", wait_until="load")
     rate = page.locator(".meta .rate")
     await expect(rate).to_be_visible()

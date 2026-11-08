@@ -18,6 +18,7 @@ import pytest_asyncio
 from playwright.async_api import Page, ViewportSize, expect
 
 from core.types import JsonObject, require_json_object
+from tests.shop.test_shop_distribution import _create_image_file
 from tests.ui.e2e_worker import ui_e2e_scope_headers
 from tests.ui.harness import AppUI
 
@@ -163,17 +164,20 @@ async def storefront(
     shop_worker: None,
     auth_headers_system: dict[str, str],
     unique_id: str,
+    shop_di,
 ) -> Storefront:
-    """Витрина с двумя категориями, товарами и модификатором — через реальный REST."""
+    """Витрина с обложкой, двумя категориями, товарами и модификатором — через реальный REST."""
     _ = shop_worker
     headers = {**auth_headers_system, **ui_e2e_scope_headers()}
     slug = f"e2ed-{unique_id[:8]}"
+    cover_id = await _create_image_file(shop_di, "cover.png")
     return await _create_storefront(
         shop_client_http,
         headers,
         slug,
         categories=("Горячее", "Десерты"),
         products_per_category=3,
+        shop_patch={"cover_file_id": cover_id},
     )
 
 
@@ -183,11 +187,13 @@ async def themed_storefront(
     shop_worker: None,
     auth_headers_system: dict[str, str],
     unique_id: str,
+    shop_di,
 ) -> Storefront:
-    """Витрина с контактами и обоими способами выдачи — meta-иконки и seg видны."""
+    """Витрина с обложкой, контактами и обоими способами выдачи — meta-иконки и seg видны."""
     _ = shop_worker
     headers = {**auth_headers_system, **ui_e2e_scope_headers()}
     slug = f"e2et-{unique_id[:8]}"
+    cover_id = await _create_image_file(shop_di, "cover.png")
     return await _create_storefront(
         shop_client_http,
         headers,
@@ -200,6 +206,7 @@ async def themed_storefront(
             "phone": "+7 495 000-00-00",
             "delivery_enabled": True,
             "pickup_enabled": True,
+            "cover_file_id": cover_id,
         },
     )
 
@@ -210,17 +217,20 @@ async def flat_storefront(
     shop_worker: None,
     auth_headers_system: dict[str, str],
     unique_id: str,
+    shop_di,
 ) -> Storefront:
-    """Витрина с одной категорией — flat-режим без сайдбара."""
+    """Витрина с обложкой и одной категорией — flat-режим без сайдбара."""
     _ = shop_worker
     headers = {**auth_headers_system, **ui_e2e_scope_headers()}
     slug = f"e2ef-{unique_id[:8]}"
+    cover_id = await _create_image_file(shop_di, "cover.png")
     return await _create_storefront(
         shop_client_http,
         headers,
         slug,
         categories=("Меню",),
         products_per_category=6,
+        shop_patch={"cover_file_id": cover_id},
     )
 
 
@@ -285,11 +295,11 @@ async def test_desktop_layout_sidebar_and_columns(
     assert await _css(page, ".tabs", "flexDirection") == "column"
     assert await _css(page, ".tabs", "position") == "sticky"
     tabs = await _rect(page, ".tabs")
-    body = await _rect(page, "#mbody")
+    body = await _rect(page, "#cbody")
     assert body["left"] > tabs["right"]
     columns = await _eval_int(
         page,
-        "getComputedStyle(document.querySelector('.mchunk')).gridTemplateColumns.split(' ').filter(Boolean).length",
+        "getComputedStyle(document.querySelector('.cchunk')).gridTemplateColumns.split(' ').filter(Boolean).length",
     )
     assert columns >= 2
     assert await _eval_bool(
@@ -392,7 +402,7 @@ async def test_single_category_flat_layout(
         page, "document.getElementById('app').classList.contains('flat')"
     ) is True
     await expect(page.locator(".tabs")).to_be_hidden()
-    assert await _css(page, "#msw", "marginLeft") == "0px"
+    assert await _css(page, "#csw", "marginLeft") == "0px"
 
 
 @pytest.mark.asyncio
@@ -546,9 +556,9 @@ async def test_theme_screenshot_matrix(
     out_dir.mkdir(parents=True, exist_ok=True)
     async def _settled() -> None:
         # Чанки дорисовываются IntersectionObserver'ом: ждём, пока очередь
-        # опустеет (#msent удаляется), затем — конец fade у последнего чанка.
-        await expect(page.locator("#msent")).to_have_count(0, timeout=5000)
-        last = page.locator("#mbody .mchunk").last
+        # опустеет (#csent удаляется), затем — конец fade у последнего чанка.
+        await expect(page.locator("#csent")).to_have_count(0, timeout=5000)
+        last = page.locator("#cbody .cchunk").last
         await expect(last).to_be_visible()
         await expect(last).to_have_css("opacity", "1", timeout=5000)
 

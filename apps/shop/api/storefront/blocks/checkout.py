@@ -4,14 +4,14 @@
 в shell как есть — без экранирования скобок.
 """
 
-CSS: str = """.seg{display:flex;background:var(--card2);border-radius:14px;padding:4px;margin:14px 0}
-.seg button{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:11px;background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+CSS: str = """.seg{display:flex;background:var(--card2);border-radius:99px;padding:4px;margin:14px 0}
+.seg button{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:99px;background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .seg button svg{width:17px;height:17px;fill:currentColor;flex-shrink:0}
 .seg button.on{background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-sm)}
 input.f,select.f{width:100%;font:inherit;font-size:15px;padding:14px;margin:6px 0;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--text);transition:border-color .15s,box-shadow .15s}
 input.f:focus,select.f:focus{outline:none;border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 input.f::placeholder{color:var(--muted)}
-button.big{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;border-radius:16px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;margin-top:14px;letter-spacing:.01em;transition:transform .1s,box-shadow .15s}
+button.big{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;border-radius:99px;border:0;background:var(--accent);color:var(--on-accent);cursor:pointer;margin-top:14px;letter-spacing:.01em;transition:transform .1s,box-shadow .15s}
 button.big:hover:not(:disabled){box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 42%,transparent)}
 button.big:disabled{opacity:.45;cursor:default}
 .minwarn{font-size:13px;color:var(--warn);margin-top:10px;text-align:center}
@@ -56,7 +56,7 @@ button.big:disabled{opacity:.45;cursor:default}
 
 JS: str = """let dtype='';
 let tableId=TABLE_ID&&TABLES.some(t=>t.id===TABLE_ID)?TABLE_ID:'';
-const DTYPES=[['delivery','truck','Доставка',S.delivery_enabled],['pickup','store','Самовывоз',S.pickup_enabled],['onsite','restaurant','В заведении',S.onsite_enabled&&TABLES.length>0]].filter(d=>d[3]);
+/* DTYPES — в ui.js: та же модель рисует селектор в мета-строке витрины. */
 /* Меню без заказов: все выдачи выключены — прячем корзину и лист оформления. */
 if(!DTYPES.length)document.documentElement.classList.add('no-order');
 /* Лояльность: undefined — personal ещё не грузили; null — нет сессии/фичи. */
@@ -96,7 +96,7 @@ let orderKey='',submitting=false;
 window.openSheet=()=>{
   if(!DTYPES.length)return;
   orderKey=crypto.randomUUID();
-  if(!dtype)dtype=(tableId&&S.onsite_enabled)?'onsite':(DTYPES[0]?DTYPES[0][0]:'');
+  if(!dtype)dtype=(tableId&&S.onsite_enabled)?'onsite':dtypeCur();
   renderSheet();
   if(LOY_ON)ensureLoyalty().then(()=>{
     const row=document.getElementById('loyRow');
@@ -108,6 +108,10 @@ window.openSheet=()=>{
   sheetOpen(document.getElementById('sheet'));
 };
 window.setDtype=t=>{dtype=t;
+  // Выбор персистится и отражается в витринном селекторе .dmode — одно
+  // состояние на витрину и чекаут.
+  try{localStorage.setItem(DTKEY,t);}catch(e){}
+  document.querySelectorAll('.dmode button').forEach(b=>b.classList.toggle('on',b.dataset.d===t));
   // Смена способа выдачи сбрасывает адресное состояние: точка и результат
   // зоновой проверки относятся к прежнему выбору и не наследуются.
   addrPoint=null;pickedAddrId='';zoneOk=null;sugItems=[];

@@ -158,7 +158,7 @@ async def test_loyalty_reward_full_cycle(
     await _shot(page, "phone-loyalty-card", sf.slug)
 
     # Второй заказ: тумблер награды в шите чекаута.
-    await page.locator(".acctnav [data-tab='menu']").click()
+    await page.locator(".acctnav [data-tab='catalog']").click()
     await page.locator(f".item[data-pid='{sf.plain_product_id}'] .add").click()
     await page.locator("#cart").click()
     await expect(page.locator("#sheet.show")).to_be_visible()

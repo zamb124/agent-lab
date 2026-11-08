@@ -4,7 +4,7 @@
 в shell как есть — без экранирования скобок.
 """
 
-CSS: str = """.hero{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:linear-gradient(160deg,var(--accent) 0%,color-mix(in srgb,var(--accent) 42%,#171310) 52%,#171310 100%)}
+CSS: str = """.hero{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:var(--card2)}
 .hero .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}
 .hero .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,14,12,.15) 20%,rgba(16,14,12,.92) 100%)}
 .hero .head{position:absolute;left:24px;right:24px;bottom:18px;display:flex;align-items:flex-end;gap:14px}
@@ -18,6 +18,13 @@ CSS: str = """.hero{position:relative;margin:0 -16px;height:260px;overflow:hidde
 .ob-open,.ob-closed{font-weight:650}
 .ob-open{color:var(--success)}
 .ob-closed{color:var(--warn)}
+/* Селектор способа получения — рабочий контрол, не мета-строка: видимо
+   отличается от информационных спанов и синхронизирован с чекаутом. */
+.dmode{display:inline-flex;gap:2px;background:var(--card2);border-radius:99px;padding:3px}
+.dmode button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12.5px;font-weight:600;
+  padding:6px 12px;border:0;border-radius:99px;background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap}
+.dmode button svg{width:15px;height:15px;fill:currentColor;opacity:1}
+.dmode button.on{background:var(--accent);color:var(--on-accent)}
 body[data-hero=minimal] .hero{height:auto;background:none;margin:0;padding:20px 0 2px}
 body[data-hero=minimal] .hero .bg,body[data-hero=minimal] .hero .veil{display:none}
 body[data-hero=minimal] .hero .head{position:static;padding:0 2px}

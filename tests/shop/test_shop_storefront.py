@@ -338,8 +338,8 @@ class TestStorefrontPage:
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert "hoursBadge" in html.text
         assert "Сейчас закрыто" in html.text
-        assert "menuSearch" in html.text
-        assert "msearch" in html.text
+        assert "catalogSearch" in html.text
+        assert "csearch" in html.text
 
     async def test_light_theme_renders_light_palette(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -444,7 +444,7 @@ class TestStorefrontDesktopLayout:
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert html.status_code == 200
         assert 'data-preset="menu"' in html.text
-        assert "body[data-preset=menu] .mchunk,body[data-preset=compact] .mchunk" in html.text
+        assert "body[data-preset=menu] .cchunk,body[data-preset=compact] .cchunk" in html.text
         assert "body[data-preset=grid] .grid" in html.text
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}", json={"theme": {"preset": "grid"}}

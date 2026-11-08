@@ -43,22 +43,24 @@ class ShopTheme(StrictBaseModel):
     """Визуальная тема витрины: акцентный цвет, пресет раскладки и режим.
 
     ``hero_style`` — подача шапки: ``card`` — карточка поверх обложки,
-    ``cover`` — иммерсивный full-bleed с градиентом, ``minimal`` —
+    ``cover`` — иммерсивный full-bleed с затемнением, ``minimal`` —
     компактный заголовок без обложки. ``backdrop`` — фон страницы:
-    ``solid`` — цвет темы, ``blur`` — размытая обложка под контентом,
-    ``gradient`` — мягкий акцентный градиент.
+    ``solid`` — нейтральный цвет темы, ``blur`` — размытая обложка под
+    контентом. Градиентных фонов нет — контентный интерфейс не должен
+    нагружать внимание фоном.
     """
 
     accent_color: str = Field(default="#e2553f", max_length=16)
     preset: str = Field(default="menu", max_length=32)
     mode: str = Field(default="dark", pattern=r"^(dark|light)$")
     hero_style: str = Field(default="card", pattern=r"^(card|cover|minimal)$")
-    backdrop: str = Field(default="solid", pattern=r"^(solid|blur|gradient)$")
+    backdrop: str = Field(default="solid", pattern=r"^(solid|blur)$")
     custom: ShopThemeCustom = Field(default_factory=ShopThemeCustom)
 
 
 def normalize_shop_theme(theme: JsonObject) -> JsonObject:
-    """Сырые `shop.theme` → канон: легаси-ключ `accent` мапится в `accent_color`."""
+    """Сырые `shop.theme` → канон: легаси-ключ `accent` мапится в `accent_color`,
+    убранный фон `gradient` — в `solid`."""
     normalized = dict(theme)
     if "accent_color" not in normalized:
         accent = normalized.pop("accent", None)
@@ -66,6 +68,8 @@ def normalize_shop_theme(theme: JsonObject) -> JsonObject:
             normalized["accent_color"] = accent
     else:
         _ = normalized.pop("accent", None)
+    if normalized.get("backdrop") == "gradient":
+        normalized["backdrop"] = "solid"
     return normalized
 
 
