@@ -3,6 +3,7 @@
 
 read_file — names → file_ids → capability files.read (HTTP gateway);
 create_file — capability files.create (HTTP gateway);
+files_locate_image_regions — capability files.locate_image_regions (HTTP gateway);
 files_materialize_image_regions — capability files.materialize_image_regions (HTTP gateway).
 """
 
@@ -330,6 +331,34 @@ async def create_file(
     return payload
 
 
+class LocateImageRegionsArgs(StrictBaseModel):
+    sections: JsonArray = Field(
+        ...,
+        description=(
+            "Секции: у item.photo={file_id,page} NanoBanana вырежет фото с этой страницы; "
+            "photo=null — пропуск. Промпт — crop_prompt_template caller'а."
+        ),
+    )
+    crop_prompt_template: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Шаблон промпта NanoBanana crop. Плейсхолдеры: {name}, {page}, {ingredients}."
+        ),
+    )
+    studio_prompt_template: str = Field(
+        default="",
+        description=(
+            "Опциональный второй проход (product-studio) по результату crop; "
+            "те же плейсхолдеры. Пустая строка — без studio."
+        ),
+    )
+    include_bytes_b64: bool = Field(
+        default=False,
+        description="True — в photo добавить bytes_b64 + content_type для превью в JSON tree.",
+    )
+
+
 class MaterializeImageRegionsArgs(StrictBaseModel):
     sections: JsonArray = Field(
         description=(
@@ -344,6 +373,55 @@ class MaterializeImageRegionsArgs(StrictBaseModel):
             "пустой список — ни один регион не материализуется."
         ),
     )
+    include_bytes_b64: bool = Field(
+        default=False,
+        description="True — в photo добавить bytes_b64 + content_type для превью в JSON tree.",
+    )
+
+
+@tool(
+    name="files_locate_image_regions",
+    description=(
+        "Crop dish photos via NanoBanana (Google generateContent, nano_banana.model). "
+        "Each item.photo must be {file_id, page} of the source page that contains the dish; "
+        "photo=null skips. Prompt text is crop_prompt_template from the caller "
+        "(placeholders {name}, {page}, {ingredients}); optional studio_prompt_template "
+        "is a second edit pass. Returns photo={file_id, content_type, already_cropped} "
+        "and optional bytes_b64."
+    ),
+    tags=["files"],
+    parameters_model=LocateImageRegionsArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
+    effects=["write"],
+)
+async def files_locate_image_regions(
+    *,
+    state: ExecutionState,
+    sections: JsonArray,
+    crop_prompt_template: str,
+    studio_prompt_template: str = "",
+    include_bytes_b64: bool = False,
+) -> JsonObject:
+    _ = require_json_array(sections, "files_locate_image_regions.sections")
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.locate_image_regions"],
+    )
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.locate_image_regions",
+            kwargs={
+                "sections": list(sections),
+                "crop_prompt_template": crop_prompt_template,
+                "studio_prompt_template": studio_prompt_template,
+                "include_bytes_b64": include_bytes_b64,
+            },
+        ),
+        timeout=timeout,
+    )
+    return require_json_object(response.result, "files_locate_image_regions.result")
 
 
 @tool(
@@ -351,6 +429,7 @@ class MaterializeImageRegionsArgs(StrictBaseModel):
     description=(
         "Crop photo regions from attachments by normalized bbox "
         "(file_id, page, x0,y0,x1,y1 fractions) into separate ephemeral JPEG files. "
+        "already_cropped photos are kept (optional bytes_b64). "
         "Returns sections with photo={file_id}; failed crops become photo=null."
     ),
     tags=["files"],
@@ -363,6 +442,7 @@ async def files_materialize_image_regions(
     state: ExecutionState,
     sections: JsonArray,
     attachment_file_ids: list[str] | None = None,
+    include_bytes_b64: bool = False,
 ) -> JsonObject:
     _ = require_json_array(sections, "files_materialize_image_regions.sections")
     ids = attachment_file_ids if attachment_file_ids is not None else []
@@ -378,6 +458,7 @@ async def files_materialize_image_regions(
             kwargs={
                 "sections": list(sections),
                 "attachment_file_ids": list(ids),
+                "include_bytes_b64": include_bytes_b64,
             },
         ),
         timeout=timeout,

@@ -228,7 +228,11 @@ class ReadFileArgs(BaseModel):
     )
     forced_lane: ReadLane | None = Field(
         default=None,
-        description="Принудительная линия чтения text | vision | stt | hybrid; None — авто.",
+        description=(
+            "Принудительная линия чтения text | vision | stt | hybrid; None — авто. "
+            "vision — страница как фото: PDF force_raster (kind=page_raster) + OCR/описание, "
+            "nested с bytes для crop; text — только текст, без nested."
+        ),
     )
     persist_assets_namespace: str | None = Field(
         default=None,

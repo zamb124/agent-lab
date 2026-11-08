@@ -9,7 +9,13 @@ from core.files.create_spec import FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef
 from core.files.reader.asset_persist import persist_extract_asset
 from core.files.reader.markdown import nested_anchor, nested_original_name
-from core.files.reader.models import NestedContent, ReadAsset, ReadPage
+from core.files.reader.models import (
+    FileExtract,
+    NestedContent,
+    ReadAsset,
+    ReadAssetKind,
+    ReadPage,
+)
 from core.files.reader.service import FileReader
 from core.files.reader.vision import compress_image
 from core.files.registry import build_file_create_spec
@@ -49,6 +55,38 @@ def nested_bytes(item: NestedContent) -> bytes:
     if item.bytes_b64 is None or not item.bytes_b64.strip():
         raise ValueError(f"nested {item.original_name!r} has no bytes")
     return base64.b64decode(item.bytes_b64)
+
+
+def page_raster_bytes_from_extract(extract: FileExtract, *, page: int) -> bytes:
+    """Байты page_raster / image nested из FileExtract (после forced_lane=VISION)."""
+    if page < 0:
+        raise ValueError("page must be >= 0")
+    matched = [item for item in extract.pages if item.index == page]
+    if not matched:
+        raise ValueError(f"page {page} not in extract")
+    universal = matched[0]
+    for item in universal.nested:
+        if item.kind is ReadAssetKind.PAGE_RASTER:
+            return nested_bytes(item)
+    for item in universal.nested:
+        if item.content_type.startswith("image/"):
+            return nested_bytes(item)
+    raise ValueError(f"page {page} has no page_raster or image nested bytes")
+
+
+def read_page_raster_bytes(page: ReadPage) -> bytes:
+    """Байты PAGE_RASTER / первого image-asset с bytes_b64 на ReadPage."""
+    for asset in page.assets:
+        if asset.kind is ReadAssetKind.PAGE_RASTER and asset.bytes_b64:
+            return base64.b64decode(asset.bytes_b64)
+    for asset in page.assets:
+        if (
+            asset.content_type is not None
+            and asset.content_type.startswith("image/")
+            and asset.bytes_b64
+        ):
+            return base64.b64decode(asset.bytes_b64)
+    raise ValueError(f"page {page.index} has no raster asset bytes")
 
 
 def compress_nested_image(item: NestedContent) -> NestedContent:
@@ -130,5 +168,7 @@ __all__ = [
     "compress_nested_image",
     "nested_bytes",
     "nested_from_page_assets",
+    "page_raster_bytes_from_extract",
     "persist_nested_content",
+    "read_page_raster_bytes",
 ]

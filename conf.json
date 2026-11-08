@@ -534,8 +534,8 @@
   },
   "nano_banana": {
     "enabled": true,
-    "model": "auto",
-    "timeout": 60
+    "model": "google:gemini-3.1-flash-image",
+    "timeout": 120
   },
   "payment_providers": {
     "default_provider": "tinkoff_main",

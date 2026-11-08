@@ -1,9 +1,9 @@
 """Default LLM-суммаризатор с батч-паковкой страниц в контекстное окно модели.
 
-При nested image на странице (bytes_b64) суммаризация multimodal: текст страницы
+При nested image на странице (bytes_b64) prose-суммаризация multimodal: текст страницы
 + interleaved Image {anchor}: / Part(raw). Маршрут — llm_vision; без картинок —
-llm_summarize. При ``schema`` — по одной странице через forced tool
-``submit_page_summary``; result — JSON arguments.
+llm_summarize. При ``schema`` — forced tool ``submit_page_summary`` (text+tools, если
+``page.text`` непустой; multimodal media только при пустом тексте); result — JSON arguments.
 """
 
 from __future__ import annotations
@@ -216,14 +216,19 @@ async def _summarize_structured_pages(
     compression: CompressionMode,
     schema: JsonObject,
 ) -> list[str]:
-    """Одна страница — один forced tool call; result — JSON arguments."""
+    """Одна страница — один forced tool call; result — JSON arguments.
+
+    Vision-модели часто игнорируют ``tool_choice`` и отвечают prose без tool_calls.
+    После ``forced_lane=VISION`` / hybrid OCR текст уже в ``page.text`` — для schema
+    предпочитаем text+tools. Multimodal media — только если текст страницы пуст.
+    """
     service = FileReader.require_text_transform()
     focus = prompt.strip()
     out: list[str] = []
     for page in pages:
         page_text = f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}"
         images = _page_image_items(page)
-        if images:
+        if images and not page.text.strip():
             media_parts: list[Part] = [Part(text=page_text)]
             for item in images:
                 media_parts.append(Part(text=nested_image_label(item.anchor)))

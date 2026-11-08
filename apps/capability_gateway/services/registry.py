@@ -88,9 +88,11 @@ from core.capabilities import (
     verify_execution_token,
 )
 from core.capabilities.tokens import assert_capability_allowed
+from core.clients.nano_banana import NanoBananaClient
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
+from core.config import get_settings
 from core.data_tables.service import DataTableService
 from core.errors.boundary import PlatformNotFoundError
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
@@ -103,7 +105,7 @@ from core.files.create_spec import (
 )
 from core.files.docx_template import DocxTemplater
 from core.files.file_ref import FileRef, stored_file_ref
-from core.files.image_region import materialize_image_regions
+from core.files.image_region import locate_image_regions, materialize_image_regions
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import ExecutionPrincipal, SystemPrincipal
@@ -624,6 +626,7 @@ class CapabilityRegistry:
             "files.get_bytes": self._files_get_bytes,
             "files.get_metadata": self._files_get_metadata,
             "files.read": self._files_read,
+            "files.locate_image_regions": self._files_locate_image_regions,
             "files.materialize_image_regions": self._files_materialize_image_regions,
             "files.fill_docx_template": self._files_fill_docx_template,
             "http.request": self._http_request,
@@ -1273,7 +1276,8 @@ class CapabilityRegistry:
                 title="Read persisted files as ReadFileEnvelope",
                 description=(
                     "Читает persisted-файлы по file_ids через read_files_to_envelope "
-                    "(тот же контракт, что tool read_file): page_summarizations, "
+                    "(тот же контракт, что tool read_file): forced_lane=vision — страница "
+                    "как фото (page_raster + OCR); page_summarizations, "
                     "summarization_schema (forced submit_page_summary), nested_mode, "
                     "budget, recursive, compression, vision_*. Ответ — ReadFileEnvelope "
                     "(files[].results, continuation, nested)."
@@ -1285,12 +1289,54 @@ class CapabilityRegistry:
                 sdk_namespace="files",
                 sdk_method="read",
             ),
+            "files.locate_image_regions": CapabilityDefinition(
+                name="files.locate_image_regions",
+                title="Locate image regions",
+                description=(
+                    "Crop dish photos via NanoBanana (Google generateContent, nano_banana.model). "
+                    "Each item.photo must be {file_id, page} of the source page; photo=null skips. "
+                    "Prompt — crop_prompt_template (placeholders {name}, {page}, {ingredients}); "
+                    "optional studio_prompt_template is a second edit pass. "
+                    "Returns photo={file_id, content_type, already_cropped} and optional bytes_b64. "
+                    "Тот же контракт, что tool files_locate_image_regions."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "sections": _array_schema(
+                            "Секции: item.photo={file_id,page} или null"
+                        ),
+                        "crop_prompt_template": _string_schema(
+                            "Шаблон промпта NanoBanana crop; плейсхолдеры {name}, {page}, {ingredients}"
+                        ),
+                        "studio_prompt_template": _string_schema(
+                            "Опциональный второй проход (product-studio); пустая строка — без studio"
+                        ),
+                        "include_bytes_b64": _boolean_schema(
+                            "True — в photo добавить bytes_b64 + content_type для превью"
+                        ),
+                    },
+                    required=["sections", "crop_prompt_template"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "sections": _array_schema(
+                            "Секции с photo={file_id, content_type, already_cropped}"
+                        ),
+                    },
+                    required=["sections"],
+                ),
+                languages=_supported_languages(),
+                tags=["files", "images"],
+                sdk_namespace="files",
+                sdk_method="locate_image_regions",
+            ),
             "files.materialize_image_regions": CapabilityDefinition(
                 name="files.materialize_image_regions",
                 title="Materialize image regions",
                 description=(
                     "Crop photo regions from attachments by normalized bbox "
                     "(file_id, page, x0,y0,x1,y1 fractions) into separate ephemeral JPEG files. "
+                    "already_cropped photos are kept (optional bytes_b64). "
                     "Returns sections with photo={file_id}; failed crops become photo=null. "
                     "Тот же контракт, что tool files_materialize_image_regions."
                 ),
@@ -1301,6 +1347,9 @@ class CapabilityRegistry:
                         ),
                         "attachment_file_ids": _array_schema(
                             "Разрешённые file_id вложений-источников; пустой список — ни один регион не материализуется"
+                        ),
+                        "include_bytes_b64": _boolean_schema(
+                            "True — в photo добавить bytes_b64 + content_type для превью"
                         ),
                     },
                     required=["sections"],
@@ -2076,6 +2125,37 @@ class CapabilityRegistry:
             "files.read.response",
         )
 
+    async def _files_locate_image_regions(
+        self, request: CapabilityCallRequest
+    ) -> JsonObject:
+        sections = request.kwargs.get("sections")
+        if not isinstance(sections, list):
+            raise TypeError("sections must be array")
+        crop_prompt_template = _required_string(
+            request.kwargs.get("crop_prompt_template"), "crop_prompt_template"
+        )
+        studio_raw = request.kwargs.get("studio_prompt_template")
+        if studio_raw is None:
+            studio_prompt_template = ""
+        elif not isinstance(studio_raw, str):
+            raise TypeError("studio_prompt_template must be string")
+        else:
+            studio_prompt_template = studio_raw.strip()
+        include_bytes_b64 = bool(request.kwargs.get("include_bytes_b64"))
+        if not get_settings().nano_banana.enabled:
+            raise ValueError("files.locate_image_regions: nano_banana.enabled is required")
+        context = await self._context_service.build_context(request.context)
+        with self._context_service.activate(context):
+            located = await locate_image_regions(
+                NanoBananaClient(self._billing_service),
+                sections=sections,
+                crop_prompt_template=crop_prompt_template,
+                files_service=self._files_service,
+                studio_prompt_template=studio_prompt_template,
+                include_bytes_b64=include_bytes_b64,
+            )
+        return {"sections": located}
+
     async def _files_materialize_image_regions(
         self, request: CapabilityCallRequest
     ) -> JsonObject:
@@ -2091,12 +2171,14 @@ class CapabilityRegistry:
                 if not isinstance(item, str) or not item.strip():
                     raise TypeError("attachment_file_ids items must be non-empty strings")
                 attachment_file_ids.append(item.strip())
+        include_bytes_b64 = bool(request.kwargs.get("include_bytes_b64"))
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
             materialized = await materialize_image_regions(
                 self._files_service,
                 sections=sections,
                 attachment_file_ids=attachment_file_ids,
+                include_bytes_b64=include_bytes_b64,
             )
         return {"sections": materialized}
 
@@ -2613,12 +2695,16 @@ class CapabilityRegistry:
             "arguments": arguments_raw,
             "state": request.state,
         }
+        # Как у code-runner: один tool (image edit / read_file + summarization) может
+        # идти дольше 120s; лимит = оставшийся TTL execution token, не хардкод.
+        claims = verify_execution_token(request.context.execution_token)
+        tool_runtime_timeout = max(1.0, float(claims.exp) - datetime.now(UTC).timestamp())
         with self._context_service.activate(context):
             raw_response = await self._service_client.post(
                 "flows",
                 "/flows/api/v1/tool-runtime/call",
                 json=payload,
-                timeout=120.0,
+                timeout=tool_runtime_timeout,
             )
 
         response = require_json_object(raw_response, "flows tool-runtime response")

@@ -850,11 +850,11 @@ class TelegramConfig(BaseModel):
 
 
 class NanoBananaConfig(BaseModel):
-    """Конфигурация image generation."""
+    """Конфигурация image generation / NanoBanana crop."""
 
     enabled: bool = False
-    model: str = LINNEX_LLM_AUTO_MODEL
-    timeout: int = 60
+    model: str = "google:gemini-3.1-flash-image"
+    timeout: int = 120
 
 
 class ProxyConfig(BaseModel):

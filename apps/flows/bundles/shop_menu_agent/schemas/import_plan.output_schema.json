@@ -7,7 +7,10 @@
       "items": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Название раздела меню" },
+          "name": {
+            "type": "string",
+            "description": "Название раздела меню"
+          },
           "items": {
             "type": "array",
             "description": "Блюда раздела в порядке следования",
@@ -15,33 +18,78 @@
               "type": "object",
               "properties": {
                 "shop_product_id": {
-                  "type": ["string", "null"],
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "description": "Блюдо каталога; null — новое блюдо"
                 },
-                "name": { "type": "string", "description": "Название блюда без цены и выхода" },
-                "description": { "type": "string", "description": "Описание; пустая строка, если нет" },
+                "name": {
+                  "type": "string",
+                  "description": "Название блюда без цены и выхода"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Описание; пустая строка, если нет"
+                },
                 "price_minor": {
-                  "type": ["integer", "null"],
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
                   "description": "Цена в копейках; обязательна для нового блюда"
                 },
-                "measure": { "type": ["integer", "null"], "description": "Выход порции в measure_unit" },
-                "measure_unit": { "type": "string", "enum": ["g", "ml", "pcs"] },
-                "ingredients": { "type": "array", "items": { "type": "string" } },
+                "measure": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Выход порции в measure_unit"
+                },
+                "measure_unit": {
+                  "type": "string",
+                  "enum": [
+                    "g",
+                    "ml",
+                    "pcs"
+                  ]
+                },
+                "ingredients": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "nutrition": {
                   "anyOf": [
                     {
                       "type": "object",
                       "description": "КБЖУ на 100 г",
                       "properties": {
-                        "calories_kcal": { "type": "number" },
-                        "proteins_g": { "type": "number" },
-                        "fats_g": { "type": "number" },
-                        "carbs_g": { "type": "number" }
+                        "calories_kcal": {
+                          "type": "number"
+                        },
+                        "proteins_g": {
+                          "type": "number"
+                        },
+                        "fats_g": {
+                          "type": "number"
+                        },
+                        "carbs_g": {
+                          "type": "number"
+                        }
                       },
-                      "required": ["calories_kcal", "proteins_g", "fats_g", "carbs_g"],
+                      "required": [
+                        "calories_kcal",
+                        "proteins_g",
+                        "fats_g",
+                        "carbs_g"
+                      ],
                       "additionalProperties": false
                     },
-                    { "type": "null" }
+                    {
+                      "type": "null"
+                    }
                   ]
                 },
                 "allergens": {
@@ -70,19 +118,32 @@
                   "anyOf": [
                     {
                       "type": "object",
-                      "description": "Рамка фото блюда во вложении; координаты — доли ширины и высоты от левого верхнего угла",
+                      "description": "Source page of the dish food photograph; NanoBanana crops it later.",
                       "properties": {
-                        "file_id": { "type": "string" },
-                        "page": { "type": "integer" },
-                        "x0": { "type": "number" },
-                        "y0": { "type": "number" },
-                        "x1": { "type": "number" },
-                        "y1": { "type": "number" }
+                        "file_id": {
+                          "type": "string"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "content_type": {
+                          "type": "string"
+                        },
+                        "bytes_b64": {
+                          "type": "string"
+                        },
+                        "already_cropped": {
+                          "type": "boolean"
+                        }
                       },
-                      "required": ["file_id", "page", "x0", "y0", "x1", "y1"],
+                      "required": [
+                        "file_id"
+                      ],
                       "additionalProperties": false
                     },
-                    { "type": "null" }
+                    {
+                      "type": "null"
+                    }
                   ]
                 }
               },
@@ -102,7 +163,10 @@
             }
           }
         },
-        "required": ["name", "items"],
+        "required": [
+          "name",
+          "items"
+        ],
         "additionalProperties": false
       }
     },
@@ -111,6 +175,9 @@
       "description": "Пустая строка при успехе; иначе короткая причина для менеджера"
     }
   },
-  "required": ["sections", "failure_reason"],
+  "required": [
+    "sections",
+    "failure_reason"
+  ],
   "additionalProperties": false
 }

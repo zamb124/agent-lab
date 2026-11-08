@@ -218,6 +218,64 @@ async def test_llm_structured_summarization_uses_forced_tool(
     assert json.loads(summaries[0]) == {"title": "Menu", "items": ["Soup", "Salad"]}
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
+@pytest.mark.usefixtures("file_reader_billing_service")
+async def test_llm_structured_with_nested_image_prefers_text_tools(
+    mock_llm_with_queue: MockLlmQueue,
+    mock_llm_capture: MockLlmCapture,
+    unique_id: str,
+) -> None:
+    """После VISION/OCR page.text непустой — schema идёт text+tools, не vision media."""
+    png = png_with_text(f"dish-{unique_id}")
+    page = UniversalPage(
+        index=0,
+        label="1",
+        text="OCR: Caesar salad photo on the left, price 450",
+        content_mode=ContentMode.VISION,
+        nested=[
+            NestedContent(
+                anchor="p0_n1",
+                original_name=f"page-{unique_id}.png",
+                content_type="image/png",
+                kind=ReadAssetKind.PAGE_RASTER,
+                checksum=compute_content_checksum_sha256(png),
+                page_index=0,
+                bytes_b64=base64.b64encode(png).decode("utf-8"),
+            )
+        ],
+    )
+    _ = mock_llm_with_queue(
+        [
+            {
+                "type": "tool_call",
+                "tool": SUBMIT_PAGE_SUMMARY_TOOL_NAME,
+                "args": {"title": "Salads", "items": ["Caesar"]},
+            }
+        ]
+    )
+
+    summaries = await summarize_llm_pages(
+        [page],
+        prompt="extract dishes",
+        model="",
+        schema=_PAGE_SCHEMA,
+    )
+
+    assert json.loads(summaries[0]) == {"title": "Salads", "items": ["Caesar"]}
+    calls = await mock_llm_capture()
+    assert calls
+    first_call = require_json_object(calls[0], "mock_llm_capture[0]")
+    messages = require_json_array(first_call.get("messages"), "mock_llm_capture[0].messages")
+    first_message = require_json_object(messages[0], "mock_llm_capture[0].messages[0]")
+    parts = require_json_array(first_message.get("parts"), "mock_llm_capture[0].messages[0].parts")
+    assert not any(
+        isinstance(part, dict) and part.get("type") == "file" for part in parts
+    )
+    tools = first_call.get("tools")
+    assert tools is not None
+
+
 def test_summarization_schema_requires_page_summarizations() -> None:
     with pytest.raises(ValueError, match="page_summarizations"):
         _ = ReadFileArgs(summarization_schema=_PAGE_SCHEMA)

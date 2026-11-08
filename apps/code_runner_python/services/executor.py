@@ -588,7 +588,18 @@ class PythonSandboxExecutor:
                     method="POST",
                 )
                 try:
-                    with urllib.request.urlopen(http_request, timeout=120.0) as response:
+                    # Один tool/capability (read_file + page_summarizations) может идти
+                    # дольше минуты; лимит = wall_time ноды, не хардкод 120s.
+                    capability_timeout = float(
+                        current_request.get("wall_time_limit_seconds") or 0
+                    )
+                    if capability_timeout <= 0:
+                        raise RuntimeError(
+                            "Capability call requires positive wall_time_limit_seconds"
+                        )
+                    with urllib.request.urlopen(
+                        http_request, timeout=capability_timeout
+                    ) as response:
                         response_body = response.read()
                 except urllib.error.HTTPError as exc:
                     error_body = exc.read().decode("utf-8", errors="replace")
