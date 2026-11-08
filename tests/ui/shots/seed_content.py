@@ -17,10 +17,7 @@ from core.context import clear_context, set_context
 from core.context.job_context import build_job_context
 from core.models.identity_models import Company, User
 from core.types import JsonObject
-from tests.office.helpers import (
-    office_document_upload_spec_json,
-    upload_office_file_bytes,
-)
+from tests.office.helpers import upload_office_file_bytes
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.e2e_worker import (
     ui_e2e_scope_headers,
@@ -127,7 +124,7 @@ async def seed_demo_shops(
     )
     _ = set_context(ctx)
     try:
-        stats = await shop_di.seed_service.seed_company(
+        await shop_di.seed_service.seed_company(
             company=company, owner_user_id=owner_id
         )
     finally:
@@ -262,12 +259,16 @@ async def _seed_crm(token: str) -> dict[str, Any]:
                 )
                 created.append(str(e.get("id") or e.get("entity_id") or ""))
         if deal_t:
-            for name, desc in (
-                ("Подписка Linnex Pro — Аврора", "24 точки, годовой контракт"),
-                ("Витрина + заказы — Кофейня", "Пилот на 2 месяца, 1 точка"),
-                ("CRM + агенты — ТехноДар", "Внедрение на отдел продаж, 15 мест"),
-                ("Расширение — Аврора", "Добавление склада и доставки"),
-            ):
+            # pick() отдаёт deal или lead: stage-значения у шаблонов разные.
+            is_lead = "lead" in deal_t
+            stages = ("qualified", "working", "new") if is_lead else ("negotiation", "proposal", "contract", "discovery")
+            deals = (
+                ("Подписка Linnex Pro — Аврора", "24 точки, годовой контракт", 2_880_000),
+                ("Витрина + заказы — Кофейня", "Пилот на 2 месяца, 1 точка", 120_000),
+                ("CRM + агенты — ТехноДар", "Внедрение на отдел продаж, 15 мест", 950_000),
+                ("Расширение — Аврора", "Добавление склада и доставки", 800_000),
+            )
+            for i, (name, desc, amount) in enumerate(deals):
                 e = await _post(
                     client,
                     "/crm/api/v1/entities",
@@ -276,6 +277,12 @@ async def _seed_crm(token: str) -> dict[str, Any]:
                         "namespace": ns,
                         "name": name,
                         "description": desc,
+                        "attributes": {
+                            "stage": stages[i % len(stages)],
+                            "source": "inbound",
+                            "amount": amount,
+                            "currency": "RUB",
+                        },
                     },
                 )
                 created.append(str(e.get("id") or e.get("entity_id") or ""))
@@ -306,6 +313,7 @@ async def _seed_crm(token: str) -> dict[str, Any]:
 
 async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
     channels: dict[str, str] = {}
+    member_ids = [member_user_id()]
     async with api_client("sync", token) as client:
         for name, is_private in (
             ("Команда продукта", False),
@@ -316,13 +324,17 @@ async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
                 client,
                 "/sync/api/v1/channels/",
                 {
-                    "type": "topic",
+                    "type": "group",
                     "name": name,
                     "namespace": "default",
                     "is_private": is_private,
+                    "member_ids": member_ids,
                 },
             )
-            channels[name] = str(body.get("id") or body.get("channel_id"))
+            channel_id = body.get("channel_id")
+            if not isinstance(channel_id, str) or not channel_id:
+                raise AssertionError(f"POST /channels без channel_id: {list(body)}")
+            channels[name] = channel_id
 
     convo = [
         ("owner", "Коллеги, обновила макеты главной — посмотрите секцию «Возможности платформы»"),
@@ -496,7 +508,10 @@ async def _seed_wiki(token: str) -> dict[str, Any]:
                     "markdown": spec["markdown"],
                 },
             )
-            page_ids.append(str(body.get("id") or body.get("page_id")))
+            page = body.get("page")
+            if not isinstance(page, dict) or not page.get("wiki_page_id"):
+                raise AssertionError(f"/pages response без page.wiki_page_id: {list(body)}")
+            page_ids.append(str(page["wiki_page_id"]))
     return {"page_ids": page_ids}
 
 
