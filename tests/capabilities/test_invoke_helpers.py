@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.billing import make_test_billing_service
 import pytest
 
 from apps.capability_gateway.services.invoke_helpers import (
@@ -10,6 +9,7 @@ from apps.capability_gateway.services.invoke_helpers import (
     invoke_text_summarize,
 )
 from core.text_transforms.service import TextTransformService
+from tests.fixtures.billing import make_test_billing_service
 
 _MOCK_LLM_TEXT = "Mock LLM ответ"
 

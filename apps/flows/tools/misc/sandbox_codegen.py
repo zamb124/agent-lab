@@ -1,38 +1,39 @@
-"""Мультиязычный инструмент генерации кода через изолированные code runner и capability-gateway."""
+"""Мультиязычный инструмент генерации кода через capability sandbox.codegen.
+
+LLM codegen loop и исполнение сгенерированного кода в code-runner-<lang>
+выполняются в capability_gateway; тул резолвит ExecutionState-проекцию,
+зовёт capability и применяет возвращённые state/platform_effects/interrupt.
+"""
 
 from __future__ import annotations
 
-import json
+import uuid
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.services.code_runner_client import CodeRunnerClient
-from apps.flows.src.state import ExecutionState
+from apps.flows.config import get_settings as get_flows_settings
+from apps.flows.src.flow_ui.effects import apply_capability_platform_effects
+from apps.flows.src.runners.capability_context import capability_execution_context
+from apps.flows.src.runners.remote import (
+    apply_runner_returned_state,
+    load_sandbox_capability_manifest,
+)
+from apps.flows.src.runners.tool_context_view import build_tool_context_view
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.flow_interface_context import current_flow_interface
+from apps.flows.src.state import ExecutionState, parse_interrupt_body_from_external_dict
 from apps.flows.src.tools.decorator import tool
-from core.ai.models import ResolvedAIModel
-from core.ai.providers import AICapability, split_provider_prefixed_model
-from core.ai.requirements import AISelection
-from core.ai.resolver import resolve_ai_model
-from core.ai.runtime import create_llm_client_from_ai_model
-from core.billing.service import BillingService
-from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
+from core.capabilities import (
+    CAPABILITY_LANGUAGES,
+    CapabilityCallRequest,
+    CapabilityLanguage,
+    PlatformEffectEnvelope,
+)
 from core.clients.capability_gateway_client import CapabilityGatewayClient
-from core.config import get_settings
-from core.errors import CodeExecutionRuntimeError
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 _LANGUAGES = CAPABILITY_LANGUAGES
-
-
-class GeneratedCode(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    code: str = Field(
-        ...,
-        min_length=1,
-        description="Complete source code for the requested language and requested entrypoint.",
-    )
 
 
 class SandboxCodegenArgs(BaseModel):
@@ -102,50 +103,6 @@ class SandboxCodegenArgs(BaseModel):
         raise ValueError(f"expected object or JSON object string, got {type(value).__name__}")
 
 
-async def _language_docs(language: CapabilityLanguage, max_doc_chars: int) -> str:
-    docs = (await CapabilityGatewayClient().get_documentation(language)).markdown
-    if len(docs) <= max_doc_chars:
-        return docs
-    return docs[:max_doc_chars] + "\n\n# ... [documentation truncated by max_doc_chars]\n"
-
-
-def _entrypoint_contract(language: CapabilityLanguage, entrypoint: str | None) -> str:
-    if entrypoint is None:
-        return "Make the first top-level function in the source the executable entrypoint with signature (args, state)"
-    if language == "go":
-        return f"Implement exactly: func {entrypoint}(args map[string]any, state map[string]any) (any, error)"
-    if language == "csharp":
-        return f"Implement exactly: async Task<object?> {entrypoint}(Dictionary<string, object?> args, Dictionary<string, object?> state)"
-    if language == "python":
-        return f"Implement exactly: async def {entrypoint}(args, state)"
-    return f"Implement exactly: async function {entrypoint}(args, state)"
-
-
-def _system_prompt(
-    *,
-    language: CapabilityLanguage,
-    entrypoint: str | None,
-    docs: str,
-    output_json_schema: str | None,
-) -> str:
-    schema_hint = ""
-    if output_json_schema and output_json_schema.strip():
-        schema_hint = f"\nExpected result JSON Schema:\n{output_json_schema.strip()}\n"
-    return (
-        "Generate production-quality user code for Linnex isolated code runners.\n"
-        f"Target language: {language}.\n"
-        f"{_entrypoint_contract(language, entrypoint)}.\n"
-        "Do not import apps.* or core.*. Do not call platform internals directly.\n"
-        "Use only the documented generated SDK namespaces for platform access; they are generated from the capability manifest.\n"
-        "Do not use JavaScript/TypeScript export syntax; runners resolve and export the entrypoint internally.\n"
-        "Return a JSON-serializable value and update state only through the provided state object.\n"
-        "Reply only with structured JSON matching GeneratedCode.\n"
-        f"{schema_hint}\n"
-        "Capability documentation:\n"
-        f"{docs}"
-    )
-
-
 def _execution_state_for_codegen(
     state: ExecutionState,
     run_variables: JsonObject | None,
@@ -154,35 +111,6 @@ def _execution_state_for_codegen(
     if run_variables:
         base.variables = {**base.variables, **run_variables}
     return base
-
-
-def _resolve_codegen_llm_selection(model: str) -> ResolvedAIModel:
-    resolved = resolve_ai_model(
-        AICapability.LLM_CODEGEN,
-        include_platform_default=True,
-    )
-    if resolved is not None:
-        return resolved
-    selected_model = model.strip() if model and model.strip() else ""
-    if not selected_model:
-        raise ValueError(
-            "sandbox_codegen: platform default for capability=llm_codegen is not configured."
-        )
-    explicit_provider, explicit_model = split_provider_prefixed_model(None, selected_model)
-    resolved_model = str(explicit_model or selected_model).strip()
-    if not resolved_model:
-        raise ValueError("sandbox_codegen: model could not be parsed into a non-empty model")
-    provider = explicit_provider or str(get_settings().llm.provider).strip()
-    if not provider:
-        raise ValueError("sandbox_codegen: settings.llm.provider is required for an explicit model")
-    resolved = resolve_ai_model(
-        AICapability.LLM_CODEGEN,
-        selection=AISelection(provider=provider, model=resolved_model),
-        include_platform_default=False,
-    )
-    if resolved is None:
-        raise ValueError("sandbox_codegen: explicit provider/model could not be resolved")
-    return resolved
 
 
 def _state_json(state: ExecutionState) -> JsonObject:
@@ -213,87 +141,68 @@ async def sandbox_codegen(
     model: str = "",
     *,
     state: ExecutionState,
-    billing_service: BillingService,
 ) -> JsonObject:
     capability_language = language
     if capability_language not in _LANGUAGES:
         raise ValueError(f"Unsupported language: {language}")
     entrypoint_name = entrypoint.strip() if entrypoint is not None and entrypoint.strip() else None
     exec_state = _execution_state_for_codegen(state, run_variables)
-    resolved_llm = _resolve_codegen_llm_selection(model)
-    docs = await _language_docs(capability_language, max_doc_chars)
-    llm = create_llm_client_from_ai_model(
-        resolved_llm,
-        billing_service=billing_service,
-        variables=exec_state.variables,
+    state_view = build_tool_context_view(exec_state)
+    # Unrestricted token: сгенерированный код вызывает любые capabilities — как у RemoteCodeRunner.
+    execution_context = capability_execution_context(state)
+    wall_time = int(get_flows_settings().node_execution_wall_time_cap_seconds)
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="sandbox.codegen",
+            kwargs={
+                "task": task,
+                "language": capability_language,
+                "entrypoint": entrypoint_name,
+                "run_args": run_args,
+                "output_json_schema": output_json_schema,
+                "max_iterations": max_iterations,
+                "max_doc_chars": max_doc_chars,
+                "model": model,
+                "state": state_view,
+                "wall_time_limit_seconds": wall_time,
+            },
+        ),
+        timeout=float(wall_time) * (max_iterations + 1),
     )
-    runner = CodeRunnerClient(language=capability_language)
-    args: JsonObject = dict(run_args) if run_args is not None else {}
-    trace: list[JsonObject] = []
-    last_code = ""
-    feedback: str | None = None
-
-    for attempt in range(1, max_iterations + 1):
-        user_parts = [f"Task:\n{task}"]
-        if last_code:
-            user_parts.append(f"Previous code:\n```{capability_language}\n{last_code}\n```")
-        if feedback:
-            user_parts.append(f"Execution feedback:\n{feedback}")
-
-        generated = await llm.chat(
-            [
-                {
-                    "role": "system",
-                    "content": _system_prompt(
-                        language=capability_language,
-                        entrypoint=entrypoint_name,
-                        docs=docs,
-                        output_json_schema=output_json_schema,
-                    ),
-                },
-                {"role": "user", "content": "\n\n".join(user_parts)},
-            ],
-            response_model=GeneratedCode,
-            model=resolved_llm.model,
+    result = require_json_object(response.result, "sandbox_codegen.result")
+    final_state = result.get("state")
+    if isinstance(final_state, dict) and final_state:
+        apply_runner_returned_state(exec_state, final_state)
+    effects_raw = result.get("platform_effects")
+    if isinstance(effects_raw, list) and effects_raw:
+        envelopes = [PlatformEffectEnvelope.model_validate(item) for item in effects_raw]
+        apply_capability_platform_effects(
+            exec_state,
+            envelopes,
+            context=execution_context,
+            manifest=await load_sandbox_capability_manifest(),
+            interface=current_flow_interface(),
         )
-        last_code = generated.code.strip()
-        try:
-            result = await runner.execute_tool(last_code, args, exec_state, entrypoint=entrypoint_name)
-        except CodeExecutionRuntimeError as exc:
-            trace.append(
-                {
-                    "attempt": attempt,
-                    "phase": "execute",
-                    "error": str(exc),
-                    "payload": exc.payload,
-                }
-            )
-            feedback = json.dumps(exc.payload, ensure_ascii=False, indent=2)
-            continue
-        except Exception as exc:
-            trace.append(
-                {
-                    "attempt": attempt,
-                    "phase": "execute",
-                    "error": str(exc),
-                    "exception_type": type(exc).__name__,
-                }
-            )
-            feedback = f"{type(exc).__name__}: {exc}"
-            continue
-
-        trace.append({"attempt": attempt, "phase": "success"})
-        return {
-            "success": True,
-            "language": capability_language,
-            "result": result,
-            "state": _state_json(exec_state),
-            "final_code": last_code,
-            "attempts": attempt,
-            "trace": trace,
-        }
-
-    raise RuntimeError(
-        "sandbox_codegen: max_iterations exhausted "
-        + f"(attempts={max_iterations}, language={capability_language})"
-    )
+    if result.get("interrupted"):
+        interrupt = require_json_object(
+            result.get("interrupt"), "sandbox_codegen.interrupt"
+        )
+        correlation_id = interrupt.get("correlation_id")
+        raise FlowInterrupt(
+            body=parse_interrupt_body_from_external_dict(
+                require_json_object(interrupt.get("body"), "sandbox_codegen.interrupt.body")
+            ),
+            correlation_id=uuid.UUID(correlation_id)
+            if isinstance(correlation_id, str)
+            else None,
+        )
+    return {
+        "success": True,
+        "language": result.get("language", capability_language),
+        "result": result.get("result"),
+        "state": _state_json(exec_state),
+        "final_code": result.get("final_code", ""),
+        "attempts": result.get("attempts", 0),
+        "trace": result.get("trace", []),
+    }

@@ -58,7 +58,6 @@ from core.namespace.service import NamespaceService
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.short_links.service import ShortLinkService
-from core.text_transforms import TextTransformService
 from core.variables.service import VariablesService
 from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.queue_access import WorkQueueAccessPort
@@ -124,7 +123,6 @@ def tool_registry(
     node_constructor: NodeConstructor,
     flow_factory: FlowFactory,
     billing_service: BillingService,
-    text_transform_service: TextTransformService,
 ) -> ToolRegistry:
     registry = ToolRegistry(
         clients=builtin_tool_clients(
@@ -136,7 +134,6 @@ def tool_registry(
             lara_facade=lara_facade,
             tool_approval_store=tool_approval_store,
             billing_service=billing_service,
-            text_transform_service=text_transform_service,
         ),
         node_constructor=node_constructor,
         flow_factory=flow_factory,

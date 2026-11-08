@@ -43,6 +43,7 @@ from apps.capability_gateway.services.rag_capabilities import (
     invoke_rag_client,
     rag_capability_definitions,
 )
+from apps.capability_gateway.services.sandbox_codegen import invoke_sandbox_codegen
 from apps.capability_gateway.services.sync_capabilities import (
     SYNC_CAPABILITY_SPECS,
     invoke_sync_client,
@@ -65,7 +66,7 @@ from apps.capability_gateway.services.worktracker_capabilities import (
 )
 from core.a2a import message_to_json_dict, struct_from_mapping
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
-from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.service import COST_ORIGIN_PLATFORM, BillingService
 from core.billing.speech_usage import record_stt_usage_span, record_tts_usage_span
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
@@ -100,7 +101,9 @@ from core.files.create_spec import (
     FileSourceKind,
     FileSourceRef,
 )
+from core.files.docx_template import DocxTemplater
 from core.files.file_ref import FileRef, stored_file_ref
+from core.files.image_region import materialize_image_regions
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import ExecutionPrincipal, SystemPrincipal
@@ -607,18 +610,22 @@ class CapabilityRegistry:
         files_service: FilesService,
         context_service: CapabilityContextService,
         text_transform_service: TextTransformService,
+        billing_service: BillingService,
     ) -> None:
         self._service_client: ServiceClient = service_client
         self._data_table_service: DataTableService = data_table_service
         self._files_service: FilesService = files_service
         self._context_service: CapabilityContextService = context_service
         self._text_transform_service: TextTransformService = text_transform_service
+        self._billing_service: BillingService = billing_service
         self._static_definitions: dict[str, CapabilityDefinition] = self._build_static_definitions()
         self._handlers: dict[str, CapabilityHandler] = {
             "files.create": self._files_create,
             "files.get_bytes": self._files_get_bytes,
             "files.get_metadata": self._files_get_metadata,
             "files.read": self._files_read,
+            "files.materialize_image_regions": self._files_materialize_image_regions,
+            "files.fill_docx_template": self._files_fill_docx_template,
             "http.request": self._http_request,
             "text.summarize": self._text_summarize,
             "text.format_markdown": self._text_format_markdown,
@@ -642,6 +649,7 @@ class CapabilityRegistry:
             "channel.send": self._channel_send,
             "channel.send_with_buttons": self._channel_send_with_buttons,
             "flow.ask_user": self._flow_ask_user,
+            "sandbox.codegen": self._sandbox_codegen,
             "tools.call": self._tools_call,
         }
         for method in HTTP_METHODS:
@@ -1127,6 +1135,7 @@ class CapabilityRegistry:
         verify_execution_context(request.context)
         claims = verify_execution_token(request.context.execution_token)
         assert_capability_allowed(claims, request.name)
+        self._reject_positional_args(request)
         handler = self._handlers.get(request.name)
         if handler is None and request.name.startswith("tools."):
             handler = self._tool_capability_call
@@ -1275,6 +1284,134 @@ class CapabilityRegistry:
                 tags=["files", "reader", "documents"],
                 sdk_namespace="files",
                 sdk_method="read",
+            ),
+            "files.materialize_image_regions": CapabilityDefinition(
+                name="files.materialize_image_regions",
+                title="Materialize image regions",
+                description=(
+                    "Crop photo regions from attachments by normalized bbox "
+                    "(file_id, page, x0,y0,x1,y1 fractions) into separate ephemeral JPEG files. "
+                    "Returns sections with photo={file_id}; failed crops become photo=null. "
+                    "Тот же контракт, что tool files_materialize_image_regions."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "sections": _array_schema(
+                            "Список секций с photo-регионами: {file_id, page, x0,y0,x1,y1} в нормализованных долях кадра или null"
+                        ),
+                        "attachment_file_ids": _array_schema(
+                            "Разрешённые file_id вложений-источников; пустой список — ни один регион не материализуется"
+                        ),
+                    },
+                    required=["sections"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "sections": _array_schema("Секции с photo={file_id}"),
+                    },
+                    required=["sections"],
+                ),
+                languages=_supported_languages(),
+                tags=["files", "images"],
+                sdk_namespace="files",
+                sdk_method="materialize_image_regions",
+            ),
+            "files.fill_docx_template": CapabilityDefinition(
+                name="files.fill_docx_template",
+                title="Fill .docx template",
+                description=(
+                    "Заполняет persisted .docx-шаблон (docxtpl, Jinja2-плейсхолдеры) "
+                    "данными variables и создаёт заполненный файл. "
+                    "Тот же контракт, что tool fill_docx_template."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "file_id": _string_schema("file_id .docx-шаблона в FileRepository"),
+                        "variables": _object_schema("Данные для подстановки в шаблон"),
+                        "output_original_name": _string_schema(
+                            "Имя результата с расширением .docx"
+                        ),
+                        "strict": _boolean_schema(
+                            "Ровно все переменные верхнего уровня из шаблона, без лишних ключей"
+                        ),
+                    },
+                    required=["file_id", "variables", "output_original_name"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "file_id": _string_schema("ID созданного файла"),
+                        "url": _string_schema("Относительный URL скачивания"),
+                        "original_name": _string_schema("Оригинальное имя"),
+                        "content_type": _string_schema("MIME type"),
+                        "file_size": _integer_schema("Размер в байтах"),
+                    },
+                    required=["file_id", "url", "original_name", "content_type", "file_size"],
+                ),
+                languages=_supported_languages(),
+                tags=["files", "docx", "template"],
+                sdk_namespace="files",
+                sdk_method="fill_docx_template",
+            ),
+            "sandbox.codegen": CapabilityDefinition(
+                name="sandbox.codegen",
+                title="Generate and execute code in isolated runner",
+                description=(
+                    "LLM codegen loop: генерирует код по задаче, исполняет в "
+                    "code-runner-<language> и итерирует по feedback до успеха. "
+                    "Тот же контракт, что tool sandbox_codegen; сгенерированный код "
+                    "вызывает platform API только через capabilities."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "task": _string_schema("Что должен делать сгенерированный код"),
+                        "language": _string_schema(
+                            "Target runtime: python, javascript, typescript, go, csharp"
+                        ),
+                        "entrypoint": _string_schema(
+                            "Имя функции-входа; None — первая функция в исходнике"
+                        ),
+                        "run_args": _object_schema("JSON args для entrypoint(args, state)"),
+                        "output_json_schema": _string_schema(
+                            "Опциональная JSON Schema ожидаемого результата"
+                        ),
+                        "max_iterations": _integer_schema(
+                            "Лимит попыток generate-execute-feedback (1..20)"
+                        ),
+                        "max_doc_chars": _integer_schema(
+                            "Лимит символов capability docs в codegen prompt"
+                        ),
+                        "model": _string_schema(
+                            "Explicit LLM model, если нет company llm_codegen override"
+                        ),
+                        "state": _object_schema(
+                            "Serialized tool-context state view для исполнения"
+                        ),
+                        "wall_time_limit_seconds": _integer_schema(
+                            "Wall-time cap одного execute в runner"
+                        ),
+                    },
+                    required=["task", "language", "state", "wall_time_limit_seconds"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "success": _boolean_schema("Код исполнен успешно"),
+                        "interrupted": _boolean_schema("Исполнение прервано FlowInterrupt"),
+                        "language": _string_schema("Target runtime language"),
+                        "result": _object_schema("Результат entrypoint"),
+                        "state": _object_schema("Финальный serialized state view"),
+                        "platform_effects": _object_schema(
+                            "Накопленные PlatformEffectEnvelope для применения в flows"
+                        ),
+                        "final_code": _string_schema("Исходник успешной попытки"),
+                        "attempts": _integer_schema("Число попыток"),
+                        "trace": _object_schema("Поэтапный trace попыток"),
+                    },
+                    required=["success", "language", "state", "attempts", "trace"],
+                ),
+                languages=_supported_languages(),
+                tags=["sandbox", "codegen", "llm", "billing"],
+                sdk_namespace="sandbox",
+                sdk_method="codegen",
             ),
             "http.request": CapabilityDefinition(
                 name="http.request",
@@ -1767,7 +1904,6 @@ class CapabilityRegistry:
 
     def _make_wiki_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_wiki_client(method, request.kwargs)
@@ -1776,7 +1912,6 @@ class CapabilityRegistry:
 
     def _make_documents_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_documents_client(method, request.kwargs)
@@ -1785,7 +1920,6 @@ class CapabilityRegistry:
 
     def _make_crm_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_crm_client(method, request.kwargs)
@@ -1794,7 +1928,6 @@ class CapabilityRegistry:
 
     def _make_sync_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_sync_client(method, request.kwargs)
@@ -1803,7 +1936,6 @@ class CapabilityRegistry:
 
     def _make_rag_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_rag_client(method, request.kwargs)
@@ -1812,7 +1944,6 @@ class CapabilityRegistry:
 
     def _make_worktracker_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_worktracker_client(method, request.kwargs)
@@ -1821,7 +1952,6 @@ class CapabilityRegistry:
 
     def _make_tables_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_tables_client(
@@ -1832,7 +1962,6 @@ class CapabilityRegistry:
 
     def _make_db_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_db_client(method, request.kwargs)
@@ -1840,7 +1969,6 @@ class CapabilityRegistry:
         return _handler
 
     async def _files_create(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         original_name = _required_string(request.kwargs.get("original_name"), "original_name")
         content_mode = _content_mode(
@@ -1871,7 +1999,6 @@ class CapabilityRegistry:
         return require_json_object(file_item.model_dump(mode="json"), "files.create.response")
 
     async def _files_get_bytes(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
         record = await FileRecord.get(file_id)
         if record is None:
@@ -1895,7 +2022,6 @@ class CapabilityRegistry:
         }
 
     async def _files_get_metadata(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
         record = await FileRecord.get(file_id)
         if record is None:
@@ -1906,7 +2032,6 @@ class CapabilityRegistry:
         )
 
     async def _files_read(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         payload = dict(request.kwargs)
         if "names" in payload:
             raise ValueError("files.read does not accept names; pass file_ids")
@@ -1951,6 +2076,66 @@ class CapabilityRegistry:
             "files.read.response",
         )
 
+    async def _files_materialize_image_regions(
+        self, request: CapabilityCallRequest
+    ) -> JsonObject:
+        sections = request.kwargs.get("sections")
+        if not isinstance(sections, list):
+            raise TypeError("sections must be array")
+        attachment_file_ids: list[str] = []
+        raw_ids = request.kwargs.get("attachment_file_ids")
+        if raw_ids is not None:
+            if not isinstance(raw_ids, list):
+                raise TypeError("attachment_file_ids must be array")
+            for item in raw_ids:
+                if not isinstance(item, str) or not item.strip():
+                    raise TypeError("attachment_file_ids items must be non-empty strings")
+                attachment_file_ids.append(item.strip())
+        context = await self._context_service.build_context(request.context)
+        with self._context_service.activate(context):
+            materialized = await materialize_image_regions(
+                self._files_service,
+                sections=sections,
+                attachment_file_ids=attachment_file_ids,
+            )
+        return {"sections": materialized}
+
+    async def _files_fill_docx_template(self, request: CapabilityCallRequest) -> JsonObject:
+        file_id = _required_string(request.kwargs.get("file_id"), "file_id")
+        variables = request.kwargs.get("variables")
+        if not isinstance(variables, dict):
+            raise TypeError("variables must be object")
+        output_original_name = _required_string(
+            request.kwargs.get("output_original_name"), "output_original_name"
+        )
+        strict = bool(request.kwargs.get("strict"))
+
+        context = await self._context_service.build_context(request.context)
+        writer = FileWriter.bind_for_upload(
+            files_service=self._files_service,
+            default_spec=FileCreateSpec(
+                source_kind=FileSourceKind.FLOW_ASSET,
+                source_ref=FileSourceRef(flow_id=RUNTIME_FLOW_ID),
+                retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+            ),
+        )
+        with self._context_service.activate(context):
+            file_ref = await self._files_service.require_stored_file_ref(file_id)
+            try:
+                record = await DocxTemplater().fill_and_create(
+                    file_ref=file_ref,
+                    context=variables,
+                    output_original_name=output_original_name,
+                    strict=strict,
+                    writer=writer,
+                )
+            except FileWriteError as exc:
+                raise ValueError(str(exc)) from exc
+        file_item = stored_file_ref(record)
+        return require_json_object(
+            file_item.model_dump(mode="json"), "files.fill_docx_template.response"
+        )
+
     def _make_http_method_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
             forwarded = request.model_copy(
@@ -1961,7 +2146,6 @@ class CapabilityRegistry:
         return _handler
 
     async def _http_request(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         method = _required_string(request.kwargs.get("method"), "method").upper()
         url = _required_string(request.kwargs.get("url"), "url")
         parsed = urlparse(url)
@@ -1998,7 +2182,6 @@ class CapabilityRegistry:
         }
 
     async def _platform_request(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         service = _required_string(request.kwargs.get("service"), "service")
         method = _required_string(request.kwargs.get("method"), "method").upper()
         path = _required_string(request.kwargs.get("path"), "path")
@@ -2037,7 +2220,6 @@ class CapabilityRegistry:
 
     def _make_log_handler(self, level: LogLevel) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
-            self._reject_positional_args(request)
             message = _required_string(request.kwargs.get("message"), "message")
             fields = _optional_object(request.kwargs.get("fields"), "fields") or {}
             log_fields = {
@@ -2053,7 +2235,6 @@ class CapabilityRegistry:
         return _handler
 
     async def _trace_event(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         event_type = _required_string(request.kwargs.get("event_type"), "event_type")
         attributes = _optional_object(request.kwargs.get("attributes"), "attributes") or {}
         trace_attributes: dict[str, OtelAttributeValue] = {
@@ -2074,20 +2255,17 @@ class CapabilityRegistry:
             return {"recorded": True}
 
     async def _state_get_nested(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         path = _required_string(request.kwargs.get("path"), "path")
         default = request.kwargs.get("default")
         return _get_nested(request.state, path, default)
 
     async def _state_set_nested(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         path = _required_string(request.kwargs.get("path"), "path")
         value = request.kwargs.get("value")
         _set_nested(request.state, path, value)
         return {"value": value}
 
     async def _state_merge(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         updates = _optional_object(request.kwargs.get("updates"), "updates")
         if updates is None:
             raise TypeError("updates must be object")
@@ -2097,18 +2275,15 @@ class CapabilityRegistry:
         return {"state": request.state}
 
     async def _state_get_files(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         files = request.state.get("files")
         return files if isinstance(files, list) else []
 
     async def _state_find_file(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         original_name = _optional_string(request.kwargs.get("original_name"), "original_name")
         files = request.state.get("files")
         return _find_file(files if isinstance(files, list) else [], original_name)
 
     async def _state_get_user(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         groups = request.state.get("user_groups")
         return {
             "id": request.state.get("user_id") or request.context.user_id or "",
@@ -2116,7 +2291,6 @@ class CapabilityRegistry:
         }
 
     async def _state_get_tool_result(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         tool_name = _required_string(request.kwargs.get("tool_name"), "tool_name")
         results = request.state.get("tool_results")
         if not isinstance(results, dict):
@@ -2124,12 +2298,10 @@ class CapabilityRegistry:
         return results.get(tool_name)
 
     async def _state_get_messages(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         messages = request.state.get("messages")
         return messages if isinstance(messages, list) else []
 
     async def _state_add_user_message(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         message = _message_dict(
             role=Role.ROLE_USER,
@@ -2144,7 +2316,6 @@ class CapabilityRegistry:
         return message
 
     async def _state_add_agent_message(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         message = _message_dict(
             role=Role.ROLE_AGENT,
@@ -2197,7 +2368,6 @@ class CapabilityRegistry:
         return _CapabilityResult(result=result, platform_effects=[envelope])
 
     async def _ui_render(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
         return self._issue_platform_effect(
             request,
             FlowUIRender.model_validate(
@@ -2209,14 +2379,12 @@ class CapabilityRegistry:
         )
 
     async def _ui_navigate(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
         return self._issue_platform_effect(
             request,
             FlowUINavigate(page_id=_required_string(request.kwargs.get("page_id"), "page_id")),
         )
 
     async def _state_extract_json(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
         fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
         candidates = [fenced.group(1)] if fenced else []
@@ -2232,7 +2400,6 @@ class CapabilityRegistry:
         return None
 
     async def _channel_send(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         message = await self._state_add_agent_message(
             request.model_copy(update={"kwargs": {"content": content}})
@@ -2242,7 +2409,6 @@ class CapabilityRegistry:
     async def _channel_send_with_buttons(
         self, request: CapabilityCallRequest
     ) -> _CapabilityResult:
-        self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         buttons = _optional_array(request.kwargs.get("buttons"), "buttons")
         button_labels: list[str] = []
@@ -2274,7 +2440,6 @@ class CapabilityRegistry:
         )
 
     async def _flow_ask_user(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         question = _required_string(request.kwargs.get("question"), "question")
         raise _CapabilityInterruptFromTool(
             {
@@ -2287,7 +2452,6 @@ class CapabilityRegistry:
         )
 
     async def _text_summarize(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
         instruction = _optional_string(request.kwargs.get("instruction"), "instruction")
         provider = _optional_string(request.kwargs.get("provider"), "provider")
@@ -2308,7 +2472,6 @@ class CapabilityRegistry:
             )
 
     async def _text_format_markdown(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
@@ -2318,7 +2481,6 @@ class CapabilityRegistry:
             )
 
     async def _voice_transcribe_audio(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
         language = _optional_string(request.kwargs.get("language"), "language")
         provider = _optional_string(request.kwargs.get("provider"), "provider")
@@ -2373,7 +2535,6 @@ class CapabilityRegistry:
         return {"text": result.text or ""}
 
     async def _voice_synthesize_speech(self, request: CapabilityCallRequest) -> JsonObject:
-        self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
         voice = _optional_string(request.kwargs.get("voice"), "voice")
         language = _optional_string(request.kwargs.get("language"), "language")
@@ -2425,8 +2586,18 @@ class CapabilityRegistry:
 
         return {"file_id": record.file_id}
 
+    async def _sandbox_codegen(self, request: CapabilityCallRequest) -> JsonObject:
+        context = await self._context_service.build_context(request.context)
+        with self._context_service.activate(context):
+            return await invoke_sandbox_codegen(
+                request,
+                billing_service=self._billing_service,
+                service_client=self._service_client,
+                manifest=await self._build_manifest(),
+                documentation_provider=lambda language: self.documentation(language=language),
+            )
+
     async def _tools_call(self, request: CapabilityCallRequest) -> JsonValue:
-        self._reject_positional_args(request)
         tool_id = _required_string(request.kwargs.get("tool_id"), "tool_id")
         arguments_raw = request.kwargs.get("arguments")
         if not isinstance(arguments_raw, dict):

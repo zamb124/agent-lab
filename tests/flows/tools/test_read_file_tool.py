@@ -6,7 +6,6 @@ import pytest
 
 from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.files import read_file
-from apps.frontend.di import FrontendDi
 from core.context import get_context, set_context
 from core.files.file_ref import FileRef
 from core.models.identity_models import User
@@ -48,7 +47,7 @@ def test_read_file_tool_metadata() -> None:
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_via_gateway_txt(
-    frontend_di: FrontendDi,
+    frontend_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -76,7 +75,7 @@ async def test_read_file_via_gateway_txt(
 @pytest.mark.timeout(120)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_missing_name_error_in_envelope(
-    frontend_di: FrontendDi,
+    frontend_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -105,7 +104,7 @@ async def test_read_file_missing_name_error_in_envelope(
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_nested_refs_upsert_into_state(
-    frontend_di: FrontendDi,
+    frontend_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:

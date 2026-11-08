@@ -31,10 +31,6 @@ from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_onc
 from core.clients.redis_client import RedisClient
 from core.config.models import BillingConfig
 from core.di import recipe
-from core.files.create_spec import RUNTIME_FLOW_ID, FileCreateSpec, FileSourceKind, FileSourceRef
-from core.files.registry import default_retention_for_source
-from core.files.service import FilesService
-from core.files.writer import FileWriter
 from core.logging import get_logger
 from core.tasks.worker_bootstrap import build_worker, connect_redis_with_backoff
 from core.utils.background import finish_background_task, run_with_log_context
@@ -46,17 +42,6 @@ broker = wire_worker("flows_worker")
 
 async def connect_flows_worker_redis(redis_client: RedisClient) -> None:
     await connect_redis_with_backoff(redis_client, service_name="flows_worker")
-
-
-async def configure_flows_worker_files(files_service: FilesService) -> None:
-    FileWriter.configure_process_upload(
-        files_service=files_service,
-        default_spec=FileCreateSpec(
-            source_kind=FileSourceKind.FLOW_ASSET,
-            source_ref=FileSourceRef(flow_id=RUNTIME_FLOW_ID),
-            retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
-        ),
-    )
 
 
 async def refresh_flows_worker_cbr_rate(billing: BillingConfig) -> AsyncIterator[None]:
@@ -98,7 +83,6 @@ worker_app = build_worker(
     lifecycle=(
         recipe(bound_tool_authz_gate),
         recipe(connect_flows_worker_redis),
-        recipe(configure_flows_worker_files),
         recipe(refresh_flows_worker_cbr_rate),
         recipe(run_flows_platform_events),
     ),

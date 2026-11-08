@@ -4,9 +4,9 @@ Files: ``files.create`` — ``FileWriter`` (gateway binds ``FilesService``);
 ``files.read`` — ``read_files_to_envelope`` → ``ReadFileEnvelope`` (тот же контракт,
 что tool ``read_file``; tool резолвит ``names`` → ``file_ids`` и зовёт gateway).
 
-Text: ``text.summarize`` / ``text.format_markdown`` and tools ``summarize_text`` /
-``format_text_markdown`` both call ``TextTransformService`` (tools via
-``TextClient``).
+Text: ``text.summarize`` / ``text.format_markdown`` call ``TextTransformService``
+в gateway; tools ``summarize_text`` / ``format_text_markdown`` — тонкие адаптеры,
+которые зовут эти capabilities через ``CapabilityGatewayClient``.
 """
 
 from __future__ import annotations

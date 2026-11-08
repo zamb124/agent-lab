@@ -9,11 +9,14 @@ from collections.abc import Awaitable
 from typing import override
 from urllib.parse import urlparse
 
+from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.models.mcp import MCPServerConfig
+from apps.flows.src.runners.capability_context import capability_execution_context
 from apps.flows.src.services.mcp_client import get_mcp_client
 from apps.flows.src.state import ExecutionState
-from core.files.reader import FileReader
-from core.files.reader.models import ReadFileArgs
+from core.capabilities import CapabilityCallRequest
+from core.clients.capability_gateway_client import CapabilityGatewayClient
+from core.files.reader.models import ReadFileEnvelope
 from core.types import JsonObject, parse_json_object, require_json_object
 
 _DUCKDUCKGO_SESSION_CREATE: JsonObject = {
@@ -284,7 +287,7 @@ class DuckDuckGoBrowserSearch(Search):
 
 class BrowserSnapshotDescribe(Describe):
     """
-    Снимок HTML в S3 и чтение markdown через FileReader (MCP browser).
+    Снимок HTML в S3 и чтение markdown через capability files.read (MCP browser).
 
     Поведение совпадает с цепочкой crawl_pages_recursive + html_to_markdown_batch в simple_crawler.
     """
@@ -295,7 +298,6 @@ class BrowserSnapshotDescribe(Describe):
         server_id: str = "browser",
         navigation_timeout_ms: int = 30000,
         ingest_source: str = "simple_crawler",
-        file_reader: FileReader | None = None,
     ) -> None:
         if server_id.strip() == "":
             raise ValueError("server_id is required")
@@ -306,14 +308,12 @@ class BrowserSnapshotDescribe(Describe):
         self._server_id: str = server_id.strip()
         self._navigation_timeout_ms: int = navigation_timeout_ms
         self._ingest_source: str = ingest_source.strip()
-        self._file_reader: FileReader | None = file_reader
 
     async def _save_html_read_markdown(
         self,
         state: ExecutionState,
         page_url: str,
     ) -> tuple[str, str, str, str]:
-        reader = self._file_reader if self._file_reader is not None else FileReader()
         created = await _mcp_json(
             self._server_id,
             state,
@@ -358,17 +358,25 @@ class BrowserSnapshotDescribe(Describe):
                 {"session_id": session_id},
             )
 
-        extract = await reader.read(
-            "",
-            ReadFileArgs(page_end=-1),
-            file_name="snapshot.html",
-            file_id=file_id,
+        timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+        execution_context = capability_execution_context(
+            state,
+            allowed_capabilities=["files.read"],
         )
-        if len(extract.pages) == 0:
-            raise ValueError("FileReader: no pages in the result")
-        text = str(extract.pages[0].text).strip()
+        response = await CapabilityGatewayClient().call(
+            CapabilityCallRequest(
+                context=execution_context,
+                name="files.read",
+                kwargs={"file_ids": [file_id], "page_end": -1},
+            ),
+            timeout=timeout,
+        )
+        envelope = ReadFileEnvelope.model_validate(response.result)
+        if not envelope.files or not envelope.files[0].results:
+            raise ValueError("files.read: no pages in the result")
+        text = str(envelope.files[0].results[0].result).strip()
         if text == "":
-            raise ValueError("FileReader: empty markdown")
+            raise ValueError("files.read: empty markdown")
         return file_id, s3_path, source_url, text
 
     async def page_snapshot(self, state: ExecutionState, url: str) -> dict[str, str]:

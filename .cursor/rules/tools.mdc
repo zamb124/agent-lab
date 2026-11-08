@@ -23,7 +23,7 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 
 1. Материализация — только `ToolRegistry.materialize`: `code_mode=mcp_tool` → `MCPTool`; builtin без `code` → `FunctionTool`; inline `code` → `CodeTool` → `RemoteCodeRunner`; нода (`llm_node`, `flow`, `external_api`, `mcp`, `datasource`, `channel`, `hitl_node`) → `NodeAsToolWrapper`.
 2. Builtin `@tool` — thin wrapper: получает по типу аннотации параметра typed-клиент peer-сервиса из `core/clients/` или сервис flows (`ToolRegistry.register_builtin_tools`), вызывает его и возвращает результат как есть; ошибки клиента пробрасываются, `{success: false}` запрещён. Эталон лёгкого tool — `apps/flows/tools/wiki/wiki_tools.py`.
-3. Тяжёлый platform tool (мультишаговый IO, FileReader/envelope, LLM-batch, vision/STT pipeline) исполняется только через capability-gateway: builtin резолвит контекст flows (`names` → `file_ids`, `state`) и зовёт `CapabilityGatewayClient.call`; дублировать пайплайн в `apps/flows/tools/**` запрещено. Эталон — `read_file` → `files.read` (`apps/flows/tools/files/files.py`, `apps/capability_gateway/services/registry.py`). `[без гейта]`
+3. Функция-библиотека без процесса-владельца исполняется только в `capability_gateway` → `eval.mdc` § Границы исполнения: builtin — адаптер, резолвит контекст flows (`names` → `file_ids`, `state`) и зовёт `CapabilityGatewayClient.call` (`core/clients/capability_gateway_client.py`); дублировать пайплайн в `apps/flows/tools/**` запрещено. Эталоны — `read_file` → `files.read`, `create_file` → `files.create` (`apps/flows/tools/files/files.py`, `apps/capability_gateway/services/registry.py`). `[без гейта]`
 4. Пара tool ↔ capability с одной платформенной операцией — один контракт: пересечение аргументов и форма ответа совпадают; builtin не отбрасывает и не игнорирует kwargs capability, capability не сужает ответ относительно tool. Новый или изменённый tool с парой в registry обновляет обе стороны в том же изменении. `[без гейта]`
 5. Один домен — один класс клиента с одним именем; подкласс `core.clients.*Client` под тем же именем в `apps/flows` запрещён.
 6. `CodeTool` и `CodeNode` — один entrypoint-контракт: `entrypoint` или первая функция source, вызов `(args, state)`; импорт `apps.*`/`core.*` в коде пользователя — `ValueError` (`reject_forbidden_platform_imports`).
@@ -42,7 +42,7 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 1. `ServiceClient()`, `platform_facades`, `runtime_deps`, Port/Facade, `get_*_service`/`get_*_facade` и параметр `di` в `apps/flows/tools/**`.
 2. Глобальный `ToolAuthzGate`, bind/reset hook, вызов `_run_impl` в обход PDP.
 3. Класс-посредник, который только делегирует в сервис flows.
-4. Прямой вызов тяжёлого пайплайна из builtin в обход capability при существующей паре tool↔capability (эталон запрета — `read_files_to_envelope` в `read_file`). `[без гейта]`
+4. Прямой вызов pipeline-библиотеки (`read_files_to_envelope`, `FileReader.read`, `FileWriter.write`, `DocxTemplater`, `materialize_image_regions`, `core.viz`, `TextTransformService`) в `apps/flows/tools/**`: исполнение — только через capability-пару → `eval.mdc` § Границы исполнения (эталон запрета — `read_files_to_envelope` в `read_file`). `[без гейта]`
 
 ## Гейты
 

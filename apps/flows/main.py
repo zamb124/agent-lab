@@ -73,15 +73,7 @@ from core.config.testing import is_testing  # noqa: E402
 from core.context import reset_context, set_context  # noqa: E402
 from core.db.storage import SharedStorage  # noqa: E402
 from core.di import recipe  # noqa: E402
-from core.files.create_spec import (  # noqa: E402
-    RUNTIME_FLOW_ID,
-    FileCreateSpec,
-    FileSourceKind,
-    FileSourceRef,
-)
-from core.files.registry import default_retention_for_source  # noqa: E402
 from core.files.service import FilesService  # noqa: E402
-from core.files.writer import FileWriter  # noqa: E402
 from core.identity.company_membership import ensure_system_actor_membership  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context  # noqa: E402
@@ -241,15 +233,6 @@ async def boot_flows(
         )
 
     set_flow_resume_handler(_flow_resume_via_taskiq)
-
-    FileWriter.configure_process_upload(
-        files_service=files_service,
-        default_spec=FileCreateSpec(
-            source_kind=FileSourceKind.FLOW_ASSET,
-            source_ref=FileSourceRef(flow_id=RUNTIME_FLOW_ID),
-            retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
-        ),
-    )
 
     # Подключаемся к Redis с retry
     logger.info("flows.connecting.redis")

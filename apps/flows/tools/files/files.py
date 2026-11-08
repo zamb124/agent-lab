@@ -2,9 +2,11 @@
 Тулы для работы с файлами в flow (вложения state.files).
 
 read_file — names → file_ids → capability files.read (HTTP gateway);
-create_file — FileWriter() (процесс настроен через FileWriter.configure_process_upload при старте).
+create_file — capability files.create (HTTP gateway);
+files_materialize_image_regions — capability files.materialize_image_regions (HTTP gateway).
 """
 
+from pathlib import Path
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,8 +21,7 @@ from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.capabilities import CapabilityCallRequest
 from core.clients.capability_gateway_client import CapabilityGatewayClient
-from core.files.file_ref import FileRef, stored_file_ref
-from core.files.image_region import materialize_image_regions
+from core.files.file_ref import FileRef
 from core.files.reader.models import (
     MAX_NESTED_DEFAULT,
     MAX_READ_BUDGET,
@@ -36,8 +37,7 @@ from core.files.reader.models import (
     ReadLane,
     StopReason,
 )
-from core.files.reader.service import FileReader
-from core.files.writer import FileWriter
+from core.files.writer.exceptions import FileWriteError
 from core.models.base import StrictBaseModel
 from core.types import JsonArray, JsonObject, require_json_array, require_json_object
 
@@ -298,16 +298,32 @@ async def create_file(
     *,
     state: ExecutionState,
 ) -> JsonObject:
-    """Создаёт файл в хранилище. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
-    writer = FileWriter()
-    record = await writer.write(
-        content=content,
-        original_name=original_name,
-        content_mode=content_mode,
-        public=True,
+    """Создаёт файл в хранилище через capability files.create. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
+    name = original_name.strip()
+    if not name:
+        raise FileWriteError("original_name is required (file name with an extension)")
+    if not Path(name).suffix:
+        raise FileWriteError(
+            f"original_name must include the target file extension, got: {original_name!r}"
+        )
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.create"],
     )
-
-    file_item = stored_file_ref(record)
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.create",
+            kwargs={
+                "content": content,
+                "original_name": original_name,
+                "content_mode": content_mode,
+            },
+        ),
+        timeout=timeout,
+    )
+    file_item = FileRef.model_validate(response.result)
     payload = require_json_object(file_item.model_dump(mode="json"), "create_file.response")
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
@@ -348,13 +364,22 @@ async def files_materialize_image_regions(
     sections: JsonArray,
     attachment_file_ids: list[str] | None = None,
 ) -> JsonObject:
-    _ = state
     _ = require_json_array(sections, "files_materialize_image_regions.sections")
-    files_service = FileReader.require_files_service()
     ids = attachment_file_ids if attachment_file_ids is not None else []
-    materialized = await materialize_image_regions(
-        files_service,
-        sections=sections,
-        attachment_file_ids=list(ids),
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.materialize_image_regions"],
     )
-    return {"sections": materialized}
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.materialize_image_regions",
+            kwargs={
+                "sections": list(sections),
+                "attachment_file_ids": list(ids),
+            },
+        ),
+        timeout=timeout,
+    )
+    return require_json_object(response.result, "files_materialize_image_regions.result")

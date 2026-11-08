@@ -9,6 +9,7 @@ from httpx2 import AsyncClient
 
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
+    RUNNER_EXECUTE_PATHS,
     CapabilityDocumentation,
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -113,13 +114,7 @@ def sdk_stable_capability_names_from_manifest(manifest: Mapping[str, object]) ->
 
 
 EXPECTED_FILE_BASE64 = "Y2FwYWJpbGl0eSBzbW9rZQ=="
-RUNNER_ENDPOINTS = {
-    "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
-    "javascript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
-    "typescript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
-    "go": ("code_runner_go", "/code-runner-go/api/v1/execute"),
-    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/execute"),
-}
+RUNNER_ENDPOINTS = RUNNER_EXECUTE_PATHS
 
 
 def go_exported_name(raw: str) -> str:

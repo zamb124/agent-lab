@@ -85,7 +85,7 @@ async def documents_find(
     description=(
         "Read content of a Documents library / catalog file by file_id "
         "(from UI context, documents_find, or documents_list_catalog; "
-        "FileReader with page_start/page_end). Not limited to state.files. "
+        "page_start/page_end slice the document pages). Not limited to state.files. "
         "Do not use read_agent_skill_reference for catalog or SPA UI file_id."
     ),
     tags=_TAGS,

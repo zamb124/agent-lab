@@ -137,6 +137,62 @@ def locked_down_code_sandbox_policy(
     )
 
 
+# language -> (service_name, execute path): единый маршрут для flows и capability_gateway.
+RUNNER_EXECUTE_PATHS: dict[str, tuple[str, str]] = {
+    "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
+    "javascript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
+    "typescript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
+    "go": ("code_runner_go", "/code-runner-go/api/v1/execute"),
+    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/execute"),
+}
+
+RUNNER_VALIDATE_PATHS: dict[str, tuple[str, str]] = {
+    "python": ("code_runner_python", "/code-runner-python/api/v1/validate"),
+    "javascript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "typescript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "go": ("code_runner_go", "/code-runner-go/api/v1/validate"),
+    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/validate"),
+}
+
+CODE_SANDBOX_MEMORY_LIMIT_MB = 256
+CODE_SANDBOX_FILESYSTEM_LIMIT_MB = 64
+CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES = 1_048_576
+CODE_RUNNER_EXECUTE_HTTP_TIMEOUT_SLACK_SECONDS = 60.0
+
+
+def runner_execute_endpoint(language: str) -> tuple[str, str]:
+    """Единственная точка разрешения execute-эндпоинта runner'а по языку."""
+    endpoint = RUNNER_EXECUTE_PATHS.get(language)
+    if endpoint is None:
+        raise ValueError(f"Unsupported code runner language: {language}")
+    return endpoint
+
+
+def runner_validate_endpoint(language: str) -> tuple[str, str]:
+    """Единственная точка разрешения validate-эндпоинта runner'а по языку."""
+    endpoint = RUNNER_VALIDATE_PATHS.get(language)
+    if endpoint is None:
+        raise ValueError(f"Unsupported code runner language: {language}")
+    return endpoint
+
+
+def filter_capabilities_by_allowed(
+    manifest: "CapabilityManifest",
+    *,
+    allowed_capabilities: list[str] | None,
+) -> "CapabilityManifest":
+    """Фильтрует манифест по token grant; пустой grant — весь манифест."""
+    if not allowed_capabilities:
+        return manifest
+    allowed = set(allowed_capabilities)
+    return CapabilityManifest(
+        version=manifest.version,
+        capabilities=[
+            capability for capability in manifest.capabilities if capability.name in allowed
+        ],
+    )
+
+
 class CapabilityDefinition(BaseModel):
     """Публичное описание одной platform capability."""
 

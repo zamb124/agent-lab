@@ -1,5 +1,6 @@
 """
-Tool: заполнение DOCX-шаблона через DocxTemplater (поиск file_info как у read_file).
+Tool: заполнение DOCX-шаблона (поиск file_info как у read_file).
+Исполнение — capability files.fill_docx_template в capability_gateway.
 """
 
 from __future__ import annotations
@@ -8,11 +9,15 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.config import get_settings as get_flows_settings
+from apps.flows.src.runners.capability_context import capability_execution_context
 from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.state_utils import find_file, normalize_file_lookup_name
 from apps.flows.src.tools.decorator import tool
-from core.files.docx_template import DocxTemplater
-from core.files.file_ref import stored_file_ref
+from core.capabilities import CapabilityCallRequest
+from core.clients.capability_gateway_client import CapabilityGatewayClient
+from core.files.file_ref import FileRef
+from core.files.writer.exceptions import FileWriteError
 from core.types import JsonObject, require_json_object
 
 JsonDict = JsonObject
@@ -30,7 +35,7 @@ _FILL_DOCX_DESCRIPTION = """
 
 Параметры:
 - variables (объект): данные для подстановки. Строки, числа, bool, null, вложенные объекты и массивы;
-  даты как строки в ISO; в inline-коде допускаются date/datetime/Decimal (см. DocxTemplater, date_iso).
+  даты как строки в ISO.
 - output_original_name: имя результата с расширением .docx (обязательно).
   Ключ должен быть СТРОГО `output_original_name` (snake_case, через `_`, без пробелов).
 - file_name: имя шаблона как в state.files[].original_name (как у read_file); если не указано — последний файл .docx в state.files.
@@ -106,6 +111,11 @@ async def fill_docx_template(
             return None
         return normalized
 
+    if not output_original_name.lower().endswith(".docx"):
+        raise FileWriteError(
+            f"output_original_name must end with .docx, got: {output_original_name!r}"
+        )
+
     files = state.files
     if not files:
         if file_name:
@@ -136,14 +146,32 @@ async def fill_docx_template(
     if not finfo.original_name.lower().endswith(".docx"):
         raise ValueError(f"Template must be .docx, got: {finfo.original_name!r}")
 
-    record = await DocxTemplater().fill_and_create(
-        file_ref=finfo,
-        context=variables,
-        output_original_name=output_original_name,
-        strict=strict,
-    )
+    file_id = finfo.file_id
+    if file_id is None or not file_id.strip():
+        raise ValueError(
+            f"File {finfo.original_name!r} has no file_id; "
+            + "fill_docx_template requires persisted FileRef"
+        )
 
-    file_item = stored_file_ref(record)
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.fill_docx_template"],
+    )
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.fill_docx_template",
+            kwargs={
+                "file_id": file_id.strip(),
+                "variables": variables,
+                "output_original_name": output_original_name,
+                "strict": strict,
+            },
+        ),
+        timeout=timeout,
+    )
+    file_item = FileRef.model_validate(response.result)
     return {
         "success": True,
         **require_json_object(file_item.model_dump(mode="json"), "fill_docx_template.response"),

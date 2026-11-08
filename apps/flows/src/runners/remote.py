@@ -25,6 +25,10 @@ from apps.flows.src.state.mutation_policy import (
     should_skip_field_on_user_returned_state_copy,
 )
 from core.capabilities import (
+    CODE_SANDBOX_FILESYSTEM_LIMIT_MB,
+    CODE_SANDBOX_MEMORY_LIMIT_MB,
+    CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES,
+    RUNNER_EXECUTE_PATHS,
     CapabilityExecutionContext,
     CapabilityLanguage,
     CapabilityManifest,
@@ -34,8 +38,11 @@ from core.capabilities import (
     CodeSandboxPolicy,
     CodeValidationRequest,
     CodeValidationResponse,
+    filter_capabilities_by_allowed,
     locked_down_code_sandbox_policy,
     match_capability_language,
+    runner_execute_endpoint,
+    runner_validate_endpoint,
 )
 from core.capabilities.source_sanitize import reject_forbidden_platform_imports
 from core.capabilities.tokens import (
@@ -53,25 +60,6 @@ from core.types import JsonObject, JsonValue
 
 CAPABILITY_MANIFEST_PATH = "/capability-gateway/api/v1/capabilities/manifest"
 TOOL_RUNTIME_MANIFEST_PATH = "/flows/api/v1/tool-runtime/manifest"
-CODE_SANDBOX_MEMORY_LIMIT_MB = 256
-CODE_SANDBOX_FILESYSTEM_LIMIT_MB = 64
-CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES = 1_048_576
-
-RUNNER_EXECUTE_PATHS: dict[str, tuple[str, str]] = {
-    "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
-    "javascript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
-    "typescript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
-    "go": ("code_runner_go", "/code-runner-go/api/v1/execute"),
-    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/execute"),
-}
-
-RUNNER_VALIDATE_PATHS: dict[str, tuple[str, str]] = {
-    "python": ("code_runner_python", "/code-runner-python/api/v1/validate"),
-    "javascript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
-    "typescript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
-    "go": ("code_runner_go", "/code-runner-go/api/v1/validate"),
-    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/validate"),
-}
 
 logger = get_logger(__name__)
 
@@ -118,6 +106,77 @@ def _merge_returned_state_fields(
         if should_skip_field_on_user_returned_state_copy(field_name):
             continue
         state[field_name] = field_value
+
+
+async def load_sandbox_capability_manifest(
+    *,
+    allowed_capabilities: list[str] | None = None,
+) -> CapabilityManifest:
+    """Merged manifest (gateway + flows tool-runtime), отфильтрованный по token grant."""
+    client = ServiceClient()
+    # Gateway без AuthMiddleware: только platform caps + builtins.
+    # Company tools — с текущего flows context (signed headers), иначе
+    # sandbox не видит только что созданный tool_repository row.
+    raw_gateway = await client.get(
+        "capability_gateway",
+        CAPABILITY_MANIFEST_PATH,
+        timeout=30.0,
+    )
+    raw_tools = await client.get(
+        "flows",
+        TOOL_RUNTIME_MANIFEST_PATH,
+        timeout=30.0,
+    )
+    gateway = CapabilityManifest.model_validate(raw_gateway)
+    tools = CapabilityManifest.model_validate(raw_tools)
+    by_name = {capability.name: capability for capability in gateway.capabilities}
+    by_name.update({capability.name: capability for capability in tools.capabilities})
+    manifest = CapabilityManifest(
+        version=gateway.version,
+        capabilities=[by_name[name] for name in sorted(by_name)],
+    )
+    return filter_capabilities_by_allowed(
+        manifest,
+        allowed_capabilities=allowed_capabilities,
+    )
+
+
+def apply_runner_returned_state(
+    state: ExecutionState,
+    response_state: JsonObject,
+    *,
+    frozen_snapshot: dict[str, ExecutionStateValue] | None = None,
+) -> None:
+    """Мержит response.state code-runner'а в ExecutionState с проверкой frozen-полей."""
+    returned_keys = frozenset(response_state.keys())
+    returned_state = ExecutionState.model_validate(response_state)
+    snapshot = (
+        frozen_snapshot if frozen_snapshot is not None else snapshot_frozen_fields(state)
+    )
+    changed_frozen = _frozen_fields_differ(
+        returned_state,
+        snapshot,
+        returned_keys=returned_keys,
+    )
+    forbidden_changes = [
+        field_name for field_name in changed_frozen if field_name in USER_RETURN_FORBIDDEN_FROZEN_FIELDS
+    ]
+    if forbidden_changes:
+        raise FrozenStateFieldError(
+            field=forbidden_changes[0],
+            reason="assign",
+        )
+    if changed_frozen:
+        logger.warning(
+            "code_runner.returned_state_echoed_frozen_fields",
+            changed_fields=changed_frozen,
+        )
+        _restore_frozen_fields_from_snapshot(returned_state, snapshot)
+    _merge_returned_state_fields(
+        state,
+        returned_state,
+        returned_keys=returned_keys,
+    )
 
 
 class RemoteCodeRunner(BaseCodeRunner):
@@ -189,7 +248,9 @@ class RemoteCodeRunner(BaseCodeRunner):
         runner_service, runner_path = self._runner_validation_endpoint()
         context = self._validation_context(flow_id=flow_id, branch_id=branch_id)
         claims = verify_execution_token(context.execution_token)
-        manifest = await self._load_manifest(allowed_capabilities=claims.allowed_capabilities)
+        manifest = await load_sandbox_capability_manifest(
+            allowed_capabilities=claims.allowed_capabilities
+        )
         request = CodeValidationRequest(
             kind=kind,
             language=self._language,
@@ -241,7 +302,9 @@ class RemoteCodeRunner(BaseCodeRunner):
         runner_service, runner_path = self._runner_endpoint()
         context = self._execution_context(state)
         claims = verify_execution_token(context.execution_token)
-        manifest = await self._load_manifest(allowed_capabilities=claims.allowed_capabilities)
+        manifest = await load_sandbox_capability_manifest(
+            allowed_capabilities=claims.allowed_capabilities
+        )
         request = CodeExecutionRequest(
             kind=kind,
             language=self._language,
@@ -285,7 +348,7 @@ class RemoteCodeRunner(BaseCodeRunner):
         response = CodeExecutionResponse.model_validate(raw_response)
         if response.status == "failed":
             self._raise_execution_failed(response)
-        self._apply_returned_state(state, response, frozen_snapshot)
+        apply_runner_returned_state(state, response.state, frozen_snapshot=frozen_snapshot)
         if response.platform_effects:
             # UI-эффекты адресуют слоты и страницы интерфейса, поэтому допустимы
             # только внутри исполнения Flow; standalone-запуск tool без эффектов легален.
@@ -299,44 +362,6 @@ class RemoteCodeRunner(BaseCodeRunner):
         if response.status == "interrupted":
             self._raise_interrupted(response)
         return response
-
-    async def _load_manifest(
-        self,
-        *,
-        allowed_capabilities: list[str] | None = None,
-    ) -> CapabilityManifest:
-        # Gateway без AuthMiddleware: только platform caps + builtins.
-        # Company tools — с текущего flows context (signed headers), иначе
-        # sandbox не видит только что созданный tool_repository row.
-        raw_gateway = await self._client.get(
-            "capability_gateway",
-            CAPABILITY_MANIFEST_PATH,
-            timeout=30.0,
-        )
-        raw_tools = await self._client.get(
-            "flows",
-            TOOL_RUNTIME_MANIFEST_PATH,
-            timeout=30.0,
-        )
-        gateway = CapabilityManifest.model_validate(raw_gateway)
-        tools = CapabilityManifest.model_validate(raw_tools)
-        by_name = {capability.name: capability for capability in gateway.capabilities}
-        by_name.update({capability.name: capability for capability in tools.capabilities})
-        manifest = CapabilityManifest(
-            version=gateway.version,
-            capabilities=[by_name[name] for name in sorted(by_name)],
-        )
-        if allowed_capabilities:
-            allowed = set(allowed_capabilities)
-            manifest = CapabilityManifest(
-                version=manifest.version,
-                capabilities=[
-                    capability
-                    for capability in manifest.capabilities
-                    if capability.name in allowed
-                ],
-            )
-        return manifest
 
     def _sandbox_policy(self) -> CodeSandboxPolicy:
         wall_time_limit_seconds = get_flows_settings().node_execution_wall_time_cap_seconds
@@ -403,52 +428,10 @@ class RemoteCodeRunner(BaseCodeRunner):
         )
 
     def _runner_endpoint(self) -> tuple[str, str]:
-        endpoint = RUNNER_EXECUTE_PATHS.get(self._language)
-        if endpoint is None:
-            raise ValueError(f"Unsupported code runner language: {self._language}")
-        return endpoint
+        return runner_execute_endpoint(self._language)
 
     def _runner_validation_endpoint(self) -> tuple[str, str]:
-        endpoint = RUNNER_VALIDATE_PATHS.get(self._language)
-        if endpoint is None:
-            raise ValueError(f"Unsupported code runner language: {self._language}")
-        return endpoint
-
-    def _apply_returned_state(
-        self,
-        state: ExecutionState,
-        response: CodeExecutionResponse,
-        frozen_snapshot: dict[str, ExecutionStateValue],
-    ) -> None:
-        returned_keys = frozenset(response.state.keys())
-        returned_state = ExecutionState.model_validate(response.state)
-        changed_frozen = _frozen_fields_differ(
-            returned_state,
-            frozen_snapshot,
-            returned_keys=returned_keys,
-        )
-        forbidden_changes = [
-            field_name
-            for field_name in changed_frozen
-            if field_name in USER_RETURN_FORBIDDEN_FROZEN_FIELDS
-        ]
-        if forbidden_changes:
-            raise FrozenStateFieldError(
-                field=forbidden_changes[0],
-                reason="assign",
-            )
-        if changed_frozen:
-            logger.warning(
-                "code_runner.returned_state_echoed_frozen_fields",
-                changed_fields=changed_frozen,
-                language=self._language,
-            )
-            _restore_frozen_fields_from_snapshot(returned_state, frozen_snapshot)
-        _merge_returned_state_fields(
-            state,
-            returned_state,
-            returned_keys=returned_keys,
-        )
+        return runner_validate_endpoint(self._language)
 
     def _raise_execution_failed(self, response: CodeExecutionResponse) -> None:
         error = response.error

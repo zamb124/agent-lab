@@ -32,6 +32,20 @@ alwaysApply: false
 8. Ошибка runner — `CodeExecutionResponse` с `language`, `service`, `stage`, `message`, `exception_type`, `traceback`, `stdout`/`stderr`, `request_id`, `trace_id`; `/flows/api/v1/code/execute` отдаёт его в `error_payload` без потерь.
 9. `node`, `npm`, `go` и `dotnet` ищет `resolve_runtime_executable`: явный `code_runner.{node,npm,go,dotnet}_bin`, затем `code_runner.runtime_dir/bin` (пусто — `~/.cache/agent-lab/runtimes`), затем PATH. Нет бинарника — ошибка с перечисленными путями.
 
+### Границы исполнения
+
+Исполнитель определяется видом работы, не точкой входа:
+
+| Работа | Процесс-исполнитель |
+|---|---|
+| Пользовательский код — code-нода, inline tool, code-условие ребра | `code_runner_<language>` — sandbox-процесс; в процессе `flows` он не исполняется |
+| Функция-библиотека без процесса-владельца — pipeline `FileReader`, рендеринг `FileWriter` и `DocxTemplater` (`core/files/docx_template/service.py`), `materialize_image_regions` (`core/files/image_region.py`), `core.viz`, LLM-transform, внешний HTTP из sandbox | Handler `apps/capability_gateway/services/`; вызов из другого процесса — только `CapabilityGatewayClient.call` (`core/clients/capability_gateway_client.py`) |
+| Доменная операция сервиса | Процесс владельца: из trusted-кода — typed `core/clients/*Client`, из sandbox — capability-прокси того же клиента (`wiki.*`, `crm.*` и т.д.) |
+| Builtin tool (`apps/flows/tools/**`) | Адаптер в процессе `flows`: резолв контекста, один вызов исполнителя, side-effects в `state`; pipeline в адаптере запрещён |
+| Ingest байтов из источника при импорте/сохранении flow (`FlowsLoader._materialize_node_files`) | Процесс `flows` (HTTP/ws-вход, не воркер графа): `FileReader.resolve_source` — единственный примитив резолва байтов из Path/URL/file_id без parse/LLM-pipeline; это не чтение документа, а материализация ассета перед upload в FilesService |
+
+Одна capability исполняется в `capability_gateway` независимо от вызывающего: builtin tool в воркере, `tools.*` из sandbox и code-нода любого языка различаются только лёгкой обвязкой вызова. `[без гейта]`
+
 ### LSP редактора
 
 1. Редактор `flows-code-editor` — npm CodeMirror + `@codemirror/lsp-client` (lazy-чанк `core/frontend/static/lib/codemirror/codemirror-lazy.ts`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).

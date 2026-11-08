@@ -9,15 +9,18 @@ from xml.sax.saxutils import escape
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.files.state_file_refs import upsert_state_file
+from apps.flows.src.runners.capability_context import capability_execution_context
 from apps.flows.src.services.flow_ui_cards import show_files
 from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.capabilities import CapabilityCallRequest
+from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.clients.files_client import FilesClient
-from core.files.file_ref import FileRef, stored_file_ref
-from core.files.writer import FileWriteError, FileWriter
+from core.files.file_ref import FileRef
 from core.types import JsonObject, require_json_object
 from core.viz.models import (
     VIZ_CONTENT_TYPE,
@@ -98,19 +101,30 @@ def _pick_state_file(
     return find_file(files, file_name)
 
 
-async def _write_viz_file(document: VizDocument, original_name: str) -> FileRef:
+async def _write_viz_file(
+    document: VizDocument,
+    original_name: str,
+    state: ExecutionState,
+) -> FileRef:
     payload = json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2)
-    writer = FileWriter()
-    try:
-        record = await writer.write(
-            content=payload,
-            original_name=original_name,
-            content_mode="raw",
-            public=True,
-        )
-    except FileWriteError as exc:
-        raise ValueError(str(exc)) from exc
-    return stored_file_ref(record)
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.create"],
+    )
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.create",
+            kwargs={
+                "content": payload,
+                "original_name": original_name,
+                "content_mode": "raw",
+            },
+        ),
+        timeout=timeout,
+    )
+    return FileRef.model_validate(response.result)
 
 
 def _svg_export_markup(document: VizDocument) -> str:
@@ -263,7 +277,7 @@ async def create_viz(
     name = original_name.strip() if original_name and original_name.strip() else _slug_filename(document.title)
     if not name.lower().endswith(VIZ_EXTENSION):
         name = f"{name}{VIZ_EXTENSION}"
-    file_item = await _write_viz_file(document, name)
+    file_item = await _write_viz_file(document, name, state)
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return {
@@ -315,7 +329,7 @@ async def update_viz(
         spec=require_json_object(next_spec, "viz.spec"),
     )
     file_item = await _write_viz_file(
-        document, item.original_name or _slug_filename(document.title)
+        document, item.original_name or _slug_filename(document.title), state
     )
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
@@ -354,19 +368,27 @@ async def export_viz(
     if format == "json":
         content = json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2)
         out_name = f"{base_name}.json"
-        content_mode: Literal["raw"] = "raw"
     else:
         content = _svg_export_markup(document)
         out_name = f"{base_name}.svg"
-        content_mode = "raw"
-    writer = FileWriter()
-    record = await writer.write(
-        content=content,
-        original_name=out_name,
-        content_mode=content_mode,
-        public=True,
+    timeout = float(get_flows_settings().node_execution_wall_time_cap_seconds)
+    execution_context = capability_execution_context(
+        state,
+        allowed_capabilities=["files.create"],
     )
-    file_item = stored_file_ref(record)
+    response = await CapabilityGatewayClient().call(
+        CapabilityCallRequest(
+            context=execution_context,
+            name="files.create",
+            kwargs={
+                "content": content,
+                "original_name": out_name,
+                "content_mode": "raw",
+            },
+        ),
+        timeout=timeout,
+    )
+    file_item = FileRef.model_validate(response.result)
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return {

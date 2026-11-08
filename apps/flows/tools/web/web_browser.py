@@ -44,7 +44,7 @@ _BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION = """
 """.strip()
 
 _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
-Открывает URL в режиме crawl, сохраняет HTML в S3 через MCP, читает markdown через `FileReader`.
+Открывает URL в режиме crawl, сохраняет HTML в S3 через MCP, читает markdown через capability `files.read` в capability-gateway.
 
 Ответ: `markdown`, `truncated`, `original_chars`, `max_markdown_chars`. Ошибки — исключение.
 

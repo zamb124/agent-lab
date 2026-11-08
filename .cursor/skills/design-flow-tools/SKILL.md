@@ -107,6 +107,7 @@ description: "Проектировать, создавать, изменять �
 
 ## Держи границу безопасности на сервере
 
+- Размещай исполнение по `.cursor/rules/eval.mdc` § Границы исполнения: пользовательский код — только `code_runner_<language>`; pipeline без процесса-владельца (FileReader, FileWriter, DocxTemplater, LLM-transform и т.п.) — только handler в `capability_gateway`; builtin tool — адаптер (`resolve контекста → CapabilityGatewayClient.call → state effects`), pipeline в нём запрещён.
 - Проверяй actor, tenant, flow, source node, tool id/version, resources и argument hash в executor/gateway.
 - Выдавай runner только subset manifest, разрешённый конкретному invocation grant.
 - Не передавай runner полный `ExecutionState`; собери allowlisted context view.
