@@ -107,3 +107,4 @@ core/frontend/embed-dist/
 /reports/ui-kostyli.json
 /scripts/stress/.dist/
 /.data/
+tests/ui/shots/out/
