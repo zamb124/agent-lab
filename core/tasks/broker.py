@@ -16,6 +16,7 @@ from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
 from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.logging import get_logger
+from core.logging.attributes import LOG_EXCEPTION_MESSAGE, LOG_EXCEPTION_TYPE
 from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.registry import TaskSpec, get_task_spec, queue_broker, register_queue_broker
@@ -230,7 +231,10 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awai
             logger.exception(
                 "task.stale_recover_failed",
                 queue=queue_name,
-                **{"exception.type": type(exc).__name__},
+                **{
+                    LOG_EXCEPTION_TYPE: type(exc).__name__,
+                    LOG_EXCEPTION_MESSAGE: str(exc)[:500],
+                },
             )
         finally:
             await r.aclose()

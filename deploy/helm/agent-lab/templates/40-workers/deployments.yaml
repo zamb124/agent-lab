@@ -36,6 +36,12 @@ spec:
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           command: {{ $worker.command | toJson }}
           env:
+            {{- if eq $name "geo-worker" }}
+            # НСПД (nspd.gov.ru) блокирует IP ноды: TLS-intercept + HTTP 403 —
+            # краул мёртв до настройки RU-прокси; тик no-op, enrich-итемы defer.
+            - name: NSPD_SYNC_ENABLED
+              value: "false"
+            {{- end }}
             {{- include "agentlab.appEnv" $ | nindent 12 }}
           volumeMounts:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}

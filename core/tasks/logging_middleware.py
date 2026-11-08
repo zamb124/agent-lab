@@ -45,6 +45,8 @@ from core.logging.attributes import (
     EVENT_TASK_FAILED,
     EVENT_TASK_FINISHED,
     EVENT_TASK_STARTED,
+    LOG_EXCEPTION_MESSAGE,
+    LOG_EXCEPTION_TYPE,
     LOG_NAMESPACE,
     LOG_SESSION_ID,
     LOG_TASK_DURATION_MS,
@@ -286,7 +288,8 @@ class LoggingMiddleware(TaskiqMiddleware):
                 LOG_TASK_QUEUE: self._queue_name,
                 LOG_TASK_DURATION_MS: duration_ms,
                 LOG_TASK_RETRY: retry_value,
-                "exception.type": type(exception).__name__,
+                LOG_EXCEPTION_TYPE: type(exception).__name__,
+                LOG_EXCEPTION_MESSAGE: str(exception)[:500],
             },
         )
         self._exit_scope(message)

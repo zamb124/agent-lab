@@ -190,7 +190,7 @@ class GeoSettings(BaseSettings):
         description="Разрешить синк ГАР/ФИАС в geo_gar_sync (False — тик завершается no-op).",
     )
     gar_info_url: str = Field(
-        default="https://fias.nalog.ru/WebServices/Public/DownloadService.asmx",
+        default="https://fias.nalog.ru/WebServices/Public",
         description=(
             "Endpoint DownloadService ФИАС: GetLastDownloadFileInfo и "
             "GetAllDownloadFileInfo отдают JSON с GarXMLFullURL/GarXMLDeltaURL."

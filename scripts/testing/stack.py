@@ -145,7 +145,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "GEOCODING__NOMINATIM_BASE_URL": "http://127.0.0.1:18098",
     "SERVER__GEO_SERVICE_URL": "http://127.0.0.1:9028",
     # DownloadService ФИАС — эмулятор стека (не внешний fias.nalog.ru).
-    "GAR_INFO_URL": "http://127.0.0.1:18101/WebServices/Public/DownloadService.asmx",
+    "GAR_INFO_URL": "http://127.0.0.1:18101/WebServices/Public",
     # Observability-бэкенды в стеке отсутствуют: flows logs/traces ops ждут
     # *_failed (unavailable), а не пустой succeeded от чужого dev-стека
     # на localhost:3100/3200. Порт 1 — гарантированный ConnectError.

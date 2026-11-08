@@ -142,12 +142,12 @@ def _file_info(request: Request, version: int) -> JsonObject:
     }
 
 
-@app.get("/WebServices/Public/DownloadService.asmx/GetLastDownloadFileInfo")
+@app.get("/WebServices/Public/GetLastDownloadFileInfo")
 async def last_download_file_info(request: Request) -> JsonObject:
     return _file_info(request, _LAST)
 
 
-@app.get("/WebServices/Public/DownloadService.asmx/GetAllDownloadFileInfo")
+@app.get("/WebServices/Public/GetAllDownloadFileInfo")
 async def all_download_file_info(request: Request) -> list[JsonObject]:
     return [_file_info(request, version) for version in _VERSIONS]
 

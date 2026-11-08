@@ -21,7 +21,7 @@ from apps.geo.models.geo_source import GeoSource, GeoSourceKind
 from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
 from apps.geo.services.gar_import_service import GarImportService
 
-_EMULATOR = "http://127.0.0.1:18101/WebServices/Public/DownloadService.asmx"
+_EMULATOR = "http://127.0.0.1:18101/WebServices/Public"
 _GEN = 990_000_010
 _REGION = "moscow"
 
