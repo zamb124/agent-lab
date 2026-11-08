@@ -43,6 +43,16 @@ logger = get_logger(__name__)
 
 _PAGE = 1000
 
+# Поля-бухгалтерия версии: не являются содержимым flow и не делают запись новой версией
+_VERSION_BOOKKEEPING_FIELDS: set[str] = {
+    "version",
+    "flow_row_id",
+    "is_current",
+    "company_id",
+    "created_at",
+    "updated_at",
+}
+
 # Тип для permission: строка или список строк
 Permission = str | list[str] | None
 
@@ -682,21 +692,35 @@ class FlowConfig(CompanyScopedModel):
         rows = await cls.objects.filter(flow_id=flow_id).order_by("-version").all()
         return [row.version for row in rows]
 
+    def content_signature(self) -> JsonObject:
+        """Содержимое flow без полей-бухгалтерии версии — сравнение для дедупликации."""
+        return require_json_object(
+            self.model_dump(mode="json", exclude=_VERSION_BOOKKEEPING_FIELDS),
+            "flow.content",
+        )
+
     @classmethod
     async def create_version(cls, entity: Self) -> bool:
+        context = get_context()
+        if context is None or context.active_company is None or context.active_company.company_id == "":
+            raise ValueError("flow save requires an active company")
+        previous = await cls.current_for_flow(entity.flow_id)
+        if previous is not None and previous.content_signature() == entity.content_signature():
+            entity.version = previous.version
+            entity.is_current = True
+            entity.company_id = previous.company_id
+            entity.flow_row_id = previous.flow_row_id
+            logger.info("flows.repo.unchanged", flow_id=entity.flow_id, version=previous.version)
+            return True
         version = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
         now = datetime.now(timezone.utc)
         entity.version = version
         entity.is_current = True
-        context = get_context()
-        if context is None or context.active_company is None or context.active_company.company_id == "":
-            raise ValueError("flow save requires an active company")
         entity.company_id = context.active_company.company_id
         entity.flow_row_id = cls.row_id_for_active_company_and_version(entity.flow_id, version)
         if entity.created_at is None:
             entity.created_at = now
         entity.updated_at = now
-        previous = await cls.current_for_flow(entity.flow_id)
         if previous is not None:
             previous.is_current = False
             _ = await previous.save(update_fields={"is_current"})

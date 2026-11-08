@@ -32,11 +32,9 @@ from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
-from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.reader import FileReader, ReadOptions
-from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
@@ -582,16 +580,12 @@ class FlowsLoader:
     ) -> FileRecord:
         if self.files_service is None:
             raise RuntimeError("files_service required to place a flow asset in Documents")
-        return await self.files_service.create(
-            FileCreateSpec(
-                source_kind=FileSourceKind.FLOW_ASSET,
-                source_ref=FileSourceRef(flow_id=flow_id),
-                retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
-                post_create=FilePostCreate(is_public=is_public),
-            ),
-            data,
+        return await self.files_service.get_or_create_flow_asset(
+            data=data,
             original_name=original_name,
             content_type=content_type,
+            flow_id=flow_id,
+            is_public=is_public,
         )
 
     def _map_source_to_local_static(self, source: str) -> Path | None:

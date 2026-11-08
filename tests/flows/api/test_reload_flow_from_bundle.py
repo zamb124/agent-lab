@@ -91,6 +91,37 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
 
 
 @pytest.mark.asyncio
+async def test_reload_from_bundle_is_idempotent(client, auth_headers_system):
+    """Повторный reload неизменённого bundle не создаёт новых версий и файлов.
+
+    ``psy`` — bundle с ``store_card_image``: материализация файлов тоже идемпотентна,
+    иначе новый file_id на каждом прогоне делал бы версию отличной.
+    """
+    flow_id = "psy"
+    first_resp = await client.post(
+        f"/flows/api/v1/flows/{flow_id}/reload-from-bundle", headers=auth_headers_system
+    )
+    assert first_resp.status_code == 200, first_resp.text
+    first = await FlowConfig.current_for_flow(flow_id)
+    assert first is not None
+    versions_first = await FlowConfig.list_version_strings_by_version_desc(flow_id)
+
+    second_resp = await client.post(
+        f"/flows/api/v1/flows/{flow_id}/reload-from-bundle", headers=auth_headers_system
+    )
+    assert second_resp.status_code == 200, second_resp.text
+    versions_second = await FlowConfig.list_version_strings_by_version_desc(flow_id)
+
+    assert versions_second == versions_first, (
+        f"Повторный reload создал дубли версий: {versions_first} → {versions_second}"
+    )
+    second = await FlowConfig.current_for_flow(flow_id)
+    assert second is not None
+    assert second.version == first.version
+    assert second.store_card_image_url == first.store_card_image_url
+
+
+@pytest.mark.asyncio
 async def test_reload_from_bundle_returns_403_when_flow_absent(client, auth_headers_system):
     response = await client.post(
         "/flows/api/v1/flows/nonexistent_flow_id_xyz999/reload-from-bundle",

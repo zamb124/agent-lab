@@ -241,6 +241,60 @@ async def test_flows_loader_filter_public(di, unique_id: str):
 
 
 @pytest.mark.asyncio
+async def test_init_company_resources_idempotent_no_duplicate_versions(di, unique_id: str):
+    """Повторная инициализация компании не создаёт новых версий flow.
+
+    Регрессия прод-бага: каждый init писал новую строку версии на flow
+    (~260 дублей на флоу). Дедуп в FlowConfig.create_version делает init идемпотентным.
+    """
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
+    from core.models.identity_models import Company, User
+
+    test_company_id = f"test_idem_{unique_id}"
+    init_kwargs = {
+        "company_id": test_company_id,
+        "company_name": "Idem",
+        "subdomain": f"idem-{unique_id}",
+        "di": di,
+    }
+
+    first = await init_company_resources(**init_kwargs)
+    assert first["status"] == "completed"
+    assert first["flows"] > 0
+
+    snapshot_ctx = Context(
+        user=User(user_id="test_user", name="Test User"),
+        active_company=Company(company_id=test_company_id, name="Idem", subdomain=""),
+        session_id="test_session",
+        channel="test",
+    )
+    set_context(snapshot_ctx)
+    try:
+        snapshot = {
+            row.flow_id: await FlowConfig.list_version_strings_by_version_desc(row.flow_id)
+            for row in await FlowConfig.list_current_by_created_at_desc(limit=10000)
+        }
+    finally:
+        clear_context()
+    assert snapshot, "init не загрузил ни одного flow"
+
+    second = await init_company_resources(**init_kwargs)
+    assert second["status"] == "completed"
+
+    set_context(snapshot_ctx)
+    try:
+        for flow_id, versions in snapshot.items():
+            after = await FlowConfig.list_version_strings_by_version_desc(flow_id)
+            assert after == versions, (
+                f"{flow_id}: повторный init создал дубли версий {versions} → {after}"
+            )
+    finally:
+        clear_context()
+
+
+@pytest.mark.asyncio
 async def test_system_vs_company_loading(di, unique_id: str):
     """
     Сравнение загрузки для system vs обычной компании.

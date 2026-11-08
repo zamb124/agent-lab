@@ -23,6 +23,7 @@ from core.files.models import FileRecord
 from core.files.object_key import object_key
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import FilePrincipal
+from core.files.registry import default_retention_for_source
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
@@ -109,6 +110,39 @@ class FilesService:
 
         await self._run_post_create(file_record, spec, post_create)
         return await self._bind_after_create(file_record, spec, title=effective_name)
+
+    async def get_or_create_flow_asset(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: str,
+        flow_id: str,
+        is_public: bool,
+    ) -> FileRecord:
+        """Идемпотентная материализация flow asset: тот же контент и имя → существующая запись."""
+        checksum = hashlib.sha256(data).hexdigest()
+        company_id = require_active_company().company_id
+        existing = await FileRecord.alive_by_checksum_source_and_name(
+            company_id=company_id,
+            source_kind=FileSourceKind.FLOW_ASSET,
+            checksum=checksum,
+            original_name=original_name,
+            is_public=is_public,
+        )
+        if existing is not None:
+            return existing
+        return await self.create(
+            FileCreateSpec(
+                source_kind=FileSourceKind.FLOW_ASSET,
+                source_ref=FileSourceRef(flow_id=flow_id),
+                retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+                post_create=FilePostCreate(is_public=is_public),
+            ),
+            data,
+            original_name=original_name,
+            content_type=content_type,
+        )
 
     async def register_s3(
         self,

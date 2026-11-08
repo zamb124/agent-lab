@@ -263,6 +263,30 @@ class FileRecord(PlatformModel):
         return await cls.objects.filter(file_id=file_id, company_id=company_id).get_or_none()
 
     @classmethod
+    async def alive_by_checksum_source_and_name(
+        cls,
+        *,
+        company_id: str,
+        source_kind: str,
+        checksum: str,
+        original_name: str,
+        is_public: bool,
+    ) -> Self | None:
+        """Живой файл компании данного источника по содержимому и имени. Нет записи — None."""
+        return await (
+            cls.objects.filter(
+                company_id=company_id,
+                source_kind=source_kind,
+                checksum=checksum,
+                original_name=original_name,
+                is_public=is_public,
+                deleted_at__isnull=True,
+            )
+            .exclude(status=FileStatus.DELETED)
+            .get_or_none()
+        )
+
+    @classmethod
     async def count_alive(cls, company_id: str) -> int:
         return await cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False).count()
 

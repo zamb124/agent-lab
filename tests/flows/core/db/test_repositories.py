@@ -99,6 +99,47 @@ class TestFlowRepository:
         await FlowConfig.delete_by_flow_id("test_flow_repo")
 
     @pytest.mark.asyncio
+    async def test_create_version_dedups_identical_content(self, app, di, unique_id):
+        """Запись идентичного содержимого не создаёт новую строку версии; изменение — создаёт."""
+        flow_id = f"dedup_{unique_id}"
+        base = {
+            "flow_id": flow_id,
+            "name": "Dedup",
+            "entry": "main",
+            "nodes": {"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+        }
+        await FlowConfig.create_version(FlowConfig.model_validate(base))
+        try:
+            versions_initial = await FlowConfig.list_version_strings_by_version_desc(flow_id)
+            assert len(versions_initial) == 1
+            first_version = versions_initial[0]
+
+            await FlowConfig.create_version(FlowConfig.model_validate(base))
+            versions_after_identical = await FlowConfig.list_version_strings_by_version_desc(
+                flow_id
+            )
+            assert versions_after_identical == [first_version], (
+                f"Идентичная запись создала новую версию: {versions_after_identical}"
+            )
+            current = await FlowConfig.current_for_flow(flow_id)
+            assert current is not None
+            assert current.version == first_version
+            assert current.is_current is True
+
+            changed = dict(base)
+            changed["name"] = "Dedup changed"
+            await FlowConfig.create_version(FlowConfig.model_validate(changed))
+            versions_after_change = await FlowConfig.list_version_strings_by_version_desc(flow_id)
+            assert len(versions_after_change) == 2
+            assert versions_after_change[0] != first_version
+            current_changed = await FlowConfig.current_for_flow(flow_id)
+            assert current_changed is not None
+            assert current_changed.name == "Dedup changed"
+            assert current_changed.is_current is True
+        finally:
+            await FlowConfig.delete_by_flow_id(flow_id)
+
+    @pytest.mark.asyncio
     async def test_list_all_flows(self, app, di):
         """Получение списка всех flows."""
 
