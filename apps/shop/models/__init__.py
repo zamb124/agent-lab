@@ -24,7 +24,7 @@ from apps.shop.models.enums import (
     order_status_label,
 )
 from apps.shop.models.favorite import ShopFavorite
-from apps.shop.models.loyalty import ShopLoyaltyProgram
+from apps.shop.models.loyalty_program import ShopLoyaltyProgram
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder, delivery_details_label

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from apps.shop.models.api import ShopFeatures, normalize_shop_features
 from apps.shop.models.enums import ShopLoyaltyRewardKind
-from apps.shop.models.loyalty import (
+from apps.shop.models.loyalty_account import ShopLoyaltyAccount
+from apps.shop.models.loyalty_program import (
     MAX_REWARD_PERCENT,
-    ShopLoyaltyAccount,
     ShopLoyaltyProgram,
 )
 from apps.shop.models.order import ShopOrder

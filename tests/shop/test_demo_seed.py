@@ -25,7 +25,7 @@ from apps.shop.models.enums import (
     ShopShelfKind,
     ShopStatus,
 )
-from apps.shop.models.loyalty import MAX_REWARD_PERCENT, ShopLoyaltyProgram
+from apps.shop.models.loyalty_program import MAX_REWARD_PERCENT, ShopLoyaltyProgram
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder
