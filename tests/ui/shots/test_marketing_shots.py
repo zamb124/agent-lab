@@ -335,7 +335,7 @@ async def test_shot_geo_route_lab(
     await wait_geo_map_ready(shot_desktop_page, zoom=15.8)
     await click_geo_map_at(shot_desktop_page, _ROAD_A)
     await click_geo_map_at(shot_desktop_page, _ROAD_B)
-    await wait_geo_map_ready(shot_desktop_page, zoom=15.8, sources={"pm-route": 1})
+    await wait_geo_map_ready(shot_desktop_page, zoom=15.8, sources={"pm-ov-route": 1})
     await expect(
         shot_desktop_page.locator(".map-metrics")
     ).to_be_visible(timeout=20_000)

@@ -131,7 +131,7 @@ def patch_service_clients_asgi(
         }
         service_prefix = _asgi_path_prefix.get(service, service)
         request_path = path
-        if not path.startswith(f"/{service_prefix}/"):
+        if not path.startswith(f"/{service_prefix}/") and not path.startswith(f"/{service}/"):
             request_path = f"/{service_prefix}{path}"
 
         preserved: BaseSettings = get_settings()

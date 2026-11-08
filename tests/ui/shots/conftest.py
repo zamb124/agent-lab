@@ -236,7 +236,9 @@ async def _wait_geo_source_features(
             """(el, src) => {
                 const s = el.getMap().getSource(src);
                 const data = s ? s.serialize().data : null;
-                return data && data.features ? data.features.length : -1;
+                if (!data) return -1;
+                if (data.type === 'Feature') return 1;
+                return data.features ? data.features.length : 0;
             }""",
             source,
         )
