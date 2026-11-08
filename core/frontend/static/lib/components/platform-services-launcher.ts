@@ -1,11 +1,13 @@
 /**
  * platform-services-launcher — сетка быстрого запуска продуктов платформы.
  * Каталог: platform-services-catalog. Навигация: build-service-entry-url.
+ * Сервис с `featured: true` идёт первым hero-плиткой во всю ширину сетки.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import './platform-icon.js';
 import { PLATFORM_SERVICES } from '../utils/platform-services-catalog.js';
 import type { PlatformServiceEntry } from '../utils/platform-services-catalog.js';
 import type { SelectController } from '../events/select-controller.js';
@@ -193,6 +195,71 @@ export class PlatformServicesLauncher extends PlatformElement {
                 -webkit-line-clamp: 2;
                 -webkit-box-orient: vertical;
             }
+            /* Featured — сервис «над продуктами»: hero-плитка на всю ширину
+               сетки с brand-градиентом, увеличенной иконкой и теглайном. */
+            .hero-tile {
+                grid-column: 1 / -1;
+                flex-direction: row;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                text-align: left;
+                border-radius: var(--radius-2xl);
+                border: 1px solid color-mix(in srgb, var(--brand-from) 32%, var(--glass-border-medium));
+                background: linear-gradient(
+                    120deg,
+                    color-mix(in srgb, var(--brand-from) 20%, transparent) 0%,
+                    color-mix(in srgb, var(--brand-to) 12%, transparent) 55%,
+                    color-mix(in srgb, var(--glass-solid-medium) 55%, transparent) 100%
+                );
+                box-shadow: var(--glass-shadow-medium);
+            }
+            .hero-text {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+                flex: 1;
+            }
+            .hero-tagline {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.3;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .hero-arrow {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+                transition:
+                    transform var(--motion-duration-layout) var(--motion-ease-standard),
+                    color var(--motion-duration-layout) var(--motion-ease-standard);
+            }
+            :host([layout="page"]) .hero-tile .icon-wrap {
+                width: 72px;
+                height: 72px;
+            }
+            @media (hover: hover) {
+                a.hero-tile:not(:active):hover,
+                button.hero-tile:not(:active):hover {
+                    background: linear-gradient(
+                        120deg,
+                        color-mix(in srgb, var(--brand-from) 26%, transparent) 0%,
+                        color-mix(in srgb, var(--brand-to) 16%, transparent) 55%,
+                        color-mix(in srgb, var(--glass-solid-medium) 65%, transparent) 100%
+                    );
+                    border-color: color-mix(in srgb, var(--brand-from) 55%, var(--glass-border-medium));
+                    box-shadow:
+                        var(--glass-inner-glow-medium),
+                        0 8px 24px -8px color-mix(in srgb, var(--brand-from) 42%, transparent),
+                        0 20px 44px -16px color-mix(in srgb, var(--brand-to) 32%, transparent);
+                }
+                a.hero-tile:not(:active):hover .hero-arrow,
+                button.hero-tile:not(:active):hover .hero-arrow {
+                    transform: translateX(3px);
+                    color: var(--text-primary);
+                }
+            }
             .tile--disabled {
                 cursor: not-allowed;
                 pointer-events: none;
@@ -276,18 +343,34 @@ export class PlatformServicesLauncher extends PlatformElement {
         const dotColor = mapped === undefined ? 'var(--text-tertiary)' : mapped;
         const brandStyle = `--brand-from: ${svc.brandFrom}; --brand-to: ${svc.brandTo}; --health-dot-color: ${dotColor};`;
         const title = this.t(svc.nameKey, null, 'platform');
+        const featured = svc.featured === true;
+        const tileClass = featured ? 'tile hero-tile' : 'tile';
         const iconBlock = html`
             <div class="icon-wrap" style=${brandStyle}>
                 <span class="health-dot" aria-hidden="true"></span>
                 <img src=${svc.logoSrc} alt="" />
             </div>
         `;
-        const label = html`<span class="label">${title}</span>`;
+        const taglineKey = svc.taglineKey;
+        const inner = featured
+            ? html`
+                ${iconBlock}
+                <span class="hero-text">
+                    <span class="label">${title}</span>
+                    ${taglineKey === undefined
+                        ? nothing
+                        : html`<span class="hero-tagline">${this.t(taglineKey, null, 'platform')}</span>`}
+                </span>
+                <platform-icon class="hero-arrow" name="chevron-right" size="20"></platform-icon>
+            `
+            : html`
+                ${iconBlock}
+                <span class="label">${title}</span>
+            `;
         if (disabled) {
             return html`
-                <div class="tile tile--disabled" data-service-id=${id} style=${brandStyle} aria-label=${title}>
-                    ${iconBlock}
-                    ${label}
+                <div class="${tileClass} tile--disabled" data-service-id=${id} style=${brandStyle} aria-label=${title}>
+                    ${inner}
                 </div>
             `;
         }
@@ -295,21 +378,20 @@ export class PlatformServicesLauncher extends PlatformElement {
             return html`
                 <button
                     type="button"
-                    class="tile"
+                    class=${tileClass}
                     data-service-id=${id}
                     style=${brandStyle}
                     aria-label=${title}
                     @click=${(e: Event) => this._onTileClick(e, id)}
                 >
-                    ${iconBlock}
-                    ${label}
+                    ${inner}
                 </button>
             `;
         }
         const href = buildServiceEntryUrl(id);
         return html`
             <a
-                class="tile"
+                class=${tileClass}
                 data-service-id=${id}
                 href=${href}
                 aria-label=${title}
@@ -322,17 +404,19 @@ export class PlatformServicesLauncher extends PlatformElement {
                     }
                 }}
             >
-                ${iconBlock}
-                ${label}
+                ${inner}
             </a>
         `;
     }
 
     override render(): TemplateResult {
         const rows = this._servicesToRender();
+        const featured = rows.filter((s) => s.featured === true);
+        const regular = rows.filter((s) => s.featured !== true);
         return html`
             <div class="grid" part="grid">
-                ${rows.map((svc) => this._renderTile(svc))}
+                ${featured.map((svc) => this._renderTile(svc))}
+                ${regular.map((svc) => this._renderTile(svc))}
             </div>
         `;
     }

@@ -47,6 +47,26 @@ class TestServicesAPI:
 
         assert response.status_code == 200
 
+    async def test_services_status_all_healthy(
+        self,
+        frontend_client: AsyncClient,
+    ):
+        """Все сервисы стека отвечают healthy — регрессия на канон `/{name}/health`.
+
+        Несуществующий health-путь (например `/flows/api/v1/health`, который
+        router трактует как flow_id) возвращает unhealthy — этот тест ловит
+        рассинхрон target-таблицы с реальными маршрутами сервисов.
+        """
+        response = await frontend_client.get("/frontend/api/services/status")
+
+        assert response.status_code == 200
+        statuses = response.json()["items"]
+
+        assert {s["name"] for s in statuses} == EXPECTED_SERVICES
+        for service in statuses:
+            assert service["status"] == "healthy", f"{service['name']} unhealthy: {service}"
+            assert service["response_time"] is not None
+
     async def test_services_status_response_time(
         self,
         frontend_client: AsyncClient,

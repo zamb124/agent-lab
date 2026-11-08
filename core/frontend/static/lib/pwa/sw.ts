@@ -363,14 +363,10 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Версия деплоя и health: только сеть, без Cache Storage (иначе клиент не видит новый релиз)
+  // Версия деплоя и health: только сеть, без Cache Storage (иначе клиент не видит новый релиз).
+  // Сетевая ошибка доходит до клиента как есть — синтетический 503 маскирует TypeError и спамит консоль.
   if (url.pathname === '/health' || url.pathname.endsWith('/health')) {
-    event.respondWith(
-      fetchFresh(request, 'no-store').catch((err) => {
-        console.error('[SW] health fetch:', err);
-        return new Response('', { status: 503, statusText: 'Service Unavailable' });
-      })
-    );
+    event.respondWith(fetchFresh(request, 'no-store'));
     return;
   }
 

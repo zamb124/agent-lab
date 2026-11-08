@@ -1197,6 +1197,31 @@ class TestA2AConversation:
         return "example_react"
 
     @pytest.mark.asyncio
+    async def test_list_tasks_empty_context_returns_tasks_array(self, client, flow_id):
+        """ListTasks по свежему contextId: `tasks` — массив, `nextPageToken` — строка.
+
+        ProtoJSON опускает пустые repeated/string — регрессия: flow-ui требует
+        `result.tasks` массивом и падал с "must be an array" на любом новом контексте.
+        """
+        resp = await client.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": "list-empty",
+                "method": "ListTasks",
+                "params": {"contextId": str(uuid.uuid4())},
+            },
+        )
+        data = resp.json()
+        _validate_jsonrpc_response(data)
+        result = data["result"]
+        assert "error" not in data
+        assert isinstance(result["tasks"], list)
+        assert result["tasks"] == []
+        assert isinstance(result["nextPageToken"], str)
+
+    @pytest.mark.asyncio
     async def test_multi_turn_preserves_context(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):

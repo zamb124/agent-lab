@@ -137,17 +137,30 @@ async def seed_demo_shops(
         raise AssertionError(f"/shops response без items: {list(body)}")
 
     shops: dict[str, dict[str, str]] = {}
+    foreign: list[str] = []
     for item in items:
         if not isinstance(item, dict):
             continue
         shop_id = str(item.get("shop_id", ""))
         slug = str(item.get("slug", ""))
-        if not shop_id.startswith("demo:") or not slug:
+        if not shop_id.startswith("demo:"):
+            if shop_id:
+                foreign.append(shop_id)
             continue
         tpl_key = shop_id.split(":")[1]
         shops[tpl_key] = {"id": shop_id, "slug": slug}
     if not shops:
         raise AssertionError(f"demo-витрины не найдены в /shops: {items}")
+
+    # Кадр админки без витрин прошлых e2e-прогонов.
+    if foreign:
+        async with api_client("shop", token) as client:
+            await asyncio.gather(
+                *(
+                    client.delete(f"{SHOP_ADMIN_API}/shops/{shop_id}")
+                    for shop_id in foreign
+                )
+            )
 
     async with api_client("shop", token) as pub_client:
         for s in shops.values():
@@ -213,6 +226,9 @@ async def _seed_crm(token: str) -> dict[str, Any]:
         ]
 
         def pick(*needles: str) -> str | None:
+            for tid in needles:
+                if tid in type_ids:
+                    return tid
             for tid in type_ids:
                 if any(n in tid for n in needles):
                     return tid
@@ -221,45 +237,77 @@ async def _seed_crm(token: str) -> dict[str, Any]:
         company_t = pick("company", "account", "organization")
         contact_t = pick("contact", "person")
         deal_t = pick("deal", "opportunity", "lead")
+        note_t = pick("note")
+        missing = [
+            label
+            for label, tid in (
+                ("company", company_t),
+                ("contact", contact_t),
+                ("deal", deal_t),
+                ("note", note_t),
+            )
+            if tid is None
+        ]
+        if missing:
+            raise AssertionError(
+                f"CRM {ns}: нет типов {missing} в namespace: {type_ids}"
+            )
 
-        created: list[str] = []
-        if company_t:
-            for name, desc in (
-                ("ООО «Аврора Ритейл»", "Сеть из 24 магазинов, Pilot по подписке"),
-                ("ИП Смирнова А.В.", "Кофейня у метро, интересует витрина + заказы"),
-                ("ООО «ТехноДар»", "Дистрибьютор электроники, 120 сотрудников"),
-            ):
-                e = await _post(
-                    client,
-                    "/crm/api/v1/entities",
-                    {
-                        "entity_type": company_t,
-                        "namespace": ns,
-                        "name": name,
-                        "description": desc,
-                    },
-                )
-                created.append(str(e.get("id") or e.get("entity_id") or ""))
-        if contact_t:
-            for name, desc in (
-                ("Анна Смирнова", "Владелец кофейни, принимает решение по подписке"),
-                ("Дмитрий Козлов", "Директор по закупкам, Аврора Ритейл"),
-                ("Мария Орлова", "Операционный директор, ТехноДар"),
-                ("Игорь Савельев", "IT-директор, Аврора Ритейл"),
-            ):
-                e = await _post(
-                    client,
-                    "/crm/api/v1/entities",
-                    {
-                        "entity_type": contact_t,
-                        "namespace": ns,
-                        "name": name,
-                        "description": desc,
-                    },
-                )
-                created.append(str(e.get("id") or e.get("entity_id") or ""))
+        existing_body = await _post(
+            client,
+            "/crm/api/v1/entities/query",
+            {"namespace": ns, "limit": 1000},
+        )
+        existing_by_name: dict[str, str] = {}
+        existing_rel: set[tuple[str, str, str]] = set()
+        for it in existing_body.get("items", []):
+            if isinstance(it, dict) and it.get("name"):
+                eid = str(it.get("entity_id") or it.get("id") or "")
+                if eid:
+                    existing_by_name[str(it["name"])] = eid
+
+        ids_by_name: dict[str, str] = dict(existing_by_name)
+
+        async def ensure_entity(
+            entity_type: str | None,
+            name: str,
+            desc: str,
+            *,
+            attributes: dict[str, Any] | None = None,
+            entity_subtype: str | None = None,
+            note_date: str | None = None,
+        ) -> str | None:
+            if entity_type is None:
+                return None
+            if name in ids_by_name:
+                return ids_by_name[name]
+            payload: dict[str, Any] = {
+                "entity_type": entity_type,
+                "namespace": ns,
+                "name": name,
+                "description": desc,
+            }
+            if attributes is not None:
+                payload["attributes"] = attributes
+            if entity_subtype is not None:
+                payload["entity_subtype"] = entity_subtype
+            if note_date is not None:
+                payload["note_date"] = note_date
+            e = await _post(client, "/crm/api/v1/entities", payload)
+            eid = str(e.get("entity_id") or e.get("id") or "")
+            ids_by_name[name] = eid
+            return eid
+
+        await ensure_entity(company_t, "ООО «Аврора Ритейл»", "Сеть из 24 магазинов, Pilot по подписке")
+        await ensure_entity(company_t, "ИП Смирнова А.В.", "Кофейня у метро, интересует витрина + заказы")
+        await ensure_entity(company_t, "ООО «ТехноДар»", "Дистрибьютор электроники, 120 сотрудников")
+
+        await ensure_entity(contact_t, "Анна Смирнова", "Владелец кофейни, принимает решение по подписке")
+        await ensure_entity(contact_t, "Дмитрий Козлов", "Директор по закупкам, Аврора Ритейл")
+        await ensure_entity(contact_t, "Мария Орлова", "Операционный директор, ТехноДар")
+        await ensure_entity(contact_t, "Игорь Савельев", "IT-директор, Аврора Ритейл")
+
         if deal_t:
-            # pick() отдаёт deal или lead: stage-значения у шаблонов разные.
             is_lead = "lead" in deal_t
             stages = ("qualified", "working", "new") if is_lead else ("negotiation", "proposal", "contract", "discovery")
             deals = (
@@ -269,57 +317,139 @@ async def _seed_crm(token: str) -> dict[str, Any]:
                 ("Расширение — Аврора", "Добавление склада и доставки", 800_000),
             )
             for i, (name, desc, amount) in enumerate(deals):
-                e = await _post(
-                    client,
-                    "/crm/api/v1/entities",
-                    {
-                        "entity_type": deal_t,
-                        "namespace": ns,
-                        "name": name,
-                        "description": desc,
-                        "attributes": {
-                            "stage": stages[i % len(stages)],
-                            "source": "inbound",
-                            "amount": amount,
-                            "currency": "RUB",
-                        },
+                await ensure_entity(
+                    deal_t,
+                    name,
+                    desc,
+                    attributes={
+                        "stage": stages[i % len(stages)],
+                        "source": "inbound",
+                        "amount": amount,
+                        "currency": "RUB",
                     },
                 )
-                created.append(str(e.get("id") or e.get("entity_id") or ""))
 
-        note_t = pick("note")
-        if note_t:
-            for name, desc in (
-                ("Звонок с Анной — кофейня", "Обсудили витрину: хочет онлайн-заказы и программу лояльности. Прислать демо-ссылку."),
-                ("Демо для Авроры — итоги", "Показали CRM, Sync и витрину. Просят расчёт на 24 точки и кейс ритейла."),
-                ("Возражение по цене", "ТехноДар сравнивает с самописной связкой. Аргумент: единая платформа, агенты из коробки."),
-            ):
-                e = await _post(
-                    client,
-                    "/crm/api/v1/entities",
-                    {
-                        "entity_type": note_t,
-                        "namespace": ns,
-                        "name": name,
-                        "description": desc,
-                    },
+        today = datetime.now(timezone.utc).date()
+        notes = (
+            ("Звонок с Анной — кофейня", 0,
+             "Обсудили витрину: хочет онлайн-заказы и программу лояльности. Прислать демо-ссылку."),
+            ("Демо для Авроры — итоги", 0,
+             "Показали CRM, Sync и витрину. Просят расчёт на 24 точки и кейс ритейла."),
+            ("Возражение по цене", 1,
+             "ТехноДар сравнивает с самописной связкой. Аргумент: единая платформа, агенты из коробки."),
+            ("Встреча с ТехноДар — план внедрения", 2,
+             "Пилот на 15 мест отдела продаж. Старт — импорт базы, затем агенты поверх данных."),
+        )
+        for name, days_ago, desc in notes:
+            await ensure_entity(
+                note_t,
+                name,
+                desc,
+                note_date=(today - timedelta(days=days_ago)).isoformat(),
+            )
+
+        rel_specs = (
+            ("Анна Смирнова", "ИП Смирнова А.В.", "belongs_to"),
+            ("Дмитрий Козлов", "ООО «Аврора Ритейл»", "belongs_to"),
+            ("Игорь Савельев", "ООО «Аврора Ритейл»", "belongs_to"),
+            ("Мария Орлова", "ООО «ТехноДар»", "belongs_to"),
+            ("Подписка Linnex Pro — Аврора", "ООО «Аврора Ритейл»", "belongs_to"),
+            ("Витрина + заказы — Кофейня", "ИП Смирнова А.В.", "belongs_to"),
+            ("CRM + агенты — ТехноДар", "ООО «ТехноДар»", "belongs_to"),
+            ("Расширение — Аврора", "ООО «Аврора Ритейл»", "belongs_to"),
+            ("Звонок с Анной — кофейня", "Анна Смирнова", "mentions"),
+            ("Демо для Авроры — итоги", "ООО «Аврора Ритейл»", "mentions"),
+            ("Возражение по цене", "ООО «ТехноДар»", "mentions"),
+            ("Встреча с ТехноДар — план внедрения", "ООО «ТехноДар»", "mentions"),
+            ("Подписка Linnex Pro — Аврора", "Дмитрий Козлов", "assigned_to"),
+            ("Игорь Савельев", "Дмитрий Козлов", "reports_to"),
+            ("Расширение — Аврора", "Подписка Linnex Pro — Аврора", "follows_up"),
+        )
+        rel_body = await _get(
+            client,
+            "/crm/api/v1/relationships",
+            params={"namespace": ns, "limit": 1000},
+        )
+        for r in rel_body.get("items", []):
+            if isinstance(r, dict):
+                existing_rel.add(
+                    (
+                        str(r.get("source_entity_id")),
+                        str(r.get("target_entity_id")),
+                        str(r.get("relationship_type")),
+                    )
                 )
-                created.append(str(e.get("id") or e.get("entity_id") or ""))
-    return {"namespace": ns, "entity_ids": created}
+        for src_name, dst_name, rel_type in rel_specs:
+            src_id = ids_by_name.get(src_name)
+            dst_id = ids_by_name.get(dst_name)
+            if not src_id or not dst_id:
+                continue
+            if (src_id, dst_id, rel_type) in existing_rel:
+                continue
+            await _post(
+                client,
+                "/crm/api/v1/relationships",
+                {
+                    "source_entity_id": src_id,
+                    "target_entity_id": dst_id,
+                    "relationship_type": rel_type,
+                    "namespace": ns,
+                    "weight": 1.0,
+                },
+            )
+
+        tasks_body = await _get(
+            client, "/crm/api/v1/activity-tasks", params={"namespace": ns, "limit": 200}
+        )
+        existing_tasks = {
+            str(w.get("title"))
+            for w in tasks_body.get("items", [])
+            if isinstance(w, dict) and w.get("title")
+        }
+        for title, priority, days in (
+            ("Позвонить Анне — демо витрины", "high", 1),
+            ("Подготовить КП для Авроры (24 точки)", "urgent", 2),
+            ("Встреча с ТехноДар — подписание", "high", 3),
+            ("Отправить кейс ритейла Дмитрию", "normal", 5),
+        ):
+            if title in existing_tasks:
+                continue
+            await _post(
+                client,
+                "/crm/api/v1/activity-tasks",
+                {
+                    "title": title,
+                    "namespace": ns,
+                    "priority": priority,
+                    "due_date": (today + timedelta(days=days)).isoformat(),
+                    "assignees": [owner_user_id()],
+                },
+            )
+
+    return {"namespace": ns, "entity_ids": list(ids_by_name.values())}
 
 
 # === Sync ===
 
 
 async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
+    wanted = (
+        ("Команда продукта", False),
+        ("Запуск лендинга", False),
+        ("Руководители", True),
+    )
     channels: dict[str, str] = {}
-    member_ids = [member_user_id()]
+    needed_members = {owner_user_id(), member_user_id()}
     async with api_client("sync", token) as client:
-        for name, is_private in (
-            ("Команда продукта", False),
-            ("Запуск лендинга", False),
-            ("Руководители", True),
-        ):
+        existing = await _get(client, "/sync/api/v1/channels/", params={"limit": 200})
+        for ch in existing.get("items", []):
+            if isinstance(ch, dict) and isinstance(ch.get("name"), str):
+                cid = ch.get("channel_id") or ch.get("id")
+                if isinstance(cid, str) and cid:
+                    channels[ch["name"]] = cid
+        for name, is_private in wanted:
+            if name in channels:
+                continue
             body = await _post(
                 client,
                 "/sync/api/v1/channels/",
@@ -328,13 +458,31 @@ async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
                     "name": name,
                     "namespace": "default",
                     "is_private": is_private,
-                    "member_ids": member_ids,
+                    "member_ids": sorted(needed_members),
                 },
             )
             channel_id = body.get("channel_id")
             if not isinstance(channel_id, str) or not channel_id:
                 raise AssertionError(f"POST /channels без channel_id: {list(body)}")
             channels[name] = channel_id
+
+        # Каналы прошлых прогонов могли создаться без нужных участников.
+        for cid in channels.values():
+            members = await _get(client, f"/sync/api/v1/channels/{cid}/members")
+            have = {
+                str(m.get("user_id"))
+                for m in members.get("items", [])
+                if isinstance(m, dict)
+            }
+            for uid in sorted(needed_members - have):
+                resp = await client.post(
+                    f"/sync/api/v1/channels/{cid}/members",
+                    json={"user_id": uid, "role": "member"},
+                )
+                if resp.status_code >= 400:
+                    raise AssertionError(
+                        f"POST /channels/{cid}/members -> {resp.status_code}: {resp.text[:300]}"
+                    )
 
     convo = [
         ("owner", "Коллеги, обновила макеты главной — посмотрите секцию «Возможности платформы»"),
@@ -347,34 +495,46 @@ async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
         ("member", "Да, и карту Geo с маршрутами доставки. Обе в тёмной теме"),
     ]
     main_channel = channels["Команда продукта"]
-    for i, (who, text) in enumerate(convo):
-        tok = token if who == "owner" else (member_token or token)
-        async with api_client("sync", tok) as c:
-            await _post(
-                c,
-                f"/sync/api/v1/channels/{main_channel}/messages",
-                {
-                    "contents": [
-                        {"type": "text/plain", "data": {"body": text}, "order": 0}
-                    ]
-                },
-            )
-        await asyncio.sleep(0.05)
-
     async with api_client("sync", token) as client:
-        for text in (
-            "Финальные PNG витрин готовы — 2880px, все в одном стиле",
-            "Предлагаю hero-кадр: витрина кофейни в светлой теме",
-        ):
-            await _post(
-                client,
-                f"/sync/api/v1/channels/{channels['Запуск лендинга']}/messages",
-                {
-                    "contents": [
-                        {"type": "text/plain", "data": {"body": text}, "order": 0}
-                    ]
-                },
-            )
+        history = await _get(
+            client,
+            f"/sync/api/v1/channels/{main_channel}/messages",
+            params={"limit": 50},
+        )
+    already = len(history.get("items", []))
+    if already < len(convo):
+        for who, text in convo:
+            tok = token if who == "owner" else (member_token or token)
+            async with api_client("sync", tok) as c:
+                await _post(
+                    c,
+                    f"/sync/api/v1/channels/{main_channel}/messages",
+                    {
+                        "thread_id": None,
+                        "parent_message_id": None,
+                        "contents": [
+                            {"type": "text/plain", "data": {"body": text}, "order": 0}
+                        ],
+                    },
+                )
+            await asyncio.sleep(0.05)
+
+        async with api_client("sync", token) as client:
+            for text in (
+                "Финальные PNG витрин готовы — 2880px, все в одном стиле",
+                "Предлагаю hero-кадр: витрина кофейни в светлой теме",
+            ):
+                await _post(
+                    client,
+                    f"/sync/api/v1/channels/{channels['Запуск лендинга']}/messages",
+                    {
+                        "thread_id": None,
+                        "parent_message_id": None,
+                        "contents": [
+                            {"type": "text/plain", "data": {"body": text}, "order": 0}
+                        ],
+                    },
+                )
     return {"channels": channels, "main_channel_id": main_channel}
 
 
@@ -383,21 +543,31 @@ async def _seed_sync(token: str, member_token: str | None) -> dict[str, Any]:
 
 async def _seed_worktracker(token: str) -> dict[str, Any]:
     async with api_client("worktracker", token) as client:
-        board = await _post(
-            client,
-            "/worktracker/api/v1/boards",
-            {
-                "name": "Запуск Linnex 2.0",
-                "board_key": "generic",
-                "columns": [
-                    {"board_column_id": "backlog", "label": "Бэклог", "state": "open", "position": 0},
-                    {"board_column_id": "doing", "label": "В работе", "state": "in_progress", "position": 1},
-                    {"board_column_id": "review", "label": "На ревью", "state": "in_progress", "position": 2},
-                    {"board_column_id": "done", "label": "Готово", "state": "done", "position": 3},
-                ],
-            },
+        boards = await _get(
+            client, "/worktracker/api/v1/boards", params={"limit": 200}
         )
-        board_id = str(board.get("id") or board.get("board_id"))
+        board_id = ""
+        for b in boards.get("items", []):
+            if isinstance(b, dict) and b.get("name") == "Запуск Linnex 2.0":
+                board_id = str(b.get("id") or b.get("board_id") or "")
+                break
+        if not board_id:
+            board = await _post(
+                client,
+                "/worktracker/api/v1/boards",
+                {
+                    "name": "Запуск Linnex 2.0",
+                    "board_key": "generic",
+                    "columns": [
+                        {"board_column_id": "backlog", "label": "Бэклог", "state": "open", "position": 0},
+                        {"board_column_id": "doing", "label": "В работе", "state": "in_progress", "position": 1},
+                        {"board_column_id": "review", "label": "На ревью", "state": "in_progress", "position": 2},
+                        {"board_column_id": "done", "label": "Готово", "state": "done", "position": 3},
+                    ],
+                },
+            )
+            board_id = str(board.get("id") or board.get("board_id"))
+
         owner = {"assignee_kind": "users", "user_ids": [owner_user_id()]}
         member = {"assignee_kind": "users", "user_ids": [member_user_id()]}
         items = [
@@ -411,7 +581,19 @@ async def _seed_worktracker(token: str) -> dict[str, Any]:
             ("Опубликовать релизные заметки 2.0", "done", "high", ["release"], member),
             ("Настроить demo-окружение для продаж", "done", "normal", ["sales"], owner),
         ]
+        existing = await _get(
+            client,
+            "/worktracker/api/v1/work-items",
+            params={"board_id": board_id, "limit": 1000},
+        )
+        existing_titles = {
+            str(w.get("title"))
+            for w in existing.get("items", [])
+            if isinstance(w, dict) and w.get("title")
+        }
         for i, (title, col, priority, labels, assignment) in enumerate(items):
+            if title in existing_titles:
+                continue
             await _post(
                 client,
                 "/worktracker/api/v1/work-items",
@@ -498,7 +680,17 @@ WIKI_PAGES: list[dict[str, str]] = [
 async def _seed_wiki(token: str) -> dict[str, Any]:
     page_ids: list[str] = []
     async with api_client("wiki", token) as client:
+        tree = await _get(client, "/wiki/api/v1/pages")
+        by_title: dict[str, str] = {}
+        for item in tree.get("items", []):
+            if isinstance(item, dict) and isinstance(item.get("title"), str):
+                pid = item.get("wiki_page_id")
+                if isinstance(pid, str) and pid:
+                    by_title[item["title"]] = pid
         for spec in WIKI_PAGES:
+            if spec["title"] in by_title:
+                page_ids.append(by_title[spec["title"]])
+                continue
             body = await _post(
                 client,
                 "/wiki/api/v1/pages",
@@ -531,9 +723,40 @@ async def _seed_office(token: str) -> dict[str, Any]:
     async with httpx2.AsyncClient(
         base_url=api_origin("office"), timeout=120.0, trust_env=False
     ) as client:
+        ensured = await client.post(
+            "/documents/api/v1/catalogs/ensure-path",
+            headers=headers,
+            json={"catalog_path": ["Documents"], "company_visible": True},
+        )
+        ensured.raise_for_status()
+        documents_catalog_id = str(ensured.json().get("catalog_id") or "")
+        if not documents_catalog_id:
+            raise AssertionError(
+                f"office: ensure-path не вернул catalog_id: {ensured.json()}"
+            )
+
+        items = await client.get(
+            f"/documents/api/v1/catalogs/{documents_catalog_id}/items",
+            headers=headers,
+        )
+        items.raise_for_status()
+        existing: dict[str, str] = {}
+        for it in items.json().get("documents", []):
+            if isinstance(it, dict) and it.get("title") and it.get("file_id"):
+                existing[str(it["title"])] = str(it["file_id"])
         for filename, content_type in OFFICE_UPLOADS:
             path = OFFICE_EXAMPLE_DOCS_DIR / filename
             if not path.exists():
+                raise AssertionError(f"example-doc не найден: {path}")
+            stem = path.stem
+            hit = existing.get(filename) or existing.get(stem)
+            if hit is None:
+                for title, fid in existing.items():
+                    if title == filename or title.startswith(stem):
+                        hit = fid
+                        break
+            if hit is not None:
+                file_ids.append(hit)
                 continue
             payload = await upload_office_file_bytes(
                 client,
@@ -562,7 +785,8 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "name": "Разбор обращения",
                 "prompt": "Ты ассистент продаж. Разбери входящее обращение клиента: тема, срочность, имя и контакт. Спроси недостающее через ask_user.",
                 "tools": [{"tool_id": "ask_user"}],
-                "llm": {"model": "auto", "temperature": 0.3, "provider": "linnex_llm"},
+                "agent_skills": [],
+                "llm": {"model": "auto", "temperature": 0.3, "provider": "linnex_llm", "max_tokens": 1024},
                 "pos_x": 120,
                 "pos_y": 260,
             },
@@ -570,6 +794,7 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "type": "code",
                 "name": "Поиск по базе знаний",
                 "code": "async def run(args, state):\n    state['kb_context'] = state.get('kb_context', '')\n    return state",
+                "language": "python",
                 "pos_x": 420,
                 "pos_y": 120,
             },
@@ -577,6 +802,7 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "type": "code",
                 "name": "Квалификация лида",
                 "code": "async def run(args, state):\n    state['qualified'] = bool(state.get('contact'))\n    return state",
+                "language": "python",
                 "pos_x": 420,
                 "pos_y": 400,
             },
@@ -585,7 +811,8 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "name": "Черновик ответа",
                 "prompt": "Подготовь вежливый черновик ответа клиенту по данным обращения и базе знаний.",
                 "tools": [{"tool_id": "ask_user"}],
-                "llm": {"model": "auto", "temperature": 0.4, "provider": "linnex_llm"},
+                "agent_skills": [],
+                "llm": {"model": "auto", "temperature": 0.4, "provider": "linnex_llm", "max_tokens": 1024},
                 "pos_x": 720,
                 "pos_y": 180,
             },
@@ -593,6 +820,7 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "type": "code",
                 "name": "Создать сделку в CRM",
                 "code": "async def run(args, state):\n    state['deal_created'] = True\n    return state",
+                "language": "python",
                 "pos_x": 720,
                 "pos_y": 420,
             },
@@ -600,6 +828,7 @@ def _marketing_flow_payload() -> dict[str, Any]:
                 "type": "code",
                 "name": "Уведомить в Sync",
                 "code": "async def run(args, state):\n    state['notified'] = True\n    return state",
+                "language": "python",
                 "pos_x": 1020,
                 "pos_y": 300,
             },

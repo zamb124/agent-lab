@@ -8,6 +8,8 @@ from typing import cast
 
 from a2a.types import (
     Artifact,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksResponse,
     Message,
     Part,
     StreamResponse,
@@ -17,6 +19,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
+from google.protobuf.message import Message as ProtoMessage
 from google.protobuf.struct_pb2 import Struct, Value
 
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
@@ -390,6 +393,20 @@ def stream_response_from_json_dict(payload: Mapping[str, JsonValue]) -> StreamRe
     return stream
 
 
+def rpc_result_to_json_dict(message: ProtoMessage) -> JsonObject:
+    """Serialize one A2A RPC result message to ProtoJSON.
+
+    ProtoJSON опускает required-поля с пустым значением (repeated, string):
+    восстанавливает `tasks`/`configs` и `nextPageToken` для list-ответов.
+    """
+    payload = require_json_object(MessageToDict(message), "a2a.rpc.result")
+    if isinstance(message, (ListTasksResponse, ListTaskPushNotificationConfigsResponse)):
+        repeated = "tasks" if isinstance(message, ListTasksResponse) else "configs"
+        payload.setdefault(repeated, [])
+        payload.setdefault("nextPageToken", "")
+    return payload
+
+
 __all__ = [
     "artifact_from_json_dict",
     "artifact_to_json_dict",
@@ -413,6 +430,7 @@ __all__ = [
     "get_part_data",
     "messages_from_json_list",
     "messages_to_json_list",
+    "rpc_result_to_json_dict",
     "status_update_from_json_dict",
     "status_update_to_json_dict",
     "stream_response_from_event",

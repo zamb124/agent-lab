@@ -14,10 +14,8 @@ from a2a.types import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
-    ListTasksResponse,
     Message,
     SendMessageRequest,
-    StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
@@ -25,7 +23,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import ParseDict
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtoMessage
 
@@ -49,6 +47,9 @@ from core.a2a import (
     SUBSCRIBE_TO_TASK,
     A2AApplicationError,
     A2AErrorCode,
+    rpc_result_to_json_dict,
+    stream_response_from_event,
+    stream_response_to_json_dict,
 )
 from core.auth.utils import get_token_info
 from core.context import set_context
@@ -65,25 +66,10 @@ JWT_ALGORITHM = "HS256"
 router = APIRouter(tags=["websocket"])
 
 
-def _proto_result(message: ProtoMessage) -> JsonObject:
-    payload = require_json_object(MessageToDict(message), "a2a.ws.result")
-    if isinstance(message, ListTasksResponse) and "nextPageToken" not in payload:
-        payload["nextPageToken"] = ""
-    return payload
-
-
 def _stream_response_result(
     event: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
 ) -> JsonObject:
-    if isinstance(event, TaskStatusUpdateEvent):
-        stream = StreamResponse(status_update=event)
-    elif isinstance(event, TaskArtifactUpdateEvent):
-        stream = StreamResponse(artifact_update=event)
-    elif isinstance(event, Task):
-        stream = StreamResponse(task=event)
-    else:
-        stream = StreamResponse(message=event)
-    return _proto_result(stream)
+    return stream_response_to_json_dict(stream_response_from_event(event))
 
 
 _TProto = TypeVar("_TProto", bound=ProtoMessage)
@@ -342,7 +328,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                     result = await handler.on_message_send(params, context=channel_context)
                     await _send_json(
                         websocket,
-                        {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)},
+                        {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)},
                     )
 
                 elif method == SEND_STREAMING_MESSAGE:
@@ -380,7 +366,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                             {
                                 "jsonrpc": "2.0",
                                 "id": rpc_id,
-                                "result": _proto_result(result),
+                                "result": rpc_result_to_json_dict(result),
                             },
                         )
 
@@ -405,7 +391,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                             {
                                 "jsonrpc": "2.0",
                                 "id": rpc_id,
-                                "result": _proto_result(result),
+                                "result": rpc_result_to_json_dict(result),
                             },
                         )
 
@@ -435,7 +421,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": _proto_result(result) if result is not None else None,
+                            "result": rpc_result_to_json_dict(result) if result is not None else None,
                         },
                     )
 
@@ -446,7 +432,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                     )
                     await _send_json(
                         websocket,
-                        {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)},
+                        {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)},
                     )
 
                 elif method == DELETE_TASK_PUSH_NOTIFICATION_CONFIG:
@@ -470,7 +456,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
                     )
                     await _send_json(
                         websocket,
-                        {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)},
+                        {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)},
                     )
 
                 elif method == GET_EXTENDED_AGENT_CARD:

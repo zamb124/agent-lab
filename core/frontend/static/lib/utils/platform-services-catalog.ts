@@ -8,12 +8,16 @@ export const SERVICE_LOGO_BASE = '/static/core/assets/service_logos';
 export interface PlatformServiceEntry {
     id: string;
     nameKey: string;
+    /** Подпись под именем в featured-плитке витрины (ключ i18n). */
+    taglineKey?: string;
     logoSrc: string;
     brandFrom: string;
     brandTo: string;
     healthName: string;
     metricField: string | null;
     metricKey: string | null;
+    /** Hero-плитка во всю ширину витрины — сервис уровня «над продуктами». */
+    featured?: boolean;
 }
 
 export const PLATFORM_SERVICES: readonly PlatformServiceEntry[] = Object.freeze([
@@ -120,12 +124,14 @@ export const PLATFORM_SERVICES: readonly PlatformServiceEntry[] = Object.freeze(
     Object.freeze({
         id: 'frontend',
         nameKey: 'apps.frontend.name',
+        taglineKey: 'apps.frontend.menu_description',
         logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,
         brandFrom: '#6366f1',
         brandTo: '#0ea5e9',
         healthName: 'frontend',
         metricField: null,
         metricKey: null,
+        featured: true,
     }),
     Object.freeze({
         id: 'litserve',

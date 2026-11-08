@@ -186,6 +186,8 @@ export class WikiPageView extends PlatformPage {
             .cover {
                 position: relative;
                 height: var(--wiki-cover-height);
+                margin: var(--space-2) var(--space-4) 0;
+                border-radius: var(--wiki-cover-radius);
                 background-size: cover;
                 background-position: center;
             }

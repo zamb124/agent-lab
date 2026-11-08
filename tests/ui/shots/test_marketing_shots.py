@@ -14,7 +14,12 @@ from playwright.async_api import Page, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.harness import AppUI
-from tests.ui.shots.conftest import settle_page
+from tests.ui.shots.conftest import (
+    click_geo_map_at,
+    dismiss_cookie_banner,
+    settle_page,
+    wait_geo_map_ready,
+)
 from tests.ui.shots.seed_content import SHOP_HOST_ORIGIN, SHOP_PUBLIC_API, api_origin
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(300)]
@@ -254,8 +259,11 @@ async def test_shot_wiki_page(
     await _goto(
         shot_desktop_page,
         f"{api_origin('wiki')}/wiki/p/{page_id}",
-        settle_ms=3000,
+        settle_ms=2500,
     )
+    await expect(
+        shot_desktop_page.locator("wiki-page-view .title-input")
+    ).to_be_visible(timeout=20_000)
     await save_shot(shot_desktop_page, "wiki-page")
 
 
@@ -266,7 +274,9 @@ async def test_shot_office_documents(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
     await _goto(
-        shot_desktop_page, f"{api_origin('office')}/documents/", settle_ms=3000
+        shot_desktop_page,
+        f"{api_origin('office')}/documents/recent",
+        settle_ms=3000,
     )
     await save_shot(shot_desktop_page, "office-documents")
 
@@ -291,7 +301,10 @@ async def test_shot_office_editor(
 async def test_shot_geo_overview(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
-    await _goto(shot_desktop_page, f"{api_origin('geo')}/geo/", settle_ms=4000)
+    await _goto(shot_desktop_page, f"{api_origin('geo')}/geo/", settle_ms=2000)
+    await wait_geo_map_ready(
+        shot_desktop_page, sources={"pm-src-roads": 3, "pm-src-addresses": 1}
+    )
     await save_shot(shot_desktop_page, "geo-overview")
 
 
@@ -299,17 +312,33 @@ async def test_shot_geo_map_lab(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
     await _goto(
-        shot_desktop_page, f"{api_origin('geo')}/geo/map-lab", settle_ms=5000
+        shot_desktop_page, f"{api_origin('geo')}/geo/map-lab", settle_ms=2000
+    )
+    await wait_geo_map_ready(
+        shot_desktop_page,
+        zoom=15.2,
+        sources={"pm-route": 1, "pm-iso": 2, "pm-src-roads": 3},
     )
     await save_shot(shot_desktop_page, "geo-map-lab")
+
+
+_ROAD_A = (37.6170, 55.7500)
+_ROAD_B = (37.6190, 55.7510)
 
 
 async def test_shot_geo_route_lab(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
     await _goto(
-        shot_desktop_page, f"{api_origin('geo')}/geo/route-lab", settle_ms=5000
+        shot_desktop_page, f"{api_origin('geo')}/geo/route-lab", settle_ms=2000
     )
+    await wait_geo_map_ready(shot_desktop_page, zoom=15.8)
+    await click_geo_map_at(shot_desktop_page, _ROAD_A)
+    await click_geo_map_at(shot_desktop_page, _ROAD_B)
+    await wait_geo_map_ready(shot_desktop_page, zoom=15.8, sources={"pm-route": 1})
+    await expect(
+        shot_desktop_page.locator(".map-metrics")
+    ).to_be_visible(timeout=20_000)
     await save_shot(shot_desktop_page, "geo-route-lab")
 
 
@@ -329,6 +358,22 @@ async def test_shot_rag_search(
     await _goto(
         shot_desktop_page, f"{api_origin('rag')}/rag/search", settle_ms=3000
     )
+    ns_input = shot_desktop_page.locator(
+        "platform-field input.field-pill-enum-input"
+    ).first
+    await ns_input.click()
+    await shot_desktop_page.locator(
+        ".enum-option", has_text="default"
+    ).first.click()
+    query = shot_desktop_page.locator(
+        "platform-field.query-field input.field-pill-input"
+    )
+    await query.fill("витрина")
+    await shot_desktop_page.locator(".search-btn").click()
+    await expect(
+        shot_desktop_page.locator(".result-card").first
+    ).to_be_visible(timeout=30_000)
+    await shot_desktop_page.wait_for_timeout(1000)
     await save_shot(shot_desktop_page, "rag-search")
 
 
@@ -362,11 +407,13 @@ async def test_shot_flows_home(
 
 async def test_shot_land_hero(shot_anonymous_page: Page, save_shot) -> None:
     await _goto(shot_anonymous_page, _ui("frontend").apex_origin, settle_ms=3000)
+    await dismiss_cookie_banner(shot_anonymous_page)
     await save_shot(shot_anonymous_page, "land-hero")
 
 
 async def test_shot_land_abilities(shot_anonymous_page: Page, save_shot) -> None:
     await _goto(shot_anonymous_page, _ui("frontend").apex_origin, settle_ms=3000)
+    await dismiss_cookie_banner(shot_anonymous_page)
     el = shot_anonymous_page.locator("landing-abilities")
     if await el.count():
         await el.scroll_into_view_if_needed()
@@ -380,4 +427,5 @@ async def test_shot_land_product_shop(shot_anonymous_page: Page, save_shot) -> N
         f"{_ui('frontend').apex_origin}/products/shop",
         settle_ms=3000,
     )
+    await dismiss_cookie_banner(shot_anonymous_page)
     await save_shot(shot_anonymous_page, "land-product-shop")

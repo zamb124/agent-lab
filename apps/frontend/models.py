@@ -343,15 +343,6 @@ class CustomProviderUpdate(BaseModel):
     model_by_capability: dict[str, str] | None = None
 
 
-class ServiceHealthTarget(BaseModel):
-    """Цель health-check для сервисного статуса frontend."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    name: str
-    health_url: str
-
-
 class ServiceStatus(BaseModel):
     """Статус микросервиса"""
 

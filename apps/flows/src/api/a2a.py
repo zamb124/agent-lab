@@ -17,7 +17,6 @@ from a2a.types import (
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
-    ListTasksResponse,
     Message,
     SendMessageRequest,
     SubscribeToTaskRequest,
@@ -28,7 +27,7 @@ from a2a.types import (
 )
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import ParseDict
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtoMessage
 
@@ -57,6 +56,7 @@ from core.a2a import (
     SUBSCRIBE_TO_TASK,
     A2AApplicationError,
     A2AErrorCode,
+    rpc_result_to_json_dict,
 )
 from core.a2a.codec import stream_response_from_event, stream_response_to_json_dict
 from core.authz.models import AuthzObject
@@ -229,14 +229,6 @@ def _a2a_rpc_error(code: A2AErrorCode, message: str | None = None) -> JsonObject
 
 
 _TProto = TypeVar("_TProto", bound=ProtoMessage)
-
-
-def _proto_result(message: ProtoMessage) -> JsonObject:
-    payload = require_json_object(MessageToDict(message), "a2a.result")
-    # ProtoJSON опускает пустые string; ListTasks.next_page_token REQUIRED (может быть "").
-    if isinstance(message, ListTasksResponse) and "nextPageToken" not in payload:
-        payload["nextPageToken"] = ""
-    return payload
 
 
 def _stream_response_result(
@@ -949,7 +941,7 @@ async def _json_rpc_handler_internal(
                     "error": {"code": -32602, "message": "Invalid params: message is required"},
                 }
             result = await handler.on_message_send(params, context=channel_context)
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == SEND_STREAMING_MESSAGE:
             params = _parse_proto_params(params_dict, SendMessageRequest)
@@ -974,12 +966,12 @@ async def _json_rpc_handler_internal(
                     "id": rpc_id,
                     "error": _a2a_rpc_error(A2AErrorCode.TASK_NOT_FOUND),
                 }
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == LIST_TASKS:
             params = _parse_proto_params(params_dict, ListTasksRequest)
             result = await handler.on_list_tasks(params, context=channel_context)
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == CANCEL_TASK:
             params = _parse_proto_params(params_dict, CancelTaskRequest)
@@ -990,7 +982,7 @@ async def _json_rpc_handler_internal(
                     "id": rpc_id,
                     "error": _a2a_rpc_error(A2AErrorCode.TASK_NOT_FOUND),
                 }
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == SUBSCRIBE_TO_TASK:
             params = _parse_proto_params(params_dict, SubscribeToTaskRequest)
@@ -1005,12 +997,12 @@ async def _json_rpc_handler_internal(
             result = await handler.on_get_task_push_notification_config(params)
             if result is None:
                 return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == CREATE_TASK_PUSH_NOTIFICATION_CONFIG:
             params = _parse_proto_params(params_dict, TaskPushNotificationConfig)
             result = await handler.on_create_task_push_notification_config(params)
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == DELETE_TASK_PUSH_NOTIFICATION_CONFIG:
             params = _parse_proto_params(params_dict, DeleteTaskPushNotificationConfigRequest)
@@ -1020,7 +1012,7 @@ async def _json_rpc_handler_internal(
         if method == LIST_TASK_PUSH_NOTIFICATION_CONFIGS:
             params = _parse_proto_params(params_dict, ListTaskPushNotificationConfigsRequest)
             result = await handler.on_list_task_push_notification_configs(params)
-            return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": rpc_result_to_json_dict(result)}
 
         if method == GET_EXTENDED_AGENT_CARD:
             # extended_agent_card=false на AgentCard — без silent fallback на regular card.

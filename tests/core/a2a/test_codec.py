@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import pytest
 from a2a.helpers.proto_helpers import new_data_part, new_text_part
-from a2a.types import Artifact, Message, Part, Role, StreamResponse, Task, TaskState, TaskStatus
+from a2a.types import (
+    Artifact,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksResponse,
+    Message,
+    Part,
+    Role,
+    StreamResponse,
+    Task,
+    TaskState,
+    TaskStatus,
+)
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 from google.protobuf.json_format import ParseError
 
@@ -16,6 +27,7 @@ from core.a2a.codec import (
     message_to_json_dict,
     messages_from_json_list,
     normalize_message_json_for_proto,
+    rpc_result_to_json_dict,
     stream_response_from_event,
     stream_response_from_json_dict,
     stream_response_to_json_dict,
@@ -176,3 +188,42 @@ def test_stream_response_codec_requires_exactly_one_payload() -> None:
     empty = StreamResponse()
     with pytest.raises(ValueError, match="payload oneof is required"):
         _ = stream_response_to_json_dict(empty)
+
+
+def test_rpc_result_restores_required_empty_list_fields() -> None:
+    """ProtoJSON опускает пустые repeated/string; wire-контракт требует их присутствия.
+
+    flow-ui клиент падает с "ListTasks result.tasks must be an array", когда
+    `tasks` отсутствует в ответе на пустой контекст.
+    """
+    dumped = rpc_result_to_json_dict(ListTasksResponse())
+    assert dumped == {"tasks": [], "nextPageToken": ""}
+
+    cfg_dumped = rpc_result_to_json_dict(ListTaskPushNotificationConfigsResponse())
+    assert cfg_dumped == {"configs": [], "nextPageToken": ""}
+
+
+def test_rpc_result_preserves_nonempty_list_fields() -> None:
+    task = Task(
+        id="task-1",
+        context_id="context-1",
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    dumped = rpc_result_to_json_dict(
+        ListTasksResponse(tasks=[task], next_page_token="7", page_size=50, total_size=1)
+    )
+    assert len(dumped["tasks"]) == 1
+    assert dumped["tasks"][0]["id"] == "task-1"
+    assert dumped["nextPageToken"] == "7"
+
+
+def test_rpc_result_leaves_other_messages_untouched() -> None:
+    message = Message(
+        message_id="m1",
+        role=Role.ROLE_USER,
+        parts=[new_text_part("hi")],
+    )
+    dumped = rpc_result_to_json_dict(message)
+    assert "tasks" not in dumped
+    assert "nextPageToken" not in dumped
+    assert dumped["messageId"] == "m1"

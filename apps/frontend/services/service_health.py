@@ -3,26 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
 import httpx2
 
-from apps.frontend.models import ServiceHealthTarget, ServiceStatus
+from apps.frontend.models import ServiceStatus
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
-SERVICE_HEALTH_TARGETS: tuple[ServiceHealthTarget, ...] = (
-    ServiceHealthTarget(name="flows", health_url="/flows/api/v1/health"),
-    ServiceHealthTarget(name="crm", health_url="/crm/api/v1/health"),
-    ServiceHealthTarget(name="rag", health_url="/rag/api/health"),
-    ServiceHealthTarget(name="sync", health_url="/sync/api/health"),
-    ServiceHealthTarget(name="worktracker", health_url="/worktracker/health"),
-    ServiceHealthTarget(name="secrets", health_url="/secrets/health"),
-    ServiceHealthTarget(name="office", health_url="/documents/api/health"),
-    ServiceHealthTarget(name="provider_litserve", health_url="/litserve/health"),
+SERVICE_HEALTH_TARGETS: tuple[str, ...] = (
+    "flows",
+    "crm",
+    "rag",
+    "sync",
+    "worktracker",
+    "secrets",
+    "office",
+    "provider_litserve",
 )
 _NETWORK_ERRORS = (
     httpx2.ConnectError,
@@ -31,44 +32,43 @@ _NETWORK_ERRORS = (
     ConnectionError,
     OSError,
     ServiceClientError,
+    json.JSONDecodeError,
 )
 
 
 def _service_status_display_url(name: str) -> str:
-    if name == "flows":
-        return "/flows"
     if name == "provider_litserve":
         return "/litserve"
     return f"/{name}"
 
 
-async def _check_service(service_client: ServiceClient, target: ServiceHealthTarget) -> ServiceStatus:
+async def _check_service(service_client: ServiceClient, name: str) -> ServiceStatus:
     started = time.time()
-    _ = await service_client.get(target.name, target.health_url)
+    _ = await service_client.get(name, f"/{name}/health")
     return ServiceStatus(
-        name=target.name,
+        name=name,
         status="healthy",
-        url=_service_status_display_url(target.name),
+        url=_service_status_display_url(name),
         response_time=round((time.time() - started) * 1000, 2),
     )
 
 
 async def collect_services_status(service_client: ServiceClient, *, limit: int, offset: int) -> OffsetPage[ServiceStatus]:
     results = await asyncio.gather(
-        *(_check_service(service_client, target) for target in SERVICE_HEALTH_TARGETS),
+        *(_check_service(service_client, name) for name in SERVICE_HEALTH_TARGETS),
         return_exceptions=True,
     )
     statuses: list[ServiceStatus] = []
-    for target, result in zip(SERVICE_HEALTH_TARGETS, results, strict=True):
+    for name, result in zip(SERVICE_HEALTH_TARGETS, results, strict=True):
         if isinstance(result, ServiceStatus):
             statuses.append(result)
         elif isinstance(result, _NETWORK_ERRORS):
-            logger.warning("services.status.unavailable", service=target.name, error=str(result))
+            logger.warning("services.status.unavailable", service=name, error=str(result))
             statuses.append(
                 ServiceStatus(
-                    name=target.name,
+                    name=name,
                     status="unhealthy",
-                    url=_service_status_display_url(target.name),
+                    url=_service_status_display_url(name),
                     response_time=None,
                 )
             )

@@ -836,6 +836,7 @@
     --wiki-outline-width: 18rem;
     --wiki-page-max-width: 56rem;
     --wiki-cover-height: 12rem;
+    --wiki-cover-radius: var(--radius-lg);
     /* Полоса слева от колонки текста под кнопки блока: её резервирует страница,
        иначе ручка перетаскивания легла бы на первые символы строки.
        Две кнопки 28px + зазор — около 4rem. */
