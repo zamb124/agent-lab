@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from apps.frontend.seo.ld_json import render_ld_script
+from apps.frontend.seo.ld_json import product_document_meta, render_ld_script
 from apps.frontend.seo.pages import (
     PUBLIC_PAGE_PATHS,
     PublicPage,
@@ -33,6 +33,22 @@ _META_NAME_IMG_RE = re.compile(
 )
 _OG_LOCALE_RE = re.compile(
     r'(<meta[^>]*\bproperty="og:locale"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
+)
+_TITLE_RE = re.compile(r"<title>[^<]*</title>", re.IGNORECASE)
+_DESCRIPTION_RE = re.compile(
+    r'(<meta[^>]*\bname="description"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
+)
+_OG_TITLE_RE = re.compile(
+    r'(<meta[^>]*\bproperty="og:title"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
+)
+_OG_DESCRIPTION_RE = re.compile(
+    r'(<meta[^>]*\bproperty="og:description"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
+)
+_TWITTER_TITLE_RE = re.compile(
+    r'(<meta[^>]*\bname="twitter:title"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
+)
+_TWITTER_DESCRIPTION_RE = re.compile(
+    r'(<meta[^>]*\bname="twitter:description"[^>]*\bcontent=")[^"]*(")', re.IGNORECASE
 )
 _EXISTING_LD_RE = re.compile(
     r'<script[^>]*type="application/ld\+json"[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL
@@ -94,6 +110,18 @@ def postprocess_snapshot(
     og_image = f"{seo_base_url}/static/frontend/assets/images/main_img.png"
     out = _set(_OG_IMAGE_RE, out, og_image)
     out = _set(_META_NAME_IMG_RE, out, og_image)
+
+    # 프로덕트 페이지는 SPA가 connect 시점에 meta를 sync하다 번들 로드 전
+    # raw key가 박히는 이력이 있다 — head 타이틀/설명을 확정값으로 덮는다.
+    if page.kind == "product":
+        doc_title, doc_description = product_document_meta(page, brand, locale)
+        out = _TITLE_RE.sub(f"<title>{doc_title}</title>", out)
+        out = _set(_OG_TITLE_RE, out, doc_title)
+        out = _set(_TWITTER_TITLE_RE, out, doc_title)
+        out = _set(_DESCRIPTION_RE, out, doc_description)
+        out = _set(_OG_DESCRIPTION_RE, out, doc_description)
+        out = _set(_TWITTER_DESCRIPTION_RE, out, doc_description)
+
     out = _EXISTING_LD_RE.sub("", out)
     out = _EXISTING_HREFLANG_RE.sub("", out)
 

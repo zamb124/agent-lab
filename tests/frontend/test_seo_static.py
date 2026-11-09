@@ -133,6 +133,11 @@ def test_postprocess_snapshot_rewrites_head() -> None:
     assert 'hreflang="en"' in html and 'hreflang="x-default"' in html
     assert 'id="seo-ld-json"' in html
     assert html.count("application/ld+json") == 1
+    # продуктовая страница: title/description выставляются из frontend_products
+    # бандла, даже если снапшот захватил raw i18n-ключ до загрузки переводов
+    assert "<title>Knowledge Base — семантический поиск по документам | Linnex</title>" in html
+    assert 'og:title" content="Knowledge Base — семантический поиск по документам | Linnex"' in html
+    assert "meta_title" not in html
 
 
 def test_postprocess_snapshot_en_rewrites_links() -> None:

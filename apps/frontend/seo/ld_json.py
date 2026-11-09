@@ -57,6 +57,20 @@ def _product_bundle(page: PublicPage, locale: SeoLocale) -> JsonObject:
     )
 
 
+def product_document_meta(
+    page: PublicPage, brand: PlatformBrandConfig, locale: SeoLocale
+) -> tuple[str, str]:
+    """프로덕트 페이지의 문서 메타: ``meta_title | 플랫폼명`` + ``meta_description``.
+
+    SPA가 ``applyPublicDocumentMeta``로 쓰는 것과 같은 포맷·같은
+    ``frontend_products`` 번들 — 스냅샷 postprocess가 head를 확정값으로
+    덮을 때 쓴다.
+    """
+    product = _product_bundle(page, locale)
+    title = f"{str(product['meta_title'])} | {brand.platform_name}"
+    return title, str(product["meta_description"])
+
+
 def product_marketing_names(locale: SeoLocale) -> tuple[str, ...]:
     """Маркетинговые имена продуктов (``AI Studio``, ``NetWorkle``…) из
     ``frontend_products.<key>.meta_title`` — первый сегмент до `` — ``.
