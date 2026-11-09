@@ -2,6 +2,7 @@
 Сервис frontend — FastAPI-приложение для управления платформой
 """
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -69,6 +70,7 @@ from core.authz.service import AuthzService
 from core.billing.service import BillingService
 from core.clients.payment import PaymentProviderFactory
 from core.clients.redis_client import RedisClient
+from core.clients.service_client import ServiceClientError
 from core.clients.tts_pronunciation.models import (
     PronunciationRule,
     PronunciationRuleKind,
@@ -171,6 +173,31 @@ async def _seed_platform_pronunciation_rules() -> None:
     logger.info("frontend.pronunciation_seed_applied")
 
 
+_DEMO_BOOTSTRAP_ATTEMPTS = 6
+_DEMO_BOOTSTRAP_RETRY_SEC = 10.0
+
+
+async def _bootstrap_demo_company(authz_service: AuthzService) -> None:
+    """Демо-seed идемпотентен и не нужен для обслуживания запросов.
+
+    На холодном роллауте flows ещё не принимает — seed ждёт в фоне,
+    под не падает и обслуживает трафик сразу.
+    """
+    for attempt in range(1, _DEMO_BOOTSTRAP_ATTEMPTS + 1):
+        try:
+            await ensure_demo_company_and_user(authz=authz_service)
+            return
+        except ServiceClientError as exc:
+            if attempt == _DEMO_BOOTSTRAP_ATTEMPTS:
+                logger.error(
+                    "identity.demo.bootstrap_failed",
+                    error=str(exc),
+                    attempts=_DEMO_BOOTSTRAP_ATTEMPTS,
+                )
+                return
+            await asyncio.sleep(_DEMO_BOOTSTRAP_RETRY_SEC)
+
+
 async def frontend_startup(
     redis_client: RedisClient,
     shared_storage: SharedStorage,
@@ -187,8 +214,10 @@ async def frontend_startup(
     _ = await ensure_system_admin_membership(
         authz=authz_service,
     )
-    await ensure_demo_company_and_user(
-        authz=authz_service,
+    _demo_task = run_with_log_context(
+        _bootstrap_demo_company(authz_service),
+        name="frontend.demo_bootstrap",
+        background_kind="startup",
     )
     if get_settings().mail.system.enabled:
         reconcile_result = await mail_service.reconcile_system()
