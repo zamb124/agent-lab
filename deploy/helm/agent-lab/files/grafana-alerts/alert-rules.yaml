@@ -898,6 +898,140 @@ groups:
     labels:
       severity: warning
       service: browser
+  - uid: seo-warmup-silent
+    title: SEO Snapshot Warmup Silent
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 10800
+        to: 0
+      datasourceUid: loki
+      model:
+        # Периодический warmup (раз в час + на старте) закрывает каждый
+        # цикл терминальным событием warmup_ok|warmup_failed. Три часа
+        # без события — таск мёртв: кэш протухает, ленивые хиты ждут
+        # рендер, краулер видит shell. Фейлы цикла ловит seo-snapshot-failures.
+        expr: sum(count_over_time({namespace="platform", service="frontend"} | json | message=~"seo[.]snapshot[.]warmup_(ok|failed)" [3h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+          expression: $B == 0
+          refId: C
+          type: math
+    # Пустой результат sum() — и есть тишина: noData состояние это алерт.
+    noDataState: Alerting
+    execErrState: Error
+    for: 30m
+    annotations:
+      summary: SEO snapshot warmup not running on frontend
+      description: No seo.snapshot.warmup_ok|warmup_failed events in 3h — warmup task dead or frontend not emitting; snapshot cache goes stale, lazy hits wait full render, crawlers may see SPA shell
+    labels:
+      severity: warning
+      service: frontend
+  - uid: seo-synth-silent
+    title: SEO Synth Cron Silent
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 7200
+        to: 0
+      datasourceUid: loki
+      model:
+        # seo-synth бежит */15м и каждый прогон печатает smoke_ok|smoke_failed.
+        # Два часа без события — крон или пайплайн логов мёртв: деградация
+        # SEO-поверхности пройдёт незамеченной вместе с её детектором.
+        expr: sum(count_over_time({namespace="platform", service="seo-synth"} | json | message=~"seo[.]smoke_(ok|failed)" [2h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+          expression: $B == 0
+          refId: C
+          type: math
+    noDataState: Alerting
+    execErrState: Error
+    for: 30m
+    annotations:
+      summary: seo-synth CronJob stopped emitting results
+      description: No seo.smoke_ok|smoke_failed in 2h — synthetic SEO checks not running; canonical/snapshot/docs/noindex regressions are currently undetected
+    labels:
+      severity: warning
+      service: seo-synth
+  - uid: seo-indexnow-silent
+    title: SEO IndexNow Cron Silent
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 46800
+        to: 0
+      datasourceUid: loki
+      model:
+        # seo-indexnow (7 */6) шлёт submissions раз в 6 часов — терминальное
+        # indexnow_ok|indexnow_failed|indexnow_skipped за прогон. 13 часов без события —
+        # два пропущенных цикла: новые страницы открываются только обходом.
+        expr: sum(count_over_time({namespace="platform", service="seo-indexnow"} | json | message=~"seo[.]indexnow_(ok|failed|skipped)" [13h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+          expression: $B == 0
+          refId: C
+          type: math
+    noDataState: Alerting
+    execErrState: Error
+    for: 30m
+    annotations:
+      summary: seo-indexnow CronJob stopped emitting results
+      description: No seo.indexnow_ok|indexnow_failed in 13h — IndexNow submissions not running; new pages/products/docs reach search engines only via regular crawl
+    labels:
+      severity: warning
+      service: seo-indexnow
 - orgId: 1
   name: platform_alerts_slow
   folder: Platform
