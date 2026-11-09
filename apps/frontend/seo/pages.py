@@ -153,3 +153,9 @@ def localized_marketing_path(path: str, locale: SeoLocale) -> str:
     if locale == "en":
         return f"en/{normalized}" if normalized else "en"
     return normalized
+
+
+def page_url(seo_base_url: str, path: str, locale: SeoLocale) -> str:
+    """Абсолютный canonical-URL страницы в локали."""
+    localized = localized_marketing_path(path, locale)
+    return f"{seo_base_url}/{localized}" if localized else f"{seo_base_url}/"

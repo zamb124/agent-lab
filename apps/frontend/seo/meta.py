@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from apps.frontend.seo.pages import SeoLocale, localized_marketing_path
+from apps.frontend.seo.pages import SeoLocale, page_url
 from core.config.models import PlatformBrandConfig
 
 OG_IMAGE_PATH = "/static/frontend/assets/images/main_img.png"
@@ -28,10 +28,6 @@ _HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
 def _set(pattern: str | re.Pattern[str], html: str, value: str) -> str:
     return re.sub(pattern, lambda m: m.group(1) + value + m.group(2), html, count=1)
 
-
-def _page_url(seo_base_url: str, path: str, locale: SeoLocale) -> str:
-    localized = localized_marketing_path(path, locale)
-    return f"{seo_base_url}/{localized}" if localized else f"{seo_base_url}/"
 
 
 def _brand_description(brand: PlatformBrandConfig, locale: SeoLocale) -> str:
@@ -67,7 +63,7 @@ def render_index_html(
         else f"{brand.platform_name} — платформа автоматизации бизнеса"
     )
     description = _brand_description(brand, locale)
-    canonical_url = _page_url(seo_base_url, path, locale)
+    canonical_url = page_url(seo_base_url, path, locale)
     og_image = seo_base_url + OG_IMAGE_PATH
     robots = _INDEX_ROBOTS if indexable else "noindex,nofollow"
     og_locale = "en_US" if locale == "en" else "ru_RU"
@@ -94,8 +90,8 @@ def render_index_html(
     ):
         html = _set(_META_NAME_RE_TEMPLATE.format(name=name), html, value)
     if indexable:
-        ru_url = _page_url(seo_base_url, path, "ru")
-        en_url = _page_url(seo_base_url, path, "en")
+        ru_url = page_url(seo_base_url, path, "ru")
+        en_url = page_url(seo_base_url, path, "en")
         alternates = (
             f'<link rel="alternate" hreflang="ru" href="{ru_url}"/>\n'
             f'<link rel="alternate" hreflang="en" href="{en_url}"/>\n'

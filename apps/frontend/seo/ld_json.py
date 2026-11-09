@@ -14,7 +14,7 @@ from apps.frontend.seo.pages import (
     PUBLIC_PRODUCT_KEYS,
     PublicPage,
     SeoLocale,
-    localized_marketing_path,
+    page_url,
     public_page_for_path,
 )
 from core.config.models import PlatformBrandConfig
@@ -69,10 +69,6 @@ def product_marketing_names(locale: SeoLocale) -> tuple[str, ...]:
     )
 
 
-def _page_url(seo_base_url: str, path: str, locale: SeoLocale) -> str:
-    localized = localized_marketing_path(path, locale)
-    return f"{seo_base_url}/{localized}" if localized else f"{seo_base_url}/"
-
 
 def _organization(brand: PlatformBrandConfig, seo_base_url: str) -> JsonObject:
     return {
@@ -125,7 +121,7 @@ def _software_app(
         "name": title,
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
-        "url": _page_url(seo_base_url, page.path, locale),
+        "url": page_url(seo_base_url, page.path, locale),
         "description": description,
         "inLanguage": locale,
         "publisher": {"@id": f"{seo_base_url}/#organization"},
@@ -171,7 +167,7 @@ def _breadcrumb(seo_base_url: str, page: PublicPage, locale: SeoLocale) -> JsonO
             "@type": "ListItem",
             "position": 1,
             "name": str(routes["landing"]),
-            "item": _page_url(seo_base_url, "", locale),
+            "item": page_url(seo_base_url, "", locale),
         },
     ]
     # Промежуточные уровни — только реальные публичные страницы реестра
@@ -187,7 +183,7 @@ def _breadcrumb(seo_base_url: str, page: PublicPage, locale: SeoLocale) -> JsonO
                     "@type": "ListItem",
                     "position": len(items) + 1,
                     "name": route_title(parent, locale),
-                    "item": _page_url(seo_base_url, parent.path, locale),
+                    "item": page_url(seo_base_url, parent.path, locale),
                 }
             )
     items.append(
@@ -195,7 +191,7 @@ def _breadcrumb(seo_base_url: str, page: PublicPage, locale: SeoLocale) -> JsonO
             "@type": "ListItem",
             "position": len(items) + 1,
             "name": title,
-            "item": _page_url(seo_base_url, page.path, locale),
+            "item": page_url(seo_base_url, page.path, locale),
         }
     )
     return {"@type": "BreadcrumbList", "itemListElement": items}
@@ -224,7 +220,7 @@ def build_ld_graph(
                 "name": f"{brand.platform_name} Blog"
                 if locale == "en"
                 else f"Блог {brand.platform_name}",
-                "url": _page_url(seo_base_url, page.path, locale),
+                "url": page_url(seo_base_url, page.path, locale),
                 "inLanguage": locale,
                 "publisher": {"@id": f"{seo_base_url}/#organization"},
             }

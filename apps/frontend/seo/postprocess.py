@@ -15,7 +15,7 @@ from apps.frontend.seo.pages import (
     PUBLIC_PAGE_PATHS,
     PublicPage,
     SeoLocale,
-    localized_marketing_path,
+    page_url,
 )
 from core.config.models import PlatformBrandConfig
 
@@ -48,10 +48,6 @@ _HREF_ROOT_RE = re.compile(r'href="/([#?"])')
 def _set(pattern: re.Pattern[str], html: str, value: str) -> str:
     return pattern.sub(lambda m: m.group(1) + value + m.group(2), html, count=1)
 
-
-def _page_url(seo_base_url: str, path: str, locale: SeoLocale) -> str:
-    localized = localized_marketing_path(path, locale)
-    return f"{seo_base_url}/{localized}" if localized else f"{seo_base_url}/"
 
 
 def _rewrite_origin(html: str, internal_origin: str, seo_base_url: str) -> str:
@@ -100,7 +96,7 @@ def postprocess_snapshot(
     internal_origin: str,
 ) -> str:
     """Отрендеренный DSD-HTML → канонический индексируемый документ."""
-    canonical = _page_url(seo_base_url, page.path, locale)
+    canonical = page_url(seo_base_url, page.path, locale)
     out = _rewrite_origin(html, internal_origin, seo_base_url)
     out = _set(_HTML_LANG_RE, out, locale)
     out = _set(_CANONICAL_RE, out, canonical)
@@ -114,8 +110,8 @@ def postprocess_snapshot(
     out = _EXISTING_HREFLANG_RE.sub("", out)
 
     head_injections: list[str] = []
-    ru_url = _page_url(seo_base_url, page.path, "ru")
-    en_url = _page_url(seo_base_url, page.path, "en")
+    ru_url = page_url(seo_base_url, page.path, "ru")
+    en_url = page_url(seo_base_url, page.path, "en")
     head_injections.append(f'<link rel="alternate" hreflang="ru" href="{ru_url}"/>')
     head_injections.append(f'<link rel="alternate" hreflang="en" href="{en_url}"/>')
     head_injections.append(f'<link rel="alternate" hreflang="x-default" href="{ru_url}"/>')
