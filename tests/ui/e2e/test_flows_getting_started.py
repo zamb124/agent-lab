@@ -90,8 +90,6 @@ async def test_flows_home_tour(
 
     hero_actions = page.locator("flows-home-page .hero-actions").first
     await expect(hero_actions).to_be_visible(timeout=15_000)
-    download_link = hero_actions.locator("a.hero-download-link").first
-    await expect(download_link).to_be_visible(timeout=15_000)
     operator_button = hero_actions.locator("platform-button").filter(
         has_text=re.compile(r"Оператор|Operator|HITL")
     ).first
@@ -426,9 +424,10 @@ async def test_flows_chat_with_lara(
     )
 
     await flows_e2e_open_lara_chat(page, flows_ui)
+    drawer = page.locator("flow-ui-drawer").first
     chat = page.locator('platform-flow-ui[flow-id="lara"]').first
     await expect(chat).to_be_attached(timeout=30_000)
-    await expect(chat).to_have_attribute("open", "", timeout=15_000)
+    await expect(drawer).to_have_attribute("open", "", timeout=15_000)
     await scenario.step(
         "Откройте чат Lara из шапки",
         page,

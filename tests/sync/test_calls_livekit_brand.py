@@ -32,6 +32,30 @@ def test_livekit_public_url_from_context_host(host: str, expected_url: str) -> N
         clear_context()
 
 
+@pytest.mark.parametrize("host", [
+    "ui-gw0.localhost:9005",
+    "acme.lvh.me:9005",
+    "127.0.0.1:9005",
+])
+def test_livekit_public_url_local_host_uses_configured(host: str) -> None:
+    """Локальный хост: livekit.<apex> не существует, URL берётся из calls.livekit_*."""
+    settings = get_settings()
+    configured = settings.calls.livekit_public_url or settings.calls.livekit_url
+    set_context(
+        Context(
+            user=User(user_id="livekit_brand_user", name="LiveKit Brand User"),
+            host=host,
+            session_id="test_session",
+            channel="test",
+            metadata={},
+        )
+    )
+    try:
+        assert livekit_public_url(settings) == str(configured).strip()
+    finally:
+        clear_context()
+
+
 def test_livekit_public_url_unknown_host_uses_configured() -> None:
     settings = get_settings()
     configured = settings.calls.livekit_public_url or settings.calls.livekit_url

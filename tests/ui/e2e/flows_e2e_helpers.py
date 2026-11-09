@@ -4489,12 +4489,13 @@ async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
     """Открывает глобальный drawer Lara через FAB на главной Flows."""
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
+    drawer = page.locator("flow-ui-drawer").first
     chat = page.locator('platform-flow-ui[flow-id="lara"]').first
     await expect(chat).to_be_attached(timeout=30_000)
-    fab = chat.locator("button.launcher, button.fab").first
+    fab = drawer.locator("button.launcher, button.fab").first
     await expect(fab).to_be_visible(timeout=30_000)
     await fab.click()
-    await expect(chat).to_have_attribute("open", "", timeout=15_000)
+    await expect(drawer).to_have_attribute("open", "", timeout=15_000)
     composer = chat.locator(FLOW_UI_COMPOSER_SELECTOR).first
     await expect(composer).to_be_visible(timeout=30_000)
 

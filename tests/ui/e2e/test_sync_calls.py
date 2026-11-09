@@ -22,36 +22,6 @@ async def _click_channel_call_button(page: Page) -> None:
     await call_button.click()
 
 
-async def _install_call_trace(page: Page) -> None:
-    page.on(
-        "console",
-        lambda msg: print(f"\n=== PAGE-CONSOLE[{msg.type}]: {msg.text[:300]}")
-        if msg.type in ("error", "warning") or "livekit" in msg.text.lower()
-        else None,
-    )
-    await page.evaluate(
-        """() => {
-            window.__callTrace = [];
-            const t0 = Date.now();
-            window.__PLATFORM_BUS__.subscribeAny((ev) => {
-                const ty = ev && ev.type ? ev.type : '?';
-                if (ty.includes('call') || ty.includes('modal')) {
-                    window.__callTrace.push({
-                        t: Date.now() - t0,
-                        type: ty,
-                        payload: JSON.stringify(ev.payload === undefined ? null : ev.payload).slice(0, 400),
-                    });
-                }
-            });
-        }"""
-    )
-
-
-async def _dump_call_trace(page: Page) -> None:
-    trace = await page.evaluate("() => window.__callTrace || 'NO-TRACE'")
-    print(f"\n=== CALL-TRACE: {trace}")
-
-
 async def _ensure_overlay_chat_open(overlay) -> None:
     chat_input = overlay.locator("textarea.chat-input")
     if await chat_input.is_visible(timeout=1_000):
@@ -60,57 +30,7 @@ async def _ensure_overlay_chat_open(overlay) -> None:
         'button.ctrl[title="Показать чат"], button.ctrl[title="Show chat"]'
     ).first
     await expect(toggle).to_be_visible(timeout=30_000)
-    page = toggle.page
-    info = await toggle.evaluate(
-        """(btn) => {
-            const r = btn.getBoundingClientRect();
-            const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-            let modal = btn;
-            while (modal && modal.tagName !== 'SYNC-CALL-OVERLAY-MODAL') {
-                modal = modal.parentElement || (modal.getRootNode && modal.getRootNode().host) || null;
-            }
-            const attrs = {};
-            if (modal) for (const a of modal.attributes) attrs[a.name] = a.value;
-            const mcs = modal ? getComputedStyle(modal) : null;
-            const mr = modal ? modal.getBoundingClientRect() : {x:0,y:0,width:0,height:0};
-            const bcs = getComputedStyle(document.body);
-            const midStack = document.elementsFromPoint(innerWidth/2, innerHeight/2).map(e => e.tagName);
-            return {
-                box: {x: r.x, y: r.y, w: r.width, h: r.height},
-                center: {x: cx, y: cy},
-                stack: document.elementsFromPoint(cx, cy).map(e => {
-                    const cs = getComputedStyle(e);
-                    return e.tagName + '|pe=' + cs.pointerEvents + '|z=' + cs.zIndex;
-                }),
-                midStack,
-                modalAttrs: attrs,
-                modalPe: mcs ? mcs.pointerEvents : 'NO-MODAL',
-                modalVis: mcs ? mcs.visibility : 'NO-MODAL',
-                modalDisp: mcs ? mcs.display : 'NO-MODAL',
-                modalClip: mcs ? mcs.clipPath : 'NO-MODAL',
-                modalCv: mcs ? mcs.contentVisibility : 'NO-MODAL',
-                bodyPe: bcs.pointerEvents,
-                bodyVis: bcs.visibility,
-                docHidden: document.hidden,
-                modalRect: {x: Math.round(mr.x), y: Math.round(mr.y), w: Math.round(mr.width), h: Math.round(mr.height)},
-                modalParent: modal && modal.parentElement ? modal.parentElement.tagName : null,
-                modalCount: document.querySelectorAll('sync-call-overlay-modal').length,
-            };
-        }"""
-    )
-    print(f"\n=== TOGGLE-PROBE: {info}")
-    try:
-        await toggle.click(timeout=12_000)
-    except Exception:
-        info2 = await page.evaluate(
-            """() => Array.from(document.querySelectorAll('sync-call-overlay-modal')).map(m => {
-                const r = m.getBoundingClientRect();
-                const cs = getComputedStyle(m);
-                return {open: m.hasAttribute('open'), closing: m.hasAttribute('closing'), min: m.hasAttribute('data-minimized'), pe: cs.pointerEvents, disp: cs.display, vis: cs.visibility, rect: {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)}};
-            })"""
-        )
-        print(f"=== TOGGLE-PROBE post-fail modals: {info2}")
-        raise
+    await toggle.click()
     await expect(chat_input).to_be_visible(timeout=30_000)
 
 
@@ -308,25 +228,20 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
         channel_prefix="Основной канал",
     )
 
-    await _install_call_trace(ui_page_system)
     await ui_page_system.locator(
         "sync-chat-list .header-action-btn"
     ).filter(
         has=ui_page_system.locator("platform-icon[name='phone-plus']")
     ).first.click()
     overlay = ui_page_system.locator("sync-call-overlay-modal")
-    try:
-        await expect(overlay).to_be_visible(timeout=30_000)
-        await _ensure_overlay_chat_open(overlay)
+    await expect(overlay).to_be_visible(timeout=30_000)
+    await _ensure_overlay_chat_open(overlay)
 
-        await overlay.locator("textarea.chat-input").fill(adhoc_text)
-        await overlay.locator("button.chat-send").click()
-        await expect(overlay.locator(".chat-text").get_by_text(adhoc_text, exact=True)).to_be_visible(
-            timeout=30_000
-        )
-    except Exception:
-        await _dump_call_trace(ui_page_system)
-        raise
+    await overlay.locator("textarea.chat-input").fill(adhoc_text)
+    await overlay.locator("button.chat-send").click()
+    await expect(overlay.locator(".chat-text").get_by_text(adhoc_text, exact=True)).to_be_visible(
+        timeout=30_000
+    )
 
     header_title = (
         await ui_page_system.locator("sync-channel-page sync-chat-header .title").first.inner_text()

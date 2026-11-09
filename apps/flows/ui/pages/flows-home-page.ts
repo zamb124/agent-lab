@@ -271,27 +271,6 @@ export class FlowsHomePage extends PlatformPage {
                 align-items: center;
                 gap: var(--space-2);
             }
-            .hero-download-link {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-height: 32px;
-                padding: 6px 14px;
-                border-radius: var(--btn-radius);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                line-height: var(--leading-tight);
-                text-decoration: none;
-                transition: var(--motion-transition-interactive);
-            }
-            .hero-download-link:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-subtle);
-            }
-            .hero-download-link:focus-visible {
-                outline: none;
-                box-shadow: var(--focus-ring);
-            }
             .hero-band {
                 display: grid;
                 grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
