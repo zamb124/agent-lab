@@ -1416,7 +1416,9 @@ groups:
         to: 0
       datasourceUid: prometheus
       model:
-        expr: kube_pod_status_phase{namespace="platform", phase=~"Failed|Unknown"} == 1
+        expr: >-
+          kube_pod_status_phase{namespace="platform", phase=~"Failed|Unknown"} == 1
+          unless on(namespace, pod) kube_pod_owner{namespace="platform", owner_kind="Job"}
         refId: A
     - refId: B
       relativeTimeRange:

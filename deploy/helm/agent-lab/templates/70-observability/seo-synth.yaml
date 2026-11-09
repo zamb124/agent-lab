@@ -19,6 +19,9 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      # Час на отладку живого пода, дальше GC — Error-поды не копятся
+      # и не держат pod-phase-failed; логи остаются в Loki.
+      ttlSecondsAfterFinished: 3600
       # Холодный прогон после выката ждёт живые DSD-рендеры всех страниц
       # реестра (до ~90с на страницу, проверки параллельны).
       activeDeadlineSeconds: 600
@@ -76,6 +79,7 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 3600
       activeDeadlineSeconds: 180
       backoffLimit: 0
       template:
