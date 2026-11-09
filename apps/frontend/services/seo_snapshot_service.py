@@ -102,6 +102,35 @@ class SeoSnapshotService:
         suffix = f"/{localized}" if localized else "/"
         return f"{self._fetch_base()}{suffix}?{SNAPSHOT_BYPASS_PARAM}=1"
 
+    async def _stale_snapshot(self, page: PublicPage, locale: SeoLocale) -> str | None:
+        """Снапшот любой версии — stale-while-revalidate при промахе текущей.
+
+        Ключ содержит deployment_version: после выката кэш новой версии
+        холодный и warmup ещё рендерит. Снапшот прошлого релиза — реальный
+        контент, оболочка для краулера — нет: отдаём устаревший, пока лидер
+        не закэширует свежий.
+        """
+        # ``*`` матчит и сегмент fail/lock-ключей той же формы — отсекаем их:
+        # в них лежит маркер "1", а не HTML.
+        pattern = f"seo:snap:*:{locale}:{self._normalized(page.path)}"
+        try:
+            keys = await self._redis.scan_keys(pattern)
+        except Exception as exc:
+            logger.warning("seo.snapshot.stale_scan_failed", error=str(exc))
+            return None
+        current = self._cache_key(page.path, locale)
+        best: str | None = None
+        for key in keys:
+            if key == current or key.split(":")[2] in ("fail", "lock"):
+                continue
+            try:
+                value = await self._redis.get(key)
+            except Exception:
+                continue
+            if value is not None and (best is None or len(value) > len(best)):
+                best = value
+        return best
+
     async def snapshot_html(self, page: PublicPage, locale: SeoLocale) -> str | None:
         """Пререндеренный HTML страницы; ``None`` — снапшот недоступен (fail-open)."""
         key = self._cache_key(page.path, locale)
@@ -113,14 +142,16 @@ class SeoSnapshotService:
         if cached:
             return cached
 
+        stale = await self._stale_snapshot(page, locale)
+
         try:
             if await self._redis.get(self._fail_key(page.path, locale)):
-                return None
+                return stale
         except Exception as exc:
             logger.warning("seo.snapshot.fail_get_failed", error=str(exc))
 
         # Не плодим параллельные fetch на одну страницу: лидер рендерит,
-        # остальные получают оболочку — следующий хит заберёт готовый кэш.
+        # остальные получают stale/оболочку — следующий хит заберёт готовый кэш.
         lock_key = self._lock_key(page.path, locale)
         try:
             acquired = await self._redis.set_nx(
@@ -130,7 +161,7 @@ class SeoSnapshotService:
             logger.warning("seo.snapshot.lock_failed", error=str(exc))
             acquired = True
         if not acquired:
-            return None
+            return stale
 
         try:
             try:
@@ -151,7 +182,7 @@ class SeoSnapshotService:
                     error=str(exc),
                 )
                 await self._mark_failure(page, locale)
-                return None
+                return stale
 
             try:
                 html = postprocess_snapshot(
@@ -169,7 +200,7 @@ class SeoSnapshotService:
                     error=str(exc),
                 )
                 await self._mark_failure(page, locale)
-                return None
+                return stale
             try:
                 _ = await self._redis.set(key, html, ttl=_SNAPSHOT_TTL_SECONDS)
             except Exception as exc:
