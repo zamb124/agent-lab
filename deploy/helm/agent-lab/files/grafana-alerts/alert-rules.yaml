@@ -995,14 +995,16 @@ groups:
     - refId: A
       queryType: instant
       relativeTimeRange:
-        from: 46800
+        from: 43200
         to: 0
       datasourceUid: loki
       model:
         # seo-indexnow (7 */6) шлёт submissions раз в 6 часов — терминальное
-        # indexnow_ok|indexnow_failed|indexnow_skipped за прогон. 13 часов без события —
-        # два пропущенных цикла: новые страницы открываются только обходом.
-        expr: sum(count_over_time({namespace="platform", service="seo-indexnow"} | json | message=~"seo[.]indexnow_(ok|failed|skipped)" [13h]))
+        # indexnow_ok|indexnow_failed|indexnow_skipped за прогон. 12 часов без
+        # события — два пропущенных цикла: новые страницы открываются только
+        # обходом. Окно from + range складывается в запрос к Loki, лимит 1d1h —
+        # 12h+12h укладывается, 13h+13h уже нет.
+        expr: sum(count_over_time({namespace="platform", service="seo-indexnow"} | json | message=~"seo[.]indexnow_(ok|failed|skipped)" [12h]))
         refId: A
     - refId: B
       relativeTimeRange:
@@ -1028,7 +1030,7 @@ groups:
     for: 30m
     annotations:
       summary: seo-indexnow CronJob stopped emitting results
-      description: No seo.indexnow_ok|indexnow_failed in 13h — IndexNow submissions not running; new pages/products/docs reach search engines only via regular crawl
+      description: No seo.indexnow_ok|indexnow_failed in 12h — IndexNow submissions not running; new pages/products/docs reach search engines only via regular crawl
     labels:
       severity: warning
       service: seo-indexnow

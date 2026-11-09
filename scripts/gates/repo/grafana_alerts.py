@@ -19,10 +19,15 @@ Grafana 13 падает panic ``assignment to entry in nil map`` при прав
 6. ``model.refId`` совпадает с ``refId`` элемента — Grafana требует паритет.
 7. У группы есть ``name``, ``folder``, ``interval`` — без них группа
    не провижинится и правила молча не доедут.
+8. Для loki-запросов ``relativeTimeRange.from`` + максимальный range-
+   селектор ``[Nh]`` в ``model.expr`` не превышает лимит Loki ``1d1h`` —
+   Grafana расширяет интервал запроса на range-вектор; переполнение даёт
+   ``sse.dataQueryError``, правило висит в health=error и не алертит.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 
 import yaml
@@ -35,6 +40,9 @@ _DATASOURCES = {"loki", "prometheus", "__expr__"}
 _NO_DATA_STATES = {"Alerting", "NoData", "OK"}
 _EXEC_ERR_STATES = {"Alerting", "Error", "OK"}
 _SEVERITIES = {"critical", "warning"}
+_LOKI_MAX_QUERY_SECONDS = 25 * 60 * 60
+_RANGE_RE = re.compile(r"\[(\d+)([smhd])\]")
+_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
 def _check_rule(group: str, rule: dict[str, object], uids: set[str], errors: list[str]) -> None:
@@ -94,6 +102,15 @@ def _check_query(where: str, entry: object, ref_ids: set[str], errors: list[str]
         errors.append(f"{where}: model пуст или не объект — panic при вставке правила")
     elif model.get("refId") != ref_id:
         errors.append(f"{where}: model.refId={model.get('refId')} != refId={ref_id}")
+    if entry.get("datasourceUid") == "loki" and isinstance(time_range, dict) and isinstance(model, dict):
+        expr = model.get("expr")
+        if isinstance(expr, str):
+            ranges = [int(n) * _UNIT_SECONDS[u] for n, u in _RANGE_RE.findall(expr)]
+            window = int(time_range.get("from") or 0) + max(ranges, default=0)
+            if window > _LOKI_MAX_QUERY_SECONDS:
+                errors.append(
+                    f"{where}: from + range {window}s > лимита Loki {_LOKI_MAX_QUERY_SECONDS}s — правило уйдёт в health=error"
+                )
 
 
 def main() -> int:
