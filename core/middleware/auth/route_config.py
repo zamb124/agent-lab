@@ -220,6 +220,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/robots.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/llms.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/llms.txt", auth_required=False, context_type="anonymous"),
+    # Корневые *.txt — публичные верификационные файлы (IndexNow /<key>.txt и
+    # будущие ключи поисковиков). SPA-fallback без правила требует браузерный
+    # Accept: text/html, а краулеры ходят с Accept: */* — нужен явный аноним.
+    RouteRule("/*.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     RouteRule(
         "/flows/api/v1/flow-ui/shares/exchange/*",
