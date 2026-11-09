@@ -273,10 +273,18 @@ async def office_e2e_search_documents(page: Page, query: str) -> None:
     await page.wait_for_timeout(400)
 
 
+async def _office_e2e_hide_flow_ui_drawer(page: Page) -> None:
+    """Прячет Lara-дроуер: его launcher перекрывает контролы в bottom-right."""
+    drawer = page.locator("flow-ui-drawer").first
+    if await drawer.count() > 0:
+        await drawer.evaluate("el => { el.style.pointerEvents = 'none'; el.style.display = 'none'; }")
+
+
 async def office_e2e_refresh_documents(page: Page) -> None:
     toolbar = office_e2e_toolbar(page)
     overflow = toolbar.locator("button.btn-icon-only").first
     await expect(overflow).to_be_visible(timeout=10_000)
+    await _office_e2e_hide_flow_ui_drawer(page)
     await overflow.click()
     refresh_item = toolbar.locator("button.overflow-item").filter(
         has_text=re.compile(r"Обновить|Refresh")
@@ -467,7 +475,6 @@ async def office_api_upload_txt(
     content: bytes = b"office e2e content",
 ) -> str:
     return await upload_txt_document(
-        office_client_http,
         office_client_http,
         office_e2e_namespace_headers(auth_headers, namespace),
         catalog_id=catalog_id,

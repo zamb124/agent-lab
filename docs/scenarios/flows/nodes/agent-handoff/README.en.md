@@ -26,25 +26,25 @@ Publish the graph and switch to **Run**. The shared chat used on the agent page 
 
 ## Step 4. Hand off the dialog to the specialist
 
-Send a return question. The feed shows a dedicated control-transfer card for Агент возвратов. This is not a normal reply: the next user turn is routed to the child agent.
+Send a return question. Control moves to Агент возвратов: the next user turn is routed to the child agent, and the reply appears in the shared Flow UI conversation feed.
 
 ![Hand off the dialog to the specialist](agent-handoff--04-handoff-visible-in-chat.png)
 
 ## Step 5. Verify that the sub-agent is replying
 
-The reply is marked with a blue icon, the Returns Agent name, and the Sub-agent role. Every bubble remains attributable in a long conversation.
+The return sub-agent reply is visible in the feed. One Flow UI conversation keeps the full parent and child dialog.
 
 ![Verify that the sub-agent is replying](agent-handoff--05-subagent-author-visible.png)
 
 ## Step 6. Return control to the main agent
 
-When the task is complete, the child calls **handback_to_parent**. A handback card is added to the feed. Only the result text and explicitly selected variables are returned — return_id in this example.
+When the task is complete, the child calls **handback_to_parent**. The handback result appears in the feed. Only the result text and explicitly selected variables are returned — return_id in this example.
 
 ![Return control to the main agent](agent-handoff--06-handback-visible-in-chat.png)
 
 ## Step 7. Verify the return to the main agent
 
-**Result demonstration.** The next reply is again labelled with the main agent name and Agent role. One feed shows the complete cycle: user → agent → handoff → sub-agent → handback → agent.
+**Result demonstration.** The next reply is again from the main agent. One feed shows the complete cycle: user → agent → handoff → sub-agent → handback → agent.
 
 **Summary.** Use Call for a one-off invocation, Handoff to route following turns, and handback_to_parent to explicitly return control.
 

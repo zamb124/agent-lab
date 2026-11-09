@@ -103,7 +103,7 @@ async def test_user_opens_direct_dm_from_member_list(
     # DM-список и start-DM rows видны только при выборе «Все пространства».
     await ui_page_system.add_init_script(
         """() => {
-            localStorage.removeItem('crm:last-namespace-by-company');
+            localStorage.removeItem('platform:crm:last_namespace_by_company');
             localStorage.setItem('pwa-banner-dismissed', 'true');
         }"""
     )

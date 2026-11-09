@@ -23,11 +23,3 @@ Click + next to branch tabs, set an identifier and promotion name. After creatio
 Open the answer node and rewrite the instruction for the summer promotion. Some settings inherit from the base branch, while the prompt text can be changed locally.
 
 ![Update the instruction for the promotion](experiment-with-branches--03-branch-prompt-updated.png)
-
-## Step 4. Publish the branch and verify isolation
-
-**Result demonstration.** After publishing, the promotion prompt is stored only in the Summer sale branch while the base version stays unchanged.
-
-**Summary.** You can now create a branch, change agent behavior there, and publish experiments without risking the main version.
-
-![Publish the branch and verify isolation](experiment-with-branches--04-branch-published.png)

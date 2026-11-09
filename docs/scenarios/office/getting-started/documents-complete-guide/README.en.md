@@ -17,15 +17,3 @@ Complete Documents workflow: workspace, catalog, create a document, upload a fil
 ## Step 4. Empty Word document created
 
 ![Empty Word document created](documents-complete-guide--04-empty-word-document-created.png)
-
-## Step 5. File uploaded to catalog
-
-![File uploaded to catalog](documents-complete-guide--05-file-uploaded-to-catalog.png)
-
-## Step 6. Document opened in editor
-
-![Document opened in editor](documents-complete-guide--06-document-opened-in-editor.png)
-
-## Step 7. Editor and OnlyOffice integration ready
-
-![Editor and OnlyOffice integration ready](documents-complete-guide--07-editor-and-onlyoffice-integration-ready.png)

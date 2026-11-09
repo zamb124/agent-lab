@@ -17,17 +17,3 @@ Open the agent on the canvas and open settings. Here you set behavior and tools.
 In Output mode choose Tools. In this mode the agent can call operations. Structured mode is not for tools or Skills.
 
 ![Switch the node to tools mode](add-agent-tools--02-tools-mode-active.png)
-
-## Step 3. Add a tool from the library
-
-Click From library and pick calculator. After selection it appears as a chip in the node tool list.
-
-![Add a tool from the library](add-agent-tools--03-tool-added-from-library.png)
-
-## Step 4. Run the agent and see the tool call
-
-**Result demonstration.** Switch to Run mode, ask a calculation question — the agent calls calculator and the reply shows the result.
-
-**Summary.** You can enable tools mode, add a library tool, and verify the call in a test run.
-
-![Run the agent and see the tool call](add-agent-tools--04-tool-call-in-run.png)

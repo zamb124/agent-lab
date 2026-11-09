@@ -48,7 +48,7 @@ async def sync_e2e_activate_namespace_for_next_load(
     await page.add_init_script(
         f"""
         (() => {{
-            const key = 'crm:last-namespace-by-company';
+            const key = 'platform:crm:last_namespace_by_company';
             let map = {{}};
             try {{
                 const raw = window.localStorage.getItem(key);

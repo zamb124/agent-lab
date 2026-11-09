@@ -5,10 +5,18 @@ Playwright E2E для SPA платформы. Сценарии с `@pytest.mark.
 ## Запуск
 
 ```bash
-make test-ui          # test-up + pytest tests/ui/e2e -n5 --dist=loadfile (+ perf SUMMARY)
+make test-ui          # test-up + pytest tests/ui/e2e -n<ресурсы> --dist=loadfile (+ perf SUMMARY)
 make test-ui-doc      # test-ui + make doc
 UI_E2E_WORKERS=1 make test-ui   # serial (отладка)
+UI_E2E_WORKERS=auto make test-ui  # явно: то же число, что и дефолт
 ```
+
+`UI_E2E_WORKERS` по умолчанию выводится из ресурсов машины —
+`scripts.testing.stack.default_ui_e2e_workers()` = `min(8, cpu//2, ram_gb//3)`,
+минимум 2. UI-воркер держит отдельный Chromium (~2-3GB RSS под нагрузкой),
+поэтому ram-бюджет жёстче, чем у unit-воркеров (`ram_gb//4` там, браузер
+тяжелее). На 8+ воркерах `--dist=loadfile` уже не ускоряет прогон — таймауты
+и шум растут быстрее параллелизма.
 
 Бюджет тела теста — **15 с** (`tests/ui/e2e/conftest.py`). Дольше только через `scenario(timeout_seconds=N)`.
 
@@ -35,7 +43,7 @@ artifacts/ui-perf/
 
 ### Параллель и изоляция
 
-- **xdist:** `UI_E2E_WORKERS?=5`, `--dist=loadfile` (файл целиком на одном worker).
+- **xdist:** `UI_E2E_WORKERS` — ресурсозависимый дефолт (см. выше), `--dist=loadfile` (файл целиком на одном worker).
 - **Company:** `ui_e2e_gw{N}` / subdomain `ui-gw{N}` — не shared `system` roster.
 - **MockLLM:** scope `test_e2e_gw{N}`; браузер шлёт `X-Test-Scope` (см. `tests/ui/e2e_worker.py`).
 - **Запрещено:** дописывать members в `system` из UI session fixtures; assert'ы на глобальный `system.members`.
@@ -93,6 +101,28 @@ docs/scenarios/sync/chat/send-message-in-channel/
 ```
 
 Формат имени задаёт движок: `<doc_slug>--<номер>-<screenshot_name>.png`. Папка `screenshots/` запрещена.
+
+## Маркетинговые кадры (`tests/ui/shots/`)
+
+Высокоразрешённые (2x) скриншоты продуктов на реальных сидированных демо-данных —
+для продуктовых страниц `/products/*` и секции «Возможности платформы» лендинга.
+
+```bash
+uv run pytest tests/ui/shots/test_marketing_shots.py -q          # весь suite (32 кадра)
+uv run pytest tests/ui/shots/test_marketing_shots.py -k crm -q   # подмножество
+```
+
+- **Сиды:** `seed_content.py` — session-фикстура `marketing_seeded`; идемпотентна
+  (dedupe по именам/namespace, повторные прогоны не копят дубли). Ошибки сидов
+  fail-fast — зелёный тест = сид реально записался.
+- **Кадры:** `out/<name>.png` (gitignored). Каждый кадр обязателен к **ручному
+  визуальному просмотру** — зелёный тест не означает красивый маркетинговый кадр.
+- **Конвейер в лендинг:** `uv run python -m scripts.tools.land_optimize`
+  (`sips -Z 2400` → `apps/frontend/ui/assets/images/land/optimized/`), затем
+  экспорт URL в `apps/frontend/ui/_helpers/land-product-images.ts`.
+- **Особенности:** cookie-баннер снимается до кадра (`dismiss_cookie_banner`);
+  geo-кадры ждут реальный рендер карты (source features + `map.loaded()`);
+  CRM-граф кадрируется через `_fitNonce`, глубина — `_maxDepth` + `_rebuildGraphByMode()`.
 
 ## Office (`/documents`)
 

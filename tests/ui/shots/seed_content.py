@@ -198,7 +198,113 @@ async def seed_demo_shops(
                 for s in shops.values()
             )
         )
+        cafe = shops.get("cafe")
+        if cafe is not None:
+            from tests.fixtures.shop import auth_customer
+
+            _ = await auth_customer(public_client, cafe["slug"])
+            await _seed_shop_orders(public_client, token, cafe["id"], cafe["slug"])
     return shops
+
+
+async def _seed_shop_orders(
+    pub_client: httpx2.AsyncClient, token: str, shop_id: str, slug: str
+) -> None:
+    """Заказы витрины по колонкам доски: new ×2, accepted ×2, preparing, delivering.
+
+    Дедуп по customer_name — повторный прогон не плодит заказы.
+    """
+    specs = (
+        ("Анна Примерова", "pickup", "new"),
+        ("Марк Лебедев", "delivery", "new"),
+        ("Ольга Ким", "pickup", "accepted"),
+        ("Давид Гусейнов", "pickup", "accepted"),
+        ("Ева Соколова", "delivery", "preparing"),
+        ("Тимур Аршавин", "delivery", "delivering"),
+    )
+    chain = ("new", "accepted", "preparing", "delivering")
+    async with api_client("shop", token) as client:
+        # Витрина всегда открыта — иначе заказ упадёт на shop_closed по расписанию.
+        patch = await client.patch(
+            f"{SHOP_ADMIN_API}/shops/{shop_id}",
+            json={
+                "working_hours": {str(d): "00:00-23:59" for d in range(7)},
+                "delivery_enabled": True,
+                "pickup_enabled": True,
+            },
+        )
+        patch.raise_for_status()
+        products = await _get(client, f"{SHOP_ADMIN_API}/shops/{shop_id}/products")
+        product_ids = [
+            str(p["shop_product_id"])
+            for p in products.get("items", [])
+            if isinstance(p, dict) and p.get("shop_product_id")
+        ][:3]
+        if not product_ids:
+            raise AssertionError(f"у витрины {slug} нет товаров для заказов")
+        orders_body = await _get(
+            client, f"{SHOP_ADMIN_API}/shops/{shop_id}/orders", params={"limit": 200}
+        )
+        existing: dict[str, dict[str, str]] = {}
+        for o in orders_body.get("items", []):
+            if isinstance(o, dict) and o.get("customer_name"):
+                existing[str(o["customer_name"])] = {
+                    "id": str(o.get("shop_order_id", "")),
+                    "status": str(o.get("status", "")),
+                }
+        for name, delivery_type, target in specs:
+            entry = existing.get(name)
+            if entry is None:
+                body: dict[str, object] = {
+                    "items": [{"product_id": pid, "qty": 1} for pid in product_ids],
+                    "customer_name": name,
+                    "delivery_type": delivery_type,
+                }
+                if delivery_type == "delivery":
+                    body["address"] = "Москва, Тверская 1"
+                resp = await pub_client.post(
+                    f"{SHOP_PUBLIC_API}/storefront/{slug}/orders", json=body
+                )
+                if resp.status_code >= 400:
+                    raise AssertionError(
+                        f"order {name} -> {resp.status_code}: {resp.text[:300]}"
+                    )
+                public_code = str(resp.json().get("public_code", ""))
+                # Свежий список — public_code → shop_order_id
+                orders_body = await _get(
+                    client,
+                    f"{SHOP_ADMIN_API}/shops/{shop_id}/orders",
+                    params={"limit": 200},
+                )
+                order_id = ""
+                for o in orders_body.get("items", []):
+                    if isinstance(o, dict) and o.get("public_code") == public_code:
+                        order_id = str(o.get("shop_order_id", ""))
+                        break
+                if not order_id:
+                    raise AssertionError(f"заказ {public_code} не найден в списке")
+                current = "new"
+            else:
+                order_id = entry["id"]
+                current = entry["status"]
+            if current == target:
+                continue
+            for step in chain:
+                if step == current:
+                    continue
+                if chain.index(step) <= chain.index(current):
+                    continue
+                resp = await client.post(
+                    f"{SHOP_ADMIN_API}/shops/{shop_id}/orders/{order_id}/status",
+                    params={"status": step},
+                )
+                if resp.status_code >= 400:
+                    raise AssertionError(
+                        f"status {order_id} -> {step}: {resp.status_code}: {resp.text[:300]}"
+                    )
+                current = step
+                if step == target:
+                    break
 
 
 # === CRM ===
@@ -256,15 +362,27 @@ async def _seed_crm(token: str) -> dict[str, Any]:
         existing_body = await _post(
             client,
             "/crm/api/v1/entities/query",
-            {"namespace": ns, "limit": 1000},
+            {"limit": 1000},
         )
         existing_by_name: dict[str, str] = {}
         existing_rel: set[tuple[str, str, str]] = set()
+        dup_ids: list[str] = []
+        seen_keys: set[tuple[str, str]] = set()
         for it in existing_body.get("items", []):
             if isinstance(it, dict) and it.get("name"):
                 eid = str(it.get("entity_id") or it.get("id") or "")
-                if eid:
-                    existing_by_name[str(it["name"])] = eid
+                if not eid:
+                    continue
+                key = (str(it.get("entity_type") or ""), str(it["name"]))
+                if key in seen_keys:
+                    dup_ids.append(eid)
+                    continue
+                seen_keys.add(key)
+                existing_by_name[str(it["name"])] = eid
+        if dup_ids:
+            await _post(
+                client, "/crm/api/v1/entities/bulk-delete", {"entity_ids": dup_ids}
+            )
 
         ids_by_name: dict[str, str] = dict(existing_by_name)
 
@@ -331,6 +449,8 @@ async def _seed_crm(token: str) -> dict[str, Any]:
 
         today = datetime.now(timezone.utc).date()
         notes = (
+            ("Еженедельный обзор воронки", 0,
+             "Вся воронка за неделю: Аврора ждёт КП на 24 точки, кофейня готова к пилоту витрины, ТехноДар торгуется по цене. Следующие шаги по каждой сделке."),
             ("Звонок с Анной — кофейня", 0,
              "Обсудили витрину: хочет онлайн-заказы и программу лояльности. Прислать демо-ссылку."),
             ("Демо для Авроры — итоги", 0,
@@ -364,6 +484,21 @@ async def _seed_crm(token: str) -> dict[str, Any]:
             ("Подписка Linnex Pro — Аврора", "Дмитрий Козлов", "assigned_to"),
             ("Игорь Савельев", "Дмитрий Козлов", "reports_to"),
             ("Расширение — Аврора", "Подписка Linnex Pro — Аврора", "follows_up"),
+            # Исходящие рёбра от корня графа: граф-обход идёт source→target,
+            # поэтому root — заметка, которая упоминает всю воронку.
+            ("Еженедельный обзор воронки", "ООО «Аврора Ритейл»", "mentions"),
+            ("Еженедельный обзор воронки", "ИП Смирнова А.В.", "mentions"),
+            ("Еженедельный обзор воронки", "ООО «ТехноДар»", "mentions"),
+            ("Еженедельный обзор воронки", "Анна Смирнова", "mentions"),
+            ("Еженедельный обзор воронки", "Дмитрий Козлов", "mentions"),
+            ("Еженедельный обзор воронки", "Мария Орлова", "mentions"),
+            ("Еженедельный обзор воронки", "Игорь Савельев", "mentions"),
+            ("Еженедельный обзор воронки", "Подписка Linnex Pro — Аврора", "mentions"),
+            ("Еженедельный обзор воронки", "CRM + агенты — ТехноДар", "mentions"),
+            ("Еженедельный обзор воронки", "Встреча с ТехноДар — план внедрения", "follows_up"),
+            ("Встреча с ТехноДар — план внедрения", "Возражение по цене", "follows_up"),
+            ("Возражение по цене", "Демо для Авроры — итоги", "follows_up"),
+            ("Демо для Авроры — итоги", "Звонок с Анной — кофейня", "follows_up"),
         )
         rel_body = await _get(
             client,
@@ -399,18 +534,34 @@ async def _seed_crm(token: str) -> dict[str, Any]:
             )
 
         tasks_body = await _get(
-            client, "/crm/api/v1/activity-tasks", params={"namespace": ns, "limit": 200}
+            client,
+            "/crm/api/v1/activity-tasks",
+            params={"namespace": ns, "limit": 200},
         )
-        existing_tasks = {
-            str(w.get("title"))
-            for w in tasks_body.get("items", [])
-            if isinstance(w, dict) and w.get("title")
-        }
+        existing_tasks: set[str] = set()
+        for w in tasks_body.get("items", []):
+            if not isinstance(w, dict) or not w.get("title"):
+                continue
+            title = str(w["title"])
+            if title in existing_tasks:
+                # Дубли прошлых прогонов: удаляем парный CRMEntity → каскадно WorkItem
+                for link in w.get("links") or []:
+                    if isinstance(link, dict) and link.get("link_kind") == "crm_entity":
+                        eid = str(link.get("entity_id") or "")
+                        if eid:
+                            resp = await client.delete(f"/crm/api/v1/entities/{eid}")
+                            resp.raise_for_status()
+                continue
+            existing_tasks.add(title)
         for title, priority, days in (
             ("Позвонить Анне — демо витрины", "high", 1),
             ("Подготовить КП для Авроры (24 точки)", "urgent", 2),
             ("Встреча с ТехноДар — подписание", "high", 3),
             ("Отправить кейс ритейла Дмитрию", "normal", 5),
+            ("Импорт базы контактов — ТехноДар", "normal", 6),
+            ("Настроить агентов для Авроры", "high", 7),
+            ("Пилот витрины кофейни — старт", "urgent", 2),
+            ("Согласовать условия расширения", "normal", 9),
         ):
             if title in existing_tasks:
                 continue
@@ -426,7 +577,11 @@ async def _seed_crm(token: str) -> dict[str, Any]:
                 },
             )
 
-    return {"namespace": ns, "entity_ids": list(ids_by_name.values())}
+    return {
+        "namespace": ns,
+        "entity_ids": list(ids_by_name.values()),
+        "graph_root_id": ids_by_name.get("Еженедельный обзор воронки", ""),
+    }
 
 
 # === Sync ===
@@ -767,7 +922,10 @@ async def _seed_office(token: str) -> dict[str, Any]:
                 namespace="default",
             )
             file_ids.append(str(payload.get("file_id") or payload.get("id") or ""))
-    return {"file_ids": [f for f in file_ids if f]}
+    return {
+        "file_ids": [f for f in file_ids if f],
+        "catalog_id": documents_catalog_id,
+    }
 
 
 # === Flows ===
@@ -866,6 +1024,51 @@ async def _seed_flows(token: str) -> dict[str, Any]:
     return {"flow_id": "sales_assistant"}
 
 
+# === RAG ===
+
+
+async def _seed_rag(token: str) -> dict[str, Any]:
+    docs = (
+        (
+            "marketing-shop-guide",
+            "Гайд по витрине Shop",
+            "Запуск: создайте витрину из шаблона (кафе, пекарня, магазин, пиццерия). "
+            "Загрузите фото товаров — сид уже содержит ~70 изображений. Опубликуйте "
+            "slug — витрина доступна на <slug>.linnex.io. Возможности: корзина и "
+            "оформление заказа без регистрации, модификаторы (размеры, добавки, "
+            "составы), программа лояльности «N-я покупка — награда», баннеры, "
+            "акции и промокоды.",
+        ),
+        (
+            "marketing-crm-playbook",
+            "CRM: плейбук продаж",
+            "Воронка из связей сущностей: заметки упоминают компании и контакты, "
+            "сделки принадлежат компаниям и назначены менеджерам. Задачи активности "
+            "хранятся в WorkItem и видны на досках. AI-анализ заметок предлагает "
+            "следующие шаги и связи.",
+        ),
+        (
+            "marketing-support-faq",
+            "FAQ: частые вопросы",
+            "Витрина: заказы принимаются анонимно по публичной ссылке. Синк: каналы, "
+            "треды и звонки в одном пространстве. Wiki: дерево страниц с RAG-индексом "
+            "и публичным сайтом. Geo: маршруты, зоны и изохроны на PostGIS.",
+        ),
+    )
+    async with api_client("rag", token) as client:
+        for document_id, name, text in docs:
+            await _post(
+                client,
+                "/rag/api/v1/namespaces/default/ingest-text",
+                {
+                    "document_id": document_id,
+                    "document_name": name,
+                    "text": text,
+                },
+            )
+    return {"document_ids": [d[0] for d in docs]}
+
+
 # === Orchestrator ===
 
 
@@ -878,9 +1081,10 @@ async def seed_service_content(*, token: str, member_token: str | None = None) -
         _seed_wiki(token),
         _seed_office(token),
         _seed_flows(token),
+        _seed_rag(token),
         return_exceptions=True,
     )
-    keys = ("crm", "sync", "worktracker", "wiki", "office", "flows")
+    keys = ("crm", "sync", "worktracker", "wiki", "office", "flows", "rag")
     for key, res in zip(keys, results):
         if isinstance(res, BaseException):
             seeds[key] = {"error": f"{type(res).__name__}: {res}"}

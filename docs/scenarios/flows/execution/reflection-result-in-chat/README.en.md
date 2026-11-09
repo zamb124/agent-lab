@@ -38,29 +38,3 @@ This example already checks the final answer for clarity. After browsing the fie
 Switch to **Run**. The same chat you use before publishing for Green Garden customers opens on the right.
 
 ![Open the test chat in Run mode](reflection-result-in-chat--04-reflection-test-chat-opened.png)
-
-## Step 5. Send a question and read the verdict chip
-
-Ask about delivery. Under the agent reply a compact quality-check chip appears. Color and label show the outcome:
-
-- green / “Check passed” — the reply is approved;
-- yellow / “Needs revision” — the critic asks for fixes;
-- red / “Blocked” — the reply failed the rules (as in this example: too vague, no delivery dates).
-
-The chip label matches the canvas exit name (here — Blocked).
-
-![Send a question and read the verdict chip](reflection-result-in-chat--05-reflection-chip-visible.png)
-
-## Step 6. Expand the details and fix the reply from the findings
-
-**Result demonstration.** When the reply is not approved, the card opens automatically. Inside you get three clear blocks:
-
-- **Summary** — the critic’s overall verdict;
-- **Findings** — individual issues (severity and wording);
-- **Reasons** — technical block reasons for debugging.
-
-Use them to tighten the agent prompt or review criteria before shipping the scenario to customers.
-
-**Summary.** You can configure the review policy and the chat visibility toggle, then read the chip and details to see whether the reply passed quality control.
-
-![Expand the details and fix the reply from the findings](reflection-result-in-chat--06-reflection-detail-summary.png)

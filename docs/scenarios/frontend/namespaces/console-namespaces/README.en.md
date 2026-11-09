@@ -8,32 +8,18 @@
 
 ## Step 1. Open the namespaces page
 
-В консоли платформы откройте раздел Namespaces (Пространства) в боковом меню или перейдите по адресу /namespaces. Это нужно, чтобы увидеть реестр рабочих и личных пространств компании. На экране появится заголовок страницы и список карточек.
+In the platform console, open Namespaces in the sidebar or go to /namespaces. This shows the company registry of work and personal spaces. You should see the page title and a list of cards.
 
 ![Open the namespaces page](console-namespaces--01-namespaces-page-opened.png)
 
 ## Step 2. Filter personal namespaces
 
-Нажмите фильтр Personal (Личные). Так вы оставите в списке только именные каталоги сотрудников. Кнопка фильтра подсветится как активная.
+Click the Personal filter. The list keeps only employee personal catalogs. The filter button appears pressed.
 
 ![Filter personal namespaces](console-namespaces--02-namespaces-filter-personal.png)
 
 ## Step 3. Return to the full list
 
-Нажмите фильтр All (Все), чтобы снова увидеть и рабочие пространства компании, и личные каталоги. Это нужно перед созданием нового workspace — иначе карточка нового пространства не появится в текущем отфильтрованном списке.
+Click the All filter to show company workspaces and personal catalogs again. Do this before creating a new workspace — otherwise the new card may stay hidden behind the personal-only filter.
 
 ![Return to the full list](console-namespaces--03-namespaces-filter-all.png)
-
-## Step 4. Open the create workspace form
-
-Нажмите кнопку Create workspace (Создать пространство). Появится форма с полями имени и описания — без выбора CRM-шаблона.
-
-![Open the create workspace form](console-namespaces--04-namespaces-create-form.png)
-
-## Step 5. Confirm the new workspace in the list
-
-**Демонстрация результата.** В списке появилась карточка с именем uiws_e7001c60. Рядом видна ссылка на настройки CRM — значит пространство зарегистрировано как рабочее пространство компании.
-
-**Итог.** Теперь вы умеете открыть реестр пространств, отфильтровать личные каталоги и создать лёгкое workspace без CRM-шаблона.
-
-![Confirm the new workspace in the list](console-namespaces--05-namespace-created-in-list.png)

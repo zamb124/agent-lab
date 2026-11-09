@@ -84,11 +84,13 @@ export class PlatformWorkItemRow extends PlatformElement {
         workItemId: { type: String, attribute: 'work-item-id' },
         selected: { type: Boolean, reflect: true },
         showPreview: { type: Boolean, attribute: 'show-preview' },
+        _loadedItem: { state: true },
     };
     declare item: WorkItemLite | null;
     declare workItemId: string;
     declare selected: boolean;
     declare showPreview: boolean;
+    declare _loadedItem: WorkItemLite | null;
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
@@ -170,6 +172,7 @@ export class PlatformWorkItemRow extends PlatformElement {
         this.workItemId = '';
         this.selected = false;
         this.showPreview = false;
+        this._loadedItem = null;
         this._getOp = null;
     }
 
@@ -188,9 +191,9 @@ export class PlatformWorkItemRow extends PlatformElement {
             && typeof this.workItemId === 'string'
             && this.workItemId.length > 0
             && this._getOp
-            && !this._getOp.busy
+            && this._resolvedItem() === null
         ) {
-            this._getOp.run({ work_item_id: this.workItemId });
+            void this._ensureLoaded();
         }
     }
 
@@ -198,12 +201,30 @@ export class PlatformWorkItemRow extends PlatformElement {
         if (isLoadedWorkItem(this.item)) {
             return this.item;
         }
+        const mine = this._loadedItem;
+        if (isLoadedWorkItem(mine) && mine.work_item_id === this.workItemId) {
+            return mine;
+        }
         const op = this._getOp;
         const result = op === null ? null : op.lastResult;
-        if (isLoadedWorkItem(result)) {
+        if (isLoadedWorkItem(result) && result.work_item_id === this.workItemId) {
             return result;
         }
         return null;
+    }
+
+    // lastResult op'а общий для всех инстансов — результат кладём в
+    // instance-поле, иначе список строк рендерит один и тот же item.
+    async _ensureLoaded(): Promise<void> {
+        const id = this.workItemId;
+        const op = this._getOp;
+        if (!id || !op) {
+            return;
+        }
+        const result = await op.run({ work_item_id: id });
+        if (isLoadedWorkItem(result) && result.work_item_id === id) {
+            this._loadedItem = result;
+        }
     }
 
     _onOpen(): void {

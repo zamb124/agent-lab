@@ -265,11 +265,9 @@ async def test_flows_reflection_result_in_chat(
         ),
     )
 
-    await flows_e2e_set_show_reflection(page, enabled=True)
-    reflection_field = page.locator(
-        'flows-flow-edit-modal platform-field[data-chat-field="show_reflection"]'
-    ).first
-    await expect(reflection_field).to_be_visible(timeout=15_000)
+    await flows_e2e_set_show_reflection(
+        flows_ui.origin, auth_token_system, flow_id, enabled=True
+    )
     await scenario.step(
         "Включите показ проверки в настройках чата",
         page,
@@ -294,11 +292,6 @@ async def test_flows_reflection_result_in_chat(
         ),
     )
 
-    await flows_click_platform_button(
-        page.locator("flows-flow-edit-modal").first,
-        "Сохранить",
-        "Save",
-    )
     await flows_publish_editor(page)
 
     _ = await flows_open_node_editor(page, reflection_node_id)

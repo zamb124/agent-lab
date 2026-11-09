@@ -76,6 +76,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         _previewOpen: { state: true },
         _previewAnchorRect: { state: true },
         _previewPinned: { state: true },
+        _loadedItem: { state: true },
     };
     declare workItemId: string;
     declare item: WorkItemLike | null;
@@ -87,6 +88,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
     declare _previewOpen: boolean;
     declare _previewAnchorRect: DOMRect | { top: number; left: number; right: number; bottom: number; width: number; height: number } | null;
     declare _previewPinned: boolean;
+    declare _loadedItem: WorkItemLike | null;
 
     private _previewCloseTimer: number | null;
     private _getOp: OpController;
@@ -311,6 +313,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         this._previewAnchorRect = null;
         this._previewPinned = false;
         this._previewCloseTimer = null;
+        this._loadedItem = null;
         this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => {
             const locale = s.i18n.locale;
@@ -326,8 +329,11 @@ export class PlatformWorkItemBadge extends PlatformElement {
         if (this.variant && !ALLOWED_VARIANTS.has(this.variant)) {
             throw new Error(`platform-work-item-badge: invalid variant "${this.variant}"`);
         }
-        if ((changed.has('workItemId') || changed.has('item')) && this._resolvedItem() === null) {
-            this._ensureLoaded();
+        if (changed.has('workItemId') || changed.has('item')) {
+            this._loadedItem = null;
+            if (this._resolvedItem() === null) {
+                void this._ensureLoaded();
+            }
         }
     }
 
@@ -335,24 +341,33 @@ export class PlatformWorkItemBadge extends PlatformElement {
         if (this.item && typeof this.item === 'object') {
             return this.item;
         }
+        const mine = this._loadedItem;
+        const id = this._effectiveWorkItemId();
+        if (isWorkItem(mine) && mine.work_item_id === id) {
+            return mine;
+        }
         const result = this._getOp.lastResult;
-        if (isWorkItem(result)) return result;
+        if (isWorkItem(result) && result.work_item_id === id) {
+            return result;
+        }
         return null;
     }
 
-    _ensureLoaded() {
+    // lastResult op'а общий для всех инстансов — результат кладём в
+    // instance-поле, иначе список бейджей рендерит один и тот же item.
+    async _ensureLoaded() {
         const id = this._effectiveWorkItemId();
         if (!id) {
             return;
         }
-        if (this._getOp.busy) {
+        const mine = this._loadedItem;
+        if (isWorkItem(mine) && mine.work_item_id === id) {
             return;
         }
-        const cached = this._getOp.lastResult;
-        if (isWorkItem(cached) && cached.work_item_id === id) {
-            return;
+        const result = await this._getOp.run({ work_item_id: id });
+        if (isWorkItem(result) && result.work_item_id === id) {
+            this._loadedItem = result;
         }
-        this._getOp.run({ work_item_id: id });
     }
 
     _effectiveWorkItemId() {

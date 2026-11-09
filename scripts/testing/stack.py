@@ -75,7 +75,11 @@ _TILES_FIXTURE = (
 BASELINE_PYTEST_WORKERS = 10
 # Parallel spawn of granian + TaskIQ: import under ~100 processes takes ~2 min.
 # 90–120 s expire while late processes are still importing.
-STACK_READINESS_TIMEOUT_SEC = 180.0
+# На перегруженной машине (игры, рендер) импорты не укладываются — таймаут
+# поднимается через TEST_STACK_READINESS_TIMEOUT_SEC.
+STACK_READINESS_TIMEOUT_SEC = float(
+    os.environ.get("TEST_STACK_READINESS_TIMEOUT_SEC", "180")
+)
 
 _TASKIQ_REDIS_URL = "redis://localhost:63792/1"
 _TASKIQ_CONSUMER_GROUP = "taskiq"
@@ -227,6 +231,29 @@ def resolve_pytest_workers() -> int:
     return int(raw)
 
 
+BASELINE_UI_E2E_WORKERS = 8
+
+
+def default_ui_e2e_workers() -> int:
+    """xdist-воркеров UI E2E по ресурсам машины: min(8, cpu//2, ram_gb//3), минимум 2.
+
+    UI-воркер — это pytest-процесс + отдельный Chromium (~2-3GB RSS на пару
+    под нагрузкой), поэтому ram-бюджет жёстче, чем у unit-воркеров (//4 там,
+    //3 здесь — браузер тяжелее платформенного импорта). cpu//2 оставляет
+    половину ядер стеку granian/TaskIQ/Docker. Выше BASELINE машина не
+    получает: --dist=loadfile таймаут-политика набрана под -n5..-n8.
+    """
+    cpu = os.process_cpu_count() or os.cpu_count() or 4
+    bounds = [cpu // 2]
+    try:
+        ram_gb = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / (1 << 30)
+    except (ValueError, OSError, AttributeError):
+        ram_gb = 0
+    if ram_gb > 0:
+        bounds.append(int(ram_gb) // 3)
+    return max(2, min(BASELINE_UI_E2E_WORKERS, *bounds))
+
+
 def stack_scale_factor(pytest_workers: int | None = None) -> float:
     workers = pytest_workers if pytest_workers is not None else resolve_pytest_workers()
     if workers <= BASELINE_PYTEST_WORKERS:
@@ -319,7 +346,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="provider_litserve",
         app_path="apps.provider_litserve.main:app",
         port=9014,
-        readiness_timeout=240.0,
+        readiness_timeout=max(240.0, STACK_READINESS_TIMEOUT_SEC),
         env={
             "PROVIDER_LITSERVE__INFRA__BACKEND": "placeholder",
             "PROVIDER_LITSERVE__INFRA__ACCELERATOR": "cpu",
@@ -1082,6 +1109,22 @@ def cmd_up() -> int:
     pytest_workers = resolve_pytest_workers()
     granian_services = build_granian_services(pytest_workers)
     taskiq_services = build_taskiq_worker_services(pytest_workers)
+    # TEST_STACK_ONLY="crm,secrets,frontend": частичный стек на слабых машинах
+    # (спавн всех ~100 процессов разом уходит в OOM). Манифест покрывает только
+    # поднятое — `down` корректно гасит частичный стек.
+    only = {
+        name.strip()
+        for name in os.environ.get("TEST_STACK_ONLY", "").split(",")
+        if name.strip()
+    }
+    if only:
+        granian_services = tuple(s for s in granian_services if s.name in only)
+        taskiq_services = tuple(s for s in taskiq_services if s.name in only)
+        print(
+            f"test_stack: TEST_STACK_ONLY частичный стек "
+            f"({len(granian_services)} granian + {len(taskiq_services)} taskiq): "
+            f"{sorted(only)}"
+        )
     started: list[tuple[str, subprocess.Popen[bytes]]] = []
     processes: list[StackProcess] = []
     cancel = threading.Event()
@@ -1133,6 +1176,8 @@ def cmd_up() -> int:
                     )
                 )
             for external in EXTERNAL_READINESS:
+                if only and external.name not in only:
+                    continue
                 futures.append(pool.submit(_wait_external_ready, external, cancel))
             try:
                 for future in futures:
@@ -1160,7 +1205,7 @@ def cmd_up() -> int:
             _terminate_started()
             return 1
 
-        probe_errors = _run_sandbox_execute_probes()
+        probe_errors = [] if only else _run_sandbox_execute_probes()
         if probe_errors:
             print("test_stack: sandbox execute probes FAILED, останавливаю стек:", file=sys.stderr)
             for error_text in probe_errors:

@@ -6,12 +6,14 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import {
-    landFlowsAbilityUrl,
-    landRagAbilityUrl,
-    landNetworkleAbilityUrl,
-    landSyncAbilityUrl,
-    landDocumentsHeroUrl,
-    landDocumentsShot2Url,
+    landFlowsEditorUrl,
+    landRagSearchUrl,
+    landCrmGraphUrl,
+    landSyncChatUrl,
+    landOfficeEditorUrl,
+    landOfficeDocumentsUrl,
+    landShopPizzaStorefrontUrl,
+    landWorktrackerBoardUrl,
 } from '../../_helpers/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
@@ -282,8 +284,6 @@ export class LandingAbilities extends PlatformElement {
 
     override render(): TemplateResult {
         const t = (key: string) => (this.t(key) || key);
-        const locale = (this._localeSel.value || 'ru');
-        const flowsSrc = landFlowsAbilityUrl(locale);
         return html`
             <div class="abilities-container">
                 <h2 class="abilities-title">${t('features.tag')}</h2>
@@ -291,7 +291,7 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">
                         <img
-                            src=${flowsSrc}
+                            src=${landFlowsEditorUrl}
                             alt=${t('features.ability_alt_flows')}
                             width="1200"
                             height="675"
@@ -315,7 +315,7 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">
                         <img
-                            src=${landRagAbilityUrl}
+                            src=${landRagSearchUrl}
                             alt=${t('features.ability_alt_kb')}
                             width="1200"
                             height="675"
@@ -339,7 +339,7 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">
                         <img
-                            src=${landNetworkleAbilityUrl}
+                            src=${landCrmGraphUrl}
                             alt=${t('features.ability_alt_networkle')}
                             width="1200"
                             height="675"
@@ -363,7 +363,7 @@ export class LandingAbilities extends PlatformElement {
                 <div class="ability-item">
                     <div class="ability-image">
                         <img
-                            src=${landSyncAbilityUrl}
+                            src=${landSyncChatUrl}
                             alt=${t('features.ability_alt_sync')}
                             width="1200"
                             height="675"
@@ -388,7 +388,7 @@ export class LandingAbilities extends PlatformElement {
                     <div class="ability-images-stack">
                         <div class="ability-image">
                             <img
-                                src=${landDocumentsHeroUrl}
+                                src=${landOfficeEditorUrl}
                                 alt=${t('features.ability_alt_documents')}
                                 width="1200"
                                 height="673"
@@ -398,7 +398,7 @@ export class LandingAbilities extends PlatformElement {
                         </div>
                         <div class="ability-image">
                             <img
-                                src=${landDocumentsShot2Url}
+                                src=${landOfficeDocumentsUrl}
                                 alt=${t('features.ability_alt_documents_2')}
                                 width="1200"
                                 height="673"
@@ -416,6 +416,54 @@ export class LandingAbilities extends PlatformElement {
                             <li>${t('features.feature5_li1')}</li>
                             <li>${t('features.feature5_li2')}</li>
                             <li>${t('features.feature5_li3')}</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="ability-item">
+                    <div class="ability-image">
+                        <img
+                            src=${landShopPizzaStorefrontUrl}
+                            alt=${t('features.ability_alt_shop')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
+                    <div class="ability-content">
+                        <h3 class="ability-name">${t('features.feature6_title')}</h3>
+                        <p class="ability-description">
+                            ${t('features.feature6_description')}
+                        </p>
+                        <ul class="ability-features">
+                            <li>${t('features.feature6_li1')}</li>
+                            <li>${t('features.feature6_li2')}</li>
+                            <li>${t('features.feature6_li3')}</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="ability-item">
+                    <div class="ability-image">
+                        <img
+                            src=${landWorktrackerBoardUrl}
+                            alt=${t('features.ability_alt_worktracker')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
+                    <div class="ability-content">
+                        <h3 class="ability-name">${t('features.feature7_title')}</h3>
+                        <p class="ability-description">
+                            ${t('features.feature7_description')}
+                        </p>
+                        <ul class="ability-features">
+                            <li>${t('features.feature7_li1')}</li>
+                            <li>${t('features.feature7_li2')}</li>
+                            <li>${t('features.feature7_li3')}</li>
                         </ul>
                     </div>
                 </div>

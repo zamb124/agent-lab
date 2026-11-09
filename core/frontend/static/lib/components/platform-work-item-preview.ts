@@ -183,6 +183,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
         workItemId: { type: String, attribute: 'work-item-id' },
         item: { attribute: false },
         anchorRect: { attribute: false },
+        _loadedItem: { state: true },
     };
 
     constructor() {
@@ -191,6 +192,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this.workItemId = '';
         this.item = null;
         this.anchorRect = null;
+        this._loadedItem = null;
         this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => {
             const locale = s.i18n.locale;
@@ -205,7 +207,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
         }
         if ((changed.has('previewOpen') || changed.has('workItemId') || changed.has('item'))
             && this._resolvedItem() === null) {
-            this._ensureLoaded();
+            void this._ensureLoaded();
         }
     }
 
@@ -213,23 +215,28 @@ export class PlatformWorkItemPreview extends PlatformElement {
         if (this.item && typeof this.item === 'object') {
             return this.item;
         }
+        const mine = this._loadedItem;
+        if (isWorkItemLite(mine) && mine.work_item_id === this.workItemId) return mine;
         const result = this._getOp.lastResult;
-        if (isWorkItemLite(result)) return result;
+        if (isWorkItemLite(result) && result.work_item_id === this.workItemId) return result;
         return null;
     }
 
-    _ensureLoaded(): void {
-        if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
+    // lastResult op'а общий для всех инстансов — результат кладём в
+    // instance-поле, иначе превью показывает чужой item.
+    async _ensureLoaded(): Promise<void> {
+        const id = this.workItemId;
+        if (typeof id !== 'string' || id.length === 0) {
             return;
         }
-        if (this._getOp.busy) {
+        const mine = this._loadedItem;
+        if (isWorkItemLite(mine) && mine.work_item_id === id) {
             return;
         }
-        const cached = this._getOp.lastResult;
-        if (isWorkItemLite(cached) && cached.work_item_id === this.workItemId) {
-            return;
+        const result = await this._getOp.run({ work_item_id: id });
+        if (isWorkItemLite(result) && result.work_item_id === id) {
+            this._loadedItem = result;
         }
-        this._getOp.run({ work_item_id: this.workItemId });
     }
 
     _formatDate(value: unknown): string {
@@ -328,6 +335,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
     declare workItemId: string;
     declare item: WorkItemLite | null;
     declare anchorRect: { x: number; y: number; width: number; height: number } | null;
+    declare _loadedItem: WorkItemLite | null;
 
     private _getOp: OpController;
     private _locale: SelectController<string>;

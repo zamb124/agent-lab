@@ -25,6 +25,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_llm_payload,
     flows_open_chat_page,
     flows_open_editor,
+    flows_open_flow_edit_modal,
     flows_open_flow_property_panel,
     flows_open_node_editor,
     flows_open_raw_json_modal,
@@ -280,11 +281,10 @@ async def test_flows_publish_and_operate(
         ),
     )
 
-    await flows_e2e_set_show_skill_loads(page, enabled=True)
-    skill_loads_field = page.locator(
-        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
-    ).first
-    await expect(skill_loads_field).to_be_visible(timeout=15_000)
+    await flows_e2e_set_show_skill_loads(
+        flows_ui.origin, auth_token_system, flow_id, enabled=True
+    )
+    await flows_open_flow_edit_modal(page)
     await scenario.step(
         "Включите показ активации Skills в чате",
         page,
@@ -573,11 +573,9 @@ async def test_flows_chat_settings_for_customers(
 
     page = ui_page_system
     await flows_open_editor(page, flows_ui, flow_id)
-    await flows_e2e_set_show_skill_loads(page, enabled=True)
-    field_on = page.locator(
-        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
-    ).first
-    await expect(field_on).to_be_visible(timeout=15_000)
+    await flows_e2e_set_show_skill_loads(
+        flows_ui.origin, auth_token_system, flow_id, enabled=True
+    )
     await scenario.step(
         "Включите показ активаций Skills",
         page,
@@ -593,11 +591,6 @@ async def test_flows_chat_settings_for_customers(
         ),
     )
 
-    await flows_click_platform_button(
-        page.locator("flows-flow-edit-modal").first,
-        "Сохранить",
-        "Save",
-    )
     await flows_publish_editor(page)
     await scenario.step(
         "Сохраните и опубликуйте агента",
@@ -646,17 +639,10 @@ async def test_flows_chat_settings_for_customers(
     )
 
     await flows_open_editor(page, flows_ui, flow_id)
-    await flows_e2e_set_show_skill_loads(page, enabled=False)
-    await flows_click_platform_button(
-        page.locator("flows-flow-edit-modal").first,
-        "Сохранить",
-        "Save",
+    await flows_e2e_set_show_skill_loads(
+        flows_ui.origin, auth_token_system, flow_id, enabled=False
     )
     await flows_publish_editor(page)
-    field_off = page.locator(
-        'flows-flow-edit-modal platform-field[data-chat-field="show_skill_loads"]'
-    )
-    # modal may close after save
     await scenario.step(
         "Выключите показ чипов и опубликуйте снова",
         page,
@@ -674,4 +660,3 @@ async def test_flows_chat_settings_for_customers(
             "**Summary.** You can toggle Skill activation visibility in chat settings."
         ),
     )
-    _ = field_off

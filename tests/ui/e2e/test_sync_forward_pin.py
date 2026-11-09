@@ -21,9 +21,11 @@ from tests.ui.harness import AppUI
 
 async def _open_message_context_menu(page: Page, bubble) -> None:
     await bubble.click(button="right")
-    await expect(page.locator("sync-message-context-menu")).to_have_attribute(
-        "open", "", timeout=10_000
-    )
+    # Меню рендерится внутри <platform-popover open> — атрибут open ставится
+    # на поповер, а не на хост sync-message-context-menu.
+    await expect(
+        page.locator("sync-message-context-menu platform-popover .menu")
+    ).to_be_visible(timeout=10_000)
 
 
 async def _click_context_item(page: Page, *labels: str) -> None:

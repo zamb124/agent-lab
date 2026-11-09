@@ -410,7 +410,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
             return cached;
         }
         const result = this._getOp ? this._getOp.lastResult : null;
-        if (isWorkItem(result)) {
+        if (isWorkItem(result) && result.work_item_id === id) {
             return result;
         }
         return null;

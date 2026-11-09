@@ -108,7 +108,15 @@ test-network: test-up
 
 # E2E UI: pytest + Playwright + фикстуры из tests/fixtures (нужны test-up)
 # UI E2E: xdist workers, изоляция company+MockLLM scope (tests/ui/e2e_worker.py).
-UI_E2E_WORKERS ?= 5
+# Дефолт — по ресурсам машины (stack.default_ui_e2e_workers: min(8, cpu//2,
+# ram_gb//3)); воркер держит браузер (~2-3GB RSS). UI_E2E_WORKERS=N — явный
+# оверрайд, UI_E2E_WORKERS=auto — то же число, что и дефолт.
+_UI_E2E_WORKERS_RESOURCE_DEFAULT = $(shell uv run python -c "from scripts.testing.stack import default_ui_e2e_workers; print(default_ui_e2e_workers())")
+ifeq ($(UI_E2E_WORKERS),auto)
+override UI_E2E_WORKERS := $(_UI_E2E_WORKERS_RESOURCE_DEFAULT)
+else
+UI_E2E_WORKERS ?= $(_UI_E2E_WORKERS_RESOURCE_DEFAULT)
+endif
 
 test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e, -n$(UI_E2E_WORKERS) --dist=loadfile, default 15s/test)..."

@@ -996,25 +996,15 @@ async def flows_publish_editor(page: Page) -> None:
     # Уже опубликовано и нет черновика — publish не шлёт PUT.
     if await draft.count() == 0:
         return
+    # Publish идёт через WS-команду (flows/flow_update, transport: 'ws') — HTTP PUT
+    # в браузере не наблюдается. Ждём исчезновение бейджа «Draft/Черновик».
+    await button.evaluate("(el) => el.click()")
     try:
-        async with page.expect_response(
-            lambda response: (
-                response.request.method == "PUT" and "/flows/api/v1/flows/" in response.url
-            ),
-            timeout=10_000,
-        ) as publish_response:
-            await button.evaluate("(el) => el.click()")
-        response = await publish_response.value
-    except TimeoutError as exc:
-        if await draft.count() == 0 or not await draft.is_visible():
-            return
+        await expect(draft).to_be_hidden(timeout=15_000)
+    except AssertionError as exc:
         raise AssertionError(
-            "flows_publish_editor: PUT /flows/api/v1/flows/ not observed while Draft visible"
+            "flows_publish_editor: Draft badge still visible after publish click"
         ) from exc
-    if response.status >= 400:
-        raise AssertionError(
-            f"flows_publish_editor: PUT failed with {response.status}: {await response.text()}"
-        )
     await expect(inner).to_be_enabled(timeout=5_000)
 
 
@@ -1384,7 +1374,7 @@ async def _flows_wait_branch_data_ready(page: Page, *, timeout_s: float = 5.0) -
                 """,
                 timeout=1_000,
             )
-        except TimeoutError, PlaywrightTimeoutError:
+        except (TimeoutError, PlaywrightTimeoutError):
             await asyncio.sleep(0.1)
             continue
         if ready is True:
@@ -4445,15 +4435,20 @@ async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locat
         chat = page.locator('platform-flow-ui[flow-id="lara"]').first
     if await chat.count() == 0:
         chat = page.locator("platform-flow-ui").first
-    chip = chat.get_by_role(
-        "group",
-        name=re.compile(
-            rf"(?:Activated skills|Активированн\w* Skill)[s]?:.*{re.escape(skill_name)}",
-            re.I,
-        ),
+    # FlowUI: skill-активации — .fu-chip[data-kind="skill"] в conversation-ходе.
+    chip = chat.locator(".fu-chip[data-kind='skill']").filter(
+        has_text=re.compile(re.escape(skill_name), re.I)
     ).first
     if await chip.count() == 0:
-        chip = chat.get_by_text(re.compile(rf"Skill\s*[«\"]?{re.escape(skill_name)}", re.I)).first
+        chip = chat.get_by_role(
+            "group",
+            name=re.compile(
+                rf"(?:Activated skills|Активированн\w* Skill)[s]?:.*{re.escape(skill_name)}",
+                re.I,
+            ),
+        ).first
+    if await chip.count() == 0:
+        chip = chat.get_by_text(re.compile(rf"(?:Skill\s*)?[«\"]?{re.escape(skill_name)}", re.I)).first
     await expect(chip).to_be_visible(timeout=120_000)
     return chip
 
@@ -4472,16 +4467,21 @@ async def flows_e2e_expect_reflection_chip(
             host = page.locator("flows-chat-page platform-flow-ui").first
         if await host.count() == 0:
             host = page.locator("platform-flow-ui").first
-    group = host.get_by_role(
-        "group",
-        name=re.compile(
-            rf"(?:Quality checks|Проверки качества):\s*.*{re.escape(exit_label)}",
-            re.I,
-        ),
+    # FlowUI: результат reflection — .fu-reflection блок с текстом «**{exit_label}** — …».
+    chip = host.locator(".fu-reflection").filter(
+        has_text=re.compile(re.escape(exit_label), re.I)
     ).first
-    await expect(group).to_be_visible(timeout=120_000)
-    chip = group.locator("button.reflection-chip").first
-    await expect(chip).to_be_visible(timeout=15_000)
+    if await chip.count() == 0:
+        group = host.get_by_role(
+            "group",
+            name=re.compile(
+                rf"(?:Quality checks|Проверки качества):\s*.*{re.escape(exit_label)}",
+                re.I,
+            ),
+        ).first
+        await expect(group).to_be_visible(timeout=120_000)
+        chip = group.locator("button.reflection-chip").first
+    await expect(chip).to_be_visible(timeout=120_000)
     return chip
 
 
@@ -4499,51 +4499,92 @@ async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
     await expect(composer).to_be_visible(timeout=30_000)
 
 
-async def flows_e2e_open_chat_settings(page: Page) -> Locator:
-    """Открывает настройки агента и возвращает блок chat settings."""
-    modal = await flows_open_flow_edit_modal(page)
-    settings = modal.locator("flow-ui-policy-fields").first
-    await expect(settings).to_be_visible(timeout=30_000)
-    return settings
+def _iter_flow_ui_blocks(blocks: Any) -> Any:
+    """Обход блоков FlowUI-документа в глубину (section/columns/tabs)."""
+    for block in blocks if isinstance(blocks, list) else []:
+        if not isinstance(block, dict):
+            continue
+        yield block
+        if block.get("type") == "section":
+            yield from _iter_flow_ui_blocks(block.get("blocks"))
+        if block.get("type") == "columns":
+            for column in block.get("columns") or []:
+                if isinstance(column, dict):
+                    yield from _iter_flow_ui_blocks(column.get("blocks"))
+        if block.get("type") == "tabs":
+            for tab in block.get("tabs") or []:
+                if isinstance(tab, dict):
+                    yield from _iter_flow_ui_blocks(tab.get("blocks"))
 
 
-async def flows_e2e_set_show_skill_loads(page: Page, *, enabled: bool) -> None:
-    settings = await flows_e2e_open_chat_settings(page)
-    field = settings.locator('platform-field[data-chat-field="show_skill_loads"]').first
-    await expect(field).to_be_visible(timeout=15_000)
-    await field.evaluate(
-        """
-        (el, enabled) => {
-            el.value = enabled;
-            if (typeof el.requestUpdate === 'function') el.requestUpdate();
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: enabled },
-                bubbles: true,
-                composed: true,
-            }));
-        }
-        """,
-        enabled,
+async def flows_e2e_set_conversation_setting(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+    name: str,
+    value: Any,
+) -> None:
+    """Меняет настройку conversation-блока интерфейса через REST-зеркало.
+
+    Chat-настройки (show_skill_loads, show_reflection и т.п.) после перехода
+    на FlowUI-документ живут в `flow.interface` → блок `conversation` →
+    `settings`, а не в модалке карточки агента.
+    """
+    flow = await flows_api_get_flow(origin, auth_token, flow_id)
+    interface = flow.get("interface")
+    if not isinstance(interface, dict):
+        raise AssertionError(f"flow {flow_id}: interface must be an object")
+    conversation: dict[str, Any] | None = None
+    for page_doc in interface.get("pages") or []:
+        if not isinstance(page_doc, dict):
+            continue
+        for block in _iter_flow_ui_blocks(page_doc.get("blocks")):
+            if block.get("type") == "conversation":
+                conversation = block
+                break
+        if conversation is not None:
+            break
+    if conversation is None:
+        raise AssertionError(f"flow {flow_id}: conversation block not found")
+    settings = conversation.get("settings")
+    if not isinstance(settings, dict):
+        settings = {}
+        conversation["settings"] = settings
+    settings[name] = value
+    payload = {**flow, "flow_id": flow_id, "interface": interface}
+    async with _flows_client(origin, auth_token) as client:
+        response = await client.put(
+            f"/flows/api/v1/flows/{flow_id}",
+            json=payload,
+        )
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"PUT /flows/api/v1/flows/{flow_id} failed: "
+            f"{response.status_code} {response.text}"
+        )
+
+
+async def flows_e2e_set_show_skill_loads(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+    *,
+    enabled: bool,
+) -> None:
+    await flows_e2e_set_conversation_setting(
+        origin, auth_token, flow_id, "show_skill_loads", enabled
     )
 
 
-async def flows_e2e_set_show_reflection(page: Page, *, enabled: bool) -> None:
-    settings = await flows_e2e_open_chat_settings(page)
-    field = settings.locator('platform-field[data-chat-field="show_reflection"]').first
-    await expect(field).to_be_visible(timeout=15_000)
-    await field.evaluate(
-        """
-        (el, enabled) => {
-            el.value = enabled;
-            if (typeof el.requestUpdate === 'function') el.requestUpdate();
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: enabled },
-                bubbles: true,
-                composed: true,
-            }));
-        }
-        """,
-        enabled,
+async def flows_e2e_set_show_reflection(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+    *,
+    enabled: bool,
+) -> None:
+    await flows_e2e_set_conversation_setting(
+        origin, auth_token, flow_id, "show_reflection", enabled
     )
 
 

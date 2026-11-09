@@ -4,8 +4,8 @@
 import { ProductLandingPage } from '../../components/product-landing/product-landing-page.js';
 import type { ProductLandingSection, ProductLandingHeroImage, ProductLandingGalleryImage, ProductLandingServiceEntry, ProductLandingAccent } from '../../components/product-landing/product-landing-page.js';
 import {
-    landWikiHomeUrl,
-    landWikiPageUrl,
+    landWikiHomeShotUrl,
+    landWikiPageShotUrl,
 } from '../../_helpers/land-product-images.js';
 
 export class ProductWikiPage extends ProductLandingPage {
@@ -13,9 +13,9 @@ export class ProductWikiPage extends ProductLandingPage {
     static override serviceEntry: ProductLandingServiceEntry = 'wiki';
     static override productAccent: ProductLandingAccent = 'accent';
     static override sections: ProductLandingSection[] = ['hero', 'gallery', 'features', 'steps', 'benefits', 'use-cases', 'faq', 'cta'];
-    static override heroImage: ProductLandingHeroImage = { kind: 'static', value: landWikiHomeUrl };
+    static override heroImage: ProductLandingHeroImage = { kind: 'static', value: landWikiHomeShotUrl };
     static override galleryImages: ProductLandingGalleryImage[] = [
-        { src: landWikiPageUrl, altKey: 'gallery_2_alt' },
+        { src: landWikiPageShotUrl, altKey: 'gallery_2_alt' },
     ];
 }
 

@@ -29,17 +29,3 @@ In the sidebar the agent card shows an AI badge on the avatar — the flow is an
 Open the company team page. People and AI employees are listed here.
 
 ![Go to the team section](enable-flow-employee--04-team-page-opened.png)
-
-## Step 5. Find the AI employee in the list
-
-In the team list find the assistant entry. An AI employee has its own member card.
-
-![Find the AI employee in the list](enable-flow-employee--05-employee-row-visible.png)
-
-## Step 6. Confirm the AI employee badge
-
-**Result demonstration.** Next to the member you see the AI employee badge — the agent is on the team.
-
-**Summary.** You understand how an employee agent appears on the team page.
-
-![Confirm the AI employee badge](enable-flow-employee--06-ai-employee-badge.png)

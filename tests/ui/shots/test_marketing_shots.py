@@ -9,6 +9,8 @@ PNG пишутся в ``tests/ui/shots/out/``. Каждый кадр вручн�
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from playwright.async_api import Page, expect
 
@@ -192,7 +194,34 @@ async def test_shot_crm_entities(
 async def test_shot_crm_graph(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
-    await _goto(shot_desktop_page, f"{api_origin('crm')}/crm/graph", settle_ms=4000)
+    root_id = str(marketing_seeded["crm"]["graph_root_id"])
+    await _goto(
+        shot_desktop_page,
+        f"{api_origin('crm')}/crm/graph?view=mindmap&root={root_id}",
+        settle_ms=4000,
+    )
+    workspace = shot_desktop_page.locator("crm-graph-workspace")
+    await expect(workspace).to_be_visible(timeout=30_000)
+    # Цепочка timeline_bounds → lookup → influence гонит WS; первый dispatch
+    # может уйти до коннекта — дёргаем перезагрузку явно.
+    await workspace.evaluate("(el) => el._reloadAll()")
+    # Компактная сцена для кадра — глубина 3 как при клике по тулбару.
+    await workspace.evaluate(
+        "(el) => { el._maxDepth = 3; el._rebuildGraphByMode(); }"
+    )
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        nodes = await workspace.evaluate(
+            "(el) => (el._graphNodes || []).length"
+        )
+        if nodes:
+            break
+        await shot_desktop_page.wait_for_timeout(500)
+    else:
+        raise AssertionError("crm graph: 0 узлов за 30s")
+    # Штатный fit: сбрасывает pan/zoom — viewBox 'meet' кадрирует всю сцену.
+    await workspace.evaluate("(el) => { el._fitNonce += 1; }")
+    await shot_desktop_page.wait_for_timeout(2500)
     await save_shot(shot_desktop_page, "crm-graph")
 
 
@@ -224,8 +253,10 @@ async def test_shot_sync_chat(
 async def test_shot_worktracker_board(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
+    board_id = str(marketing_seeded["worktracker"]["board_id"])
     await _goto(
-        shot_desktop_page, f"{api_origin('worktracker')}/worktracker/board",
+        shot_desktop_page,
+        f"{api_origin('worktracker')}/worktracker/board?board_id={board_id}",
         settle_ms=3000,
     )
     await save_shot(shot_desktop_page, "worktracker-board")
@@ -273,10 +304,11 @@ async def test_shot_wiki_page(
 async def test_shot_office_documents(
     shot_desktop_page: Page, marketing_seeded, save_shot
 ) -> None:
+    catalog_id = str(marketing_seeded["office"]["catalog_id"])
     await _goto(
         shot_desktop_page,
-        f"{api_origin('office')}/documents/recent",
-        settle_ms=3000,
+        f"{api_origin('office')}/documents/?catalog_id={catalog_id}",
+        settle_ms=3500,
     )
     await save_shot(shot_desktop_page, "office-documents")
 

@@ -17,17 +17,3 @@ Open the agent chat that has a non-blocking task creation tool. This lets the ag
 Ask for a callback. The agent replies immediately, without a waiting banner, and says the request was passed to the team. The customer dialog is not interrupted.
 
 ![Request a callback and get an instant reply](agent-logs-background-task--02-agent-replied-without-pause.png)
-
-## Step 3. Open the team task inbox
-
-Open inbox in the tasks section. The new callback assignment should appear — the agent created it without stopping the customer chat.
-
-![Open the team task inbox](agent-logs-background-task--03-background-task-in-inbox-list.png)
-
-## Step 4. Open the background task card
-
-**Result demonstration.** The task card is open — title, Customer Support queue, and callback description are visible even though the agent chat already continued with the customer.
-
-**Summary.** You can now tell a background task from an HITL pause: the customer does not wait, and the team gets the assignment in the queue.
-
-![Open the background task card](agent-logs-background-task--04-background-task-in-inbox.png)
