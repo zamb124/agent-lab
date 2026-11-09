@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_click_and_wait_bus_op
 from tests.ui.scenario_doc import ELEMENT_IS_PAINTED_JS, LOADING_SELECTOR
 
 if TYPE_CHECKING:
@@ -2701,17 +2701,9 @@ async def flows_create_branch(
     create_btn = (
         modal.locator("platform-button").filter(has_text=re.compile(r"Create|Создать")).first
     )
-    await expect(create_btn.locator("button")).to_be_enabled(timeout=15_000)
-    async with page.expect_response(
-        lambda response: response.request.method == "POST" and "/branches" in response.url,
-        timeout=60_000,
-    ) as branch_response:
-        await create_btn.evaluate("(el) => el.click()")
-    response = await branch_response.value
-    if response.status >= 400:
-        raise AssertionError(
-            f"flows_create_branch: POST failed with {response.status}: {await response.text()}"
-        )
+    create_button = create_btn.locator("button")
+    await expect(create_button).to_be_enabled(timeout=15_000)
+    await ui_click_and_wait_bus_op(page, create_button, "flows/branch_create", timeout_ms=60_000)
     await expect(modal).to_be_hidden(timeout=30_000)
     control = page.locator(
         "flows-editor-header .branches-scroll platform-segmented-control, "

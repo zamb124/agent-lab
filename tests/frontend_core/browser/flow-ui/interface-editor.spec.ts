@@ -156,7 +156,7 @@ describe('flows-interface-editor', () => {
         expect(state!.history.present.pages[0].blocks.map((block: any) => block.block_id)).to.deep.equal(['title', 'text-input']);
         expect(state!.history.present.pages[0].blocks[1]).to.include({ type: 'text_input', field: 'text_input' });
         await waitUntil(() => q(element.renderRoot, 'flows-interface-properties-panel') !== null, 'properties panel did not open');
-        expect(q(element.renderRoot, '.selection')).to.not.equal(null);
+        await waitUntil(() => q(element.renderRoot, '.selection') !== null, 'selection chrome did not render');
     });
 
     it('undoes and redoes the draft history and keeps it in local storage', async () => {

@@ -297,7 +297,9 @@ export function buildFlowPublishBody(state: unknown): Record<string, unknown> | 
             [branchId]: {
                 ...existingBranch,
                 nodes: ownNodes,
+                nodes_mode: 'merge',
                 edges: ownEdges,
+                edges_mode: 'merge',
                 entry: data.entry,
                 variables: data.variables,
             },

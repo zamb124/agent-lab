@@ -61,7 +61,7 @@ async def test_office_catalog_access_and_members(
 
     await office_e2e_select_catalog(ui_page_system, catalog_title)
     await office_e2e_open_catalog_context_menu(ui_page_system, catalog_title)
-    members_item = ui_page_system.locator("office-catalog-context-menu .ctx-item").filter(
+    members_item = ui_page_system.locator("office-catalog-context-menu button.item").filter(
         has=ui_page_system.locator("platform-icon[name='users']")
     ).first
     await members_item.click()

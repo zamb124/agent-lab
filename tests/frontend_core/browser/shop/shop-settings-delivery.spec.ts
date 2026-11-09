@@ -232,9 +232,11 @@ describe('shop-settings-page: раздел «Выдача заказов»', () 
             .to.deep.equal(zone);
     });
 
-    it('доставка выключена → platform-map не рендерится', async () => {
+    it('доставка выключена → карта точки магазина есть, редактора зоны и полей доставки нет', async () => {
         const el = await deliveryPage({ ...SHOP, delivery_enabled: false });
-        expect(shadow(el).querySelector('platform-map')).to.equal(null);
+        expect(shadow(el).querySelector('platform-map'), 'карта точки магазина').to.exist;
+        expect(shadow(el).querySelector('.open-editor'), 'кнопка редактора зоны').to.equal(null);
+        expect(shadow(el).querySelector('platform-field[type="enum"]'), 'поля доставки').to.equal(null);
     });
 
     it('чеклист «Способ выдачи» засчитывает onsite', async () => {

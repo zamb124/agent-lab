@@ -369,7 +369,7 @@ async def office_e2e_open_catalog_context_menu(page: Page, title: str) -> None:
 async def office_e2e_catalog_context_action(page: Page, title: str, *labels: str) -> None:
     await office_e2e_open_catalog_context_menu(page, title)
     pattern = re.compile("|".join(re.escape(label) for label in labels))
-    item = page.locator("office-catalog-context-menu .ctx-item").filter(has_text=pattern).first
+    item = page.locator("office-catalog-context-menu button.item").filter(has_text=pattern).first
     await expect(item).to_be_visible(timeout=10_000)
     await item.click()
 

@@ -8,7 +8,7 @@
 
 ## Step 1. Open the Flows home page
 
-Start from Flows home. From here open chat and launch the built-in Lara platform assistant.
+Open Flows. The welcome block and quick actions are in the center; your agent catalog is on the left.
 
 ![Open the Flows home page](flows-home-tour--01-flows-home-opened.png)
 

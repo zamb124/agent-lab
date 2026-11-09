@@ -11,6 +11,7 @@ const SERVICE_DEV_PORTS = Object.freeze({
     worktracker: '8021',
     documents: '8008',
     wiki: '8023',
+    stock: '8026',
     shop: '8027',
     geo: '8028',
     litserve: '8014',
@@ -27,6 +28,7 @@ function devPort(serviceId: string): string {
         case 'worktracker': return SERVICE_DEV_PORTS.worktracker;
         case 'documents': return SERVICE_DEV_PORTS.documents;
         case 'wiki': return SERVICE_DEV_PORTS.wiki;
+        case 'stock': return SERVICE_DEV_PORTS.stock;
         case 'shop': return SERVICE_DEV_PORTS.shop;
         case 'geo': return SERVICE_DEV_PORTS.geo;
         case 'litserve': return SERVICE_DEV_PORTS.litserve;

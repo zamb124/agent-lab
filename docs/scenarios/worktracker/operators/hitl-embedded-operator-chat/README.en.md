@@ -26,8 +26,8 @@ Type your message and send. It appears in the task chat as an operator reply —
 
 ## Step 4. Verify the reply in the customer chat
 
-**Result demonstration.** The customer chat shows the operator reply. The waiting banner clears after the task completes.
+**Result demonstration.** Return to the customer agent chat: your operator reply is already visible. The customer receives the message immediately, without waiting for the task to close.
 
-**Summary.** In single-reply mode write only in Reply and complete; Activity is for internal team notes.
+**Summary.** You can now use the embedded chat on an HITL task: read full history, reply with the same composer as in Flows, and see the result in the customer chat in real time.
 
 ![Verify the reply in the customer chat](hitl-embedded-operator-chat--04-customer-sees-operator-reply.png)

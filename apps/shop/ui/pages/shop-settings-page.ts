@@ -557,8 +557,10 @@ export class ShopSettingsPage extends PlatformPage {
         this._deliveryZone = zone !== null && typeof zone === 'object'
             ? (zone as Record<string, unknown>)
             : {};
-        this._shopPoint = shop.lat !== null && shop.lng !== null
-            ? [Number(shop.lng), Number(shop.lat)]
+        const shopLat = Number(shop.lat);
+        const shopLng = Number(shop.lng);
+        this._shopPoint = shop.lat != null && shop.lng != null && Number.isFinite(shopLat) && Number.isFinite(shopLng)
+            ? [shopLng, shopLat]
             : null;
         const wh = shop.working_hours !== null && typeof shop.working_hours === 'object'
             ? shop.working_hours as Record<string, unknown>

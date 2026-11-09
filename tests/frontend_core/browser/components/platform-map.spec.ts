@@ -59,6 +59,8 @@ type StoreFeature = {
 
 type TestMap = {
     isStyleLoaded(): boolean;
+    loaded(): boolean;
+    isMoving(): boolean;
     getCanvas(): HTMLCanvasElement;
     project(lngLat: [number, number]): { x: number; y: number };
     getCenter?(): { lng: number; lat: number };
@@ -971,9 +973,13 @@ describe('platform-map', function () {
 
     it('moveEvent → pm-move с центром и bounds на moveend', async () => {
         const el = await mapEl({ interactive: true, layers: { fetch: false }, moveEvent: true });
+        const map = el.getMap()!;
+        // post-_ready resize (rAF) может добить реальный moveend — ждём idle,
+        // чтобы единственным событием был ручной fire.
+        await waitUntil(() => map.loaded() && !map.isMoving(), 'карта устаканилась', { timeout: 10_000 });
         const moves: Array<{ zoom: number }> = [];
         el.addEventListener('pm-move', (e) => moves.push((e as CustomEvent<{ zoom: number }>).detail));
-        el.getMap()!.fire('moveend');
+        map.fire('moveend');
         await aTimeout(30);
         expect(moves.length, 'pm-move эмитнут').to.equal(1);
         expect(typeof moves[0]!.zoom).to.equal('number');
