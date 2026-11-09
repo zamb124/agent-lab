@@ -107,19 +107,26 @@ async def test_rag_first_namespace(
 
     card = page.locator("namespace-card", has_text=namespace_name).first
     await expect(card).to_be_visible(timeout=15_000)
-    await card.click()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    nav = await card.evaluate(
+        """(el) => {
+            try {
+                el.shadowRoot.querySelector('.card').click();
+                return { ok: true, url: location.href };
+            } catch (err) {
+                return { ok: false, error: String(err) };
+            }
+        }"""
+    )
+    await page.wait_for_timeout(300)
     try:
         await expect(page.locator("rag-namespace-page")).to_be_visible(timeout=15_000)
     except AssertionError:
-        state = await page.evaluate(
-            """() => ({
-                url: location.href,
-                pages: [...document.querySelectorAll('*')].filter(
-                    (e) => e.tagName.toLowerCase().startsWith('rag-')
-                ).map((e) => e.tagName.toLowerCase()),
-            })"""
+        state = await page.evaluate("() => location.href")
+        raise AssertionError(
+            f"namespace_detail not mounted: nav={nav} url={state} errors={errors[:5]}"
         )
-        raise AssertionError(f"namespace_detail not mounted: {state}")
 
     doc_path = tmp_path / "ustav.txt"
     doc_path.write_text(_DOC_TEXT, encoding="utf-8")
