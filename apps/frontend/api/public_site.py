@@ -123,10 +123,14 @@ async def get_startup_card(request: Request, di: Di) -> PublicStartupCard:
         raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     base_url = resolve_public_base_url(str(host).strip())
+    # Список продуктов деривится из реестра — новая страница products/<key>
+    # попадает в карточку без правок хендлера.
+    products_ru = ", ".join(product_marketing_names("ru"))
+    products_en = ", ".join(product_marketing_names("en"))
     return PublicStartupCard(
         name=brand.platform_name,
-        tagline_ru="Платформа автоматизации бизнеса: AI-агенты, база знаний, CRM-граф, чат и документы.",
-        tagline_en="Business automation platform: AI agents, knowledge base, CRM graph, chat, and documents.",
+        tagline_ru=f"Платформа автоматизации бизнеса: {products_ru}.",
+        tagline_en=f"Business automation platform: {products_en}.",
         website_url=base_url,
         products=product_marketing_names("en"),
         deployment_modes=("cloud", "hybrid", "on-premise"),

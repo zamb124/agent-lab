@@ -45,7 +45,7 @@ def _url_block(base_url: str, page: PublicPage, *, locale: SeoLocale, lastmod: s
         f"    <changefreq>{page.changefreq}</changefreq>",
         f"    <priority>{page.priority}</priority>",
     ]
-    if page.og_image:
+    if page.sitemap_image:
         lines.extend(
             (
                 "    <image:image>",

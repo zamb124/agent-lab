@@ -30,6 +30,8 @@ class PublicPage:
     ``cookie-consent``…): по нему берётся локализованный nav-тайтл из
     ``i18n routes.*`` и гейт сверяет паритет key↔path.
     ``ld`` — типы JSON-LD сущностей, которые снапшот-конвейер вставляет в head.
+    ``sitemap_image`` — включать ли страницу в ``<image:image>`` маркетинг-карты
+    (hero-страницы с визуалом); og:image мета-тег ставится всем безусловно.
     ``wait_selector`` — маркер готовности контента для пререндера (Playwright
     pierces shadow DOM); новая страница без ``landing-footer`` задаёт свой.
     """
@@ -38,7 +40,7 @@ class PublicPage:
     kind: PublicPageKind
     priority: str
     changefreq: str
-    og_image: bool
+    sitemap_image: bool
     ld: tuple[LdKind, ...]
     route_key: str
     wait_selector: str = "landing-footer"

@@ -60,7 +60,7 @@ def read_blog_index() -> list[JsonObject]:
 
     Файл отсутствует или битый → ``[]`` + alertable-событие
     ``seo.blog_index_missing`` / ``seo.blog_index_invalid`` (Grafana
-    ``seo-blog-index-missing``): потребители отдают пустой список, а не 500.
+    ``seo-artifacts-missing``): потребители отдают пустой список, а не 500.
     """
     index_path = blog_index_path()
     if not index_path.is_file():

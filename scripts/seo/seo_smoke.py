@@ -4,8 +4,9 @@
 - robots.txt: 200, sitemap-директива, allow публичного, disallow приватного;
 - sitemap.xml: sitemapindex с дочерними картами; дочерние карты отдаются;
 - llms.txt: 200, ссылки на документацию;
-- маркетинговые страницы (RU + /en): 200, text/html, канонический <link canonical>
-  на linnex.io, meta robots index, контент снапшота (не пустая оболочка);
+- маркетинговые страницы (все PUBLIC_PAGES × RU + /en): 200, text/html,
+  канонический <link canonical> на primary-домен, meta robots index,
+  контент снапшота (не пустая оболочка);
 - блог: /blog/feed.xml 200, первый пост 200 и содержит Article JSON-LD;
 - приватные маршруты: X-Robots-Tag noindex или meta robots noindex;
 - документация: /documentation/ 200, sitemap docs, llms.txt docs, .md зеркало;
@@ -31,6 +32,7 @@ import sys
 
 import httpx2
 
+from apps.frontend.seo.pages import PUBLIC_PAGES, SEO_LOCALES, localized_marketing_path
 from scripts.seo.seo_config import primary_platform_domain, public_mirror_domains, seo_base_url
 
 
@@ -124,17 +126,14 @@ def main() -> int:
     else:
         check.fail("llms.txt", f"status={status}")
 
-    pages = (
-        ("/", "landing"),
-        ("/products/agents", "product ru"),
-        ("/products/rag", "product ru"),
-        ("/en/products/agents", "product en"),
-        ("/en", "landing en"),
-        ("/support", "support"),
-        ("/blog", "blog list"),
-        ("/about", "about"),
-        ("/policy", "policy"),
-    )
+    # Все страницы реестра × обе локали: новая PUBLIC_PAGES-запись
+    # автоматически попадает в синтетику кластера.
+    pages = [
+        ("/" + localized, f"{page.kind} {locale} /{page.path}")
+        for page in PUBLIC_PAGES
+        for locale in SEO_LOCALES
+        for localized in (localized_marketing_path(page.path, locale),)
+    ]
     for path, name in pages:
         status, headers, body = _get(client, path, host_header)
         if status != 200:

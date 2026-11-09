@@ -216,7 +216,10 @@ def _patch_sitemap(sitemap_path: Path, build_root: Path, base: str) -> int:
         nonlocal patched
         loc = match.group(1)
         rel = loc.removeprefix(base).strip("/")
-        for candidate in (build_root / f"{rel}.md", build_root / rel / "index.md", build_root / "index.md" if rel == "" else build_root / "__none__"):
+        candidates = [build_root / f"{rel}.md", build_root / rel / "index.md"]
+        if rel == "":
+            candidates.append(build_root / "index.md")
+        for candidate in candidates:
             if candidate.is_file():
                 patched += 1
                 return f"<url>\n        <loc>{loc}</loc>\n        <lastmod>{_lastmod(candidate)}</lastmod>"

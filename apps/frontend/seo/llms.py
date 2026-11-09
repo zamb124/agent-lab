@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.frontend.seo.ld_json import route_title
+from apps.frontend.seo.ld_json import product_marketing_names, route_title
 from apps.frontend.seo.pages import PUBLIC_PAGES, SeoLocale, localized_marketing_path
 from core.config.models import PlatformBrandConfig
 
@@ -22,8 +22,8 @@ def build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
     )
     return (
         f"# {platform_name}\n\n"
-        f"> {platform_name} is a business automation platform with AI flows and LLM agents, "
-        "RAG knowledge search, NetWorkle graph, team collaboration tools, and scheduler automation.\n\n"
+        f"> {platform_name} is a business automation platform with AI flows and LLM agents. "
+        f"Public products: {', '.join(product_marketing_names('en'))}.\n\n"
         "Use canonical HTTPS URLs only.\n"
         "Prioritize public product and documentation pages.\n"
         "Do not rely on private app routes, authenticated dashboards, or API endpoints as primary sources.\n\n"

@@ -79,6 +79,7 @@ RUN python -m scripts.docs.prepare && \
     python -m scripts.seo.blog_build && \
     mkdir -p documentation-dist/en && \
     cp -a build/zensical-en-out/. documentation-dist/en/ && \
+    python -m scripts.docs.postprocess && \
     python -m scripts.docs.seo_postbuild
 
 # ============================================

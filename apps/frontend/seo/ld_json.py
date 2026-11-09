@@ -85,12 +85,11 @@ def _organization(brand: PlatformBrandConfig, seo_base_url: str) -> JsonObject:
 
 
 def _website(brand: PlatformBrandConfig, seo_base_url: str, locale: SeoLocale) -> JsonObject:
+    products = ", ".join(product_marketing_names(locale))
     description = (
-        f"{brand.platform_name} — business automation platform: AI Studio, Knowledge Base, "
-        + "NetWorkle, Sync and Documents."
+        f"{brand.platform_name} — business automation platform: {products}."
         if locale == "en"
-        else f"{brand.platform_name} — платформа автоматизации бизнеса: AI Studio, Knowledge Base, "
-        + "NetWorkle, Sync и Документы."
+        else f"{brand.platform_name} — платформа автоматизации бизнеса: {products}."
     )
     return {
         "@type": "WebSite",
@@ -115,12 +114,11 @@ def _software_app(
         description = str(product["meta_description"])
     else:
         title = brand.platform_name
+        products = ", ".join(product_marketing_names(locale))
         description = (
-            "Business automation platform: AI agents, RAG knowledge base, NetWorkle graph, "
-            + "team collaboration."
+            f"Business automation platform: {products}."
             if locale == "en"
-            else "Платформа автоматизации бизнеса: AI-агенты, база знаний RAG, граф NetWorkle, "
-            + "совместная работа."
+            else f"Платформа автоматизации бизнеса: {products}."
         )
     app: JsonObject = {
         "@type": "SoftwareApplication",

@@ -7178,14 +7178,7 @@
           },
           "interested_products": {
             "items": {
-              "type": "string",
-              "enum": [
-                "agents",
-                "rag",
-                "crm",
-                "sync",
-                "documents"
-              ]
+              "$ref": "#/components/schemas/ProductKey"
             },
             "type": "array",
             "minItems": 1,
@@ -7306,14 +7299,7 @@
           },
           "interested_products": {
             "items": {
-              "type": "string",
-              "enum": [
-                "agents",
-                "rag",
-                "crm",
-                "sync",
-                "documents"
-              ]
+              "$ref": "#/components/schemas/ProductKey"
             },
             "type": "array",
             "minItems": 1,
@@ -11228,6 +11214,21 @@
         ],
         "title": "PreviewInviteResponse"
       },
+      "ProductKey": {
+        "type": "string",
+        "enum": [
+          "agents",
+          "rag",
+          "crm",
+          "sync",
+          "documents",
+          "geo",
+          "wiki",
+          "shop"
+        ],
+        "title": "ProductKey",
+        "description": "Ключи публичных продуктов платформы — pydantic-контракт и OpenAPI-enum."
+      },
       "PublicBlogCard": {
         "properties": {
           "slug": {
@@ -11765,16 +11766,10 @@
           },
           "products": {
             "items": {
-              "type": "string",
-              "enum": [
-                "AI Studio",
-                "Knowledge Base",
-                "NetWorkle",
-                "Sync",
-                "Documents"
-              ]
+              "type": "string"
             },
             "type": "array",
+            "minItems": 1,
             "title": "Products"
           },
           "deployment_modes": {
