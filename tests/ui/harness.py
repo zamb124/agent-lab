@@ -108,3 +108,33 @@ async def ui_click_and_wait_bus_op(
     if result == 'failed':
         seen = await page.evaluate(f"window[{marker!r}] || []")
         raise AssertionError(f"Операция завершилась {failed}: события bus — {seen}")
+
+
+async def ui_set_platform_field(field: Locator, value: str) -> None:
+    """Заполняет ``platform-field``: реальный ввод + ``change``-событие компонента.
+
+    ``platform-field`` может держать скрытые служебные input при смене
+    renderer'ов — работаем только с видимым контролом, а затем дублируем
+    ``.value`` и ``change``, чтобы состояние компонента гарантированно
+    обновилось (поведение идентично ``flows_set_platform_field``).
+    """
+    await expect(field).to_be_visible(timeout=5_000)
+    editable = field.locator("input:visible, textarea:visible").first
+    if await editable.count() > 0:
+        await editable.fill(value)
+    await field.evaluate(
+        """
+        (el, value) => {
+            el.value = value;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        """,
+        value,
+    )
+    if await editable.count() > 0:
+        await expect(editable).to_have_value(value, timeout=5_000)

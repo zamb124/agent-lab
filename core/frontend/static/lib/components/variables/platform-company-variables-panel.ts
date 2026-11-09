@@ -68,7 +68,7 @@ function companyVariableItems(items: readonly unknown[]): CompanyVariableItem[] 
             throw new Error('company variable: variable_key required');
         }
         const item: CompanyVariableItem = { variable_key: value.variable_key };
-        if ('title' in value && value.title !== undefined) {
+        if ('title' in value && value.title !== undefined && value.title !== null) {
             if (typeof value.title !== 'string') throw new Error('company variable: title must be a string');
             item.title = value.title;
         }

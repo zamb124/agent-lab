@@ -117,47 +117,6 @@ async def _await_visible_images_ready(page: Page) -> None:
 
 
 async def _await_no_blocking_loaders(page: Page) -> None:
-    try:
-        await _await_no_blocking_loaders_inner(page)
-    except Exception:
-        dump = await page.evaluate(
-            """(selector) => {
-                const out = [];
-                const isPainted = """ + ELEMENT_IS_PAINTED_JS + """;
-                const walk = (root) => {
-                    if (!root || !root.querySelectorAll) return;
-                    for (const p of root.querySelectorAll('platform-company-variables-panel')) {
-                        const v = p._variables;
-                        if (v) {
-                            out.push('PANEL-STATE|' + JSON.stringify({loading: v.loading, refreshing: v.refreshing, itemsLen: (v.items||[]).length, error: v.error}));
-                        }
-                    }
-                    for (const el of root.querySelectorAll(selector)) {
-                        if (isPainted(el)) {
-                            let anc = el;
-                            let chain = [];
-                            for (let i = 0; i < 8 && anc; i++) {
-                                const r = anc.getRootNode();
-                                chain.push(anc.tagName + (anc.id ? '#' + anc.id : ''));
-                                anc = (r instanceof ShadowRoot) ? r.host : anc.parentElement;
-                            }
-                            out.push(chain.join(' < '));
-                        }
-                    }
-                    for (const el of root.querySelectorAll('*')) {
-                        if (el.shadowRoot) walk(el.shadowRoot);
-                    }
-                };
-                walk(document);
-                return out;
-            }""",
-            arg=_LOADING_SELECTOR,
-        )
-        print(f"\n=== BLOCKING-LOADERS-DUMP: {dump}")
-        raise
-
-
-async def _await_no_blocking_loaders_inner(page: Page) -> None:
     await page.wait_for_function(
         """
         (selector) => {
