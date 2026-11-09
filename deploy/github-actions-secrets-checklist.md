@@ -21,6 +21,14 @@ gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github
 
 Скрипт пишет **одну строку** base64 в stdout (kubeconfig YAML не печатает). Не вставлять вывод `microk8s config` — там `127.0.0.1`.
 
+## 1a. Обязательно для push образов из Actions
+
+Job `build` пушит образы в `ghcr.io` под PAT владельца пакетов — `GITHUB_TOKEN` не используется: его `packages: write` зависит от repo-оценки прав и периодически получает `403` на push при неизменной конфигурации.
+
+| Имя в GitHub (копировать как есть) | Как получить значение |
+|---|---|
+| **`GHCR_TOKEN`** | PAT с правом **`write:packages`** (classic) владельца пакетов `ghcr.io/<owner>/agent-lab*`. Username в логине — `github.repository_owner`. |
+
 ## 1b. Обязательно для pull образа платформы из GHCR
 
 Кластер должен аутентифицироваться в `ghcr.io`, иначе Pod’ы с образом `ghcr.io/.../agent-lab` останутся в `ImagePullBackOff`.

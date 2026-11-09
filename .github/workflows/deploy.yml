@@ -100,12 +100,25 @@ jobs:
           if [ -d "/usr/share/dotnet" ]; then sudo rm -rf /usr/share/dotnet || true; fi
           df -h
 
+      - name: Check GHCR push token
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GHCR_TOKEN}" ]; then
+            echo "::error title=Missing GHCR_TOKEN::Задайте repository secret GHCR_TOKEN (PAT с write:packages для ghcr.io)."
+            exit 1
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # PAT владельца пакетов: GITHUB_TOKEN зависит от repo-оценки
+          # packages:write и периодически получает 403 на push; username —
+          # владелец PAT, не actor (диспетчер может быть другим пользователем).
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Docker metadata
         id: meta
