@@ -33,6 +33,7 @@ import sys
 
 import httpx2
 
+from apps.frontend.config import get_frontend_settings
 from apps.frontend.seo.pages import PUBLIC_PAGES, SEO_LOCALES, localized_marketing_path
 from scripts.seo.seo_config import primary_platform_domain, public_mirror_domains, seo_base_url
 
@@ -139,6 +140,19 @@ def main() -> int:
         check.ok("llms.txt")
     else:
         check.fail("llms.txt", f"status={status}")
+
+    # IndexNow: ключ обязан отдаваться как /<key>.txt — без верификации
+    # Bing/Yandex отклоняют пуш (403). Читаем из тех же frontend-настроек,
+    # что scripts.seo.index_now — расхождение ловится здесь же.
+    indexnow_key = get_frontend_settings().indexnow_key
+    if not indexnow_key:
+        check.fail("indexnow key file", "services.frontend.indexnow_key не задан")
+    else:
+        status, _h, body = _get(client, f"/{indexnow_key}.txt", host_header)
+        if status == 200 and body.strip() == indexnow_key:
+            check.ok("indexnow key file")
+        else:
+            check.fail("indexnow key file", f"status={status}")
 
     # Все страницы реестра × обе локали: новая PUBLIC_PAGES-запись
     # автоматически попадает в синтетику кластера. Холодный снапшот —
