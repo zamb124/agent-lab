@@ -5,10 +5,16 @@
 """
 
 
+from pathlib import Path
+
 from pydantic import Field
 
 from core.config import BaseSettings
 from core.config.service_settings import ServiceSettingsCache
+
+
+def _default_seo_dist_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "seo-dist"
 
 
 class FrontendSettings(BaseSettings):
@@ -27,6 +33,10 @@ class FrontendSettings(BaseSettings):
             "IndexNow ключ верификации: frontend отдаёт /<key>.txt, "
             "scripts.seo.index_now шлёт URL в Bing/Yandex после выката."
         ),
+    )
+    seo_dist_dir: Path = Field(
+        default_factory=_default_seo_dist_dir,
+        description="Каталог статических SEO-артефактов (блог, страницы zensical).",
     )
 
 

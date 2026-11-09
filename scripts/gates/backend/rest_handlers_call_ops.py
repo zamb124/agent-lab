@@ -119,6 +119,13 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/frontend/api/public_search.py::public_search_favicon",
         "apps/frontend/api/public_search.py::public_search_serp_click",
         "apps/frontend/api/public_search.py::public_search_serp_more",
+        # frontend: SEO-протоколы и публичная раздача — XML/txt/HTML наружу, SPA catch-all
+        "apps/frontend/api/public_serving.py::get_robots_txt",
+        "apps/frontend/api/public_serving.py::get_sitemap_blog_xml",
+        "apps/frontend/api/public_serving.py::get_sitemap_marketing_xml",
+        "apps/frontend/api/public_serving.py::get_sitemap_xml",
+        "apps/frontend/api/public_serving.py::serve_llms_txt",
+        "apps/frontend/api/public_serving.py::serve_public_page",
         "apps/frontend/api/public_site.py::get_public_blog_post",
         "apps/frontend/api/public_site.py::get_site_bundle",
         "apps/frontend/api/public_site.py::get_startup_card",

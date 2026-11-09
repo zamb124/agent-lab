@@ -9,6 +9,7 @@ import pytest_asyncio
 from httpx2 import ASGITransport, AsyncClient
 
 from apps.frontend.models import LeadRequestRecord
+from apps.frontend.seo.pages import PUBLIC_PRODUCT_KEYS, ProductKey
 from core.models.identity_models import SYSTEM_COMPANY_ID
 
 REQUEST_STORAGE_PREFIX = f"company:{SYSTEM_COMPANY_ID}:request:"
@@ -39,7 +40,7 @@ def _record(lead_request_id: str, created_at: datetime) -> LeadRequestRecord:
         comment="Need a demo",
         job_title="CTO",
         headcount_range="50_199",
-        interested_products=["agents", "crm"],
+        interested_products=[ProductKey.AGENTS, ProductKey.CRM],
         created_at=created_at,
     )
 
@@ -92,6 +93,51 @@ async def test_create_lead_stores_canonical_record(
         assert stored.organization_name == f"Org {unique_id}"
     finally:
         await frontend_di.shared_storage.delete(key, force_global=True)
+
+
+@pytest.mark.asyncio
+async def test_create_lead_accepts_all_registry_products(
+    frontend_client: AsyncClient,
+    frontend_di,
+    unique_id: str,
+) -> None:
+    """Все ключи PUBLIC_PAGES kind=product принимаются; список растёт с реестром."""
+    response = await frontend_client.post(
+        "/frontend/api/leads",
+        json={
+            "contact_name": f"Lead {unique_id}",
+            "email": None,
+            "phone": "+7 999 000 00 00",
+            "organization_name": f"Org {unique_id}",
+            "job_title": None,
+            "headcount_range": "1_49",
+            "interested_products": list(PUBLIC_PRODUCT_KEYS),
+            "comment": None,
+        },
+    )
+
+    assert response.status_code == 200
+    key = _storage_key(response.json()["lead_request_id"])
+    await frontend_di.shared_storage.delete(key, force_global=True)
+
+
+@pytest.mark.asyncio
+async def test_create_lead_rejects_unknown_product(frontend_client: AsyncClient) -> None:
+    response = await frontend_client.post(
+        "/frontend/api/leads",
+        json={
+            "contact_name": "Lead",
+            "email": None,
+            "phone": "+7 999 000 00 00",
+            "organization_name": None,
+            "job_title": None,
+            "headcount_range": "1_49",
+            "interested_products": ["agents", "not_a_product"],
+            "comment": None,
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

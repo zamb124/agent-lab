@@ -8,7 +8,18 @@ Zero-Guess: все системные поля явно типизированы
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Annotated, ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
+from typing import (
+    Annotated,
+    ClassVar,
+    Literal,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    cast,
+    get_args,
+    overload,
+    override,
+)
 
 from a2a.types import Message
 from pydantic import (
@@ -20,12 +31,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-
-# a2a_pb2.Message (protobuf) не имеет JSON Schema; сериализатор ниже отдаёт JSON-объекты.
-JsonMessageList = Annotated[
-    list[Message],
-    WithJsonSchema({"type": "array", "items": {"type": "object"}}),
-]
 
 from apps.flows.src.agent_plan.models import AgentPlan
 from apps.flows.src.reflection import ReflectionRecord
@@ -43,6 +48,12 @@ from core.models import FlexibleBaseModel, StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.ui_document.document import FlowUIBlock
 from core.ui_document.protocol import FlowUIAction, FlowUIEvent
+
+# a2a_pb2.Message (protobuf) не имеет JSON Schema; сериализатор ниже отдаёт JSON-объекты.
+JsonMessageList = Annotated[
+    list[Message],
+    WithJsonSchema({"type": "array", "items": {"type": "object"}}),
+]
 
 ExecutionTaskState = Literal[
     "completed",

@@ -318,7 +318,7 @@ async def test_shot_office_editor(
 ) -> None:
     file_ids = marketing_seeded["office"]["file_ids"]
     if not file_ids:
-        pytest.skip("office files не загружены")
+        pytest.fail("office files не загружены: сид marketing_seeded не создал файлы")
     await _goto(
         shot_desktop_page,
         f"{api_origin('office')}/documents/edit/{file_ids[0]}",

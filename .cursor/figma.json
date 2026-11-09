@@ -1,0 +1,6 @@
+{
+  "name": "Platform UI",
+  "fileKey": "0ZVwEI56YtAhQMFYrBWz7e",
+  "collection": "Platform",
+  "note": "fileKey — ключ Design-файла Figma из URL /design/<fileKey>/; заполняется после создания файла. Пусто — figma_tokens sync берёт активный файл моста."
+}

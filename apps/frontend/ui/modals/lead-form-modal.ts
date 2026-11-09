@@ -8,11 +8,13 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { isValidEmail, digitsOnly } from '@platform/lib/utils/validators.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 export class FrontendLeadFormModal extends PlatformFormModal {
     static i18nNamespace = 'landing';
@@ -26,11 +28,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
         _organizationName: { state: true },
         _jobTitle: { state: true },
         _headcountRange: { state: true },
-        _interestAgents: { state: true },
-        _interestRag: { state: true },
-        _interestCrm: { state: true },
-        _interestSync: { state: true },
-        _interestDocuments: { state: true },
+        _interests: { state: true },
         _comment: { state: true },
     }
     declare _contactName: string;
@@ -39,11 +37,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
     declare _organizationName: string;
     declare _jobTitle: string;
     declare _headcountRange: string;
-    declare _interestAgents: boolean;
-    declare _interestRag: boolean;
-    declare _interestCrm: boolean;
-    declare _interestSync: boolean;
-    declare _interestDocuments: boolean;
+    declare _interests: Record<string, boolean>;
     declare _comment: string;
 ;
 
@@ -80,16 +74,24 @@ export class FrontendLeadFormModal extends PlatformFormModal {
         this._organizationName = '';
         this._jobTitle = '';
         this._headcountRange = '';
-        this._interestAgents = false;
-        this._interestRag = false;
-        this._interestCrm = false;
-        this._interestSync = false;
-        this._interestDocuments = false;
+        this._interests = {};
         this._comment = '';
         this.size = 'sm';
         this._submit = this.useOp('frontend/lead_submit');
+        this._productKeysCtl = this.select((state) => {
+            const bundle = state.i18n.translations[state.i18n.locale];
+            const landing = bundle === undefined ? undefined : bundle['landing'];
+            const cta = isPlainRecord(landing) ? landing['cta'] : undefined;
+            if (!isPlainRecord(cta)) {
+                return [] as string[];
+            }
+            return Object.keys(cta)
+                .filter((key) => key.startsWith('product_'))
+                .map((key) => key.slice('product_'.length));
+        });
     }
     private _submit: OpController;
+    private _productKeysCtl: SelectController<string[]>;
 
 
     override willUpdate(changed: PropertyValues<this>): void {
@@ -117,26 +119,21 @@ export class FrontendLeadFormModal extends PlatformFormModal {
             errors.headcount = this.t('cta.toast_required');
         }
 
-        const anyProduct =
-            this._interestAgents ||
-            this._interestRag ||
-            this._interestCrm ||
-            this._interestSync ||
-            this._interestDocuments;
-        if (!anyProduct) {
+        if (!this._productKeys().some((key) => this._interests[key] === true)) {
             errors.products = this.t('cta.toast_products_required');
         }
 
         return errors;
     }
 
+    // Продукты формы — ключи ``cta.product_<key>`` её же бандла: новый лейбл
+    // в i18n автоматически добавляет свитч, бэкенд валидирует по ProductKey.
+    private _productKeys(): string[] {
+        return this._productKeysCtl.value;
+    }
+
     override async handleSubmit() {
-        const interested_products: any[] = [];
-        if (this._interestAgents) interested_products.push('agents');
-        if (this._interestRag) interested_products.push('rag');
-        if (this._interestCrm) interested_products.push('crm');
-        if (this._interestSync) interested_products.push('sync');
-        if (this._interestDocuments) interested_products.push('documents');
+        const interested_products = this._productKeys().filter((key) => this._interests[key] === true);
 
         await this._submit.run({
             contact_name: this._contactName.trim(),
@@ -261,56 +258,20 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                     </div>
                     <div class="form-group">
                         <div class="products-grid" role="group" aria-label=${this.t('cta.products_label')}>
-                            <div class="product-row">
-                                <platform-switch
-                                    size="sm"
-                                    .checked=${this._interestAgents}
-                                    @change=${(e: CustomEvent) => {
-                                        this._interestAgents = e.detail.value;
-                                    }}
-                                ></platform-switch>
-                                <span>${this.t('cta.product_agents')}</span>
-                            </div>
-                            <div class="product-row">
-                                <platform-switch
-                                    size="sm"
-                                    .checked=${this._interestRag}
-                                    @change=${(e: CustomEvent) => {
-                                        this._interestRag = e.detail.value;
-                                    }}
-                                ></platform-switch>
-                                <span>${this.t('cta.product_rag')}</span>
-                            </div>
-                            <div class="product-row">
-                                <platform-switch
-                                    size="sm"
-                                    .checked=${this._interestCrm}
-                                    @change=${(e: CustomEvent) => {
-                                        this._interestCrm = e.detail.value;
-                                    }}
-                                ></platform-switch>
-                                <span>${this.t('cta.product_crm')}</span>
-                            </div>
-                            <div class="product-row">
-                                <platform-switch
-                                    size="sm"
-                                    .checked=${this._interestSync}
-                                    @change=${(e: CustomEvent) => {
-                                        this._interestSync = e.detail.value;
-                                    }}
-                                ></platform-switch>
-                                <span>${this.t('cta.product_sync')}</span>
-                            </div>
-                            <div class="product-row">
-                                <platform-switch
-                                    size="sm"
-                                    .checked=${this._interestDocuments}
-                                    @change=${(e: CustomEvent) => {
-                                        this._interestDocuments = e.detail.value;
-                                    }}
-                                ></platform-switch>
-                                <span>${this.t('cta.product_documents')}</span>
-                            </div>
+                            ${this._productKeys().map(
+                                (key) => html`
+                                    <div class="product-row">
+                                        <platform-switch
+                                            size="sm"
+                                            .checked=${this._interests[key] === true}
+                                            @change=${(e: CustomEvent) => {
+                                                this._interests = { ...this._interests, [key]: e.detail.value === true };
+                                            }}
+                                        ></platform-switch>
+                                        <span>${this.t(`cta.product_${key}`)}</span>
+                                    </div>
+                                `,
+                            )}
                         </div>
                         ${this.renderFieldError('products')}
                         ${this.renderFieldError('contact')}

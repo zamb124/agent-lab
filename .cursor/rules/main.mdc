@@ -290,3 +290,4 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `ui_factories.mdc` | доменное состояние UI — только шесть фабрик |
 | `ui_components.mdc` | core UI Kit: модалки, sheets, user-chip, breadcrumbs |
 | `ui_fields.mdc` | любое поле формы — `<platform-field>` |
+| `seo.mdc` | публичная поверхность — реальный HTML: `PUBLIC_PAGES`, DSD-снапшоты, sitemap, блог |

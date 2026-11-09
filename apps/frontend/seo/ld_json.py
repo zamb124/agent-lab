@@ -10,7 +10,13 @@ import json
 from functools import lru_cache
 
 from apps.frontend.seo.blog_files import repo_root
-from apps.frontend.seo.pages import PublicPage, SeoLocale, localized_marketing_path
+from apps.frontend.seo.pages import (
+    PUBLIC_PRODUCT_KEYS,
+    PublicPage,
+    SeoLocale,
+    localized_marketing_path,
+    public_page_for_path,
+)
 from core.config.models import PlatformBrandConfig
 from core.types import JsonObject, parse_json_object
 
@@ -48,6 +54,18 @@ def _product_bundle(page: PublicPage, locale: SeoLocale) -> JsonObject:
     """Запись ``frontend_products.<key>``: ключ — последний сегмент ``products/<key>``."""
     return _bundle_object(
         _translations("frontend_products", locale), page.path.rsplit("/", 1)[-1]
+    )
+
+
+def product_marketing_names(locale: SeoLocale) -> tuple[str, ...]:
+    """Маркетинговые имена продуктов (``AI Studio``, ``NetWorkle``…) из
+    ``frontend_products.<key>.meta_title`` — первый сегмент до `` — ``.
+    Список деривится из ``PUBLIC_PRODUCT_KEYS``: новая продуктовая страница
+    попадает сюда автоматически."""
+    bundle = _translations("frontend_products", locale)
+    return tuple(
+        str(_bundle_object(bundle, key)["meta_title"]).split(" — ", 1)[0]
+        for key in PUBLIC_PRODUCT_KEYS
     )
 
 
@@ -149,25 +167,31 @@ def _faq_graph(locale: SeoLocale) -> JsonObject | None:
 
 def _breadcrumb(seo_base_url: str, page: PublicPage, locale: SeoLocale) -> JsonObject:
     routes = _bundle_object(_translations("frontend", locale), "routes")
-    home_title = str(routes["landing"])
     title = route_title(page, locale)
     items: list[JsonObject] = [
         {
             "@type": "ListItem",
             "position": 1,
-            "name": home_title,
+            "name": str(routes["landing"]),
             "item": _page_url(seo_base_url, "", locale),
         },
     ]
-    if page.path.startswith("products/"):
-        items.append(
-            {
-                "@type": "ListItem",
-                "position": 2,
-                "name": "Products" if locale == "en" else "Продукты",
-                "item": _page_url(seo_base_url, "", locale),
-            }
-        )
+    # Промежуточные уровни — только реальные публичные страницы реестра
+    # (``products``, ``demo``…): фейковый уровень со ссылкой на главную
+    # не добавляем; появится листинг — crumb деривнётся сам.
+    prefix = ""
+    for segment in page.path.split("/")[:-1]:
+        prefix = f"{prefix}/{segment}".strip("/")
+        parent = public_page_for_path(prefix)
+        if parent is not None:
+            items.append(
+                {
+                    "@type": "ListItem",
+                    "position": len(items) + 1,
+                    "name": route_title(parent, locale),
+                    "item": _page_url(seo_base_url, parent.path, locale),
+                }
+            )
     items.append(
         {
             "@type": "ListItem",

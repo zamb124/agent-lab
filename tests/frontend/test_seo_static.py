@@ -69,10 +69,20 @@ def test_marketing_sitemap_has_hreflang_and_images() -> None:
 
 def test_blog_sitemap_entries() -> None:
     xml = build_blog_sitemap_xml(
-        SEO_BASE, [("blog/post-a", "2026-01-10"), ("en/blog/post-a", "2026-01-10")]
+        SEO_BASE,
+        [
+            ("blog/post-a", "en/blog/post-a", "2026-01-10"),
+            ("blog/post-b", None, "2026-01-11"),
+        ],
     )
     assert f"{SEO_BASE}/blog/post-a" in xml
     assert f"{SEO_BASE}/en/blog/post-a" in xml
+    # hreflang-пары RU↔EN и x-default у поста с английской версией.
+    assert 'hreflang="x-default"' in xml
+    assert f'hreflang="en" href="{SEO_BASE}/en/blog/post-a"' in xml
+    # Пост без EN — единственный URL, без alternate-ссылок на несуществующую локаль.
+    assert f"{SEO_BASE}/en/blog/post-b" not in xml
+    assert xml.count(f'href="{SEO_BASE}/blog/post-b"') == 1
 
 
 def test_robots_txt_structure() -> None:

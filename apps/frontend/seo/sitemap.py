@@ -75,22 +75,53 @@ def build_marketing_sitemap_xml(base_url: str, *, lastmod: str) -> str:
     )
 
 
-def build_blog_sitemap_xml(base_url: str, entries: list[tuple[str, str]]) -> str:
-    """Urlset постов блога; ``entries`` — пары ``(loc_path, lastmod_iso)``."""
-    blocks = "\n".join(
-        "  <url>\n"
-        + f"    <loc>{escape(base_url + '/' + path.lstrip('/'))}</loc>\n"
-        + f"    <lastmod>{escape(lastmod)}</lastmod>\n"
-        + "    <changefreq>monthly</changefreq>\n"
-        + "    <priority>0.60</priority>\n"
-        + "  </url>"
-        for path, lastmod in entries
+def _blog_url_block(
+    base_url: str, path: str, lastmod: str, alternates: list[tuple[str, str]]
+) -> str:
+    lines = [
+        "  <url>",
+        f"    <loc>{escape(base_url + '/' + path.lstrip('/'))}</loc>",
+    ]
+    for hreflang, href in alternates:
+        lines.append(
+            f'    <xhtml:link rel="alternate" hreflang="{hreflang}" href="{escape(href)}"/>'
+        )
+    lines.extend(
+        (
+            f"    <lastmod>{escape(lastmod)}</lastmod>",
+            "    <changefreq>monthly</changefreq>",
+            "    <priority>0.60</priority>",
+            "  </url>",
+        )
     )
+    return "\n".join(lines)
+
+
+def build_blog_sitemap_xml(
+    base_url: str, entries: list[tuple[str, str | None, str]]
+) -> str:
+    """Urlset постов блога с hreflang-парами RU↔EN.
+
+    ``entries`` — ``(ru_path, en_path|None, lastmod_iso)`` по посту: RU-блок
+    всегда, EN-блок — при наличии английской версии; оба связываются
+    ``xhtml:link``-альтернативами, как в маркетинг-карте.
+    """
+    blocks: list[str] = []
+    for ru_path, en_path, lastmod in entries:
+        ru_url = base_url + "/" + ru_path.lstrip("/")
+        if en_path is None:
+            # Самоссылочный hreflang обязателен и для одноязычного поста.
+            blocks.append(_blog_url_block(base_url, ru_path, lastmod, [("ru", ru_url)]))
+            continue
+        en_url = base_url + "/" + en_path.lstrip("/")
+        alternates = [("ru", ru_url), ("en", en_url), ("x-default", ru_url)]
+        blocks.append(_blog_url_block(base_url, ru_path, lastmod, alternates))
+        blocks.append(_blog_url_block(base_url, en_path, lastmod, alternates))
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        f'<urlset xmlns="{_SITEMAP_XMLNS}">\n'
-        f"{blocks}\n"
-        "</urlset>\n"
+        + f'<urlset xmlns="{_SITEMAP_XMLNS}" xmlns:xhtml="{_XHTML_XMLNS}">\n'
+        + "\n".join(blocks)
+        + "\n</urlset>\n"
     )
 
 

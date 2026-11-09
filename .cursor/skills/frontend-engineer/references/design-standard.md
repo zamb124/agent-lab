@@ -2,6 +2,8 @@
 
 Норма — `.cursor/rules/frontend.mdc` § Дизайн: в компонентах только токены `tokens.css` и core-компоненты, локальные hex/rgba запрещены. Этот файл — как переводить макет в код.
 
+Обратное направление — `tokens.css` → Figma Variables: `uv run python -m scripts.tools.figma_tokens sync` (норма `figma.mdc` § Канон 7–9, процедура — SKILL.md § Figma-синк). Меняя токены, прогоняем синк и коммитим `scripts/tools/figma_tokens.snapshot.json`.
+
 ## Источники
 
 - Ритм и семантика — базовые макеты Figma `Networkle / Макеты / node 30:556`.

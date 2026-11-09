@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from httpx2 import AsyncClient
 
+from apps.frontend.config import get_frontend_settings
+from apps.frontend.seo.pages import PUBLIC_PRODUCT_KEYS
 from core.types import parse_json_object
 
 
@@ -87,7 +89,9 @@ async def test_public_startup_card_contract(frontend_client: AsyncClient) -> Non
     assert card["name"] == "Linnex"
     assert isinstance(card["tagline_ru"], str)
     assert isinstance(card["products"], list)
-    assert len(card["products"]) == 5
+    # Список продуктов деривится из реестра PUBLIC_PAGES (kind=product).
+    assert len(card["products"]) == len(PUBLIC_PRODUCT_KEYS)
+    assert all(isinstance(name, str) and name for name in card["products"])
     assert isinstance(card["deployment_modes"], list)
 
 
@@ -171,11 +175,10 @@ async def test_sitemap_blog_survives_malformed_index(
     frontend_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Битый blog index.json → пустая urlset (200), не 500; событие blog_index_invalid."""
-    bad = tmp_path / "index.json"
-    _ = bad.write_text("not json at all", encoding="utf-8")
-    monkeypatch.setattr(
-        "apps.frontend.seo.blog_files.blog_index_path", lambda: bad
-    )
+    blog_dir = tmp_path / "blog"
+    blog_dir.mkdir()
+    _ = (blog_dir / "index.json").write_text("not json at all", encoding="utf-8")
+    monkeypatch.setattr(get_frontend_settings(), "seo_dist_dir", tmp_path)
     response = await frontend_client.get("/sitemap-blog.xml")
     assert response.status_code == 200
     assert "<urlset" in response.text
@@ -188,11 +191,10 @@ async def test_public_blog_api_survives_malformed_index(
 ) -> None:
     """Битый index.json → пустой список (200), не 500: один битый артефакт
     не роняет публичный блог-API."""
-    bad = tmp_path / "index.json"
-    _ = bad.write_text("not json at all", encoding="utf-8")
-    monkeypatch.setattr(
-        "apps.frontend.seo.blog_files.blog_index_path", lambda: bad
-    )
+    blog_dir = tmp_path / "blog"
+    blog_dir.mkdir()
+    _ = (blog_dir / "index.json").write_text("not json at all", encoding="utf-8")
+    monkeypatch.setattr(get_frontend_settings(), "seo_dist_dir", tmp_path)
     response = await frontend_client.get("/frontend/api/public/blog")
     assert response.status_code == 200
     assert parse_json_object(response.text)["items"] == []

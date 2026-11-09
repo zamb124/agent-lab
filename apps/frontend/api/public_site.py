@@ -19,6 +19,7 @@ from apps.frontend.models import (
     PublicStartupCard,
 )
 from apps.frontend.seo.blog_files import blog_body_path, read_blog_body, read_blog_index
+from apps.frontend.seo.ld_json import product_marketing_names
 from apps.frontend.services.cookie_consent_service import analytics_configured
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 from core.types import JsonObject
@@ -127,13 +128,7 @@ async def get_startup_card(request: Request, di: Di) -> PublicStartupCard:
         tagline_ru="Платформа автоматизации бизнеса: AI-агенты, база знаний, CRM-граф, чат и документы.",
         tagline_en="Business automation platform: AI agents, knowledge base, CRM graph, chat, and documents.",
         website_url=base_url,
-        products=(
-            "AI Studio",
-            "Knowledge Base",
-            "NetWorkle",
-            "Sync",
-            "Documents",
-        ),
+        products=product_marketing_names("en"),
         deployment_modes=("cloud", "hybrid", "on-premise"),
         logo_url=f"{base_url}/static/core/assets/service_logos/frontend_logo.svg",
     )

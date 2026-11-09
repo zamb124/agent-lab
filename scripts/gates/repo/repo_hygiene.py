@@ -66,6 +66,8 @@ ALLOWED_LOCAL_ROOT_FILES: frozenset[str] = frozenset(
         ".coverage",
         ".env",
         ".env.test-compose-images",
+        "build-zensical.en.toml",
+        "build-zensical.ru.toml",
         "conf.local.json",
     }
 )

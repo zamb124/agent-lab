@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Literal
 
 PublicPageKind = Literal[
@@ -107,6 +108,32 @@ PUBLIC_PAGES: tuple[PublicPage, ...] = (
 )
 
 PUBLIC_PAGE_PATHS: frozenset[str] = frozenset(page.path for page in PUBLIC_PAGES)
+
+# Ключи продуктов — последний сегмент ``products/<key>`` для kind="product"
+# в порядке реестра; единый источник для Literal-полей моделей и i18n-бандлов.
+PUBLIC_PRODUCT_KEYS: tuple[str, ...] = tuple(
+    page.path.rsplit("/", 1)[-1] for page in PUBLIC_PAGES if page.kind == "product"
+)
+
+# Enum-форма ключей для pydantic-полей: OpenAPI получает enum, контракт
+# расширяется реестром без правки моделей.
+class ProductKey(StrEnum):
+    """Ключи публичных продуктов платформы — pydantic-контракт и OpenAPI-enum."""
+
+    AGENTS = "agents"
+    RAG = "rag"
+    CRM = "crm"
+    SYNC = "sync"
+    DOCUMENTS = "documents"
+    GEO = "geo"
+    WIKI = "wiki"
+    SHOP = "shop"
+
+
+# Реестр страниц — источник истины; enum должен покрывать ровно его ключи.
+assert {page.path.rsplit("/", 1)[-1] for page in PUBLIC_PAGES if page.kind == "product"} == {
+    key.value for key in ProductKey
+}, "ProductKey не синхронизирован с PUBLIC_PAGES"
 
 
 def public_page_for_path(path: str) -> PublicPage | None:

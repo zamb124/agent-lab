@@ -39,6 +39,7 @@ from apps.frontend.api.public_docs_assistant import router as public_docs_assist
 from apps.frontend.api.public_embed_page import router as public_embed_page_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_search import router as public_search_router
+from apps.frontend.api.public_serving import public_router
 from apps.frontend.api.public_site import router as public_site_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.settings import router as settings_router
@@ -49,7 +50,6 @@ from apps.frontend.config import (
 )
 from apps.frontend.di import Di, FrontendDi
 from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
-from apps.frontend.seo.public_serving import public_router
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (

@@ -7,6 +7,7 @@ import {
     DRAG_THRESHOLD_PX,
     gesturesAllowed,
     LAUNCHER_NAV_GAP_PX,
+    LAUNCHER_SIZE_PX,
     MOBILE_MAX_WIDTH_PX,
     moveCluster,
     resizeFromSouthEast,

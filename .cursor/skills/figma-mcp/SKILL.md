@@ -59,6 +59,10 @@ uv run python -m scripts.tools.figma_mcp --wait-plugin 60 status   # ждать 
 3. `figma_get_file_data` на большом файле возвращает весь документ — сначала `figma_get_selection` или снимок, документ — точечно по узлу.
 4. Снимок для контекста — `figma_take_screenshot`; файлы попадают в temp-каталог сервера.
 
+## Синк дизайн-токенов
+
+`tokens.css` → Figma Variables — `uv run python -m scripts.tools.figma_tokens sync` (идемпотентно, коллекция `Platform`, режимы Dark/Light, `var()` → alias; целевой файл — `.cursor/figma.json`). Норма — `figma.mdc` § Канон 7–9, процедура — скил `frontend-engineer` § Figma-синк, дрейф — гейт `frontend.figma_tokens_drift`.
+
 ## Troubleshooting
 
 - **`transport.active: none`** — плагин не запущен: `Plugins → Development → Figma Desktop Bridge` на открытом файле. Проверить `lsof -iTCP:9223 -sTCP:LISTEN` — сервер слушает только пока жив MCP-клиент/драйвер.

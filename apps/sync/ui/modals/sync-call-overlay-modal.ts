@@ -457,7 +457,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             .chat-panel {
                 position: absolute;
                 top: var(--space-4);
-                right: var(--space-4);
+                right: calc(var(--space-4) + var(--platform-launcher-inline-end-inset, 0px));
                 bottom: var(--space-4);
                 width: min(360px, calc(100vw - var(--space-8)));
                 background: var(--sync-call-panel-strong);
@@ -570,7 +570,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 display: grid;
                 grid-template-columns: 1fr auto 1fr;
                 align-items: center;
-                padding: var(--space-3) var(--space-6) var(--space-4);
+                padding: var(--space-3) calc(var(--space-6) + var(--platform-launcher-inline-end-inset, 0px)) var(--space-4) var(--space-6);
                 gap: var(--space-3);
                 position: relative;
             }

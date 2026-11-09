@@ -137,6 +137,16 @@ uv run python .cursor/skills/frontend-engineer/scripts/ui_audit.py       # де�
 3. Desktop `1440x1024`; shell, страница или модалка — ещё mobile `390x844` или `430x932`: нет overlap, горизонтального скролла, обрезанного текста; ритм — `references/design-standard.md`.
 4. Скриншоты до и после — в отчёте.
 
+## Figma-синк
+
+UI-макеты платформы живут в Figma-файле из `.cursor/figma.json`; источник правды — код (`tokens.css`, core-компоненты, страницы), направление правок — код → Figma, макеты подтягиваются за кодом, не наоборот.
+
+1. Изменил `core/frontend/static/assets/css/tokens.css` или `lib/flow-ui/shell/tokens.css` — прогони `uv run python -m scripts.tools.figma_tokens sync` (Figma Desktop, Design-файл, запущенный Desktop Bridge; `fileKey` — `.cursor/figma.json`) и закоммить `scripts/tools/figma_tokens.snapshot.json`. Без прогона падает гейт `frontend.figma_tokens_drift`; `extract` и `check` Figma не требуют.
+2. Sync идемпотентен: переменные ищутся по имени `a/b/c` в коллекции `Platform` (режимы Dark/Light), значения перезаписываются, `var()` превращается в `VariableAlias`; stale-переменные не удаляются — печатаются в отчёте.
+3. Мост недоступен (файл не создан/не открыт) — sync честно падает с инструкцией; макет считается не обновлённым и называется в отчёте блокером, baseline руками не переписывается.
+4. Изменился компонент или страница — соответствующий макет в файле правится `figma_execute` по тем же токенам; подключение и troubleshooting — скил `figma-mcp`, нормы — `figma.mdc`.
+5. Обратное направление (дизайнерский макет → код) — по `references/design-standard.md`: Figma задаёт ритм, код — только токены и core-компоненты.
+
 ## Чек-лист «готово»
 
 - [ ] `make ui` зелёный; Python или гейты затронуты — `make lint` зелёный или падения доказаны baseline.
@@ -148,6 +158,7 @@ uv run python .cursor/skills/frontend-engineer/scripts/ui_audit.py       # де�
 - [ ] Новая фабрика — уникальное `<svc>/<entity>` в `static factories`; компонент берёт её по имени.
 - [ ] Модалка или sheet — `modalKind`/`bottomSheetKind` + регистрация, открытие helper-ом.
 - [ ] Поля — `<platform-field>`; визуал — токены и core-компоненты; новый `platform-*` имеет UIKDS-карточку.
+- [ ] Затронуты источники токенов — `figma_tokens sync` прогнан и snapshot закоммичен, либо мост назван блокером в отчёте.
 - [ ] Убраны заменённые пути, мосты, исключения; правило-владелец и скил отражают факты as-is.
 - [ ] Отчёт содержит раздел «Найдено и не исправлено» (пустой — явно «нет»).
 

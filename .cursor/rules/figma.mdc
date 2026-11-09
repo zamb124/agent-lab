@@ -19,9 +19,16 @@ alwaysApply: false
 4. Агент без MCP-реестра вызывает инструменты через `uv run python -m scripts.tools.figma_mcp` — `list`, `call`, `batch`, `status`, `--wait-plugin`; pin версии скрипт читает из `.cursor/mcp.json`. `[без гейта]`
 5. Чтение доски — `figjam_get_board_contents` (стикеры, фигуры, коннекторы, секции), снимок — `figma_take_screenshot`/`figma_capture_screenshot`, состояние моста — `figma_get_status` с `probe: true`, список инструментов — `figma_mcp list`. `[без гейта]`
 6. Файл и доска — живые документы команды: write-инструменты (создание и правка узлов, комментарии, переменные) вызываются только по явному запросу пользователя. `[без гейта]`
+7. Источник правды дизайн-токенов — `core/frontend/static/assets/css/tokens.css` и его `@import` `core/frontend/static/lib/flow-ui/shell/tokens.css` (`:root` — режим Dark, `[data-theme="light"]` — Light). Синк в Figma Variables — `uv run python -m scripts.tools.figma_tokens sync`: коллекция `Platform`, идемпотентно по имени `a/b/c`, `var()` → `VariableAlias`; целевой файл — `.cursor/figma.json` (`fileKey`), baseline — `scripts/tools/figma_tokens.snapshot.json`. `[без гейта]`
+8. Правка источников токенов завершается `figma_tokens sync` и коммитом обновлённого snapshot; дрейф ловит гейт `frontend.figma_tokens_drift`. Процедура — скил `frontend-engineer` § Figma-синк.
+9. Значения вне Figma Variables (градиенты, многослойные тени, `calc`/`clamp`, `filter`, `url`) переносятся paint/effect styles, а не переменными; их перечень — `skipped` спеки `figma_tokens extract`. `[без гейта]`
 
 ## Запреты
 
 1. `figd_*` и другие секреты Figma в файлах репозитория.
 2. Второй Figma MCP-сервер в `.cursor/mcp.json` (`figma-developer-mcp`, `mcp-server-figma`).
 3. Плавающий тег версии (`@latest`, `*`) у `figma-console-mcp`.
+
+## Гейты
+
+- `frontend.figma_tokens_drift` (`make lint`) — `tokens.css` ≡ `scripts/tools/figma_tokens.snapshot.json`; при расхождении — `uv run python -m scripts.tools.figma_tokens sync`.

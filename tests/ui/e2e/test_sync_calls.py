@@ -35,15 +35,42 @@ async def _ensure_overlay_chat_open(overlay) -> None:
         """(btn) => {
             const r = btn.getBoundingClientRect();
             const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+            let modal = btn;
+            while (modal && modal.tagName !== 'SYNC-CALL-OVERLAY-MODAL') {
+                modal = modal.parentElement || (modal.getRootNode && modal.getRootNode().host) || null;
+            }
+            const attrs = {};
+            if (modal) for (const a of modal.attributes) attrs[a.name] = a.value;
+            const mcs = modal ? getComputedStyle(modal) : null;
+            const mr = modal ? modal.getBoundingClientRect() : {x:0,y:0,width:0,height:0};
             return {
                 box: {x: r.x, y: r.y, w: r.width, h: r.height},
                 center: {x: cx, y: cy},
-                stack: document.elementsFromPoint(cx, cy).map(e => e.tagName + '.' + (e.className||'').toString().slice(0,30)),
+                stack: document.elementsFromPoint(cx, cy).map(e => {
+                    const cs = getComputedStyle(e);
+                    return e.tagName + '|pe=' + cs.pointerEvents + '|z=' + cs.zIndex;
+                }),
+                modalAttrs: attrs,
+                modalPe: mcs ? mcs.pointerEvents : 'NO-MODAL',
+                modalRect: {x: Math.round(mr.x), y: Math.round(mr.y), w: Math.round(mr.width), h: Math.round(mr.height)},
+                modalParent: modal && modal.parentElement ? modal.parentElement.tagName : null,
+                modalCount: document.querySelectorAll('sync-call-overlay-modal').length,
             };
         }"""
     )
     print(f"\n=== TOGGLE-PROBE: {info}")
-    await toggle.click()
+    try:
+        await toggle.click(timeout=12_000)
+    except Exception:
+        info2 = await page.evaluate(
+            """() => Array.from(document.querySelectorAll('sync-call-overlay-modal')).map(m => {
+                const r = m.getBoundingClientRect();
+                const cs = getComputedStyle(m);
+                return {open: m.hasAttribute('open'), closing: m.hasAttribute('closing'), min: m.hasAttribute('data-minimized'), pe: cs.pointerEvents, disp: cs.display, vis: cs.visibility, rect: {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)}};
+            })"""
+        )
+        print(f"=== TOGGLE-PROBE post-fail modals: {info2}")
+        raise
     await expect(chat_input).to_be_visible(timeout=30_000)
 
 

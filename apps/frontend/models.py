@@ -10,6 +10,7 @@ from oxyde import Index
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.frontend.cookie_consent import CookieConsentDecision, CookieConsentLocale
+from apps.frontend.seo.pages import ProductKey
 from core.ai.company_settings import CapabilityLiteral
 from core.ai.llm_config import LLMCallConfig
 from core.billing.settlement_rules import SettlementRulesDocument
@@ -117,7 +118,7 @@ class LeadCreateBody(BaseModel):
     comment: str | None = Field(default=None, max_length=4000)
     job_title: str | None = Field(default=None, max_length=200)
     headcount_range: Literal["1_49", "50_199", "200_499", "500_plus"]
-    interested_products: list[Literal["agents", "rag", "crm", "sync", "documents"]] = Field(min_length=1)
+    interested_products: list[ProductKey] = Field(min_length=1)
 
     @field_validator("email", "phone", "organization_name", "comment", "job_title")
     @classmethod
@@ -269,7 +270,7 @@ class PublicStartupCard(BaseModel):
     tagline_ru: str = Field(min_length=1)
     tagline_en: str = Field(min_length=1)
     website_url: str = Field(min_length=1)
-    products: tuple[Literal["AI Studio", "Knowledge Base", "NetWorkle", "Sync", "Documents"], ...]
+    products: tuple[str, ...] = Field(min_length=1)
     deployment_modes: tuple[Literal["cloud", "hybrid", "on-premise"], ...]
     logo_url: str = Field(min_length=1)
 

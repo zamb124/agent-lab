@@ -21,6 +21,7 @@ from apps.browser.models.types import (
 )
 from apps.browser.services.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.services.interaction_profiles import get_interaction_profile
+from apps.browser.services.page_evaluate import evaluate_json_value
 from core.authz.models import AuthzObject
 from core.clients.browser.control_types import BrowserCapabilityError
 from core.clients.browser.crawl_fetch_types import (
@@ -174,7 +175,7 @@ async def crawl_fetch(
                     await _post_navigate_crawl_signals(page)
                     if body.wait_selector is not None:
                         try:
-                            await page.wait_for_selector(
+                            _ = await page.wait_for_selector(
                                 body.wait_selector,
                                 timeout=min(body.navigation_timeout_ms, 15_000),
                             )
@@ -185,10 +186,18 @@ async def crawl_fetch(
                                 error_code="upstream",
                             ) from exc
                     if body.html_capture == "dsd":
-                        html = await page.evaluate(
-                            "() => document.documentElement.getHTML({serializableShadowRoots: true})"
+                        captured = await evaluate_json_value(
+                            page,
+                            "() => document.documentElement.getHTML({serializableShadowRoots: true})",
+                            "crawl_fetch.dsd_html",
                         )
-                        html = "<!DOCTYPE html>\n" + str(html)
+                        if not isinstance(captured, str):
+                            raise WsCommandError(
+                                "upstream",
+                                "browser dsd capture returned non-string html",
+                                error_code="upstream",
+                            )
+                        html = "<!DOCTYPE html>\n" + captured
                     else:
                         html = await page.content()
                 if not html.strip():

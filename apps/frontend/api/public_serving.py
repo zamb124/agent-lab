@@ -113,15 +113,14 @@ def _marketing_sitemap_lastmod() -> str:
     return datetime.fromtimestamp(mtime, UTC).strftime("%Y-%m-%d")
 
 
-def _blog_sitemap_entries() -> list[tuple[str, str]]:
-    """Пары (path, lastmod) опубликованных постов из собранного blog index."""
-    entries: list[tuple[str, str]] = []
+def _blog_sitemap_entries() -> list[tuple[str, str | None, str]]:
+    """``(ru_path, en_path|None, lastmod)`` по посту — hreflang-пары в карте."""
+    entries: list[tuple[str, str | None, str]] = []
     for item in read_blog_index():
         slug = str(item["slug"])
         date = str(item["updated"])
-        entries.append((f"blog/{slug}", date))
-        if item.get("has_en"):
-            entries.append((f"en/blog/{slug}", date))
+        en_path = f"en/blog/{slug}" if item.get("has_en") else None
+        entries.append((f"blog/{slug}", en_path, date))
     return entries
 
 

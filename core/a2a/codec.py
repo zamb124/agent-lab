@@ -402,8 +402,8 @@ def rpc_result_to_json_dict(message: ProtoMessage) -> JsonObject:
     payload = require_json_object(MessageToDict(message), "a2a.rpc.result")
     if isinstance(message, (ListTasksResponse, ListTaskPushNotificationConfigsResponse)):
         repeated = "tasks" if isinstance(message, ListTasksResponse) else "configs"
-        payload.setdefault(repeated, [])
-        payload.setdefault("nextPageToken", "")
+        _ = payload.setdefault(repeated, [])
+        _ = payload.setdefault("nextPageToken", "")
     return payload
 
 

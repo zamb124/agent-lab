@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from apps.frontend.config import get_frontend_settings
 from apps.frontend.seo.pages import SeoLocale
 from core.logging import get_logger
-from core.types import JsonObject, parse_json_array
+from core.types import JsonObject, JsonValue, parse_json_array
 
 logger = get_logger(__name__)
-
-SEO_DIST_DIR = "seo-dist"
 
 
 def repo_root() -> Path:
@@ -19,7 +18,7 @@ def repo_root() -> Path:
 
 def seo_dist_root() -> Path:
     """Каталог статических SEO-артефактов (блог, статические страницы)."""
-    return repo_root() / SEO_DIST_DIR
+    return get_frontend_settings().seo_dist_dir
 
 
 def blog_post_html_path(slug: str, locale: SeoLocale) -> Path:
@@ -48,7 +47,7 @@ def blog_body_path(slug: str, locale: SeoLocale) -> Path:
 _blog_problem_logged = False
 
 
-def _log_problem(event: str, **fields: object) -> None:
+def _log_problem(event: str, **fields: JsonValue) -> None:
     global _blog_problem_logged
     if _blog_problem_logged:
         return
