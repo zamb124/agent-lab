@@ -78,31 +78,23 @@ spec:
               mountPath: /dev/shm
           resources:
             {{- toYaml $app.chromium.resources | nindent 12 }}
+          # headless-shell образ минимальный: wget/curl нет — только TCP-порт.
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
+            tcpSocket:
+              port: 9222
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 5
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
+            tcpSocket:
+              port: 9222
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
           startupProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
+            tcpSocket:
+              port: 9222
             failureThreshold: 30
             periodSeconds: 5
         {{- end }}
