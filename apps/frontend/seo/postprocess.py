@@ -65,6 +65,24 @@ def _set(pattern: re.Pattern[str], html: str, value: str) -> str:
     return pattern.sub(lambda m: m.group(1) + value + m.group(2), html, count=1)
 
 
+def _set_title(html: str, title: str) -> str:
+    """Первый ``<title>`` → заданный текст, остальные удаляются.
+
+    В снапшоте встречается пара тегов (шаблонный + записанный SPA через
+    ``document.title``) — документ с одним title и без дублей.
+    """
+    seen = False
+
+    def _repl(_match: re.Match[str]) -> str:
+        nonlocal seen
+        if seen:
+            return ""
+        seen = True
+        return f"<title>{title}</title>"
+
+    return _TITLE_RE.sub(_repl, html)
+
+
 
 def _en_href(match: re.Match[str]) -> str:
     """``href="/x"``/``href="<seo_base_url>/x"`` → ``href="<origin>/en/x"``."""
@@ -115,7 +133,7 @@ def postprocess_snapshot(
     # raw key가 박히는 이력이 있다 — head 타이틀/설명을 확정값으로 덮는다.
     if page.kind == "product":
         doc_title, doc_description = product_document_meta(page, brand, locale)
-        out = _TITLE_RE.sub(f"<title>{doc_title}</title>", out)
+        out = _set_title(out, doc_title)
         out = _set(_OG_TITLE_RE, out, doc_title)
         out = _set(_TWITTER_TITLE_RE, out, doc_title)
         out = _set(_DESCRIPTION_RE, out, doc_description)
