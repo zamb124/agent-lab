@@ -69,7 +69,9 @@ spec:
             - --metrics-recording-only
             - --mute-audio
             - --js-flags=--max-old-space-size=512
-            # Chromium 124+ слушает только 127.0.0.1; browser-app ходит через shared netns pod'а.
+            # Chrome 136+ запрещает CDP на дефолтном user-data-dir.
+            - --user-data-dir=/tmp/chrome-data
+            # CDP слушает 127.0.0.1; browser-app ходит через shared netns pod'а.
             - --remote-debugging-port=9222
           volumeMounts:
             - name: chromium-dshm
