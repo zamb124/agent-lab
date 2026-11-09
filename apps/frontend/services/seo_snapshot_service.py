@@ -22,8 +22,10 @@ from apps.frontend.seo.pages import (
     localized_marketing_path,
 )
 from apps.frontend.seo.postprocess import postprocess_snapshot
+from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchResponse
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.redis_client import RedisClient
+from core.clients.service_client import ServiceClientError
 from core.logging import get_logger
 from core.platform_brand.resolver import (
     platform_public_base_url,
@@ -49,6 +51,11 @@ _WARMUP_INTERVAL_SECONDS = 60 * 60
 _WARMUP_REFRESH_TTL_FLOOR = _SNAPSHOT_TTL_SECONDS // 2
 _SNAPSHOT_NAV_TIMEOUT_MS = 30_000
 _SNAPSHOT_SERVICE_TIMEOUT_SECONDS = 45.0
+# 429 — контракт backpressure browser-сервиса: семафор краулера занят на
+# секунды, а мгновенный fail-marker превращал бы транзитную конкуренцию в
+# минуту stale-отдач. Ретраим только явный rate-limit (отказ мгновенный,
+# попытка почти бесплатна); таймауты и 5xx рендера — в fail-путь сразу.
+_SNAPSHOT_FETCH_429_DELAYS = (2.0, 4.0, 8.0)
 # i18n-бандлы и API грузятся fetch/xhr — блокируем только не влияющее на DOM.
 _SNAPSHOT_BLOCK_RESOURCES = ["image", "media", "font", "eventsource", "websocket", "manifest"]
 
@@ -165,15 +172,7 @@ class SeoSnapshotService:
 
         try:
             try:
-                response = await self._browser.fetch_html(
-                    self._fetch_url(page.path, locale),
-                    timeout_ms=_SNAPSHOT_NAV_TIMEOUT_MS,
-                    service_timeout_seconds=_SNAPSHOT_SERVICE_TIMEOUT_SECONDS,
-                    locale="en-US" if locale == "en" else "ru-RU",
-                    wait_selector=page.wait_selector,
-                    html_capture="dsd",
-                    block_resource_types=list(_SNAPSHOT_BLOCK_RESOURCES),
-                )
+                response = await self._fetch_render(page, locale)
             except Exception as exc:
                 logger.warning(
                     "seo.snapshot.fetch_failed",
@@ -213,6 +212,28 @@ class SeoSnapshotService:
                 _ = await self._redis.delete(lock_key)
             except Exception as exc:
                 logger.warning("seo.snapshot.lock_release_failed", error=str(exc))
+
+    async def _fetch_render(self, page: PublicPage, locale: SeoLocale) -> BrowserCrawlFetchResponse:
+        last_rate_limit: ServiceClientError | None = None
+        for attempt, delay in enumerate(_SNAPSHOT_FETCH_429_DELAYS):
+            if attempt:
+                await asyncio.sleep(delay)
+            try:
+                return await self._browser.fetch_html(
+                    self._fetch_url(page.path, locale),
+                    timeout_ms=_SNAPSHOT_NAV_TIMEOUT_MS,
+                    service_timeout_seconds=_SNAPSHOT_SERVICE_TIMEOUT_SECONDS,
+                    locale="en-US" if locale == "en" else "ru-RU",
+                    wait_selector=page.wait_selector,
+                    html_capture="dsd",
+                    block_resource_types=list(_SNAPSHOT_BLOCK_RESOURCES),
+                )
+            except ServiceClientError as exc:
+                if exc.status_code != 429:
+                    raise
+                last_rate_limit = exc
+        assert last_rate_limit is not None
+        raise last_rate_limit
 
     async def invalidate(self, path: str, locale: str) -> None:
         _ = await self._redis.delete(self._cache_key(path, locale), self._fail_key(path, locale))
