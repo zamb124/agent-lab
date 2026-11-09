@@ -71,7 +71,8 @@ spec:
             - --js-flags=--max-old-space-size=512
             # Chrome 136+ запрещает CDP на дефолтном user-data-dir.
             - --user-data-dir=/tmp/chrome-data
-            # CDP слушает 127.0.0.1; browser-app ходит через shared netns pod'а.
+            # 0.0.0.0: tcpSocket-пробы kubelet ходят на IP пода; порт не экспонирован Service.
+            - --remote-debugging-address=0.0.0.0
             - --remote-debugging-port=9222
           volumeMounts:
             - name: chromium-dshm
