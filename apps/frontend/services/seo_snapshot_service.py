@@ -243,7 +243,10 @@ class SeoSnapshotService:
                     locale=locale,
                     error=str(exc),
                 )
-            if html is None:
+            # stale-отдача — не прогрев: ключа новой версии не записано,
+            # страница остаётся в missed и уходит в повторный проход,
+            # иначе warmup_ok врёт и холодные ключи висят до следующего часа.
+            if html is None or await self._stale_for_refresh(page, locale):
                 missed.append((page, locale))
         return missed
 
