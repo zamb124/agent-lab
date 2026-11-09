@@ -96,9 +96,9 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
         const screenshot = shown(blockUrl(ctx, block.screenshot_url));
         return html`<div class="fu-card fu-preview" data-status=${block.status}>
             <div class="head"><span>${title !== '' ? title : url}</span><span class="fu-status" data-tone=${statusTone(block.status)}>${flowUIText(ctx.locale, `browser_status_${block.status}`)}</span></div>
-            <span class="sub">${url}</span>
             ${screenshot !== '' ? html`<img src=${flowUIMediaSrc(ctx.platformUiOrigin, screenshot)} alt="" loading="lazy"
-                style="cursor:zoom-in" @click=${() => ctx.host.openBrowserPreview({ url, screenshot, status: block.status })}>` : ''}
+                style="cursor:zoom-in" @click=${() => ctx.host.openBrowserPreview({ url, title, status: block.status })}
+                @error=${(event: Event) => { (event.target as HTMLImageElement).style.display = 'none'; }}>` : ''}
         </div>`;
     },
 

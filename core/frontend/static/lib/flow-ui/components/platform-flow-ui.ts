@@ -27,6 +27,7 @@ import { flowUIIsAbortError } from '../../a2a/a2a-stream.js';
 import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import { sessionFiles } from '../runtime/conversation.js';
 import type { FlowUiSendInput } from '../runtime/flow-ui-client.js';
+import { openFlowUIBrowserPreview } from '../runtime/browser-preview.js';
 import { FlowUIClient } from '../runtime/flow-ui-client.js';
 import type { FlowUiBlock, FlowUiDocument, FlowUiHostLike, FlowUiPage, FlowUiRecord, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
 import { FlowUIStore } from '../runtime/flow-ui-store.js';
@@ -573,8 +574,8 @@ export class PlatformFlowUI extends LitElement {
         return toggleFlowUIVoiceSession(this);
     }
 
-    openBrowserPreview({ url, screenshot, status }: { url?: unknown; screenshot?: unknown; status?: unknown }) {
-        this._emit('browser-preview-open', { viewerUrl: screenshot, sessionId: `${this.flowId}:${this.contextId}`, currentUrl: url, status });
+    openBrowserPreview(options: { url?: unknown; title?: unknown; status?: unknown }) {
+        openFlowUIBrowserPreview(this, options);
     }
 
     _chromeMode() {
