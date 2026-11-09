@@ -71,7 +71,7 @@ async def test_rag_first_namespace(
     await rag_ui.open(page)
     await rag_ui.expect_shell(page)
 
-    namespace_name = f"База знаний {unique_id[:4]}"
+    namespace_name = f"kb-{unique_id[:6]}"
     await expect(page.locator("rag-namespaces-page")).to_be_visible(timeout=30_000)
     await page.locator(
         "rag-namespaces-page page-header .btn-primary"
@@ -92,13 +92,15 @@ async def test_rag_first_namespace(
         label_en="Create a knowledge space",
         details=(
             "На странице «Пространства» нажмите «Создать» и дайте "
-            "пространству понятное имя — например, «База знаний». "
+            "пространству имя латиницей — например, `kb-docs` (это "
+            "техническое имя: только английские буквы, цифры и дефис). "
             "Пространство — это отдельная полка для документов: уставы "
             "отдельно, инструкции отдельно."
         ),
         details_en=(
             "On the «Namespaces» page click «Create» and give the space a "
-            "clear name — e.g. «Knowledge base». A namespace is a separate "
+            "latin name — e.g. `kb-docs` (a technical name: English "
+            "letters, digits and dashes only). A namespace is a separate "
             "shelf for documents: charters here, manuals there."
         ),
     )
@@ -106,7 +108,18 @@ async def test_rag_first_namespace(
     card = page.locator("namespace-card", has_text=namespace_name).first
     await expect(card).to_be_visible(timeout=15_000)
     await card.click()
-    await expect(page.locator("rag-namespace-page")).to_be_visible(timeout=15_000)
+    try:
+        await expect(page.locator("rag-namespace-page")).to_be_visible(timeout=15_000)
+    except AssertionError:
+        state = await page.evaluate(
+            """() => ({
+                url: location.href,
+                pages: [...document.querySelectorAll('*')].filter(
+                    (e) => e.tagName.toLowerCase().startsWith('rag-')
+                ).map((e) => e.tagName.toLowerCase()),
+            })"""
+        )
+        raise AssertionError(f"namespace_detail not mounted: {state}")
 
     doc_path = tmp_path / "ustav.txt"
     doc_path.write_text(_DOC_TEXT, encoding="utf-8")

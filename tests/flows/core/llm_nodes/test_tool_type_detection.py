@@ -46,7 +46,6 @@ def _llm_runner(
         emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         redis_client=di.node_constructor.redis_client,
         tool_registry=di.tool_registry,
-        billing_service=di.node_constructor.billing_service,
     )
 
 
