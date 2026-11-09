@@ -106,7 +106,7 @@ async def crawl_fetch(
         shared_storage_key=None,
         anti_bot_tier=_CRAWL_ANTI_BOT_TIER,
         stealth_init_version="v1",
-        locale="ru-RU",
+        locale=body.locale or "ru-RU",
         timezone_id="Europe/Moscow",
         user_agent=None,
         page_mode="crawl",
@@ -172,7 +172,25 @@ async def crawl_fetch(
                             error_code="upstream",
                         ) from exc
                     await _post_navigate_crawl_signals(page)
-                    html = await page.content()
+                    if body.wait_selector is not None:
+                        try:
+                            await page.wait_for_selector(
+                                body.wait_selector,
+                                timeout=min(body.navigation_timeout_ms, 15_000),
+                            )
+                        except PlaywrightTimeoutError as exc:
+                            raise WsCommandError(
+                                "gateway_timeout",
+                                f"wait_selector timeout for {body.url}: {body.wait_selector}",
+                                error_code="upstream",
+                            ) from exc
+                    if body.html_capture == "dsd":
+                        html = await page.evaluate(
+                            "() => document.documentElement.getHTML({serializableShadowRoots: true})"
+                        )
+                        html = "<!DOCTYPE html>\n" + str(html)
+                    else:
+                        html = await page.content()
                 if not html.strip():
                     raise WsCommandError(
                         "upstream",

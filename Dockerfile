@@ -58,21 +58,28 @@ RUN npm run typecheck:ui \
 # Docs-builder отдельный, GIL-build cp314: статический HTML, free-threading не нужен,
 # а часть deps zensical тянет Rust-extension'ы без cp314t wheels.
 FROM python:3.14-slim AS docs-builder
-RUN pip install --no-cache-dir "zensical>=0.0.73"
+# markdown + pyyaml — сборка seo-dist блога (scripts.seo.blog_build)
+RUN pip install --no-cache-dir "zensical>=0.0.73" "markdown>=3.11" "pyyaml>=6.0"
 WORKDIR /app
 ENV PYTHONPATH=/app
 # esbuild — статические Go-бинари из ui-builder стейджа (без node-рантайма)
 COPY --from=ui-builder /app/node_modules/@esbuild ./node_modules/@esbuild
 COPY zensical.ru.toml zensical.en.toml ./
+# conf.json — канонический домен/имя бренда для SEO-скриптов (seo_config.py)
+COPY conf.json ./
 COPY docs ./docs
 COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
 COPY scripts/__init__.py ./scripts/__init__.py
 COPY scripts/docs ./scripts/docs
+COPY scripts/seo ./scripts/seo
+COPY blog ./blog
 RUN python -m scripts.docs.prepare && \
-    zensical build --clean --config-file zensical.ru.toml && \
-    zensical build --clean --config-file zensical.en.toml && \
+    zensical build --clean --config-file build-zensical.ru.toml && \
+    zensical build --clean --config-file build-zensical.en.toml && \
+    python -m scripts.seo.blog_build && \
     mkdir -p documentation-dist/en && \
-    cp -a build/zensical-en-out/. documentation-dist/en/
+    cp -a build/zensical-en-out/. documentation-dist/en/ && \
+    python -m scripts.docs.seo_postbuild
 
 # ============================================
 # Финальные стадии - отличаются только CMD/EXPOSE
@@ -157,6 +164,7 @@ CMD ["python", "-m", "scripts.db.migrate", "upgrade"]
 # внутри apps/<svc>/ui-dist/chunks/).
 FROM base-final AS full
 COPY --from=docs-builder /app/documentation-dist ./documentation-dist
+COPY --from=docs-builder /app/seo-dist ./seo-dist
 COPY --from=ui-builder /out/apps/ ./apps/
 COPY --from=ui-builder /out/core/frontend/embed-dist ./core/frontend/embed-dist
 EXPOSE 8001 8002 8003 8004 8005 8006 8008 8009 8010 8015 8016 8017 8018 8019 8020

@@ -28,7 +28,9 @@ def mount_documentation_static(
     """
     dist = repo_root / DOCUMENTATION_DIST
     if not dist.is_dir():
-        logger.warning("frontend.make.doc.zensical.ru.toml", DOCUMENTATION_DIST=DOCUMENTATION_DIST)
+        # seo-dist-артефакт документации не доехал в образ — все docs-страницы
+        # 404 без сигнала; alertable-событие ловит Grafana-алерт про seo.*.
+        logger.warning("seo.documentation_dist_missing", dist=str(dist))
 
     async def redirect_documentation_trailing_slash() -> RedirectResponse:
         return RedirectResponse(url="/documentation/", status_code=307)

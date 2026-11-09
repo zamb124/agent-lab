@@ -106,6 +106,7 @@ GATES: tuple[Gate, ...] = (
         frozenset(),
     ),
     Gate("repo.scripts_layout", _py("scripts.gates.repo.scripts_layout"), _LINT),
+    Gate("repo.public_pages_canon", _py("scripts.gates.repo.public_pages_canon"), _LINT),
     Gate("generate.a2a_fixtures", _py("scripts.generate.a2a_fixtures", "--check"), _STATIC),
     Gate("generate.a2a_fixtures_remote", _py("scripts.generate.a2a_fixtures", "--check-remote"), _NETWORK),
 )

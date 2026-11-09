@@ -39,6 +39,24 @@
 
 После **`make test-ui`**: **`make doc`** или **`make test-ui-doc`**.
 
+## SEO-артефакты документации
+
+`scripts/docs/seo_postbuild.py` (в цепочке `make doc` после `postprocess`, а также в Dockerfile docs-builder): `index.md`-зеркала рядом с каждым `index.html`, `link[alternate type=text/markdown]`, TechArticle+Breadcrumb JSON-LD, `<lastmod>` в `sitemap.xml` (git-история → mtime источника). LLM получает исходный markdown по URL страницы + `/index.md`; корневой `/llms.txt` ссылается на docs `llms.txt`/`llms-full.txt`.
+
+## Блог
+
+Источник — `blog/<slug>.md` + `blog/<slug>.en.md` (YAML-шапка: `title`, `summary`, `date`, `updated`, `author`, `tags`, `draft`). Сборка — `python -m scripts.seo.blog_build` (часть `make ui-build`/`seo-build`) → `seo-dist/`: статические страницы постов с BlogPosting JSON-LD и hreflang, `body.html` для `/api/public/blog/post`, `index.json` (каталог + sitemap-blog), `feed.xml`. Правила канона — `.cursor/rules/seo.mdc`.
+
+### Качество скриншотов (норма)
+
+- Браузерный контекст e2e: **viewport 1440×900, `device_scale_factor=2`** → desktop PNG **2880×1800**
+  (`tests/ui/conftest.py::_new_browser_context`, тот же кадр, что у marketing shots).
+- Мобильный сценарий задаёт `set_viewport_size` явно (390×844 → PNG ~780×1688).
+- Gate предупреждает о PNG с «@1x-подобной» шириной (901–2499px) — признак устаревшего или неверного контекста.
+- Видимый контент — реалистичные демо-данные (названия, имена, фото), а не сырые `unique_id` на кадрах.
+- Каждая новая инструкция проходит self-review на портале: страница открывается, все PNG осмотрены глазами,
+  инструкция находится из sidebar-меню и поиском портала, карточка видна на hub сервиса.
+
 ## Стиль инструкции (канон)
 
 - Заголовок шага: **`## Шаг N. …`** (EN: **`## Step N. …`**).

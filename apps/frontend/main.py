@@ -8,10 +8,8 @@ from urllib.parse import quote, urlparse
 
 from fastapi import Request
 from fastapi.responses import (
-    FileResponse,
     HTMLResponse,
     JSONResponse,
-    PlainTextResponse,
     RedirectResponse,
     Response,
 )
@@ -51,6 +49,7 @@ from apps.frontend.config import (
 )
 from apps.frontend.di import Di, FrontendDi
 from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
+from apps.frontend.seo.public_serving import public_router
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (
@@ -60,6 +59,7 @@ from apps.frontend.services.flow_preview_guest_html import (
 from apps.frontend.services.flow_ui_shared_session_html import (
     build_flow_ui_shared_session_html,
 )
+from apps.frontend.services.seo_snapshot_service import SeoSnapshotService
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
@@ -75,11 +75,9 @@ from core.clients.tts_pronunciation.models import (
     PronunciationRuleWrite,
 )
 from core.config import get_settings
-from core.config.models import PlatformBrandConfig
 from core.config.testing import is_testing
 from core.db.storage import SharedStorage
 from core.di import recipe
-from core.http.client import get_httpx_client
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
     consume_flow_preview_handoff,
@@ -89,12 +87,14 @@ from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
 from core.mail.service import MailService
 from core.middleware.auth.company_resolver import build_service_base_url
-from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
+from core.platform_brand.resolver import (
+    resolve_brand,
+)
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.models import PlatformShortLink
 from core.short_links.payloads import FlowPreviewEmbedPayload
 from core.types import JsonObject, parse_json_object
-from core.utils.domain import extract_company_subdomain
+from core.utils.background import run_with_log_context
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
@@ -102,23 +102,6 @@ _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
     r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
     r"|"
     r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
-)
-
-INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
-    "/",
-    "/documentation/",
-    "/support",
-    "/cookies",
-    "/consent/cookies",
-    "/products/agents",
-    "/products/rag",
-    "/products/crm",
-    "/products/sync",
-    "/products/documents",
-    "/demo/digital-workers",
-    "/blog",
-    "/about",
-    "/roadmap",
 )
 
 def _flow_preview_preferred_lang(request: Request) -> str:
@@ -155,88 +138,6 @@ def _short_link_redirect_location(target: str) -> str:
     if p.query:
         loc = f"{loc}?{p.query}"
     return loc
-
-def _build_sitemap_xml(base_url: str) -> str:
-    lastmod = datetime.now(UTC).strftime("%Y-%m-%d")
-    og_image_loc = f"{base_url}/static/frontend/assets/images/main_img.png"
-    paths_with_preview_image: frozenset[str] = frozenset(
-        (
-            "/",
-            "/products/agents",
-            "/products/rag",
-            "/products/crm",
-            "/products/sync",
-            "/products/documents",
-            "/demo/digital-workers",
-        )
-    )
-
-    def _priority_for_path(path: str) -> str:
-        if path.startswith("/products/"):
-            return "0.90"
-        if path == "/":
-            return "0.80"
-        if path == "/documentation/":
-            return "0.70"
-        if path == "/support":
-            return "0.65"
-        if path in ("/blog", "/about", "/roadmap"):
-            return "0.55"
-        return "0.50"
-
-    def _url_block(path: str) -> str:
-        lines = [
-            "  <url>",
-            f"    <loc>{base_url}{path}</loc>",
-            f"    <lastmod>{lastmod}</lastmod>",
-            "    <changefreq>weekly</changefreq>",
-            f"    <priority>{_priority_for_path(path)}</priority>",
-        ]
-        if path in paths_with_preview_image:
-            lines.extend(
-                (
-                    "    <image:image>",
-                    f"      <image:loc>{og_image_loc}</image:loc>",
-                    "    </image:image>",
-                )
-            )
-        lines.append("  </url>")
-        return "\n".join(lines)
-
-    urls_xml = "\n".join(_url_block(path) for path in INDEXABLE_PUBLIC_PATHS)
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
-        'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n'
-        f"{urls_xml}\n"
-        "</urlset>\n"
-    )
-
-def _build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
-    platform_name = brand.platform_name
-    return (
-        f"# {platform_name}\n\n"
-        f"> {platform_name} is a business automation platform with AI flows and LLM agents, "
-        "RAG knowledge search, NetWorkle graph, "
-        "team collaboration tools, and scheduler automation.\n\n"
-        "Use canonical HTTPS URLs only.\n"
-        "Prioritize public product and documentation pages.\n"
-        "Do not rely on private app routes, authenticated dashboards, or API endpoints as primary sources.\n\n"
-        "## Key Pages\n"
-        f"- Platform Overview: {base_url}/\n"
-        f"- Product Agents: {base_url}/products/agents\n"
-        f"- Product RAG: {base_url}/products/rag\n"
-        f"- Product NetWorkle: {base_url}/products/crm\n"
-        f"- Product Sync: {base_url}/products/sync\n"
-        f"- Product Documents: {base_url}/products/documents\n"
-        f"- Product Documentation: {base_url}/documentation/\n"
-        f"- Support: {base_url}/support\n"
-        f"- Blog: {base_url}/blog\n"
-        f"- About: {base_url}/about\n"
-        f"- Roadmap: {base_url}/roadmap\n\n"
-        "## Optional\n"
-        f"- Service health endpoint (technical): {base_url}/health\n"
-    )
 
 async def _seed_platform_pronunciation_rules() -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
@@ -276,6 +177,7 @@ async def frontend_startup(
     authz_service: AuthzService,
     mail_service: MailService,
     billing_service: BillingService,
+    seo_snapshot_service: SeoSnapshotService,
 ) -> None:
     await redis_client.connect()
     logger.info("frontend.redis.connected")
@@ -307,6 +209,11 @@ async def frontend_startup(
     schedule_docs_assistant_bootstrap(
         shared_storage,
         project_root=Path(__file__).resolve().parents[2],
+    )
+    _warmup_task = run_with_log_context(
+        seo_snapshot_service.warmup_public_pages(),
+        name="frontend.seo_snapshot_warmup",
+        background_kind="startup",
     )
 
 # Приложение собирает create_service_app: middleware и FrontendDi.
@@ -541,55 +448,6 @@ async def get_public_legal(request: Request, di: Di) -> JSONResponse:
     brand = resolve_brand(str(host).strip())
     return JSONResponse(content=brand.legal.model_dump())
 
-@app.get("/robots.txt")
-@app.get("/frontend/robots.txt")
-async def get_robots_txt(request: Request, di: Di) -> PlainTextResponse:
-    _ = di
-    host = request.headers.get("host")
-    if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
-    base_url = resolve_public_base_url(str(host).strip())
-    robots_txt = (
-        "User-agent: *\n"
-        "Allow: /\n"
-        "Disallow: /api/\n"
-        "Disallow: /frontend/api/\n"
-        "Disallow: /auth/\n"
-        "Disallow: /frontend/api/auth/\n"
-        "Disallow: /ws/\n"
-        "Disallow: /frontend/ws/\n"
-        "Disallow: /crm/\n"
-        "Disallow: /sync/\n"
-        "Disallow: /rag/\n"
-        "Disallow: /flows/\n"
-        "Disallow: /office/\n"
-        f"Sitemap: {base_url}/sitemap.xml\n"
-    )
-    return PlainTextResponse(content=robots_txt)
-
-@app.get("/sitemap.xml")
-@app.get("/frontend/sitemap.xml")
-async def get_sitemap_xml(request: Request, di: Di) -> Response:
-    _ = di
-    host = request.headers.get("host")
-    if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
-    base_url = resolve_public_base_url(str(host).strip())
-    sitemap_xml = _build_sitemap_xml(base_url=base_url)
-    return Response(content=sitemap_xml, media_type="application/xml")
-
-@app.get("/llms.txt")
-@app.get("/frontend/llms.txt")
-async def serve_llms_txt(request: Request, di: Di) -> PlainTextResponse:
-    _ = di
-    host = request.headers.get("host")
-    if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
-    brand = resolve_brand(str(host).strip())
-    base_url = resolve_public_base_url(str(host).strip())
-    return PlainTextResponse(content=_build_llms_txt(base_url=base_url, brand=brand))
-
-
 _PWA_MANIFEST_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "manifest.json"
 )
@@ -660,81 +518,9 @@ async def get_pwa_offline_page(request: Request, di: Di) -> Response:
     return Response(content=body, media_type="text/html; charset=utf-8")
 
 
-async def _shop_public_page(request: Request, upstream_path: str) -> Response | None:
-    """HTML публичной страницы shop (витрина/агрегатор) по Host запроса.
-
-    200 → тело + кэш-заголовки shop; 304 → пустой ответ; другой статус →
-    None (вызывающий решает: SPA или auth-wall). Сетевые ошибки shop
-    пробрасываются — инфраструктура не маскируется фолбеком.
-    """
-    host = request.headers.get("host", "")
-    shop_base = get_frontend_settings().server.get_service_url("shop").rstrip("/")
-    forward_headers = {"host": host, "x-forwarded-host": host}
-    if_none_match = request.headers.get("if-none-match")
-    if if_none_match:
-        forward_headers["if-none-match"] = if_none_match
-    url = f"{shop_base}{upstream_path}"
-    if request.url.query:
-        url = f"{url}?{request.url.query}"
-    async with get_httpx_client(timeout=10.0) as client:
-        upstream = await client.request(request.method, url, headers=forward_headers)
-    relay: dict[str, str] = {}
-    for key in ("content-type", "etag", "cache-control"):
-        value = upstream.headers.get(key)
-        if value:
-            relay[key] = value
-    if upstream.status_code == 304:
-        return Response(status_code=304, headers=relay)
-    if upstream.status_code != 200:
-        return None
-    return Response(content=upstream.content, status_code=200, headers=relay)
-
-
-# SPA-резерв (все неизвестные пути → index.html)
-@app.get("/")
-@app.get("/{full_path:path}")
-async def serve_spa(request: Request, di: Di, full_path: str = ""):
-    _ = di
-    # Исключаем API, статику, WebSocket и PWA файлы
-    # full_path может начинаться с frontend/ из-за префикса сервиса
-    excluded = (
-        "api/", "static/", "ws/", "l/",
-        "documentation/", "documentation",
-        "frontend/api/", "frontend/static/", "frontend/ws/",
-        "frontend/documentation/", "frontend/documentation",
-        "manifest.json", "sw.js", "offline.html",
-        "robots.txt", "sitemap.xml", "llms.txt",
-        "frontend/robots.txt", "frontend/sitemap.xml", "frontend/llms.txt",
-        "design-system/", "frontend/design-system/",
-    )
-    if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
-        raise WsCommandError("not_found", "Not found", error_code="not_found")
-
-    # /market — публичный агрегатор витрин для всех пользователей (в проде
-    # ingress отдаёт его прямо в shop; в dev и как резерв — прокси сюда).
-    if full_path == "market":
-        market = await _shop_public_page(request, "/shop/api/v1/public/market")
-        if market is not None:
-            return market
-        raise WsCommandError("not_found", "Not found", error_code="not_found")
-
-    # Аноним на корне поддомена компании → её published-витрина; магазин не
-    # активирован или поддомен не компании — обычный SPA с экраном авторизации.
-    if (
-        full_path == ""
-        and request.cookies.get("auth_token") is None
-        and extract_company_subdomain(request.headers.get("host", "")) is not None
-    ):
-        storefront = await _shop_public_page(request, "/shop/api/v1/public/host")
-        if storefront is not None:
-            return storefront
-
-    index_path = _UI_STATIC_PATH / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-
-    raise WsCommandError("not_found", "Frontend UI not built yet", error_code="not_found")
-
+# Публичная раздача сайта (robots/sitemap/llms/IndexNow, блог-статика, снапшоты,
+# SPA-fallback) — последним, его catch-all `/{full_path:path}` должен быть крайним.
+app.include_router(public_router)
 
 
 if __name__ == "__main__":

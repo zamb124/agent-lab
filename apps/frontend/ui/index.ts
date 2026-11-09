@@ -5,6 +5,11 @@
  * транзитивно через `frontend-app.js`.
  */
 
+// Гидратация DSD-снапшотов: патчит attachShadow до определения элементов —
+// Lit переиспользует declarative shadow root из серверного HTML вместо
+// пустого. Должен быть первым импортом (до первого customElements.define).
+import '@lit-labs/ssr-client/lit-element-hydrate-support.js';
+
 import '@platform/lib/utils/viewport-app-vh.js';
 import '@platform/lib/utils/platform-deeplink-init.js';
 import '@platform/lib/components/platform-spinner.js';

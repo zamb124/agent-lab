@@ -1,0 +1,106 @@
+# Синтетический SEO-мониторинг: каждые 15 минут scripts.seo.seo_smoke
+# прогоняет публичную поверхность (robots/sitemap/llms/canonical/снапшоты/
+# блог/docs/noindex/зеркала) по canonical origin — тот же путь, что видят
+# краулеры (DNS → ingress → TLS → frontend). Итог — JSON-строка
+# {"message": "seo.smoke_failed|seo.smoke_ok"} в stdout пода → Loki →
+# Grafana-алерт seo-synth-failures. Лейбл app=seo-synth становится
+# Loki-меткой service (alloy.config: pod_label_app → service).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seo-synth
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: seo-synth
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 180
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: seo-synth
+        spec:
+          restartPolicy: Never
+          {{- include "agentlab.nodeSchedule" (list . "master") | nindent 10 }}
+          containers:
+            - name: seo-synth
+              image: {{ include "agentlab.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - python
+                - -m
+                - scripts.seo.seo_smoke
+              env:
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                {{- include "agentlab.confVolumeMount" . | nindent 16 }}
+          volumes:
+            {{- include "agentlab.confVolume" . | nindent 12 }}
+---
+# IndexNow: каждые 6 часов scripts.seo.index_now собирает все публичные URL
+# (реестр + блог + sitemap документации) и пушит их в IndexNow — Bing/Yandex
+# узнают о новом контенте без ожидания краула. Периодический пересабмит
+# самолечится: упавший прогон повторится следующим запуском. Ключ
+# frontend.indexnow_key берётся из смонтированного conf.json; без ключа скрипт
+# пишет seo.indexnow_skipped и выходит 0. Итог — JSON-строка
+# {"message": "seo.indexnow_*"} → Loki (service=seo-indexnow из pod label
+# app) → Grafana-алерт seo-indexnow-failures.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seo-indexnow
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: seo-indexnow
+spec:
+  schedule: "7 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 180
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: seo-indexnow
+        spec:
+          restartPolicy: Never
+          {{- include "agentlab.nodeSchedule" (list . "master") | nindent 10 }}
+          containers:
+            - name: seo-indexnow
+              image: {{ include "agentlab.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - python
+                - -m
+                - scripts.seo.index_now
+              env:
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                {{- include "agentlab.confVolumeMount" . | nindent 16 }}
+          volumes:
+            {{- include "agentlab.confVolume" . | nindent 12 }}

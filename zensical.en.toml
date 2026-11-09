@@ -1,3 +1,6 @@
+# site_url/site_name/site_author/copyright — шаблон: scripts.docs.prepare подставляет
+# conf.json (primary_platform_domain, platform_name) в build-zensical.<locale>.toml.
+
 [project]
 site_name = "Linnex"
 site_description = "Platform for AI agents, RAG, NetWorkle, and automation"

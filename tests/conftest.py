@@ -17,12 +17,13 @@ os.environ.setdefault("LOGGING__LEVEL", "WARNING")
 import asyncio
 import sys
 import uuid
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
 from pathlib import Path
 from typing import Any, List
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx2 import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV, ensure_local_no_proxy
@@ -152,6 +153,7 @@ from core.context import Context, User  # noqa: E402
 from core.models.identity_models import Company  # noqa: E402
 from core.tracing.provider import shutdown_tracing  # noqa: E402
 from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
+from tests.fixtures.service_processes import ServiceProcesses  # noqa: E402
 
 _flows_worker_broker = queue_broker("flows_worker")
 if _flows_worker_broker is None or id(process_flow_task.broker) != id(_flows_worker_broker):
@@ -1482,7 +1484,7 @@ async def flows_app(app):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def frontend_app(service_processes):
+async def frontend_app(service_processes: ServiceProcesses) -> FastAPI:
     """FastAPI приложение frontend с lifespan (``service_processes``), одно на сессию."""
     return await service_processes.app("frontend")
 
@@ -1505,7 +1507,7 @@ async def flows_client(flows_app):
 
 
 @pytest_asyncio.fixture
-async def frontend_client(frontend_app):
+async def frontend_client(frontend_app: FastAPI) -> AsyncIterator[AsyncClient]:
     """
     HTTP клиент для тестирования frontend API.
 

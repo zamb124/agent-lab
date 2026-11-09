@@ -32,10 +32,13 @@ sgr-service/config.yaml
 site/
 
 documentation-dist/
+seo-dist/
 
 build/documentation-ru/
 build/documentation-en/
 build/zensical-en-out/
+build-zensical.ru.toml
+build-zensical.en.toml
 
 docs/scenarios/**/index.md
 

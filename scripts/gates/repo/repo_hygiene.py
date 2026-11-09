@@ -74,6 +74,7 @@ ALLOWED_ROOT_DIRS: frozenset[str] = frozenset(
         ".cursor",
         ".github",
         "apps",
+        "blog",
         "ci_scripts",
         "conf",
         "core",
@@ -108,6 +109,7 @@ ALLOWED_GENERATED_ROOT_DIRS: frozenset[str] = frozenset(
         "documentation-dist",
         "node_modules",
         "reports",
+        "seo-dist",
     }
 )
 FORBIDDEN_ROOT_SUFFIXES: tuple[str, ...] = (

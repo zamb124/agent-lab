@@ -21,6 +21,13 @@ class FrontendSettings(BaseSettings):
 
     cors_allow_origins: list[str] = Field(default_factory=list)
     cors_allow_origin_regex: str | None = None
+    indexnow_key: str | None = Field(
+        default=None,
+        description=(
+            "IndexNow ключ верификации: frontend отдаёт /<key>.txt, "
+            "scripts.seo.index_now шлёт URL в Bing/Yandex после выката."
+        ),
+    )
 
 
 _settings_cache = ServiceSettingsCache("frontend", FrontendSettings)

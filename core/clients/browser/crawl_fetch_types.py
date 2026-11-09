@@ -18,6 +18,18 @@ class BrowserCrawlFetchRequest(BaseModel):
     block_resource_types: list[str] = Field(
         default_factory=lambda: ["image", "media", "font", "stylesheet"],
     )
+    locale: str | None = Field(
+        default=None,
+        description="Локаль контекста браузера (например ru-RU/en-US); None — дефолт рантайма.",
+    )
+    wait_selector: str | None = Field(
+        default=None,
+        description="CSS-селектор (Playwright, pierces shadow DOM) готовности контента после навигации.",
+    )
+    html_capture: Literal["flat", "dsd"] = Field(
+        default="flat",
+        description="flat — page.content(); dsd — getHTML(serializableShadowRoots) с declarative shadow DOM.",
+    )
 
 
 class BrowserCrawlFetchResponse(BaseModel):

@@ -682,6 +682,178 @@ groups:
       description: MCP error rate is {{ printf "%.2f" $values.B.Value }}%
     labels:
       severity: warning
+  - uid: seo-snapshot-failures
+    title: SEO Snapshot Failures
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform", service="frontend"} | json | message=~"seo[.]snapshot[.].*failed" [15m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+        datasourceUid: __expr__
+        model:
+          expression: $B > 5
+          refId: C
+          type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: SEO snapshot pipeline degraded on frontend
+      description: '{{ printf "%.0f" $values.B.Value }} seo.snapshot.*failed events in 15m — prerender broken, pages serve SPA shell (crawlers see degraded content)'
+    labels:
+      severity: warning
+      service: frontend
+  - uid: seo-artifacts-missing
+    title: SEO Artifacts Missing
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      datasourceUid: loki
+      model:
+        # Артефактные seo.* события логируются один раз на процесс — одно
+        # уже инцидент: seo-dist/documentation-dist не собран или не доехал
+        # в образ, index.json битый, body.html поста отсутствует → sitemap
+        # блога пустая, посты или вся документация 404.
+        expr: sum(count_over_time({namespace="platform", service="frontend"} | json | message=~"seo[.](blog_(index_(missing|invalid)|body_missing)|documentation_dist_missing)" [1h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+        datasourceUid: __expr__
+        model:
+          expression: $B >= 1
+          refId: C
+          type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: SEO artifacts missing on frontend
+      description: seo-dist/blog or documentation-dist artifacts missing or malformed — blog sitemap empty, post pages/public API degrade, or all documentation pages 404 (build step failed or assets missing in image)
+    labels:
+      severity: warning
+      service: frontend
+  - uid: seo-synth-failures
+    title: SEO Synthetic Checks Failing
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 1800
+        to: 0
+      datasourceUid: loki
+      model:
+        # CronJob seo-synth (*/15) пишет seo.smoke_failed в stdout — Loki
+        # лейбл service=seo-synth берётся из pod label app.
+        expr: sum(count_over_time({namespace="platform", service="seo-synth"} | json | message=~"seo[.]smoke_failed" [30m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+        datasourceUid: __expr__
+        model:
+          expression: $B >= 1
+          refId: C
+          type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: SEO synthetic smoke checks failing on linnex.io
+      description: CronJob seo-synth runs scripts.seo.seo_smoke every 15m against the canonical origin — robots/sitemap/llms/canonical/snapshot/blog/docs/noindex. Failures mean crawlers currently see a broken surface.
+    labels:
+      severity: warning
+      service: seo-synth
+  - uid: seo-indexnow-failures
+    title: SEO IndexNow Submission Failing
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 25200
+        to: 0
+      datasourceUid: loki
+      model:
+        # CronJob seo-indexnow (7 */6) пишет seo.indexnow_failed в stdout —
+        # Loki лейбл service=seo-indexnow берётся из pod label app.
+        expr: sum(count_over_time({namespace="platform", service="seo-indexnow"} | json | message=~"seo[.]indexnow_failed" [7h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+        datasourceUid: __expr__
+        model:
+          expression: $B >= 1
+          refId: C
+          type: math
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: SEO IndexNow submissions failing
+      description: CronJob seo-indexnow submits all public URLs (registry + blog + docs sitemaps) to IndexNow every 6h. Failures mean search engines only discover new content via regular crawl.
+    labels:
+      severity: warning
+      service: seo-indexnow
 - orgId: 1
   name: platform_alerts_slow
   folder: Platform

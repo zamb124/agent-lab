@@ -281,6 +281,12 @@ const FRONTEND_ROUTES = [
     { key: 'platform-billing',        path: 'platform-billing',         parent: 'dashboard',   titleKey: 'routes.platform-billing' },
 ];
 
+/** Префикс локали для router baseUrl: '/en' под /en/* URL, иначе ''. */
+function _seoBaseUrlPrefix(): string {
+    const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+    return pathname === '/en' || pathname.startsWith('/en/') ? '/en' : '';
+}
+
 const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'search',
@@ -566,7 +572,10 @@ export class FrontendApp extends PlatformApp {
 
     override getServiceEffects() {
         return [
-            createRouterEffect({ baseUrl: '', routes: FRONTEND_ROUTES }),
+            // baseUrl '/en' — английское зеркало публичных страниц: роутер
+            // снимает префикс и матчит те же FRONTEND_ROUTES, а navigate()
+            // сохраняет /en/ в pushState.
+            createRouterEffect({ baseUrl: _seoBaseUrlPrefix(), routes: FRONTEND_ROUTES }),
         ];
     }
 

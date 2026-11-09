@@ -18,60 +18,35 @@ from apps.frontend.models import (
     PublicSiteBundle,
     PublicStartupCard,
 )
+from apps.frontend.seo.blog_files import blog_body_path, read_blog_body, read_blog_index
 from apps.frontend.services.cookie_consent_service import analytics_configured
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
+from core.types import JsonObject
 from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/api/public", tags=["public-site"])
 
-_BLOG_POSTS: tuple[PublicBlogPost, ...] = (
-    PublicBlogPost(
-        slug="ai-agent-support-rag",
-        title_ru="ИИ-поддержка 24/7 на базе корпоративных регламентов",
-        title_en="24/7 AI support grounded in corporate policies",
-        summary_ru="Как связать RAG с очередью оператора и сократить типовые обращения без потери контроля качества.",
-        summary_en="How to combine RAG with an operator queue and cut repetitive tickets without losing quality control.",
-        body_ru=(
-            "<p>RAG позволяет отвечать опираясь на ваши документы и регламенты, а не на «общие знания» модели. "
-            "{platformName} объединяет Knowledge Base, AI Studio и каналы связи так, что эскалация к человеку остаётся "
-            "явной частью процесса.</p>"
-            "<p>На практике это означает предсказуемые ответы по базе знаний, журналирование и возможность "
-            "быстро обновить источники без передеплоя кода.</p>"
-        ),
-        body_en=(
-            "<p>RAG lets answers cite your documents and policies instead of generic model knowledge. "
-            "{platformName} connects Knowledge Base, AI Studio, and channels so human escalation stays an explicit "
-            "part of the flow.</p>"
-            "<p>In practice you get predictable answers from your knowledge base, logging, and fast source updates "
-            "without redeploying code.</p>"
-        ),
-    ),
-    PublicBlogPost(
-        slug="platform-five-products",
-        title_ru="Пять продуктов одной платформы: зачем это бизнесу",
-        title_en="Five products in one platform: why it matters for business",
-        summary_ru="AI Studio, Knowledge Base, NetWorkle, Sync и Документы — как связка снижает стоимость владения инструментами.",
-        summary_en="AI Studio, Knowledge Base, NetWorkle, Sync, and Documents — how the bundle lowers total cost of ownership.",
-        body_ru=(
-            "<p>Когда агенты, база знаний, CRM-граф, чат и офисные документы живут в одном контуре, не нужно "
-            "собирать десяток подписок и отдельных интеграций. Единый вход и общая модель компании упрощают "
-            "безопасность и онбординг.</p>"
-        ),
-        body_en=(
-            "<p>When agents, knowledge base, CRM graph, chat, and office documents share one perimeter, you avoid "
-            "a patchwork of subscriptions and glue integrations. A single entry point and company model simplify "
-            "security and onboarding.</p>"
-        ),
-    ),
-)
 
+def _blog_post_model(entry: JsonObject, platform_name: str) -> PublicBlogPost | None:
+    """PublicBlogPost из карточки index.json + body-фрагментов seo-dist.
 
-def _apply_platform_name_to_post(post: PublicBlogPost, platform_name: str) -> PublicBlogPost:
-    return post.model_copy(
-        update={
-            "body_ru": post.body_ru.replace("{platformName}", platform_name),
-            "body_en": post.body_en.replace("{platformName}", platform_name),
-        }
+    ``None`` — body-файла нет (событие ``seo.blog_body_missing`` уже залогировано
+    в ``read_blog_body``): список пропускает битый пост, detail отвечает 404.
+    """
+    slug = str(entry["slug"])
+    body_ru = read_blog_body(slug)
+    if body_ru is None:
+        return None
+    body_en_path = blog_body_path(slug, "en")
+    body_en = body_en_path.read_text(encoding="utf-8") if body_en_path.is_file() else body_ru
+    return PublicBlogPost(
+        slug=slug,
+        title_ru=str(entry["title_ru"]).replace("{platformName}", platform_name),
+        title_en=str(entry["title_en"]).replace("{platformName}", platform_name),
+        summary_ru=str(entry["summary_ru"]).replace("{platformName}", platform_name),
+        summary_en=str(entry["summary_en"]).replace("{platformName}", platform_name),
+        body_ru=body_ru.replace("{platformName}", platform_name),
+        body_en=body_en.replace("{platformName}", platform_name),
     )
 
 
@@ -110,7 +85,11 @@ async def list_public_blog_posts(request: Request, di: Di) -> PublicBlogListResp
     if host is None or not str(host).strip():
         raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
-    items = tuple(_apply_platform_name_to_post(post, brand.platform_name) for post in _BLOG_POSTS)
+    items = tuple(
+        post
+        for entry in read_blog_index()
+        if (post := _blog_post_model(entry, brand.platform_name)) is not None
+    )
     return PublicBlogListResponse(items=items)
 
 
@@ -125,9 +104,12 @@ async def get_public_blog_post(
     if host is None or not str(host).strip():
         raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
-    for post in _BLOG_POSTS:
-        if post.slug == slug:
-            return _apply_platform_name_to_post(post, brand.platform_name)
+    for entry in read_blog_index():
+        if entry.get("slug") == slug:
+            post = _blog_post_model(entry, brand.platform_name)
+            if post is not None:
+                return post
+            break
     raise WsCommandError("not_found", "Post not found", error_code="not_found")
 
 

@@ -210,7 +210,10 @@ async def test_llms_txt_host_aware(
     assert response.status_code == 200
     body = response.text
     assert body.startswith(f"# {platform_name}\n")
-    assert "Product Agents:" in body
+    assert "## Pages" in body
+    assert "products/agents" in body
+    assert "documentation/llms.txt" in body
+    assert "documentation/en/llms.txt" in body
 
 
 @pytest.mark.parametrize(

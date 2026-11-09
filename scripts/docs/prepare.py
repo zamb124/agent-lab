@@ -22,6 +22,7 @@ from scripts.docs.scenario_taxonomy import (
     service_label,
     tag_label,
 )
+from scripts.seo.seo_config import platform_name, seo_base_url
 
 SCENARIOS_ROOT = "scenarios"
 ROOT_MARKDOWN_PAGES = ("quickstart.md",)
@@ -868,11 +869,16 @@ def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
     if not docs_root.is_dir():
         return
 
-    title = "Linnex Documentation" if language == "en" else "Документация Linnex"
-    description = (
-        "Reference documentation for the Linnex platform: quickstart, start here, API, and UI instructions."
+    platform = platform_name()
+    title = (
+        f"{platform} Documentation"
         if language == "en"
-        else "Справочная документация платформы Linnex: быстрый старт, маршруты обучения, API и UI-инструкции."
+        else f"Документация {platform}"
+    )
+    description = (
+        f"Reference documentation for the {platform} platform: quickstart, start here, API, and UI instructions."
+        if language == "en"
+        else f"Справочная документация платформы {platform}: быстрый старт, маршруты обучения, API и UI-инструкции."
     )
     pages = _iter_llms_pages(docs_root)
 
@@ -907,8 +913,41 @@ def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
             ]
         )
 
-    (docs_root / "llms.txt").write_text("\n".join(llms_lines).rstrip() + "\n", encoding="utf-8")
-    (docs_root / "llms-full.txt").write_text("\n".join(full_lines).rstrip() + "\n", encoding="utf-8")
+    _ = (docs_root / "llms.txt").write_text(
+        "\n".join(llms_lines).rstrip() + "\n", encoding="utf-8"
+    )
+    _ = (docs_root / "llms-full.txt").write_text(
+        "\n".join(full_lines).rstrip() + "\n", encoding="utf-8"
+    )
+
+
+_SITE_URL_RE = re.compile(r'(?m)^site_url = "[^"]*"')
+_SITE_NAME_RE = re.compile(r'(?m)^site_name = "[^"]*"')
+_SITE_AUTHOR_RE = re.compile(r'(?m)^site_author = "[^"]*"')
+_COPYRIGHT_RE = re.compile(r'(?m)^copyright = "[^"]*"')
+
+
+def _render_zensical_configs(root: Path) -> None:
+    """``build-zensical.<locale>.toml`` в корне репо: site_url/site_name/
+    site_author/copyright из ``scripts.seo.seo_config`` (conf.json) — домен
+    и бренд не дублируются в checked-in toml, который становится шаблоном.
+    Конфиг рендерится именно в корень: zensical резолвит относительные пути
+    (docs_dir, site_dir, custom_dir, extra_css, логотипы) от каталога
+    конфига."""
+    platform = platform_name()
+    base = seo_base_url()
+    for locale, site_url in (
+        ("ru", f"{base}/documentation/"),
+        ("en", f"{base}/documentation/en/"),
+    ):
+        text = (root / f"zensical.{locale}.toml").read_text(encoding="utf-8")
+        text = _SITE_URL_RE.sub(f'site_url = "{site_url}"', text)
+        text = _SITE_NAME_RE.sub(f'site_name = "{platform}"', text)
+        text = _SITE_AUTHOR_RE.sub(f'site_author = "{platform}"', text)
+        text = _COPYRIGHT_RE.sub(f'copyright = "{platform}"', text)
+        _ = (root / f"build-zensical.{locale}.toml").write_text(
+            text, encoding="utf-8"
+        )
 
 
 def main() -> None:
@@ -926,8 +965,10 @@ def main() -> None:
     _prepare_en_build_tree(docs_dir, en_path, taxonomy)
 
     _generate_api_docs(ru_path, en_path)
-    _generate_llms_files(ru_path, "ru", "https://linnex.io/documentation/")
-    _generate_llms_files(en_path, "en", "https://linnex.io/documentation/en/")
+    base = seo_base_url()
+    _generate_llms_files(ru_path, "ru", f"{base}/documentation/")
+    _generate_llms_files(en_path, "en", f"{base}/documentation/en/")
+    _render_zensical_configs(root)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,15 @@ def resolve_public_base_url(host: str) -> str:
     return f"{protocol}://{base_domain}"
 
 
+def resolve_seo_base_url() -> str:
+    """Canonical origin для sitemap/canonical/OG/JSON-LD: всегда primary apex.
+
+    Зеркальные apex (agents-lab.ru и др.) обслуживают тот же контент, но
+    поисковый канон — primary_platform_domain, чтобы сила не распылялась.
+    """
+    return f"https://{get_settings().primary_platform_domain}"
+
+
 def resolve_brand_apex_origin(host: str, *, url_scheme: str) -> str:
     """Публичный origin бренда для bootstrap: dev host сохраняет subdomain и порт."""
     if is_local(host):

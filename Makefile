@@ -539,11 +539,12 @@ doc: ui-build
 	uv run python -m scripts.gates.repo.scenario_docs_quality --warnings-ok
 	uv run python -m scripts.docs.prepare
 	uv run python -m scripts.gates.repo.docs_locale_parity
-	uv run --group docs zensical build --clean --config-file zensical.ru.toml
-	uv run --group docs zensical build --clean --config-file zensical.en.toml
+	uv run --group docs zensical build --clean --config-file build-zensical.ru.toml
+	uv run --group docs zensical build --clean --config-file build-zensical.en.toml
 	mkdir -p documentation-dist/en
 	cp -a build/zensical-en-out/. documentation-dist/en/
 	uv run python -m scripts.docs.postprocess
+	uv run python -m scripts.docs.seo_postbuild
 	uv run python -m scripts.gates.repo.docs_locale_parity --site documentation-dist
 	@echo "Документация: documentation-dist/ и documentation-dist/en/ (монтирование /documentation/)"
 

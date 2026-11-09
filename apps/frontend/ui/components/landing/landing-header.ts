@@ -752,6 +752,14 @@ export class LandingHeader extends PlatformElement {
             return;
         }
         this.setLocale(lang);
+        // URL следует локали: /en/* — английское зеркало, без префикса — ru.
+        // pushState без router-события: routeKey тот же, меняется только видимый путь.
+        const path = window.location.pathname.replace(/\/+$/, '') || '/';
+        if (lang === 'en' && !(path === '/en' || path.startsWith('/en/'))) {
+            history.pushState({}, '', path === '/' ? '/en' : `/en${path}`);
+        } else if (lang === 'ru' && (path === '/en' || path.startsWith('/en/'))) {
+            history.pushState({}, '', path === '/en' ? '/' : path.slice('/en'.length));
+        }
     }
 
     _toggleTheme() {

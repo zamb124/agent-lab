@@ -183,8 +183,13 @@ test-frontend-core-browser: runtime-bootstrap
 	@npm ci --silent
 	@npm run test:core-browser
 
+# Статические SEO-артефакты: blog/*.md → seo-dist/ (страницы постов, index.json, feed.xml).
+seo-build:
+	@echo "seo-build: blog/*.md → seo-dist/"
+	@uv run python -m scripts.seo.blog_build
+
 # Сборка UI-бандлов: esbuild per-app → apps/<svc>/ui-dist/ (index.js + hashed chunks + ассеты).
-ui-build: runtime-bootstrap
+ui-build: runtime-bootstrap seo-build
 	@echo "ui-build: esbuild bundles → ui-dist/"
 	@npm ci --silent
 	@npm run build:ui
