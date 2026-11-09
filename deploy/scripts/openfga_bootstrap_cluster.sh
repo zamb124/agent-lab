@@ -107,18 +107,34 @@ else
   log_info "reuse store_id=${STORE_ID}"
 fi
 
-log_do "POST authorization-models (model.json)"
+# OpenFGA выдаёт новый authorization_model_id на каждый POST даже при
+# идентичном теле (плюс нормализует metadata) — контентное сравнение
+# ненадёжно. Pin по sha256 model.json в секрете: модель не менялась →
+# переиспользуем сохранённый ID и не катим поды новым env.
 MODEL_BODY="$(jq '{schema_version, type_definitions}' "${MODEL_JSON}")"
-WRITE_OUT="$(
-  curl -sf "${AUTH_HDR[@]}" \
-    -d "${MODEL_BODY}" \
-    "${API}/stores/${STORE_ID}/authorization-models"
-)"
-MODEL_ID="$(printf '%s' "${WRITE_OUT}" | jq -r '.authorization_model_id')"
-if [ -z "${MODEL_ID}" ] || [ "${MODEL_ID}" = "null" ]; then
-  log_error "write model без authorization_model_id: ${WRITE_OUT}"
-  print_summary
-  exit 1
+MODEL_SHA="$(shasum -a 256 "${MODEL_JSON}" | cut -d' ' -f1)"
+LIVE_MODEL_SHA=""
+LIVE_MODEL_ID=""
+if $K get secret "${IDS_SECRET}" -n "${NS}" >/dev/null 2>&1; then
+  LIVE_MODEL_SHA="$($K get secret "${IDS_SECRET}" -n "${NS}" -o jsonpath='{.data.model-sha256}' 2>/dev/null | base64 -d || true)"
+  LIVE_MODEL_ID="$($K get secret "${IDS_SECRET}" -n "${NS}" -o jsonpath='{.data.authorization-model-id}' 2>/dev/null | base64 -d || true)"
+fi
+if [ -n "${LIVE_MODEL_ID}" ] && [ "${LIVE_MODEL_SHA}" = "${MODEL_SHA}" ]; then
+  MODEL_ID="${LIVE_MODEL_ID}"
+  log_info "reuse authorization_model_id=${MODEL_ID} (model.json sha совпал)"
+else
+  log_do "POST authorization-models (model.json изменён)"
+  WRITE_OUT="$(
+    curl -sf "${AUTH_HDR[@]}" \
+      -d "${MODEL_BODY}" \
+      "${API}/stores/${STORE_ID}/authorization-models"
+  )"
+  MODEL_ID="$(printf '%s' "${WRITE_OUT}" | jq -r '.authorization_model_id')"
+  if [ -z "${MODEL_ID}" ] || [ "${MODEL_ID}" = "null" ]; then
+    log_error "write model без authorization_model_id: ${WRITE_OUT}"
+    print_summary
+    exit 1
+  fi
 fi
 
 log_ok "store_id=${STORE_ID}"
@@ -129,6 +145,7 @@ $K create secret generic "${IDS_SECRET}" \
   -n "${NS}" \
   --from-literal=store-id="${STORE_ID}" \
   --from-literal=authorization-model-id="${MODEL_ID}" \
+  --from-literal=model-sha256="${MODEL_SHA}" \
   --dry-run=client -o yaml | $K apply -f -
 log_ok "Secret ${IDS_SECRET} обновлён (канон pin для следующих деплоев)"
 
