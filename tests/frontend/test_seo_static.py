@@ -109,11 +109,11 @@ _SNAPSHOT_HTML = """<!DOCTYPE html>
 <title>x</title>
 <meta name="description" content="d">
 <meta name="robots" content="index">
-<link rel="canonical" href="http://frontend:8002/products/rag">
+<link rel="canonical" href="https://linnex.io/products/rag">
 <meta property="og:locale" content="ru_RU">
-<meta property="og:url" content="http://frontend:8002/products/rag">
-<meta property="og:image" content="http://frontend:8002/static/frontend/assets/images/main_img.png">
-<meta name="twitter:image" content="http://frontend:8002/static/frontend/assets/images/main_img.png">
+<meta property="og:url" content="https://linnex.io/products/rag">
+<meta property="og:image" content="https://linnex.io/static/frontend/assets/images/main_img.png">
+<meta name="twitter:image" content="https://linnex.io/static/frontend/assets/images/main_img.png">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite"}</script>
 </head><body><landing-footer></landing-footer></body></html>"""
 
@@ -127,12 +127,10 @@ def test_postprocess_snapshot_rewrites_head() -> None:
         locale="ru",
         brand=BRAND,
         seo_base_url=SEO_BASE,
-        internal_origin="http://frontend:8002",
     )
     assert f'<link rel="canonical" href="{SEO_BASE}/products/rag">' in html
     assert f'content="{SEO_BASE}/products/rag"' in html
     assert 'hreflang="en"' in html and 'hreflang="x-default"' in html
-    assert "frontend:8002" not in html
     assert 'id="seo-ld-json"' in html
     assert html.count("application/ld+json") == 1
 
@@ -146,7 +144,6 @@ def test_postprocess_snapshot_en_rewrites_links() -> None:
         locale="en",
         brand=BRAND,
         seo_base_url=SEO_BASE,
-        internal_origin="http://frontend:8002",
     )
     assert f'{SEO_BASE}/en"' in html or f"{SEO_BASE}/en<" in html or "en_US" in html
     assert '<html lang="en"' in html
@@ -155,18 +152,18 @@ def test_postprocess_snapshot_en_rewrites_links() -> None:
 
 _SNAPSHOT_LINKS_HTML = """<!DOCTYPE html>
 <html lang="ru"><head>
-<link rel="canonical" href="http://frontend:8002/products/rag">
+<link rel="canonical" href="https://linnex.io/products/rag">
 <meta name="robots" content="index">
 </head><body>
 <a href="/products/rag">p</a><a href="/blog/post-a">b</a>
 <a href="/search?q=x">s</a><a href="/">h</a>
-<a href="http://frontend:8002/about">abs</a>
+<a href="https://linnex.io/about">abs</a>
 </body></html>"""
 
 
 def test_postprocess_en_href_rewrite_covers_subpaths_and_queries() -> None:
     """en-снапшот: все публичные href получают /en-префикс — включая подпути
-    (/blog/<slug>), ?query и абсолютные URL внутреннего origin."""
+    (/blog/<slug>), ?query и canonical-абсолютные URL."""
     page = public_page_for_path("products/rag")
     assert page is not None
     html = postprocess_snapshot(
@@ -175,13 +172,11 @@ def test_postprocess_en_href_rewrite_covers_subpaths_and_queries() -> None:
         locale="en",
         brand=BRAND,
         seo_base_url=SEO_BASE,
-        internal_origin="http://frontend:8002",
     )
     assert 'href="/en/products/rag"' in html
     assert 'href="/en/blog/post-a"' in html
     assert 'href="/en/search?q=x"' in html
     assert f"{SEO_BASE}/en/about" in html
-    assert "frontend:8002" not in html
 
 
 def _graph_types(graph: JsonObject) -> set[str]:

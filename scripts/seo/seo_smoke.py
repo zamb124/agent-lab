@@ -25,6 +25,7 @@ CronJob ``seo-synth`` (helm, */15м) пишет её в stdout → Loki → ал
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import dataclasses
 import json
 import re
@@ -34,6 +35,13 @@ import httpx2
 
 from apps.frontend.seo.pages import PUBLIC_PAGES, SEO_LOCALES, localized_marketing_path
 from scripts.seo.seo_config import primary_platform_domain, public_mirror_domains, seo_base_url
+
+# Страницы из реестра на холодном кэше ждут DSD-рендер через browser-сервис
+# (Playwright + wait_selector): десятки секунд на страницу после выката.
+# Страничные проверки идут параллельно с запросным таймаутом рендера;
+# статические эндпоинты (robots/sitemap/feed/docs) — быстрый таймаут.
+_PAGE_TIMEOUT = 90.0
+_PAGE_WORKERS = 8
 
 
 class Check:
@@ -51,14 +59,14 @@ class Check:
 
 
 def _get(
-    client: httpx2.Client, path: str, host_header: str | None
+    client: httpx2.Client, path: str, host_header: str | None, timeout: float | None = None
 ) -> tuple[int, httpx2.Headers, str]:
     """GET с кастомным Host; сетевая ошибка → ``(0, {}, "")`` — проверка фейлится."""
     headers: dict[str, str] = {}
     if host_header:
         headers["Host"] = host_header
     try:
-        response = client.get(path, headers=headers or None)
+        response = client.get(path, headers=headers or None, timeout=timeout)
     except httpx2.HTTPError:
         return 0, httpx2.Headers(), ""
     return response.status_code, response.headers, response.text
@@ -127,15 +135,22 @@ def main() -> int:
         check.fail("llms.txt", f"status={status}")
 
     # Все страницы реестра × обе локали: новая PUBLIC_PAGES-запись
-    # автоматически попадает в синтетику кластера.
+    # автоматически попадает в синтетику кластера. Холодный снапшот —
+    # живой рендер: страницы фетчатся параллельно, иначе последовательный
+    # прогон после выката упирается в дедлайн джобы.
     pages = [
         ("/" + localized, f"{page.kind} {locale} /{page.path}")
         for page in PUBLIC_PAGES
         for locale in SEO_LOCALES
         for localized in (localized_marketing_path(page.path, locale),)
     ]
-    for path, name in pages:
-        status, headers, body = _get(client, path, host_header)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_PAGE_WORKERS) as pool:
+        futures = [
+            pool.submit(_get, client, path, host_header, timeout=_PAGE_TIMEOUT)
+            for path, _name in pages
+        ]
+        page_responses = [future.result() for future in futures]
+    for (path, name), (status, headers, body) in zip(pages, page_responses, strict=True):
         if status != 200:
             check.fail(f"page {name} {path}", f"status={status}")
             continue
@@ -225,7 +240,7 @@ def main() -> int:
     if canonical_host in base:
         for mirror_domain in public_mirror_domains():
             mirror_client = httpx2.Client(
-                base_url=f"https://{mirror_domain}", timeout=20.0,
+                base_url=f"https://{mirror_domain}", timeout=_PAGE_TIMEOUT,
                 follow_redirects=True,
             )
             status, _h, body = _get(mirror_client, "/products/agents", None)

@@ -19,7 +19,9 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 180
+      # Холодный прогон после выката ждёт живые DSD-рендеры всех страниц
+      # реестра (до ~90с на страницу, проверки параллельны).
+      activeDeadlineSeconds: 600
       backoffLimit: 0
       template:
         metadata:

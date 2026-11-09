@@ -23,7 +23,11 @@ from apps.frontend.seo.postprocess import postprocess_snapshot
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
-from core.platform_brand.resolver import resolve_brand_or_primary, resolve_seo_base_url
+from core.platform_brand.resolver import (
+    platform_public_base_url,
+    resolve_brand_or_primary,
+    resolve_seo_base_url,
+)
 
 logger = get_logger(__name__)
 
@@ -79,7 +83,12 @@ class SeoSnapshotService:
             logger.warning("seo.snapshot.fail_mark_failed", error=str(exc))
 
     def _fetch_base(self) -> str:
-        return self._settings.server.get_service_url("frontend").rstrip("/")
+        # Рендер по публичному origin, а не по внутреннему service-адресу:
+        # SPA читает бренд из Host — на service-хосте bootstrap не резолвится
+        # и страница не доходит до wait_selector. Canonical origin проходит
+        # тем же путём, что и реальный посетитель (ingress → serve_spa);
+        # ``spa_shell`` исключает рекурсию снапшота.
+        return platform_public_base_url().rstrip("/")
 
     def _fetch_url(self, path: str, locale: SeoLocale) -> str:
         localized = localized_marketing_path(path, locale)
@@ -144,7 +153,6 @@ class SeoSnapshotService:
                     locale=locale,
                     brand=resolve_brand_or_primary(None),
                     seo_base_url=resolve_seo_base_url(),
-                    internal_origin=self._fetch_base(),
                 )
             except Exception as exc:
                 logger.warning(

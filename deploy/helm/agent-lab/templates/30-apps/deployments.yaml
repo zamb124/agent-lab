@@ -52,10 +52,8 @@ spec:
             capabilities:
               drop: ["ALL"]
           command:
-            - chromium-browser
-            - --headless=new
+            - /headless-shell/headless-shell
             - --no-zygote
-            - --ozone-platform=headless
             - --disable-gpu
             - --no-sandbox
             - --disable-dev-shm-usage

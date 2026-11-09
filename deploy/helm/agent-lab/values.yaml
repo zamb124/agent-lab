@@ -641,11 +641,12 @@ applications:
     port: 8009
     replicas: 1
     serviceName: browser
-    # Sidecar Chromium (CDP). Тег запинен (не latest) для детерминизма: latest
-    # периодически приносил нестабильные сборки с сегфолтами.
+    # Sidecar Chromium (CDP). headless-shell — purpose-built CDP-образ
+    # (zenika/alpine-chrome замёрз на 124, а DSD getHTML требует >=125).
+    # Тег запинен по версии для детерминизма.
     chromium:
-      image: zenika/alpine-chrome
-      tag: "124"
+      image: chromedp/headless-shell
+      tag: "158.0.8127.18"
       resources:
         requests:
           cpu: 250m

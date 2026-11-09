@@ -1,9 +1,9 @@
 """Постобработка DSD-снапшота публичной страницы перед отдачей краулеру и пользователю.
 
-Снапшот приходит с внутреннего URL (http://frontend:port/...), поэтому все
-absolute-URL в head переписываются на canonical origin (``resolve_seo_base_url``),
-добавляются hreflang-альтернативы, JSON-LD граф страницы и корректный robots.
-Для en-локали root-relative ссылки на публичные страницы получают префикс ``/en``.
+Снапшот рендерится по canonical origin, поэтому absolute-URL уже верные;
+постобработка выставляет canonical/robots/og-теги, hreflang-альтернативы,
+JSON-LD граф страницы и корректный robots. Для en-локали root-relative
+ссылки на публичные страницы получают префикс ``/en``.
 """
 
 from __future__ import annotations
@@ -50,17 +50,6 @@ def _set(pattern: re.Pattern[str], html: str, value: str) -> str:
 
 
 
-def _rewrite_origin(html: str, internal_origin: str, seo_base_url: str) -> str:
-    """Абсолютные URL внутреннего fetch-origin → canonical origin.
-
-    Снапшот рендерится по service URL (http://frontend:8002), поэтому все
-    абсолютные ссылки на него в head/body переписываются на canonical-домен.
-    """
-    return html.replace(f"{internal_origin}/", f"{seo_base_url}/").replace(
-        internal_origin, seo_base_url
-    )
-
-
 def _en_href(match: re.Match[str]) -> str:
     """``href="/x"``/``href="<seo_base_url>/x"`` → ``href="<origin>/en/x"``."""
     origin = match.group(1)
@@ -93,11 +82,10 @@ def postprocess_snapshot(
     locale: SeoLocale,
     brand: PlatformBrandConfig,
     seo_base_url: str,
-    internal_origin: str,
 ) -> str:
     """Отрендеренный DSD-HTML → канонический индексируемый документ."""
     canonical = page_url(seo_base_url, page.path, locale)
-    out = _rewrite_origin(html, internal_origin, seo_base_url)
+    out = html
     out = _set(_HTML_LANG_RE, out, locale)
     out = _set(_CANONICAL_RE, out, canonical)
     out = _set(_ROBOTS_RE, out, _INDEX_ROBOTS)
