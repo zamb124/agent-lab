@@ -30,6 +30,19 @@ async def _ensure_overlay_chat_open(overlay) -> None:
         'button.ctrl[title="Показать чат"], button.ctrl[title="Show chat"]'
     ).first
     await expect(toggle).to_be_visible(timeout=30_000)
+    page = toggle.page
+    info = await toggle.evaluate(
+        """(btn) => {
+            const r = btn.getBoundingClientRect();
+            const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+            return {
+                box: {x: r.x, y: r.y, w: r.width, h: r.height},
+                center: {x: cx, y: cy},
+                stack: document.elementsFromPoint(cx, cy).map(e => e.tagName + '.' + (e.className||'').toString().slice(0,30)),
+            };
+        }"""
+    )
+    print(f"\n=== TOGGLE-PROBE: {info}")
     await toggle.click()
     await expect(chat_input).to_be_visible(timeout=30_000)
 

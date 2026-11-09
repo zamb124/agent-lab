@@ -14,7 +14,7 @@ On the Flows home start creating an agent, pick the plain template, and name it 
 
 ## Step 2. Open Studio in Tools mode
 
-In agent Studio open Skills and tools and choose Tools mode. Only here can you attach the planning Skill.
+In Studio open Skills and tools and choose Tools. Here you add library tools without a Skill.
 
 ![Open Studio in Tools mode](agent-plan-via-skill--02-agent-plan-studio-tools.png)
 
@@ -26,6 +26,6 @@ Click Add skill, find agent-planning, and confirm. A Skill chip appears on the n
 
 ## Step 4. Publish the agent and open chat
 
-Publish the changes and open the Green Garden Assistant chat. Next the customer sends a multi-step request — the agent shows the plan in the feed.
+Publish the settings and open the assistant chat. Next the same multi-step customer request — the plan appears without a Skill.
 
 ![Publish the agent and open chat](agent-plan-via-skill--04-agent-plan-chat-opened.png)

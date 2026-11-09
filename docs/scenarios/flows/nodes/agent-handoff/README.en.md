@@ -26,8 +26,6 @@ Publish the graph and switch to **Run**. The shared chat used on the agent page 
 
 ## Step 4. Hand off the dialog to the specialist
 
-Send a return question. Control moves to Агент возвратов: the next user turn is routed to the child agent, and the reply appears in the shared Flow UI conversation feed.
-
 ![Hand off the dialog to the specialist](agent-handoff--04-handoff-visible-in-chat.png)
 
 ## Step 5. Verify that the sub-agent is replying

@@ -566,6 +566,70 @@
         ],
         "title": "ActAsResponse"
       },
+      "AddressCreatePayload": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Address"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Label",
+            "default": ""
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "AddressCreatePayload",
+        "description": "Тело `POST .../customer-auth/addresses`."
+      },
+      "AddressListView": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddressView"
+            },
+            "type": "array",
+            "title": "Addresses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AddressListView",
+        "description": "Ответ `GET .../customer-auth/addresses`."
+      },
       "ApiKeyCreate": {
         "properties": {
           "name": {
@@ -688,6 +752,190 @@
         ],
         "title": "ApiKeyUpdate",
         "description": "Запрос на обновление API ключа"
+      },
+      "AuthStartPayload": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "flow_hint": {
+            "type": "string",
+            "const": "checkout",
+            "title": "Flow Hint",
+            "default": "checkout"
+          },
+          "client": {
+            "$ref": "#/components/schemas/ClientKind",
+            "default": "mobile_web"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "AuthStartPayload",
+        "description": "Тело `POST .../customer-auth/start`."
+      },
+      "AuthStartView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "challenge_pending",
+            "title": "Status",
+            "default": "challenge_pending"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "phone_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Masked"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodOption"
+            },
+            "type": "array",
+            "title": "Methods"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id"
+        ],
+        "title": "AuthStartView",
+        "description": "Ответ `auth/start`: challenge + доступные методы."
+      },
+      "AuthStatusView": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PhoneChallengeStatus"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneVerificationMethod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerMe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "challenge_id"
+        ],
+        "title": "AuthStatusView",
+        "description": "Ответ `auth/status` для polling direct/OAuth потоков."
+      },
+      "AuthVerifyPayload": {
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "direct": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectVerificationRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "company_id"
+        ],
+        "title": "AuthVerifyPayload",
+        "description": "Тело `POST .../customer-auth/verify`."
+      },
+      "AuthVerifyView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "pending"
+            ],
+            "title": "Status"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerMe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AuthVerifyView",
+        "description": "Ответ `auth/verify`."
       },
       "AuthzExplorerByObjectResponse": {
         "properties": {
@@ -2401,6 +2649,16 @@
         ],
         "title": "ChunkedUploadPartRecord"
       },
+      "ClientKind": {
+        "type": "string",
+        "enum": [
+          "web_desktop",
+          "mobile_web",
+          "telegram_mini_app"
+        ],
+        "title": "ClientKind",
+        "description": "Класс клиентского устройства — влияет на приоритет OAuth-провайдеров."
+      },
       "CompanyCreated": {
         "properties": {
           "company_id": {
@@ -3739,6 +3997,128 @@
         "title": "CustomProviderUpdate",
         "description": "PATCH /api/settings/ai-providers/custom/{id}."
       },
+      "CustomerAddressView": {
+        "properties": {
+          "customer_address_id": {
+            "type": "string",
+            "title": "Customer Address Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_address_id",
+          "address"
+        ],
+        "title": "CustomerAddressView",
+        "description": "Сохранённый адрес покупателя (чипы в чекауте)."
+      },
+      "CustomerIdentityProvider": {
+        "type": "string",
+        "enum": [
+          "telegram",
+          "max",
+          "yandex",
+          "vk",
+          "sber",
+          "phone",
+          "emulator"
+        ],
+        "title": "CustomerIdentityProvider",
+        "description": "Внешний аккаунт, подтвердивший телефон покупателя."
+      },
+      "CustomerMe": {
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "title": "Customer Id"
+          },
+          "phone_e164": {
+            "type": "string",
+            "title": "Phone E164"
+          },
+          "scope_company_id": {
+            "type": "string",
+            "title": "Scope Company Id"
+          },
+          "scope_company_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope Company Ids",
+            "default": []
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_id",
+          "phone_e164",
+          "scope_company_id"
+        ],
+        "title": "CustomerMe",
+        "description": "Профиль покупателя для API `/public/customer/me`."
+      },
+      "CustomerMeUpdatePayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CustomerMeUpdatePayload",
+        "description": "`POST .../customer-auth/me` — правка профиля покупателя."
+      },
       "DashboardStats": {
         "properties": {
           "flows_total": {
@@ -3803,6 +4183,135 @@
           "password"
         ],
         "title": "DemoLoginRequest"
+      },
+      "DirectAuthorizationKind": {
+        "type": "string",
+        "enum": [
+          "contact_share",
+          "oauth"
+        ],
+        "title": "DirectAuthorizationKind",
+        "description": "Тип direct-метода для UI и state-машины challenge."
+      },
+      "DirectVerificationRequest": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DirectAuthorizationKind"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CustomerIdentityProvider"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "provider_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider User Id"
+          },
+          "contact_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact User Id"
+          },
+          "oauth_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Code"
+          },
+          "oauth_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth State"
+          },
+          "oauth_code_verifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Code Verifier"
+          },
+          "oauth_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Device Id"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "provider"
+        ],
+        "title": "DirectVerificationRequest",
+        "description": "Доказательство direct-подтверждения — приходит от webhook/callback/client."
       },
       "DocumentPlacement": {
         "properties": {
@@ -4708,6 +5217,7 @@
           "rag_document",
           "office_document",
           "wiki_page",
+          "shop_product",
           "platform_default"
         ],
         "title": "FileRetentionKind"
@@ -4755,7 +5265,8 @@
           "wiki_page",
           "code_agent_source",
           "platform_auxiliary",
-          "generated_ephemeral"
+          "generated_ephemeral",
+          "shop_product"
         ],
         "title": "FileSourceKind"
       },
@@ -5024,6 +5535,28 @@
               }
             ],
             "title": "Relative Dir"
+          },
+          "shop_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Id"
+          },
+          "shop_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Product Id"
           }
         },
         "additionalProperties": false,
@@ -8940,6 +9473,182 @@
         ],
         "title": "MetaSearchResponse"
       },
+      "MethodChallengedView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "challenge_sent",
+              "awaiting_contact",
+              "awaiting_oauth"
+            ],
+            "title": "Status"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PhoneChallengeKind"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneVerificationChannel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "resend_after": {
+            "type": "integer",
+            "title": "Resend After",
+            "default": 0
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "oauth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "challenge_id",
+          "kind",
+          "method",
+          "expires_in"
+        ],
+        "title": "MethodChallengedView",
+        "description": "Ответ на `method_chosen`: отправлен код / ждём direct-подтверждение."
+      },
+      "MethodChosenPayload": {
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "return_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "company_id",
+          "method"
+        ],
+        "title": "MethodChosenPayload",
+        "description": "Тело `POST .../customer-auth/method`."
+      },
+      "MethodOption": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "ui": {
+            "type": "string",
+            "enum": [
+              "deep_link",
+              "oauth",
+              "contact_share",
+              "code_input",
+              "auto"
+            ],
+            "title": "Ui"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 0
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerIdentityProvider"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "provider_data": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "ui"
+        ],
+        "title": "MethodOption",
+        "description": "Один пункт выбора способа подтверждения в `methods` из start."
+      },
       "Namespace": {
         "properties": {
           "company_id": {
@@ -9496,6 +10205,50 @@
           "smtp_host"
         ],
         "title": "PersonalMailboxHealthcheckPayload"
+      },
+      "PhoneChallengeKind": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "code"
+        ],
+        "title": "PhoneChallengeKind"
+      },
+      "PhoneChallengeStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "confirmed",
+          "failed",
+          "expired",
+          "cancelled"
+        ],
+        "title": "PhoneChallengeStatus"
+      },
+      "PhoneVerificationChannel": {
+        "type": "string",
+        "enum": [
+          "sms",
+          "call",
+          "telegram",
+          "max"
+        ],
+        "title": "PhoneVerificationChannel",
+        "description": "Канал отправки короткого кода (значение provider_send Channels)."
+      },
+      "PhoneVerificationMethod": {
+        "type": "string",
+        "enum": [
+          "telegram_contact",
+          "max_contact",
+          "yandex_id",
+          "vk_id",
+          "sber_id",
+          "sms_code",
+          "emulator"
+        ],
+        "title": "PhoneVerificationMethod",
+        "description": "Способ доставки/подтверждения — то, что видит пользователь."
       },
       "PlatformBillingBalanceGrantRequest": {
         "properties": {

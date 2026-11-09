@@ -165,6 +165,10 @@ export class FlowUIDrawer extends LitElement {
         globalThis.removeEventListener('resize', this._onViewportResize);
         this._unbindToggleListener();
         this._detachGestureListeners();
+        const doc = this.ownerDocument?.documentElement;
+        if (doc) {
+            doc.style.setProperty('--platform-launcher-inline-end-inset', '0px');
+        }
         super.disconnectedCallback();
     }
 
@@ -262,6 +266,13 @@ export class FlowUIDrawer extends LitElement {
         if (!(nav instanceof HTMLElement)) return 0;
         const rect = nav.getBoundingClientRect();
         if (rect.height <= 0 || rect.top >= globalThis.innerHeight) return 0;
+        // Инсет существует только пока nav реально пришит к нижнему краю
+        // (mobile shell: position fixed + bottom). До апгрейда/стилей хост
+        // отдаёт переходный rect у верхней кромки — такой rect не bottom-nav.
+        const style = getComputedStyle(nav);
+        if (style.position !== 'fixed' || rect.top <= globalThis.innerHeight / 2) {
+            return 0;
+        }
         return globalThis.innerHeight - rect.top + LAUNCHER_NAV_GAP_PX;
     }
 
@@ -350,10 +361,44 @@ export class FlowUIDrawer extends LitElement {
 
     _applyClusterCssVars() {
         this.style.setProperty('--drawer-bottom-inset', `${this._bottomNavInset()}px`);
+        this._publishLauncherInlineEndInset();
         const cluster = this._cluster;
         if (cluster === null) return;
         this.style.setProperty('--drawer-panel-width', `${cluster.panelWidth}px`);
         this.style.setProperty('--drawer-panel-height', `${cluster.panelHeight}px`);
+    }
+
+    /**
+     * Нижняя кромка справа занята launcher'ом — публикуем ширину полосы в
+     * ``--platform-launcher-inline-end-inset`` на <html>: bottom-бары контента
+     * (композер, action bars) добавляют её к padding-inline-end, иначе кнопки
+     * у правого края вьюпорта оказываются под launcher'ом и недоступны клику.
+     * Позиция берётся из cluster (владелец геометрии), а не из DOM-rect —
+     * rect в момент обновления может быть 0 (display:none при expanded-panel,
+     * переходный рендер), и такое чтение не должно сбрасывать инсет.
+     */
+    private _publishLauncherInlineEndInset() {
+        const doc = this.ownerDocument?.documentElement;
+        if (!doc) return;
+        doc.style.setProperty(
+            '--platform-launcher-inline-end-inset',
+            `${this._launcherInlineEndInsetPx()}px`,
+        );
+    }
+
+    private _launcherInlineEndInsetPx(): number {
+        if (this.config?.showLauncher === false || this._unavailable === true) return 0;
+        const vp = this._readViewport();
+        if (this._gesturesEnabled() !== true) {
+            // CSS-режим: хост пришит к нижней кромке, launcher у её правого
+            // конца для bottom-right (drawer.styles.ts, inset: auto 22px …).
+            if (this._launcherPosition() !== 'bottom-right') return 0;
+            return VIEWPORT_MARGIN_DESKTOP_PX + LAUNCHER_SIZE_PX;
+        }
+        const cluster = this._cluster;
+        if (cluster === null) return 0;
+        if (cluster.panelAlign !== 'right' || cluster.launcherTop <= vp.height / 2) return 0;
+        return Math.ceil(vp.width - cluster.launcherLeft);
     }
 
     private _clusterStyle(kind: 'launcher' | 'panel'): string {

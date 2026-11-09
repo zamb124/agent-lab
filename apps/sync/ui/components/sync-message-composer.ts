@@ -93,7 +93,11 @@ export class SyncMessageComposer extends PlatformElement {
         :host {
             display: flex;
             flex-direction: column;
-            padding: var(--space-4) var(--space-6) var(--space-4);
+            /* --platform-launcher-inline-end-inset: полоса Lara launcher у
+               нижней правой кромки — send не должен оказаться под ней. */
+            padding: var(--space-4)
+                calc(var(--space-6) + var(--platform-launcher-inline-end-inset, 0px))
+                var(--space-4) var(--space-6);
             gap: var(--space-2);
             background: var(--sync-composer-host-bg, var(--glass-solid-subtle));
             backdrop-filter: blur(8px);
@@ -101,7 +105,11 @@ export class SyncMessageComposer extends PlatformElement {
             border-top: 1px solid var(--glass-border-subtle);
         }
         @media (max-width: 767px) {
-            :host { padding: var(--space-3) var(--space-4); }
+            :host {
+                padding: var(--space-3)
+                    calc(var(--space-4) + var(--platform-launcher-inline-end-inset, 0px))
+                    var(--space-3) var(--space-4);
+            }
         }
         .mode-bar {
             display: flex;

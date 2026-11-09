@@ -112,6 +112,12 @@ function readI18nNamespace(ctor: unknown): string | undefined {
 
 export class PlatformElement extends LitElement {
     static override styles: CSSResultGroup = [baseStyles, glassStyles, formStyles, buttonStyles, iconButtonStyles, motionStyles];
+    // serializable — DSD-снапшоты публичных страниц (documentElement.getHTML
+    // с serializableShadowRoots). Флаг влияет только на сериализацию.
+    static override shadowRootOptions: ShadowRootInit = {
+        ...LitElement.shadowRootOptions,
+        serializable: true,
+    };
     static _standaloneNoZoomGuardRegistered = false;
 
     _busTypeUnsubs: Array<() => void>;

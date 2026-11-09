@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx2
-from playwright.async_api import Locator, Page, Response, expect
+from playwright.async_api import Locator, Page, Response, TimeoutError as PlaywrightTimeoutError, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.harness import AppUI
@@ -445,10 +445,61 @@ async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> 
     await worktracker_hitl_chat_send(editor, text)
 
 
+async def worktracker_hitl_click_and_wait_bus_op(
+    page: Page,
+    button: Locator,
+    op_name: str,
+    *,
+    timeout_ms: int = 30_000,
+) -> None:
+    """Клик по кнопке ws-transport op + ожидание ``<op>/succeeded`` на bus.
+
+    Команды ``transport: 'ws'`` идут через Centrifugo RPC — HTTP-зеркала для
+    expect_response нет. Исход проверяем по событию на ``__PLATFORM_BUS__``.
+    """
+    marker = "__wtHitlOpEvents"
+    await page.evaluate(
+        """(m) => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.subscribeAny !== 'function') {
+                throw new Error('__PLATFORM_BUS__ недоступен для ожидания исхода op');
+            }
+            window[m] = [];
+            bus.subscribeAny((event) => { window[m].push(event.type); });
+        }""",
+        marker,
+    )
+    await button.click()
+    succeeded = f"{op_name}/succeeded"
+    failed = f"{op_name}/failed"
+    result: str | None = None
+    try:
+        handle = await page.wait_for_function(
+            """([m, ok, bad]) => {
+                const types = window[m] || [];
+                if (types.includes(bad)) return 'failed';
+                return types.includes(ok) ? 'ok' : false;
+            }""",
+            arg=[marker, succeeded, failed],
+            timeout=timeout_ms,
+        )
+        result = await handle.json_value()
+    except PlaywrightTimeoutError as exc:
+        seen = await page.evaluate(f"window[{marker!r}] || []")
+        raise AssertionError(
+            f"Клик не привёл к {succeeded}: событий на bus нет — {seen}"
+        ) from exc
+    if result == 'failed':
+        seen = await page.evaluate(f"window[{marker!r}] || []")
+        raise AssertionError(f"Операция завершилась {failed}: события bus — {seen}")
+
+
 async def worktracker_hitl_complete_takeover_click(editor: Locator) -> None:
     complete = editor.locator("section.wt-hitl .wt-hitl-complete button").first
     await expect(complete).to_be_visible(timeout=15_000)
-    await worktracker_hitl_click_send_and_assert_http(editor.page, complete)
+    await worktracker_hitl_click_and_wait_bus_op(
+        editor.page, complete, "worktracker/work_item_complete"
+    )
 
 
 async def worktracker_hitl_assert_complete_hidden(editor: Locator) -> None:

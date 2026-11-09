@@ -20,8 +20,6 @@ The greeting variable is already in the modal table. This confirms the value is 
 
 ## Step 3. Add variables and update the prompt
 
-Create a greeting variable and put support address support@zeleniy-sad.ru and secret @var:telegram_bot_token_400ccca4 in the prompt. Contacts can change without rewriting the whole instruction.
-
 ![Add variables and update the prompt](parameters-and-secrets--03-prompt-with-variables.png)
 
 ## Step 4. Publish the agent with variables

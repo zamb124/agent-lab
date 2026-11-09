@@ -2,14 +2,14 @@
 
 Finding a page by text and opening the result.
 
-## Step 1. Открыт поиск
+## Step 1. Search opened
 
-![Открыт поиск](search-pages--01-otkryt-poisk.png)
+![Search opened](search-pages--01-otkryt-poisk.png)
 
-## Step 2. Страница найдена по тексту
+## Step 2. Page found by text
 
-![Страница найдена по тексту](search-pages--02-stranitsa-naydena-po-tekstu.png)
+![Page found by text](search-pages--02-stranitsa-naydena-po-tekstu.png)
 
-## Step 3. Результат поиска открыт
+## Step 3. Search result opened
 
-![Результат поиска открыт](search-pages--03-rezultat-poiska-otkryt.png)
+![Search result opened](search-pages--03-rezultat-poiska-otkryt.png)

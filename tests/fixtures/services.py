@@ -227,6 +227,13 @@ def geo_service(setup_database_before_tests):
 
 
 @pytest.fixture(scope="session")
+def stock_service(setup_database_before_tests):
+    """Stock на 9026 (складской учёт: локации, товары, перемещения)."""
+    _ = setup_database_before_tests
+    require_http_service("stock", 9026)
+
+
+@pytest.fixture(scope="session")
 def nominatim_service(setup_database_before_tests):
     """Эмулятор Nominatim на 18098 — провайдер геокодинга стека."""
     _ = setup_database_before_tests

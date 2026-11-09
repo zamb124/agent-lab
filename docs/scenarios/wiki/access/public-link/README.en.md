@@ -2,10 +2,10 @@
 
 Enabling a public link and reading a section with subpages without signing in.
 
-## Step 1. Открыто окно доступа
+## Step 1. Access modal opened
 
-![Открыто окно доступа](public-link--01-otkryto-okno-dostupa.png)
+![Access modal opened](public-link--01-otkryto-okno-dostupa.png)
 
-## Step 2. Публичная ссылка включена
+## Step 2. Public link enabled
 
-![Публичная ссылка включена](public-link--02-publichnaya-ssylka-vklyuchena.png)
+![Public link enabled](public-link--02-publichnaya-ssylka-vklyuchena.png)

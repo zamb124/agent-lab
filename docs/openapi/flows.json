@@ -854,6 +854,70 @@
         ],
         "title": "ActivityStatus"
       },
+      "AddressCreatePayload": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Address"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Label",
+            "default": ""
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "AddressCreatePayload",
+        "description": "Тело `POST .../customer-auth/addresses`."
+      },
+      "AddressListView": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddressView"
+            },
+            "type": "array",
+            "title": "Addresses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AddressListView",
+        "description": "Ответ `GET .../customer-auth/addresses`."
+      },
       "AgentPlan": {
         "properties": {
           "agent_plan_id": {
@@ -1145,6 +1209,190 @@
         ],
         "title": "AudioTranscriptionStatus",
         "description": "Канонический статус транскрипции аудио."
+      },
+      "AuthStartPayload": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "flow_hint": {
+            "type": "string",
+            "const": "checkout",
+            "title": "Flow Hint",
+            "default": "checkout"
+          },
+          "client": {
+            "$ref": "#/components/schemas/ClientKind",
+            "default": "mobile_web"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "AuthStartPayload",
+        "description": "Тело `POST .../customer-auth/start`."
+      },
+      "AuthStartView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "challenge_pending",
+            "title": "Status",
+            "default": "challenge_pending"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "phone_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Masked"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodOption"
+            },
+            "type": "array",
+            "title": "Methods"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id"
+        ],
+        "title": "AuthStartView",
+        "description": "Ответ `auth/start`: challenge + доступные методы."
+      },
+      "AuthStatusView": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PhoneChallengeStatus"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneVerificationMethod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerMe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "challenge_id"
+        ],
+        "title": "AuthStatusView",
+        "description": "Ответ `auth/status` для polling direct/OAuth потоков."
+      },
+      "AuthVerifyPayload": {
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "direct": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectVerificationRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "company_id"
+        ],
+        "title": "AuthVerifyPayload",
+        "description": "Тело `POST .../customer-auth/verify`."
+      },
+      "AuthVerifyView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "pending"
+            ],
+            "title": "Status"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerMe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AuthVerifyView",
+        "description": "Ответ `auth/verify`."
       },
       "Body_auth_callback_post_flows_api_auth_callback__provider_name__post": {
         "properties": {
@@ -3447,6 +3695,16 @@
         ],
         "title": "ChunkedUploadPartRecord"
       },
+      "ClientKind": {
+        "type": "string",
+        "enum": [
+          "web_desktop",
+          "mobile_web",
+          "telegram_mini_app"
+        ],
+        "title": "ClientKind",
+        "description": "Класс клиентского устройства — влияет на приоритет OAuth-провайдеров."
+      },
       "CodeAgentCopyTreeRequest": {
         "properties": {
           "flow_id": {
@@ -4722,6 +4980,128 @@
         ],
         "title": "CriticPolicy",
         "description": "Строгая политика: когда рефлексия одобряет или блокирует gate."
+      },
+      "CustomerAddressView": {
+        "properties": {
+          "customer_address_id": {
+            "type": "string",
+            "title": "Customer Address Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_address_id",
+          "address"
+        ],
+        "title": "CustomerAddressView",
+        "description": "Сохранённый адрес покупателя (чипы в чекауте)."
+      },
+      "CustomerIdentityProvider": {
+        "type": "string",
+        "enum": [
+          "telegram",
+          "max",
+          "yandex",
+          "vk",
+          "sber",
+          "phone",
+          "emulator"
+        ],
+        "title": "CustomerIdentityProvider",
+        "description": "Внешний аккаунт, подтвердивший телефон покупателя."
+      },
+      "CustomerMe": {
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "title": "Customer Id"
+          },
+          "phone_e164": {
+            "type": "string",
+            "title": "Phone E164"
+          },
+          "scope_company_id": {
+            "type": "string",
+            "title": "Scope Company Id"
+          },
+          "scope_company_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope Company Ids",
+            "default": []
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_id",
+          "phone_e164",
+          "scope_company_id"
+        ],
+        "title": "CustomerMe",
+        "description": "Профиль покупателя для API `/public/customer/me`."
+      },
+      "CustomerMeUpdatePayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CustomerMeUpdatePayload",
+        "description": "`POST .../customer-auth/me` — правка профиля покупателя."
       },
       "DataTableColumnSpec": {
         "properties": {
@@ -6219,6 +6599,135 @@
         "title": "DiffItem",
         "description": "Элемент diff между state-снимками."
       },
+      "DirectAuthorizationKind": {
+        "type": "string",
+        "enum": [
+          "contact_share",
+          "oauth"
+        ],
+        "title": "DirectAuthorizationKind",
+        "description": "Тип direct-метода для UI и state-машины challenge."
+      },
+      "DirectVerificationRequest": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DirectAuthorizationKind"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CustomerIdentityProvider"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "provider_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider User Id"
+          },
+          "contact_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact User Id"
+          },
+          "oauth_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Code"
+          },
+          "oauth_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth State"
+          },
+          "oauth_code_verifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Code Verifier"
+          },
+          "oauth_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Device Id"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "provider"
+        ],
+        "title": "DirectVerificationRequest",
+        "description": "Доказательство direct-подтверждения — приходит от webhook/callback/client."
+      },
       "DocumentPlacement": {
         "properties": {
           "catalog_id": {
@@ -6293,6 +6802,47 @@
         ],
         "title": "DurableForkPayload"
       },
+      "DurableManualPatchPayload": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "default": ""
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sequence"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExecutionState-Input"
+          },
+          "execution_branch_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Branch Id"
+          },
+          "activate": {
+            "type": "boolean",
+            "title": "Activate",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sequence",
+          "state"
+        ],
+        "title": "DurableManualPatchPayload"
+      },
       "DurableRetryPayload": {
         "properties": {
           "session_id": {
@@ -6360,6 +6910,55 @@
           "sequence"
         ],
         "title": "DurableRewindPayload"
+      },
+      "DurableSessionStateUpdatePayload": {
+        "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "context_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Id"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExecutionState-Input"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "DurableSessionStateUpdatePayload"
       },
       "Edge": {
         "properties": {
@@ -11959,7 +12558,680 @@
         "title": "ExecutionExceptionRecord",
         "description": "Запись об исключении, обработанном как ответ (режим exception_as_response)."
       },
-      "ExecutionState": {
+      "ExecutionState-Input": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "ID задачи A2A"
+          },
+          "context_id": {
+            "type": "string",
+            "title": "Context Id",
+            "description": "ID контекста A2A"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "ID актора выполнения (сотрудник-агент или инициатор)"
+          },
+          "initiator_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiator User Id",
+            "description": "Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника."
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "description": "ID сессии в формате flow_id:context_id"
+          },
+          "flow_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Config Version",
+            "description": "Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows"
+          },
+          "terminal_task_state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "input-required",
+                  "canceled",
+                  "failed",
+                  "rejected",
+                  "auth-required",
+                  "handback",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Task State",
+            "description": "Финальный A2A TaskState, сохранённый в БД только на terminal boundary."
+          },
+          "terminal_task_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Task Error",
+            "description": "Текст ошибки для terminal_task_state='failed'/'rejected'/'unknown'."
+          },
+          "current_nodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Current Nodes",
+            "description": "Текущие ноды для выполнения"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id",
+            "description": "ID branch",
+            "default": "default"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "Входное сообщение"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response",
+            "description": "Ответ агента"
+          },
+          "result": {
+            "$ref": "#/components/schemas/JsonValue",
+            "description": "Произвольный результат ноды или tool (CodeNode, inline execute)"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation",
+            "description": "Данные валидации ноды (условия рёбер вида validation.valid == true)"
+          },
+          "messages": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "История сообщений"
+          },
+          "user_groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "User Groups",
+            "description": "Группы пользователя"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Variables",
+            "description": "Резолвнутые переменные"
+          },
+          "triggers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TriggerRuntimeSnapshot"
+            },
+            "type": "object",
+            "title": "Triggers",
+            "description": "Снимок по trigger_id: { payload, context } — не смешивать с variables"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Прикреплённые файлы"
+          },
+          "interrupt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InterruptData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Данные прерывания"
+          },
+          "interrupt_path": {
+            "items": {
+              "$ref": "#/components/schemas/InterruptPathItem"
+            },
+            "type": "array",
+            "title": "Interrupt Path",
+            "description": "Путь к месту прерывания"
+          },
+          "hitl_handoff_correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitl Handoff Correlation Id",
+            "description": "При resume после operator handoff: correlation_id задачи до сброса interrupt, чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
+          },
+          "hitl_streamed_closing_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitl Streamed Closing Text",
+            "description": "Текст closing operator reply, уже отправленный в Redis как operator_reply. Если final_response совпадает — emit_complete не дублирует его в UI completed."
+          },
+          "node_history": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Node History",
+            "description": "История вызовов нод за последний проход Flow.run: {node_id: {type, calls: [...]}}. Сбрасывается в начале каждого Flow.run; лимит повторных заходов в code-ноду считается только в этом проходе."
+          },
+          "tool_results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Tool Results",
+            "description": "Результаты выполнения tools {tool_id: result}"
+          },
+          "execution_exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionExceptionRecord"
+            },
+            "type": "array",
+            "title": "Execution Exceptions",
+            "description": "Реестр исключений, обработанных как ответ (exception_as_response на ноде)"
+          },
+          "nested_states": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NestedStateData-Input"
+            },
+            "type": "object",
+            "title": "Nested States",
+            "description": "Состояния вложенных субагентов"
+          },
+          "child_workflows": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChildWorkflowLink"
+            },
+            "type": "object",
+            "title": "Child Workflows",
+            "description": "Durable child workflow links по node_id; хранит session_id child flow для resume без snapshot-копии child state в родителе."
+          },
+          "handoff_parent_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Parent Session Id",
+            "description": "ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить"
+          },
+          "handoff_depth": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Handoff Depth",
+            "description": "Глубина цепочки handoff (для отладки и лимитов)",
+            "default": 0
+          },
+          "handoff_trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Trace Id",
+            "description": "OTEL trace_id цепочки handoff parent↔child для observability"
+          },
+          "handback_return_variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Handback Return Variables",
+            "description": "Переменные, явно возвращаемые родителю через handback_to_parent"
+          },
+          "reasoning_history": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Reasoning History",
+            "description": "История рассуждений агента"
+          },
+          "reflection_history": {
+            "items": {
+              "$ref": "#/components/schemas/ReflectionRecord"
+            },
+            "type": "array",
+            "title": "Reflection History",
+            "description": "Typed reflection/test-time compute gate history"
+          },
+          "pending_reasoning": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Reasoning",
+            "description": "Текущее pending рассуждение"
+          },
+          "agent_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Активный AgentPlan (flat checklist); перетирается agent_plan_write"
+          },
+          "breakpoints": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Breakpoints",
+            "description": "Активные breakpoints для нод (node_id -> enabled)"
+          },
+          "breakpoint_hit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakpoint Hit",
+            "description": "ID ноды, на которой сработал breakpoint"
+          },
+          "breakpoint_state": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakpoint State",
+            "description": "Projection snapshot на момент срабатывания breakpoint"
+          },
+          "scheduled_tasks": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Scheduled Tasks",
+            "description": "Scheduled tasks созданные в текущей сессии"
+          },
+          "join_arrived_preds": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Join Arrived Preds",
+            "description": "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
+          },
+          "flow_deadline_monotonic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Deadline Monotonic",
+            "description": "Дедлайн одного вызова run flow: time.monotonic() <= flow_deadline_monotonic; None — wall-clock лимит не задан для этой сессии"
+          },
+          "flow_timeout_effective_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Timeout Effective Seconds",
+            "description": "Секунд wall-clock, заданных на этот run (для ошибок и отладки)"
+          },
+          "prompt_history": {
+            "items": {
+              "$ref": "#/components/schemas/PromptHistoryItem"
+            },
+            "type": "array",
+            "title": "Prompt History",
+            "description": "История изменений системного промпта"
+          },
+          "ui_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Событие текущего хода от интерактивного блока интерфейса"
+          },
+          "ui_slots": {
+            "additionalProperties": {
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FlowUISection-Input"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIColumns-Input"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUITabs-Input"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIHeading"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIMarkdownText"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIImage"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIVideo"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIAudio"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUICode"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIBadge"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIAlert"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIMetric"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIProgress"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIStatus"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIEmptyState"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIDivider"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUITextInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUINumberInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISelect"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUICheckbox"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISwitch"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISlider"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIDateInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIDateTimeInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIFileUpload"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIVoiceInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIButton"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUILink"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIDataTable"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIChart"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIJsonView"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIFileCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIFileList"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIConversation"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISlot"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIAgentIdentity"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIAvatar"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIRunTrace"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIToolActivity"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIBrowserPreview"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISkillActivity"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIActionPreview"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIActionResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIReflection"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIActivity"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUISuggestedPrompts"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FlowUIHtml"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "action_preview": "#/components/schemas/FlowUIActionPreview",
+                    "action_result": "#/components/schemas/FlowUIActionResult",
+                    "activity": "#/components/schemas/FlowUIActivity",
+                    "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                    "alert": "#/components/schemas/FlowUIAlert",
+                    "audio": "#/components/schemas/FlowUIAudio",
+                    "avatar": "#/components/schemas/FlowUIAvatar",
+                    "badge": "#/components/schemas/FlowUIBadge",
+                    "browser_preview": "#/components/schemas/FlowUIBrowserPreview",
+                    "button": "#/components/schemas/FlowUIButton",
+                    "chart": "#/components/schemas/FlowUIChart",
+                    "checkbox": "#/components/schemas/FlowUICheckbox",
+                    "code": "#/components/schemas/FlowUICode",
+                    "columns": "#/components/schemas/FlowUIColumns-Input",
+                    "conversation": "#/components/schemas/FlowUIConversation",
+                    "data_table": "#/components/schemas/FlowUIDataTable",
+                    "date_input": "#/components/schemas/FlowUIDateInput",
+                    "datetime_input": "#/components/schemas/FlowUIDateTimeInput",
+                    "divider": "#/components/schemas/FlowUIDivider",
+                    "empty_state": "#/components/schemas/FlowUIEmptyState",
+                    "file_card": "#/components/schemas/FlowUIFileCard",
+                    "file_list": "#/components/schemas/FlowUIFileList",
+                    "file_upload": "#/components/schemas/FlowUIFileUpload",
+                    "heading": "#/components/schemas/FlowUIHeading",
+                    "html": "#/components/schemas/FlowUIHtml",
+                    "image": "#/components/schemas/FlowUIImage",
+                    "json_view": "#/components/schemas/FlowUIJsonView",
+                    "link": "#/components/schemas/FlowUILink",
+                    "metric": "#/components/schemas/FlowUIMetric",
+                    "number_input": "#/components/schemas/FlowUINumberInput",
+                    "progress": "#/components/schemas/FlowUIProgress",
+                    "reflection": "#/components/schemas/FlowUIReflection",
+                    "run_trace": "#/components/schemas/FlowUIRunTrace",
+                    "section": "#/components/schemas/FlowUISection-Input",
+                    "select": "#/components/schemas/FlowUISelect",
+                    "skill_activity": "#/components/schemas/FlowUISkillActivity",
+                    "slider": "#/components/schemas/FlowUISlider",
+                    "slot": "#/components/schemas/FlowUISlot",
+                    "status": "#/components/schemas/FlowUIStatus",
+                    "suggested_prompts": "#/components/schemas/FlowUISuggestedPrompts",
+                    "switch": "#/components/schemas/FlowUISwitch",
+                    "tabs": "#/components/schemas/FlowUITabs-Input",
+                    "text": "#/components/schemas/FlowUIMarkdownText",
+                    "text_input": "#/components/schemas/FlowUITextInput",
+                    "tool_activity": "#/components/schemas/FlowUIToolActivity",
+                    "video": "#/components/schemas/FlowUIVideo",
+                    "voice_input": "#/components/schemas/FlowUIVoiceInput"
+                  }
+                }
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Ui Slots",
+            "description": "Блоки, отрендеренные агентом, по целям рендера (slot_id)"
+          },
+          "llm_context_memory_cursor": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Llm Context Memory Cursor",
+            "description": "Закрытый offset сообщений для episodic memory context layer"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "task_id",
+          "context_id",
+          "user_id",
+          "session_id"
+        ],
+        "title": "ExecutionState",
+        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nПримеры:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
+      },
+      "ExecutionState-Output": {
         "properties": {
           "task_id": {
             "type": "string",
@@ -12211,7 +13483,7 @@
           },
           "nested_states": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData"
+              "$ref": "#/components/schemas/NestedStateData-Output"
             },
             "type": "object",
             "title": "Nested States",
@@ -13095,6 +14367,7 @@
           "rag_document",
           "office_document",
           "wiki_page",
+          "shop_product",
           "platform_default"
         ],
         "title": "FileRetentionKind"
@@ -13142,7 +14415,8 @@
           "wiki_page",
           "code_agent_source",
           "platform_auxiliary",
-          "generated_ephemeral"
+          "generated_ephemeral",
+          "shop_product"
         ],
         "title": "FileSourceKind"
       },
@@ -13411,6 +14685,28 @@
               }
             ],
             "title": "Relative Dir"
+          },
+          "shop_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Id"
+          },
+          "shop_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Product Id"
           }
         },
         "additionalProperties": false,
@@ -14235,6 +15531,53 @@
           "share_url"
         ],
         "title": "FlowPreviewShareResponse"
+      },
+      "FlowReloadFromBundleRequest": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id",
+            "default": ""
+          },
+          "bundle_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowReloadFromBundleRequest",
+        "description": "Установка или перезапись flow из каталожного bundle.\n\n``flow_id`` — целевой id в БД (path REST / поле команды).\n``bundle_id`` — каталог ``apps/flows/bundles/<bundle_id>/``; пустой —\nсовпадает с ``flow_id`` (перезагрузка того же id).\n``name`` / ``description`` — опциональный override поверх ``flow.json``."
       },
       "FlowResourceTypeCard": {
         "properties": {
@@ -28426,7 +29769,215 @@
         "title": "MergeMode",
         "description": "Режимы применения skill к базовой конфигурации агента.\n\nZero-Guess: явно указываем как мержить - merge или replace."
       },
-      "NestedStateData": {
+      "MethodChallengedView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "challenge_sent",
+              "awaiting_contact",
+              "awaiting_oauth"
+            ],
+            "title": "Status"
+          },
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PhoneChallengeKind"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneVerificationChannel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "resend_after": {
+            "type": "integer",
+            "title": "Resend After",
+            "default": 0
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "oauth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "challenge_id",
+          "kind",
+          "method",
+          "expires_in"
+        ],
+        "title": "MethodChallengedView",
+        "description": "Ответ на `method_chosen`: отправлен код / ждём direct-подтверждение."
+      },
+      "MethodChosenPayload": {
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "title": "Challenge Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "return_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "company_id",
+          "method"
+        ],
+        "title": "MethodChosenPayload",
+        "description": "Тело `POST .../customer-auth/method`."
+      },
+      "MethodOption": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PhoneVerificationMethod"
+          },
+          "ui": {
+            "type": "string",
+            "enum": [
+              "deep_link",
+              "oauth",
+              "contact_share",
+              "code_input",
+              "auto"
+            ],
+            "title": "Ui"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 0
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerIdentityProvider"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "provider_data": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "ui"
+        ],
+        "title": "MethodOption",
+        "description": "Один пункт выбора способа подтверждения в `methods` из start."
+      },
+      "NestedStateData-Input": {
+        "properties": {
+          "messages": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "История сообщений субагента"
+          },
+          "interrupt_path": {
+            "items": {
+              "$ref": "#/components/schemas/InterruptPathItem"
+            },
+            "type": "array",
+            "title": "Interrupt Path",
+            "description": "Путь прерывания внутри субагента"
+          },
+          "nested_states": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NestedStateData-Input"
+            },
+            "type": "object",
+            "title": "Nested States",
+            "description": "Вложенные состояния суб-субагентов"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "NestedStateData",
+        "description": "Данные вложенного состояния для субагентов."
+      },
+      "NestedStateData-Output": {
         "properties": {
           "messages": {
             "items": {
@@ -28449,7 +30000,7 @@
           },
           "nested_states": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/NestedStateData"
+              "$ref": "#/components/schemas/NestedStateData-Output"
             },
             "type": "object",
             "title": "Nested States",
@@ -32185,6 +33736,50 @@
           "smtp_host"
         ],
         "title": "PersonalMailboxHealthcheckPayload"
+      },
+      "PhoneChallengeKind": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "code"
+        ],
+        "title": "PhoneChallengeKind"
+      },
+      "PhoneChallengeStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "confirmed",
+          "failed",
+          "expired",
+          "cancelled"
+        ],
+        "title": "PhoneChallengeStatus"
+      },
+      "PhoneVerificationChannel": {
+        "type": "string",
+        "enum": [
+          "sms",
+          "call",
+          "telegram",
+          "max"
+        ],
+        "title": "PhoneVerificationChannel",
+        "description": "Канал отправки короткого кода (значение provider_send Channels)."
+      },
+      "PhoneVerificationMethod": {
+        "type": "string",
+        "enum": [
+          "telegram_contact",
+          "max_contact",
+          "yandex_id",
+          "vk_id",
+          "sber_id",
+          "sms_code",
+          "emulator"
+        ],
+        "title": "PhoneVerificationMethod",
+        "description": "Способ доставки/подтверждения — то, что видит пользователь."
       },
       "PickerCategory": {
         "type": "string",

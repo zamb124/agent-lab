@@ -14,8 +14,6 @@ In the editor menu, choose API and A2A. A modal opens with the agent endpoint, g
 
 ## Step 2. Review the Start tab
 
-The Start tab shows where to send the first request: agent endpoint, selected branch, and a sample conversation id. The mode selector changes how the call works: streaming response, one synchronous response, or a background run with later status checks.
-
 ![Review the Start tab](api-first-request--02-api-start-tab.png)
 
 ## Step 3. Switch to the Run tab

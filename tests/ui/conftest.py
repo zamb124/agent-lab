@@ -176,7 +176,13 @@ async def _new_browser_context(
     *,
     with_test_scope: bool = True,
 ) -> BrowserContext:
-    context_kwargs: dict[str, object] = {"color_scheme": "light"}
+    # Документационные скриншоты снимаем в том же кадре, что и marketing shots:
+    # 1440×900 @2x → PNG 2880×1800 (tests/ui/shots/conftest.py).
+    context_kwargs: dict[str, object] = {
+        "color_scheme": "light",
+        "viewport": {"width": 1440, "height": 900},
+        "device_scale_factor": 2,
+    }
     if with_test_scope:
         # Authenticated SPA + MockLLM. Anonymous/embed (внешний origin) — без
         # X-Test-Scope: иначе CORS preflight на embed API падает до Allow-Headers.
@@ -355,6 +361,15 @@ async def litserve_ui(provider_litserve_service) -> AppUI:
 async def shop_ui(shop_service, shop_worker, _ui_subdomain_mappings) -> AppUI:
     _ = shop_service, shop_worker, _ui_subdomain_mappings
     return AppUI(SERVICE_UI_REGISTRY["shop"])
+
+
+@pytest_asyncio.fixture
+async def stock_ui(
+    stock_service,
+    _ui_e2e_company_resources,
+) -> AppUI:
+    _ = stock_service, _ui_e2e_company_resources
+    return AppUI(SERVICE_UI_REGISTRY["stock"])
 
 
 @pytest_asyncio.fixture

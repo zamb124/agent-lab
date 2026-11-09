@@ -101,4 +101,11 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         title=None,
         subdomain_prefix="system",
     ),
+    "stock": ServiceUiSpec(
+        key="stock",
+        port=9026,
+        spa_path="/stock/",
+        shell_selector="stock-app",
+        title="Склад",
+    ),
 }

@@ -2,14 +2,14 @@
 
 Expanding a section in the tree and opening a nested page.
 
-## Step 1. В дереве появился раздел
+## Step 1. Section appeared in the tree
 
-![В дереве появился раздел](navigate-tree--01-v-dereve-poyavilsya-razdel.png)
+![Section appeared in the tree](navigate-tree--01-v-dereve-poyavilsya-razdel.png)
 
-## Step 2. Раздел раскрыт, видна вложенная страница
+## Step 2. Section expanded, nested page visible
 
-![Раздел раскрыт, видна вложенная страница](navigate-tree--02-razdel-raskryt-vidna-vlozhennaya-stranitsa.png)
+![Section expanded, nested page visible](navigate-tree--02-razdel-raskryt-vidna-vlozhennaya-stranitsa.png)
 
-## Step 3. Вложенная страница открыта
+## Step 3. Nested page opened
 
-![Вложенная страница открыта](navigate-tree--03-vlozhennaya-stranitsa-otkryta.png)
+![Nested page opened](navigate-tree--03-vlozhennaya-stranitsa-otkryta.png)

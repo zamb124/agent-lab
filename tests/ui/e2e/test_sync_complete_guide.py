@@ -48,7 +48,9 @@ async def _open_message_context_menu(page: Page, text: str) -> None:
     bubble = page.locator("sync-message-bubble").filter(has_text=text).first
     await expect(bubble).to_be_visible(timeout=8_000)
     await bubble.click(button="right")
-    await expect(page.locator("sync-message-context-menu")).to_have_attribute(
+    await expect(
+        page.locator("sync-message-context-menu platform-popover")
+    ).to_have_attribute(
         "open",
         "",
         timeout=5_000,

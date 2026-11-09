@@ -20,7 +20,7 @@ Pick the plain agent template, set an identifier and the name Green Garden Assis
 
 ## Step 3. Open the triggers list
 
-In the editor menu choose Triggers. All automatic runs appear here: schedule, Telegram, webhook, email, and platform events. An empty list is normal for a new agent.
+In the editor menu choose Triggers. A platform event connects the agent to actions in other services without a separate webhook.
 
 ![Open the triggers list](agent-triggers-overview--03-triggers-list-empty.png)
 

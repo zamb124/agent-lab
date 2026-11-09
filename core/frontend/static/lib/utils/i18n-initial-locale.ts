@@ -1,6 +1,7 @@
 /**
  * Локаль UI до первого ответа GET /api/i18n/{locale} (экран загрузки, первый paint).
- * Порядок: localStorage → cookie language → navigator → ru.
+ * Порядок: URL-префикс /en → localStorage → cookie language → navigator → ru.
+ * URL-префикс — канонический сигнал (публичные /en/* страницы индексируются отдельно).
  * Допустимые значения для запроса бандла: ru | en.
  */
 
@@ -14,7 +15,23 @@ function normalizeToSupportedLocale(raw: unknown): string {
     return base === 'en' ? 'en' : 'ru';
 }
 
+function resolvePathLocale(): string | null {
+    const loc = typeof globalThis.location === 'object' ? globalThis.location : null;
+    if (loc === null || typeof loc.pathname !== 'string') {
+        return null;
+    }
+    const path = loc.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/en' || path.startsWith('/en/')) {
+        return 'en';
+    }
+    return null;
+}
+
 export function resolveInitialUiLocale(): string {
+    const pathLocale = resolvePathLocale();
+    if (pathLocale !== null) {
+        return pathLocale;
+    }
     const ls =
         typeof globalThis.localStorage !== 'undefined' && typeof globalThis.localStorage.getItem === 'function'
             ? globalThis.localStorage

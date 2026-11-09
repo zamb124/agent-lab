@@ -8,8 +8,6 @@
 
 ## Step 1. Open triggers in the editor
 
-Open Triggers on the Green Garden Assistant. Here you connect the bot @zeleniy_sad_bot so customer messages reach the agent.
-
 ![Open triggers in the editor](telegram-auto-reply--01-telegram-triggers-modal-opened.png)
 
 ## Step 2. Choose Telegram and name the trigger

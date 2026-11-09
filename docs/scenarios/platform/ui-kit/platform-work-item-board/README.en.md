@@ -1,10 +1,10 @@
-# platform-work-item-board
+# Work Item Board
 
 Platform component `platform-work-item-board`.
 
 Documentation status: **backlog**.
 
-## Running tests
+## Run tests
 
 ```bash
 npm run test:ui-kit -- tests/ui/design-system/components/platform-work-item-board/contract.spec.js

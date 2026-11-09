@@ -14,8 +14,6 @@ Switch to the Run tab. Here you can change mode, message text, and variables, th
 
 ## Step 2. Test sync mode
 
-Sync mode sends one message and waits for a final JSON response without reading a stream of events. This is handy for short scenarios and backend-to-backend integrations.
-
 ![Test sync mode](api-sync-async--02-api-sync-result.png)
 
 ## Step 3. Switch to async mode
@@ -25,11 +23,5 @@ Choose Async mode. The API returns a task immediately and you fetch the final re
 ![Switch to async mode](api-sync-async--03-api-async-mode-selected.png)
 
 ## Step 4. Test async mode
-
-Async mode quickly returns a task id, and you can fetch the result with separate status requests. The modal shows which status checks were already performed.
-
-**Result demonstration.** In Async mode you see a quick task response and the final result after status polling — both call styles work.
-
-**Summary.** You can now switch Sync and Async in API Console and understand when to use each mode.
 
 ![Test async mode](api-sync-async--04-api-async-result.png)

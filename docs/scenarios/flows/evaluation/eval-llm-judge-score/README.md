@@ -23,3 +23,11 @@
 Нажмите «Создать». Кейс появляется в списке: в API у проверки есть judge_node_id и rubric_version_id, а тело judge-ноды лежит в flow.
 
 ![Сохраните кейс и убедитесь, что хранятся только id](eval-llm-judge-score--03-eval-judge-case-saved-ids.png)
+
+## Шаг 4. Запустите кейс и посмотрите score
+
+**Демонстрация результата.** После «Запустить» в матрице результатов виден score, а в transcript — feedback судьи.
+
+**Итог.** Теперь вы умеете создать рубрику с judge-нодой и прогнать LLM judge до видимой оценки.
+
+![Запустите кейс и посмотрите score](eval-llm-judge-score--04-eval-judge-score-visible.png)

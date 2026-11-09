@@ -55,9 +55,37 @@ def _image_links(readme: Path) -> list[str]:
     return _IMAGE_LINK_RE.findall(readme.read_text(encoding="utf-8"))
 
 
-def _check_screenshot_layout(slug_dir: Path, readme: Path, scenarios_root: Path) -> list[str]:
+_PNG_HEADER_LEN = 24
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_PNG_IHDR = b"IHDR"
+# Норма документации: desktop 2880px (@2x), mobile/tablet ≤ 1700px (@2x при 390–834).
+# Ширина между 901 и 2499 типична для @1x-снимка (старый контекст 1280–1600).
+_PNG_HI_WIDTH = 2500
+_PNG_MOBILE_WIDTH = 900
+
+
+def _png_width(path: Path) -> int | None:
+    """Ширина PNG из IHDR без сторонних библиотек; None — не PNG/не читается."""
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(_PNG_HEADER_LEN)
+    except OSError:
+        return None
+    if (
+        len(header) < _PNG_HEADER_LEN
+        or header[:8] != _PNG_SIGNATURE
+        or header[12:16] != _PNG_IHDR
+    ):
+        return None
+    return int.from_bytes(header[16:20], "big")
+
+
+def _check_screenshot_layout(
+    slug_dir: Path, readme: Path, scenarios_root: Path
+) -> tuple[list[str], list[str]]:
     """PNG должны лежать рядом с README и иметь имя `<slug>--<NN>-<meaning>.png`."""
     errors: list[str] = []
+    warnings: list[str] = []
     slug = slug_dir.name
     legacy_dir = slug_dir / "screenshots"
     if legacy_dir.exists():
@@ -66,7 +94,7 @@ def _check_screenshot_layout(slug_dir: Path, readme: Path, scenarios_root: Path)
     refs = _image_links(readme)
     if not refs:
         errors.append("README.md не содержит ссылок на PNG-скриншоты")
-        return errors
+        return errors, warnings
 
     filename_re = re.compile(
         rf"^{re.escape(slug)}--\d{{2,}}-[a-z0-9]+(?:-[a-z0-9]+)*\.png$"
@@ -87,6 +115,16 @@ def _check_screenshot_layout(slug_dir: Path, readme: Path, scenarios_root: Path)
             )
         if not (slug_dir / filename).is_file():
             errors.append(f"README.md ссылается на отсутствующий файл {filename!r}")
+            continue
+        if _is_ui_kit_scenario_stub(slug_dir, scenarios_root):
+            continue
+        width = _png_width(slug_dir / filename)
+        if width is not None and _PNG_MOBILE_WIDTH < width < _PNG_HI_WIDTH:
+            message = (
+                f"{filename}: ширина {width}px похожа на @1x-снимок; "
+                + f"ожидается ≥{_PNG_HI_WIDTH}px (desktop @2x) или ≤{_PNG_MOBILE_WIDTH}px (mobile)"
+            )
+            warnings.append(message)
 
     flat_pngs = {p.name for p in slug_dir.glob("*.png") if p.is_file()}
     for filename in sorted(flat_pngs - referenced_names):
@@ -96,7 +134,7 @@ def _check_screenshot_layout(slug_dir: Path, readme: Path, scenarios_root: Path)
     if en_readme.is_file() and _image_links(en_readme) != refs:
         errors.append("README.en.md должен ссылаться на те же PNG и в том же порядке")
     errors.extend(_check_en_readme(slug_dir, scenarios_root))
-    return errors
+    return errors, warnings
 
 
 def _title_from_readme(readme: Path) -> str:
@@ -247,8 +285,9 @@ def _is_ui_kit_scenario_stub(slug_dir: Path, scenarios_root: Path) -> bool:
     return len(parts) >= 2 and parts[0] == "platform" and parts[1] == "ui-kit"
 
 
-def check_readme_quality(scenarios_root: Path) -> list[str]:
+def check_readme_quality(scenarios_root: Path) -> tuple[list[str], list[str]]:
     errors: list[str] = []
+    warnings: list[str] = []
     for slug_dir in _slug_readme_dirs(scenarios_root):
         if _is_ui_kit_scenario_stub(slug_dir, scenarios_root):
             continue
@@ -262,9 +301,12 @@ def check_readme_quality(scenarios_root: Path) -> list[str]:
             errors.append(
                 f"{rel}: нужно минимум {_MIN_STEPS} секций «## Шаг …», найдено {step_count}"
             )
-        for screenshot_error in _check_screenshot_layout(slug_dir, readme, scenarios_root):
-            errors.append(f"{rel}: {screenshot_error}")
-    return errors
+        screenshot_errors, screenshot_warnings = _check_screenshot_layout(
+            slug_dir, readme, scenarios_root
+        )
+        errors.extend(f"{rel}: {e}" for e in screenshot_errors)
+        warnings.extend(f"{rel}: {w}" for w in screenshot_warnings)
+    return errors, warnings
 
 
 def _check_taxonomy_markers(repo_root: Path) -> tuple[list[str], list[str]]:
@@ -366,7 +408,9 @@ def main() -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    errors.extend(check_readme_quality(scenarios_root))
+    readme_errors, readme_warnings = check_readme_quality(scenarios_root)
+    errors.extend(readme_errors)
+    warnings.extend(readme_warnings)
     errors.extend(_check_scenario_marker_en_fields(repo_root / _UI_E2E_ROOT))
     marker_errors, marker_warnings = _check_taxonomy_markers(repo_root)
     errors.extend(marker_errors)

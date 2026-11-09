@@ -38,8 +38,4 @@ Replace the prompt with an unknown variable by a clear instruction without curly
 
 ## Step 6. Publish and confirm warnings are gone
 
-**Result demonstration.** Publish the draft — the prompt no longer references a missing variable.
-
-**Summary.** You can now annotate the graph with notes, show data links, and fix problematic blocks for Green Garden.
-
 ![Publish and confirm warnings are gone](organize-large-graph--06-problems-cleared.png)

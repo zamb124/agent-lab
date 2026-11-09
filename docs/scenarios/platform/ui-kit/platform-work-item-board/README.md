@@ -1,4 +1,4 @@
-# platform-work-item-board
+# Work Item Board
 
 Платформенный компонент `platform-work-item-board`.
 

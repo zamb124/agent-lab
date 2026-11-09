@@ -8,17 +8,24 @@ Zero-Guess: все системные поля явно типизированы
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
+from typing import Annotated, ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
 from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    WithJsonSchema,
     field_serializer,
     field_validator,
     model_validator,
 )
+
+# a2a_pb2.Message (protobuf) не имеет JSON Schema; сериализатор ниже отдаёт JSON-объекты.
+JsonMessageList = Annotated[
+    list[Message],
+    WithJsonSchema({"type": "array", "items": {"type": "object"}}),
+]
 
 from apps.flows.src.agent_plan.models import AgentPlan
 from apps.flows.src.reflection import ReflectionRecord
@@ -178,7 +185,7 @@ class NestedStateData(FlexibleBaseModel):
         arbitrary_types_allowed=True,
     )
 
-    messages: list[Message] = Field(default_factory=list, description="История сообщений субагента")
+    messages: JsonMessageList = Field(default_factory=list, description="История сообщений субагента")
     interrupt_path: list[InterruptPathItem] = Field(
         default_factory=list,
         description="Путь прерывания внутри субагента"
@@ -475,7 +482,7 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Данные валидации ноды (условия рёбер вида validation.valid == true)",
     )
-    messages: list[Message] = Field(default_factory=list, description="История сообщений")
+    messages: JsonMessageList = Field(default_factory=list, description="История сообщений")
     user_groups: list[str] = Field(default_factory=list, description="Группы пользователя")
 
     @field_validator("messages", mode="before")

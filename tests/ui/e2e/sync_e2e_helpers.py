@@ -8,7 +8,7 @@ import re
 
 import httpx2
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Locator, Page, expect
+from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError, expect
 
 from core.di.platform import PlatformDi
 from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
@@ -312,11 +312,41 @@ async def sync_e2e_create_topic_channel_and_open(
     namespace = await _sync_active_namespace(page)
     origin = await _sync_page_origin(page)
     auth_token = await _sync_page_auth_token(page)
-    await sync_api_create_group_channel(origin, auth_token, namespace, channel_name)
+    channel_id = await sync_api_create_group_channel(
+        origin, auth_token, namespace, channel_name
+    )
     await _sync_e2e_reload_channels(page)
     await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
-    await sync_sidebar_channel_nav(page, channel_name).click()
-    await expect(page.locator("sync-channel-page")).to_be_visible()
+    # Список каналов обновляется push'ами и повторными LIST_REQUESTED: строка
+    # может перебиндиться между resolve локатора и кликом, и _onClick строки
+    # откроет другой канал. Проверяем channelId открывшейся страницы и при
+    # промахе кликаем заново.
+    for _attempt in range(5):
+        await sync_sidebar_channel_nav(page, channel_name).click()
+        try:
+            await page.wait_for_function(
+                """(cid) => {
+                    const find = (root) => {
+                        const el = root.querySelector && root.querySelector('sync-channel-page');
+                        if (el) return el;
+                        for (const n of root.querySelectorAll ? root.querySelectorAll('*') : []) {
+                            if (n.shadowRoot) { const hit = find(n.shadowRoot); if (hit) return hit; }
+                        }
+                        return null;
+                    };
+                    const page = find(document);
+                    return page !== null && page.channelId === cid;
+                }""",
+                arg=channel_id,
+                timeout=6_000,
+            )
+            break
+        except PlaywrightTimeoutError:
+            continue
+    else:
+        raise AssertionError(
+            f"Клик по каналу {channel_name!r} не открыл sync-channel-page с channel_id={channel_id}."
+        )
     return channel_name
 
 

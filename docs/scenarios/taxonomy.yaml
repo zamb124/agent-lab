@@ -11,6 +11,9 @@ service_order:
   - frontend
   - office
   - wiki
+  - shop
+  - stock
+  - geo
 
 learning_paths:
   - id: new-user
@@ -351,6 +354,10 @@ services:
         label_ru: Подключения компании
         label_en: Company connections
         order: 9
+      operators:
+        label_ru: Передача оператору
+        label_en: Operator handoff
+        order: 10
 
   worktracker:
     label_ru: Операторы
@@ -382,6 +389,10 @@ services:
         label_ru: Общее
         label_en: General
         order: 1
+      tasks:
+        label_ru: Задачи
+        label_en: Tasks
+        order: 2
 
   rag:
     label_ru: RAG
@@ -494,4 +505,102 @@ services:
       access:
         label_ru: Доступ
         label_en: Access
+        order: 3
+
+  shop:
+    label_ru: Магазин
+    label_en: Shop
+    intro_ru: >-
+      Онлайн-витрина компании: создание магазина, меню с модификаторами,
+      публикация витрины, заказы, акции, доставка и отзывы покупателей.
+    intro_en: >-
+      Company storefront: create a shop, menu with modifiers, publish the
+      storefront, orders, promos, delivery zones, and customer reviews.
+    tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 1
+      storefront:
+        label_ru: Витрина
+        label_en: Storefront
+        order: 2
+      menu:
+        label_ru: Меню и каталог
+        label_en: Menu and catalog
+        order: 3
+      orders:
+        label_ru: Заказы
+        label_en: Orders
+        order: 4
+      promos:
+        label_ru: Акции и лояльность
+        label_en: Promos and loyalty
+        order: 5
+      delivery:
+        label_ru: Доставка
+        label_en: Delivery
+        order: 6
+      customer:
+        label_ru: Покупатель
+        label_en: Customer
+        order: 7
+      settings:
+        label_ru: Настройки
+        label_en: Settings
+        order: 8
+
+  stock:
+    label_ru: Склад
+    label_en: Stock
+    intro_ru: >-
+      Складской учёт: локации и склады, каталог товаров, приход и перемещения,
+      журнал движений и денежная оценка запасов.
+    intro_en: >-
+      Inventory management: locations and warehouses, product catalog,
+      receipts and transfers, move ledger, and stock valuation.
+    tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 1
+      locations:
+        label_ru: Локации и склады
+        label_en: Locations
+        order: 2
+      products:
+        label_ru: Товары
+        label_en: Products
+        order: 3
+      transfers:
+        label_ru: Приход и перемещения
+        label_en: Receipts and transfers
+        order: 4
+      valuation:
+        label_ru: Оценка запасов
+        label_en: Valuation
+        order: 5
+
+  geo:
+    label_ru: Geo
+    label_en: Geo
+    intro_ru: >-
+      Гео-движок компании: справочник адресов, источники геоданных
+      и маршрутная лаборатория с картой.
+    intro_en: >-
+      Company geo engine: address directory, geodata sources,
+      and the route lab with a live map.
+    featured_slug: route-lab
+    tags:
+      addresses:
+        label_ru: Адреса
+        label_en: Addresses
+        order: 1
+      sources:
+        label_ru: Источники геоданных
+        label_en: Geo sources
+        order: 2
+      route_lab:
+        label_ru: Маршрутная лаборатория
+        label_en: Route lab
         order: 3

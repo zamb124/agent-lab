@@ -8,13 +8,11 @@
 
 ## Step 1. Open the agent chat
 
-Open the Green Garden Assistant chat. The message feed is in the center and the input field is at the bottom. This is the same interface a customer sees.
+Open the Green Garden Assistant chat. Execution history is available for dialogs that have run at least once.
 
 ![Open the agent chat](test-agent-in-chat--01-chat-opened.png)
 
 ## Step 2. Ask about delivery
-
-Type a customer question — for example about delivery to your city — and send it. This tests the agent on a typical Green Garden store request.
 
 ![Ask about delivery](test-agent-in-chat--02-question-sent.png)
 
@@ -31,9 +29,5 @@ Clear the feed or start a new chat — this checks a fresh-start scenario, like 
 ![Start a new conversation](test-agent-in-chat--04-new-chat-cleared.png)
 
 ## Step 5. Verify the meaningful reply
-
-**Result demonstration.** After the new message an agent reply appears again — the Green Garden Assistant dialog works.
-
-**Summary.** You can open the Green Garden agent chat, send a question, and start a new conversation.
 
 ![Verify the meaningful reply](test-agent-in-chat--05-agent-replied.png)

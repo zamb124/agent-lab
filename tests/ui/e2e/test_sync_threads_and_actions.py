@@ -33,7 +33,7 @@ async def _open_message_context_menu(page: Page, bubble) -> None:
     )
     # data-own появляется после сверки sender с auth — без него Delete/Edit скрыты.
     await expect(bubble).to_have_attribute("data-own", "", timeout=15_000)
-    menu = page.locator("sync-message-context-menu[open]")
+    menu = page.locator("sync-message-context-menu platform-popover[open]")
     for _attempt in range(3):
         await bubble.click(button="right")
         try:
@@ -55,7 +55,7 @@ async def _open_message_context_menu(page: Page, bubble) -> None:
 
 async def _click_context_item(page: Page, *labels: str) -> None:
     pattern = re.compile("|".join(re.escape(label) for label in labels))
-    item = page.locator("sync-message-context-menu[open]").locator(".item").filter(
+    item = page.locator("sync-message-context-menu platform-popover[open]").locator(".item").filter(
         has_text=pattern
     ).first
     await expect(item).to_be_visible(timeout=10_000)

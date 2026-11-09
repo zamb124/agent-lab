@@ -37,12 +37,22 @@ async def test_wiki_create_and_edit_page(
 ) -> None:
     page = ui_page_system
     _ = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="edit", di=frontend_di)
-    await scenario.step("Открыта база знаний", page)
+    await scenario.step(
+        "Открыта база знаний",
+        page,
+        label_en="Knowledge base opened",
+        screenshot_name="kb-opened",
+    )
 
     await page.locator("wiki-sidebar [data-wiki-create-page]").click()
     title_input = wiki_e2e_title_input(page)
     await expect(title_input).to_be_visible(timeout=30_000)
-    await scenario.step("Создана пустая страница", page)
+    await scenario.step(
+        "Создана пустая страница",
+        page,
+        label_en="Empty page created",
+        screenshot_name="empty-page-created",
+    )
 
     title = f"Регламент {unique_id}"
     await title_input.fill(title)
@@ -53,14 +63,24 @@ async def test_wiki_create_and_edit_page(
 
     save_state = page.locator("wiki-page-view .save-state")
     await expect(save_state).to_have_attribute("data-state", "done", timeout=30_000)
-    await scenario.step("Заголовок и текст сохранены", page)
+    await scenario.step(
+        "Заголовок и текст сохранены",
+        page,
+        label_en="Title and text saved",
+        screenshot_name="title-text-saved",
+    )
 
     _ = await page.reload(wait_until="domcontentloaded")
     await expect(wiki_e2e_title_input(page)).to_have_value(title, timeout=30_000)
     await expect(page.locator("wiki-page-view .pm-editor")).to_contain_text(
         "Первый абзац регламента."
     )
-    await scenario.step("После перезагрузки содержимое на месте", page)
+    await scenario.step(
+        "После перезагрузки содержимое на месте",
+        page,
+        label_en="Content persisted after reload",
+        screenshot_name="content-after-reload",
+    )
 
 
 @pytest.mark.scenario(
@@ -102,18 +122,33 @@ async def test_wiki_navigate_tree(
     _ = await page.reload(wait_until="domcontentloaded")
     parent_row = wiki_e2e_tree_row(page, parent_id)
     await expect(parent_row).to_be_visible(timeout=30_000)
-    await scenario.step("В дереве появился раздел", page)
+    await scenario.step(
+        "В дереве появился раздел",
+        page,
+        label_en="Section appeared in the tree",
+        screenshot_name="tree-section-visible",
+    )
 
     await parent_row.locator(f'[data-twisty="{parent_id}"]').click()
     child_row = wiki_e2e_tree_row(page, child_id)
     await expect(child_row).to_be_visible(timeout=15_000)
-    await scenario.step("Раздел раскрыт, видна вложенная страница", page)
+    await scenario.step(
+        "Раздел раскрыт, видна вложенная страница",
+        page,
+        label_en="Section expanded, nested page visible",
+        screenshot_name="nested-page-visible",
+    )
 
     await child_row.click()
     await expect(wiki_e2e_title_input(page)).to_have_value(
         f"Вложенная {unique_id}", timeout=30_000
     )
-    await scenario.step("Вложенная страница открыта", page)
+    await scenario.step(
+        "Вложенная страница открыта",
+        page,
+        label_en="Nested page opened",
+        screenshot_name="nested-page-opened",
+    )
 
 
 @pytest.mark.scenario(
@@ -150,18 +185,33 @@ async def test_wiki_search_pages(
     _ = await page.goto(f"{wiki_ui.origin}/wiki/search")
     search_input = page.locator("wiki-search-page [data-wiki-search-input]")
     await expect(search_input).to_be_visible(timeout=30_000)
-    await scenario.step("Открыт поиск", page)
+    await scenario.step(
+        "Открыт поиск",
+        page,
+        label_en="Search opened",
+        screenshot_name="search-opened",
+    )
 
     await search_input.fill(marker)
     hit = page.locator(f'wiki-search-page [data-wiki-hit="{page_id}"]')
     await expect(hit).to_be_visible(timeout=30_000)
-    await scenario.step("Страница найдена по тексту", page)
+    await scenario.step(
+        "Страница найдена по тексту",
+        page,
+        label_en="Page found by text",
+        screenshot_name="page-found-by-text",
+    )
 
     await hit.click()
     await expect(wiki_e2e_title_input(page)).to_have_value(
         f"Инструкция {unique_id}", timeout=30_000
     )
-    await scenario.step("Результат поиска открыт", page)
+    await scenario.step(
+        "Результат поиска открыт",
+        page,
+        label_en="Search result opened",
+        screenshot_name="search-result-opened",
+    )
 
 
 @pytest.mark.scenario(
@@ -209,12 +259,22 @@ async def test_wiki_public_link(
     await page.locator('platform-menu [data-menu-item="access"]').click()
     access_modal = page.locator("wiki-page-access-modal")
     await expect(access_modal).to_be_visible(timeout=15_000)
-    await scenario.step("Открыто окно доступа", page)
+    await scenario.step(
+        "Открыто окно доступа",
+        page,
+        label_en="Access modal opened",
+        screenshot_name="access-modal-opened",
+    )
 
     await access_modal.locator("[data-wiki-public-link]").click()
     await expect(access_modal.locator("[data-wiki-copy-link]")).to_be_visible(timeout=15_000)
     link_url = await access_modal.locator("[data-wiki-link-url]").inner_text()
-    await scenario.step("Публичная ссылка включена", page)
+    await scenario.step(
+        "Публичная ссылка включена",
+        page,
+        label_en="Public link enabled",
+        screenshot_name="public-link-enabled",
+    )
 
     await wiki_e2e_set_locale_ru(ui_page_anonymous)
     _ = await ui_page_anonymous.goto(link_url.strip(), wait_until="domcontentloaded")

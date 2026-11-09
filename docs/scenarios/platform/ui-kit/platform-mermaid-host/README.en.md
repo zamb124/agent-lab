@@ -2,9 +2,7 @@
 
 Platform component `platform-mermaid-host`.
 
-Mermaid SVG in Lit: lazy script loading, antiscript, platform theme.
-
-Documentation status: **backfill**.
+Documentation status: **backlog**.
 
 ## Run tests
 

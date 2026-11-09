@@ -1,8 +1,10 @@
-# platform-mail-calendar-rail
+# Mail Calendar Rail
 
-Общий левый rail почты и календаря: аватары ящиков, переключатель Mail/Calendar, settings.
+Платформенный компонент `platform-mail-calendar-rail`.
 
-## Запуск
+Статус документации: **backlog**.
+
+## Запуск тестов
 
 ```bash
 npm run test:ui-kit -- tests/ui/design-system/components/platform-mail-calendar-rail/contract.spec.js
