@@ -32,6 +32,7 @@ import {
     shopCreateOp,
     shopPublishOp,
     shopAiAutofillOp,
+    shopDemosSeedOp,
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '../../../../apps/shop/ui/pages/shop-menu-page.js';
 import '../../../../apps/shop/ui/pages/shop-home-page.js';
@@ -57,6 +58,7 @@ const FACTORIES = [
     shopCreateOp,
     shopPublishOp,
     shopAiAutofillOp,
+    shopDemosSeedOp,
     platformFileCreateOp,
 ];
 

@@ -20,7 +20,7 @@ from scripts.tools.figma_tokens import (
     _Server,
 )
 
-_UKIT_JS = r"""
+_HELPERS_JS = r"""
 const spec = SPEC;
 const FONT_R = { family: 'Inter', style: 'Regular' };
 const FONT_M = { family: 'Inter', style: 'Medium' };
@@ -29,9 +29,41 @@ const FONT_B = { family: 'Inter', style: 'Bold' };
 for (const f of [FONT_R, FONT_M, FONT_S, FONT_B]) await figma.loadFontAsync(f);
 await figma.loadAllPagesAsync();
 let page = figma.root.children.find(p => p.name === spec.page);
+if (!page) {
+  const p1 = figma.root.children.find(p => /^Page \d+$/.test(p.name) && p.children.length === 0);
+  if (p1) { p1.name = spec.page; page = p1; }
+}
 if (!page) { page = figma.createPage(); page.name = spec.page; }
 await page.loadAsync();
-for (const n of [...page.children]) n.remove();
+let container = page;
+if (spec.zone) {
+  let board = page.findOne(n => n.name === 'screens-board' && n.parent === page);
+  if (!board) {
+    board = figma.createFrame();
+    board.name = 'screens-board';
+    board.layoutMode = 'HORIZONTAL'; board.layoutWrap = 'WRAP';
+    board.itemSpacing = 48; board.counterAxisSpacing = 48;
+    board.paddingLeft = board.paddingTop = board.paddingRight = board.paddingBottom = 32;
+    board.resize(3200, 100);
+    board.primaryAxisSizingMode = 'FIXED'; board.counterAxisSizingMode = 'AUTO';
+    board.fills = [{ type: 'SOLID', color: { r: 0.04, g: 0.04, b: 0.07 } }];
+    page.appendChild(board);
+  }
+  let zone = board.children.find(n => n.name === spec.zone);
+  if (!zone) {
+    zone = figma.createFrame();
+    zone.name = spec.zone;
+    zone.layoutMode = 'VERTICAL'; zone.itemSpacing = 32;
+    zone.primaryAxisSizingMode = 'AUTO'; zone.counterAxisSizingMode = 'AUTO';
+    zone.fills = [];
+    board.appendChild(zone);
+  } else {
+    for (const n of [...zone.children]) n.remove();
+  }
+  container = zone;
+} else {
+  for (const n of [...page.children]) n.remove();
+}
 const colls = await figma.variables.getLocalVariableCollectionsAsync();
 const allVars = await figma.variables.getLocalVariablesAsync();
 const V = {};
@@ -113,6 +145,9 @@ function autoComp(name, dir, gap, pad) {
   c.counterAxisAlignItems = 'CENTER'; c.primaryAxisAlignItems = 'CENTER';
   return c;
 }
+"""
+
+_UKIT_JS = _HELPERS_JS + r"""
 // ---------- Button ----------
 function makeButton(variant, label, bgName, textName, opts) {
   const b = autoComp('Button/' + variant, 'HORIZONTAL', 8, 0);
@@ -368,6 +403,238 @@ return { pageId: page.id, components: page.findAll(n => n.type === 'COMPONENT').
 }
 """
 
+_SHELL_JS = _HELPERS_JS + r"""
+function icon(glyph, size, colorName) {
+  const t = txt(glyph, FONT_R, size || 18, colorName || 'text/secondary');
+  return t;
+}
+function navItem(label, glyph, active) {
+  const n = figma.createComponent();
+  n.name = 'Shell/NavItem' + (active ? ' Active' : '');
+  n.layoutMode = 'HORIZONTAL'; n.itemSpacing = 12;
+  n.paddingLeft = n.paddingRight = 12; n.paddingTop = n.paddingBottom = 9;
+  n.primaryAxisSizingMode = 'FIXED'; n.counterAxisSizingMode = 'AUTO';
+  n.counterAxisAlignItems = 'CENTER';
+  n.resize(224, 40);
+  bindRadius(n, 'radius/lg', 16);
+  if (active) boundFill(n, 'accent/subtle', { r: 0.6, g: 0.65, b: 0.98, a: 0.16 });
+  else n.fills = [];
+  const ic = figma.createFrame();
+  ic.resize(20, 20); ic.fills = [];
+  ic.layoutMode = 'HORIZONTAL'; ic.primaryAxisAlignItems = 'CENTER'; ic.counterAxisAlignItems = 'CENTER';
+  ic.appendChild(icon(glyph, 16, active ? 'accent' : 'text/secondary'));
+  n.appendChild(ic);
+  n.appendChild(txt(label, FONT_M, 14, active ? 'accent' : 'text/secondary'));
+  return n;
+}
+function makeSidebar() {
+  const sb = figma.createComponent();
+  sb.name = 'Shell/Sidebar';
+  sb.layoutMode = 'VERTICAL'; sb.itemSpacing = 0;
+  sb.primaryAxisSizingMode = 'FIXED'; sb.counterAxisSizingMode = 'FIXED';
+  sb.resize(280, 1024);
+  sb.paddingLeft = sb.paddingRight = 16; sb.paddingTop = 16;
+  sb.fills = [];
+  const logo = figma.createFrame();
+  logo.layoutMode = 'HORIZONTAL'; logo.itemSpacing = 12; logo.counterAxisAlignItems = 'CENTER';
+  logo.paddingLeft = logo.paddingRight = 12; logo.paddingTop = logo.paddingBottom = 16;
+  logo.primaryAxisSizingMode = 'FIXED'; logo.counterAxisSizingMode = 'AUTO';
+  logo.resize(248, 60); logo.fills = []; logo.itemSpacing = 12;
+  const li = figma.createFrame();
+  li.resize(36, 36); bindRadius(li, 'radius/lg', 16);
+  li.fills = [{ type: 'GRADIENT_LINEAR', gradientTransform: [[1, -1, 0.5], [1, 1, 0.5]], gradientStops: [{ color: { r: 0.6, g: 0.65, b: 0.98, a: 1 }, position: 0 }, { color: { r: 0.55, g: 0.36, b: 0.96, a: 1 }, position: 1 }] }];
+  li.layoutMode = 'HORIZONTAL'; li.primaryAxisAlignItems = 'CENTER'; li.counterAxisAlignItems = 'CENTER';
+  li.appendChild(txt('L', FONT_B, 18, 'platform/btn/primary/text'));
+  logo.appendChild(li);
+  logo.appendChild(txt('Linnex', FONT_B, 20, 'text/primary'));
+  sb.appendChild(logo);
+  const head = figma.createFrame();
+  head.layoutMode = 'HORIZONTAL'; head.itemSpacing = 8;
+  head.primaryAxisSizingMode = 'FIXED'; head.counterAxisSizingMode = 'AUTO';
+  head.resize(248, 40); head.paddingBottom = 8; head.fills = [];
+  sb.appendChild(head);
+  const nav = figma.createFrame();
+  nav.layoutMode = 'VERTICAL'; nav.itemSpacing = 4;
+  nav.paddingLeft = nav.paddingRight = 12;
+  nav.primaryAxisSizingMode = 'AUTO'; nav.counterAxisSizingMode = 'FIXED';
+  nav.resize(248, 400); nav.fills = []; nav.layoutGrow = 1;
+  const st = txt('РАБОЧЕЕ ПРОСТРАНСТВО', FONT_S, 12, 'text/tertiary');
+  st.letterSpacing = { value: 8, unit: 'PERCENT' };
+  const stWrap = figma.createFrame(); stWrap.layoutMode = 'HORIZONTAL';
+  stWrap.paddingLeft = stWrap.paddingRight = 12; stWrap.paddingTop = stWrap.paddingBottom = 8;
+  stWrap.primaryAxisSizingMode = 'FIXED'; stWrap.counterAxisSizingMode = 'AUTO';
+  stWrap.resize(224, 30); stWrap.fills = [];
+  stWrap.appendChild(st);
+  nav.appendChild(stWrap);
+  const items = spec.nav;
+  for (const it of items) nav.appendChild(navItem(it[0], it[1], it[2]).createInstance());
+  sb.appendChild(nav);
+  const foot = figma.createFrame();
+  foot.layoutMode = 'HORIZONTAL'; foot.itemSpacing = 12; foot.counterAxisAlignItems = 'CENTER';
+  foot.paddingLeft = foot.paddingRight = foot.paddingTop = foot.paddingBottom = 16;
+  foot.primaryAxisSizingMode = 'FIXED'; foot.counterAxisSizingMode = 'AUTO';
+  foot.resize(280, 68); foot.x = 0;
+  foot.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.08 } }]; foot.strokeWeight = 1; foot.strokeAlign = 'INSIDE';
+  foot.fills = [];
+  const av = figma.createFrame(); av.resize(36, 36); av.cornerRadius = 18;
+  av.fills = [{ type: 'GRADIENT_LINEAR', gradientTransform: [[1, -1, 0.5], [1, 1, 0.5]], gradientStops: [{ color: { r: 1, g: 0.53, b: 0.36, a: 1 }, position: 0 }, { color: { r: 0.96, g: 0.25, b: 0.37, a: 1 }, position: 1 }] }];
+  av.layoutMode = 'HORIZONTAL'; av.primaryAxisAlignItems = 'CENTER'; av.counterAxisAlignItems = 'CENTER';
+  av.appendChild(txt('ВШ', FONT_M, 13, 'platform/btn/primary/text'));
+  foot.appendChild(av);
+  const un = col(2); un.layoutGrow = 1;
+  un.appendChild(txt('Виктор Швед', FONT_M, 13, 'text/primary'));
+  un.appendChild(txt('Администратор', FONT_R, 11, 'text/tertiary'));
+  foot.appendChild(un);
+  foot.appendChild(icon('◔', 16, 'text/secondary'));
+  sb.appendChild(foot);
+  foot.absoluteTransform = [[1, 0, 0], [0, 1, 956]];
+  foot.layoutPositioning = 'ABSOLUTE';
+  return sb;
+}
+function makeTopBar() {
+  const tb = figma.createComponent();
+  tb.name = 'Shell/TopBar';
+  tb.layoutMode = 'HORIZONTAL'; tb.itemSpacing = 8;
+  tb.primaryAxisSizingMode = 'FIXED'; tb.counterAxisSizingMode = 'AUTO';
+  tb.counterAxisAlignItems = 'CENTER';
+  tb.paddingLeft = tb.paddingRight = 12; tb.paddingTop = tb.paddingBottom = 8;
+  tb.resize(390, 52);
+  boundFill(tb, 'glass/solid/strong', { r: 0.16, g: 0.16, b: 0.25, a: 0.92 });
+  boundStroke(tb, 'glass/border/subtle');
+  const back = figma.createFrame(); back.resize(36, 36); bindRadius(back, 'radius/lg', 16);
+  boundFill(back, 'glass/tint/medium', { r: 1, g: 1, b: 1, a: 0.05 }); boundStroke(back, 'glass/border/subtle');
+  back.layoutMode = 'HORIZONTAL'; back.primaryAxisAlignItems = 'CENTER'; back.counterAxisAlignItems = 'CENTER';
+  back.appendChild(txt('‹', FONT_M, 18, 'text/primary'));
+  tb.appendChild(back);
+  const mid = figma.createFrame(); mid.fills = []; mid.layoutGrow = 1;
+  mid.layoutMode = 'HORIZONTAL'; mid.primaryAxisAlignItems = 'CENTER'; mid.counterAxisAlignItems = 'CENTER';
+  mid.appendChild(txt('Дашборд', FONT_S, 16, 'text/primary'));
+  tb.appendChild(mid);
+  const bell = figma.createFrame(); bell.resize(36, 36); bindRadius(bell, 'radius/lg', 16);
+  boundFill(bell, 'glass/tint/medium', { r: 1, g: 1, b: 1, a: 0.05 }); boundStroke(bell, 'glass/border/subtle');
+  bell.layoutMode = 'HORIZONTAL'; bell.primaryAxisAlignItems = 'CENTER'; bell.counterAxisAlignItems = 'CENTER';
+  bell.appendChild(txt('◉', FONT_R, 15, 'text/secondary'));
+  tb.appendChild(bell);
+  return tb;
+}
+function bottomNavItem(glyph, label, active) {
+  const n = figma.createFrame();
+  n.layoutMode = 'VERTICAL'; n.itemSpacing = 2;
+  n.paddingLeft = n.paddingRight = 8; n.paddingTop = n.paddingBottom = 6;
+  n.primaryAxisSizingMode = 'AUTO'; n.counterAxisSizingMode = 'AUTO';
+  n.counterAxisAlignItems = 'CENTER'; n.primaryAxisAlignItems = 'CENTER';
+  bindRadius(n, 'radius/xl', 20);
+  if (active) boundFill(n, 'accent/subtle', { r: 0.6, g: 0.65, b: 0.98, a: 0.16 }); else n.fills = [];
+  n.appendChild(icon(glyph, 22, active ? 'accent' : 'text/secondary'));
+  n.appendChild(txt(label, FONT_R, 10, active ? 'accent' : 'text/secondary'));
+  return n;
+}
+function makeBottomNav() {
+  const bn = figma.createComponent();
+  bn.name = 'Shell/BottomNav';
+  bn.layoutMode = 'HORIZONTAL'; bn.itemSpacing = 2;
+  bn.primaryAxisSizingMode = 'FIXED'; bn.counterAxisSizingMode = 'AUTO';
+  bn.paddingLeft = bn.paddingRight = bn.paddingTop = bn.paddingBottom = 8;
+  bn.primaryAxisAlignItems = 'CENTER';
+  bn.resize(374, 64);
+  bindRadius(bn, 'radius/2xl', 24);
+  boundFill(bn, 'glass/solid/strong', { r: 0.16, g: 0.16, b: 0.25, a: 0.92 });
+  boundStroke(bn, 'glass/border/subtle');
+  bn.effects = [{ type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.35 }, offset: { x: 0, y: 8 }, radius: 24, spread: 0, visible: true, blendMode: 'NORMAL' }];
+  const items = [['⌂', 'Главная', true], ['✉', 'Синк', false], ['◆', 'CRM', false], ['▤', 'Документы', false], ['☰', 'Ещё', false]];
+  for (const it of items) {
+    const ni = bottomNavItem(it[0], it[1], it[2]);
+    ni.layoutGrow = 1;
+    bn.appendChild(ni);
+  }
+  return bn;
+}
+try {
+const root = figma.createFrame();
+root.name = 'shell-board';
+root.layoutMode = 'HORIZONTAL'; root.itemSpacing = 48;
+root.paddingLeft = root.paddingTop = root.paddingRight = root.paddingBottom = 32;
+root.primaryAxisSizingMode = 'AUTO'; root.counterAxisSizingMode = 'AUTO';
+root.fills = [];
+const headCol = col(8);
+headCol.appendChild(txt('Linnex · App Shell', FONT_S, 28, 'text/primary'));
+headCol.appendChild(txt('Desktop 1440 (sidebar 280 + content) · Mobile 390 (top-bar + bottom-nav)', FONT_R, 13, 'text/secondary'));
+root.appendChild(headCol);
+const desk = section('Desktop — 1440 × 1024');
+const dwrap = figma.createFrame();
+dwrap.name = 'Shell/Desktop';
+dwrap.layoutMode = 'HORIZONTAL'; dwrap.itemSpacing = 0;
+dwrap.primaryAxisSizingMode = 'FIXED'; dwrap.counterAxisSizingMode = 'FIXED';
+dwrap.resize(1440, 1024); dwrap.clipsContent = true;
+boundFill(dwrap, 'bg/primary', { r: 0.086, g: 0.13, b: 0.24 });
+const sidebar = makeSidebar();
+dwrap.appendChild(sidebar);
+const main = figma.createFrame();
+main.name = 'content';
+main.layoutMode = 'VERTICAL'; main.itemSpacing = 24;
+main.paddingLeft = main.paddingRight = main.paddingTop = 32;
+main.primaryAxisSizingMode = 'FIXED'; main.counterAxisSizingMode = 'FIXED';
+main.resize(1160, 1024); main.fills = [];
+main.appendChild(txt('Дашборд', FONT_S, 28, 'text/primary'));
+const phRow = row(16);
+for (const t of ['Быстрые действия', 'Активность', 'Задачи']) {
+  const card = figma.createFrame();
+  card.layoutMode = 'VERTICAL'; card.itemSpacing = 8;
+  card.paddingLeft = card.paddingRight = card.paddingTop = card.paddingBottom = 20;
+  bindRadius(card, 'radius/xl', 20);
+  boundFill(card, 'glass/tint/subtle', { r: 1, g: 1, b: 1, a: 0.03 });
+  boundStroke(card, 'glass/border/subtle');
+  card.resize(360, 160);
+  card.appendChild(txt(t, FONT_M, 14, 'text/secondary'));
+  card.appendChild(txt('…контент экрана сервиса…', FONT_R, 12, 'text/tertiary'));
+  phRow.appendChild(card);
+}
+main.appendChild(phRow);
+dwrap.appendChild(main);
+desk.appendChild(dwrap);
+root.appendChild(desk);
+const mob = section('Mobile — 390 × 844');
+const mwrap = figma.createFrame();
+mwrap.name = 'Shell/Mobile';
+mwrap.layoutMode = 'VERTICAL'; mwrap.itemSpacing = 0;
+mwrap.primaryAxisSizingMode = 'FIXED'; mwrap.counterAxisSizingMode = 'FIXED';
+mwrap.resize(390, 844); mwrap.clipsContent = true;
+boundFill(mwrap, 'bg/primary', { r: 0.086, g: 0.13, b: 0.24 });
+mwrap.appendChild(makeTopBar());
+const mmain = figma.createFrame();
+mmain.name = 'content';
+mmain.layoutMode = 'VERTICAL'; mmain.itemSpacing = 12;
+mmain.paddingLeft = mmain.paddingRight = 16; mmain.paddingTop = 20;
+mmain.primaryAxisSizingMode = 'FIXED'; mmain.counterAxisSizingMode = 'AUTO';
+mmain.resize(390, 660); mmain.fills = []; mmain.layoutGrow = 1;
+for (const t of ['Быстрые действия', 'Активность', 'Задачи']) {
+  const card = figma.createFrame();
+  card.layoutMode = 'VERTICAL'; card.itemSpacing = 6;
+  card.paddingLeft = card.paddingRight = card.paddingTop = card.paddingBottom = 16;
+  bindRadius(card, 'radius/xl', 20);
+  boundFill(card, 'glass/tint/subtle', { r: 1, g: 1, b: 1, a: 0.03 });
+  boundStroke(card, 'glass/border/subtle');
+  card.resize(358, 120);
+  card.appendChild(txt(t, FONT_M, 14, 'text/secondary'));
+  card.appendChild(txt('…контент…', FONT_R, 12, 'text/tertiary'));
+  mmain.appendChild(card);
+}
+mwrap.appendChild(mmain);
+const bnHolder = figma.createFrame();
+bnHolder.layoutMode = 'HORIZONTAL'; bnHolder.primaryAxisAlignItems = 'CENTER'; bnHolder.counterAxisAlignItems = 'CENTER';
+bnHolder.primaryAxisSizingMode = 'FIXED'; bnHolder.counterAxisSizingMode = 'FIXED';
+bnHolder.resize(390, 96); bnHolder.fills = [];
+bnHolder.appendChild(makeBottomNav());
+mwrap.appendChild(bnHolder);
+mob.appendChild(mwrap);
+root.appendChild(mob);
+container.appendChild(root);
+return { pageId: page.id, components: page.findAll(n => n.type === 'COMPONENT').length };
+} catch (e) {
+  return { error: String(e), stack: e.stack ? String(e.stack).slice(0, 1500) : null };
+}
+"""
+
 
 def _uikit_payload() -> Json:
     from scripts.tools.figma_tokens import extract
@@ -381,18 +648,39 @@ def _uikit_payload() -> Json:
     }
 
 
-def cmd_uikit(args: argparse.Namespace) -> int:
-    payload = _uikit_payload()
+def _shell_payload() -> Json:
+    from scripts.tools.figma_tokens import extract
+
+    spec = extract()
+    tokens = {t["name"]: {"Dark": t["values"].get("Dark"), "Light": t["values"].get("Light")} for t in spec["tokens"]}
+    return {
+        "page": "� Экраны",
+        "zone": "zone/00 — App Shell",
+        "collDark": f"{spec['collection']} · Dark",
+        "tokens": tokens,
+        "nav": [
+            ["Дашборд", "⌂", True],
+            ["Синк", "✉", False],
+            ["NetWorkle", "◆", False],
+            ["Документы", "▤", False],
+            ["Wiki", "✎", False],
+            ["Задачи", "☑", False],
+            ["Flows", "⚡", False],
+        ],
+    }
+
+
+def _run(js: str, tag: str, payload: Json, args: argparse.Namespace) -> int:
     file_key = str(args.file_key or "") or _project_file_key()
     server = _Server()
     try:
         if not server.start():
-            print("uikit: figma-console-mcp не инициализировался", file=sys.stderr)
+            print(f"{tag}: figma-console-mcp не инициализировался", file=sys.stderr)
             return 2
         _require_design_file(server, file_key or None, wait=float(args.wait_plugin or 30))
-        code = _UKIT_JS.replace("SPEC", json.dumps(payload, ensure_ascii=False), 1)
+        code = js.replace("SPEC", json.dumps(payload, ensure_ascii=False), 1)
         result = _figma_exec(server, code, timeout_ms=300_000)
-        print(f"uikit: {json.dumps(result, ensure_ascii=False)[:400]}")
+        print(f"{tag}: {json.dumps(result, ensure_ascii=False)[:400]}")
         return 0
     finally:
         server.stop()
@@ -400,10 +688,13 @@ def cmd_uikit(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="python -m scripts.tools.figma_uikit")
+    parser.add_argument("command", nargs="?", default="uikit", choices=["uikit", "shell"])
     parser.add_argument("--file-key", default="")
     parser.add_argument("--wait-plugin", type=float, default=30)
     ns = parser.parse_args()
-    return cmd_uikit(ns)
+    if ns.command == "shell":
+        return _run(_SHELL_JS, "shell", _shell_payload(), ns)
+    return _run(_UKIT_JS, "uikit", _uikit_payload(), ns)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,36 @@ async def _click_channel_call_button(page: Page) -> None:
     await call_button.click()
 
 
+async def _install_call_trace(page: Page) -> None:
+    page.on(
+        "console",
+        lambda msg: print(f"\n=== PAGE-CONSOLE[{msg.type}]: {msg.text[:300]}")
+        if msg.type in ("error", "warning") or "livekit" in msg.text.lower()
+        else None,
+    )
+    await page.evaluate(
+        """() => {
+            window.__callTrace = [];
+            const t0 = Date.now();
+            window.__PLATFORM_BUS__.subscribeAny((ev) => {
+                const ty = ev && ev.type ? ev.type : '?';
+                if (ty.includes('call') || ty.includes('modal')) {
+                    window.__callTrace.push({
+                        t: Date.now() - t0,
+                        type: ty,
+                        payload: JSON.stringify(ev.payload === undefined ? null : ev.payload).slice(0, 400),
+                    });
+                }
+            });
+        }"""
+    )
+
+
+async def _dump_call_trace(page: Page) -> None:
+    trace = await page.evaluate("() => window.__callTrace || 'NO-TRACE'")
+    print(f"\n=== CALL-TRACE: {trace}")
+
+
 async def _ensure_overlay_chat_open(overlay) -> None:
     chat_input = overlay.locator("textarea.chat-input")
     if await chat_input.is_visible(timeout=1_000):
@@ -278,20 +308,25 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
         channel_prefix="Основной канал",
     )
 
+    await _install_call_trace(ui_page_system)
     await ui_page_system.locator(
         "sync-chat-list .header-action-btn"
     ).filter(
         has=ui_page_system.locator("platform-icon[name='phone-plus']")
     ).first.click()
     overlay = ui_page_system.locator("sync-call-overlay-modal")
-    await expect(overlay).to_be_visible(timeout=30_000)
-    await _ensure_overlay_chat_open(overlay)
+    try:
+        await expect(overlay).to_be_visible(timeout=30_000)
+        await _ensure_overlay_chat_open(overlay)
 
-    await overlay.locator("textarea.chat-input").fill(adhoc_text)
-    await overlay.locator("button.chat-send").click()
-    await expect(overlay.locator(".chat-text").get_by_text(adhoc_text, exact=True)).to_be_visible(
-        timeout=30_000
-    )
+        await overlay.locator("textarea.chat-input").fill(adhoc_text)
+        await overlay.locator("button.chat-send").click()
+        await expect(overlay.locator(".chat-text").get_by_text(adhoc_text, exact=True)).to_be_visible(
+            timeout=30_000
+        )
+    except Exception:
+        await _dump_call_trace(ui_page_system)
+        raise
 
     header_title = (
         await ui_page_system.locator("sync-channel-page sync-chat-header .title").first.inner_text()

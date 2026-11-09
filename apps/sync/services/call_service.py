@@ -57,6 +57,7 @@ from core.files.service import FilesService
 from core.logging import get_logger
 from core.pagination import ListResponse
 from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
+from core.utils.domain import is_local
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
@@ -73,7 +74,7 @@ def livekit_client(settings: BaseSettings, billing_service: BillingService) -> L
 
 def livekit_public_url(settings: BaseSettings) -> str:
     host = resolve_context_host()
-    if host is not None:
+    if host is not None and not is_local(host):
         try:
             return resolve_livekit_public_url(host)
         except ValueError as exc:

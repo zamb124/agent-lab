@@ -22,6 +22,7 @@ import {
     shopPromoRemoveOp,
     shopProductsListOp,
     shopAiAutofillOp,
+    shopDemosSeedOp,
 } from '../../../../apps/shop/ui/events/resources/shop.resource.js';
 import '../../../../apps/shop/ui/components/shop-page-head.js';
 import '../../../../apps/shop/ui/pages/shop-orders-page.js';
@@ -42,6 +43,7 @@ const FACTORIES = [
     shopPromoRemoveOp,
     shopProductsListOp,
     shopAiAutofillOp,
+    shopDemosSeedOp,
 ];
 
 const SHOP_ROUTES = [
