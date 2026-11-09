@@ -29,6 +29,7 @@ spec:
             app: seo-synth
         spec:
           restartPolicy: Never
+          {{- include "agentlab.podImagePullSecrets" . | nindent 10 }}
           {{- include "agentlab.nodeSchedule" (list . "master") | nindent 10 }}
           containers:
             - name: seo-synth
@@ -83,6 +84,7 @@ spec:
             app: seo-indexnow
         spec:
           restartPolicy: Never
+          {{- include "agentlab.podImagePullSecrets" . | nindent 10 }}
           {{- include "agentlab.nodeSchedule" (list . "master") | nindent 10 }}
           containers:
             - name: seo-indexnow
