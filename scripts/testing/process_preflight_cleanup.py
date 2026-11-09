@@ -1,9 +1,10 @@
 """Preflight cleanup for local pytest runs.
 
-Kills stale local processes created by pytest fixtures before a new test run.
-The matcher is intentionally narrow: fixed test HTTP ports, known platform
-Granian/TaskIQ commands, pytest/xdist from this repository, and Python sandbox
-workers from ``/tmp/code-runner-python-runtime-*``.
+Kills stale local processes created by pytest fixtures and test_stack before a
+new test run. The matcher is intentionally narrow: HTTP ports and app modules
+of the test stack (derived from ``scripts.testing.stack`` catalogs), pytest/
+xdist from this repository, repo-cwd multiprocessing children, and Python
+sandbox workers from ``/tmp/code-runner-python-runtime-*``.
 """
 
 from __future__ import annotations
@@ -19,63 +20,21 @@ from pathlib import Path
 
 import psutil
 
+from scripts.testing.stack import build_granian_services, build_taskiq_worker_services
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MARKER_DIR = Path("/tmp")
 TEMP_DIR = Path(tempfile.gettempdir()).resolve()
 
-TEST_HTTP_PORTS = {
-    9001,
-    9002,
-    9003,
-    9004,
-    9005,
-    9008,
-    9010,
-    9014,
-    9015,
-    9016,
-    9017,
-    9018,
-    9019,
-    9020,
-    9021,
-    9022,
-    9023,
-    9024,
-    9025,
-}
-
-TEST_GRANIAN_APPS = (
-    "apps.flows.main:app",
-    "apps.rag.main:app",
-    "apps.crm.main:app",
-    "apps.frontend.main:app",
-    "apps.sync.main:app",
-    "apps.office.main:app",
-    "apps.search.main:app",
-    "apps.voice.main:app",
-    "apps.provider_litserve.main:app",
-    "apps.capability_gateway.main:app",
-    "apps.code_runner_python.main:app",
-    "apps.code_runner_node.main:app",
-    "apps.code_runner_go.main:app",
-    "apps.code_runner_csharp.main:app",
-    "apps.worktracker.main:app",
-    "apps.secrets.main:app",
-    "apps.wiki.main:app",
-    "apps.guest_runtime.main:app",
-    "apps.realtime.main:app",
-)
-
-TEST_TASKIQ_APPS = (
-    "apps.flows.worker:worker_app",
-    "apps.rag.worker:worker_app",
-    "apps.search.worker:worker_app",
-    "apps.sync.worker:worker_app",
-    "apps.crm.worker:worker_app",
-    "apps.crm.worker_summary:worker_app",
-    "apps.idle.worker:worker_app",
-    "apps.idle.worker_a2a_push:worker_app",
+# Каталоги — из test_stack, единый источник правды: новый сервис/порт стека
+# попадает в матчер автоматически, без правки этого файла.
+_GRANIAN_SERVICES = build_granian_services()
+TEST_HTTP_PORTS = {service.port for service in _GRANIAN_SERVICES}
+TEST_GRANIAN_APPS = tuple(service.app_path for service in _GRANIAN_SERVICES)
+TEST_TASKIQ_APPS = tuple(
+    worker.worker_module for worker in build_taskiq_worker_services()
+) + (
+    # conftest поднимает scheduler сабпроцессом вне стека (tests/fixtures/workers.py).
     "apps.scheduler.scheduler:scheduler",
 )
 
@@ -168,6 +127,11 @@ def _candidate_reason(process: psutil.Process, ports_by_pid: dict[int, set[int]]
 
     if "code-runner-python-runtime-" in command and "python_worker.py" in command:
         return "code-runner-python-runtime"
+
+    # Осиротевшие multiprocessing-дети (litserve spawn-воркеры, resource_tracker):
+    # cmdline без pytest/портов — узнаём только по cwd внутри репозитория.
+    if "multiprocessing" in command and _cwd_is_repo(process):
+        return "repo-multiprocessing-child"
 
     if "granian" in command:
         for app_path in TEST_GRANIAN_APPS:

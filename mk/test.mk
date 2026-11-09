@@ -45,6 +45,8 @@ _COV_ARGS_APPEND :=
 endif
 
 test-static:
+	@echo "Preflight: зачистка stale pytest/granian/taskiq/code-runner процессов..."
+	@uv run python -m scripts.testing.process_preflight_cleanup
 	@$(MAKE) --no-print-directory _lint-py
 	@uv run python -m scripts.gates --suite static
 	@uv run pytest -q tests/core/ai/test_platform_model_scoring_fixtures.py

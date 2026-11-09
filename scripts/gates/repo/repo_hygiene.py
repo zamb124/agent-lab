@@ -36,6 +36,7 @@ ALLOWED_ROOT_FILES: frozenset[str] = frozenset(
         "Dockerfile.test.base",
         "LICENSE",
         "Makefile",
+        "linnex.io.fig",
         "README.md",
         "THIRD_PARTY_NOTICES.md",
         "analyze_imports.py",

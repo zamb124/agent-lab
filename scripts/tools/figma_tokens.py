@@ -177,6 +177,115 @@ def _classify_literal(raw: str) -> tuple[str, Any] | tuple[None, str]:
     return (None, "unclassified")
 
 
+_GRADIENT_RE = re.compile(
+    r"(?P<kind>linear|radial|conic)-gradient\(\s*(?P<body>.*)\)\s*$", re.S | re.I
+)
+_GRAD_ANGLE_RE = re.compile(r"^(-?\d+(?:\.\d+)?)deg\b")
+_COLOR_RE = re.compile(
+    r"#(?:[0-9a-fA-F]{3,8})\b|rgba?\([^()]*\)|\b(?:transparent|white|black)\b"
+)
+_SHADOW_LAYER_RE = re.compile(
+    r"^\s*(inset\s+)?(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?(?:\s+(-?[\d.]+)(?:px)?)?\s+(.+?)\s*$",
+    re.I,
+)
+
+
+def _parse_css_color(raw: str) -> tuple[float, float, float, float] | None:
+    v = raw.strip().lower()
+    if v in KEYWORD_COLORS:
+        return KEYWORD_COLORS[v]
+    match = HEX_RE.fullmatch(v)
+    if match:
+        return _hex_rgba(match.group(1))
+    match = RGB_RE.fullmatch(v)
+    if match:
+        return _rgb_rgba(match.group("ch"))
+    return None
+
+
+def _split_top_level(raw: str) -> list[str]:
+    """Сплит по запятым вне скобок — внутри rgba()/gradient() запятые не считаются."""
+
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(raw):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == "," and depth == 0:
+            parts.append(raw[start:i])
+            start = i + 1
+    parts.append(raw[start:])
+    return parts
+
+
+def _parse_gradient(raw: str) -> Json | None:
+    """linear/radial-gradient(...) → {kind, angleDeg, stops:[{color,pos}]}."""
+
+    match = _GRADIENT_RE.match(raw.strip())
+    if not match:
+        return None
+    kind = match.group("kind").lower()
+    body = match.group("body")
+    parts = _split_top_level(body)
+    angle = 180.0 if kind == "linear" else None
+    if parts and (angle_match := _GRAD_ANGLE_RE.match(parts[0].strip())):
+        angle = float(angle_match.group(1))
+        parts = parts[1:]
+    elif parts and parts[0].strip().startswith("to "):
+        named = {"to top": 0.0, "to right": 90.0, "to bottom": 180.0, "to left": 270.0}
+        angle = named.get(parts[0].strip().lower())
+        parts = parts[1:]
+        if angle is None:
+            return None
+    stops: list[Json] = []
+    for i, part in enumerate(parts):
+        cm = _COLOR_RE.search(part)
+        if not cm:
+            return None
+        color = _parse_css_color(cm.group(0))
+        if color is None:
+            return None
+        rest = part[cm.end() :].strip()
+        pm = re.match(r"([\d.]+)%", rest)
+        pos = float(pm.group(1)) / 100 if pm else (0.0 if i == 0 else (1.0 if i == len(parts) - 1 else i / (len(parts) - 1)))
+        stops.append({"color": _rgba_obj(color), "position": min(1.0, max(0.0, pos))})
+    if len(stops) < 2:
+        return None
+    return {"kind": kind, "angle": angle, "stops": stops}
+
+
+def _parse_shadow(raw: str) -> list[Json] | None:
+    """CSS box-shadow → список слоёв {inset,x,y,blur,spread,color}; None — не тень."""
+
+    if not re.search(r"\dpx", raw):
+        return None
+    if re.search(r"(?:linear|radial|conic)-gradient\(|url\(|calc\(|var\(", raw):
+        return None
+    layers: list[Json] = []
+    for layer_raw in _split_top_level(raw):
+        match = _SHADOW_LAYER_RE.match(layer_raw.strip())
+        if not match:
+            return None
+        inset, x, y, blur, spread, color_raw = match.groups()
+        color = _parse_css_color(color_raw)
+        if color is None:
+            return None
+        layers.append(
+            {
+                "inset": bool(inset),
+                "x": float(x),
+                "y": float(y),
+                "blur": float(blur),
+                "spread": float(spread or 0),
+                "color": _rgba_obj(color),
+            }
+        )
+    return layers or None
+
+
 def _resolve(
     name: str,
     mode: str,
@@ -277,11 +386,44 @@ def extract() -> Json:
         if reasons:
             skipped.append({"css": f"--{name}", "reason": ";".join(sorted(reasons))})
         tokens.append(spec)
+    styles: list[Json] = []
+    for name in sorted(blocks):
+        values: dict[str, Any] = {}
+        kind: str | None = None
+        for mode, mode_key in (("Dark", "dark"), ("Light", "light")):
+            raw = blocks[name].get(mode_key) or blocks[name].get("dark")
+            if raw is None:
+                continue
+            alias = ALIAS_RE.fullmatch(raw.strip())
+            if alias:
+                tgt = alias.group(1)
+                tgt_raw = blocks.get(tgt, {}).get(mode_key) or blocks.get(tgt, {}).get("dark")
+                fallback = alias.group("fallback")
+                raw = tgt_raw if tgt_raw is not None else (fallback or "")
+            gradient = _parse_gradient(raw.strip())
+            if gradient is not None:
+                kind = "gradient"
+                values[mode] = gradient
+                continue
+            shadow = _parse_shadow(raw.strip())
+            if shadow is not None:
+                kind = "shadow"
+                values[mode] = shadow
+        if kind and values:
+            styles.append(
+                {
+                    "name": _to_figma_name(name),
+                    "css": f"--{name}",
+                    "kind": kind,
+                    "values": values,
+                }
+            )
     return {
         "collection": DEFAULT_COLLECTION,
         "modes": list(MODES),
         "tokens": tokens,
         "skipped": skipped,
+        "styles": styles,
     }
 
 
@@ -343,19 +485,73 @@ for (const t of spec.tokens) {
     stats.errors.push(t.name + ' type ' + v.resolvedType + ' != ' + t.type); continue;
   }
   try { v.setVariableCodeSyntax('WEB', t.css); } catch (e) {}
+  if (t.value === undefined || t.value === null) continue;
   try {
-    if (t.alias) {
-      const tgt = local[t.alias];
-      if (!tgt) { stats.errors.push(t.name + ' alias-miss ' + t.alias); continue; }
-      v.setValueForMode(modeId, { type: 'VARIABLE_ALIAS', id: tgt.id });
-      stats.aliases++;
-    } else {
-      v.setValueForMode(modeId, t.value);
-      stats.values++;
-    }
+    v.setValueForMode(modeId, t.value);
+    stats.values++;
   } catch (e) { stats.errors.push(t.name + ': ' + e.message); }
 }
 return { collectionId: coll.id, stats };
+"""
+
+
+_ALIAS_JS = """
+const spec = SPEC;
+const coll = (await figma.variables.getLocalVariableCollectionsAsync()).find(c => c.name === spec.collection);
+if (!coll) return { stats: { aliases: 0, errors: ['no collection ' + spec.collection] } };
+const modeId = coll.modes[0].modeId;
+const local = {};
+(await figma.variables.getLocalVariablesAsync()).forEach(v => {
+  if (v.variableCollectionId === coll.id) local[v.name] = v;
+});
+const stats = { aliases: 0, errors: [] };
+for (const a of spec.aliases) {
+  const v = local[a.name];
+  const tgt = local[a.alias];
+  if (!v || !tgt) { stats.errors.push(a.name + ' -> ' + a.alias + ' miss'); continue; }
+  try {
+    v.setValueForMode(modeId, { type: 'VARIABLE_ALIAS', id: tgt.id });
+    stats.aliases++;
+  } catch (e) { stats.errors.push(a.name + ': ' + e.message); }
+}
+return { collectionId: coll.id, stats };
+"""
+
+
+_STYLES_JS = """
+const spec = SPEC;
+const paints = await figma.getLocalPaintStylesAsync();
+const effects = await figma.getLocalEffectStylesAsync();
+const stats = { created: 0, updated: 0, errors: [] };
+function gTransform(angle) {
+  const rad = ((angle == null ? 180 : angle) - 90) * Math.PI / 180;
+  const c = Math.cos(rad), s = Math.sin(rad);
+  return [[c, -s, 0.5], [s, c, 0.5]];
+}
+for (const s of spec.styles) {
+  try {
+    if (s.kind === 'gradient') {
+      let st = paints.find(p => p.name === s.name);
+      if (!st) { st = figma.createPaintStyle(); st.name = s.name; stats.created++; }
+      else stats.updated++;
+      const stops = s.value.stops.map(x => ({ color: { r: x.color.r, g: x.color.g, b: x.color.b, a: x.color.a }, position: x.position }));
+      st.paints = [s.value.kind === 'radial'
+        ? { type: 'GRADIENT_RADIAL', gradientTransform: [[1, 0, 0], [0, 1, 0]], gradientStops: stops }
+        : { type: 'GRADIENT_LINEAR', gradientTransform: gTransform(s.value.angle), gradientStops: stops }];
+    } else {
+      let st = effects.find(p => p.name === s.name);
+      if (!st) { st = figma.createEffectStyle(); st.name = s.name; stats.created++; }
+      else stats.updated++;
+      st.effects = s.value.map(l => ({
+        type: l.inset ? 'INNER_SHADOW' : 'DROP_SHADOW',
+        color: { r: l.color.r, g: l.color.g, b: l.color.b, a: l.color.a },
+        offset: { x: l.x, y: l.y }, radius: l.blur, spread: l.spread,
+        visible: true, blendMode: 'NORMAL',
+      }));
+    }
+  } catch (e) { stats.errors.push(s.name + ': ' + e.message); }
+}
+return { stats };
 """
 
 
@@ -465,6 +661,226 @@ def cmd_check() -> int:
     return 0
 
 
+_BOARD_JS = r"""
+const spec = SPEC;
+const FONT_R = { family: 'Inter', style: 'Regular' };
+const FONT_M = { family: 'Inter', style: 'Medium' };
+const FONT_S = { family: 'Inter', style: 'Semi Bold' };
+await figma.loadFontAsync(FONT_R); await figma.loadFontAsync(FONT_M); await figma.loadFontAsync(FONT_S);
+await figma.loadAllPagesAsync();
+let page = figma.root.children.find(p => p.name === spec.page);
+if (!page) { page = figma.createPage(); page.name = spec.page; }
+await page.loadAsync();
+for (const n of [...page.children]) n.remove();
+const colls = await figma.variables.getLocalVariableCollectionsAsync();
+const allVars = await figma.variables.getLocalVariablesAsync();
+const byColl = {};
+for (const c of colls) {
+  byColl[c.name] = {};
+  for (const v of allVars) if (v.variableCollectionId === c.id) byColl[c.name][v.name] = v;
+}
+const varsD = byColl[spec.collDark] || {};
+const varsL = byColl[spec.collLight] || {};
+const rgba = (a) => a ? { r: a[0], g: a[1], b: a[2], a: a.length > 3 ? a[3] : 1 } : { r: 1, g: 0, b: 1, a: 1 };
+function txt(str, font, size, color) {
+  const t = figma.createText();
+  t.fontName = font; t.characters = str; t.fontSize = size;
+  t.fills = [{ type: 'SOLID', color: color || { r: 0.6, g: 0.6, b: 0.65 } }];
+  return t;
+}
+function boundFill(node, v, fallback) {
+  if (v) {
+    try { node.fills = [{ type: 'SOLID', color: fallback, boundVariables: { color: { type: 'VARIABLE_ALIAS', id: v.id } } }]; return; }
+    catch (e) {}
+  }
+  node.fills = [{ type: 'SOLID', color: fallback }];
+}
+function section(title) {
+  const s = figma.createFrame();
+  s.name = 'section/' + title;
+  s.layoutMode = 'VERTICAL'; s.itemSpacing = 16; s.paddingLeft = s.paddingRight = s.paddingTop = s.paddingBottom = 28;
+  s.primaryAxisSizingMode = 'AUTO'; s.counterAxisSizingMode = 'AUTO';
+  s.fills = [{ type: 'SOLID', color: { r: 0.08, g: 0.08, b: 0.12 } }];
+  s.cornerRadius = 16; s.clipsContent = false;
+  s.appendChild(txt(title, FONT_S, 20, { r: 0.95, g: 0.95, b: 1 }));
+  return s;
+}
+function groupFrame(title, width) {
+  const g = figma.createFrame();
+  g.name = 'group/' + title;
+  g.layoutMode = 'VERTICAL'; g.itemSpacing = 10; g.paddingTop = g.paddingBottom = 4;
+  g.resize(width, 40);
+  g.primaryAxisSizingMode = 'AUTO'; g.counterAxisSizingMode = 'FIXED';
+  g.fills = [];
+  g.appendChild(txt(title, FONT_M, 13, { r: 0.55, g: 0.6, b: 0.8 }));
+  const grid = figma.createFrame();
+  grid.name = 'grid';
+  grid.layoutMode = 'HORIZONTAL'; grid.layoutWrap = 'WRAP';
+  grid.itemSpacing = 12; grid.counterAxisSpacing = 12;
+  grid.resize(width, 40);
+  grid.primaryAxisSizingMode = 'FIXED'; grid.counterAxisSizingMode = 'AUTO';
+  grid.fills = [];
+  g.appendChild(grid);
+  return { g, grid };
+}
+function colorCard(t) {
+  const card = figma.createFrame();
+  card.name = t.n;
+  card.layoutMode = 'HORIZONTAL'; card.itemSpacing = 10;
+  card.paddingLeft = card.paddingRight = card.paddingTop = card.paddingBottom = 10;
+  card.primaryAxisSizingMode = 'AUTO'; card.counterAxisSizingMode = 'AUTO';
+  card.fills = [{ type: 'SOLID', color: { r: 0.14, g: 0.15, b: 0.22 } }];
+  card.cornerRadius = 10;
+  card.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.08 } }]; card.strokeWeight = 1;
+  for (const [v, fb, tag] of [[varsD[t.n], rgba(t.d), 'D'], [varsL[t.n], rgba(t.l), 'L']]) {
+    const wrap = figma.createFrame();
+    wrap.name = tag; wrap.layoutMode = 'VERTICAL'; wrap.itemSpacing = 4;
+    wrap.primaryAxisSizingMode = 'FIXED'; wrap.counterAxisSizingMode = 'FIXED';
+    wrap.primaryAxisAlignItems = 'CENTER';
+    wrap.resize(56, 76); wrap.fills = [];
+    const sw = figma.createRectangle();
+    sw.name = tag; sw.resize(56, 56); sw.cornerRadius = 8;
+    sw.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.15 } }]; sw.strokeWeight = 1;
+    boundFill(sw, v, fb);
+    wrap.appendChild(sw);
+    wrap.appendChild(txt(tag, FONT_M, 9, { r: 0.55, g: 0.55, b: 0.6 }));
+    card.appendChild(wrap);
+  }
+  const col = figma.createFrame();
+  col.layoutMode = 'VERTICAL'; col.itemSpacing = 4; col.fills = [];
+  col.primaryAxisSizingMode = 'AUTO'; col.counterAxisSizingMode = 'AUTO';
+  col.appendChild(txt(t.n, FONT_M, 11, { r: 0.9, g: 0.9, b: 0.95 }));
+  col.appendChild(txt(t.c, FONT_R, 9));
+  card.appendChild(col);
+  return card;
+}
+let y = 0;
+function place(node, x) {
+  page.appendChild(node); node.x = x; node.y = 0;
+  return node.x + node.width + 40;
+}
+const root = figma.createFrame();
+root.name = 'tokens-board';
+root.layoutMode = 'HORIZONTAL'; root.itemSpacing = 32; root.paddingLeft = root.paddingTop = root.paddingRight = root.paddingBottom = 32;
+root.primaryAxisSizingMode = 'AUTO'; root.counterAxisSizingMode = 'AUTO';
+root.fills = [{ type: 'SOLID', color: { r: 0.05, g: 0.05, b: 0.08 } }];
+const colW = 1240;
+const colorsSec = section('Цвета — ' + spec.collDark + ' / ' + spec.collLight);
+const groups = {};
+for (const t of spec.colors) { const g = t.n.split('/')[0]; (groups[g] = groups[g] || []).push(t); }
+for (const gName of Object.keys(groups).sort()) {
+  const { g, grid } = groupFrame(gName + ' (' + groups[gName].length + ')', colW);
+  for (const t of groups[gName]) grid.appendChild(colorCard(t));
+  colorsSec.appendChild(g);
+}
+const miscSec = section('Метрики');
+for (const gName of Object.keys(spec.floatGroups).sort()) {
+  const { g, grid } = groupFrame(gName, colW);
+  for (const t of spec.floatGroups[gName]) {
+    const chip = figma.createFrame();
+    chip.name = t.n; chip.layoutMode = 'HORIZONTAL'; chip.itemSpacing = 8;
+    chip.paddingLeft = chip.paddingRight = 12; chip.paddingTop = chip.paddingBottom = 8;
+    chip.primaryAxisSizingMode = 'AUTO'; chip.counterAxisSizingMode = 'AUTO';
+    chip.fills = [{ type: 'SOLID', color: { r: 0.14, g: 0.15, b: 0.22 } }]; chip.cornerRadius = 8;
+    chip.appendChild(txt(t.n, FONT_R, 10, { r: 0.8, g: 0.8, b: 0.85 }));
+    chip.appendChild(txt(String(t.v), FONT_M, 10, { r: 0.6, g: 0.65, b: 0.95 }));
+    grid.appendChild(chip);
+  }
+  miscSec.appendChild(g);
+}
+const stylesSec = section('Градиенты и тени');
+for (const mode of spec.modes) {
+  const { g, grid } = groupFrame(mode, colW);
+  for (const s of spec.styles.filter(x => x.v[mode])) {
+    const sw = figma.createFrame();
+    sw.name = s.n; sw.resize(150, 84); sw.cornerRadius = 10; sw.clipsContent = true;
+    sw.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.15 } }]; sw.strokeWeight = 1;
+    const vv = s.v[mode];
+    if (s.k === 'gradient') {
+      const stops = vv.stops.map(x => ({ color: { r: x.color.r, g: x.color.g, b: x.color.b, a: x.color.a }, position: x.position }));
+      const rad = (((vv.angle == null ? 180 : vv.angle) - 90) * Math.PI) / 180;
+      sw.fills = [{ type: 'GRADIENT_LINEAR', gradientTransform: [[Math.cos(rad), -Math.sin(rad), 0.5], [Math.sin(rad), Math.cos(rad), 0.5]], gradientStops: stops }];
+    } else {
+      sw.fills = [{ type: 'SOLID', color: { r: 0.16, g: 0.17, b: 0.26 } }];
+      sw.effects = vv.map(l => ({ type: l.inset ? 'INNER_SHADOW' : 'DROP_SHADOW', color: { r: l.color.r, g: l.color.g, b: l.color.b, a: l.color.a }, offset: { x: l.x, y: l.y }, radius: l.blur, spread: l.spread, visible: true, blendMode: 'NORMAL' }));
+    }
+    const lab = txt(s.n, FONT_R, 9, { r: 1, g: 1, b: 1, a: 0.75 });
+    lab.x = 4; lab.y = 70;
+    const holder = figma.createFrame(); holder.name = s.n; holder.fills = [];
+    holder.layoutMode = 'VERTICAL'; holder.itemSpacing = 4; holder.primaryAxisSizingMode = 'AUTO'; holder.counterAxisSizingMode = 'AUTO';
+    holder.appendChild(sw); lab.y = 0; holder.appendChild(txt(s.n, FONT_R, 9, { r: 0.75, g: 0.75, b: 0.8 }));
+    grid.appendChild(holder);
+  }
+  stylesSec.appendChild(g);
+}
+const head = txt('Linnex · Liquid Glass — Design Tokens', FONT_S, 28, { r: 0.95, g: 0.95, b: 1 });
+const sub = txt(spec.colors.length + ' colors · ' + spec.floatCount + ' metrics · ' + spec.styles.length + ' styles → collections «' + spec.collDark + '», «' + spec.collLight + '»', FONT_R, 13);
+const headCol = figma.createFrame();
+headCol.layoutMode = 'VERTICAL'; headCol.itemSpacing = 8; headCol.fills = [];
+headCol.primaryAxisSizingMode = 'AUTO'; headCol.counterAxisSizingMode = 'AUTO';
+headCol.appendChild(head); headCol.appendChild(sub);
+root.appendChild(headCol);
+root.appendChild(colorsSec);
+root.appendChild(miscSec);
+root.appendChild(stylesSec);
+page.appendChild(root);
+return { pageId: page.id, cards: spec.colors.length };
+"""
+
+
+def _board_payload(spec: Json) -> Json:
+    colors: list[Json] = []
+    float_groups: dict[str, list[Json]] = {}
+    float_count = 0
+    for t in spec["tokens"]:
+        vals = t["values"]
+        dark = vals.get("Dark")
+        light = vals.get("Light")
+        if t["type"] == "COLOR":
+            def _c(v: Any) -> Any:  # pyright: ignore[reportExplicitAny]
+                if isinstance(v, dict) and "$alias" in v:
+                    return None
+                return [v["r"], v["g"], v["b"], v["a"]] if isinstance(v, dict) else v
+
+            colors.append({"n": t["name"], "c": t["css"], "d": _c(dark), "l": _c(light)})
+        elif t["type"] == "FLOAT" and isinstance(dark, (int, float)):
+            group = t["name"].split("/")[0]
+            float_groups.setdefault(group, []).append({"n": t["name"], "v": dark})
+            float_count += 1
+    styles = [
+        {"n": s["name"], "k": s["kind"], "v": s["values"]}
+        for s in spec.get("styles", [])
+    ]
+    return {
+        "page": "🎨 Design Tokens",
+        "collDark": f"{spec['collection']} · Dark",
+        "collLight": f"{spec['collection']} · Light",
+        "modes": spec["modes"],
+        "colors": colors,
+        "floatGroups": float_groups,
+        "floatCount": float_count,
+        "styles": styles,
+    }
+
+
+def cmd_board(args: argparse.Namespace) -> int:
+    spec = extract()
+    file_key = str(args.file_key or "") or _project_file_key()
+    server = _Server()
+    try:
+        if not server.start():
+            print("board: figma-console-mcp не инициализировался", file=sys.stderr)
+            return 2
+        _require_design_file(server, file_key or None, wait=float(args.wait_plugin or 30))
+        payload = _board_payload(spec)
+        code = _BOARD_JS.replace("SPEC", json.dumps(payload, ensure_ascii=False), 1)
+        result = _figma_exec(server, code, timeout_ms=300_000)
+        print(f"board: {json.dumps(result, ensure_ascii=False)[:400]}")
+        return 0
+    finally:
+        server.stop()
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     spec = extract()
     file_key = str(args.file_key or "") or _project_file_key()
@@ -515,6 +931,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
         totals = {"created": 0, "values": 0, "aliases": 0, "errors": []}
         for mode, coll_name, mode_tokens in collections:
+            aliases = [
+                {"name": t["name"], "alias": t["alias"]}
+                for t in mode_tokens
+                if t.get("alias")
+            ]
             for start in range(0, len(mode_tokens), CHUNK_SIZE):
                 chunk = mode_tokens[start : start + CHUNK_SIZE]
                 payload = json.dumps(
@@ -539,6 +960,59 @@ def cmd_sync(args: argparse.Namespace) -> int:
                     f"+{stats.get('created', 0)} vars, {stats.get('values', 0)} values, "
                     f"{stats.get('aliases', 0)} aliases, {len(errors)} errors"
                 )
+            for start in range(0, len(aliases), CHUNK_SIZE):
+                batch = aliases[start : start + CHUNK_SIZE]
+                payload = json.dumps(
+                    {"collection": coll_name, "aliases": batch}, ensure_ascii=False
+                )
+                result = _figma_exec(
+                    server,
+                    _ALIAS_JS.replace("SPEC", payload, 1),
+                )
+                stats = result.get("stats", result)
+                if not isinstance(stats, dict) or "aliases" not in stats:
+                    print(f"  alias вернул неожиданное: {json.dumps(result, ensure_ascii=False)[:500]}", file=sys.stderr)
+                    stats = {"aliases": 0, "errors": ["execute-response"]}
+                totals["aliases"] += int(stats.get("aliases", 0))
+                errors = stats.get("errors", [])
+                if isinstance(errors, list):
+                    totals["errors"].extend(f"{mode}:{e}" for e in errors)
+                print(
+                    f"  {mode} aliases {start}-{start + len(batch)}: "
+                    f"{stats.get('aliases', 0)} aliases, {len(errors)} errors"
+                )
+        style_items: list[Json] = []
+        for s in spec.get("styles", []):
+            for mode in spec["modes"]:
+                val = s["values"].get(mode)
+                if val is None:
+                    continue
+                style_items.append(
+                    {"name": f"{mode}/{s['name']}", "kind": s["kind"], "value": val}
+                )
+        if style_items:
+            style_stats = {"created": 0, "updated": 0, "errors": 0}
+            for start in range(0, len(style_items), CHUNK_SIZE):
+                batch = style_items[start : start + CHUNK_SIZE]
+                payload = json.dumps({"styles": batch}, ensure_ascii=False)
+                result = _figma_exec(
+                    server,
+                    _STYLES_JS.replace("SPEC", payload, 1),
+                )
+                stats = result.get("stats", result)
+                if not isinstance(stats, dict) or "created" not in stats:
+                    print(f"  styles вернул неожиданное: {json.dumps(result, ensure_ascii=False)[:500]}", file=sys.stderr)
+                    stats = {"created": 0, "updated": 0, "errors": ["execute-response"]}
+                style_stats["created"] += int(stats.get("created", 0))
+                style_stats["updated"] += int(stats.get("updated", 0))
+                errors = stats.get("errors", [])
+                if isinstance(errors, list):
+                    totals["errors"].extend(f"style:{e}" for e in errors)
+                    style_stats["errors"] += len(errors)
+            print(
+                f"  styles: +{style_stats['created']} created, "
+                f"{style_stats['updated']} updated, {style_stats['errors']} errors"
+            )
         print(
             f"sync: итого +{totals['created']} переменных, {totals['values']} значений, "
             f"{totals['aliases']} алиасов; ошибок {len(totals['errors'])}; stale {len(all_stale)}"
@@ -563,7 +1037,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     _ = parser.add_argument(
         "command",
-        choices=["extract", "sync", "check", "snapshot"],
+        choices=["extract", "sync", "check", "snapshot", "board"],
     )
     _ = parser.add_argument("--file-key", default="", help="ключ Design-файла Figma")
     _ = parser.add_argument("--collection", default="", help=f"коллекция переменных (default {DEFAULT_COLLECTION})")
@@ -582,6 +1056,8 @@ def main() -> int:
         return cmd_snapshot()
     if ns.command == "check":
         return cmd_check()
+    if ns.command == "board":
+        return cmd_board(ns)
     return cmd_sync(ns)
 
 

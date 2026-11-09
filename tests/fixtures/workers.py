@@ -40,6 +40,20 @@ def _pid_is_alive(pid: int) -> bool:
     return True
 
 
+def _recorded_pid_is_pytest(pid: int) -> bool:
+    """Живой pid из маркера — реально pytest? Отсекает переиспользование pid."""
+    try:
+        import psutil
+    except ImportError:
+        return True
+    try:
+        return "pytest" in " ".join(psutil.Process(pid).cmdline())
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        return False
+    except psutil.AccessDenied:
+        return True
+
+
 def claim_pytest_controller_session() -> None:
     if _PLATFORM_TEST_CONTROLLER_PID.exists():
         try:
@@ -48,7 +62,11 @@ def claim_pytest_controller_session() -> None:
             )
         except ValueError:
             existing_pid = -1
-        if existing_pid > 0 and _pid_is_alive(existing_pid):
+        if (
+            existing_pid > 0
+            and _pid_is_alive(existing_pid)
+            and _recorded_pid_is_pytest(existing_pid)
+        ):
             raise RuntimeError(
                 "pytest controller уже запущен "
                 f"(pid={existing_pid}). Дождитесь завершения make test "

@@ -43,6 +43,8 @@ async def _ensure_overlay_chat_open(overlay) -> None:
             if (modal) for (const a of modal.attributes) attrs[a.name] = a.value;
             const mcs = modal ? getComputedStyle(modal) : null;
             const mr = modal ? modal.getBoundingClientRect() : {x:0,y:0,width:0,height:0};
+            const bcs = getComputedStyle(document.body);
+            const midStack = document.elementsFromPoint(innerWidth/2, innerHeight/2).map(e => e.tagName);
             return {
                 box: {x: r.x, y: r.y, w: r.width, h: r.height},
                 center: {x: cx, y: cy},
@@ -50,8 +52,16 @@ async def _ensure_overlay_chat_open(overlay) -> None:
                     const cs = getComputedStyle(e);
                     return e.tagName + '|pe=' + cs.pointerEvents + '|z=' + cs.zIndex;
                 }),
+                midStack,
                 modalAttrs: attrs,
                 modalPe: mcs ? mcs.pointerEvents : 'NO-MODAL',
+                modalVis: mcs ? mcs.visibility : 'NO-MODAL',
+                modalDisp: mcs ? mcs.display : 'NO-MODAL',
+                modalClip: mcs ? mcs.clipPath : 'NO-MODAL',
+                modalCv: mcs ? mcs.contentVisibility : 'NO-MODAL',
+                bodyPe: bcs.pointerEvents,
+                bodyVis: bcs.visibility,
+                docHidden: document.hidden,
                 modalRect: {x: Math.round(mr.x), y: Math.round(mr.y), w: Math.round(mr.width), h: Math.round(mr.height)},
                 modalParent: modal && modal.parentElement ? modal.parentElement.tagName : null,
                 modalCount: document.querySelectorAll('sync-call-overlay-modal').length,
