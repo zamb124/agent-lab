@@ -43,6 +43,12 @@ from scripts.seo.seo_config import primary_platform_domain, public_mirror_domain
 _PAGE_TIMEOUT = 90.0
 _PAGE_WORKERS = 8
 
+# Сырой i18n-ключ в head: `rag.meta_title | Linnex` — симптом записи
+# document.meta до загрузки бандла. Человеческие тайтлы так не начинаются.
+_RAW_I18N_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+(\s|$)")
+_TITLE_RE = re.compile(r"<title>([^<]*)</title>")
+_DESCRIPTION_RE = re.compile(r'<meta[^>]*\bname="description"[^>]*\bcontent="([^"]*)"')
+
 
 class Check:
     def __init__(self) -> None:
@@ -167,6 +173,22 @@ def main() -> int:
             continue
         if "shadowrootmode" not in body:
             check.fail(f"page {name} snapshot", "нет DSD-разметки — снапшот не отдался")
+            continue
+        # Title и description локализованы: сырой i18n-ключ означает, что
+        # SPA записала мету до загрузки бандла (гонка i18n-ready).
+        title = _TITLE_RE.search(body)
+        if title is None or _RAW_I18N_KEY_RE.match(title.group(1)):
+            check.fail(
+                f"page {name} title",
+                repr(title.group(1)) if title is not None else "отсутствует",
+            )
+            continue
+        description = _DESCRIPTION_RE.search(body)
+        if description is None or _RAW_I18N_KEY_RE.match(description.group(1)):
+            check.fail(
+                f"page {name} description",
+                repr(description.group(1)) if description is not None else "отсутствует",
+            )
             continue
         check.ok(f"page {name}", canonical.group(1))
 
