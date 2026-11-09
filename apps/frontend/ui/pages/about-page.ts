@@ -4,7 +4,7 @@
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
+import { applyPublicDocumentMeta, PublicDocumentMetaSyncController } from '../_helpers/public-document-meta.js';
 import { FrontendLeadFormModal } from '../modals/lead-form-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
@@ -18,9 +18,9 @@ export class AboutPage extends PlatformPage {
 
     static override styles: CSSResultGroup = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
-    override connectedCallback(): void {
-        super.connectedCallback();
-        queueMicrotask(() => this._syncMeta());
+    constructor() {
+        super();
+        new PublicDocumentMetaSyncController(this, () => this._syncMeta());
     }
 
     _syncMeta() {

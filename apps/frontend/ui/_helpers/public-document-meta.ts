@@ -2,6 +2,35 @@
  * Обновление title и мета-тегов документа для публичных страниц (SEO / Open Graph).
  */
 
+import { isI18nBundleReady } from '@platform/lib/events/effects/i18n.effect.js';
+import type { ReactiveController } from 'lit';
+import type { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+
+/**
+ * Синк document meta после загрузки i18n-бандла.
+ *
+ * `connectedCallback`/`queueMicrotask` бегут до ответа `/api/i18n/<locale>` —
+ * `t()` тогда отдаёт сырой ключ и он запекается в title снапшота и вкладки.
+ * Контроллер ждёт `isI18nBundleReady` и синкает один раз на локаль.
+ */
+export class PublicDocumentMetaSyncController implements ReactiveController {
+    private _readyLocale: SelectController<string>;
+    private _applied: string = '';
+
+    constructor(host: PlatformElement, private _sync: () => void) {
+        host.addController(this);
+        this._readyLocale = host.select((s) => (isI18nBundleReady(s.i18n) ? s.i18n.locale : ''));
+    }
+
+    hostUpdated(): void {
+        const locale = this._readyLocale.value;
+        if (locale === '' || locale === this._applied) return;
+        this._applied = locale;
+        this._sync();
+    }
+}
+
 function _ensureMeta(attrName: string, attrValue: string) {
     let el = document.querySelector(`meta[${attrName}="${attrValue}"]`);
     if (!el) {

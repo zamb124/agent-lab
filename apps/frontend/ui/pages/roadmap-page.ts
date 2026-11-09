@@ -4,7 +4,7 @@
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
+import { applyPublicDocumentMeta, PublicDocumentMetaSyncController } from '../_helpers/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import '../components/cosmic/cosmic-scope.js';
@@ -16,9 +16,9 @@ export class RoadmapPage extends PlatformPage {
 
     static override styles: CSSResultGroup = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
-    override connectedCallback(): void {
-        super.connectedCallback();
-        queueMicrotask(() => this._syncMeta());
+    constructor() {
+        super();
+        new PublicDocumentMetaSyncController(this, () => this._syncMeta());
     }
 
     _syncMeta() {

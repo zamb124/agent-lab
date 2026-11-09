@@ -4,7 +4,7 @@
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
+import { applyPublicDocumentMeta, PublicDocumentMetaSyncController } from '../_helpers/public-document-meta.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -43,11 +43,7 @@ export class SupportPage extends PlatformPage {
         this._subject = '';
         this._message = '';
         this._status = { kind: 'idle', i18nKey: '' };
-    }
-
-    override connectedCallback(): void {
-        super.connectedCallback();
-        queueMicrotask(() => this._syncDocumentMeta());
+        new PublicDocumentMetaSyncController(this, () => this._syncDocumentMeta());
     }
 
     _syncDocumentMeta() {

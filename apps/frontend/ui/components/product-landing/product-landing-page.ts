@@ -10,8 +10,7 @@ import '../landing/landing-header.js';
 import '../landing/landing-footer.js';
 import '../cosmic/cosmic-scope.js';
 import '../cosmic/scramble-text.js';
-import { applyPublicDocumentMeta } from '../../_helpers/public-document-meta.js';
-import { isI18nBundleReady } from '@platform/lib/events/effects/i18n.effect.js';
+import { applyPublicDocumentMeta, PublicDocumentMetaSyncController } from '../../_helpers/public-document-meta.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -47,12 +46,10 @@ export class ProductLandingPage extends PlatformPage {
         super();
         this._authStatusSel = this.select((s) => s.auth.status);
         this._localeSel = this.select((s) => s.i18n.locale);
-        this._i18nReady = this.select((s) => isI18nBundleReady(s.i18n));
+        new PublicDocumentMetaSyncController(this, () => this._syncProductDocumentMeta());
     }
     private _authStatusSel: SelectController<AuthStatus>;
     private _localeSel: SelectController<string>;
-    private _i18nReady: SelectController<boolean>;
-    private _metaSyncSig: string = '';
 
 
     override connectedCallback(): void {
@@ -61,17 +58,6 @@ export class ProductLandingPage extends PlatformPage {
         if (ctor.productAccent !== 'accent') {
             this.setAttribute('product-accent', ctor.productAccent);
         }
-    }
-
-    override updated(): void {
-        // connect 시점에는 /api/i18n 번들이 아직 없어 t()가 raw key를 돌려준다.
-        // 번들 로드·로케일 전환 시 select가 updated()를 다시 부르므로 거기서 sync.
-        if (!this._i18nReady.value) return;
-        const ctor = this.constructor as typeof ProductLandingPage;
-        const sig = `${ctor.productKey}|${this._localeSel.value}`;
-        if (this._metaSyncSig === sig) return;
-        this._metaSyncSig = sig;
-        this._syncProductDocumentMeta();
     }
 
     _translationKey(relativeKey: string) {

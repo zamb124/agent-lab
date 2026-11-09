@@ -5,7 +5,7 @@ import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { mergePlatformI18nVars } from '@platform/lib/utils/platform-i18n-vars.js';
-import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
+import { applyPublicDocumentMeta, PublicDocumentMetaSyncController } from '../_helpers/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import '../components/cosmic/cosmic-scope.js';
@@ -72,6 +72,7 @@ export class LegalPage extends PlatformPage {
         this._localeSel = this.select((s) => s.i18n.locale);
         this._bundleSel = this.select((s) => s.i18n.translations[s.i18n.locale]);
         this._siteBundle = this.useOp('frontend/public_site_bundle');
+        new PublicDocumentMetaSyncController(this, () => this._syncDocumentMeta());
     }
     private _localeSel: SelectController<any>;
     private _bundleSel: SelectController<any>;
@@ -81,7 +82,6 @@ export class LegalPage extends PlatformPage {
     override connectedCallback(): void {
         super.connectedCallback();
         void this._siteBundle.run(null);
-        queueMicrotask(() => this._syncDocumentMeta());
     }
 
     _spec() {
