@@ -45,6 +45,10 @@ _CRAWL_SESSION_CREATE: JsonObject = {
     },
 }
 
+# HTTP-таймаут MCP-вызова обязан быть больше самого долгого inner-таймаута инструмента
+# (browser_wait ждёт до 60s), иначе клиент рвёт соединение до ответа сервера.
+_MCP_CALL_TIMEOUT_SECONDS = 90.0
+
 
 def _normalize_ref(raw_ref: str) -> str:
     value = raw_ref.strip()
@@ -115,7 +119,7 @@ async def _mcp_json(
     client = await get_mcp_client(
         config=config,
         variables=state.variables,
-        timeout=60.0,
+        timeout=_MCP_CALL_TIMEOUT_SECONDS,
     )
     result = await client.call_tool(tool_name, arguments)
     if result.is_error:

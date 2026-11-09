@@ -21,7 +21,8 @@ _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 
 Поведение совпадает с нодой simple_crawler `search_duckduckgo_batch`.
 
-Ответ: `urls` (список строк, до `per_query_limit` штук). Ошибки — исключение.
+Ответ: `success` + `urls` (список строк, до `per_query_limit` штук); при недоступном
+browser MCP, капче или сетевом сбое — `success=false` + `error`, без исключения.
 
 Параметры:
 - `query` (строка): поисковая фраза.
@@ -34,7 +35,7 @@ _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 _BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION = """
 Несколько поисковых запросов параллельно; URL из всех запросов объединяются с дедупликацией (порядок первого появления).
 
-Ответ: `urls`. Ошибки — исключение.
+Ответ: `success` + `urls`; при сбое — `success=false` + `error`, без исключения.
 
 Параметры:
 - `queries` (массив строк): хотя бы одна непустая строка после trim.
@@ -170,13 +171,18 @@ async def browser_duckduckgo_links(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    urls = await BrowserClient().duckduckgo_links(
-        state,
-        query,
-        server_id=server_id,
-        per_query_limit=per_query_limit,
-    )
-    return {"urls": urls}
+    try:
+        urls = await BrowserClient().duckduckgo_links(
+            state,
+            query,
+            server_id=server_id,
+            per_query_limit=per_query_limit,
+        )
+    except Exception as exc:
+        # Как у browser_page_markdown: success=false вместо падения хода
+        # (капча/анти-бот DDG, сетевые сбои browser MCP).
+        return {"success": False, "urls": [], "error": str(exc)}
+    return {"success": True, "urls": urls}
 
 
 @tool(
@@ -192,13 +198,16 @@ async def browser_duckduckgo_links_batch(
     *,
     state: "ExecutionState",
 ) -> JsonObject:
-    urls = await BrowserClient().duckduckgo_links_batch(
-        state,
-        queries,
-        server_id=server_id,
-        per_query_limit=per_query_limit,
-    )
-    return {"urls": urls}
+    try:
+        urls = await BrowserClient().duckduckgo_links_batch(
+            state,
+            queries,
+            server_id=server_id,
+            per_query_limit=per_query_limit,
+        )
+    except Exception as exc:
+        return {"success": False, "urls": [], "error": str(exc)}
+    return {"success": True, "urls": urls}
 
 
 @tool(

@@ -241,7 +241,10 @@ class MCPClient:
                         headers=headers,
                     )
                 except httpx2.RequestError as exc:
-                    raise MCPClientError(f"MCP connection error: {exc}") from exc
+                    detail = str(exc).strip()
+                    exc_name = exc.__class__.__name__
+                    message = f"MCP connection error: {exc_name}: {detail}" if detail else f"MCP connection error: {exc_name}"
+                    raise MCPClientError(message) from exc
                 response_headers = response.headers
                 text = await self._read_response_text(response)
                 content_type_header = http_header_text(response.headers, "content-type")
