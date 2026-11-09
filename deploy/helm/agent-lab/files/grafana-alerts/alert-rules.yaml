@@ -1365,6 +1365,46 @@ groups:
       description: '{{ printf "%.1f" $values.B.Value }} restarts in 15m'
     labels:
       severity: critical
+  - uid: pod-oom-killed
+    title: Pod OOMKilled
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        expr: kube_pod_container_status_last_terminated_reason{namespace="platform",reason="OOMKilled"} == 1 and on(pod, container) increase(kube_pod_container_status_restarts_total{namespace="platform"}[1h]) > 0
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    annotations:
+      summary: 'OOMKilled: {{ $labels.pod }}/{{ $labels.container }}'
+      description: 'Container memory limit hit in the last hour — raise the limit or fix the leak'
+    labels:
+      severity: critical
   - uid: pod-phase-failed
     title: Pod Failed/Unknown
     condition: C
