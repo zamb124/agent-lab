@@ -17,10 +17,10 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
 const LEGAL_KINDS = Object.freeze({
-    policy: Object.freeze({ ns: 'privacy', path: '/policy', sections: 14 }),
-    terms: Object.freeze({ ns: 'terms', path: '/terms', sections: 13 }),
-    cookies: Object.freeze({ ns: 'cookies', path: '/cookies', sections: 8 }),
-    cookie_consent: Object.freeze({ ns: 'cookie_consent', path: '/consent/cookies', sections: 8 }),
+    policy: Object.freeze({ ns: 'privacy', path: '/policy', sections: 14, descriptionKey: 'meta.policy_description' }),
+    terms: Object.freeze({ ns: 'terms', path: '/terms', sections: 13, descriptionKey: 'meta.terms_description' }),
+    cookies: Object.freeze({ ns: 'cookies', path: '/cookies', sections: 8, descriptionKey: 'meta.cookies_description' }),
+    cookie_consent: Object.freeze({ ns: 'cookie_consent', path: '/consent/cookies', sections: 8, descriptionKey: 'meta.cookie_consent_description' }),
 });
 
 function isLegalKind(kind: string): kind is keyof typeof LEGAL_KINDS {
@@ -97,7 +97,7 @@ export class LegalPage extends PlatformPage {
         const origin = window.location.origin;
         applyPublicDocumentMeta({
             title: this._lt('title', undefined, spec.ns),
-            description: this._lt('updated', undefined, spec.ns),
+            description: this.t(spec.descriptionKey, {}, 'landing'),
             canonicalUrl: `${origin}${spec.path}`,
             ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
         });

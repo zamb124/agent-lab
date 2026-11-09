@@ -242,24 +242,24 @@ import '@platform/lib/components/platform-empty-state.js';
 const FRONTEND_ROUTES = [
     { key: 'landing',                 path: '',                                                titleKey: 'routes.landing' },
     { key: 'search',                  path: 'search',                   parent: 'landing',     titleKey: 'routes.search' },
-    { key: 'product-agents',          path: 'products/agents',          parent: 'landing',     titleKey: 'routes.product-agents' },
-    { key: 'product-rag',             path: 'products/rag',             parent: 'landing',     titleKey: 'routes.product-rag' },
-    { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
-    { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync' },
-    { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents' },
-    { key: 'product-geo',             path: 'products/geo',             parent: 'landing',     titleKey: 'routes.product-geo' },
-    { key: 'product-wiki',            path: 'products/wiki',            parent: 'landing',     titleKey: 'routes.product-wiki' },
-    { key: 'product-shop',            path: 'products/shop',            parent: 'landing',     titleKey: 'routes.product-shop' },
-    { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
-    { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
-    { key: 'cookies',                 path: 'cookies',                  parent: 'landing',     titleKey: 'routes.cookies' },
-    { key: 'cookie-consent',          path: 'consent/cookies',          parent: 'landing',     titleKey: 'routes.cookie-consent' },
-    { key: 'support',                 path: 'support',                  parent: 'landing',     titleKey: 'routes.support' },
+    { key: 'product-agents',          path: 'products/agents',          parent: 'landing',     titleKey: 'routes.product-agents',    ownsDocumentMeta: true },
+    { key: 'product-rag',             path: 'products/rag',             parent: 'landing',     titleKey: 'routes.product-rag',       ownsDocumentMeta: true },
+    { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm',       ownsDocumentMeta: true },
+    { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync',      ownsDocumentMeta: true },
+    { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents', ownsDocumentMeta: true },
+    { key: 'product-geo',             path: 'products/geo',             parent: 'landing',     titleKey: 'routes.product-geo',       ownsDocumentMeta: true },
+    { key: 'product-wiki',            path: 'products/wiki',            parent: 'landing',     titleKey: 'routes.product-wiki',      ownsDocumentMeta: true },
+    { key: 'product-shop',            path: 'products/shop',            parent: 'landing',     titleKey: 'routes.product-shop',      ownsDocumentMeta: true },
+    { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy',            ownsDocumentMeta: true },
+    { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms',             ownsDocumentMeta: true },
+    { key: 'cookies',                 path: 'cookies',                  parent: 'landing',     titleKey: 'routes.cookies',           ownsDocumentMeta: true },
+    { key: 'cookie-consent',          path: 'consent/cookies',          parent: 'landing',     titleKey: 'routes.cookie-consent',    ownsDocumentMeta: true },
+    { key: 'support',                 path: 'support',                  parent: 'landing',     titleKey: 'routes.support',           ownsDocumentMeta: true },
     { key: 'digital-workers',         path: 'demo/digital-workers',     parent: 'landing',     titleKey: 'routes.digital-workers' },
     { key: 'blog',                    path: 'blog',                     parent: 'landing',     titleKey: 'routes.blog' },
-    { key: 'blog-post',               path: 'blog/:slug',               parent: 'blog',        titleKey: 'routes.blog-post' },
-    { key: 'about',                   path: 'about',                    parent: 'landing',     titleKey: 'routes.about' },
-    { key: 'roadmap',                 path: 'roadmap',                  parent: 'landing',     titleKey: 'routes.roadmap' },
+    { key: 'blog-post',               path: 'blog/:slug',               parent: 'blog',        titleKey: 'routes.blog-post',         ownsDocumentMeta: true },
+    { key: 'about',                   path: 'about',                    parent: 'landing',     titleKey: 'routes.about',             ownsDocumentMeta: true },
+    { key: 'roadmap',                 path: 'roadmap',                  parent: 'landing',     titleKey: 'routes.roadmap',           ownsDocumentMeta: true },
     { key: 'login',                   path: 'login',                                           titleKey: 'routes.login' },
     { key: 'join',                    path: 'join',                                            titleKey: 'routes.join' },
     { key: 'select-company',          path: 'select-company',                                  titleKey: 'routes.select-company' },
@@ -308,18 +308,12 @@ const LANDING_ROUTE_KEYS = new Set([
     'blog', 'blog-post', 'about', 'roadmap',
 ]);
 
-/** Публичные страницы с собственным sync meta (продукты, пост блога). */
-const DOCUMENT_META_SKIP = new Set([
-    'product-agents',
-    'product-rag',
-    'product-crm',
-    'product-sync',
-    'product-documents',
-    'product-geo',
-    'product-wiki',
-    'product-shop',
-    'blog-post',
-]);
+/** Роуты, где document meta синкает сама страница — app-level sync их пропускает. */
+const DOCUMENT_META_SKIP = new Set(
+    FRONTEND_ROUTES.filter((route) => 'ownsDocumentMeta' in route && route.ownsDocumentMeta).map(
+        (route) => route.key,
+    ),
+);
 
 /**
  * Нижняя навигация (mobile shell 2026): консоль панели управления.
@@ -724,52 +718,10 @@ export class FrontendApp extends PlatformApp {
                 titleNs = 'landing';
                 descriptionNs = 'landing';
                 break;
-            case 'about':
-                titleKey = 'meta.about_title';
-                descriptionKey = 'meta.about_description';
-                titleNs = 'landing';
-                descriptionNs = 'landing';
-                break;
-            case 'roadmap':
-                titleKey = 'meta.roadmap_title';
-                descriptionKey = 'meta.roadmap_description';
-                titleNs = 'landing';
-                descriptionNs = 'landing';
-                break;
             case 'digital-workers':
                 titleKey = 'meta.digital_workers_title';
                 descriptionKey = 'meta.digital_workers_description';
                 titleNs = 'landing';
-                descriptionNs = 'landing';
-                break;
-            case 'support':
-                titleKey = 'meta.support_title';
-                descriptionKey = 'meta.support_description';
-                titleNs = 'landing';
-                descriptionNs = 'landing';
-                break;
-            case 'policy':
-                titleKey = 'title';
-                descriptionKey = 'meta.policy_description';
-                titleNs = 'privacy';
-                descriptionNs = 'landing';
-                break;
-            case 'terms':
-                titleKey = 'title';
-                descriptionKey = 'meta.terms_description';
-                titleNs = 'terms';
-                descriptionNs = 'landing';
-                break;
-            case 'cookies':
-                titleKey = 'title';
-                descriptionKey = 'meta.cookies_description';
-                titleNs = 'cookies';
-                descriptionNs = 'landing';
-                break;
-            case 'cookie-consent':
-                titleKey = 'title';
-                descriptionKey = 'meta.cookie_consent_description';
-                titleNs = 'cookie_consent';
                 descriptionNs = 'landing';
                 break;
             default:
