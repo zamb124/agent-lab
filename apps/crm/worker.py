@@ -21,13 +21,26 @@ import importlib
 from apps.crm.services.task_service import TaskService
 from apps.crm.di import CrmDi
 from apps.worker_manifest import wire_worker
+from core.billing.service import BillingService
 from core.di import recipe
+from core.files.reader.service import FileReader
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.tasks.worker_bootstrap import build_worker
+from core.text_transforms import TextTransformService
 
 logger = get_logger(__name__)
 
 _ = importlib.import_module("apps.crm.events")
+
+
+async def configure_crm_file_reader(
+    files_service: FilesService,
+    billing_service: BillingService,
+) -> None:
+    """Persist ассетов FileReader и text transform тем же процессом, что HTTP."""
+    FileReader.configure_asset_persist(files_service)
+    FileReader.configure_text_transform(TextTransformService(billing_service))
 
 
 async def reconcile_crm_worker_tasks(task_service: TaskService) -> None:
@@ -48,7 +61,7 @@ worker_app = build_worker(
     settings=_crm_worker_settings,
     di_class=CrmDi,
     database="crm_url",
-    lifecycle=(recipe(reconcile_crm_worker_tasks),),
+    lifecycle=(recipe(configure_crm_file_reader), recipe(reconcile_crm_worker_tasks)),
 )
 
 __all__ = ["worker_app"]

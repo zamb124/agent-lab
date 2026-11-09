@@ -21,7 +21,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 1 | `rag-shell` | Оболочка сервиса | готовый | ✅ |
-| 1 | `rag-first-namespace` | Пространство → загрузка → поиск (featured) | `test_rag_doc_getting_started.py` | 📝 |
+| 1 | `rag-first-namespace` | Пространство → загрузка → поиск (featured) | `test_rag_doc_getting_started.py` | 🚧 |
 
 ### search (новый тег)
 

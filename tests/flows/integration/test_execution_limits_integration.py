@@ -174,7 +174,7 @@ async def test_flow_run_aborts_on_expired_deadline_before_node(
         nodes={n_id: node},
         edges=[{"from_node": n_id, "to_node": None}],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",

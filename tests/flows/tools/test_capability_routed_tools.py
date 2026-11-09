@@ -167,10 +167,10 @@ async def test_files_materialize_image_regions_via_gateway(
                                 "photo": {
                                     "file_id": file_ref.file_id,
                                     "page": 0,
-                                    "x0": 0.0,
-                                    "y0": 0.0,
-                                    "x1": 1.0,
-                                    "y1": 1.0,
+                                    "x0": 0.1,
+                                    "y0": 0.1,
+                                    "x1": 0.6,
+                                    "y1": 0.6,
                                 },
                             }
                         ],

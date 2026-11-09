@@ -75,7 +75,7 @@ def _llm_node(app: FastAPI, node_id: str, config: dict[str, object]) -> LlmNode:
         tool_registry=di.tool_registry,
         workflow_runtime=di.node_constructor.workflow_runtime,
         text_transform_service=di.node_constructor.text_transform_service,
-        emitter_factory=di.node_constructor.emitter_factory,
+        emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 
@@ -130,7 +130,7 @@ async def _run_single_node_flow(
         nodes={node.node_id: node},
         edges=[],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
     _ = await run_flow(di=di, flow=flow, state=state)
 
@@ -348,7 +348,7 @@ async def run(args, state):
             tools=[t_a, t_b],
             llm=None,
             prompt="Call tools.",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
 
         frozen_before = frozen_snapshot(state)
@@ -417,7 +417,7 @@ async def run(args, state):
             tools=[t_ok, t_evil],
             llm=None,
             prompt="Tools.",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
 
         frozen_before = frozen_snapshot(state)

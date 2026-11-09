@@ -165,18 +165,13 @@ export const stockWavesResource = createResourceCollection({
     },
 });
 
-export const stockValuationResource = createResourceCollection({
-    name: 'stock/valuation',
-    baseUrl: '/stock/api/v1/valuation/layers',
-    idField: 'layer_id',
-    operations: ['list'],
+export const stockValuationLayersListOp = createAsyncOp({
+    name: 'stock/valuation_layers_list',
+    silent: true,
+    commandType: 'stock/valuation/layers_list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
-    extraReducer: (state, event) => {
-        if (event.type !== 'stock/valuation/changed' || !event.payload) return state;
-        return state;
-    },
+    restMirror: { method: 'GET', path: '/stock/api/v1/valuation/layers' },
 });
 
 // --- ops ---
@@ -443,7 +438,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'stock/quants': typeof stockQuantsResource;
         'stock/queue': typeof stockQueueResource;
         'stock/waves': typeof stockWavesResource;
-        'stock/valuation': typeof stockValuationResource;
+        'stock/valuation_layers_list': typeof stockValuationLayersListOp;
         'stock/product_create': typeof stockProductCreateOp;
         'stock/product_update': typeof stockProductUpdateOp;
         'stock/location_create': typeof stockLocationCreateOp;

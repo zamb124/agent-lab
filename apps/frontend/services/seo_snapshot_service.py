@@ -11,6 +11,8 @@ first paint с последующей lit-гидратацией.
 
 from __future__ import annotations
 
+import asyncio
+
 from apps.frontend.config import FrontendSettings
 from apps.frontend.seo.pages import (
     PUBLIC_PAGES,
@@ -179,31 +181,44 @@ class SeoSnapshotService:
     async def invalidate(self, path: str, locale: str) -> None:
         _ = await self._redis.delete(self._cache_key(path, locale), self._fail_key(path, locale))
 
+    async def _warmup_pass(
+        self, pending: list[tuple[PublicPage, SeoLocale]]
+    ) -> list[tuple[PublicPage, SeoLocale]]:
+        missed: list[tuple[PublicPage, SeoLocale]] = []
+        for page, locale in pending:
+            try:
+                html = await self.snapshot_html(page, locale)
+            except Exception as exc:
+                html = None
+                logger.warning(
+                    "seo.snapshot.warmup_page_failed",
+                    path=page.path,
+                    locale=locale,
+                    error=str(exc),
+                )
+            if html is None:
+                missed.append((page, locale))
+        return missed
+
     async def warmup_public_pages(self) -> None:
         """Прогрев кэша снапшотов: все публичные страницы в обеих локалях.
 
-        Итог логируется одним событием ``seo.snapshot.warmup_failed`` при
-        хотя бы одном промахе — это alertable-сигнал «пререндер деградировал»
+        Первый проход на холодном выкате может попасть в окно, когда ingress
+        ещё не отдаёт canonical origin (сам сервис стартует) — промахи
+        перепроверяются одним повторным проходом после паузы, равной TTL
+        fail-маркера. Итог логируется ``seo.snapshot.warmup_failed`` только
+        по устойчивым промахам — это alertable-сигнал «пререндер деградировал»
         (warning-алерт ``seo-snapshot-failures`` в Grafana).
         """
-        total = 0
-        failed = 0
-        for page in PUBLIC_PAGES:
-            for locale in SEO_LOCALES:
-                total += 1
-                try:
-                    html = await self.snapshot_html(page, locale)
-                except Exception as exc:
-                    html = None
-                    logger.warning(
-                        "seo.snapshot.warmup_page_failed",
-                        path=page.path,
-                        locale=locale,
-                        error=str(exc),
-                    )
-                if html is None:
-                    failed += 1
-        if failed:
-            logger.error("seo.snapshot.warmup_failed", failed=failed, total=total)
+        pending: list[tuple[PublicPage, SeoLocale]] = [
+            (page, locale) for page in PUBLIC_PAGES for locale in SEO_LOCALES
+        ]
+        total = len(pending)
+        missed = await self._warmup_pass(pending)
+        if missed:
+            await asyncio.sleep(_SNAPSHOT_FAIL_TTL_SECONDS)
+            missed = await self._warmup_pass(missed)
+        if missed:
+            logger.error("seo.snapshot.warmup_failed", failed=len(missed), total=total)
         else:
             logger.info("seo.snapshot.warmup_ok", warmed=total)

@@ -319,6 +319,7 @@ async def test_docker_farm_rebuild_and_ensure_lease(
         ),
         files_client=FilesClient(service="office"),
         farm=GuestRuntimeFarmConfig(executor="docker", data_dir=str(tmp_path)),
+        billing_service=guest_runtime_di.billing_service,
     )
     held.append((flow_id, node_id))
     async with guest_identity_scope(user=user, company=company):

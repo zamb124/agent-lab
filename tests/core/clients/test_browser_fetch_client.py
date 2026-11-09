@@ -37,6 +37,9 @@ async def test_fetch_html_passes_service_timeout_to_browser_post() -> None:
             "wait_policy": "domcontentloaded",
             "navigation_timeout_ms": 20_000,
             "block_resource_types": ["image", "media", "font", "stylesheet"],
+            "locale": None,
+            "wait_selector": None,
+            "html_capture": "flat",
         },
         timeout=120.0,
     )

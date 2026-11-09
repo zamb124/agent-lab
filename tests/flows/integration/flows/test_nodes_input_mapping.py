@@ -32,7 +32,7 @@ def llm_node(di: FlowsDi, *, node_id: str, config: JsonObject) -> LlmNode:
     return LlmNode(
         node_id=node_id,
         config=_typed_config(NodeType.LLM_NODE, config),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 
@@ -53,7 +53,7 @@ def remote_flow_node(
     return RemoteFlowNode(
         node_id=node_id,
         config=_typed_config(NodeType.REMOTE_FLOW, config),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 

@@ -392,7 +392,7 @@ class MaterializeImageRegionsArgs(StrictBaseModel):
     tags=["files"],
     parameters_model=LocateImageRegionsArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
-    effects=["write"],
+    effects=["create"],
 )
 async def files_locate_image_regions(
     *,
@@ -435,7 +435,7 @@ async def files_locate_image_regions(
     tags=["files"],
     parameters_model=MaterializeImageRegionsArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
-    effects=["write"],
+    effects=["create"],
 )
 async def files_materialize_image_regions(
     *,

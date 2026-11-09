@@ -35,8 +35,8 @@ _DESKTOP = ViewportSize(width=1440, height=900)
         "**Какие проблемы решает:** вы узнаете, где живут складские документы, "
         "что означают статусы «черновик → подтверждён → зарезервирован → "
         "проведён» и как убедиться, что товар числится на складе.\n\n"
-        "**Результат:** поступление проведено, а пульс склада показывает "
-        "полученное количество."
+        "**Результат:** поступление проведено, а оценка запасов показывает "
+        "запись о принятом товаре."
     ),
     description_en=(
         "**Purpose:** this guide helps you receive a delivery: open the "
@@ -44,8 +44,8 @@ _DESKTOP = ViewportSize(width=1440, height=900)
         "**Problems solved:** you will learn where warehouse documents live, "
         "what the states «draft → confirmed → reserved → done» mean, and how "
         "to verify the goods are counted in stock.\n\n"
-        "**Result:** the receipt is validated and the warehouse pulse shows "
-        "the received quantity."
+        "**Result:** the receipt is validated and stock valuation shows "
+        "the accepted-goods entry."
     ),
 )
 @pytest.mark.asyncio
@@ -194,29 +194,31 @@ async def test_stock_incoming_receipt(
         ),
     )
 
-    await stock_e2e_nav(page, 0, page_selector="stock-home-page")
-    quant_row = page.locator(
-        "stock-home-page table tbody tr", has_text=product_id
+    await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
+    layer_row = page.locator(
+        "stock-valuation-page table tbody tr", has_text=product_id
     ).first
-    await expect(quant_row).to_be_visible(timeout=15_000)
-    await expect(quant_row).to_contain_text("12")
+    await expect(layer_row).to_be_visible(timeout=30_000)
+    await expect(layer_row).to_contain_text("inbound")
     await scenario.step(
-        "Проверьте остаток на пульсе склада",
+        "Проверьте запись в оценке запасов",
         page,
-        screenshot_name="pulse-quant-visible",
-        label_en="Check the on-hand quantity on the warehouse pulse",
+        screenshot_name="valuation-inbound-layer",
+        label_en="Check the entry in stock valuation",
         details=(
-            "**Демонстрация результата.** Вернитесь на главную «Склада»: в "
-            "таблице остатков появилась строка товара с принятым количеством. "
-            "Ниже пульс показывает проведённый документ.\n\n"
-            "**Итог.** Теперь вы умеете находить поступление в журнале, "
-            "проводить его по статусам и проверять остаток на пульсе склада."
+            "**Демонстрация результата.** Откройте «Оценку» в меню слева: в "
+            "журнале появилась запись «приход» по товару — 12 шт. по цене из "
+            "документа. Эта запись и есть принятый остаток на складе.\n\n"
+            "**Итог.** Теперь вы умеете находить поступление в журнале "
+            "переводов, проводить его по статусам и проверять результат в "
+            "оценке запасов."
         ),
         details_en=(
-            "**Result demonstration.** Return to the Stock home page: the "
-            "on-hand table now shows the product row with the received "
-            "quantity. Below, the pulse lists the validated document.\n\n"
-            "**Summary.** Now you can find a receipt in the journal, process "
-            "it through the states, and verify stock on the warehouse pulse."
+            "**Result demonstration.** Open «Valuation» in the left menu: the "
+            "journal now shows an «inbound» entry for the product — 12 units "
+            "at the document price. That entry is the accepted stock.\n\n"
+            "**Summary.** Now you can find a receipt in the transfers "
+            "journal, process it through the states, and verify the result "
+            "in stock valuation."
         ),
     )

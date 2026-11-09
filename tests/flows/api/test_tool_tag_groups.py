@@ -8,6 +8,7 @@ import pytest
 
 from apps.flows.src.models.tool_tag_group import ToolTagGroup, ToolTagGroupDescribeResult
 from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
+from tests.fixtures.billing import make_test_billing_service
 
 
 @pytest.mark.asyncio
@@ -118,7 +119,7 @@ async def test_describe_writes_llm_result(di, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_content_hash_stable_order():
-    service = ToolTagGroupService()
+    service = ToolTagGroupService(make_test_billing_service())
     a = service._content_hash([("a", "1"), ("b", "2")])
     b = service._content_hash([("a", "1"), ("b", "2")])
     c = service._content_hash([("b", "2"), ("a", "1")])

@@ -4,13 +4,21 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-empty-state.js';
+
+function _layerItems(result: unknown): Record<string, unknown>[] {
+    if (!isPlainRecord(result)) return [];
+    const items = result.items;
+    if (!Array.isArray(items)) return [];
+    return items.filter(isPlainRecord);
+}
 
 export class StockValuationPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    private _layers: ResourceController;
+    private _layers: OpController;
 
     static override styles = [
         PlatformPage.styles,
@@ -31,16 +39,17 @@ export class StockValuationPage extends PlatformPage {
 
     constructor() {
         super();
-        this._layers = this.useResource('stock/valuation', { autoload: true });
+        this._layers = this.useOp('stock/valuation_layers_list');
+        this._layers.run({});
     }
 
 
     override render() {
-        const items = this._layers.items;
+        const items = _layerItems(this._layers.lastResult);
         return html`
             <div class="wrap">
                 <h1>${this.t('valuation.title')}</h1>
-                ${this._layers.loading
+                ${this._layers.busy
                     ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
                     ? html`<platform-empty-state icon="chart" title=${this.t('valuation.empty')}></platform-empty-state>`

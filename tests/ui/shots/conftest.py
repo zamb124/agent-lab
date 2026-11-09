@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from playwright.async_api import Browser, BrowserContext, Page, expect
+from playwright.async_api import Browser, BrowserContext, Page, ViewportSize, expect
 
 from tests.ui.browser_auth import add_auth_token_cookie
 from tests.ui.centrifugo_ws_bridge import install_centrifugo_ws_bridge
@@ -24,8 +24,8 @@ from tests.ui.shots import seed_content
 
 SHOTS_OUT_DIR = Path(__file__).resolve().parent / "out"
 
-DESKTOP_VIEWPORT = {"width": 1440, "height": 900}
-MOBILE_VIEWPORT = {"width": 390, "height": 844}
+DESKTOP_VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
+MOBILE_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
 DEVICE_SCALE = 2
 
 PAGE_SETTLE_MS = 1200
@@ -41,7 +41,7 @@ async def _new_shot_context(
     browser: Browser,
     *,
     token: str | None,
-    viewport: dict[str, int],
+    viewport: ViewportSize,
     reduced_motion: bool,
 ) -> BrowserContext:
     context = await browser.new_context(

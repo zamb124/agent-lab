@@ -286,7 +286,7 @@ class TestAllNodeTypesDataFlow:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id)
         result = await run_flow(di=di, flow=flow, state=state)
@@ -319,7 +319,7 @@ class TestAllNodeTypesDataFlow:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id)
         result = await run_flow(di=di, flow=flow, state=state)
@@ -366,7 +366,7 @@ class TestAllNodeTypesDataFlow:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id, initial=5)
         result = await run_flow(di=di, flow=flow, state=state)
@@ -396,7 +396,7 @@ class TestAllNodeTypesDataFlow:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id)
         result = await run_flow(di=di, flow=flow, state=state)
@@ -436,7 +436,7 @@ class TestAllNodeTypesDataFlow:
             ],
             variables={"bonus_amount": 50},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id, messages=[])
         result = await run_flow(di=di, flow=flow, state=state)
@@ -580,7 +580,7 @@ class TestComplexPipeline:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = make_state(unique_id, flow_id=flow_id, messages=[])
         result = await run_flow(di=di, flow=flow, state=state)
@@ -672,7 +672,7 @@ class TestComplexPipeline:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state1 = make_state(
             f"{unique_id}-urgent",

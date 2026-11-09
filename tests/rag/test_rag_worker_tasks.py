@@ -68,9 +68,11 @@ async def test_rag_cleanup_expired_documents_tick_runs_batch(
 
 
 @pytest.mark.asyncio
-async def test_rag_reembed_stale_documents_tick_requires_schedule_task_id() -> None:
+async def test_rag_reembed_stale_documents_tick_requires_schedule_task_id(
+    rag_worker_di,
+) -> None:
     """Reembed тик требует ``schedule_task_id`` (validation gate)."""
     with pytest.raises(ValueError, match="schedule_task_id"):
-        await maintenance_tasks.rag_reembed_stale_documents_tick(schedule_task_id="  ")
+        await maintenance_tasks.rag_reembed_stale_documents_tick(schedule_task_id="  ", di=rag_worker_di)
     with pytest.raises(ValueError, match="schedule_task_id"):
-        await maintenance_tasks.rag_reembed_stale_documents_tick(schedule_task_id="")
+        await maintenance_tasks.rag_reembed_stale_documents_tick(schedule_task_id="", di=rag_worker_di)

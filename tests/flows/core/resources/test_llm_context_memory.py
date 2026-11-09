@@ -167,6 +167,7 @@ def _runner(
         workflow_runtime=workflow_runtime,
         memory_store=store,
         text_transform_service=TextTransformService(make_test_billing_service()),
+        billing_service=make_test_billing_service(),
         emitter_factory=EmitterFactory.__new__(EmitterFactory),
         redis_client=RedisClient.__new__(RedisClient),
         tool_registry=_ClosedToolRegistry(),

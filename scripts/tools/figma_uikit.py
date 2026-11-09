@@ -55,11 +55,15 @@ if (spec.zone) {
     zone.name = spec.zone;
     zone.layoutMode = 'VERTICAL'; zone.itemSpacing = 32;
     zone.primaryAxisSizingMode = 'AUTO'; zone.counterAxisSizingMode = 'AUTO';
-    zone.fills = [];
+    zone.paddingLeft = zone.paddingTop = zone.paddingRight = zone.paddingBottom = 24;
+    zone.cornerRadius = 20;
+    zone.fills = [{ type: 'SOLID', color: { r: 0.086, g: 0.13, b: 0.24 } }];
     board.appendChild(zone);
   } else {
     for (const n of [...zone.children]) n.remove();
   }
+  const zones = [...board.children].sort((a, b) => a.name.localeCompare(b.name));
+  zones.forEach((z, i) => board.insertChild(i, z));
   container = zone;
 } else {
   for (const n of [...page.children]) n.remove();
@@ -655,7 +659,7 @@ def _shell_payload() -> Json:
     tokens = {t["name"]: {"Dark": t["values"].get("Dark"), "Light": t["values"].get("Light")} for t in spec["tokens"]}
     return {
         "page": "\U0001F4F1 Экраны",
-        "zone": "zone/00 — App Shell",
+        "zone": "zone/000 — App Shell",
         "collDark": f"{spec['collection']} · Dark",
         "tokens": tokens,
         "nav": [

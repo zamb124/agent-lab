@@ -43,9 +43,10 @@ def _llm_runner(
         workflow_runtime=di.node_constructor.workflow_runtime,
         memory_store=di.node_constructor.llm_context_memory_store,
         text_transform_service=di.node_constructor.text_transform_service,
-        emitter_factory=di.node_constructor.emitter_factory,
+        emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         redis_client=di.node_constructor.redis_client,
         tool_registry=di.tool_registry,
+        billing_service=di.node_constructor.billing_service,
     )
 
 

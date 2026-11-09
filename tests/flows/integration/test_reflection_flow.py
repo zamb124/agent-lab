@@ -96,7 +96,7 @@ async def _build_dual_exit_flow(
             {"from_node": "blocked_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 
@@ -194,7 +194,7 @@ async def test_reflection_flow_incomplete_exits_raises_no_conditional_match(
             {"from_node": "approved_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
     state = workflow_state(
         flow_id=flow_id,
@@ -288,7 +288,7 @@ async def _build_three_exit_flow(
             {"from_node": "reject_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 

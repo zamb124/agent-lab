@@ -84,7 +84,7 @@ class TestRemoteFlowNode:
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": remote_flow_server},
-            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(
@@ -103,7 +103,7 @@ class TestRemoteFlowNode:
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": remote_flow_server},
-            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(
@@ -326,7 +326,7 @@ class TestRemoteAgentInputMapping:
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": server["url"]},
-            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(
@@ -353,7 +353,7 @@ class TestRemoteAgentInputMapping:
                 "url": server["url"],
                 "input_mapping": {"content": "@state:my_query"}
             },
-            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(
@@ -380,7 +380,7 @@ class TestRemoteAgentInputMapping:
                 "url": server["url"],
                 "input_mapping": {"content": "@state:data"}
             },
-            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(

@@ -100,7 +100,9 @@ class ScenarioScreenshotLayoutTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertEqual(check_readme_quality(scenarios_root), [])
+            errors, warnings = check_readme_quality(scenarios_root)
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
 
     def test_quality_gate_rejects_legacy_subdirectory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -118,7 +120,7 @@ class ScenarioScreenshotLayoutTest(unittest.TestCase):
             )
             _ = (slug_dir / "README.md").write_text(markdown, encoding="utf-8")
 
-            errors = check_readme_quality(scenarios_root)
+            errors, _ = check_readme_quality(scenarios_root)
 
             self.assertTrue(any("legacy-каталог screenshots/ запрещён" in error for error in errors))
             self.assertTrue(any("должен лежать рядом с README.md" in error for error in errors))

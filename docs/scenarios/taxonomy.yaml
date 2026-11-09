@@ -405,6 +405,10 @@ services:
       scenarios are added via tests/ui.
     featured_slug: rag-shell
     tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 0
       general:
         label_ru: Общее
         label_en: General
@@ -419,6 +423,10 @@ services:
       Platform shell and public pages.
     featured_slug: frontend-shell
     tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 0
       general:
         label_ru: Общее
         label_en: General

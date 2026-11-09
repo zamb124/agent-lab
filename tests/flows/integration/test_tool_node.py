@@ -71,7 +71,7 @@ class TestCodeNodeInAgent:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
 
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="test")
@@ -100,7 +100,7 @@ class TestCodeNodeInAgent:
             edges=[Edge(from_node="greet", to_node=None)],
             variables={"company_name": "Platform Corp"},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(
             flow_id=flow.flow_id,
@@ -164,7 +164,7 @@ class TestCodeNodeInAgent:
             ],
             variables={},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state1 = workflow_state(
             flow_id=flow.flow_id,
@@ -271,7 +271,7 @@ class TestCodeNodeWithSkillVariables:
             edges=[Edge(from_node="format", to_node=None)],
             variables={"prefix": "ORDER-"},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=f"{unique_id}-order", entity_id="12345")
         result = await run_flow(di=di, flow=flow, state=state)
@@ -312,7 +312,7 @@ class TestCodeNodeChaining:
             edges=[Edge(from_node="step1", to_node="step2"), Edge(from_node="step2", to_node=None)],
             variables={"bonus": 100},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, input=25)
         result = await run_flow(di=di, flow=flow, state=state)
@@ -395,7 +395,7 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"multiplier": 3, "bonus": 5},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
         result = await run_flow(di=di, flow=flow, state=state)
@@ -453,7 +453,7 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"player_name": "Alice", "boost_amount": 50},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
         result = await run_flow(di=di, flow=flow, state=state)
@@ -526,7 +526,7 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"min_items": 2},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, raw_input="apple, banana, cherry")
         result = await run_flow(di=di, flow=flow, state=state)
@@ -590,7 +590,7 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"bonus_text": "+VIP"},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
         result = await run_flow(di=di, flow=flow, state=state)

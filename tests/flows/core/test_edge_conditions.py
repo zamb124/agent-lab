@@ -83,7 +83,7 @@ def make_flow(
         nodes=runtime_nodes,
         edges=edges,
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
 
 

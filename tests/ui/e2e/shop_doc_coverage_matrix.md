@@ -24,7 +24,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `shop-first-store` | Создать магазин → добавить позиции → опубликовать витрину | `test_shop_doc_getting_started.py` | 📝 |
+| 1 | `shop-first-store` | Создать магазин → добавить позиции → опубликовать витрину | `test_shop_doc_getting_started.py` | ✅ |
 | 1 | `storefront-tour` | Витрина глазами покупателя (anon) | `test_shop_doc_getting_started.py` | 📝 |
 
 ### menu — Меню и каталог

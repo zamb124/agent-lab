@@ -75,6 +75,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
                 trace_attr.ATTR_BILLING_PENDING_SETTLEMENT: True,
                 trace_attr.ATTR_BILLING_USAGE_TYPE: UsageType.LLM_REQUEST.value,
                 trace_attr.ATTR_BILLING_QUANTITY: 1,
+                trace_attr.ATTR_LLM_TOTAL_TOKENS: 1,
             },
             events=[],
         )

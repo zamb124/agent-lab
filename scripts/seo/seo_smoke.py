@@ -203,13 +203,26 @@ def main() -> int:
     else:
         check.fail("site-bundle api", f"status={index_status}")
 
+    # Приватные маршруты не индексируются двумя способами: явный noindex
+    # (shell /login) либо редирект на публичную точку входа (/settings → /) —
+    # редирект-стаб краулер не индексирует. Проверяем БЕЗ follow_redirects:
+    # иначе цепочка приводит на индексируемую страницу и маскирует проблему.
+    private_client = httpx2.Client(
+        base_url=base,
+        headers={"Accept": "text/html,application/xhtml+xml", "User-Agent": "seo-smoke/1.0"},
+        timeout=20.0,
+        follow_redirects=False,
+    )
     for path in ("/login", "/settings", "/dashboard"):
-        status, headers, body = _get(client, path, host_header)
+        status, headers, body = _get(private_client, path, host_header)
         robots_header = headers.get("X-Robots-Tag") or headers.get("x-robots-tag") or ""
-        if "noindex" in robots_header or 'content="noindex' in body or "noindex,nofollow" in body:
+        if status in (301, 302, 303, 307, 308):
+            check.ok(f"noindex {path}", f"redirect {status}")
+        elif "noindex" in robots_header or 'content="noindex' in body or "noindex,nofollow" in body:
             check.ok(f"noindex {path}")
         else:
             check.fail(f"noindex {path}", f"status={status} header={robots_header!r}")
+    private_client.close()
 
     status, _h, body = _get(client, "/documentation/", host_header)
     if status == 200:
@@ -243,8 +256,14 @@ def main() -> int:
                 base_url=f"https://{mirror_domain}", timeout=_PAGE_TIMEOUT,
                 follow_redirects=True,
             )
+            root_status, root_headers, _ = _get(mirror_client, "/", None)
             status, _h, body = _get(mirror_client, "/products/agents", None)
             mirror_client.close()
+            # Бренд может быть описан заранее, а DNS ещё вести на внешний
+            # хостинг: домен без платформенного заголовка — не зеркало.
+            if root_status and "x-deployment-version" not in root_headers:
+                check.ok(f"{mirror_domain}", "внешний хостинг, не платформа")
+                continue
             if status == 200:
                 canonical = re.search(r'rel="canonical" href="([^"]+)"', body)
                 if canonical and canonical_host in canonical.group(1):

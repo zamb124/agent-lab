@@ -42,7 +42,7 @@ async def test_datasource_standalone_flow_query_exact_rows(
         nodes={"orders": node},
         edges=[Edge(from_node="orders", to_node=None)],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
     )
     state = workflow_state(
         flow_id=flow_id,

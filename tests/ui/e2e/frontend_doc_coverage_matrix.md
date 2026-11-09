@@ -47,7 +47,7 @@ fixture `frontend_ui`. Mail/calendar — модалки из user-menu `platform
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `dashboard-tour` | Дашборд: что видит сотрудник | новый | 📝 |
+| 1 | `dashboard-tour` | Дашборд: что видит сотрудник | `test_frontend_doc_dashboard.py` | 🚧 |
 | 2 | `search-everything` | Поиск по платформе | новый | 📝 |
 
 ### settings (frontend)

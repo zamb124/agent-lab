@@ -80,7 +80,7 @@ async def test_llm_runner_absorbs_tool_error_when_enabled(app, unique_id: str, d
         tools=[_FailingTool()],
         llm=None,
         prompt="p",
-        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(
@@ -120,7 +120,7 @@ async def test_llm_runner_raises_when_policy_off(app, unique_id: str, di) -> Non
         tools=[_FailingTool()],
         llm=None,
         prompt="p",
-        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(
@@ -156,7 +156,7 @@ async def test_llm_runner_absorbs_arg_validation_error_when_policy_off(
         tools=[_strict_args_tool],
         llm=None,
         prompt="p",
-        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(

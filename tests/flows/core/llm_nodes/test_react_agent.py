@@ -71,7 +71,7 @@ class TestReactAgentWithToolCalls:
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
         assert runner is not None
 
@@ -83,7 +83,7 @@ class TestReactAgentWithToolCalls:
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
         assert runner is not None
 
@@ -111,7 +111,7 @@ class TestReactAgentStreaming:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
         assert runner is not None
 
@@ -159,7 +159,7 @@ class TestToolExecution:
             tools=[_InterruptingTool(), _StateWritingTool()],
             llm=None,
             prompt="Test",
-            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry, billing_service=di.node_constructor.billing_service,
         )
         context_id = f"test-context-{unique_id}"
         state = ExecutionState(
