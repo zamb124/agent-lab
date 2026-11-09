@@ -910,10 +910,10 @@ groups:
       datasourceUid: loki
       model:
         # Периодический warmup (раз в час + на старте) закрывает каждый
-        # цикл терминальным событием warmup_ok|warmup_failed. Три часа
+        # цикл терминальным событием warmup_ok|warmup_failed|warmup_cycle_failed. Три часа
         # без события — таск мёртв: кэш протухает, ленивые хиты ждут
         # рендер, краулер видит shell. Фейлы цикла ловит seo-snapshot-failures.
-        expr: sum(count_over_time({namespace="platform", service="frontend"} | json | message=~"seo[.]snapshot[.]warmup_(ok|failed)" [3h]))
+        expr: sum(count_over_time({namespace="platform", service="frontend"} | json | message=~"seo[.]snapshot[.]warmup_(ok|failed|cycle_failed)" [3h]))
         refId: A
     - refId: B
       relativeTimeRange:
