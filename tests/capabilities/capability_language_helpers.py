@@ -1075,6 +1075,7 @@ async def assert_language_runs_static_platform_capabilities(
         and not item["name"].startswith("tools.")
     }
     core_static = STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
+    files_static = {name for name in static_names if name.startswith("files.")}
     wiki_static = {name for name in static_names if name.startswith("wiki.")}
     documents_static = {name for name in static_names if name.startswith("documents.")}
     crm_static = {name for name in static_names if name.startswith("crm.")}
@@ -1083,9 +1084,11 @@ async def assert_language_runs_static_platform_capabilities(
     worktracker_static = {name for name in static_names if name.startswith("worktracker.")}
     tables_static = {name for name in static_names if name.startswith("tables.")}
     db_static = {name for name in static_names if name.startswith("db.")}
+    sandbox_static = {name for name in static_names if name.startswith("sandbox.")}
     assert core_static <= static_names
     assert static_names == (
         core_static
+        | files_static
         | wiki_static
         | documents_static
         | crm_static
@@ -1094,7 +1097,9 @@ async def assert_language_runs_static_platform_capabilities(
         | worktracker_static
         | tables_static
         | db_static
+        | sandbox_static
     )
+    assert files_static  # files.* SDK namespace registered for eval/code_node
     assert wiki_static  # wiki.* SDK namespace registered for eval/code_node
     assert documents_static  # documents.* SDK namespace registered for eval/code_node
     assert crm_static  # crm.* SDK namespace registered for eval/code_node

@@ -14,11 +14,11 @@ from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
-import httpx2
 import pytest
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType as RuntimeNodeType
+from core.ai.adapters.catalog_base import AIProviderAdapterError
 from tests.fixtures.billing import make_test_billing_service
 
 
@@ -624,8 +624,8 @@ class TestLLMModelsServiceRealAPI:
 
         try:
             models = await service.fetch_models_by_provider("bothub")
-        except httpx2.HTTPStatusError as exc:
-            if exc.response.status_code in (401, 403):
+        except AIProviderAdapterError as exc:
+            if exc.status_code in (401, 403):
                 raise AssertionError(
                     "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
                 ) from exc
@@ -660,8 +660,8 @@ class TestLLMModelsServiceRealAPI:
 
         try:
             models = await service.fetch_models_by_provider("openrouter")
-        except httpx2.HTTPStatusError as exc:
-            if exc.response.status_code in (401, 403):
+        except AIProviderAdapterError as exc:
+            if exc.status_code in (401, 403):
                 pytest.skip(
                     "OpenRouter API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
                 )
@@ -745,8 +745,8 @@ class TestLLMModelsServiceRealAPI:
             try:
                 probe_service = di.llm_models_service
                 await probe_service.fetch_models_by_provider("openrouter")
-            except httpx2.HTTPStatusError as exc:
-                if exc.response.status_code in (401, 403):
+            except AIProviderAdapterError as exc:
+                if exc.status_code in (401, 403):
                     pytest.skip(
                         "OpenRouter API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
                     )

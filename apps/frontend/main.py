@@ -213,7 +213,7 @@ async def frontend_startup(
     _warmup_task = run_with_log_context(
         seo_snapshot_service.warmup_public_pages(),
         name="frontend.seo_snapshot_warmup",
-        background_kind="startup",
+        background_kind="polling",
     )
 
 # Приложение собирает create_service_app: middleware и FrontendDi.

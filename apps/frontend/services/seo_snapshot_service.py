@@ -42,6 +42,11 @@ _SNAPSHOT_FAIL_TTL_SECONDS = 60
 # Дольше максимального fetch (nav 30s + service timeout 45s), чтобы лидер
 # успел закончить до истечения блокировки.
 _SNAPSHOT_LOCK_TTL_SECONDS = 60
+# Прогрев раз в час; страницы с остаточным TTL ниже половины снапшотного
+# перерендериваются упреждающе — кэш публичных страниц не истекает вообще,
+# и ленивый хит никогда не ждёт живой DSD-рендер.
+_WARMUP_INTERVAL_SECONDS = 60 * 60
+_WARMUP_REFRESH_TTL_FLOOR = _SNAPSHOT_TTL_SECONDS // 2
 _SNAPSHOT_NAV_TIMEOUT_MS = 30_000
 _SNAPSHOT_SERVICE_TIMEOUT_SECONDS = 45.0
 # i18n-бандлы и API грузятся fetch/xhr — блокируем только не влияющее на DOM.
@@ -181,11 +186,22 @@ class SeoSnapshotService:
     async def invalidate(self, path: str, locale: str) -> None:
         _ = await self._redis.delete(self._cache_key(path, locale), self._fail_key(path, locale))
 
+    async def _stale_for_refresh(self, page: PublicPage, locale: SeoLocale) -> bool:
+        """Кэш отсутствует или близок к истечению — страницу надо рендерить."""
+        try:
+            ttl = await self._redis.ttl(self._cache_key(page.path, locale))
+        except Exception as exc:
+            logger.warning("seo.snapshot.ttl_failed", error=str(exc))
+            return True
+        return ttl < _WARMUP_REFRESH_TTL_FLOOR
+
     async def _warmup_pass(
         self, pending: list[tuple[PublicPage, SeoLocale]]
     ) -> list[tuple[PublicPage, SeoLocale]]:
         missed: list[tuple[PublicPage, SeoLocale]] = []
         for page, locale in pending:
+            if not await self._stale_for_refresh(page, locale):
+                continue
             try:
                 html = await self.snapshot_html(page, locale)
             except Exception as exc:
@@ -200,16 +216,8 @@ class SeoSnapshotService:
                 missed.append((page, locale))
         return missed
 
-    async def warmup_public_pages(self) -> None:
-        """Прогрев кэша снапшотов: все публичные страницы в обеих локалях.
-
-        Первый проход на холодном выкате может попасть в окно, когда ingress
-        ещё не отдаёт canonical origin (сам сервис стартует) — промахи
-        перепроверяются одним повторным проходом после паузы, равной TTL
-        fail-маркера. Итог логируется ``seo.snapshot.warmup_failed`` только
-        по устойчивым промахам — это alertable-сигнал «пререндер деградировал»
-        (warning-алерт ``seo-snapshot-failures`` в Grafana).
-        """
+    async def _warmup_cycle(self) -> None:
+        """Один цикл прогрева: весь реестр + повтор по промахам после паузы."""
         pending: list[tuple[PublicPage, SeoLocale]] = [
             (page, locale) for page in PUBLIC_PAGES for locale in SEO_LOCALES
         ]
@@ -222,3 +230,26 @@ class SeoSnapshotService:
             logger.error("seo.snapshot.warmup_failed", failed=len(missed), total=total)
         else:
             logger.info("seo.snapshot.warmup_ok", warmed=total)
+
+    async def warmup_public_pages(self) -> None:
+        """Периодический прогрев кэша снапшотов: реестр × локали, раз в час.
+
+        Первый проход на холодном выкате может попасть в окно, когда ingress
+        ещё не отдаёт canonical origin (сам сервис стартует) — промахи
+        перепроверяются одним повторным проходом после паузы, равной TTL
+        fail-маркера. Дальнейшие циклы держат кэш вечно горячим: страницы с
+        остаточным TTL ниже половины снапшотного перерендериваются раньше
+        истечения — ленивый хит живого рендера исключён. Итог каждого цикла
+        логируется ``seo.snapshot.warmup_failed`` только по устойчивым
+        промахам — alertable-сигнал (алерт ``seo-snapshot-failures``).
+        """
+        while True:
+            try:
+                await self._warmup_cycle()
+            except Exception as exc:
+                logger.error(
+                    "seo.snapshot.warmup_cycle_failed",
+                    **{"exception.type": type(exc).__name__},
+                    error=str(exc),
+                )
+            await asyncio.sleep(_WARMUP_INTERVAL_SECONDS)

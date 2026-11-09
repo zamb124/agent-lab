@@ -8,8 +8,10 @@ import pytest
 
 from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.files import read_file
+from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef
 from core.files.reader import ReadLane
+from core.files.registry import default_retention_for_source
 from core.types import require_json_array, require_json_object
 from tests.core.files.corpus.manifest import POSITIVE
 from tests.core.files.corpus.read_helpers import store_corpus_in_files_service
@@ -92,14 +94,25 @@ async def test_read_file_pdf_text_only_stays_text_lane(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_pdf_text_and_embedded_image_merged(
+    frontend_di,
+    unique_id: str,
     mock_llm_with_queue,
 ) -> None:
-    file_ref = FileRef(
-        original_name=_TEXT_AND_IMAGE_PDF.name,
-        url=str(_TEXT_AND_IMAGE_PDF),
-        content_type="application/pdf",
-        file_size=_TEXT_AND_IMAGE_PDF.stat().st_size,
+    require_s3_configured()
+    spec = FileCreateSpec.model_validate(
+        {
+            "source_kind": FileSourceKind.PLATFORM_AUXILIARY.value,
+            "source_ref": FileSourceRef.model_validate({}).model_dump(),
+            "retention": default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
+        }
     )
+    record = await frontend_di.files_service.create(
+        spec,
+        _TEXT_AND_IMAGE_PDF.read_bytes(),
+        original_name=_TEXT_AND_IMAGE_PDF.name,
+        content_type="application/pdf",
+    )
+    file_ref = FileRef.model_validate(record)
     mock_llm_with_queue([_MOCK_VISION])
     state = _state_with(file_ref)
 

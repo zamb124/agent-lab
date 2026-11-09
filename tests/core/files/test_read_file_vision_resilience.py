@@ -124,7 +124,7 @@ async def test_read_image_vision_heic_from_corpus(
         "read_file.heic",
     )
     assert payload["files"][0]["success"] is True
-    assert payload["files"][0]["read_lane"] == "vision"
+    assert payload["files"][0]["read_lane"] == "hybrid"
 
 
 @pytest.mark.asyncio

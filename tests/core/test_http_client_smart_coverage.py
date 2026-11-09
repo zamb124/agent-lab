@@ -405,11 +405,23 @@ async def test_stream_context_aexit_closes(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_relative_url_requires_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_relative_url_goes_local_without_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
+    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+        response = await client.request("GET", "/relative-only")
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_absolute_request_url_requires_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         with pytest.raises(ValueError, match="base_url"):
-            await client.request("GET", "/relative-only")
+            client.absolute_request_url("/relative-only")
 
 
 @pytest.mark.asyncio
@@ -989,7 +1001,7 @@ async def test_is_local_url_unparsable_uses_false(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr("core.http.client.urlparse", boom)
     c = SmartProxyClient(timeout=5.0, use_proxy=False)
-    assert c._is_local_url("http://example.com") is False
+    assert c.is_local_url("http://example.com") is False
 
 
 @pytest.mark.asyncio

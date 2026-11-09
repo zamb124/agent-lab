@@ -81,7 +81,9 @@ async def test_rag_first_namespace(
     await ui_set_platform_field(
         modal.locator("platform-field[type='string']").first, namespace_name
     )
-    await modal.locator(".footer-actions .btn-primary").click()
+    create_btn = modal.locator(".footer-actions .btn-primary")
+    await expect(create_btn).to_be_enabled(timeout=10_000)
+    await create_btn.click()
     await expect(modal).to_be_hidden(timeout=30_000)
     await scenario.step(
         "Создайте пространство знаний",

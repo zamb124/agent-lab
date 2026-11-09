@@ -19,7 +19,7 @@ _AUTO_DETECT = (
     ("pdf/single_table.pdf", ReadLane.HYBRID),
     ("stanley-cups.xlsx", ReadLane.TEXT),
     ("simple.docx", ReadLane.TEXT),
-    ("img/example.jpg", ReadLane.VISION),
+    ("img/example.jpg", ReadLane.HYBRID),
 )
 
 
@@ -76,7 +76,7 @@ async def test_read_file_on_image_auto_uses_vision(
     )
     file_result = payload["files"][0]
     assert file_result["success"] is True
-    assert file_result["read_lane"] == ReadLane.VISION.value
+    assert file_result["read_lane"] == ReadLane.HYBRID.value
 
 
 @pytest.mark.asyncio

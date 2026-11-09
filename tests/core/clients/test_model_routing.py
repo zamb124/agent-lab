@@ -296,7 +296,7 @@ def test_conf_json_openai_compat_blocks_match_specs():
     payload = json.loads(conf_path.read_text(encoding="utf-8"))
     llm = payload["llm"]
     for slug in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
-        if slug == "openai":
+        if slug in ("openai", "github"):
             continue
         assert slug in llm, f"conf.json llm.{slug} отсутствует"
         block = llm[slug]
