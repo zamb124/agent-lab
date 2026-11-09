@@ -849,6 +849,7 @@
       }
     },
     "frontend": {
+      "indexnow_key": "312fa9d420df976521fae90c22a1bf6",
       "server": {
         "name": "frontend",
         "host": "0.0.0.0",
