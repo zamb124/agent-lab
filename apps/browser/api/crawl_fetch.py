@@ -177,7 +177,7 @@ async def crawl_fetch(
                         try:
                             _ = await page.wait_for_selector(
                                 body.wait_selector,
-                                timeout=min(body.navigation_timeout_ms, 15_000),
+                                timeout=body.navigation_timeout_ms,
                             )
                         except PlaywrightTimeoutError as exc:
                             raise WsCommandError(
