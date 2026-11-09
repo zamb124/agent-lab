@@ -265,6 +265,26 @@ async def request_public_oauth(
     )
 
 
+def _is_local_url(url: str) -> bool:
+    try:
+        hostname = urlparse(url).hostname or ""
+        return (
+            # Однолейбловые имена (service DNS в кластере: ``browser``,
+            # ``redis``) и внутренние суффиксы — публичное имя без точки
+            # существовать не может.
+            "." not in hostname
+            or hostname.endswith(".localhost")
+            or hostname.endswith(".internal")
+            or hostname.endswith(".svc.cluster.local")
+            or hostname in ("localhost", "127.0.0.1", "::1")
+            or hostname.startswith("192.168.")
+            or hostname.startswith("10.")
+            or hostname.startswith("172.16.")
+        )
+    except Exception:
+        return False
+
+
 async def request_with_strategy(
     method: str,
     url: str,
@@ -297,7 +317,7 @@ async def request_with_strategy(
     """
     strategy = _require_proxy_strategy(strategy)
 
-    if strategy == ProxyStrategy.DIRECT_ONLY:
+    if strategy == ProxyStrategy.DIRECT_ONLY or _is_local_url(url):
         return await _request_direct_burst(
             method,
             url,
@@ -495,27 +515,8 @@ class SmartProxyClient:
     def absolute_request_url(self, url: str) -> str:
         return self._absolute_request_url(url)
 
-    def _is_local_url(self, url: str) -> bool:
-        try:
-            hostname = urlparse(url).hostname or ""
-            return (
-                # Однолейбловые имена (service DNS в кластере: ``browser``,
-                # ``redis``) и внутренние суффиксы — публичное имя без точки
-                # существовать не может.
-                "." not in hostname
-                or hostname.endswith(".localhost")
-                or hostname.endswith(".internal")
-                or hostname.endswith(".svc.cluster.local")
-                or hostname in ("localhost", "127.0.0.1", "::1")
-                or hostname.startswith("192.168.")
-                or hostname.startswith("10.")
-                or hostname.startswith("172.16.")
-            )
-        except Exception:
-            return False
-
     def is_local_url(self, url: str) -> bool:
-        return self._is_local_url(url)
+        return _is_local_url(url)
 
     async def _request_via_proxy_rotation(
         self, http_method: str, url: str, **kwargs: Unpack[HttpRequestKwargs]
@@ -556,7 +557,7 @@ class SmartProxyClient:
         http_method = method.upper()
         strategy = self._strategy
 
-        if self._is_local_url(url):
+        if _is_local_url(url):
             last_exc: httpx2.ConnectError | httpx2.ConnectTimeout | None = None
             for attempt in range(self.LOCAL_CONNECT_ATTEMPTS):
                 try:
