@@ -20,6 +20,7 @@ from tests.ui.e2e.shop_e2e_helpers import (
     shop_e2e_open_storefront,
     shop_e2e_product_in_storefront,
     shop_e2e_publish,
+    shop_e2e_set_point_on_map,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -137,6 +138,25 @@ async def test_shop_first_store(
             "Click «+ Item» in the page header. In the window fill in the name "
             "and price — the rest can stay empty. Save: the item card appears "
             "in the list on the right."
+        ),
+    )
+
+    shop_id = page.url.split("/shop/")[-1].split("/")[0]
+    await shop_e2e_set_point_on_map(page, shop_ui, shop_id)
+    await scenario.step(
+        "Отметьте точку магазина на карте",
+        page,
+        screenshot_name="settings-point-on-map",
+        label_en="Mark the store point on the map",
+        details=(
+            "Откройте «Настройки» магазина. Кликните по карте в нужном месте — "
+            "появится метка с адресом точки, затем сохраните. Без точки витрину "
+            "опубликовать нельзя: покупатели не увидят магазин на карте."
+        ),
+        details_en=(
+            "Open the store «Settings». Click the map where the store is — a "
+            "pin with the point's coordinates appears, then save. Publishing "
+            "requires the point: customers could not find the store otherwise."
         ),
     )
 

@@ -71,33 +71,17 @@ spec:
             - --js-flags=--max-old-space-size=512
             # Chrome 136+ запрещает CDP на дефолтном user-data-dir.
             - --user-data-dir=/tmp/chrome-data
-            # 0.0.0.0: tcpSocket-пробы kubelet ходят на IP пода; порт не экспонирован Service.
-            - --remote-debugging-address=0.0.0.0
+            # CDP слушает 127.0.0.1; browser-app ходит через shared netns pod'а.
             - --remote-debugging-port=9222
           volumeMounts:
             - name: chromium-dshm
               mountPath: /dev/shm
           resources:
             {{- toYaml $app.chromium.resources | nindent 12 }}
-          # headless-shell образ минимальный: wget/curl нет — только TCP-порт.
-          livenessProbe:
-            tcpSocket:
-              port: 9222
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 5
-          readinessProbe:
-            tcpSocket:
-              port: 9222
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-          startupProbe:
-            tcpSocket:
-              port: 9222
-            failureThreshold: 30
-            periodSeconds: 5
+          # Проб нет: CDP слушает только loopback (Chrome 136+ игнорирует
+          # remote-debugging-address), а kubelet ходит на IP пода; exec-пробе
+          # нечем выполняться — образ без wget/curl/nc. Падение sidecar'а
+          # рестартит kubelet, деградацию видит browser-app (browser.cdp.*).
         {{- end }}
         - name: {{ $app.serviceName }}
           image: {{ include "agentlab.image" $ }}

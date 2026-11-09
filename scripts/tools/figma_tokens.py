@@ -873,7 +873,7 @@ def cmd_board(args: argparse.Namespace) -> int:
             return 2
         _require_design_file(server, file_key or None, wait=float(args.wait_plugin or 30))
         payload = _board_payload(spec)
-        code = _BOARD_JS.replace("SPEC", json.dumps(payload, ensure_ascii=False), 1)
+        code = _BOARD_JS.replace("SPEC", json.dumps(payload, ensure_ascii=True), 1)
         result = _figma_exec(server, code, timeout_ms=300_000)
         print(f"board: {json.dumps(result, ensure_ascii=False)[:400]}")
         return 0

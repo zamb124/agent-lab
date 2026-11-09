@@ -487,8 +487,8 @@ function makeSidebar() {
   foot.appendChild(un);
   foot.appendChild(icon('◔', 16, 'text/secondary'));
   sb.appendChild(foot);
-  foot.absoluteTransform = [[1, 0, 0], [0, 1, 956]];
   foot.layoutPositioning = 'ABSOLUTE';
+  foot.x = 0; foot.y = 956;
   return sb;
 }
 function makeTopBar() {
@@ -654,7 +654,7 @@ def _shell_payload() -> Json:
     spec = extract()
     tokens = {t["name"]: {"Dark": t["values"].get("Dark"), "Light": t["values"].get("Light")} for t in spec["tokens"]}
     return {
-        "page": "� Экраны",
+        "page": "\U0001F4F1 Экраны",
         "zone": "zone/00 — App Shell",
         "collDark": f"{spec['collection']} · Dark",
         "tokens": tokens,
@@ -678,7 +678,7 @@ def _run(js: str, tag: str, payload: Json, args: argparse.Namespace) -> int:
             print(f"{tag}: figma-console-mcp не инициализировался", file=sys.stderr)
             return 2
         _require_design_file(server, file_key or None, wait=float(args.wait_plugin or 30))
-        code = js.replace("SPEC", json.dumps(payload, ensure_ascii=False), 1)
+        code = js.replace("SPEC", json.dumps(payload, ensure_ascii=True), 1)
         result = _figma_exec(server, code, timeout_ms=300_000)
         print(f"{tag}: {json.dumps(result, ensure_ascii=False)[:400]}")
         return 0

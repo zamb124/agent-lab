@@ -368,7 +368,29 @@ async def stock_ui(
     stock_service,
     _ui_e2e_company_resources,
 ) -> AppUI:
+    """Stock UI: компания worker'а инициализирована (виртуальные локации + ЕИ).
+
+    Продовый `company_init_new_company` фан-аутит на
+    ``POST /stock/api/v1/internal/company/init`` — здесь зеркалим тем же
+    контрактом, иначе ``warehouses/create`` отвечает ``company_not_initialized``.
+    """
     _ = stock_service, _ui_e2e_company_resources
+    from httpx2 import AsyncClient
+
+    from core.internal_context_headers import build_internal_context_headers
+    from tests.ui.e2e_worker import ui_e2e_company_id, ui_e2e_worker_id
+
+    company_id = ui_e2e_company_id()
+    async with AsyncClient(base_url="http://localhost:9026", timeout=30.0) as client:
+        resp = await client.post(
+            "/stock/api/v1/internal/company/init",
+            json={"company_id": company_id},
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=f"ui_owner_{ui_e2e_worker_id()}",
+            ),
+        )
+    assert resp.status_code == 200, resp.text
     return AppUI(SERVICE_UI_REGISTRY["stock"])
 
 

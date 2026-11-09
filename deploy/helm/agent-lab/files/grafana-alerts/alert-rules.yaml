@@ -854,6 +854,50 @@ groups:
     labels:
       severity: warning
       service: seo-indexnow
+  - uid: browser-cdp-disconnects
+    title: Browser CDP Endpoint Flapping
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 1800
+        to: 0
+      datasourceUid: loki
+      model:
+        # sidecar chromium-cdp не имеет проб (CDP только loopback, в образе
+        # нет wget/curl) — деградацию видит browser-app: каждый разрыв
+        # DevTools-сокета выбрасывает handle с browser.cdp.disconnected_evicted.
+        expr: sum(count_over_time({namespace="platform", service="browser"} | json | message=~"browser[.]cdp[.]disconnected_evicted" [30m]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+          expression: $B >= 3
+          refId: C
+          type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Chromium CDP sidecar flapping on browser
+      description: '{{ printf "%.0f" $values.B.Value }} CDP disconnects in 30m — chromium-cdp sidecar restarting or OOMing; crawl/SEO snapshot renders degrade or fail'
+    labels:
+      severity: warning
+      service: browser
 - orgId: 1
   name: platform_alerts_slow
   folder: Platform

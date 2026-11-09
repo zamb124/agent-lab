@@ -72,6 +72,27 @@ async def shop_e2e_add_product(page: Page, name: str, price: str) -> Locator:
     return card
 
 
+async def shop_e2e_set_point_on_map(page: Page, shop_ui: AppUI, shop_id: str) -> None:
+    """Ставит обязательную точку магазина кликом по карте в настройках."""
+    await page.goto(
+        f"{shop_ui.spa_url()}{shop_id}/settings?section=delivery",
+        wait_until="domcontentloaded",
+    )
+    wrap = page.locator(".zone-map-wrap")
+    await expect(wrap).to_be_visible(timeout=45_000)
+    # pm-overlay перехватывает клики, пока карта не прогрузилась.
+    await expect(wrap.locator(".maplibregl-canvas")).to_be_visible(timeout=45_000)
+    await expect(wrap.locator(".pm-overlay")).to_have_count(0, timeout=45_000)
+    map_el = wrap.locator("platform-map")
+    await map_el.click(position={"x": 260, "y": 120})
+    await expect(wrap.locator(".empty-badge.point")).to_have_count(0, timeout=15_000)
+    await expect(wrap.locator(".maplibregl-marker")).to_have_count(1, timeout=15_000)
+    save = page.locator(".savebar platform-button[variant='primary']")
+    await expect(save).to_be_enabled(timeout=15_000)
+    await save.click()
+    await expect(page.locator(".savebar")).to_have_count(0, timeout=30_000)
+
+
 async def shop_e2e_publish(page: Page, shop_ui: AppUI) -> Locator:
     """Публикует магазин с главной и ждёт появления ссылки на витрину."""
     await shop_e2e_open_home(page, shop_ui)
@@ -86,7 +107,9 @@ async def shop_e2e_publish(page: Page, shop_ui: AppUI) -> Locator:
 async def shop_e2e_open_storefront(page: Page, href: str, base_url: str) -> None:
     """Открывает публичную витрину и ждёт появления каталога."""
     url = href if href.startswith("http") else f"{base_url}{href}"
-    await page.goto(url, wait_until="load")
+    # tmode=light — штатный параметр витрины: док-скриншоты держим в светлой теме.
+    sep = "&" if "?" in url else "?"
+    await page.goto(f"{url}{sep}tmode=light", wait_until="load")
     await expect(page.locator(".item, .gcard").first).to_be_visible(timeout=60_000)
 
 
