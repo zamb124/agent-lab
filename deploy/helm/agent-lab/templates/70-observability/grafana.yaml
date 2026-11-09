@@ -80,6 +80,13 @@ spec:
       app: grafana
   template:
     metadata:
+      annotations:
+        # Alert rules, datasources и provider-конфиг грузятся только на старте;
+        # ConfigMap-volume обновляется через symlink, file-watcher Grafana это
+        # не ловит — checksum форсирует rollout пода при правке файлов.
+        checksum/grafana-alerts: {{ (.Files.Glob "files/grafana-alerts/*.yaml").AsConfig | sha256sum }}
+        checksum/grafana-datasources: {{ .Files.Get "files/grafana-datasources.yaml" | sha256sum }}
+        checksum/grafana-dashboards-provider: {{ .Files.Get "files/grafana-dashboards.yaml" | sha256sum }}
       labels:
         app: grafana
     spec:
