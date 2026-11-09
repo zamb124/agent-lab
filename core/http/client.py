@@ -499,8 +499,14 @@ class SmartProxyClient:
         try:
             hostname = urlparse(url).hostname or ""
             return (
-                hostname in ("localhost", "127.0.0.1", "::1")
+                # Однолейбловые имена (service DNS в кластере: ``browser``,
+                # ``redis``) и внутренние суффиксы — публичное имя без точки
+                # существовать не может.
+                "." not in hostname
                 or hostname.endswith(".localhost")
+                or hostname.endswith(".internal")
+                or hostname.endswith(".svc.cluster.local")
+                or hostname in ("localhost", "127.0.0.1", "::1")
                 or hostname.startswith("192.168.")
                 or hostname.startswith("10.")
                 or hostname.startswith("172.16.")
