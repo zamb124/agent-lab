@@ -42,16 +42,21 @@ def _pid_is_alive(pid: int) -> bool:
 
 def _recorded_pid_is_pytest(pid: int) -> bool:
     """Живой pid из маркера — реально pytest? Отсекает переиспользование pid."""
+    return _pid_cmdline(pid) is None or "pytest" in _pid_cmdline(pid)
+
+
+def _pid_cmdline(pid: int) -> str | None:
+    """Cmdline процесса; None — psutil недоступен."""
     try:
         import psutil
     except ImportError:
-        return True
+        return None
     try:
-        return "pytest" in " ".join(psutil.Process(pid).cmdline())
+        return " ".join(psutil.Process(pid).cmdline())
     except (psutil.NoSuchProcess, psutil.ZombieProcess):
-        return False
+        return ""
     except psutil.AccessDenied:
-        return True
+        return None
 
 
 def claim_pytest_controller_session() -> None:
@@ -67,10 +72,11 @@ def claim_pytest_controller_session() -> None:
             and _pid_is_alive(existing_pid)
             and _recorded_pid_is_pytest(existing_pid)
         ):
+            cmdline = _pid_cmdline(existing_pid) or ""
             raise RuntimeError(
-                "pytest controller уже запущен "
-                f"(pid={existing_pid}). Дождитесь завершения make test "
-                "или завершите процесс вручную."
+                f"pytest controller уже запущен (pid={existing_pid}"
+                f"{', ' + cmdline if cmdline else ''}). "
+                "Дождитесь завершения make test или завершите процесс вручную."
             )
         _PLATFORM_TEST_CONTROLLER_PID.unlink(missing_ok=True)
     _PLATFORM_TEST_CONTROLLER_PID.write_text(str(os.getpid()), encoding="utf-8")

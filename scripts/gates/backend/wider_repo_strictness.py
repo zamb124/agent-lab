@@ -30,6 +30,10 @@ SKIP_PARTS = {
     ".ruff_cache",
     ".venv",
     "node_modules",
+    # ui-dist — генерируемый esbuild-вывод: чанки переписываются прямо во время
+    # сборки (make test гоняет lint и esbuild параллельно), плюс аудиту
+    # исходного текста там нечего проверять.
+    "ui-dist",
 }
 SKIP_PATH_PREFIXES: tuple[str, ...] = ()
 SKIP_TEXT_SUFFIXES = (".map", ".min.js")

@@ -2465,6 +2465,8 @@ async def flows_open_variables_modal(
         )
     modal = page.locator("flows-variables-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
+    spinner = modal.locator("platform-company-variables-panel platform-spinner")
+    await expect(spinner).to_be_hidden(timeout=20_000)
     return modal
 
 

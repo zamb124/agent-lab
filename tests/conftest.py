@@ -273,7 +273,9 @@ def pytest_configure(config):
     """Guard одного pytest-контроллера и подготовка каталога junitxml."""
     import pathlib
 
-    if not hasattr(config, "workerinput"):
+    # --collect-only (IDE discovery) не запускает тесты и не трогает БД —
+    # контроллер не захватываем, иначе фоновый discovery конфликтует с make test.
+    if not hasattr(config, "workerinput") and not config.option.collectonly:
         from tests.fixtures.workers import prepare_pytest_controller_session
 
         try:
