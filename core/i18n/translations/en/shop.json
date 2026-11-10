@@ -47,7 +47,10 @@
   "published_open": "Open storefront",
   "ready_hint": "Storefront is ready to publish",
   "fill_hint": "Fill the menu, pick a design — and publish",
-  "field_slug_hint": "Lowercase letters, digits and dashes"
+  "field_slug_hint": "Lowercase letters, digits and dashes",
+  "demos_add": "Add examples",
+  "demo_badge": "Example",
+  "demo_hint": "Reference sample storefront: explore its settings and build your own menu by example"
  },
  "menu": {
   "title": "Menu & products",
@@ -61,6 +64,12 @@
   "badge_add": "Add badge",
   "badge_remove": "Remove badge",
   "field_description": "Description",
+  "nutrition_title": "Nutrition per portion",
+  "nutri_kcal": "kcal",
+  "nutri_protein": "Protein",
+  "nutri_fat": "Fat",
+  "nutri_carb": "Carbs",
+  "field_available": "In stock",
   "add_product": "Add",
   "empty": "No products yet — add the first one above",
   "col_name": "Name",
@@ -439,7 +448,12 @@
   "is_available": "Available",
   "ai_suggest": "AI suggest options",
   "ai_busy": "AI thinking…",
-  "group_remove": "Delete group"
+  "group_remove": "Delete group",
+  "option_photo": "Option photo",
+  "delta_kcal": "+kcal",
+  "delta_protein": "+protein",
+  "delta_fat": "+fat",
+  "delta_carb": "+carbs"
  },
  "promos": {
   "title": "Promotions",
