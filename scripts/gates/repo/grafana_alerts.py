@@ -23,6 +23,10 @@ Grafana 13 падает panic ``assignment to entry in nil map`` при прав
    селектор ``[Nh]`` в ``model.expr`` не превышает лимит Loki ``1d1h`` —
    Grafana расширяет интервал запроса на range-вектор; переполнение даёт
    ``sse.dataQueryError``, правило висит в health=error и не алертит.
+9. Loki-правило на отношении (``sum(...) / sum(...)``) или квантиле
+   (``quantile_over_time``) обязано иметь volume floor — math-условие
+   с ``&&`` на второй запрос объёма. Процент/квантиль на малой выборке
+   — шум: 1 ошибка из 2 вызовов даёт 50%, один медленный запрос = p99.
 """
 
 from __future__ import annotations
@@ -43,6 +47,7 @@ _SEVERITIES = {"critical", "warning"}
 _LOKI_MAX_QUERY_SECONDS = 25 * 60 * 60
 _RANGE_RE = re.compile(r"\[(\d+)([smhd])\]")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+_RATIO_OR_QUANTILE_RE = re.compile(r"quantile_over_time\(|/\s*\(?\s*sum")
 
 
 def _check_rule(group: str, rule: dict[str, object], uids: set[str], errors: list[str]) -> None:
@@ -74,6 +79,21 @@ def _check_rule(group: str, rule: dict[str, object], uids: set[str], errors: lis
     condition = rule.get("condition")
     if condition and condition not in ref_ids:
         errors.append(f"{where}: condition={condition} не совпадает ни с одним refId")
+    is_ratio_or_quantile = any(
+        e.get("datasourceUid") == "loki"
+        and isinstance(e.get("model"), dict)
+        and _RATIO_OR_QUANTILE_RE.search(str(e["model"].get("expr") or ""))
+        for e in data
+        if isinstance(e, dict)
+    )
+    if is_ratio_or_quantile:
+        maths = [
+            str(e["model"].get("expression") or "")
+            for e in data
+            if isinstance(e, dict) and isinstance(e.get("model"), dict) and e["model"].get("type") == "math"
+        ]
+        if not any("&&" in expr for expr in maths):
+            errors.append(f"{where}: отношение/квантиль без volume floor — math-условие должно содержать '&& $volumeRef'")
 
 
 def _check_query(where: str, entry: object, ref_ids: set[str], errors: list[str]) -> None:
