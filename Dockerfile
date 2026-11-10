@@ -68,7 +68,7 @@ COPY zensical.ru.toml zensical.en.toml ./
 # conf.json — канонический домен/имя бренда для SEO-скриптов (seo_config.py)
 COPY conf.json ./
 COPY docs ./docs
-COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
+COPY core/frontend/static/assets/service_logos ./core/frontend/static/assets/service_logos
 COPY scripts/__init__.py ./scripts/__init__.py
 COPY scripts/docs ./scripts/docs
 COPY scripts/seo ./scripts/seo
