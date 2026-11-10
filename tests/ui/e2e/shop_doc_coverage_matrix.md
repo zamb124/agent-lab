@@ -53,7 +53,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `promo-create` | Создать акцию и показать на витрине | `test_shop_feed_e2e.py` / новый | 📝 |
+| 2 | `promo-create` | Создать акцию и показать на витрине | `test_shop_doc_promos.py` | ✅ |
 | 3 | `loyalty-points` | Баллы лояльности покупателя | `test_shop_loyalty_e2e.py` | 📝 |
 
 ### delivery — Доставка
