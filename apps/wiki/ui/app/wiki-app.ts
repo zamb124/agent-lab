@@ -102,6 +102,7 @@ const PUBLIC_ROUTE_KEYS = [PUBLIC_ROUTE_KEY, PUBLIC_PAGE_ROUTE_KEY];
 export class WikiApp extends PlatformApp {
     static defaultI18nNamespace = 'wiki';
     static topBarEnabled = true;
+    static topBarHideOnRoutes = PUBLIC_ROUTE_KEYS;
     static bottomNavItems = WIKI_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = PUBLIC_ROUTE_KEYS;
     static platformAssistant = {
@@ -227,6 +228,15 @@ export class WikiApp extends PlatformApp {
     }
 
     override getBaseUrl() { return '/wiki'; }
+
+    /**
+     * Публичный сайт по ссылке (/wiki/s/...) — гость без cookie: /api/auth/me даёт 401,
+     * иначе PlatformApp уводит на логин до отрисовки публичной страницы.
+     */
+    override rendersUnauthenticated() {
+        if (typeof window === 'undefined') return false;
+        return window.location.pathname.startsWith('/wiki/s/');
+    }
 
     override getRoutes() { return []; }
 

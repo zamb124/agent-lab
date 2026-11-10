@@ -119,31 +119,34 @@ async def test_console_namespaces_list_filter_and_create(
         has_text=re.compile(r"Create workspace|Создать", re.I)
     ).first
     await create_btn.click()
-    create_form = page_root.locator("form.create-panel")
-    await expect(create_form).to_be_visible(timeout=15_000)
+    create_modal = ui_page_system.locator("frontend-namespace-create-modal")
+    await expect(create_modal).to_be_visible(timeout=15_000)
     await scenario.step(
         "Откройте форму создания пространства",
         ui_page_system,
         screenshot_name="namespaces-create-form",
         details=(
-            "Нажмите кнопку Create workspace (Создать пространство). Появится форма "
+            "Нажмите кнопку Create workspace (Создать пространство). Откроется окно "
             "с полями имени и описания — без выбора CRM-шаблона."
         ),
         label_en="Open the create workspace form",
         details_en=(
-            "Click Create workspace. A form opens with name and description fields — "
+            "Click Create workspace. A dialog opens with name and description fields — "
             "without choosing a CRM template."
         ),
     )
 
-    name_input = create_form.locator("input.field-pill-input").first
+    name_input = create_modal.locator("platform-field").nth(0).locator("input:visible").first
     await expect(name_input).to_be_visible(timeout=15_000)
     await name_input.fill(workspace_name)
-    desc_input = create_form.locator("textarea.field-pill-textarea, textarea").first
+    desc_input = create_modal.locator("platform-field").nth(1).locator(
+        "textarea:visible, input:visible"
+    ).first
     await expect(desc_input).to_be_visible(timeout=15_000)
     await desc_input.fill(f"UI workspace {unique_id}")
 
-    await create_form.locator('button[type="submit"]').click()
+    await create_modal.locator(".footer-actions .btn-primary").click()
+    await expect(create_modal).to_be_hidden(timeout=15_000)
     await expect(page_root.locator(".card-title, .card").filter(has_text=workspace_name)).to_be_visible(
         timeout=30_000
     )

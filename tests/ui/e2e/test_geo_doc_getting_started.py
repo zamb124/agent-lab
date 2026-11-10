@@ -18,7 +18,7 @@ from apps.geo.models.geo_road_edge import GeoRoadEdge
 from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from core.tasks import enqueue
 from tests.ui.apps import SERVICE_UI_REGISTRY
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_wait_ws_open
 from tests.ui.scenario_doc import ScenarioRecorder
 from tests.ui.shots.conftest import wait_geo_map_ready
 
@@ -86,6 +86,7 @@ async def test_geo_address_lookup_on_map(
     await _GEO_UI.open(page)
     await expect(page.locator("geo-overview-page")).to_be_visible(timeout=30_000)
     await wait_geo_map_ready(page)
+    await ui_wait_ws_open(page)
 
     await scenario.step(
         "Откройте Geo — сразу видна карта",
@@ -195,6 +196,7 @@ async def test_geo_overview_tour(
     await _GEO_UI.open(page)
     await expect(page.locator("geo-overview-page")).to_be_visible(timeout=30_000)
     await wait_geo_map_ready(page)
+    await ui_wait_ws_open(page)
 
     await scenario.step(
         "Главная — живая карта города",

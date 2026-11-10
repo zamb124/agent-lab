@@ -110,6 +110,24 @@ async def ui_click_and_wait_bus_op(
         raise AssertionError(f"Операция завершилась {failed}: события bus — {seen}")
 
 
+async def ui_wait_ws_open(page: Page, *, timeout_ms: int = 30_000) -> None:
+    """Дождаться открытия WS-шины (``network.ws.status === 'open'``).
+
+    Команды ``transport: 'ws'`` до подключения стоят в pre-connect очереди
+    максимум ``PRE_CONNECT_MAX_WAIT_MS`` (5с) — ввод на холодной странице
+    теряет команду. Гейт обязателен перед первым ws-op после навигации.
+    """
+    await page.wait_for_function(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const network = bus.getState().network;
+            return Boolean(network && network.ws && network.ws.status === 'open');
+        }""",
+        timeout=timeout_ms,
+    )
+
+
 async def ui_set_platform_field(field: Locator, value: str) -> None:
     """Заполняет ``platform-field``: реальный ввод + ``change``-событие компонента.
 

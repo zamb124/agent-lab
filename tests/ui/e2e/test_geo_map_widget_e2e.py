@@ -29,7 +29,7 @@ from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
 from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from core.tasks import enqueue
 from tests.ui.apps import SERVICE_UI_REGISTRY
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_wait_ws_open
 
 _GEO_UI = AppUI(SERVICE_UI_REGISTRY["geo"])
 
@@ -72,6 +72,7 @@ async def _open_overview(page: Page) -> None:
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("canvas.maplibregl-canvas")).to_be_visible(timeout=30_000)
     await expect(page.locator(".pm-controls .pm-zoom")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 async def _open_lab(page: Page) -> None:
@@ -79,6 +80,7 @@ async def _open_lab(page: Page) -> None:
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("canvas.maplibregl-canvas").first).to_be_visible(timeout=30_000)
     await expect(page.locator(".main-map .pm-zoom")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 async def _project(page: Page, lng: float, lat: float, *, nth: int = 0) -> tuple[float, float]:

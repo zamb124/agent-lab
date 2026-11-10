@@ -21,29 +21,24 @@ import pytest
 from playwright.async_api import Page, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field, ui_wait_ws_open
 from tests.ui.scenario_doc import ScenarioRecorder
 
 _GEO_UI = AppUI(SERVICE_UI_REGISTRY["geo"])
-
-
-async def _fill_platform_field(field, value: str) -> None:
-    """Ввод в <platform-field> боевым путём: input-события → change с detail.value."""
-    editable = field.locator("input:visible, textarea:visible").first
-    await editable.click()
-    await editable.fill(value)
 
 
 async def _open_sources(page: Page) -> None:
     _ = await page.goto(f"{_GEO_UI.spa_url()}sources", wait_until="load")
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("geo-sources-page")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 async def _open_map_lab(page: Page) -> None:
     _ = await page.goto(f"{_GEO_UI.spa_url()}map-lab", wait_until="load")
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("geo-map-lab-page")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 @pytest.mark.scenario(
@@ -107,12 +102,12 @@ async def test_sources_hub_and_region_crud(
     )
 
     fields = modal.locator("platform-field")
-    await _fill_platform_field(fields.nth(0), "e2e-region")
-    await _fill_platform_field(fields.nth(1), "E2E регион")
-    await _fill_platform_field(fields.nth(4), "55.0")
-    await _fill_platform_field(fields.nth(5), "56.0")
-    await _fill_platform_field(fields.nth(6), "37.0")
-    await _fill_platform_field(fields.nth(7), "38.0")
+    await ui_set_platform_field(fields.nth(0), "e2e-region")
+    await ui_set_platform_field(fields.nth(1), "E2E регион")
+    await ui_set_platform_field(fields.nth(4), "55.0")
+    await ui_set_platform_field(fields.nth(5), "56.0")
+    await ui_set_platform_field(fields.nth(6), "37.0")
+    await ui_set_platform_field(fields.nth(7), "38.0")
     await modal.locator(".btn-primary").click()
     await expect(modal).to_be_hidden(timeout=15_000)
     row = page.locator("geo-sources-page tbody tr", has_text="e2e-region")
@@ -126,7 +121,7 @@ async def test_sources_hub_and_region_crud(
     # Edit: меняем title через модалку.
     await row.first.locator(".icon-btn").first.click()
     await expect(modal).to_be_visible(timeout=10_000)
-    await _fill_platform_field(modal.locator("platform-field").nth(1), "E2E регион 2")
+    await ui_set_platform_field(modal.locator("platform-field").nth(1), "E2E регион 2")
     await modal.locator(".btn-primary").click()
     await expect(modal).to_be_hidden(timeout=15_000)
     await expect(

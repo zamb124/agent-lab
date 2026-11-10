@@ -31,7 +31,12 @@ SECRET_VALUE_RE = re.compile(
 )
 PLACEHOLDER_PREFIXES: tuple[str, ...] = ("YOUR_", "ВСТАВИТЬ_", "@var:")
 # Дефолт dev coturn из docker-compose-dev.yaml (`--static-auth-secret=${TURN_SECRET:-turnsecret}`), не прод-секрет.
-ALLOWED_PATHS: frozenset[str] = frozenset({"calls.turn_secret"})
+ALLOWED_PATHS: frozenset[str] = frozenset({
+    "calls.turn_secret",
+    # IndexNow key — верификационный токен домена, публичен по протоколу:
+    # frontend раздаёт его как /<key>.txt любому краулеру (см. public_serving).
+    "services.frontend.indexnow_key",
+})
 
 
 def _walk(value: JsonValue, path: list[str], hits: list[str]) -> None:

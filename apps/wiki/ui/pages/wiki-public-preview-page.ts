@@ -416,6 +416,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
                     <platform-tree
                         .nodes=${this._treeNodes()}
                         selected-id=${this._selectedId()}
+                        expand-all
                         aria-label=${this.t('public.site_nav')}
                         @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this._onTreeSelect(event)}
                     ></platform-tree>

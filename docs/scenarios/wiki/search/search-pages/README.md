@@ -4,12 +4,12 @@
 
 ## Шаг 1. Открыт поиск
 
-![Открыт поиск](search-pages--01-otkryt-poisk.png)
+![Открыт поиск](search-pages--01-search-opened.png)
 
 ## Шаг 2. Страница найдена по тексту
 
-![Страница найдена по тексту](search-pages--02-stranitsa-naydena-po-tekstu.png)
+![Страница найдена по тексту](search-pages--02-page-found-by-text.png)
 
 ## Шаг 3. Результат поиска открыт
 
-![Результат поиска открыт](search-pages--03-rezultat-poiska-otkryt.png)
+![Результат поиска открыт](search-pages--03-search-result-opened.png)

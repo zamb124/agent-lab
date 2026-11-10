@@ -17,28 +17,22 @@ import pytest
 from playwright.async_api import Page, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field, ui_wait_ws_open
 from tests.ui.scenario_doc import ScenarioRecorder
 
 _GEO_UI = AppUI(SERVICE_UI_REGISTRY["geo"])
-
-
-async def _fill_platform_field(field, value: str) -> None:
-    """Ввод в <platform-field> боевым путём: input-события → change с detail.value."""
-    editable = field.locator("input:visible, textarea:visible").first
-    await editable.click()
-    await editable.fill(value)
 
 
 async def _open_addresses(page: Page) -> None:
     _ = await page.goto(f"{_GEO_UI.spa_url()}addresses", wait_until="load")
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("geo-addresses-page")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 async def _search(page: Page, q: str) -> None:
     field = page.locator("geo-addresses-page .search-box platform-field")
-    await _fill_platform_field(field, q)
+    await ui_set_platform_field(field, q)
 
 
 @pytest.mark.scenario(
@@ -94,8 +88,8 @@ async def test_admin_edit_audit_and_revert_address(
         label_en="Editor modal: address fields and mini-map with marker",
     )
 
-    await _fill_platform_field(modal.locator("platform-field").nth(3), "1Е2А")
-    await _fill_platform_field(modal.locator("platform-field").nth(5), "e2e уточнение")
+    await ui_set_platform_field(modal.locator("platform-field").nth(3), "1Е2А")
+    await ui_set_platform_field(modal.locator("platform-field").nth(5), "e2e уточнение")
     await modal.locator(".btn-primary").click()
     await expect(modal).to_be_hidden(timeout=15_000)
     await expect(
@@ -140,13 +134,13 @@ async def test_admin_creates_and_hides_manual_address(ui_page_system: Page) -> N
     await expect(modal).to_be_visible(timeout=10_000)
 
     fields = modal.locator("platform-field")
-    await _fill_platform_field(fields.nth(0), "Тестовая улица, 7")
-    await _fill_platform_field(fields.nth(1), "Москва")
-    await _fill_platform_field(fields.nth(2), "Тестовая улица")
-    await _fill_platform_field(fields.nth(3), "7")
-    await _fill_platform_field(fields.nth(4), "")
-    await _fill_platform_field(fields.nth(5), "moscow")
-    await _fill_platform_field(fields.nth(6), "e2e create")
+    await ui_set_platform_field(fields.nth(0), "Тестовая улица, 7")
+    await ui_set_platform_field(fields.nth(1), "Москва")
+    await ui_set_platform_field(fields.nth(2), "Тестовая улица")
+    await ui_set_platform_field(fields.nth(3), "7")
+    await ui_set_platform_field(fields.nth(4), "")
+    await ui_set_platform_field(fields.nth(5), "moscow")
+    await ui_set_platform_field(fields.nth(6), "e2e create")
 
     await expect(modal.locator("platform-map")).to_be_visible(timeout=15_000)
     map_box = await modal.locator("platform-map canvas").first.bounding_box()

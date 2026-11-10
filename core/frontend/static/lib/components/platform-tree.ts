@@ -81,6 +81,8 @@ export class PlatformTree extends PlatformElement {
         draggableNodes: { type: Boolean, attribute: 'draggable-nodes' },
         emptyLabel: { type: String, attribute: 'empty-label' },
         ariaLabel: { type: String, attribute: 'aria-label' },
+        /** Стартовое состояние — все ветки раскрыты (карта раздела, публичный сайт). */
+        expandAll: { type: Boolean, attribute: 'expand-all' },
         /** Функция узла → пункты `platform-menu`; без неё меню не открывается. */
         menuItems: { attribute: false },
         _expanded: { state: true },
@@ -95,6 +97,7 @@ export class PlatformTree extends PlatformElement {
     declare draggableNodes: boolean;
     declare emptyLabel: string;
     declare ariaLabel: string;
+    declare expandAll: boolean;
     declare menuItems: ((node: PlatformTreeNode) => unknown) | null;
     declare _expanded: Set<string>;
     declare _dragId: string;
@@ -283,6 +286,7 @@ export class PlatformTree extends PlatformElement {
         this.draggableNodes = false;
         this.emptyLabel = '';
         this.ariaLabel = '';
+        this.expandAll = false;
         this.menuItems = null;
         /** @type {Set<string>} */
         this._expanded = new Set();
@@ -292,6 +296,17 @@ export class PlatformTree extends PlatformElement {
         this._menuAnchor = null;
         this._focusedId = '';
         this._revealedSelectedId = '';
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
+        if (this.expandAll && (changed.has('nodes') || changed.has('expandAll'))) {
+            const next = new Set(this._expanded);
+            for (const node of this.nodes) {
+                next.add(node.id);
+            }
+            this._expanded = next;
+        }
     }
 
     override updated(changed: PropertyValues): void {

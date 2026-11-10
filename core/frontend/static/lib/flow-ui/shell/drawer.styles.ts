@@ -62,7 +62,14 @@ export const flowUIDrawerStyles = css`
         :host([data-embed-position='bottom-left']:not([data-drawer-gestures='on'])) .panel {
             right: auto; left: 0; transform-origin: bottom left;
         }
-        :host(:not([open])) .panel { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+        :host(:not([open])) .panel {
+            opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none;
+            /* visibility — единственный способ выключить hit-testing поддерева:
+               потомки с pointer-events:auto (topbar, кнопки) переоткрывают его
+               внутри pointer-events:none родителя, visibility им не перебить. */
+            visibility: hidden;
+            transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+        }
         :host([expanded][open]) {
             inset: 0;
             pointer-events: none;

@@ -23,7 +23,7 @@ from apps.geo.models.geo_road_edge import GeoRoadEdge
 from apps.geo.tasks.task_names import GEO_OSM_SYNC_TICK
 from core.tasks import enqueue
 from tests.ui.apps import SERVICE_UI_REGISTRY
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_wait_ws_open
 from tests.ui.scenario_doc import ScenarioRecorder
 
 _GEO_UI = AppUI(SERVICE_UI_REGISTRY["geo"])
@@ -73,6 +73,7 @@ async def _open_route_lab(page: Page) -> None:
     await expect(page.locator("geo-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("geo-route-lab-page")).to_be_visible(timeout=30_000)
     await expect(page.locator("canvas.maplibregl-canvas")).to_be_visible(timeout=30_000)
+    await ui_wait_ws_open(page)
 
 
 async def _project(page: Page, lng: float, lat: float) -> tuple[float, float]:

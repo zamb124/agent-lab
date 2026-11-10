@@ -23,3 +23,17 @@ Click the Personal filter. The list keeps only employee personal catalogs. The f
 Click the All filter to show company workspaces and personal catalogs again. Do this before creating a new workspace — otherwise the new card may stay hidden behind the personal-only filter.
 
 ![Return to the full list](console-namespaces--03-namespaces-filter-all.png)
+
+## Step 4. Open the create workspace form
+
+Click Create workspace. A dialog opens with name and description fields — without choosing a CRM template.
+
+![Open the create workspace form](console-namespaces--04-namespaces-create-form.png)
+
+## Step 5. Confirm the new workspace in the list
+
+**Result demonstration.** The list shows a card named uiws_b8d28ff0. A CRM settings link next to it means the space is registered as a company workspace.
+
+**Summary.** You can open the namespaces registry, filter personal catalogs, and create a lightweight workspace without a CRM template.
+
+![Confirm the new workspace in the list](console-namespaces--05-namespace-created-in-list.png)

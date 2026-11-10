@@ -76,6 +76,7 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
             <platform-tree
                 .nodes=${this.nodes}
                 selected-id=${this.selectedId}
+                expand-all
                 aria-label=${this.t('public.site_nav')}
                 @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this._onSelect(event)}
             ></platform-tree>

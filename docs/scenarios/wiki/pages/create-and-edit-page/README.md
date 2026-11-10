@@ -4,16 +4,16 @@
 
 ## Шаг 1. Открыта база знаний
 
-![Открыта база знаний](create-and-edit-page--01-otkryta-baza-znaniy.png)
+![Открыта база знаний](create-and-edit-page--01-kb-opened.png)
 
 ## Шаг 2. Создана пустая страница
 
-![Создана пустая страница](create-and-edit-page--02-sozdana-pustaya-stranitsa.png)
+![Создана пустая страница](create-and-edit-page--02-empty-page-created.png)
 
 ## Шаг 3. Заголовок и текст сохранены
 
-![Заголовок и текст сохранены](create-and-edit-page--03-zagolovok-i-tekst-sokhraneny.png)
+![Заголовок и текст сохранены](create-and-edit-page--03-title-text-saved.png)
 
 ## Шаг 4. После перезагрузки содержимое на месте
 
-![После перезагрузки содержимое на месте](create-and-edit-page--04-posle-perezagruzki-soderzhimoe-na-meste.png)
+![После перезагрузки содержимое на месте](create-and-edit-page--04-content-after-reload.png)

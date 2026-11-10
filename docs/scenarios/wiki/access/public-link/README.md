@@ -4,8 +4,16 @@
 
 ## Шаг 1. Открыто окно доступа
 
-![Открыто окно доступа](public-link--01-otkryto-okno-dostupa.png)
+![Открыто окно доступа](public-link--01-access-modal-opened.png)
 
 ## Шаг 2. Публичная ссылка включена
 
-![Публичная ссылка включена](public-link--02-publichnaya-ssylka-vklyuchena.png)
+![Публичная ссылка включена](public-link--02-public-link-enabled.png)
+
+## Шаг 3. Раздел открыт без входа в систему
+
+![Раздел открыт без входа в систему](public-link--03-section-opened-without-signing.png)
+
+## Шаг 4. Подстраница открыта по той же ссылке
+
+![Подстраница открыта по той же ссылке](public-link--04-subpage-opened-via-the-same-link.png)
