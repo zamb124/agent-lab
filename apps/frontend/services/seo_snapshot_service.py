@@ -40,6 +40,10 @@ logger = get_logger(__name__)
 SNAPSHOT_BYPASS_PARAM = "spa_shell"
 
 _SNAPSHOT_TTL_SECONDS = 6 * 60 * 60
+# Stale-слой живёт намного дольше свежего ключа: при истечении TTL,
+# холодном выкате или фейле рендера краулер получает последний удачный
+# DSD-контент, а не оболочку — классический stale-while-revalidate.
+_SNAPSHOT_STALE_TTL_SECONDS = 7 * 24 * 60 * 60
 _SNAPSHOT_FAIL_TTL_SECONDS = 60
 # Дольше максимального fetch (nav 30s + service timeout 45s), чтобы лидер
 # успел закончить до истечения блокировки.
@@ -82,6 +86,9 @@ class SeoSnapshotService:
         version_key = version if version else "dev"
         return f"seo:snap:{version_key}:{locale}:{self._normalized(path)}"
 
+    def _stale_key(self, path: str, locale: str) -> str:
+        return f"seo:snapstale:{locale}:{self._normalized(path)}"
+
     def _fail_key(self, path: str, locale: str) -> str:
         return f"seo:snap:fail:{locale}:{self._normalized(path)}"
 
@@ -110,52 +117,87 @@ class SeoSnapshotService:
         return f"{self._fetch_base()}{suffix}?{SNAPSHOT_BYPASS_PARAM}=1"
 
     async def _stale_snapshot(self, page: PublicPage, locale: SeoLocale) -> str | None:
-        """Снапшот любой версии — stale-while-revalidate при промахе текущей.
+        """Последний удачный снапшот страницы любой версии — слой SWR.
 
-        Ключ содержит deployment_version: после выката кэш новой версии
-        холодный и warmup ещё рендерит. Снапшот прошлого релиза — реальный
-        контент, оболочка для краулера — нет: отдаём устаревший, пока лидер
-        не закэширует свежий.
+        Отдельный ключ ``seo:snapstale`` переживает и TTL свежего ключа, и
+        смену deployment_version: пока страница хоть раз отрендерилась,
+        промах никогда не превращается в оболочку.
         """
-        # ``*`` матчит и сегмент fail/lock-ключей той же формы — отсекаем их:
-        # в них лежит маркер "1", а не HTML.
-        pattern = f"seo:snap:*:{locale}:{self._normalized(page.path)}"
         try:
-            keys = await self._redis.scan_keys(pattern)
+            return await self._redis.get(self._stale_key(page.path, locale))
         except Exception as exc:
-            logger.warning("seo.snapshot.stale_scan_failed", error=str(exc))
+            logger.warning("seo.snapshot.stale_get_failed", error=str(exc))
             return None
-        current = self._cache_key(page.path, locale)
-        best: str | None = None
-        for key in keys:
-            if key == current or key.split(":")[2] in ("fail", "lock"):
-                continue
-            try:
-                value = await self._redis.get(key)
-            except Exception:
-                continue
-            if value is not None and (best is None or len(value) > len(best)):
-                best = value
-        return best
 
-    async def snapshot_html(self, page: PublicPage, locale: SeoLocale) -> str | None:
-        """Пререндеренный HTML страницы; ``None`` — снапшот недоступен (fail-open)."""
-        key = self._cache_key(page.path, locale)
+    async def _render_store(self, page: PublicPage, locale: SeoLocale) -> str | None:
+        """Живой рендер → postprocess → запись свежего и stale ключей."""
         try:
-            cached = await self._redis.get(key)
+            response = await self._fetch_render(page, locale)
         except Exception as exc:
-            logger.warning("seo.snapshot.cache_get_failed", error=str(exc))
-            cached = None
-        if cached:
-            return cached
+            logger.warning(
+                "seo.snapshot.fetch_failed",
+                path=page.path,
+                locale=locale,
+                error=str(exc),
+            )
+            await self._mark_failure(page, locale)
+            return None
+        try:
+            html = postprocess_snapshot(
+                response.html,
+                page=page,
+                locale=locale,
+                brand=resolve_brand_or_primary(None),
+                seo_base_url=resolve_seo_base_url(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "seo.snapshot.postprocess_failed",
+                path=page.path,
+                locale=locale,
+                error=str(exc),
+            )
+            await self._mark_failure(page, locale)
+            return None
+        try:
+            _ = await self._redis.set(
+                self._cache_key(page.path, locale), html, ttl=_SNAPSHOT_TTL_SECONDS
+            )
+            _ = await self._redis.set(
+                self._stale_key(page.path, locale), html, ttl=_SNAPSHOT_STALE_TTL_SECONDS
+            )
+        except Exception as exc:
+            logger.warning("seo.snapshot.cache_set_failed", error=str(exc))
+        return html
+
+    async def snapshot_html(
+        self, page: PublicPage, locale: SeoLocale, *, force_refresh: bool = False
+    ) -> str | None:
+        """Пререндеренный HTML страницы; ``None`` — снапшот недоступен (fail-open).
+
+        ``force_refresh`` — путь warmup: ключ жив, но TTL ниже половины —
+        чтение из кэша пропускаем и перерендериваем упреждающе, пока
+        свежий ключ не истёк (иначе warmup лишь перечитывает свой же кэш
+        и весь реестр истекает одной массой).
+        """
+        key = self._cache_key(page.path, locale)
+        if not force_refresh:
+            try:
+                cached = await self._redis.get(key)
+            except Exception as exc:
+                logger.warning("seo.snapshot.cache_get_failed", error=str(exc))
+                cached = None
+            if cached:
+                return cached
 
         stale = await self._stale_snapshot(page, locale)
 
-        try:
-            if await self._redis.get(self._fail_key(page.path, locale)):
-                return stale
-        except Exception as exc:
-            logger.warning("seo.snapshot.fail_get_failed", error=str(exc))
+        if not force_refresh:
+            try:
+                if await self._redis.get(self._fail_key(page.path, locale)):
+                    return stale
+            except Exception as exc:
+                logger.warning("seo.snapshot.fail_get_failed", error=str(exc))
 
         # Не плодим параллельные fetch на одну страницу: лидер рендерит,
         # остальные получают stale/оболочку — следующий хит заберёт готовый кэш.
@@ -171,40 +213,8 @@ class SeoSnapshotService:
             return stale
 
         try:
-            try:
-                response = await self._fetch_render(page, locale)
-            except Exception as exc:
-                logger.warning(
-                    "seo.snapshot.fetch_failed",
-                    path=page.path,
-                    locale=locale,
-                    error=str(exc),
-                )
-                await self._mark_failure(page, locale)
-                return stale
-
-            try:
-                html = postprocess_snapshot(
-                    response.html,
-                    page=page,
-                    locale=locale,
-                    brand=resolve_brand_or_primary(None),
-                    seo_base_url=resolve_seo_base_url(),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "seo.snapshot.postprocess_failed",
-                    path=page.path,
-                    locale=locale,
-                    error=str(exc),
-                )
-                await self._mark_failure(page, locale)
-                return stale
-            try:
-                _ = await self._redis.set(key, html, ttl=_SNAPSHOT_TTL_SECONDS)
-            except Exception as exc:
-                logger.warning("seo.snapshot.cache_set_failed", error=str(exc))
-            return html
+            html = await self._render_store(page, locale)
+            return html if html is not None else stale
         finally:
             # Лидер закончил: снимаем lock, чтобы ретрай не ждал TTL.
             # Cache set уже отработал либо fail-маркер поставлен — дублей нет.
@@ -236,9 +246,13 @@ class SeoSnapshotService:
         raise last_rate_limit
 
     async def invalidate(self, path: str, locale: str) -> None:
-        _ = await self._redis.delete(self._cache_key(path, locale), self._fail_key(path, locale))
+        _ = await self._redis.delete(
+            self._cache_key(path, locale),
+            self._stale_key(path, locale),
+            self._fail_key(path, locale),
+        )
 
-    async def _stale_for_refresh(self, page: PublicPage, locale: SeoLocale) -> bool:
+    async def _needs_refresh(self, page: PublicPage, locale: SeoLocale) -> bool:
         """Кэш отсутствует или близок к истечению — страницу надо рендерить."""
         try:
             ttl = await self._redis.ttl(self._cache_key(page.path, locale))
@@ -252,10 +266,10 @@ class SeoSnapshotService:
     ) -> list[tuple[PublicPage, SeoLocale]]:
         missed: list[tuple[PublicPage, SeoLocale]] = []
         for page, locale in pending:
-            if not await self._stale_for_refresh(page, locale):
+            if not await self._needs_refresh(page, locale):
                 continue
             try:
-                html = await self.snapshot_html(page, locale)
+                html = await self.snapshot_html(page, locale, force_refresh=True)
             except Exception as exc:
                 html = None
                 logger.warning(
@@ -267,7 +281,7 @@ class SeoSnapshotService:
             # stale-отдача — не прогрев: ключа новой версии не записано,
             # страница остаётся в missed и уходит в повторный проход,
             # иначе warmup_ok врёт и холодные ключи висят до следующего часа.
-            if html is None or await self._stale_for_refresh(page, locale):
+            if html is None or await self._needs_refresh(page, locale):
                 missed.append((page, locale))
         return missed
 
