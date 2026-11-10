@@ -30,13 +30,13 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `locations-tree` | Создать склад и зоны хранения | `test_stock_doc_locations.py` | 📝 |
+| 2 | `locations-tree` | Создать склад и зоны хранения | `test_stock_doc_locations.py` | ✅ |
 
 ### products — Товары
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `products-catalog` | Завести товар и единицы измерения | `test_stock_doc_products.py` | 📝 |
+| 2 | `products-catalog` | Завести товар и единицы измерения | `test_stock_doc_products.py` | ✅ |
 
 ### transfers — Приход и перемещения
 

@@ -79,7 +79,7 @@ async def test_locations_tree(
     zone = await stock_e2e_op(
         page,
         "stock/location_create",
-        "stock/locations/create_requested",
+        "stock/location_create/requested",
         {
             "warehouse_id": warehouse_id,
             "name": zone_name,
@@ -90,7 +90,7 @@ async def test_locations_tree(
     await stock_e2e_op(
         page,
         "stock/location_create",
-        "stock/locations/create_requested",
+        "stock/location_create/requested",
         {
             "warehouse_id": warehouse_id,
             "parent_id": zone["location_id"],
