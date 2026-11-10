@@ -79,7 +79,7 @@ async def test_incoming_policy_all_waits_all_predecessors(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
     out = await run_flow(di=di, flow=flow, state=state)
@@ -108,7 +108,7 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(
             {"from_node": "right", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
 
     out = await run_flow(
@@ -146,7 +146,7 @@ async def test_incoming_policy_any_allows_double_join_when_waves_split(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
     out = await run_flow(di=di, flow=flow, state=state)
@@ -183,7 +183,7 @@ async def test_premature_completion_on_incomplete_and_join(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
     with pytest.raises(FlowPrematureCompletionError) as exc_info:
@@ -222,7 +222,7 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
             {"from_node": "2", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
     with pytest.raises(FlowPrematureCompletionError) as exc_info:
@@ -272,7 +272,7 @@ async def test_router_with_second_branch_reaches_end(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
     out = await run_flow(di=di, flow=flow, state=state)
@@ -303,7 +303,7 @@ def test_join_required_skips_edge_with_contributes_to_join_false(
             {"from_node": "5", "to_node": None},
         ],
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     assert flow._join_required["5"] == frozenset({"4"})
 

@@ -30,7 +30,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `admin-edit-address` | Админ-правка адреса | `test_geo_addresses_admin_e2e.py` | ✅ |
-| 2 | `address-lookup-on-map` | Найти адрес на карте (user-уровень) | новый | 📝 |
+| 2 | `address-lookup-on-map` | Найти адрес на карте (user-уровень) | `test_geo_doc_getting_started.py` | ✅ |
 
 ### sources — Источники геоданных
 
@@ -42,7 +42,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `geo-overview-tour` | Обзор возможностей geo | новый | 📝 |
+| 1 | `geo-overview-tour` | Обзор возможностей geo | `test_geo_doc_getting_started.py` | ✅ |
 
 ## Долг и заметки
 

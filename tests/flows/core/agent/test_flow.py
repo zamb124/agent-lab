@@ -247,7 +247,7 @@ class TestFlowWithEdges:
                 {"from_node": "step2", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -280,7 +280,7 @@ class TestFlowWithEdges:
                 {"from_node": "invalid_path", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -311,7 +311,7 @@ class TestFlowWithEdges:
                 {"from_node": "invalid_path", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -339,7 +339,7 @@ class TestFlowWithEdges:
                 {"from_node": "success", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -367,7 +367,7 @@ class TestFlowWithEdges:
                 {"from_node": "step2", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -392,7 +392,7 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         with pytest.raises(ValueError, match="not found"):
@@ -423,7 +423,7 @@ class TestFlowWithEdges:
                 {"from_node": "b", "to_node": "a"},  # Бесконечный цикл
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         with pytest.raises(FlowInfiniteLoopError):
@@ -445,7 +445,7 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[{"from_node": "prep", "to_node": None}],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(flow.flow_id, unique_id)
         state.current_nodes = ["prep"]
@@ -478,7 +478,7 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[{"from_node": "loop", "to_node": "loop"}],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         from core.errors import NodeCallLimitError
 
@@ -517,7 +517,7 @@ class TestFlowWithEdges:
                 {"from_node": "b", "to_node": "a"},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         from core.errors import FlowInfiniteLoopError
 
@@ -541,7 +541,7 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[{"from_node": "nc", "to_node": "nc"}],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         from core.errors import NodeCallLimitError
 
@@ -602,7 +602,7 @@ class TestFlowVariables:
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "TestCorp", "phone": "123-456"},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -631,7 +631,7 @@ class TestFlowVariables:
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "Acme Inc"},
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -754,7 +754,7 @@ class TestFlowConditionEvaluation:
                 {"from_node": "active", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)
@@ -785,7 +785,7 @@ class TestFlowConditionEvaluation:
                 {"from_node": "low", "to_node": None},
             ],
             interface=default_chat_document(),
-            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         result = await run_test_flow(di=di, flow=flow, unique_id=unique_id)

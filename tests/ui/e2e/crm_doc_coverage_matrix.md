@@ -29,8 +29,8 @@
 |---|---|---|---|---|
 | 1 | `crm-shell` | Оболочка сервиса | готовый | ✅ |
 | 1 | `crm-settings-hub` | Хаб настроек | готовый | ✅ |
-| 1 | `crm-first-entity` | Пространство → тип → первая запись (featured) | `test_crm_doc_getting_started.py` | 📝 |
-| 1 | `crm-namespaces-tour` | Пространства и что в них живёт | `test_crm_doc_getting_started.py` | 📝 |
+| 1 | `crm-first-entity` | Пространство → тип → первая запись (featured) | `test_crm_doc_getting_started.py` | ✅ |
+| 1 | `crm-namespaces-tour` | Пространства и что в них живёт | `test_crm_doc_getting_started.py` | ✅ |
 
 ### entities (новый тег)
 
@@ -44,7 +44,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `daily-notes` | Ежедневные заметки и привязка к записям | `test_crm_doc_notes.py` | 📝 |
+| 2 | `daily-notes` | Ежедневные заметки и привязка к записям | `test_crm_doc_notes.py` | ✅ |
 | 2 | `suggests-quick-add` | Быстрый разбор предложений | `test_crm_doc_notes.py` | 📝 |
 | 3 | `ai-note-analysis` | AI-анализ заметки | проверить стабильность MockLLM | 📝 |
 

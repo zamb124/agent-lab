@@ -38,7 +38,7 @@ export class GeoOverviewPage extends PlatformPage {
             platform-map { flex: 1; min-height: 0; }
             .map-status {
                 position: absolute;
-                top: 12px;
+                top: 56px;
                 left: 12px;
                 z-index: 6;
                 display: flex;

@@ -38,7 +38,7 @@ async def test_flow_emits_edge_executed_linear(
         nodes=nodes,
         edges=edges,
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state_task = ExecutionState.model_validate(
         {
@@ -87,7 +87,7 @@ async def test_flow_emits_two_edges_parallel(
         nodes=nodes,
         edges=edges,
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = ExecutionState.model_validate(
         {
@@ -147,7 +147,7 @@ async def test_flow_emits_both_edges_on_and_join(
         nodes=nodes,
         edges=edges,
         interface=default_chat_document(),
-        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory, billing_service=di.node_constructor.billing_service,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state_task = ExecutionState.model_validate(
         {

@@ -39,15 +39,15 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `publish-storefront` | Публикация и ссылка на витрину | `test_shop_storefront_desktop.py` | 📝 |
-| 2 | `storefront-checkout` | Покупатель оформляет заказ до конца | `test_shop_checkout_e2e.py` | 📝 |
-| 3 | `storefront-mobile` | Мобильная витрина (390×844) | `test_shop_storefront_desktop.py` | 📝 |
+| 2 | `storefront-checkout` | Покупатель оформляет заказ до конца | `test_shop_doc_checkout.py` | ✅ |
+| 3 | `storefront-mobile` | Мобильная витрина (390×844) | `test_shop_doc_checkout.py` | ✅ |
 
 ### orders — Заказы
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `incoming-orders-board` | Входящий заказ в доске, статусы | `test_shop_orders_board_e2e.py` | 📝 |
-| 3 | `order-status-flow` | Полный цикл статусов заказа | `test_shop_orders_board_e2e.py` | 📝 |
+| 2 | `incoming-orders-board` | Входящий заказ в доске, статусы | `test_shop_doc_orders.py` | ✅ |
+| 3 | `order-status-flow` | Полный цикл статусов заказа | `test_shop_doc_orders.py` | ✅ |
 
 ### promos — Акции и лояльность
 

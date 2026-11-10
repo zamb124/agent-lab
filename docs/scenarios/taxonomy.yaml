@@ -383,8 +383,12 @@ services:
       по сущностям и графу — в следующих итерациях.
     intro_en: >-
       CRM notebook and settings shell. Detailed entity and graph scenarios are coming next.
-    featured_slug: crm-shell
+    featured_slug: crm-first-entity
     tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 0
       general:
         label_ru: Общее
         label_en: General
@@ -393,6 +397,10 @@ services:
         label_ru: Задачи
         label_en: Tasks
         order: 2
+      notes:
+        label_ru: Заметки
+        label_en: Notes
+        order: 3
 
   rag:
     label_ru: RAG
@@ -403,7 +411,7 @@ services:
     intro_en: >-
       Semantic search and documents. Service shell is documented; upload and search
       scenarios are added via tests/ui.
-    featured_slug: rag-shell
+    featured_slug: rag-first-namespace
     tags:
       getting-started:
         label_ru: С чего начать
@@ -421,7 +429,7 @@ services:
       Платформенная оболочка и публичные страницы.
     intro_en: >-
       Platform shell and public pages.
-    featured_slug: frontend-shell
+    featured_slug: dashboard-tour
     tags:
       getting-started:
         label_ru: С чего начать
@@ -500,8 +508,12 @@ services:
     intro_en: >-
       Knowledge base at /wiki: the workspace page tree, block editor,
       text and semantic search, access control, and public links.
-    featured_slug: create-and-edit-page
+    featured_slug: wiki-complete-guide
     tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 0
       pages:
         label_ru: Страницы
         label_en: Pages
@@ -524,6 +536,7 @@ services:
     intro_en: >-
       Company storefront: create a shop, menu with modifiers, publish the
       storefront, orders, promos, delivery zones, and customer reviews.
+    featured_slug: shop-first-store
     tags:
       getting-started:
         label_ru: С чего начать
@@ -567,6 +580,7 @@ services:
     intro_en: >-
       Inventory management: locations and warehouses, product catalog,
       receipts and transfers, move ledger, and stock valuation.
+    featured_slug: stock-overview
     tags:
       getting-started:
         label_ru: С чего начать
@@ -612,3 +626,7 @@ services:
         label_ru: Маршрутная лаборатория
         label_en: Route lab
         order: 3
+      getting-started:
+        label_ru: Начало работы
+        label_en: Getting started
+        order: 0
