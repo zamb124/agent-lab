@@ -28,6 +28,40 @@ SCENARIOS_ROOT = "scenarios"
 ROOT_MARKDOWN_PAGES = ("quickstart.md",)
 CURATED_README_MIN_BODY = 80
 PLATFORM_LOGO_SVG = Path("core/frontend/static/assets/service_logos/frontend_logo.svg")
+SERVICE_LOGOS_SRC = Path("core/frontend/static/assets/service_logos")
+
+# Сервис → его логотип из UI-платформы (SPA launcher использует те же SVG).
+SERVICE_LOGO_FILES: dict[str, str] = {
+    "platform": "frontend_logo.svg",
+    "sync": "sync_logo.svg",
+    "flows": "agents_logo.svg",
+    "worktracker": "worktracker_logo.svg",
+    "crm": "crm_logo.svg",
+    "rag": "rag_logo.svg",
+    "frontend": "frontend_logo.svg",
+    "office": "documents_logo.svg",
+    "wiki": "wiki_logo.svg",
+    "shop": "shop_logo.svg",
+    "stock": "stock_logo.svg",
+    "geo": "geo_logo.svg",
+}
+
+# Сервис → emoji для заголовка хаба: awesome-pages берёт title из h1 —
+# так иконка оказывается и в сайдбаре, и на странице сервиса.
+SERVICE_NAV_EMOJI: dict[str, str] = {
+    "platform": "🏠",
+    "sync": "💬",
+    "flows": "🤖",
+    "worktracker": "✅",
+    "crm": "📇",
+    "rag": "🔍",
+    "frontend": "🖥️",
+    "office": "📄",
+    "wiki": "📖",
+    "shop": "🛍️",
+    "stock": "📦",
+    "geo": "🗺️",
+}
 
 RU_BUILD = Path("build/documentation-ru")
 EN_BUILD = Path("build/documentation-en")
@@ -355,6 +389,7 @@ def _write_grouped_hub_index(
     sections: list[tuple[str, list[tuple[str, str]]]],
     hero_image: str | None = None,
     hero_alt: str | None = None,
+    link_icons: dict[str, str] | None = None,
 ) -> None:
     title_json = json.dumps(title, ensure_ascii=False)
     lines = [
@@ -375,11 +410,22 @@ def _write_grouped_hub_index(
         for label, href in links:
             label_html = html.escape(label)
             href_html = html.escape(href, quote=True)
-            lines.append(
-                f'  <a class="docs-link-card" href="{href_html}">'
-                f"<span>{label_html}</span>"
-                "</a>"
-            )
+            icon_src = link_icons.get(href) if link_icons else None
+            if icon_src is None:
+                lines.append(
+                    f'  <a class="docs-link-card" href="{href_html}">'
+                    f"<span>{label_html}</span>"
+                    "</a>"
+                )
+            else:
+                icon_html = html.escape(icon_src, quote=True)
+                alt_html = html.escape(f"{label} logo", quote=True)
+                lines.append(
+                    f'  <a class="docs-link-card docs-link-card--icon" href="{href_html}">'
+                    f'<img class="docs-link-icon" src="{icon_html}" alt="{alt_html}" loading="lazy">'
+                    f"<span>{label_html}</span>"
+                    "</a>"
+                )
         lines.extend(["</div>", ""])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines), encoding="utf-8")
@@ -472,6 +518,9 @@ def _write_scenario_hub_indices(
         if not svc_dir.is_dir():
             continue
         title = service_label(taxonomy, service, language=language)
+        emoji = SERVICE_NAV_EMOJI.get(service)
+        if emoji is not None:
+            title = f"{emoji} {title}"
         spec = taxonomy.services[service]
         fallback_intro = spec.intro_en if language == "en" else spec.intro_ru
         intro = _service_intro_from_readme(
@@ -500,10 +549,15 @@ def _write_scenario_hub_indices(
         )
 
     root_links: list[tuple[str, str]] = []
+    link_icons: dict[str, str] = {}
     for service in taxonomy.service_order:
         idx = scenarios_dst / service / "index.md"
         if idx.is_file():
-            root_links.append((service_label(taxonomy, service, language=language), f"{service}/"))
+            href = f"{service}/"
+            root_links.append((service_label(taxonomy, service, language=language), href))
+            logo_file = SERVICE_LOGO_FILES.get(service)
+            if logo_file is not None:
+                link_icons[href] = f"../assets/service_logos/{logo_file}"
 
     if not root_links:
         return
@@ -519,6 +573,7 @@ def _write_scenario_hub_indices(
         title=root_title,
         intro=root_intro,
         sections=[("Services" if language == "en" else "Сервисы", root_links)],
+        link_icons=link_icons,
     )
 
 
@@ -630,6 +685,18 @@ def _sync_platform_logo(docs_assets_dir: Path) -> None:
     shutil.copy2(logo_src, docs_assets_dir / "logo.svg")
 
 
+def _sync_service_logos(docs_assets_dir: Path) -> None:
+    """Иконки сервисов для карточек документации — те же SVG, что в SPA."""
+    logos_src = _repo_root() / SERVICE_LOGOS_SRC
+    dst_dir = docs_assets_dir / "service_logos"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for logo_name in set(SERVICE_LOGO_FILES.values()):
+        src = logos_src / logo_name
+        if not src.is_file():
+            raise FileNotFoundError(f"Нет логотипа сервиса для документации: {src}")
+        shutil.copy2(src, dst_dir / logo_name)
+
+
 def _copy_optional_subdir(src_root: Path, name: str, dst_root: Path) -> None:
     src = src_root / name
     if src.is_dir():
@@ -725,6 +792,7 @@ def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path, taxonomy: ScenarioTaxon
 
     _copy_openapi_subdir(docs_dir, ru_dir)
     _sync_platform_logo(docs_dir / "assets")
+    _sync_service_logos(docs_dir / "assets")
     _copy_optional_subdir(docs_dir, "assets", ru_dir)
     _transpile_docs_javascripts(ru_dir)
 
@@ -744,6 +812,7 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path, taxonomy: ScenarioTaxon
 
     _copy_openapi_subdir(docs_dir, en_dir)
     _sync_platform_logo(docs_dir / "assets")
+    _sync_service_logos(docs_dir / "assets")
     _copy_optional_subdir(docs_dir, "assets", en_dir)
     _transpile_docs_javascripts(en_dir)
 

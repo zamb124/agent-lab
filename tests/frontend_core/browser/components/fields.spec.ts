@@ -630,6 +630,37 @@ describe('platform-field floating label', () => {
         expect(qs(shellRoot(el), 'fieldset').classList.contains('field-pill--float')).to.equal(true);
     });
 
+    it('enum: value="" с явной опцией — выбор по умолчанию, label floated', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field
+                type="enum"
+                mode="edit"
+                label="Профиль"
+                .value=${''}
+                .config=${{ values: [{ value: '', label: 'Наследовать' }, { value: 'x', label: 'X' }] }}
+            ></platform-field>
+        `);
+        const fs = qs(shellRoot(el), 'fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(true);
+        const inner = qs(shadow(el), 'platform-field-enum');
+        const inp = qs(shadow(inner), 'input.field-pill-enum-input') as HTMLInputElement;
+        expect(inp.value).to.equal('Наследовать');
+    });
+
+    it('enum: value="" с синтетической пустой опцией — «—» тоже текст, label floated', async () => {
+        const el = await fixture<TestEl>(html`
+            <platform-field
+                type="enum"
+                mode="edit"
+                label="Профиль"
+                .value=${''}
+                .config=${{ values: ['a', 'b'] }}
+            ></platform-field>
+        `);
+        const fs = qs(shellRoot(el), 'fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(true);
+    });
+
     it('ввод текста без родительского ребиндинга .value: label улетает (mirror value)', async () => {
         const el = await fixture<TestEl>(html`
             <platform-field type="string" mode="edit" label="Name" value=""></platform-field>

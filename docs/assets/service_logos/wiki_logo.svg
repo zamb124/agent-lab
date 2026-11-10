@@ -1,0 +1,29 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 12C8 9.79086 9.79086 8 12 8H24V40H12C9.79086 40 8 38.2091 8 36V12Z" fill="url(#wiki_gradient_left)"/>
+<path d="M24 8H36C38.2091 8 40 9.79086 40 12V36C40 38.2091 38.2091 40 36 40H24V8Z" fill="url(#wiki_gradient_right)"/>
+<rect x="23" y="8" width="2" height="32" fill="white" fill-opacity="0.28"/>
+<rect x="12.5" y="14" width="8" height="1.8" rx="0.9" fill="white" fill-opacity="0.92"/>
+<rect x="12.5" y="18.5" width="7" height="1.6" rx="0.8" fill="white" fill-opacity="0.6"/>
+<rect x="12.5" y="22.5" width="8" height="1.6" rx="0.8" fill="white" fill-opacity="0.6"/>
+<rect x="12.5" y="26.5" width="5.5" height="1.6" rx="0.8" fill="white" fill-opacity="0.42"/>
+<rect x="27.5" y="14" width="8" height="1.8" rx="0.9" fill="white" fill-opacity="0.92"/>
+<rect x="27.5" y="18.5" width="8" height="1.6" rx="0.8" fill="white" fill-opacity="0.6"/>
+<rect x="27.5" y="22.5" width="6.5" height="1.6" rx="0.8" fill="white" fill-opacity="0.6"/>
+<rect x="27.5" y="26.5" width="8" height="1.6" rx="0.8" fill="white" fill-opacity="0.42"/>
+<circle cx="37" cy="36" r="7" fill="url(#wiki_accent)"/>
+<path d="M37 32.4V39.6M33.4 36H40.6" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+<defs>
+<linearGradient id="wiki_gradient_left" x1="16" y1="8" x2="16" y2="40" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#6D28D9"/>
+</linearGradient>
+<linearGradient id="wiki_gradient_right" x1="32" y1="8" x2="32" y2="40" gradientUnits="userSpaceOnUse">
+<stop stop-color="#22D3EE"/>
+<stop offset="1" stop-color="#0E7490"/>
+</linearGradient>
+<linearGradient id="wiki_accent" x1="37" y1="29" x2="37" y2="43" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A78BFA"/>
+<stop offset="1" stop-color="#22D3EE"/>
+</linearGradient>
+</defs>
+</svg>

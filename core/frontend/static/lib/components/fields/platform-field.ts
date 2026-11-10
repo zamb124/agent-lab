@@ -177,6 +177,11 @@ export class PlatformField extends PlatformElement {
                 return v != null;
             case 'array':
                 return Array.isArray(v) && v.length > 0;
+            case 'enum':
+                // enum-контрол всегда показывает label выбранной опции: '' —
+                // тоже опция (явная {value:'',label} или синтетическая «—»),
+                // resting label только перекрыл бы текст поля.
+                return true;
             default:
                 return typeof v === 'string' ? v !== '' : v != null;
         }

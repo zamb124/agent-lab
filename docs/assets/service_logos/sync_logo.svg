@@ -1,0 +1,16 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 8C4 5.79086 5.79086 4 8 4H36C38.2091 4 40 5.79086 40 8V28C40 30.2091 38.2091 32 36 32H26L18 42V32H8C5.79086 32 4 30.2091 4 28V8Z" fill="url(#sync_gradient)"/>
+<rect x="10" y="13" width="24" height="3" rx="1.5" fill="white" fill-opacity="0.7"/>
+<rect x="10" y="20" width="18" height="3" rx="1.5" fill="white" fill-opacity="0.7"/>
+<path d="M24 36C24 34.8954 24.8954 34 26 34H44C45.1046 34 46 34.8954 46 36V44C46 45.1046 45.1046 46 44 46H26C24.8954 46 24 45.1046 24 44V36Z" fill="url(#sync_gradient2)"/>
+<defs>
+<linearGradient id="sync_gradient" x1="22" y1="4" x2="22" y2="42" gradientUnits="userSpaceOnUse">
+<stop stop-color="#6366F1"/>
+<stop offset="1" stop-color="#8B5CF6"/>
+</linearGradient>
+<linearGradient id="sync_gradient2" x1="35" y1="34" x2="35" y2="46" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A78BFA"/>
+<stop offset="1" stop-color="#7C3AED"/>
+</linearGradient>
+</defs>
+</svg>

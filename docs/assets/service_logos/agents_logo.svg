@@ -1,0 +1,39 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Центральный узел (смещен влево) -->
+<circle cx="18" cy="24" r="7.5" fill="url(#agents_gradient)"/>
+<text x="18" y="26.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" font-weight="bold" fill="#3ca373">AI</text>
+
+<!-- Верхний узел -->
+<circle cx="28" cy="5" r="4" fill="url(#agents_gradient)"/>
+<!-- Правый верхний узел -->
+<circle cx="42" cy="12" r="6" fill="url(#agents_gradient)"/>
+<!-- Правый узел -->
+<circle cx="44" cy="28" r="3.5" fill="url(#agents_gradient)"/>
+<!-- Правый нижний узел -->
+<circle cx="38" cy="40" r="5" fill="url(#agents_gradient)"/>
+<!-- Нижний узел -->
+<circle cx="22" cy="44" r="3" fill="url(#agents_gradient)"/>
+<!-- Левый нижний узел -->
+<circle cx="6" cy="38" r="4.5" fill="url(#agents_gradient)"/>
+<!-- Левый узел -->
+<circle cx="4" cy="18" r="3" fill="url(#agents_gradient)"/>
+<!-- Левый верхний узел -->
+<circle cx="10" cy="6" r="5" fill="url(#agents_gradient)"/>
+
+<!-- Линии связи -->
+<line x1="18" y1="14" x2="28" y2="5" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="27" y1="20" x2="42" y2="12" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="28" y1="24" x2="44" y2="28" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="26" y1="30" x2="38" y2="40" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="20" y1="34" x2="22" y2="44" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="10" y1="30" x2="6" y2="38" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="8" y1="22" x2="4" y2="18" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+<line x1="12" y1="16" x2="10" y2="6" stroke="url(#agents_gradient)" stroke-width="1.5"/>
+
+<defs>
+<linearGradient id="agents_gradient" x1="24" y1="1" x2="24" y2="47" gradientUnits="userSpaceOnUse">
+<stop stop-color="#694E9F"/>
+<stop offset="1" stop-color="#5768FE"/>
+</linearGradient>
+</defs>
+</svg>

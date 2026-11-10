@@ -617,6 +617,18 @@ body[data-md-color-scheme="slate"] .docs-endpoint-panel code {
   border-radius: 50%;
 }
 
+.docs-link-card--icon::before {
+  display: none;
+}
+
+.docs-link-icon {
+  flex: 0 0 1.7rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-right: 0.75rem;
+  object-fit: contain;
+}
+
 .md-typeset a.docs-link-card,
 .md-typeset a.docs-link-card:hover {
   color: var(--docs-ink);

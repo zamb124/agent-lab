@@ -1,0 +1,23 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Документ -->
+<path d="M8 6C8 3.79086 9.79086 2 12 2H28L40 14V42C40 44.2091 38.2091 46 36 46H12C9.79086 46 8 44.2091 8 42V6Z" fill="url(#rag_gradient)"/>
+<!-- Угол документа -->
+<path d="M28 2L40 14H32C29.7909 14 28 12.2091 28 10V2Z" fill="url(#rag_gradient_corner)"/>
+<!-- Линии текста -->
+<rect x="14" y="20" width="16" height="3" rx="1.5" fill="white" fill-opacity="0.6"/>
+<rect x="14" y="26" width="20" height="3" rx="1.5" fill="white" fill-opacity="0.6"/>
+<rect x="14" y="32" width="12" height="3" rx="1.5" fill="white" fill-opacity="0.6"/>
+<!-- Лупа -->
+<circle cx="35" cy="35" r="8" stroke="white" stroke-width="3" fill="none"/>
+<line x1="41" y1="41" x2="46" y2="46" stroke="white" stroke-width="3" stroke-linecap="round"/>
+<defs>
+<linearGradient id="rag_gradient" x1="24" y1="2" x2="24" y2="46" gradientUnits="userSpaceOnUse">
+<stop stop-color="#448AC6"/>
+<stop offset="1" stop-color="#41BFB4"/>
+</linearGradient>
+<linearGradient id="rag_gradient_corner" x1="34" y1="2" x2="34" y2="14" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3A7AB0"/>
+<stop offset="1" stop-color="#38A8A0"/>
+</linearGradient>
+</defs>
+</svg>

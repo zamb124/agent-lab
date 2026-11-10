@@ -1,0 +1,19 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Карта -->
+<path d="M6 8L18 4L30 8L42 4V38L30 42L18 38L6 42V8Z" fill="url(#geo_gradient)"/>
+<!-- Складки карты -->
+<path d="M18 4V38" stroke="white" stroke-opacity="0.35" stroke-width="2"/>
+<path d="M30 8V42" stroke="white" stroke-opacity="0.35" stroke-width="2"/>
+<!-- Маршрут -->
+<path d="M12 30C16 24 20 28 24 22C28 16 32 20 36 14" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 5"/>
+<!-- Пин -->
+<circle cx="36" cy="14" r="6" fill="white"/>
+<circle cx="36" cy="14" r="3" fill="url(#geo_gradient)"/>
+<circle cx="12" cy="30" r="4" fill="white" fill-opacity="0.9"/>
+<defs>
+<linearGradient id="geo_gradient" x1="6" y1="4" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0EA5E9"/>
+<stop offset="1" stop-color="#22C55E"/>
+</linearGradient>
+</defs>
+</svg>
