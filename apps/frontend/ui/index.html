@@ -151,6 +151,8 @@
 <body>
     <frontend-app></frontend-app>
     
+    <!-- hydrate.entry.js — первым: патч LitElement до эвалюации lit-element -->
+    <script type="module" src="/static/frontend/hydrate.entry.js"></script>
     <script type="module" src="/static/frontend/index.js"></script>
 </body>
 </html>
