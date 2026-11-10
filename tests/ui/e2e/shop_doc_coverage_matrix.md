@@ -73,7 +73,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 3 | `shop-settings-integrations` | Домен/slug, интеграции | `test_shop_settings_e2e.py` | 📝 |
+| 2 | `shop-settings` | Адрес витрины, часы работы, пресеты | `test_shop_doc_settings.py` | ✅ |
 
 ## Долг и заметки
 
