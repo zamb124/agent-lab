@@ -146,10 +146,43 @@
             width: 100%;
             min-height: 100vh;
         }
+
+        /* Кроет DSD-снапшот: getHTML сериализует разметку без adoptedStyleSheets —
+           до re-render контент нестилизован. Гаснет чистым CSS по :defined
+           (псевдокласс не сериализуется в снапшот), JS-снятие не нужно —
+           иначе элемент не попадёт в снапшот и не закроет SSR на проде. */
+        #platform-boot {
+            position: fixed;
+            inset: 0;
+            z-index: 2147483647;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--landing-bg, var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #1a1a2e 75%, #16213e 100%)));
+        }
+        #platform-boot::after {
+            content: '';
+            width: 192px;
+            height: 192px;
+            flex-shrink: 0;
+            background: url('/static/core/assets/service_logos/linnex_spinner_logo.png') center / contain no-repeat;
+            animation: platform-boot-spin 1.2s linear infinite;
+            will-change: transform;
+        }
+        frontend-app:defined + #platform-boot {
+            display: none;
+        }
+        @keyframes platform-boot-spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #platform-boot::after { animation: none; }
+        }
 </style>
 </head>
 <body>
     <frontend-app></frontend-app>
+    <div id="platform-boot"></div>
     
     <script type="module" src="/static/frontend/index.js"></script>
 </body>
