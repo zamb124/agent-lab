@@ -46,23 +46,6 @@ SERVICE_LOGO_FILES: dict[str, str] = {
     "geo": "geo_logo.svg",
 }
 
-# Сервис → emoji для заголовка хаба: awesome-pages берёт title из h1 —
-# так иконка оказывается и в сайдбаре, и на странице сервиса.
-SERVICE_NAV_EMOJI: dict[str, str] = {
-    "platform": "🏠",
-    "sync": "💬",
-    "flows": "🤖",
-    "worktracker": "✅",
-    "crm": "📇",
-    "rag": "🔍",
-    "frontend": "🖥️",
-    "office": "📄",
-    "wiki": "📖",
-    "shop": "🛍️",
-    "stock": "📦",
-    "geo": "🗺️",
-}
-
 RU_BUILD = Path("build/documentation-ru")
 EN_BUILD = Path("build/documentation-en")
 
@@ -390,6 +373,7 @@ def _write_grouped_hub_index(
     hero_image: str | None = None,
     hero_alt: str | None = None,
     link_icons: dict[str, str] | None = None,
+    brand_icon: str | None = None,
 ) -> None:
     title_json = json.dumps(title, ensure_ascii=False)
     lines = [
@@ -397,9 +381,15 @@ def _write_grouped_hub_index(
         f"title: {title_json}",
         "---",
         "",
-        intro,
-        "",
     ]
+    if brand_icon is not None:
+        icon_html = html.escape(brand_icon, quote=True)
+        alt_html = html.escape(f"{title} logo", quote=True)
+        lines.append(
+            f'<img class="docs-hub-icon" src="{icon_html}" alt="{alt_html}">'
+        )
+        lines.append("")
+    lines.extend([intro, ""])
     if hero_image is not None:
         alt = hero_alt or title
         lines.extend([f"![{alt}]({hero_image})", ""])
@@ -518,9 +508,6 @@ def _write_scenario_hub_indices(
         if not svc_dir.is_dir():
             continue
         title = service_label(taxonomy, service, language=language)
-        emoji = SERVICE_NAV_EMOJI.get(service)
-        if emoji is not None:
-            title = f"{emoji} {title}"
         spec = taxonomy.services[service]
         fallback_intro = spec.intro_en if language == "en" else spec.intro_ru
         intro = _service_intro_from_readme(
@@ -539,6 +526,10 @@ def _write_scenario_hub_indices(
         if not sections:
             continue
         hero_image = "screenshots/001.png" if (svc_dir / "screenshots" / "001.png").is_file() else None
+        logo_file = SERVICE_LOGO_FILES.get(service)
+        brand_icon = (
+            f"../../assets/service_logos/{logo_file}" if logo_file is not None else None
+        )
         _write_grouped_hub_index(
             svc_dir / "index.md",
             title=title,
@@ -546,6 +537,7 @@ def _write_scenario_hub_indices(
             sections=sections,
             hero_image=hero_image,
             hero_alt=f"{title}: service home",
+            brand_icon=brand_icon,
         )
 
     root_links: list[tuple[str, str]] = []
