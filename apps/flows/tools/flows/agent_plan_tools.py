@@ -15,8 +15,10 @@ from apps.flows.src.agent_plan.models import (
     AgentPlanStepWriteInput,
     steps_from_write_inputs,
 )
+from apps.flows.src.flow_ui.runtime import render_conversation
 from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
+from core.ui_document.document import FlowUIAgentPlan
 
 if TYPE_CHECKING:
     from apps.flows.src.state import ExecutionState
@@ -40,18 +42,21 @@ class AgentPlanGetArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
 
-def _plan_block(plan: AgentPlan) -> JsonObject:
-    return {
-        "type": "agent_plan",
-        "plan": plan.model_dump(mode="json"),
-    }
+_AGENT_PLAN_BLOCK_ID = "agent-plan"
+
+
+def _plan_block(plan: AgentPlan) -> FlowUIAgentPlan:
+    return FlowUIAgentPlan(
+        block_id=_AGENT_PLAN_BLOCK_ID,
+        plan=plan.model_dump(mode="json"),
+    )
 
 
 def _plan_payload(plan: AgentPlan) -> JsonObject:
     return {
         "agent_plan_id": plan.agent_plan_id,
         "plan": plan.model_dump(mode="json"),
-        "blocks": [_plan_block(plan)],
+        "blocks": [_plan_block(plan).model_dump(mode="json")],
     }
 
 
@@ -83,6 +88,7 @@ async def agent_plan_write(
         agent_plan_id=previous.agent_plan_id if previous is not None else None,
     )
     state.agent_plan = plan
+    render_conversation(state, [_plan_block(plan)])
     return _plan_payload(plan)
 
 

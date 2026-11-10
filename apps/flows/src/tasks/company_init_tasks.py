@@ -101,6 +101,7 @@ async def init_company_resources(
         # Загружаем tools (для ВСЕХ компаний, включая system)
         loaded_tools = await load_tools_to_db(
             flow_access_service=di.flow_access_service,
+            company_id=company_id,
         )
         logger.info("flows.company_init.tools_loaded", company_id=company_id, count=len(loaded_tools))
 

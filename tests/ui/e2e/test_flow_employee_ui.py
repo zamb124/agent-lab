@@ -16,7 +16,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_doc_flow_id,
     flows_open_editor,
 )
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_wait_ws_open
 from tests.ui.scenario_doc import ScenarioRecorder
 
 os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
@@ -159,6 +159,7 @@ async def test_flows_enable_flow_employee(
 
         await page.goto(f"{frontend_ui.origin}/team", wait_until="domcontentloaded")
         await expect(page.locator("frontend-team-page")).to_be_visible(timeout=30_000)
+        await ui_wait_ws_open(page)
         employee_chip = page.locator(
             f'frontend-team-page platform-user-chip[user-id="{emp_id}"]'
         ).first

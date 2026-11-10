@@ -59,6 +59,7 @@ import './flow-ui-task-controls.js';
 import './flow-ui-share-menu.js';
 import './flow-ui-drawer-controls.js';
 import './flow-ui-run-trace.js';
+import '../../components/platform-agent-plan.js';
 
 /** HTTP-статус из A2aError (interface/open/shape), иначе undefined. */
 function flowUIInterfaceStatus(error: unknown): number | undefined {

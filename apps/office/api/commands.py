@@ -128,7 +128,11 @@ from apps.office.realtime.operations import (
 from core.context import require_context
 from core.di.platform import Di as PlatformDiDep
 from core.documents.placement import DocumentEnsureRequest, DocumentEnsureResult
-from core.identity.team_operations import TeamMemberResponse, op_team_members_list
+from core.identity.team_operations import (
+    TeamMemberResponse,
+    TeamMembersListPayload,
+    op_team_members_list,
+)
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.identity_models import Namespace
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
@@ -183,9 +187,17 @@ async def create_namespace(
     )
 
 
-@router.get("/company-members", response_model=ListResponse[TeamMemberResponse])
-async def list_company_members(di: PlatformDiDep) -> ListResponse[TeamMemberResponse]:
-    return await op_team_members_list(EmptyPayload(), user=require_context().user, di=di)
+@router.get("/company-members", response_model=OffsetPage[TeamMemberResponse])
+async def list_company_members(
+    di: PlatformDiDep,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[TeamMemberResponse]:
+    return await op_team_members_list(
+        TeamMembersListPayload(limit=limit, offset=offset),
+        user=require_context().user,
+        di=di,
+    )
 
 
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)

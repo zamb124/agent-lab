@@ -2823,7 +2823,7 @@ async def flows_click_llm_output_mode(
         ).first
     else:
         mode_pattern = structured_pattern
-        ready_probe = editor.locator("platform-json-editor").first
+        ready_probe = editor.locator("platform-schema-editor").first
     output_mode_control = editor.locator(
         "platform-segmented-control[aria-label='LLM output mode'], "
         "platform-segmented-control[aria-label='Режим вывода LLM']"

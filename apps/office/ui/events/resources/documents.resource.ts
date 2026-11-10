@@ -634,7 +634,11 @@ export const documentUploadOp = createAsyncOp({
                 });
         const uploaded = await uploadPlatformFile({
             file,
-            spec: buildOfficeDocumentFileCreateSpecJson({ namespaceId }),
+            spec: buildOfficeDocumentFileCreateSpecJson({
+                namespaceId,
+                catalogId: reqPayload.catalog_id,
+            }),
+            headers: nsHeaders,
         });
         if (typeof uploaded.file_id !== 'string' || uploaded.file_id.length === 0) {
             throw new Error('office/document_upload: upload result.file_id required');

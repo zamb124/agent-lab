@@ -468,7 +468,7 @@ async def test_flows_telegram_auto_reply(
     )
     editor = page.locator("flows-trigger-editor-modal").first
     await expect(
-        editor.get_by_text(re.compile(r"Токен бота|Bot token", re.I))
+        editor.get_by_role("group", name=re.compile(r"Токен бота|Bot token", re.I)).first
     ).to_be_visible(timeout=10_000)
     await scenario.step(
         "Укажите токен бота и разрешённых пользователей",
@@ -816,7 +816,7 @@ async def test_flows_email_orders_trigger(
     )
     editor = page.locator("flows-trigger-editor-modal").first
     await expect(
-        editor.get_by_text(re.compile(r"Тема содержит|Subject contains", re.I))
+        editor.get_by_role("group", name=re.compile(r"Тема содержит|Subject contains", re.I)).first
     ).to_be_visible(timeout=10_000)
     await scenario.step(
         "Выберите пресет фильтра по теме",

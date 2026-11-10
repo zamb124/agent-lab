@@ -15,19 +15,30 @@ from starlette.responses import JSONResponse, Response
 from core.context import get_context, require_context
 from core.di.platform import Di
 from core.identity.flow_employee import flow_employee_curator_user_ids, is_flow_employee
-from core.identity.team_operations import TeamMemberResponse, op_team_members_list
+from core.identity.team_operations import (
+    TeamMemberResponse,
+    TeamMembersListPayload,
+    op_team_members_list,
+)
 from core.models.identity_models import Company, User
-from core.pagination import ListResponse
+from core.pagination import ListResponse, OffsetPage
 from core.utils.auth_session_rebind import attach_session_auth_cookie
 from core.utils.tokens import TokenService, get_token_service
-from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["team"])
 
 
-@router.get("/members", response_model=ListResponse[TeamMemberResponse])
-async def get_team_members(di: Di) -> ListResponse[TeamMemberResponse]:
-    return await op_team_members_list(EmptyPayload(), user=require_context().user, di=di)
+@router.get("/members", response_model=OffsetPage[TeamMemberResponse])
+async def get_team_members(
+    di: Di,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[TeamMemberResponse]:
+    return await op_team_members_list(
+        TeamMembersListPayload(limit=limit, offset=offset),
+        user=require_context().user,
+        di=di,
+    )
 
 
 class UserSearchResult(BaseModel):

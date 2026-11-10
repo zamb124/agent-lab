@@ -14,10 +14,16 @@ from core.identity.flow_employee import (
     is_flow_employee,
     require_flow_employee_flow_id,
 )
+from core.models.base import StrictBaseModel
 from core.models.identity_models import Company, User
-from core.pagination import ListResponse
+from core.pagination import OffsetPage
 from core.request_scope import require_company_viewer
-from core.websocket import EmptyPayload, Operation
+from core.websocket import Operation
+
+
+class TeamMembersListPayload(StrictBaseModel):
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
 
 
 class TeamMemberResponse(BaseModel):
@@ -33,10 +39,10 @@ class TeamMemberResponse(BaseModel):
 
 
 async def op_team_members_list(
-    payload: EmptyPayload, *, user: User, di: PlatformDi
-) -> ListResponse[TeamMemberResponse]:
+    payload: TeamMembersListPayload, *, user: User, di: PlatformDi
+) -> OffsetPage[TeamMemberResponse]:
     """Roster активной компании с признаками flow-сотрудников; Check `company` viewer."""
-    _ = payload, user
+    _ = user
     scope = await require_company_viewer(di.authz_service)
     company = await Company.get(scope.company_id)
     if company is None:
@@ -61,9 +67,14 @@ async def op_team_members_list(
                 curator_user_ids=flow_employee_curator_user_ids(member_user) if member_is_employee else [],
             )
         )
-    return ListResponse[TeamMemberResponse](items=members)
+    return OffsetPage[TeamMemberResponse](
+        items=members[payload.offset : payload.offset + payload.limit],
+        total=len(members),
+        limit=payload.limit,
+        offset=payload.offset,
+    )
 
 
-TEAM_MEMBERS_LIST_OPERATION: Operation[EmptyPayload, PlatformDi] = Operation(
-    payload_model=EmptyPayload, fn=op_team_members_list
+TEAM_MEMBERS_LIST_OPERATION: Operation[TeamMembersListPayload, PlatformDi] = Operation(
+    payload_model=TeamMembersListPayload, fn=op_team_members_list
 )

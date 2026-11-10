@@ -1,6 +1,6 @@
 /**
  * Платформенные блоки: conversation, slot, agent_identity, avatar, run_trace, tool_activity,
- * browser_preview, skill_activity, action_preview, action_result, reflection, activity.
+ * browser_preview, skill_activity, action_preview, action_result, reflection, activity, agent_plan.
  */
 
 import { html, nothing } from 'lit';
@@ -137,6 +137,10 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
         const value = text(ctx, block.text);
         if (value === null || value === '') return nothing;
         return html`<div class="fu-reflection">${value}</div>`;
+    },
+
+    agent_plan(block) {
+        return html`<platform-agent-plan .plan=${block.plan}></platform-agent-plan>`;
     },
 
     activity(block, ctx) {

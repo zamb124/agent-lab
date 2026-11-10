@@ -595,6 +595,15 @@ class FlowUISuggestedPrompts(FlowUIBlockBase):
     items: list[FlowUIText] = Field(min_length=1, max_length=12)
 
 
+class FlowUIAgentPlan(FlowUIBlockBase):
+    """Карточка AgentPlan в ленте: ``plan`` — сериализованный ``AgentPlan`` модели flows."""
+
+    model_config: ClassVar[ConfigDict] = block_schema("platform", "checklist")
+
+    type: Literal["agent_plan"] = "agent_plan"
+    plan: JsonObject = Field(default_factory=dict)
+
+
 # --- Свой код ---------------------------------------------------------------------
 
 
@@ -680,6 +689,7 @@ FlowUIBlock = Annotated[
     | FlowUIReflection
     | FlowUIActivity
     | FlowUISuggestedPrompts
+    | FlowUIAgentPlan
     | FlowUIHtml,
     Field(discriminator="type"),
 ]
@@ -722,6 +732,7 @@ FlowUIBlockModel = (
     | FlowUIReflection
     | FlowUIActivity
     | FlowUISuggestedPrompts
+    | FlowUIAgentPlan
     | FlowUIHtml
 )
 
@@ -915,6 +926,7 @@ __all__ = [
     "FlowUIActionSpec",
     "FlowUIActivity",
     "FlowUIAgentIdentity",
+    "FlowUIAgentPlan",
     "FlowUIAlert",
     "FlowUIAudio",
     "FlowUIAvatar",

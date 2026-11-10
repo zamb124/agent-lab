@@ -1038,6 +1038,7 @@ async def op_flows_reload_from_bundle(
     catalog_install = await authorize_reload_from_bundle(di, payload.flow_id)
     _ = await load_tools_to_db(
         flow_access_service=di.flow_access_service,
+        company_id=company_scope().company_id,
     )
     flows_root = _flows_root()
     loader = FlowsLoader(

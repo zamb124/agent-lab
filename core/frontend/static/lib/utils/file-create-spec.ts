@@ -296,13 +296,17 @@ export function buildCodeAgentSourceFileCreateSpecJson({
     });
 }
 
-export function buildOfficeDocumentFileCreateSpecJson({ namespaceId }: { namespaceId: string }): string {
+export function buildOfficeDocumentFileCreateSpecJson({ namespaceId, catalogId }: { namespaceId: string; catalogId: string }): string {
     if (typeof namespaceId !== 'string' || namespaceId.length === 0) {
         throw new Error('buildOfficeDocumentFileCreateSpecJson: namespaceId required');
+    }
+    if (typeof catalogId !== 'string' || catalogId.length === 0) {
+        throw new Error('buildOfficeDocumentFileCreateSpecJson: catalogId required');
     }
     return buildFileCreateSpecJson({
         sourceKind: 'office_document',
         sourceRef: { entity_id: namespaceId },
+        placement: { catalog_id: catalogId },
         postCreate: { is_public: false },
     });
 }
