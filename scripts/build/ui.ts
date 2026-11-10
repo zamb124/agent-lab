@@ -85,9 +85,6 @@ interface UiApp {
     outDir: string;
 }
 
-// `ui/*.entry.ts` — дополнительные entry-сборки сервиса (напр. hydrate.entry.ts
-// гидратации DSD): у каждой свой <script> в html-шаблоне, модульная загрузка
-// сохраняет порядок тегов. Имена сортированы — сборка детерминирована.
 function discoverApps(): UiApp[] {
     const apps: UiApp[] = [];
     for (const svc of readdirSync(APPS_DIR)) {
@@ -99,12 +96,8 @@ function discoverApps(): UiApp[] {
             if (!hasSources) continue;
             throw new Error(`[build-ui] ${svc}: нет точки входа ${path.relative(ROOT, entry)}`);
         }
-        const extra = readdirSync(uiDir)
-            .filter((f) => f.endsWith('.entry.ts'))
-            .sort()
-            .map((f) => path.join(uiDir, f));
         if (!APPS_FILTER || APPS_FILTER.has(svc)) {
-            apps.push({ svc, uiDir, entries: [...extra, entry], outDir: path.join(APPS_DIR, svc, 'ui-dist') });
+            apps.push({ svc, uiDir, entries: [entry], outDir: path.join(APPS_DIR, svc, 'ui-dist') });
         }
     }
     return apps;

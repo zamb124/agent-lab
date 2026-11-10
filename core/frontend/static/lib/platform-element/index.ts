@@ -118,6 +118,17 @@ export class PlatformElement extends LitElement {
         ...LitElement.shadowRootOptions,
         serializable: true,
     };
+
+    /**
+     * Снапшот — сериализация живого DOM: части помечены пустыми <!-- -->,
+     * а не lit-part-маркерами lit-ssr — hydrate() такую разметку не читает.
+     * Поэтому declarative shadow root не гидратируется, а очищается: Lit
+     * рендерит единственное дерево, контент для краулеров остаётся в HTML.
+     */
+    protected override createRenderRoot(): HTMLElement | DocumentFragment {
+        this.shadowRoot?.replaceChildren();
+        return super.createRenderRoot();
+    }
     static _standaloneNoZoomGuardRegistered = false;
 
     _busTypeUnsubs: Array<() => void>;
