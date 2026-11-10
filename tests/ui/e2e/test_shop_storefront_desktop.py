@@ -77,6 +77,7 @@ async def _create_storefront(
     categories: tuple[str, ...],
     products_per_category: int,
     shop_patch: JsonObject | None = None,
+    publish: bool = True,
 ) -> Storefront:
     shop = await _post(
         client,
@@ -148,8 +149,9 @@ async def _create_storefront(
             {},
         )
         products_total += 1
-    _ = await _post(client, headers, f"/shops/{shop_id}/publish", {})
-    await _wait_snapshot_products(client, slug, products_total)
+    if publish:
+        _ = await _post(client, headers, f"/shops/{shop_id}/publish", {})
+        await _wait_snapshot_products(client, slug, products_total)
     return Storefront(
         slug=slug,
         shop_id=shop_id,

@@ -38,7 +38,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `publish-storefront` | Публикация и ссылка на витрину | `test_shop_storefront_desktop.py` | 📝 |
+| 2 | `publish-storefront` | Публикация и ссылка на витрину | `test_shop_doc_publish.py` | ✅ |
 | 2 | `storefront-checkout` | Покупатель оформляет заказ до конца | `test_shop_doc_checkout.py` | ✅ |
 | 3 | `storefront-mobile` | Мобильная витрина (390×844) | `test_shop_doc_checkout.py` | ✅ |
 

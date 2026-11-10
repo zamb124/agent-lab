@@ -66,6 +66,7 @@ async def test_publish_storefront(
         categories=("Меню",),
         products_per_category=2,
         shop_patch={"pickup_enabled": True},
+        publish=False,
     )
 
     await shop_ui.open(page)
