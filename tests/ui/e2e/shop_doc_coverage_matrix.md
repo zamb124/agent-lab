@@ -67,7 +67,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 3 | `customer-auth-phone` | Вход покупателя по телефону | `test_shop_customer_auth_e2e.py` | 📝 |
-| 3 | `feedback-reviews` | Отзыв покупателя, модерация | `test_shop_feedback_e2e.py` | 📝 |
+| 3 | `customer-feedback` | Отзыв покупателя: оценка → лента | `test_shop_doc_feedback.py` | ✅ |
 
 ### settings — Настройки
 
