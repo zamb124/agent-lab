@@ -1,19 +1,33 @@
-# Office: public link preview
+# Office: view a document via public link
 
-Anonymous document access via /documents/p/:token and invalid link handling.
+**What for:** this guide shows how a guest without an account opens a document via a public link.
 
-## Step 1. Preview page opened
+**Problems it solves:** you share a file with someone outside the company and want to see what they will get and what a wrong link does.
 
-![Preview page opened](public-link-preview--01-preview-page-opened.png)
+**Result:** the document opens in the browser without sign-in, and a broken link shows a clear error.
 
-## Step 2. Document visible without auth
+## Step 1. Open the public document link
 
-![Document visible without auth](public-link-preview--02-document-visible-without-auth.png)
+Paste the received link into the browser address bar. No sign-in is needed — the preview page opens.
 
-## Step 3. Document viewer loaded
+![Open the public document link](public-link-preview--01-public-link-opened.png)
 
-![Document viewer loaded](public-link-preview--03-document-viewer-loaded.png)
+## Step 2. Check the document title in the header
 
-## Step 4. Invalid link rejected
+The file name appears at the top of the page. This means the link works and the document is available to the guest.
 
-![Invalid link rejected](public-link-preview--04-invalid-link-rejected.png)
+![Check the document title in the header](public-link-preview--02-document-title-visible.png)
+
+## Step 3. Wait for the document content
+
+The viewer loads the file text — wait until the content replaces the placeholder. The document is readable right on the page.
+
+![Wait for the document content](public-link-preview--03-document-content-visible.png)
+
+## Step 4. Check that a wrong link is rejected
+
+**Result demonstration.** If the link is altered or expires, the page shows “Link not found” — a stranger cannot open the document.
+
+**Summary.** You know what a guest sees via a public link: the document itself without sign-in, and a clear error for a bad link.
+
+![Check that a wrong link is rejected](public-link-preview--04-invalid-link-error.png)

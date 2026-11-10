@@ -14,6 +14,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-empty-state.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
@@ -76,19 +77,6 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
                 border: 1px solid var(--glass-border-subtle);
             }
             .member-row .name { flex: 1; font-size: var(--text-sm); color: var(--text-primary); }
-            .member-row .remove-btn {
-                background: transparent;
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-md);
-                padding: 4px var(--space-2);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .member-row .remove-btn:hover {
-                color: var(--error);
-                border-color: var(--error);
-            }
             .candidate-list {
                 display: flex; flex-direction: column;
                 gap: var(--space-1);
@@ -104,6 +92,7 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
             .candidate-row:hover {
                 background: var(--glass-solid-medium);
             }
+            .candidate-row .name { flex: 1; font-size: var(--text-sm); color: var(--text-primary); }
             .empty {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
@@ -223,11 +212,11 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
                 ${items.map((m) => html`
                     <div class="member-row">
                         <span class="name">${m.display_name}</span>
-                        <button class="remove-btn" type="button"
+                        <platform-button variant="ghost" danger density="dense"
                                 ?disabled=${this._remove.busy}
                                 @click=${() => this._onRemove(m.user_id)}>
                             ${this.t('catalog_members_modal.remove_member')}
-                        </button>
+                        </platform-button>
                     </div>
                 `)}
             </div>
@@ -264,10 +253,10 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
                         <div class="candidate-row" @click=${() => this._onAdd(u.user_id)}>
                             <platform-icon name="user" size="16"></platform-icon>
                             <span class="name">${u.name || u.user_id}</span>
-                            <button class="remove-btn" type="button"
+                            <platform-button variant="secondary" density="dense"
                                     ?disabled=${this._add.busy}>
                                 ${this.t('catalog_members_modal.add_member')}
-                            </button>
+                            </platform-button>
                         </div>
                     `)}
                 </div>

@@ -4,6 +4,7 @@ services:
   postgres-test:
     platform: "linux/amd64"
     image: agentlab-postgres:local
+    init: true
     build:
       context: .
       dockerfile: deploy/postgres/Dockerfile

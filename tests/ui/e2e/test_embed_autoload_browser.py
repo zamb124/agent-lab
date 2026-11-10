@@ -118,7 +118,7 @@ def _make_embed_host_handler(state: _EmbedHostState) -> type[BaseHTTPRequestHand
             self.end_headers()
             self.wfile.write(state.token_bytes)
 
-        def log_message(self, _format: str, *_args: object) -> None:
+        def log_message(self, format: str, *args: object) -> None:
             return None
 
     return EmbedHostHandler
@@ -128,7 +128,7 @@ def _make_embed_host_handler(state: _EmbedHostState) -> type[BaseHTTPRequestHand
 def _external_embed_origin(
     *,
     html_page_utf8: str,
-    token_payload: dict | None = None,
+    token_payload: dict[str, object] | None = None,
     session_token_proxy: _SessionTokenProxy | None = None,
 ) -> Iterator[str]:
     page_bytes = html_page_utf8.encode("utf-8")
@@ -164,6 +164,7 @@ def _build_embed_page_html(
     use_credentials: bool = False,
     toggle_event_name: str = "linnex-flow-ui-toggle",
     initial_open: bool = False,
+    body_html: str = "",
 ) -> str:
     launcher_attr = "true" if show_launcher else "false"
     credentials_attr = "true" if use_credentials else "false"
@@ -176,6 +177,7 @@ def _build_embed_page_html(
         )
     return (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>e2e-embed-host</title></head><body>"
+        f"{body_html}"
         '<script type="module"\n'
         f'  src="{html_stdlib.escape(script_src, quote=True)}"\n'
         f'  data-embed-id="{html_stdlib.escape(embed_id, quote=True)}"\n'
@@ -194,6 +196,43 @@ def _build_embed_page_html(
         f'  data-company-id="{html_stdlib.escape(company_id, quote=True)}"\n'
         "></script></body></html>"
     )
+
+
+# Контент витрины «Зелёный сад» для doc-сценария: скриншоты инструкции должны
+# показывать виджет на реальной странице магазина, а не на пустом хосте.
+_STOREFRONT_BODY_HTML = """
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f7f9f6; color: #23301f; }
+  .sg-header { display: flex; align-items: center; gap: 32px; padding: 18px 48px; background: #fff; border-bottom: 1px solid #e4eadf; }
+  .sg-logo { font-size: 22px; font-weight: 700; color: #2f6b2f; }
+  .sg-nav { display: flex; gap: 24px; font-size: 14px; color: #4a5a44; }
+  .sg-hero { padding: 48px; background: linear-gradient(135deg, #eaf4e4, #d8ead4); }
+  .sg-hero h1 { margin: 0 0 12px; font-size: 34px; }
+  .sg-hero p { margin: 0; font-size: 16px; color: #4a5a44; max-width: 560px; }
+  .sg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 40px 48px; }
+  .sg-card { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #e4eadf; }
+  .sg-photo { height: 140px; }
+  .sg-card-body { padding: 16px 18px 20px; }
+  .sg-card-name { font-size: 16px; font-weight: 600; }
+  .sg-card-price { margin-top: 6px; font-size: 15px; color: #2f6b2f; font-weight: 700; }
+</style>
+<header class="sg-header">
+  <div class="sg-logo">Зелёный сад</div>
+  <nav class="sg-nav"><span>Каталог</span><span>Доставка</span><span>О нас</span><span>Контакты</span></nav>
+</header>
+<section class="sg-hero">
+  <h1>Свежие цветы и растения с доставкой</h1>
+  <p>Букеты на каждый день, комнатные растения и подарочные композиции. Собираем заказ за 30 минут.</p>
+</section>
+<main class="sg-grid">
+  <div class="sg-card"><div class="sg-photo" style="background: linear-gradient(135deg, #f2c4ce, #e8a2b4);"></div>
+    <div class="sg-card-body"><div class="sg-card-name">Букет «Весенний»</div><div class="sg-card-price">2 900 ₽</div></div></div>
+  <div class="sg-card"><div class="sg-photo" style="background: linear-gradient(135deg, #b8d9a8, #8fc07a);"></div>
+    <div class="sg-card-body"><div class="sg-card-name">Фикус Бенджамина</div><div class="sg-card-price">3 400 ₽</div></div></div>
+  <div class="sg-card"><div class="sg-photo" style="background: linear-gradient(135deg, #f4e2b8, #e8c87e);"></div>
+    <div class="sg-card-body"><div class="sg-card-name">Набор «Солнечный»</div><div class="sg-card-price">4 200 ₽</div></div></div>
+</main>
+"""
 
 
 async def _create_embed_config(
@@ -718,6 +757,7 @@ async def test_flows_embed_agent_on_site(
             frontend_origin=frontend_origin,
             company_id=company_id,
             show_launcher=True,
+            body_html=_STOREFRONT_BODY_HTML,
         )
         await scenario.step(
             "Подготовьте страницу сайта со скриптом",
