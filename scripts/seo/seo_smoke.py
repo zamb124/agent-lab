@@ -154,6 +154,14 @@ def main() -> int:
         else:
             check.fail("indexnow key file", f"status={status}")
 
+    # /favicon.ico — конвенция для иконки в выдаче Яндекса/браузеров;
+    # SPA-оболочка (text/html) на этом пути = битая раздача.
+    status, headers, body = _get(client, "/favicon.ico", host_header)
+    if status == 200 and "image" in str(headers.get("content-type", "")):
+        check.ok("favicon.ico")
+    else:
+        check.fail("favicon.ico", f"status={status} ct={headers.get('content-type')}")
+
     # Все страницы реестра × обе локали: новая PUBLIC_PAGES-запись
     # автоматически попадает в синтетику кластера. Холодный снапшот —
     # живой рендер: страницы фетчатся параллельно, иначе последовательный

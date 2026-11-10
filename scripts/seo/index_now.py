@@ -31,7 +31,12 @@ from apps.frontend.seo.pages import PUBLIC_PAGES, SEO_LOCALES, localized_marketi
 from core.platform_brand.resolver import resolve_seo_base_url
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow"
+# api.indexnow.org — федеративная точка (Bing и участники); yandex.ru —
+# собственный приём Яндекса: для RU-выдачи сабмитим в обе.
+INDEXNOW_ENDPOINTS = (
+    "https://api.indexnow.org/indexnow",
+    "https://yandex.ru/indexnow",
+)
 _LOC_RE = re.compile(r"<loc>(.*?)</loc>")
 
 
@@ -97,19 +102,29 @@ def submit(urls: list[str], *, key: str, dry_run: bool) -> tuple[int, int | None
         print(json.dumps(payload, ensure_ascii=False, indent=2)[:4000])
         print(f"index_now dry-run: {len(urls)} urls")
         return 0, None
-    try:
-        response = httpx2.post(
-            INDEXNOW_ENDPOINT,
-            content=body,
-            headers={"Content-Type": "application/json; charset=utf-8"},
-            timeout=30.0,
-        )
-    except httpx2.HTTPError as exc:
-        print(f"index_now: {len(urls)} urls → transport error: {exc}")
-        return 1, None
-    print(f"index_now: {len(urls)} urls → HTTP {response.status_code}")
-    # IndexNow: 200/202 — принято; прочее (403 ключ, 422 payload) — провал деплой-хука.
-    return (0 if response.status_code in (200, 202) else 1), response.status_code
+    statuses: dict[str, int] = {}
+    for endpoint in INDEXNOW_ENDPOINTS:
+        try:
+            response = httpx2.post(
+                endpoint,
+                content=body,
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                timeout=30.0,
+            )
+        except httpx2.HTTPError as exc:
+            print(f"index_now: {len(urls)} urls → {endpoint} transport error: {exc}")
+            continue
+        statuses[endpoint] = response.status_code
+        print(f"index_now: {len(urls)} urls → {endpoint} HTTP {response.status_code}")
+    # IndexNow: 200/202 — принято; прочее (403 ключ, 422 payload) — провал.
+    # Фейлом считается отказ хотя бы одного эндпоинта: RU-выдача зависит
+    # от Яндекса, глобальная — от федеративного api.indexnow.org.
+    ok = statuses and all(status in (200, 202) for status in statuses.values())
+    worst = next(
+        (status for status in statuses.values() if status not in (200, 202)),
+        next(iter(statuses.values()), None),
+    )
+    return (0 if ok else 1), worst
 
 
 def _emit_event(event: str, *, urls: int, http_status: int | None) -> None:

@@ -9,6 +9,7 @@ DSD-снапшоты через ``SeoSnapshotService`` и последний cat
 
 from __future__ import annotations
 
+import io
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +40,7 @@ from apps.frontend.seo.sitemap import (
 )
 from apps.frontend.services.seo_snapshot_service import SNAPSHOT_BYPASS_PARAM
 from core.app.spa import resolve_ui_static_dir
+from core.config.loader import get_project_root
 from core.http.client import get_httpx_client
 from core.logging import get_logger
 from core.platform_brand.resolver import (
@@ -77,6 +79,7 @@ _SPA_EXCLUDED_EXACT = (
     "manifest.json",
     "sw.js",
     "offline.html",
+    "favicon.ico",
     "documentation",
     "frontend/documentation",
     "robots.txt",
@@ -177,6 +180,40 @@ async def get_sitemap_blog_xml() -> Response:
         content=sitemap_xml,
         media_type="application/xml",
         headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+_FAVICON_SOURCE = (
+    get_project_root()
+    / "core"
+    / "frontend"
+    / "static"
+    / "assets"
+    / "service_logos"
+    / "favicon-48x48.png"
+)
+_favicon_ico_bytes: bytes | None = None
+
+
+def _render_favicon_ico() -> bytes:
+    """Мульти-size ICO (16/32/48) из брендового PNG — собирается один раз на процесс."""
+    global _favicon_ico_bytes
+    if _favicon_ico_bytes is None:
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.open(_FAVICON_SOURCE).save(buf, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
+        _favicon_ico_bytes = buf.getvalue()
+    return _favicon_ico_bytes
+
+
+@public_router.get("/favicon.ico")
+async def get_favicon_ico() -> Response:
+    """``/favicon.ico`` — конвенция браузеров и Яндекса для иконки сайта в выдаче."""
+    return Response(
+        content=_render_favicon_ico(),
+        media_type="image/vnd.microsoft.icon",
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
