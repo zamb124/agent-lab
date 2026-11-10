@@ -98,6 +98,7 @@ async def test_valuation_report(
     op_in = next(op["operation_type_id"] for op in op_types["items"] if op["code"] == "incoming")
 
     # Два прихода по разной цене — два слоя в оценке.
+    transfer_ids: list[str] = []
     for qty, price in (("10", "200"), ("6", "260")):
         transfer = await stock_e2e_op(
             page,
@@ -115,8 +116,10 @@ async def test_valuation_report(
                 ],
             },
         )
-        transfer_id = transfer["transfer_id"]
-        await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+        transfer_ids.append(transfer["transfer_id"])
+
+    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    for transfer_id in transfer_ids:
         await stock_e2e_open_transfer(page, transfer_id)
         await stock_e2e_transfer_action(page, 0, "stock/transfer_confirm", "assigned")
         await stock_e2e_transfer_action(page, 2, "stock/transfer_validate", "done")
