@@ -60,7 +60,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `delivery-zone-map` | Зона доставки на карте (platform-map — красивый кадр) | `test_shop_settings_e2e.py` | 📝 |
+| 2 | `delivery-zone-map` | Зона доставки на карте (platform-map — красивый кадр) | `test_shop_doc_delivery.py` | ✅ |
 
 ### customer — Покупатель
 
