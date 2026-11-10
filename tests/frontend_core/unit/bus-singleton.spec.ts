@@ -8,6 +8,8 @@ import {
     getPlatformBus,
     hasPlatformBus,
     resetPlatformBusForTests,
+    awaitPlatformBus,
+    cancelPlatformBusWait,
 } from '@platform/lib/events/bus-singleton.js';
 import { installDomShim } from '../helpers/dom-shim.js';
 import { buildPlatformBus } from '../helpers/bus-fixtures.js';
@@ -65,5 +67,33 @@ describe('bus-singleton: contract', () => {
         resetPlatformBusForTests();
         expect(hasPlatformBus()).toBe(false);
         expect(() => getPlatformBus()).toThrow(/not initialized/);
+    });
+});
+
+describe('bus-singleton: очередь потребителей (DSD-гидратация)', () => {
+    it('setPlatformBus вызывает bindPlatformBus всем ожидающим', () => {
+        const bound: string[] = [];
+        awaitPlatformBus({ bindPlatformBus: () => bound.push('a') });
+        awaitPlatformBus({ bindPlatformBus: () => bound.push('b') });
+        setPlatformBus(buildPlatformBus());
+        expect(bound).toEqual(['a', 'b']);
+    });
+
+    it('cancelPlatformBusWait снимает потребителя из очереди', () => {
+        const bound: string[] = [];
+        const consumer = { bindPlatformBus: () => bound.push('a') };
+        awaitPlatformBus(consumer);
+        cancelPlatformBusWait(consumer);
+        setPlatformBus(buildPlatformBus());
+        expect(bound).toEqual([]);
+    });
+
+    it('очередь одноразовая: потребители не получают второй bind', () => {
+        const bound: string[] = [];
+        awaitPlatformBus({ bindPlatformBus: () => bound.push('a') });
+        setPlatformBus(buildPlatformBus());
+        resetPlatformBusForTests();
+        setPlatformBus(buildPlatformBus());
+        expect(bound).toEqual(['a']);
     });
 });

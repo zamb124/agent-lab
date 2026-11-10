@@ -50,6 +50,7 @@ import {
     requireI18nKey,
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent, PlatformEventMeta } from '../contract.js';
+import { registerFactory } from '../factory-registry.js';
 import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
@@ -409,7 +410,7 @@ export function createAsyncOp<
         return _runEffect(event, ctx, opCtx);
     }
 
-    return freeze({
+    return registerFactory(freeze({
         kind: 'async-op',
         name,
         sliceKey,
@@ -429,7 +430,7 @@ export function createAsyncOp<
             const causationId = ctx.causationId === undefined ? '' : ctx.causationId;
             return _runEffect(requestedEvent(events.REQUESTED, payload, causationId), ctx, opCtx);
         },
-    });
+    }));
 }
 
 interface _OpCtx {

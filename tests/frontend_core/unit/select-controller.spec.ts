@@ -67,10 +67,49 @@ describe('SelectController: contract', () => {
         expect(host.controllers).toContain(ctl);
     });
 
-    it('value до hostConnected — ошибка', () => {
+    it('value до привязки bus — ошибка', () => {
         const host = _buildHost();
         const ctl = new SelectController(host, (s: Readonly<PlatformBusState>) => s);
-        expect(() => ctl.value).toThrow(/before hostConnected/);
+        expect(() => ctl.value).toThrow(/before platform bus binding/);
+    });
+});
+
+describe('SelectController: отложенная привязка (DSD-гидратация)', () => {
+    it('hostConnected без bus → ждёт; setPlatformBus привязывает и триггит requestUpdate', () => {
+        const host = _buildHost();
+        const ctl = new SelectController(host, (s: Readonly<PlatformBusState>) => s['echo']);
+        ctl.hostConnected();
+        expect(() => ctl.value).toThrow(/before platform bus binding/);
+        const slice = buildEchoSlice('echo');
+        const { bus } = _buildPlatformBus(slice);
+        const updatesBefore = host.updates;
+        setPlatformBus(bus);
+        expect(ctl.value).toEqual({ lastType: null, lastPayload: null });
+        expect(host.updates).toBe(updatesBefore + 1);
+    });
+
+    it('подписка после отложенной привязки реактивна', () => {
+        const host = _buildHost();
+        const ctl = new SelectController(host, (s: Readonly<PlatformBusState>) => s['echo']);
+        ctl.hostConnected();
+        const slice = buildEchoSlice('echo');
+        const { bus } = _buildPlatformBus(slice);
+        setPlatformBus(bus);
+        const updatesBefore = host.updates;
+        bus.dispatch('test/sample/changed', { x: 1 }, { source: 'local' });
+        expect(ctl.value).toEqual({ lastType: 'test/sample/changed', lastPayload: { x: 1 } });
+        expect(host.updates).toBe(updatesBefore + 1);
+    });
+
+    it('hostDisconnected до появления bus снимает из очереди — bind не случается', () => {
+        const host = _buildHost();
+        const ctl = new SelectController(host, (s: Readonly<PlatformBusState>) => s['echo']);
+        ctl.hostConnected();
+        ctl.hostDisconnected();
+        const slice = buildEchoSlice('echo');
+        const { bus } = _buildPlatformBus(slice);
+        setPlatformBus(bus);
+        expect(() => ctl.value).toThrow(/before platform bus binding/);
     });
 });
 

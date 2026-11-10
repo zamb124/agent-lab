@@ -18,6 +18,7 @@
 
 import { SelectController } from '../events/select-controller.js';
 import { isPlainRecord } from '../events/payload.js';
+import { hasPlatformBus, awaitPlatformBus, cancelPlatformBusWait } from '../events/bus-singleton.js';
 import type { PlatformBusLike } from '../events/bus-singleton.js';
 import type { PlatformEvent } from '../events/contract.js';
 import type {
@@ -122,6 +123,7 @@ export class ResourceController<S extends ResourceCollectionSlice<unknown> = Res
     autoload: boolean;
     autoloadQuery: Record<string, unknown> | null;
     private _slice: SelectController<unknown>;
+    private _awaitingBus: boolean;
 
     constructor(host: ControllerHost, resource: ResourceCollectionFactory<S, ActionMap>, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }) {
         _requireFactory(resource, 'resource-collection', 'ResourceController');
@@ -130,6 +132,7 @@ export class ResourceController<S extends ResourceCollectionSlice<unknown> = Res
         this.autoload = Boolean(opts && opts.autoload === true);
         this.autoloadQuery = opts && opts.autoloadQuery !== undefined ? opts.autoloadQuery : null;
         this._slice = new SelectController<unknown>(host, resource.selectors.slice);
+        this._awaitingBus = false;
         host.addController(this);
     }
 
@@ -238,8 +241,24 @@ export class ResourceController<S extends ResourceCollectionSlice<unknown> = Res
     }
 
     hostConnected(): void {
-        if (this.autoload) {
-            this.load(this.autoloadQuery);
+        if (!this.autoload) return;
+        if (!hasPlatformBus()) {
+            this._awaitingBus = true;
+            awaitPlatformBus(this);
+            return;
+        }
+        this.load(this.autoloadQuery);
+    }
+
+    bindPlatformBus(): void {
+        this._awaitingBus = false;
+        this.load(this.autoloadQuery);
+    }
+
+    hostDisconnected(): void {
+        if (this._awaitingBus) {
+            this._awaitingBus = false;
+            cancelPlatformBusWait(this);
         }
     }
 }
@@ -411,6 +430,7 @@ export class CursorListController<TItem = unknown> {
     autoload: boolean;
     autoloadFilters: Record<string, unknown> | null;
     private _slice: SelectController<CursorListSlice<TItem>>;
+    private _awaitingBus: boolean;
 
     constructor(host: ControllerHost, list: CursorListFactory<TItem>, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }) {
         _requireFactory(list, 'cursor-list', 'CursorListController');
@@ -419,6 +439,7 @@ export class CursorListController<TItem = unknown> {
         this.autoload = Boolean(opts && opts.autoload === true);
         this.autoloadFilters = opts && opts.autoloadFilters !== undefined ? opts.autoloadFilters : null;
         this._slice = new SelectController(host, list.selectors.slice);
+        this._awaitingBus = false;
         host.addController(this);
     }
 
@@ -462,8 +483,24 @@ export class CursorListController<TItem = unknown> {
     }
 
     hostConnected(): void {
-        if (this.autoload) {
-            this.load(this.autoloadFilters);
+        if (!this.autoload) return;
+        if (!hasPlatformBus()) {
+            this._awaitingBus = true;
+            awaitPlatformBus(this);
+            return;
+        }
+        this.load(this.autoloadFilters);
+    }
+
+    bindPlatformBus(): void {
+        this._awaitingBus = false;
+        this.load(this.autoloadFilters);
+    }
+
+    hostDisconnected(): void {
+        if (this._awaitingBus) {
+            this._awaitingBus = false;
+            cancelPlatformBusWait(this);
         }
     }
 }

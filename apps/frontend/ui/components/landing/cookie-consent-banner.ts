@@ -166,8 +166,7 @@ export class CookieConsentBanner extends PlatformElement {
     private _consentSel: SelectController<any>;
 
 
-    override connectedCallback(): void {
-        super.connectedCallback();
+    override platformBusReady(): void {
         void this._siteBundle.run(null);
         const consent = this._consentSel.value;
         if (!consent.hydrated) {

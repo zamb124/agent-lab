@@ -229,13 +229,8 @@ export class LandingFooter extends PlatformElement {
     private _localeSel: SelectController<any>;
 
 
-    override connectedCallback(): void {
-        super.connectedCallback();
+    override platformBusReady(): void {
         void this._bundle.run(null);
-    }
-
-    override disconnectedCallback(): void {
-        super.disconnectedCallback();
     }
 
     _openCookieSettings() {

@@ -36,6 +36,7 @@ import {
 } from './_internal.js';
 import type { PlatformEvent } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
+import { registerFactory } from '../factory-registry.js';
 import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 
@@ -182,7 +183,7 @@ export function createSlice<S extends object = Record<string, unknown>, A extend
         slice: (state: Record<string, unknown>) => _readSlice(state),
     });
 
-    return freeze({
+    return registerFactory(freeze({
         kind: 'slice',
         name,
         sliceKey,
@@ -192,5 +193,5 @@ export function createSlice<S extends object = Record<string, unknown>, A extend
         slice: freeze({ reducer, initial: initialSlice }),
         selectors,
         // Нет effect: фабрика не подписывается на bus.
-    });
+    }));
 }

@@ -29,6 +29,29 @@ declare global {
     }
 }
 
+/**
+ * Потребитель bus, подключившийся до того, как PlatformApp его поднял.
+ *
+ * DSD-гидратация апгрейдит элементы при customElements.define — порядок задаёт
+ * разметка снапшота, а не граф модулей, поэтому hostConnected контроллера может
+ * прийти раньше setPlatformBus. Контроллер ждёт в очереди и получает
+ * bindPlatformBus синхронно в момент установки bus — до того, как Lit выполнит
+ * первый render на микротасках.
+ */
+export interface PlatformBusConsumer {
+    bindPlatformBus(bus: PlatformBusLike): void;
+}
+
+const _pendingConsumers = new Set<PlatformBusConsumer>();
+
+export function awaitPlatformBus(consumer: PlatformBusConsumer): void {
+    _pendingConsumers.add(consumer);
+}
+
+export function cancelPlatformBusWait(consumer: PlatformBusConsumer): void {
+    _pendingConsumers.delete(consumer);
+}
+
 export function setPlatformBus(bus: PlatformBusLike): void {
     if (typeof window === 'undefined') {
         throw new Error('setPlatformBus: window unavailable');
@@ -40,6 +63,11 @@ export function setPlatformBus(bus: PlatformBusLike): void {
         throw new Error('setPlatformBus: bus already initialized');
     }
     window[KEY] = bus;
+    const pending = [..._pendingConsumers];
+    _pendingConsumers.clear();
+    for (const consumer of pending) {
+        consumer.bindPlatformBus(bus);
+    }
 }
 
 export function getPlatformBus(): PlatformBusLike {
@@ -59,6 +87,7 @@ export function hasPlatformBus(): boolean {
 
 /** Только для тестов: сброс. */
 export function resetPlatformBusForTests(): void {
+    _pendingConsumers.clear();
     if (typeof window !== 'undefined') {
         delete window[KEY];
     }

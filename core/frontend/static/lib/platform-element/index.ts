@@ -44,7 +44,7 @@ import { glassStyles } from '../styles/shared/glass.styles.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
 import { motionStyles } from '../styles/shared/motion.styles.js';
-import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
+import { getPlatformBus, hasPlatformBus, awaitPlatformBus, cancelPlatformBusWait } from '../events/bus-singleton.js';
 import { SelectController } from '../events/select-controller.js';
 // Не использовать ../events/index.js: barrel подтягивает модули с bare import `lit` (ложится на автономный embed).
 import { CoreEvents, assertEventType } from '../events/contract.js';
@@ -122,11 +122,13 @@ export class PlatformElement extends LitElement {
 
     _busTypeUnsubs: Array<() => void>;
     _i18nSelectController: SelectController<Record<string, unknown> | undefined> | null;
+    private _awaitingBusReady: boolean;
 
     constructor() {
         super();
         this._busTypeUnsubs = [];
         this._i18nSelectController = null;
+        this._awaitingBusReady = false;
     }
 
     get bus(): PlatformBusLike { return getPlatformBus(); }
@@ -147,9 +149,32 @@ export class PlatformElement extends LitElement {
 
     useEvent(type: string, handler: (event: PlatformEvent) => void): () => void {
         assertEventType(type);
-        const unsub = this.bus.subscribeType(type, handler);
-        this._busTypeUnsubs.push(unsub);
-        return unsub;
+        // DSD-гидратация: подписка привязывается при setPlatformBus, если элемент
+        // апгрейднулся до bootstrap приложения.
+        let inner: (() => void) | null = null;
+        let waiting: { bindPlatformBus(bus: PlatformBusLike): void } | null = null;
+        const release = () => {
+            if (waiting) {
+                cancelPlatformBusWait(waiting);
+                waiting = null;
+            }
+            if (inner) {
+                inner();
+                inner = null;
+            }
+        };
+        if (hasPlatformBus()) {
+            inner = this.bus.subscribeType(type, handler);
+        } else {
+            waiting = {
+                bindPlatformBus: (bus: PlatformBusLike) => {
+                    inner = bus.subscribeType(type, handler);
+                },
+            };
+            awaitPlatformBus(waiting);
+        }
+        this._busTypeUnsubs.push(release);
+        return release;
     }
 
     /**
@@ -521,21 +546,44 @@ export class PlatformElement extends LitElement {
         ];
     }
 
+    /**
+     * Lifecycle-точка «bus готов»: вызывается после каждого connect, когда
+     * platform bus поднят. При DSD-гидратации снапшота элементы апгрейдятся
+     * до bootstrap приложения — bus-работа подкласса (dispatch, op.run,
+     * чтение select.value) принадлежит сюда, не в connectedCallback.
+     */
+    platformBusReady(): void {}
+
+    bindPlatformBus(_bus: PlatformBusLike): void {
+        this._awaitingBusReady = false;
+        this.platformBusReady();
+    }
+
     override connectedCallback(): void {
         super.connectedCallback();
+        if (hasPlatformBus()) {
+            this.platformBusReady();
+        } else if (!this._awaitingBusReady) {
+            this._awaitingBusReady = true;
+            awaitPlatformBus(this);
+        }
         // Реактивность переводов: подписка на сам бандл активной локали.
         // locale сразу проставлен initialState'ом, не меняется при первой загрузке.
         // Меняется только translations[locale] (с undefined на объект) — этого триггера
         // достаточно, чтобы перерендерить любой компонент, использующий this.t(...).
-        // Production Flow UI iframe не бутстрапит PlatformApp — catalog может
-        // монтировать PlatformElement (DataTable host); без bus подписка запрещена.
-        if (hasPlatformBus() && !this._i18nSelectController) {
+        // При отсутствии bus (DSD-гидратация до bootstrap, Flow UI iframe)
+        // SelectController ждёт в очереди singleton'а — подписка без bus не случается.
+        if (!this._i18nSelectController) {
             this._i18nSelectController = this.select((s) => s.i18n.translations[s.i18n.locale]);
         }
         PlatformElement._registerStandaloneNoZoomGuard();
     }
 
     override disconnectedCallback(): void {
+        if (this._awaitingBusReady) {
+            this._awaitingBusReady = false;
+            cancelPlatformBusWait(this);
+        }
         for (const unsub of this._busTypeUnsubs) {
             unsub();
         }

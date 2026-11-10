@@ -29,6 +29,7 @@ import {
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
+import { registerFactory } from '../factory-registry.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { RestMirrorEntry } from './_transport.js';
@@ -244,7 +245,7 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
         restMirror[facetKey] = freeze({ method: 'GET', path: `${baseUrl}/${segment}` });
     }
 
-    return freeze({
+    return registerFactory(freeze({
         kind: 'facets',
         name,
         sliceKey,
@@ -257,7 +258,7 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
         slice: freeze({ reducer, initial: initialSlice }),
         selectors,
         effect,
-    });
+    }));
 }
 
 interface _FacetCfg {

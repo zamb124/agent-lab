@@ -11,7 +11,7 @@ import type { ResourceCollectionOptions } from '@platform/lib/events/factories/r
 import { ResourceController } from '@platform/lib/base/use-resource.js';
 import type { ControllerHost } from '@platform/lib/base/use-resource.js';
 import { installDomShim } from '../../helpers/dom-shim.js';
-import { resetPlatformBusForTests, setPlatformBus } from '@platform/lib/events/bus-singleton.js';
+import { resetPlatformBusForTests, setPlatformBus, getPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import type { PlatformBusLike } from '@platform/lib/events/bus-singleton.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 import { EventBus } from '@platform/lib/events/bus.js';
@@ -118,5 +118,27 @@ describe('ResourceController.create: идемпотентность до async e
         ctl.create({ name: 'second' });
         const n = events().filter((e) => e.type === r.events.CREATE_REQUESTED).length;
         expect(n).toBe(2);
+    });
+});
+
+describe('ResourceController.autoload: отложенный запуск до bus (DSD-гидратация)', () => {
+    it('hostConnected без bus ждёт; setPlatformBus диспатчит LIST_REQUESTED', () => {
+        const r = createResourceCollection(baseResOpts());
+        const { bus, events } = _buildPlatformBus({ [r.sliceKey]: r.slice });
+        const host: TestHost = {
+            get bus() {
+                return getPlatformBus();
+            },
+            controllers: [],
+            addController(ctl: TestController) {
+                host.controllers.push(ctl);
+            },
+            requestUpdate() {},
+        };
+        new ResourceController(host, r, { autoload: true });
+        _connectAll(host);
+        expect(events().filter((e) => e.type === r.events.LIST_REQUESTED)).toHaveLength(0);
+        setPlatformBus(bus);
+        expect(events().filter((e) => e.type === r.events.LIST_REQUESTED)).toHaveLength(1);
     });
 });

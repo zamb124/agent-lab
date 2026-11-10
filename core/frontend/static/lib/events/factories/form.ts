@@ -45,6 +45,7 @@ import {
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
 import { isPlainRecord } from '../payload.js';
+import { registerFactory } from '../factory-registry.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 
@@ -282,7 +283,7 @@ export function createForm(options: FormOptions): FormFactory {
         ctx.dispatch(submitEvent, payload, { causation_id: event.id });
     }
 
-    return freeze({
+    return registerFactory(freeze({
         kind: 'form',
         name,
         sliceKey,
@@ -292,7 +293,7 @@ export function createForm(options: FormOptions): FormFactory {
         slice: freeze({ reducer, initial: initialSlice }),
         selectors,
         effect,
-    });
+    }));
 }
 
 function _validateField(field: string, value: unknown, draft: Record<string, unknown>, schema: Record<string, FormFieldRule>): string | null {

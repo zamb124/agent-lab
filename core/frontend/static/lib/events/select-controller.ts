@@ -6,7 +6,13 @@
  * если нужны несколько отдельных подписок.
  */
 
-import { getPlatformBus } from './bus-singleton.js';
+import {
+    getPlatformBus,
+    hasPlatformBus,
+    awaitPlatformBus,
+    cancelPlatformBusWait,
+} from './bus-singleton.js';
+import type { PlatformBusLike } from './bus-singleton.js';
 import type { PlatformBusState } from './bus-state.js';
 import { isPlainRecord } from './payload.js';
 
@@ -53,6 +59,7 @@ export class SelectController<V = unknown> {
     private _read: () => V;
     private _equal: (a: unknown, b: unknown) => boolean;
     private _unsubscribe: (() => void) | null;
+    private _awaitingBus: boolean;
 
     constructor(host: ReactiveHost, selector: (state: Readonly<PlatformBusState>) => V, opts?: { equality?: (a: unknown, b: unknown) => boolean }) {
         if (typeof selector !== 'function') {
@@ -62,19 +69,37 @@ export class SelectController<V = unknown> {
         this.selector = selector;
         this._equal = opts?.equality === undefined ? _shallowEqual : opts.equality;
         this._read = () => {
-            throw new Error('SelectController.value read before hostConnected');
+            throw new Error('SelectController.value read before platform bus binding');
         };
         this._unsubscribe = null;
+        this._awaitingBus = false;
         host.addController(this);
     }
 
-    /** Значение селектора. До `hostConnected` шина ещё не прочитана — это ошибка вызова, а не пустой слайс. */
+    /** Значение селектора. До привязки bus — это ошибка вызова, а не пустой слайс. */
     get value(): V {
         return this._read();
     }
 
     hostConnected(): void {
-        const bus = getPlatformBus();
+        if (!hasPlatformBus()) {
+            // DSD-гидратация: элементы снапшота апгрейдятся при customElements.define,
+            // а PlatformApp поднимает bus в конструкторе своего элемента позже —
+            // привязка откладывается до setPlatformBus.
+            this._awaitingBus = true;
+            awaitPlatformBus(this);
+            return;
+        }
+        this._bind(getPlatformBus());
+    }
+
+    bindPlatformBus(bus: PlatformBusLike): void {
+        this._awaitingBus = false;
+        // subscribeSelector эмитит начальное значение — callback триггит requestUpdate.
+        this._bind(bus);
+    }
+
+    private _bind(bus: PlatformBusLike): void {
         let current = this.selector(bus.getState());
         this._read = () => current;
         this._unsubscribe = bus.subscribeSelector(
@@ -88,6 +113,10 @@ export class SelectController<V = unknown> {
     }
 
     hostDisconnected(): void {
+        if (this._awaitingBus) {
+            this._awaitingBus = false;
+            cancelPlatformBusWait(this);
+        }
         if (this._unsubscribe) {
             this._unsubscribe();
             this._unsubscribe = null;

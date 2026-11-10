@@ -89,9 +89,10 @@ alwaysApply: false
 - `use*` принимает только имя своего вида из `PlatformFactoryRegistry` (`core/frontend/static/lib/events/factory-registry.ts`) и возвращает контроллер с `S` и `actions` этой фабрики; тип поля — `ControllerFor<'<svc>/<entity>'>` (`core/frontend/static/lib/base/use-resource.ts`); каст результата `use*` запрещён.
 - Занятость команды — только `op.busy`, `resource.createInFlight`, `resource.isBusy(id)`, `form.submitting`; ручной флаг `this._busy` запрещён. `[без гейта]`
 - `OpController.run(payload)` возвращает Promise по `meta.causation_id` своего `REQUESTED`: SUCCEEDED → `result`, FAILED → `null`, текст — в `op.error`, HTTP-статус — в `op.failureStatus` (иначе `null`). Вызов, которому важен отказ, бросает `op.error`. `await this.dispatch(...)` вместо `run()` запрещён.
-- Состояние шины — `PlatformBusState` (`core/frontend/static/lib/events/bus-state.ts`). Core-слайс есть с создания bus; `s.<slice> || {}` и `select.value || initialSlice` запрещены. `SelectController.value` до `hostConnected` бросает. Слайс сервиса добавляется в интерфейс рядом с фабрикой; до этого ключ читается как `unknown`.
+- Состояние шины — `PlatformBusState` (`core/frontend/static/lib/events/bus-state.ts`). Core-слайс есть с создания bus; `s.<slice> || {}` и `select.value || initialSlice` запрещены. `SelectController.value` до привязки bus бросает. Слайс сервиса добавляется в интерфейс рядом с фабрикой; до этого ключ читается как `unknown`.
+- DSD-гидратация снапшотов апгрейдит элементы при `customElements.define` — до bootstrap `PlatformApp`. Контроллер без bus ждёт в очереди `awaitPlatformBus`/`setPlatformBus` (`bus-singleton.ts`); bus-работа компонента на connect (`dispatch`, `op.run`, `useEvent`, чтение `select.value`) принадлежит `platformBusReady()`, не `connectedCallback`; `useEvent` и `SelectController` привязываются сами. Гидратируемый входной файл (`lit-element-hydrate-support`) импортирует `<svc>-app.js` сразу после hydrate-патча — корневой элемент поднимает bus в фазе eval модулей.
 - Подписка на `SUCCEEDED`/`FAILED` фильтрует `event.meta.causation_id` своего запуска (`op.lastRequestId` или id своего `REQUESTED`); разовое ожидание через `bus.subscribeType` снимает обе подписки при первом совпадении; несколько `_requested` одного действия пользователя без ожидания исхода запрещены. `[без гейта]`
-- `run()` из `updated()`/`render()` без проверки `busy`, `error`, `lastResult` запрещён: `REQUESTED` перерисовывает host и даёт шторм запросов; старт — `connectedCallback` или явное действие. `[без гейта]`
+- `run()` из `updated()`/`render()` без проверки `busy`, `error`, `lastResult` запрещён: `REQUESTED` перерисовывает host и даёт шторм запросов; старт — `platformBusReady` или явное действие. `[без гейта]`
 
 ### Сериализованный create
 
@@ -107,7 +108,7 @@ alwaysApply: false
 
 ### Реестр и PlatformApp
 
-- Регистрация — один раз при старте через `static factories = [...]` в `apps/<svc>/ui/app/<svc>-app.ts` (`registerFactory`, `core/frontend/static/lib/events/factory-registry.ts`); коллизия `name` или `sliceKey` — `throw`, `getFactory(name, kind)` неизвестного имени — `throw`.
+- Регистрация — при eval модуля фабрики внутри `create*` (`registerFactory`, `core/frontend/static/lib/events/factory-registry.ts`); `static factories = [...]` в `apps/<svc>/ui/app/<svc>-app.ts` перечисляет фабрики только для сборки slices/effects в bus. Коллизия `name` или `sliceKey` — `throw`, `getFactory(name, kind)` неизвестного имени — `throw`.
 - Модуль фабрик расширяет `PlatformFactoryRegistry` блоком `declare module '@platform/lib/events/factory-registry.js'` с записью `'<svc>/<entity>': typeof <factory>`; имя вне реестра в `use*` — ошибка `tsc`.
 - Фабрика, на которую ссылается `use*` в UI сервиса, зарегистрирована в `static factories` этого сервиса; иначе `getFactory: not registered`.
 - `getServiceSlices()` для slice фабрики запрещён; `getServiceEffects()` — только core-effects (`createRouterEffect` и др.) и bridge-effect. `[без гейта]`

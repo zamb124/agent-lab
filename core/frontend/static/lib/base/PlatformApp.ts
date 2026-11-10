@@ -46,7 +46,6 @@ import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
-import { registerFactory } from '../events/factory-registry.js';
 import type { PlatformFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
 import type { CollectableFactory } from '../events/factories/register.js';
@@ -280,9 +279,6 @@ export class PlatformApp extends PlatformElement {
             createWorktrackerWorkItemCountsAuthEffect(),
         ];
         if (factories.length > 0) {
-            for (const factory of factories) {
-                registerFactory(factory);
-            }
             const collected = collectFactories(factories);
             Object.assign(factorySlices, collected.slices);
             factoryEffects.push(...collected.effects);
@@ -297,8 +293,8 @@ export class PlatformApp extends PlatformElement {
         }
         const mergedEffects = [...factoryEffects, ...this.getServiceEffects()];
         // Bus поднимается в конструкторе до того как Lit активирует controllers.
-        // Это инвариант: ни один SelectController, созданный в полях подкласса,
-        // не должен встретить отсутствующий bus в hostConnected.
+        // Элементы, уже подключённые раньше (апгрейд при DSD-гидратации снапшота),
+        // привязываются через очередь потребителей в setPlatformBus.
         setPlatformFilesRouteSegment(this.getFilesRouteSegment());
         if (!hasPlatformBus()) {
             bootstrapPlatformBus({

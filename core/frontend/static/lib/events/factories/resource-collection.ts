@@ -48,6 +48,7 @@ import {
     transportRequest,
 } from './_transport.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
+import { registerFactory } from '../factory-registry.js';
 import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { PlatformCommandMap } from '../wire/index.js';
@@ -892,7 +893,7 @@ export function createResourceCollection<
         }
     }
 
-    return freeze({
+    return registerFactory(freeze({
         kind: 'resource-collection',
         name,
         sliceKey,
@@ -907,5 +908,5 @@ export function createResourceCollection<
         slice: freeze({ reducer, initial: initialSlice }),
         selectors,
         effect,
-    });
+    }));
 }

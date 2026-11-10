@@ -10,6 +10,14 @@
 // пустого. Должен быть первым импортом (до первого customElements.define).
 import '@lit-labs/ssr-client/lit-element-hydrate-support.js';
 
+// Корневой элемент приложения — вторым импортом, до любых компонентов.
+// Его модуль подтягивает ресурсы (фабрики регистрируются при eval) и страницы;
+// последней инструкцией выполняется customElements.define('frontend-app') —
+// апгрейд конструктора поднимает platform bus синхронно в фазе eval модулей,
+// до первых render на микротасках. Элементы снапшота, уже апгрейднутые выше,
+// ждут привязки через очередь потребителей setPlatformBus.
+import './app/frontend-app.js';
+
 import '@platform/lib/utils/viewport-app-vh.js';
 import '@platform/lib/utils/platform-deeplink-init.js';
 import '@platform/lib/components/platform-spinner.js';
@@ -58,7 +66,5 @@ import './components/landing/landing-trust.js';
 import './components/landing/landing-roi-calculator.js';
 import './components/landing/landing-cases.js';
 import './components/landing/landing-floating-cta.js';
-
-import './app/frontend-app.js';
 
 export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
