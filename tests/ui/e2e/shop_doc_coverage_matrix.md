@@ -32,7 +32,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `menu-items-and-modifiers` | Позиции, категории, модификаторы | `test_shop_doc_menu.py` | ✅ |
-| 2 | `builder-sections` | Сборка витрины в конструкторе | `test_shop_builder_e2e.py` / новый | 📝 |
+| 2 | `builder-sections` | Сборка витрины в конструкторе | `test_shop_doc_builder.py` | ✅ |
 
 ### storefront — Витрина
 
