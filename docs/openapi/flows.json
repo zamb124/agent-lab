@@ -38612,12 +38612,12 @@
             "type": "array",
             "title": "Vad Sample Rate Ids"
           },
-          "litserve_silero_tts_sample_rate_ids": {
+          "litserve_tts_sample_rate_ids": {
             "items": {
               "type": "integer"
             },
             "type": "array",
-            "title": "Litserve Silero Tts Sample Rate Ids"
+            "title": "Litserve Tts Sample Rate Ids"
           },
           "cloud_ru_tts_voice_ids": {
             "items": {
