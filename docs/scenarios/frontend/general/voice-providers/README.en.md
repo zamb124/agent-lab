@@ -8,7 +8,7 @@
 
 ## Step 1. Open «Voice providers»
 
-Three cards: «Speech recognition» (hears the customer), «Speech synthesis» (the agent's voice) and «Voice activity detector» (knows when a person is speaking). Platform defaults work out of the box — change them only if your company needs its own service.
+Two cards: «Speech recognition» (hears the customer) and «Speech synthesis» (the voice the agent answers with). Platform defaults work out of the box — change them only if your company needs its own service.
 
 ![Open «Voice providers»](voice-providers--01-voice-providers-cards.png)
 

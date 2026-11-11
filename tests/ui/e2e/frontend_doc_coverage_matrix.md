@@ -39,9 +39,9 @@ platform, тег `tools`.
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `profile-and-settings` | Профиль и настройки компании | `test_frontend_doc_console.py` | 🚧 |
-| 2 | `mail-connect-and-inbox` | Почта из user-menu: ящик, входящие, чтение | `test_frontend_doc_console.py` | 🚧 |
-| 2 | `calendar-modal` | Календарь из user-menu | `test_frontend_doc_console.py` | 🚧 |
+| 1 | `profile-and-settings` | Профиль и настройки компании | `test_frontend_doc_console.py` | ✅ |
+| 2 | `mail-connect-and-inbox` | Почта из user-menu: ящик, входящие, чтение | `test_frontend_doc_console.py` | ✅ |
+| 2 | `calendar-modal` | Календарь из user-menu | `test_frontend_doc_console.py` | ✅ |
 
 ### getting-started — С чего начать (frontend)
 
@@ -53,13 +53,17 @@ platform, тег `tools`.
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `invite-team-member` | Пригласить коллегу по ссылке | `test_frontend_doc_console.py` | 🚧 |
-| 2 | `search-everything` | Поиск встроенным движком | `test_frontend_doc_console.py` | 🚧 |
-| 3 | `company-variables` | Переменные компании | `test_frontend_doc_console.py` | 🚧 |
-| 3 | `billing-and-limits` | Тариф, расход, счета | `test_frontend_doc_console.py` | 🚧 |
-| 3 | `api-keys-create` | API-ключ для интеграции | `test_frontend_doc_console.py` | 🚧 |
-| 3 | `scheduler-tasks` | Расписания фоновых задач | `test_frontend_doc_console.py` | 🚧 |
-| 3 | `embed-widget` | Чат-виджет агента на сайте | `test_frontend_doc_console.py` | 🚧 |
+| 1 | `sign-in` | Вход в платформу | `test_frontend_doc_console.py` | ✅ |
+| 1 | `select-company` | Выбор компании для работы | `test_frontend_doc_console.py` | ✅ |
+| 1 | `invite-team-member` | Пригласить коллегу по ссылке | `test_frontend_doc_console.py` | ✅ |
+| 2 | `search-everything` | Поиск встроенным движком | `test_frontend_doc_console.py` | ✅ |
+| 2 | `access-explorer` | Кто и почему имеет доступ | `test_frontend_doc_console.py` | ✅ |
+| 3 | `company-variables` | Переменные компании | `test_frontend_doc_console.py` | ✅ |
+| 3 | `billing-and-limits` | Тариф, расход, счета | `test_frontend_doc_console.py` | ✅ |
+| 3 | `api-keys-create` | API-ключ для интеграции | `test_frontend_doc_console.py` | ✅ |
+| 3 | `scheduler-tasks` | Расписания фоновых задач | `test_frontend_doc_console.py` | ✅ |
+| 3 | `embed-widget` | Чат-виджет агента на сайте | `test_frontend_doc_console.py` | ✅ |
+| 3 | `voice-providers` | Голосовые провайдеры и произношение | `test_frontend_doc_console.py` | ✅ |
 
 ### namespaces — Пространства (frontend)
 
@@ -69,6 +73,9 @@ platform, тег `tools`.
 
 ## Покрытие вне этой матрицы
 
-- `access/`, `company-voice-providers/`, `login`/`select-company` — проверить, покрыты ли существующими сценариями (`test_frontend_access.py` и др.), иначе добавить.
+- Все страницы из таблицы поверхностей покрыты сценариями выше; `join` — отдельный анонимный маршрут принятия приглашения, документируется со стороны invites.
+- Access: OpenFGA-грант сеется напрямую через `authz_service.write`; фильтр чипа `platform_namespace` оставляет в кадре только понятные права на пространства (в общей БД копятся технические гранты ящиков/документов).
+- Voice: карточки только STT/TTS (`KINDS`), VAD на странице нет; словарь произношения — реальные правила + dry-run подмена текста.
+- Login/select-company: cookie-баннер на /login лежит под auth-модалкой — снятие через `dispatch_event('click')` на кнопке «OK»; PWA-промпт скрыт состоянием «вернувшийся пользователь» (`localStorage` dismissed-ключ).
 - Mail: сид — `flows_seed_ui_mail_mailbox` (ACTIVE connection + USER binding) + `StoredMailMessage` в `INBOX`. Живой IMAP-синк в стеке недоступен — показывается local-first состояние (папки/письма из общей БД).
 - Search: `public_search_run` идёт через flow → runet-индекс. Если SERP в стеке пуст — документируем страницу и честное состояние результатов.

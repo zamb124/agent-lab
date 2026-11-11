@@ -24,6 +24,32 @@ from tests.ui.scenario_doc import ScenarioRecorder
 _DESKTOP = ViewportSize(width=1440, height=900)
 
 
+async def _prepare_clean_page(page: Page) -> None:
+    """Вьюпорт + состояние «вернувшийся пользователь»: PWA-промпт уже скрыт."""
+    await page.set_viewport_size(_DESKTOP)
+    await page.add_init_script(
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true')"
+    )
+
+
+async def _dismiss_cookie_banner(page: Page) -> None:
+    """Честный клик «OK» по баннеру согласия на cookies, если он отрендерился.
+
+    ``dispatch_event`` — баннер может оказаться под auth-модалкой (страница
+    /login), где обычный click блокируется оверлеем: обработчик Lit @click
+    при этом срабатывает по-настоящему.
+    """
+    cookie_panel = page.locator("cookie-consent-banner .panel")
+    try:
+        await cookie_panel.wait_for(state="visible", timeout=10_000)
+    except PlaywrightTimeoutError:
+        return
+    await page.locator("cookie-consent-banner .cosmic-btn--primary").dispatch_event(
+        "click"
+    )
+    await expect(cookie_panel).not_to_be_visible(timeout=30_000)
+
+
 async def _open_user_menu(page: Page):
     button = page.locator("platform-user button.user-button").first
     await expect(button).to_be_visible(timeout=30_000)
@@ -567,14 +593,7 @@ async def test_frontend_search_everything(
     await page.goto(f"{frontend_ui.origin}/search", wait_until="domcontentloaded")
     search_page = page.locator("public-search-page, frontend-search-page")
     await expect(search_page).to_be_visible(timeout=30_000)
-    cookie_panel = page.locator("cookie-consent-banner .panel")
-    try:
-        await cookie_panel.wait_for(state="visible", timeout=10_000)
-    except PlaywrightTimeoutError:
-        pass
-    else:
-        await page.locator("cookie-consent-banner .cosmic-btn--primary").click()
-        await expect(cookie_panel).not_to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
     box = page.locator("input[type='search']").first
     await expect(box).to_be_visible(timeout=30_000)
     await scenario.step(
@@ -1266,7 +1285,7 @@ async def test_frontend_access_explorer(
     )
 
     page = ui_page_system
-    await page.set_viewport_size(_DESKTOP)
+    await _prepare_clean_page(page)
     await frontend_ui.open(page)
     _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
     await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
@@ -1392,31 +1411,31 @@ async def test_frontend_voice_providers(
     ui_page_system: Page,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_DESKTOP)
+    await _prepare_clean_page(page)
     await frontend_ui.open(page)
     _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
     await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
 
     _ = await page.goto(f"{frontend_ui.origin}/company-voice-providers", wait_until="domcontentloaded")
+    await _dismiss_cookie_banner(page)
     voice_page = page.locator("frontend-company-voice-providers-page")
     await expect(voice_page).to_be_visible(timeout=30_000)
-    await expect(voice_page.locator(".card").first).to_be_visible(timeout=30_000)
+    await expect(voice_page.locator(".card").nth(1)).to_be_visible(timeout=30_000)
     await scenario.step(
         "Откройте «Провайдеры речи»",
         page,
         screenshot_name="voice-providers-cards",
         label_en="Open «Voice providers»",
         details=(
-            "Три карточки: «Распознавание речи» (слышит клиента), "
-            "«Синтез речи» (голос агента) и «Детектор речи» (понимает, "
-            "когда человек говорит). По умолчанию работают настройки "
+            "Две карточки: «Распознавание речи» (слышит клиента) и "
+            "«Синтез речи» (каким голосом отвечает агент). "
+            "По умолчанию работают настройки "
             "платформы — менять нужно, только если компании требуется "
             "свой сервис."
         ),
         details_en=(
-            "Three cards: «Speech recognition» (hears the customer), "
-            "«Speech synthesis» (the agent's voice) and «Voice "
-            "activity detector» (knows when a person is speaking). "
+            "Two cards: «Speech recognition» (hears the customer) and "
+            "«Speech synthesis» (the voice the agent answers with). "
             "Platform defaults work out of the box — change them only "
             "if your company needs its own service."
         ),
@@ -1474,6 +1493,7 @@ async def test_frontend_voice_providers(
     result = test_card.locator(".test-result")
     await expect(result).to_be_visible(timeout=30_000)
     await expect(result).to_contain_text("эм-эф-цэ")
+    await result.scroll_into_view_if_needed()
     await scenario.step(
         "Проверьте правило на тексте",
         page,
@@ -1534,12 +1554,13 @@ async def test_frontend_select_company(
     ui_page_system: Page,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_DESKTOP)
+    await _prepare_clean_page(page)
     await frontend_ui.open(page)
     _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
     await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
 
     _ = await page.goto(f"{frontend_ui.origin}/select-company", wait_until="domcontentloaded")
+    await _dismiss_cookie_banner(page)
     select_page = page.locator("select-company-page")
     await expect(select_page).to_be_visible(timeout=30_000)
     await expect(select_page.locator(".company-card").first).to_be_visible(timeout=30_000)
@@ -1619,8 +1640,9 @@ async def test_frontend_sign_in(
     ui_page_anonymous: Page,
 ) -> None:
     page = ui_page_anonymous
-    await page.set_viewport_size(_DESKTOP)
+    await _prepare_clean_page(page)
     _ = await page.goto(f"{frontend_ui.origin}/login", wait_until="domcontentloaded")
+    await _dismiss_cookie_banner(page)
     auth_modal = page.locator("auth-modal")
     await expect(auth_modal).to_be_visible(timeout=30_000)
     await expect(

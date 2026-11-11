@@ -11,6 +11,8 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-help-hint.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -290,6 +292,16 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 gap: var(--space-6);
                 margin-bottom: var(--space-4);
                 flex-wrap: wrap;
+            }
+            .switch-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .switch-label {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                font-weight: 500;
             }
 
             .actions-row { display: flex; gap: var(--space-2); }
@@ -1043,7 +1055,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                         .hint=${this.t('pronunciation_rules_page.hint_language')}
                         @change=${(e: CustomEvent) => this._setRuleDraft('language', e.detail.value)}
                     ></platform-field>
-                    <platform-field type="text" mode="edit"
+                    <platform-field type="string" mode="edit"
                         label="${this.t('pronunciation_rules_page.field_note')}"
                         .value=${d.note}
                         placeholder="${this.t('pronunciation_rules_page.placeholder_note')}"
@@ -1052,22 +1064,28 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 </div>
 
                 <div class="toggles-row">
-                    <platform-field type="boolean" mode="edit"
-                        label="${this.t('pronunciation_rules_page.field_word_boundary')}"
-                        .value=${d.word_boundary}
-                        .hint=${this.t('pronunciation_rules_page.hint_word_boundary')}
-                        @change=${(e: CustomEvent) => this._setRuleDraft('word_boundary', e.detail.value)}
-                    ></platform-field>
-                    <platform-field type="boolean" mode="edit"
-                        label="${this.t('pronunciation_rules_page.field_case_sensitive')}"
-                        .value=${d.case_sensitive}
-                        @change=${(e: CustomEvent) => this._setRuleDraft('case_sensitive', e.detail.value)}
-                    ></platform-field>
-                    <platform-field type="boolean" mode="edit"
-                        label="${this.t('pronunciation_rules_page.field_enabled')}"
-                        .value=${d.enabled}
-                        @change=${(e: CustomEvent) => this._setRuleDraft('enabled', e.detail.value)}
-                    ></platform-field>
+                    <div class="switch-row">
+                        <platform-switch
+                            ?checked=${d.word_boundary}
+                            @change=${(e: CustomEvent) => this._setRuleDraft('word_boundary', e.detail.value)}
+                        ></platform-switch>
+                        <span class="switch-label">${this.t('pronunciation_rules_page.field_word_boundary')}</span>
+                        <platform-help-hint .text=${this.t('pronunciation_rules_page.hint_word_boundary')}></platform-help-hint>
+                    </div>
+                    <div class="switch-row">
+                        <platform-switch
+                            ?checked=${d.case_sensitive}
+                            @change=${(e: CustomEvent) => this._setRuleDraft('case_sensitive', e.detail.value)}
+                        ></platform-switch>
+                        <span class="switch-label">${this.t('pronunciation_rules_page.field_case_sensitive')}</span>
+                    </div>
+                    <div class="switch-row">
+                        <platform-switch
+                            ?checked=${d.enabled}
+                            @change=${(e: CustomEvent) => this._setRuleDraft('enabled', e.detail.value)}
+                        ></platform-switch>
+                        <span class="switch-label">${this.t('pronunciation_rules_page.field_enabled')}</span>
+                    </div>
                 </div>
 
                 <div class="actions-row">
