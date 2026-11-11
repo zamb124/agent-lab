@@ -74,11 +74,10 @@ async def test_user_starts_channel_call_overlay(
     await expect(ui_page_system.locator("sync-app")).to_have_attribute("data-call-active", "", timeout=90_000)
     overlay = ui_page_system.locator("sync-call-overlay-modal")
     await expect(overlay).to_be_visible(timeout=15_000)
-    # LiveKit-сигналинг должен реально подключиться: room.state === 'connected'.
-    # В headless окружении getUserMedia не выдаёт трек, поэтому _status остаётся
-    # 'connecting' — но соединение с сервером звонка обязано установиться.
+    # Звонок обязан дойти до активного состояния: room.connect завершён,
+    # локальные медиа включаются фоном и статус не блокируются ими.
     await ui_page_system.wait_for_function(
-        "() => document.querySelector('sync-call-overlay-modal')?._room?.state === 'connected'",
+        "() => document.querySelector('sync-call-overlay-modal')?._status === 'active'",
         timeout=60_000,
     )
     await scenario.step(

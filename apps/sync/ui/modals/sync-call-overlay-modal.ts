@@ -1142,31 +1142,27 @@ export class SyncCallOverlayModal extends PlatformModal {
 
             await room.connect(tokenResult.livekit_url, tokenResult.token);
             if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
-            if (_canUseMediaDevices()) {
-                await room.localParticipant.enableCameraAndMicrophone();
-                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
-                const prefs = this._prefsSel.value;
-                const wantCamera = this.callType === 'audio' ? false : (prefs ? prefs.cameraEnabled !== false : true);
-                await room.localParticipant.setCameraEnabled(wantCamera);
-                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
-                this._camOff = !wantCamera;
-                this._micMuted = false;
-            } else {
-                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
-                this.toast('composer.voice_insecure_context', { type: 'warning' });
-                this._camOff = true;
-                this._micMuted = true;
-            }
-            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
+            // Комната connected — звонок состоялся. Локальные медиа включаем фоном:
+            // getUserMedia может ждать permission-prompt бесконечно, и отказ/зависание
+            // медиа не должны убивать звонок или держать его в «Connecting…».
             this._status = 'active';
             this._connecting = false;
-            await this._loadDeviceLists();
-            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._syncParticipants();
             try {
                 await this._statusOp.run({ call_id: this.callId });
             } catch (_err) {
                 // не критично — без admin-меню overlay работает.
+            }
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
+            if (_canUseMediaDevices()) {
+                this._camOff = true;
+                this._micMuted = true;
+                void this._enableLocalMedia(room, connectRequestId);
+            } else {
+                this.toast('composer.voice_insecure_context', { type: 'warning' });
+                this._camOff = true;
+                this._micMuted = true;
+                await this._loadDeviceLists();
             }
         } catch (err) {
             if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
@@ -1175,6 +1171,30 @@ export class SyncCallOverlayModal extends PlatformModal {
             this._connecting = false;
             this._disconnectRoom();
         }
+    }
+
+    /**
+     * Локальные микрофон/камера включаются после `_status='active'`: room.connect уже
+     * выполнен, а getUserMedia может ждать ответа на permission-prompt сколь угодно
+     * долго. Отказ или зависание деградируют в muted/cam-off — звонок остаётся активным.
+     */
+    async _enableLocalMedia(room: LkRoom, connectRequestId: number) {
+        try {
+            await room.localParticipant.enableCameraAndMicrophone();
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting || this._room !== room) return;
+            const prefs = this._prefsSel.value;
+            const wantCamera = this.callType === 'audio' ? false : (prefs ? prefs.cameraEnabled !== false : true);
+            await room.localParticipant.setCameraEnabled(wantCamera);
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting || this._room !== room) return;
+            this._camOff = !wantCamera;
+            this._micMuted = false;
+        } catch (_err) {
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting || this._room !== room) return;
+            this._camOff = true;
+            this._micMuted = true;
+            this.toast('composer.voice_permission_denied', { type: 'warning' });
+        }
+        await this._loadDeviceLists();
     }
 
     _disconnectRoom() {
