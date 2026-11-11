@@ -469,6 +469,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     }
 
     _tryReparentOoIframe(): void {
+        if (!this.isConnected) return;
         const mount = this._ooIframeMount;
         if (!(mount && mount.isConnected)) return;
         if (mount.querySelector('iframe[name="frameEditor"]')) {
@@ -494,6 +495,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     }
 
     _syncOoLayout(): void {
+        if (!this.isConnected) return;
         this._tryReparentOoIframe();
         const anchor = this._ooAnchor;
         const ph = this._ooPlaceholder;
@@ -553,14 +555,34 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         requestAnimationFrame(() => this._syncOoLayout());
     }
 
-    _destroyEditor(): void {
-        if (this._docEditor && typeof this._docEditor.destroyEditor === 'function') {
-            this._docEditor.destroyEditor();
+    _removeOrphanedOoIframes(frameKey: string | null): void {
+        if (!frameKey) return;
+        for (const node of document.querySelectorAll('iframe[name="frameEditor"]')) {
+            const src = node.getAttribute('src');
+            if (!src || !URL.canParse(src, document.baseURI)) continue;
+            const fid = new URL(src, document.baseURI).searchParams.get('frameEditorId');
+            if (fid && ooFrameIdKey(fid) === frameKey) {
+                node.remove();
+            }
         }
-        this._docEditor = null;
-        this._teardownOoDom();
-        const target = this.renderRoot ? this.renderRoot.querySelector('#oo-editor-target') : null;
-        if (target) target.innerHTML = '';
+    }
+
+    _destroyEditor(): void {
+        const frameKey = this._ooPlaceholder ? ooFrameIdKey(this._ooPlaceholder.id) : null;
+        try {
+            if (this._docEditor && typeof this._docEditor.destroyEditor === 'function') {
+                this._docEditor.destroyEditor();
+            }
+        } catch {
+            // SDK destroy может бросить (iframe репарентирован из placeholder) —
+            // teardown обязан отработать, иначе pinned-iframe остаётся поверх страницы.
+        } finally {
+            this._docEditor = null;
+            this._teardownOoDom();
+            const target = this.renderRoot ? this.renderRoot.querySelector('#oo-editor-target') : null;
+            if (target) target.innerHTML = '';
+            this._removeOrphanedOoIframes(frameKey);
+        }
     }
 
     async _injectOoScript(scriptSrc: string, logicalDsOrigin: string): Promise<void> {
@@ -606,11 +628,13 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         this._initializing = true;
         try {
             await this._ensureDocsApi(dsUrl);
+            if (!this.isConnected) return;
             if (typeof window.DocsAPI === 'undefined' || !window.DocsAPI.DocEditor) {
                 throw new Error('DocsAPI.DocEditor is not available after api.js load');
             }
             await this.updateComplete;
             await new Promise<unknown>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            if (!this.isConnected) return;
             const host = this.renderRoot.querySelector('.editor-host');
             const target = this.renderRoot.querySelector('#oo-editor-target');
             if (!host || !target) {
@@ -669,6 +693,10 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 },
             };
             this._docEditor = new window.DocsAPI.DocEditor!(placeholder.id, editorInit);
+            if (!this.isConnected) {
+                this._destroyEditor();
+                return;
+            }
             this._tryReparentOoIframe();
             requestAnimationFrame(() => {
                 this._tryReparentOoIframe();

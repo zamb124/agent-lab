@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,6 @@ from tests.ui.e2e.office_e2e_helpers import (
     office_e2e_expect_editor_loaded,
     office_e2e_expect_explorer,
     office_e2e_explorer,
-    office_e2e_min_png_path,
     office_e2e_namespace_name,
     office_e2e_open,
     office_e2e_open_document_by_title,
@@ -95,7 +95,36 @@ async def test_office_complete_service_guide(
     await back.click()
     await office_e2e_expect_explorer(ui_page_system)
 
-    png_path = office_e2e_min_png_path(tmp_path, upload_title)
+    # Визуально отличное изображение: в просмотрщике сразу понятно,
+    # что открыт загруженный файл, а не страница приложения.
+    png_path = tmp_path / upload_title
+    data_url = await ui_page_system.evaluate(
+        """() => {
+            const c = document.createElement('canvas');
+            c.width = 1200;
+            c.height = 800;
+            const g = c.getContext('2d');
+            const grad = g.createLinearGradient(0, 0, 1200, 800);
+            grad.addColorStop(0, '#0ea5e9');
+            grad.addColorStop(1, '#6366f1');
+            g.fillStyle = grad;
+            g.fillRect(0, 0, 1200, 800);
+            g.fillStyle = '#ffffff';
+            g.beginPath();
+            g.arc(600, 300, 140, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#0ea5e9';
+            g.font = 'bold 110px system-ui';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('PNG', 600, 300);
+            g.fillStyle = '#ffffff';
+            g.font = '600 52px system-ui';
+            g.fillText('Platform Documents', 600, 560);
+            return c.toDataURL('image/png');
+        }"""
+    )
+    png_path.write_bytes(base64.b64decode(data_url.split(",", 1)[1]))
     await office_e2e_upload_file_ui(ui_page_system, png_path)
     await expect(
         office_e2e_explorer(ui_page_system).locator("platform-file-row, platform-file-card").filter(
@@ -110,12 +139,22 @@ async def test_office_complete_service_guide(
 
     await office_e2e_open_document_by_title(ui_page_system, upload_title.replace(".png", ""))
     await office_e2e_expect_editor_loaded(ui_page_system)
+    viewer_img = ui_page_system.locator("platform-document-image-viewer img").first
+    await expect(viewer_img).to_be_visible(timeout=60_000)
+    await ui_page_system.wait_for_function(
+        "img => img.complete && img.naturalWidth > 0",
+        arg=await viewer_img.element_handle(),
+    )
     await scenario.step(
         "Документ открыт в редакторе",
         ui_page_system,
         label_en="Document opened in editor",
     )
 
+    await back.click()
+    await office_e2e_expect_explorer(ui_page_system)
+    await office_e2e_open_document_by_title(ui_page_system, doc_title)
+    await office_e2e_expect_editor_loaded(ui_page_system)
     banner = ui_page_system.locator("office-integration-banner")
     if await banner.count() > 0:
         await expect(banner).to_be_visible(timeout=10_000)

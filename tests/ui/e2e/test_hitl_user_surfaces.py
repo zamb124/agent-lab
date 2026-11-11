@@ -235,7 +235,9 @@ async def test_hitl_embed_single_reply_wait(
             ),
         )
         await hitl_host_send(host, GREEN_GARDEN_HITL_MESSAGE)
-        await hitl_wait_host_input_required(host)
+        await expect(
+            host.get_by_text(GREEN_GARDEN_HITL_MESSAGE).first
+        ).to_be_visible(timeout=15_000)
         await scenario.step(
             "Опишите спорный возврат",
             page,
@@ -250,38 +252,26 @@ async def test_hitl_embed_single_reply_wait(
                 "agent routes the case to the support queue."
             ),
         )
-        await expect(host.locator(".input-required-banner").first).to_be_visible()
-        await scenario.step(
-            "Дождитесь плашки ожидания",
-            page,
-            screenshot_name="embed-waiting-banner",
-            label_en="Wait for the waiting banner",
-            details=(
-                "В виджете появляется плашка, что запрос у оператора. Это тот же сигнал, "
-                "что в чате Flows."
-            ),
-            details_en=(
-                "The widget shows a banner that an operator has the request. This is "
-                "the same signal as in the Flows chat."
-            ),
-        )
+        await hitl_wait_host_input_required(host)
         await hitl_assert_composer_readonly(host)
         await scenario.step(
-            "Проверьте, что поле ввода недоступно",
+            "Дождитесь плашки ожидания — поле ввода заблокировано",
             page,
-            screenshot_name="embed-composer-readonly",
-            label_en="Confirm the input is read-only",
+            screenshot_name="embed-waiting-banner",
+            label_en="Wait for the banner — the input is locked",
             details=(
-                "**Демонстрация результата.** В режиме одного ответа покупатель не "
-                "может отправить ещё одно сообщение из виджета — диалог ждёт оператора.\n\n"
+                "В виджете появляется плашка, что запрос у оператора, а поле ввода "
+                "становится недоступным — в режиме одного ответа покупатель не может "
+                "отправить ещё одно сообщение.\n\n"
                 "**Итог.** На сайте магазина HITL выглядит так же, как в кабинете: "
                 "плашка ожидания и заблокированный ввод."
             ),
             details_en=(
-                "**Result demonstration.** In single-reply the customer cannot send "
-                "another message from the widget — the dialog waits for the operator.\n\n"
-                "**Summary.** On the store site HITL looks the same as in the product: "
-                "a waiting banner and a locked composer."
+                "The widget shows a banner that an operator has the request and the "
+                "composer becomes read-only — in single-reply mode the customer "
+                "cannot send another message.\n\n"
+                "**Summary.** On the store site HITL looks the same as in the "
+                "product: a waiting banner and a locked composer."
             ),
         )
 

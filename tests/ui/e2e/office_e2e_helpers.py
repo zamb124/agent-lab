@@ -243,9 +243,15 @@ async def office_e2e_open_document_by_title(page: Page, title: str) -> None:
     await target.click()
     details = office_e2e_explorer(page).locator("office-file-details-panel")
     open_btn = details.get_by_role("button", name=re.compile(r"^Открыть$|^Open$"))
-    if await open_btn.count() > 0:
-        await open_btn.click()
-    else:
+    # Панель биндится к выбранному файлу асинхронно — без ожидания «Открыть»
+    # может открыть ранее выбранный документ (гонка → открывается не тот файл).
+    try:
+        await expect(
+            details.locator(".doc-title").filter(has_text=title).first
+        ).to_be_visible(timeout=10_000)
+        await expect(open_btn.first).to_be_visible(timeout=5_000)
+        await open_btn.first.click()
+    except AssertionError:
         await target.dblclick()
     await expect(page.locator("office-document-editor-page")).to_be_visible(timeout=60_000)
 
@@ -631,6 +637,25 @@ async def office_e2e_expect_editor_loaded(page: Page) -> None:
     await expect(editor).to_be_visible(timeout=60_000)
     host = editor.locator("platform-document-viewer-host, platform-onlyoffice-host")
     await expect(host.first).to_be_visible(timeout=120_000)
+    # Страница и onlyoffice-host показывают скелетоны, пока грузится meta/конфиг
+    # и сам редактор — без ожидания кадр ловит серые полосы-заглушки.
+    await expect(editor.locator(".loading-shell")).to_be_hidden(timeout=120_000)
+    await expect(
+        page.locator("platform-onlyoffice-host .editor-loading-overlay")
+    ).to_be_hidden(timeout=120_000)
+    # OnlyOffice грузится как iframe[name="frameEditor"], нативные viewer'ы —
+    # свои компоненты; ждём, что раньше появится — без этого кадр пустой.
+    await page.wait_for_selector(
+        'iframe[name="frameEditor"], '
+        'office-document-editor-page platform-document-image-viewer, '
+        'office-document-editor-page platform-document-text-viewer, '
+        'office-document-editor-page platform-document-media-viewer, '
+        'office-document-editor-page platform-document-binary-viewer, '
+        'office-document-editor-page platform-viz-host, '
+        'office-document-editor-page platform-data-table-host',
+        state="visible",
+        timeout=60_000,
+    )
 
 
 async def office_e2e_goto_public_preview(office_ui, page: Page, token: str) -> None:

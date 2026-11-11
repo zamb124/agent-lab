@@ -6,7 +6,6 @@ callback) и REST-зеркала `op_*` редактора.
 from __future__ import annotations
 
 from typing import Annotated
-from urllib.parse import quote
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Query, Request
@@ -47,6 +46,7 @@ from apps.office.realtime.operations import (
 from apps.office.services.callback_dedupe import try_claim_onlyoffice_callback
 from apps.office.services.callback_token import decode_callback_context_token
 from apps.office.services.office_access_service import PublicLinkTarget
+from apps.office.services.viewer_handlers._urls import office_content_disposition
 from apps.office.services.onlyoffice_jwt import (
     decode_callback_authorization,
     decode_download_token,
@@ -71,14 +71,6 @@ router = APIRouter(tags=["office-bff"])
 router.include_router(office_commands_router)
 router.include_router(office_viewer_router)
 router.include_router(office_data_tables_router)
-
-
-def _office_inline_content_disposition(original_name: str) -> str:
-    name = (original_name or "document").replace("\r", "").replace("\n", "")[:800]
-    ascii_fallback = name.encode("ascii", "ignore").decode("ascii").strip() or "document"
-    ascii_fallback = ascii_fallback.replace("\\", "_").replace('"', "'")[:200]
-    encoded = quote(name, safe="")
-    return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _onlyoffice_request_payload(token_payload: JsonObject, body: JsonObject) -> JsonObject:
@@ -320,7 +312,7 @@ async def office_download(
     return Response(
         content=body,
         media_type=ct,
-        headers={"Content-Disposition": _office_inline_content_disposition(meta.original_name)},
+        headers={"Content-Disposition": office_content_disposition(meta.original_name)},
     )
 
 

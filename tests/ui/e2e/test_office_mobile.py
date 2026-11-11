@@ -50,12 +50,12 @@ async def test_office_mobile_documents_workflow(
 
     await bottom_nav.locator("button.nav-tab").filter(has_text="Недавние").click()
     await expect(office_e2e_explorer(ui_page_system)).to_be_visible(timeout=15_000)
-    await bottom_nav.locator("button.nav-tab").filter(has_text="Файлы").click()
     await scenario.step(
         "Переключение Files / Recent",
         ui_page_system,
         label_en="Files and Recent tabs",
     )
+    await bottom_nav.locator("button.nav-tab").filter(has_text="Файлы").click()
 
     catalog_id = await office_api_create_catalog(
         office_ui.origin,

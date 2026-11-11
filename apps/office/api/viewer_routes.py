@@ -12,7 +12,11 @@ from apps.office.config import get_office_settings
 from apps.office.di import Di
 from apps.office.models.link import DocumentLink
 from apps.office.services.viewer_frame import render_viewer_frame_html
-from apps.office.services.viewer_handlers._urls import viewer_save_url, viewer_stream_url
+from apps.office.services.viewer_handlers._urls import (
+    office_content_disposition,
+    viewer_save_url,
+    viewer_stream_url,
+)
 from apps.office.services.viewer_handlers.text_handler import TEXT_MAX_EDIT_BYTES
 from core.clients.onlyoffice import OnlyOfficeJwtError
 from core.documents.viewer.jwt import decode_viewer_save_token, decode_viewer_stream_token
@@ -69,7 +73,7 @@ async def viewer_stream(
     return Response(
         content=body,
         media_type=content_type,
-        headers={"Content-Disposition": f'{disposition}; filename="{meta.original_name}"'},
+        headers={"Content-Disposition": office_content_disposition(meta.original_name, disposition=disposition)},
     )
 
 

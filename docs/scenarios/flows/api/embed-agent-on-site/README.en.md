@@ -10,8 +10,6 @@
 
 In platform settings create an embed widget config and link it to the store agent. This is not the editor guest link — the widget lives on your site.
 
-![Create an embed config for the agent](embed-agent-on-site--01-embed-config-created.png)
-
 ## Step 2. Prepare the site page with the script
 
 Add the autoload script snippet with the widget id to the store site. Chat mounts on the external storefront page.

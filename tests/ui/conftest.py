@@ -106,7 +106,15 @@ async def scenario(request: pytest.FixtureRequest) -> ScenarioRecorder:
 @pytest_asyncio.fixture(scope="session")
 async def _browser_session() -> Browser:
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True,
+            # Fake media: Sync/LiveKit-звонки в E2E реально подключаются —
+            # без флагов getUserMedia висит на permission-prompt в headless.
+            args=[
+                "--use-fake-device-for-media-stream",
+                "--use-fake-ui-for-media-stream",
+            ],
+        )
         yield browser
         await browser.close()
 
@@ -191,7 +199,10 @@ async def _new_browser_context(
     await install_centrifugo_ws_bridge(context)
     await context.add_init_script(_FORCE_LIGHT_THEME_INIT_SCRIPT)
     # Office share / copy link; без grant headless clipboard.writeText падает.
-    await context.grant_permissions(["clipboard-read", "clipboard-write"])
+    # camera/microphone — звонки Sync (fake device подключён на уровне браузера).
+    await context.grant_permissions(
+        ["clipboard-read", "clipboard-write", "camera", "microphone"]
+    )
     await install_click_highlight_on_context(context)
     collector = get_current_collector()
     if collector is not None:

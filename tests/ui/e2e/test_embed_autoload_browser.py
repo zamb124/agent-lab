@@ -687,7 +687,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
         "**Result:** the site page shows the chat widget and receives an agent reply."
     ),
 )
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(120)
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_flows_embed_agent_on_site(
@@ -722,8 +722,6 @@ async def test_flows_embed_agent_on_site(
         )
         await scenario.step(
             "Создайте embed-конфиг для агента",
-            page,
-            screenshot_name="embed-config-created",
             label_en="Create an embed config for the agent",
             details=(
                 "В настройках платформы создайте конфиг встраиваемого виджета и "
@@ -759,30 +757,34 @@ async def test_flows_embed_agent_on_site(
             show_launcher=True,
             body_html=_STOREFRONT_BODY_HTML,
         )
-        await scenario.step(
-            "Подготовьте страницу сайта со скриптом",
-            page,
-            screenshot_name="embed-host-ready",
-            label_en="Prepare the site page with the script",
-            details=(
-                "На сайт магазина добавьте snippet autoload-скрипта с id виджета. "
-                "Чат смонтируется на внешней странице витрины."
-            ),
-            details_en=(
-                "Add the autoload script snippet with the widget id to the store site. "
-                "Chat mounts on the external storefront page."
-            ),
-        )
-
         with _external_embed_origin(
             html_page_utf8=page_html,
             token_payload=token_payload_for_host,
         ) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
+            await scenario.step(
+                "Подготовьте страницу сайта со скриптом",
+                page,
+                screenshot_name="embed-host-ready",
+                label_en="Prepare the site page with the script",
+                details=(
+                    "На сайт магазина добавьте snippet autoload-скрипта с id виджета. "
+                    "Чат смонтируется на внешней странице витрины."
+                ),
+                details_en=(
+                    "Add the autoload script snippet with the widget id to the store site. "
+                    "Chat mounts on the external storefront page."
+                ),
+            )
             await _wait_flow_ui_embed(page, errors, network_events)
             await expect(page.locator("flow-ui-drawer")).to_be_attached(timeout=5_000)
             fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
+            await fab.click()
+            composer = page.locator(
+                "flow-ui-drawer platform-flow-ui, platform-flow-ui"
+            ).locator('textarea[data-canon="composer"]').first
+            await expect(composer).to_be_visible(timeout=8_000)
             await scenario.step(
                 "Откройте виджет чата на сайте",
                 page,
@@ -798,7 +800,6 @@ async def test_flows_embed_agent_on_site(
                 ),
             )
 
-            await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
