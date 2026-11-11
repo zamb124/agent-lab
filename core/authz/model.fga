@@ -130,8 +130,8 @@ type flow
     define owner: [user]
     define viewer: [user, company#member, group#member]
     define editor: [user, group#member] or owner
-    define can_view: viewer or editor or owner or admin from platform
-    define can_edit: editor or owner or admin from platform
+    define can_view: viewer or editor or owner or admin from company or admin from platform
+    define can_edit: editor or owner or admin from company or admin from platform
     define can_admin: owner or admin from company
     define can_share: can_admin
 
@@ -141,7 +141,7 @@ type flow_branch
     define viewer: [user, company#member, group#member] or viewer from flow
     define editor: [user, group#member] or editor from flow
     define can_view: viewer or editor or can_view from flow
-    define can_edit: editor
+    define can_edit: editor or can_edit from flow
 
 type tool
   relations

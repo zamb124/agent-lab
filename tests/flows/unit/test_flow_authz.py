@@ -59,6 +59,41 @@ async def test_platform_admin_views_restricted_flow_via_fga(di, unique_id) -> No
 
 
 @pytest.mark.asyncio
+async def test_company_admin_edits_restricted_flow_via_fga(di, unique_id) -> None:
+    authz = di.authz_service
+    access = FlowAccessService(authz)
+    admin_id = f"co_admin_{unique_id}"
+    owner_id = f"owner_{unique_id}"
+    flow_id = f"flow_{unique_id}"
+    company_id = f"co_{unique_id}"
+    await sync_company_member_roles(
+        authz, company_id=company_id, user_id=admin_id, roles=["admin"]
+    )
+    config = FlowConfig(
+        flow_id=flow_id,
+        name="restricted",
+        entry="main",
+        permission=["secret-group"],
+        nodes={
+            "main": {
+                "type": "code",
+                "code": "async def run(args, state): return state",
+            }
+        },
+        edges=[Edge(from_node="main", to_node=None)],
+    )
+    await access.sync_flow_saved(
+        config, company_id=company_id, owner_user_id=owner_id
+    )
+    flow_obj = AuthzObject.flow(flow_id, company_id=company_id)
+    await authz.require_can_view(flow_obj, user_id=admin_id)
+    await authz.require_can_edit(flow_obj, user_id=admin_id)
+    await authz.require_relation(
+        AuthzRelation.CAN_ADMIN, flow_obj, user_id=admin_id
+    )
+
+
+@pytest.mark.asyncio
 async def test_group_viewer_can_view_flow(di, unique_id) -> None:
     authz = di.authz_service
     access = FlowAccessService(authz)

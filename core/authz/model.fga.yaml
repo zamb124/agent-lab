@@ -332,8 +332,14 @@ tests:
       - user: user:ivan
         object: flow:acme/flow1
         assertions:
-          can_view: false
+          can_view: true
+          can_edit: true
           can_admin: true
+      - user: user:ivan
+        object: flow_branch:acme/flow1/main
+        assertions:
+          can_view: true
+          can_edit: true
 
   - name: platform-admin-views-restricted-flow
     check:
