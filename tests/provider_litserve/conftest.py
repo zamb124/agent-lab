@@ -9,6 +9,8 @@ integration+slow тестов Silero (модель ~2 MB, один раз на �
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 
@@ -20,6 +22,11 @@ def setup_database_before_tests():
 @pytest.fixture(scope="session", autouse=True)
 def ensure_default_test_user_authz():
     yield
+
+
+@pytest.fixture
+def unique_id() -> str:
+    return uuid.uuid4().hex[:12]
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +60,7 @@ def shared_silero_vad_engine():
 
     try:
         entry = cfg.vad_models[0]
-        engine._ensure_model(entry)
+        _ = engine._ensure_model(entry)  # pyright: ignore[reportPrivateUsage] — прогрев весов до прогона
     except (RuntimeError, OSError) as exc:
         pytest.skip(f"Silero VAD недоступен в окружении теста: {exc}")
     return engine, cfg, api_id
