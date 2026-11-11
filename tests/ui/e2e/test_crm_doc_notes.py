@@ -10,6 +10,7 @@ import asyncio
 import re
 from datetime import UTC, datetime
 
+import httpx2
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
 
@@ -20,9 +21,10 @@ from tests.ui.e2e.crm_activity_tasks_helpers import (
     crm_api_ensure_entity_type,
     crm_api_ensure_namespace,
     crm_api_list_suggests,
+    crm_api_origin,
 )
 from tests.ui.e2e.sync_e2e_helpers import sync_e2e_activate_namespace_for_next_load
-from tests.ui.e2e_worker import ui_e2e_company_id
+from tests.ui.e2e_worker import ui_e2e_company_id, ui_e2e_scope_headers
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
 
@@ -359,5 +361,238 @@ async def test_crm_suggests_quick_add_scenario(
             "it, link it and track tasks against it.\n\n"
             "**Summary.** AI suggestions turn notes into a live card "
             "index with a single confirmation."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="crm",
+    tag="notes",
+    doc_slug="ai-note-analysis",
+    title="AI-разбор заметки: записи и связи из текста",
+    title_en="AI note analysis: records and links from text",
+    description=(
+        "**Для чего:** написать заметку свободным текстом, а записи "
+        "картотеки получить готовыми — AI сам находит людей, компании "
+        "и связи между ними.\n\n"
+        "**Какие проблемы решает:** после встречи лень заводить "
+        "карточки руками — договорённости оседают в тексте и "
+        "теряются. AI-разбор предлагает готовый список записей: "
+        "проверил — применил одним кликом.\n\n"
+        "**Результат:** из заметки созданы записи и связи, заметка "
+        "получила AI-резюме."
+    ),
+    description_en=(
+        "**Purpose:** write a note in free text and get ready-made "
+        "card-index records — AI finds people, companies and links "
+        "between them.\n\n"
+        "**Problems solved:** after a meeting nobody wants to file "
+        "cards by hand — agreements sink into text and get lost. AI "
+        "analysis proposes a ready record list: review it, apply in "
+        "one click.\n\n"
+        "**Result:** records and links were created from the note, "
+        "and the note got an AI summary."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180, func_only=True)
+async def test_crm_ai_note_analysis_scenario(
+    scenario: ScenarioRecorder,
+    crm_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+) -> None:
+    import json as _json
+
+    from core.clients.llm.mock import setup_mock_responses_redis
+    from core.clients.redis_client import RedisClient
+    from core.config import get_settings
+    from core.test_scope import TEST_SCOPE_STATIC_E2E
+
+    page = ui_page_system
+    namespace = f"e_{unique_id}"
+    note_title = f"Встреча с «Альфа-Логистик» {unique_id[:6]}"
+    contact_name = f"Антон Верников {unique_id[:6]}"
+
+    await crm_api_ensure_namespace(crm_ui.origin, auth_token_system, namespace=namespace)
+    note_id = await crm_api_create_entity(
+        crm_ui.origin,
+        auth_token_system,
+        entity_type="note",
+        name=note_title,
+        namespace=namespace,
+        attributes={},
+    )
+    # Текст заметки — то, что разберёт AI.
+    description = (
+        "Встретились с Антоном Верниковым из «Альфа-Логистик». "
+        "Обсудили поставку в марте: он подтвердил скидку 12% и прислал "
+        "спецификацию. Договорились созвониться в пятницу."
+    )
+    async with httpx2.AsyncClient(
+        base_url=crm_api_origin(crm_ui.origin),
+        cookies={"auth_token": auth_token_system},
+        headers=ui_e2e_scope_headers(),
+        timeout=60.0,
+    ) as client:
+        upd = await client.put(
+            f"/crm/api/v1/entities/{note_id}", json={"description": description}
+        )
+        if upd.status_code != 200:
+            raise AssertionError(f"PUT note failed: {upd.status_code} {upd.text}")
+
+    ai_payload = _json.dumps({
+        "note": {
+            "entity_type": "note",
+            "name": note_title,
+            "description": "Встреча с поставщиком: скидка 12%, спецификация, созвон в пятницу.",
+            "attributes": {},
+            "confidence": 0.92,
+        },
+        "entities": [
+            {
+                "entity_type": "contact",
+                "name": contact_name,
+                "description": "Менеджер «Альфа-Логистик» по оптовым поставкам",
+                "attributes": {"role": "менеджер"},
+                "confidence": 0.9,
+            },
+            {
+                "entity_type": "organization",
+                "name": f"Альфа-Логистик {unique_id[:6]}",
+                "description": "Поставщик логистических услуг",
+                "attributes": {},
+                "confidence": 0.88,
+            },
+        ],
+        "relationships": [
+            {
+                "source_type": "note",
+                "source_name": note_title,
+                "target_type": "contact",
+                "target_name": contact_name,
+                "relationship_type": "mentions",
+                "weight": 1.0,
+                "confidence": 0.9,
+            },
+            {
+                "source_type": "contact",
+                "source_name": contact_name,
+                "target_type": "organization",
+                "target_name": f"Альфа-Логистик {unique_id[:6]}",
+                "relationship_type": "belongs_to",
+                "weight": 1.0,
+                "confidence": 0.9,
+            },
+        ],
+        "metadata": {"dates_mentioned": [], "places_mentioned": [], "key_topics": ["поставка", "скидка"]},
+        "attachment_summaries": [],
+    })
+    # Клик по кнопке анализа идёт WS-командой без X-Test-Scope — MockLLM воркера
+    # читает очередь дефолтного scope `test_e2e_static` (core/test_scope.py).
+    redis_client = RedisClient(get_settings().database.redis_url)
+    try:
+        await setup_mock_responses_redis(
+            redis_client,
+            [{"type": "text", "content": ai_payload}] * 6,
+            test_scope=TEST_SCOPE_STATIC_E2E,
+        )
+    finally:
+        await redis_client.close()
+
+    await sync_e2e_activate_namespace_for_next_load(page, namespace)
+    await crm_ui.open(page)
+    await page.set_viewport_size(_DESKTOP)
+    await page.goto(
+        f"{crm_ui.origin}/crm/notes/{note_id}", wait_until="domcontentloaded"
+    )
+    note_page = page.locator("crm-note-page")
+    await expect(note_page).to_be_visible(timeout=60_000)
+    await expect(
+        note_page.get_by_text(note_title, exact=False).first
+    ).to_be_visible(timeout=60_000)
+    await scenario.step(
+        "Заметка после встречи",
+        page,
+        screenshot_name="note-page",
+        label_en="Note after meeting",
+        details=(
+            "Заметка записана обычным текстом — без форм и карточек. "
+            "Рядом с резюме — круглая кнопка обновления: она запускает "
+            "AI-разбор текста."
+        ),
+        details_en=(
+            "The note is written in plain text — no forms or cards. "
+            "Next to the summary sits a round refresh button: it "
+            "starts the AI analysis of the text."
+        ),
+    )
+
+    refresh = note_page.locator(".summary-card .round-btn")
+    await expect(refresh).to_be_visible(timeout=30_000)
+    await refresh.click()
+    analysis_modal = page.locator("crm-ai-analysis-modal")
+    await expect(analysis_modal).to_be_visible(timeout=120_000)
+    await expect(
+        analysis_modal.get_by_text(contact_name, exact=False).first
+    ).to_be_visible(timeout=60_000)
+    await scenario.step(
+        "AI нашёл записи и связи",
+        page,
+        screenshot_name="ai-analysis-modal",
+        label_en="AI found records and links",
+        details=(
+            "AI-разбор показывает, что он понял из текста: резюме "
+            "заметки, предложенные записи (контакт, компания) и связи "
+            "между ними. Каждую строку можно поправить прямо здесь, "
+            "прежде чем записи попадут в картотеку."
+        ),
+        details_en=(
+            "AI analysis shows what it understood from the text: a "
+            "note summary, suggested records (contact, company) and "
+            "links between them. Each row can be edited right here "
+            "before the records reach the card index."
+        ),
+    )
+
+    apply_btn = analysis_modal.get_by_role(
+        "button", name=re.compile("Применить|Apply")
+    )
+    await expect(apply_btn).to_be_visible(timeout=30_000)
+    await apply_btn.click()
+    await expect(
+        analysis_modal.get_by_text(
+            re.compile("Применено|Applied", re.I), exact=False
+        ).first
+    ).to_be_visible(timeout=60_000)
+
+    await page.goto(
+        f"{crm_ui.origin}/crm/entities", wait_until="domcontentloaded"
+    )
+    entities_page = page.locator("crm-entities-page")
+    await expect(entities_page).to_be_visible(timeout=60_000)
+    await expect(
+        entities_page.get_by_text(contact_name, exact=False).first
+    ).to_be_visible(timeout=60_000)
+    await scenario.step(
+        "Записи в картотеке",
+        page,
+        screenshot_name="ai-created-entity",
+        label_en="Records in the card index",
+        details=(
+            f"«{contact_name}» уже в картотеке — вместе с компанией "
+            "и связью к заметке. AI сделал черновую работу, вы только "
+            "проверили.\n\n"
+            "**Итог.** Пишите заметки как удобно — картотека "
+            "заполнится сама."
+        ),
+        details_en=(
+            f"{contact_name} is already in the card index — with the "
+            "company and a link to the note. AI did the rough work, "
+            "you only reviewed it.\n\n"
+            "**Summary.** Write notes the way you like — the card "
+            "index fills itself in."
         ),
     )

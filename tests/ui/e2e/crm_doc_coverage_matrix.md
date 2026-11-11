@@ -46,7 +46,7 @@
 |---|---|---|---|---|
 | 2 | `daily-notes` | Ежедневные заметки и привязка к записям | `test_crm_doc_notes.py` | ✅ |
 | 2 | `suggests-quick-add` | Быстрый разбор предложений | `test_crm_doc_notes.py` | ✅ |
-| 3 | `ai-note-analysis` | AI-анализ заметки | проверить стабильность MockLLM | 📝 |
+| 3 | `ai-note-analysis` | AI-анализ заметки | `test_crm_doc_notes.py` | ✅ |
 
 ### tasks — Задачи
 
