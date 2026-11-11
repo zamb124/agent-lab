@@ -53,7 +53,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `hitl-open-from-crm` | Открыть задачу из CRM | `test_hitl_operator_matrix.py` | ✅ |
-| 2 | `tasks-in-crm` | Задачи пространства | `test_crm_tasks_workspace.py` | 📝 |
+| 2 | `tasks-in-crm` | Задачи пространства | `test_crm_tasks_workspace.py` | ✅ |
 
 ### setup (новый тег)
 
