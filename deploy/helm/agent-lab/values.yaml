@@ -1085,7 +1085,7 @@ litserve:
   modelCacheSize: 100Gi
   rerankModelId: Qwen/Qwen3-Reranker-0.6B
   embeddingModelId: Qwen/Qwen3-Embedding-0.6B
-  # Загружать embedding-модель в bfloat16 (экономия ~50% VRAM на RTX A2000 6GB).
+  # Загружать embedding-модель в bfloat16 (экономия ~50% VRAM на RTX A4000 16GB).
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"
   resources:
