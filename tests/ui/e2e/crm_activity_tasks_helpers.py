@@ -151,6 +151,7 @@ async def crm_api_create_entity(
     entity_type: str,
     name: str,
     namespace: str,
+    attributes: dict[str, Any] | None = None,
 ) -> str:
     async with _crm_client(origin, auth_token) as client:
         response = await client.post(
@@ -159,7 +160,7 @@ async def crm_api_create_entity(
                 "entity_type": entity_type,
                 "name": name,
                 "namespace": namespace,
-                "attributes": {},
+                "attributes": attributes or {},
             },
         )
     if response.status_code != 200:
@@ -170,6 +171,32 @@ async def crm_api_create_entity(
     if not isinstance(entity_id, str) or not entity_id:
         raise AssertionError("entities response must contain entity_id")
     return entity_id
+
+
+async def crm_api_list_suggests(
+    origin: str,
+    auth_token: str,
+    *,
+    namespace: str,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    params: dict[str, str] = {}
+    if status:
+        params["status"] = status
+    async with _crm_client(origin, auth_token) as client:
+        response = await client.get(
+            f"{CRM_API_PREFIX}/namespaces/{namespace}/suggests",
+            params=params,
+        )
+    if response.status_code != 200:
+        raise AssertionError(
+            f"GET suggests failed: {response.status_code} {response.text}"
+        )
+    payload = response.json()
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise AssertionError("suggests response must contain items array")
+    return [item for item in items if isinstance(item, dict)]
 
 
 async def crm_api_create_relationship(
