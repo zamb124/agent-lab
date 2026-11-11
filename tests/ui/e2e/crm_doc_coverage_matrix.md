@@ -36,7 +36,7 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `entity-detail-and-links` | Карточка записи и связи | `test_crm_doc_entities.py` | 📝 |
+| 2 | `entity-detail-and-links` | Карточка записи и связи | `test_crm_doc_entities.py` | ✅ |
 | 2 | `graph-explore` | Граф связей: навигация и фильтры | `test_crm_graph_workspace.py` | ✅ |
 | 3 | `relationship-types` | Свои типы связей | новый | 📝 |
 
