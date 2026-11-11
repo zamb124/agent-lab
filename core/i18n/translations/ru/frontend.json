@@ -138,8 +138,6 @@
         "source_inherited": "родитель",
         "source_company_visible": "вся компания",
         "type_wiki_page": "Wiki",
-        "type_office_document": "Документ",
-        "type_office_catalog": "Каталог",
         "type_crm_entity": "CRM",
         "type_crm_namespace": "Пространство CRM",
         "type_flow": "Flow",
@@ -149,7 +147,9 @@
         "type_mailbox_binding": "Почта",
         "type_platform_namespace": "Пространство",
         "type_flow_ui_share": "Share Flow UI",
-        "type_flow_branch": "Ветка flow"
+        "type_flow_branch": "Ветка flow",
+        "type_document_file": "Документ",
+        "type_document_catalog": "Каталог"
     },
     "leads_page": {
         "title": "Заявки с лендинга",

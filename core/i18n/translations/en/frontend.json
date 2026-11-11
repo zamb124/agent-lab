@@ -138,8 +138,6 @@
         "source_inherited": "parent",
         "source_company_visible": "company",
         "type_wiki_page": "Wiki",
-        "type_office_document": "Document",
-        "type_office_catalog": "Catalog",
         "type_crm_entity": "CRM",
         "type_crm_namespace": "CRM space",
         "type_flow": "Flow",
@@ -149,7 +147,9 @@
         "type_mailbox_binding": "Mailbox",
         "type_platform_namespace": "Workspace",
         "type_flow_ui_share": "Flow UI share",
-        "type_flow_branch": "Flow branch"
+        "type_flow_branch": "Flow branch",
+        "type_document_file": "Document",
+        "type_document_catalog": "Catalog"
     },
     "leads_page": {
         "title": "Landing leads",
