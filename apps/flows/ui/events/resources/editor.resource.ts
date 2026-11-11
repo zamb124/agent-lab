@@ -19,6 +19,7 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 import { applyAutoLayoutToBranchData, canvasNeedsAutoLayout } from '../../_helpers/flow-graph-auto-layout.js';
 import {
     applyEditorLayoutToState,
+    EDITOR_LAYOUT_AGENT,
     EDITOR_LAYOUT_CANVAS,
     isAgentFocusEligible,
     resolveEditorLayout,
@@ -880,6 +881,27 @@ export const editorResource = createAsyncOp({
             }
             const nextFlowId = loadedFlowId;
             const resolvedLayout = resolveEditorLayout(nextBranchData, nextFlowId, null);
+            // Повторная загрузка того же flow (дублирующийся item_loaded,
+            // refresh после save) не должна сбрасывать открытые панели и выбор.
+            const isSameFlow = s.flowId === nextFlowId;
+            const nextNodes = _isPlainObject(nextBranchData) && _isPlainObject(nextBranchData.nodes)
+                ? nextBranchData.nodes
+                : {};
+            const nextResources = _isPlainObject(nextBranchData) && _isPlainObject(nextBranchData.resources)
+                ? nextBranchData.resources
+                : {};
+            const keptOpenIds = isSameFlow
+                ? (Array.isArray(s.openNodePanelIds) ? s.openNodePanelIds : []).filter((id) => id in nextNodes)
+                : [];
+            const keptSelectedNodeId = isSameFlow && typeof s.selectedNodeId === 'string' && s.selectedNodeId in nextNodes
+                ? s.selectedNodeId
+                : null;
+            const keptResourceId = isSameFlow && typeof s.selectedResourceId === 'string' && s.selectedResourceId in nextResources
+                ? s.selectedResourceId
+                : null;
+            const keptMultiSelection = isSameFlow && Array.isArray(s.multiSelection)
+                ? s.multiSelection.filter((id) => id in nextNodes)
+                : [];
             const loaded = {
                 ...state,
                 flowId: nextFlowId,
@@ -911,15 +933,17 @@ export const editorResource = createAsyncOp({
                 startWireRunState: null,
                 endWireRunStateByNodeId: EMPTY_END_WIRE_STATE,
                 entryNodeId: effective.entryNodeId,
-                multiSelection: [],
+                multiSelection: keptMultiSelection,
                 stickyNotes,
-                pendingNodeToolId: null,
-                selectedNodeId: null,
-                selectedResourceId: null,
-                openNodePanelIds: [],
-                propertyPanelLayouts: {},
-                panelOpen: false,
-                editorLayout: EDITOR_LAYOUT_CANVAS,
+                pendingNodeToolId: isSameFlow && keptSelectedNodeId ? s.pendingNodeToolId : null,
+                selectedNodeId: keptSelectedNodeId,
+                selectedResourceId: keptResourceId,
+                openNodePanelIds: keptOpenIds,
+                propertyPanelLayouts: isSameFlow && _isPlainObject(s.propertyPanelLayouts) ? s.propertyPanelLayouts : {},
+                panelOpen: isSameFlow && (keptOpenIds.length > 0 || keptResourceId !== null),
+                editorLayout: isSameFlow && s.editorLayout === EDITOR_LAYOUT_AGENT && isAgentFocusEligible(nextBranchData)
+                    ? EDITOR_LAYOUT_AGENT
+                    : EDITOR_LAYOUT_CANVAS,
             };
             return applyEditorLayoutToState(loaded, resolvedLayout, nextBranchData);
         }

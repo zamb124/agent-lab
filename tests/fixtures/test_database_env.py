@@ -37,8 +37,8 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     # Локальные сервисы тест-стека не должны идти через внешний HTTP_PROXY.
     # `.invalid` — зарезервированный TLD фейковых доменов тестов: через прокси
     # он даёт 502/ProxyError вместо детерминированного ConnectError.
-    "NO_PROXY": "localhost,127.0.0.1,::1,lvh.me,.invalid",
-    "no_proxy": "localhost,127.0.0.1,::1,lvh.me,.invalid",
+    "NO_PROXY": "localhost,127.0.0.1,::1,.localhost,lvh.me,.lvh.me,.invalid",
+    "no_proxy": "localhost,127.0.0.1,::1,.localhost,lvh.me,.lvh.me,.invalid",
     # Платформенный egress-прокси из conf.local.json разработчика не должен
     # делать тесты недетерминированными: несуществующий домен через живой
     # прокси даёт 502/ProxyError вместо ConnectError. Тесты стратегий прокси
@@ -119,7 +119,7 @@ def ensure_local_no_proxy() -> None:
     """
     for key in ("NO_PROXY", "no_proxy"):
         bypass = [part.strip() for part in os.environ.get(key, "").split(",") if part.strip()]
-        for host in ("localhost", "127.0.0.1", "::1", "lvh.me", ".invalid"):
+        for host in ("localhost", "127.0.0.1", "::1", ".localhost", "lvh.me", ".lvh.me", ".invalid"):
             if host not in bypass:
                 bypass.append(host)
         os.environ[key] = ",".join(bypass)

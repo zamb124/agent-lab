@@ -95,6 +95,14 @@ MINIMAL_BLOCKS: dict[str, JsonObject] = {
     "reflection": {"type": "reflection", "block_id": "b", "text": "Hmm"},
     "activity": {"type": "activity", "block_id": "b", "title": "Working"},
     "suggested_prompts": {"type": "suggested_prompts", "block_id": "b", "items": ["Hi"]},
+    "agent_plan": {
+        "type": "agent_plan",
+        "block_id": "b",
+        "plan": {
+            "agent_plan_id": "p1",
+            "steps": [{"step_id": "s1", "title": "Step", "status": "pending"}],
+        },
+    },
     "html": {"type": "html", "block_id": "b", "source": "<b>x</b>"},
 }
 
