@@ -200,7 +200,7 @@
 | Модель | Возраст/версия | Состояние на 11.2026 | Действие |
 |---|---|---|---|
 | GigaAM-v3 `e2e_rnnt` | Nov 2025 | Open SOTA RU ASR; Multilingual-600M — сосед-апгрейд на будущее | Keep + опционально каталог-записи |
-| Silero TTS `v5_5_ru` | ~2025 | Не последний бандл; CC BY-NC; по качеству ниже Qwen3-TTS | **P0 лицензия → P1 замена на Qwen3-TTS** |
+| Silero TTS `v5_5_ru` | ~2025 | CC BY-NC; качество ниже Qwen3-TTS | **ЗАМЕНЁН на Qwen3-TTS 1.7B CustomVoice (прод, 2026-11-11)** |
 | silero-vad 6.2.3 | Sep 2026 | Последняя версия, MIT | Keep |
 | (отсутствует) partial-STT | — | Пробел в UX голосовых сессий | P1 T-One / sherpa |
 | Yandex/Sber клиенты | stub | Лучшие RU-облака не подключены | P2 доработка |
@@ -226,3 +226,38 @@
 **Помечено как unverified:** реальные ready-записи `provider_litserve_models` в проде (известны только seed-дефолты + подтверждённый ответ `/v1/models`: embedding, reranker, `gigaam-v3-rnnt-ru` видны в каталоге); RU-покрытие smart-turn-v3 на наших данных; легальность статуса ruaccent (MIT в репо vs оговорка о коммерческом использовании на PyPI); Apache-2.0 карточка ESpeech vs наследование от CC-BY-NC баз F5; наличие EE-лицензии Silero у компании.
 
 **Замерено на проде 2026-11-11:** GPU RTX A4000 16GB; embedder+reranker 2785 MiB, +VAD ~3038 MiB, +GigaAM ~4230 MiB, TTS на `cuda:0`, свободно ~12 GB; `gigaam-v3-rnnt-ru` падал при загрузке (meta-device ошибка transformers 5.x → STT 500) — **исправлено** (§ «Инцидент», коммиты `4a799fee1` + `01e445a3b`, прод верифицирован); устаревший комментарий «RTX A2000 6GB» в `values.yaml` исправлен.
+
+
+---
+
+## 9. Миграция TTS: Silero → Qwen3-TTS — выполнено и верифицировано на проде (2026-11-11)
+
+**Статус:** DEPLOYED + VERIFIED. Локальный TTS теперь `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`
+(Apache-2.0) — P0-лицензионный риск Silero CC BY-NC закрыт.
+
+**Верификация на проде** (`provider-litserve-7f9974cd9f-qj7q6`, образ `ghcr.io/zamb124/agent-lab-gpu:qwen3-tts`):
+
+| Проверка | Результат |
+|---|---|
+| Загрузка модели | `load_seconds=14.3` (HF-кэш на PVC), READY |
+| GPU | воркер 4338 MiB на `cuda:0` (nvidia-smi); всего ~7.4/16 GiB |
+| Синтез RU | `POST /v1/audio/speech` → WAV 24 kHz mono, 2.56 с (122 924 B) |
+| Цепочка TTS→STT | GigaAM транскрибация Qwen-речи → дословный текст (7.6 с) |
+| Смена спикера | `voice=vivian` → WAV 61 КБ; дефолт `serena` |
+| Невалидный голос | `voice=xenia` → ошибка (не молчаливый фолбек) |
+| Старая модель | `model=silero-tts-v5-5-ru` → ошибка unknown model |
+| Каталог | `/v1/models`: единственный TTS — `qwen3-tts-1.7b-customvoice-ru` |
+| Удаление Silero | строка `deleting` → `deleted` ops-циклом (веса вычищены) |
+
+**Найденный и закрытый прод-баг:** transformers 5.x сделал `MimiModel.upsample`/`decoder_transformer`
+read-only @property → вендорный `Qwen3TTSTokenizerV2Encoder` падал на `self.upsample = None`.
+Фикс `_apply_qwen_tts_encoder_compat` в `tts/engines.py` (коммит `7de249333`).
+
+**Известная неидеальность:** при загрузке весов токенизера transformers логирует
+`MISSING encoder_seanet.layers.*.conv.bias` — инициализация дефолтом; эмпирически
+не влияет (дословная TTS→STT-цепочка подтверждена), стоит отслеживать апстрим issue.
+
+**Дрейф прода:** под на образе `qwen3-tts` (дельта поверх `stt-meta-fix`, собран на ноде),
+деплой через `kubectl set image`. Канонический образ появится при следующем CI-деплое
+после пуша коммитов (`240551cd6`, `7de249333`). Helm rev 143 завис в `pending-upgrade`
+(сессия умерла на `Preparing upgrade`) — следующий `make k8s-deploy` снимет.
