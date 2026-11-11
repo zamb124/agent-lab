@@ -169,6 +169,13 @@ litserve = [
     "pyannote-audio>=4.0.7",
 ]
 
+# Зависимости пода apps/voice (voice gateway): in-process стейтфул Silero VAD
+# для streaming-диктовки (`silero_local`). Пакет держит веса модели в wheel,
+# весит ~11 MB и не тянет torchaudio/onnxruntime (torch уже в образе).
+voice = [
+    "silero-vad>=6.2.3",
+]
+
 llm-model = [
     "torch>=2.15.0",
     "transformers>=5.21.0",

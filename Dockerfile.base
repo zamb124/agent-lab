@@ -138,6 +138,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group crm \
         --group rag \
         --group sync \
+        --group voice \
         --group browser \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \

@@ -188,6 +188,9 @@ sync = [
     { name = "livekit-api" },
     { name = "websockets" },
 ]
+voice = [
+    { name = "silero-vad" },
+]
 worker-base = [
     { name = "openai" },
     { name = "taskiq" },
@@ -328,6 +331,7 @@ sync = [
     { name = "livekit-api", specifier = ">=1.2.2" },
     { name = "websockets", specifier = ">=17.3" },
 ]
+voice = [{ name = "silero-vad", specifier = ">=6.2.3" }]
 worker-base = [
     { name = "openai", specifier = ">=3.40.0" },
     { name = "taskiq", specifier = ">=0.13.0" },
