@@ -251,3 +251,127 @@ async def test_second_checkout_reuses_customer_session(
     await expect(page.locator(".done .code")).to_be_visible(timeout=15_000)
     # Лист авторизации так и не открылся.
     assert await _auth(page).locator(".sheet").count() == 0
+
+
+@pytest.mark.scenario(
+    service="shop",
+    tag="customer",
+    doc_slug="customer-auth-phone",
+    title="Вход покупателя по номеру телефона",
+    title_en="Customer sign-in by phone number",
+    description=(
+        "**Для чего:** покупателю не нужны пароли и регистрация — "
+        "номер телефона и код из SMS открывают заказы, адреса и "
+        "лояльность.\n\n"
+        "**Какие проблемы решает:** вход всплывает только там, где он "
+        "нужен — при оформлении заказа или в личном кабинете. Покупатель "
+        "не заполняет анкету и ничего не запоминает.\n\n"
+        "**Результат:** покупатель вошёл — заказ оформлен и привязан "
+        "к его номеру."
+    ),
+    description_en=(
+        "**Purpose:** customers need no passwords or registration — a "
+        "phone number and an SMS code unlock orders, addresses and "
+        "loyalty.\n\n"
+        "**Problems solved:** sign-in pops up only where needed — at "
+        "checkout or in the account. The customer fills no forms and "
+        "memorizes nothing.\n\n"
+        "**Result:** the customer is signed in — the order is placed "
+        "and bound to their number."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_customer_auth_phone_scenario(
+    page: Page,
+    auth_storefront: Storefront,
+    unique_id: str,
+    scenario,
+) -> None:
+    phone = _phone(unique_id)
+    await _open_cart_to_pay(page, auth_storefront)
+    await page.locator("#payBtn").click()
+
+    await expect(_auth(page).locator(".sheet")).to_be_visible()
+    await scenario.step(
+        "Введите номер телефона",
+        page,
+        screenshot_name="auth-phone",
+        label_en="Enter the phone number",
+        details=(
+            "При оформлении заказа витрина просит номер телефона — это "
+            "и есть вход. Отдельной регистрации нет: номер — ваш "
+            "аккаунт."
+        ),
+        details_en=(
+            "At checkout the storefront asks for a phone number — that "
+            "is the sign-in. There is no separate registration: the "
+            "number is your account."
+        ),
+    )
+
+    await _enter_phone(page, phone)
+    methods = _auth(page).locator("button.method")
+    await expect(methods.first).to_be_visible()
+    await scenario.step(
+        "Выберите способ подтверждения",
+        page,
+        screenshot_name="auth-methods",
+        label_en="Choose a confirmation method",
+        details=(
+            "Витрина предлагает способы подтверждения номера — "
+            "например, код по SMS. Выбирайте удобный: ничего "
+            "запоминать не нужно."
+        ),
+        details_en=(
+            "The storefront offers ways to confirm the number — for "
+            "example, an SMS code. Pick whichever is convenient: "
+            "nothing to memorize."
+        ),
+    )
+
+    await methods.filter(has_text="SMS").click()
+    code_input = _auth(page).locator("input[inputmode=numeric]")
+    await expect(code_input).to_be_visible()
+    code = await _challenge_code(phone)
+    await code_input.fill(code)
+    await scenario.step(
+        "Введите код из SMS",
+        page,
+        screenshot_name="auth-code",
+        label_en="Enter the SMS code",
+        details=(
+            "На номер приходит короткий код — впишите его в поле. "
+            "Код одноразовый и живёт несколько минут."
+        ),
+        details_en=(
+            "A short code arrives by SMS — type it into the field. "
+            "The code is one-time and lives for a few minutes."
+        ),
+    )
+
+    await _auth(page).locator("button.primary").click()
+    await expect(page.locator(".done .code")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Вход выполнен — заказ принят",
+        page,
+        screenshot_name="auth-done",
+        label_en="Signed in — order accepted",
+        details=(
+            "После подтверждения номера заказ уходит в работу и "
+            "получает номер. В следующий раз вход уже не понадобится — "
+            "витрина вас помнит.\n\n"
+            "**Итог.** Телефон — это и аккаунт, и подтверждение: "
+            "покупатель заходит без пароля, а заказ сразу привязан "
+            "к нему."
+        ),
+        details_en=(
+            "After the number is confirmed the order goes to work and "
+            "gets a number. Next time no sign-in is needed — the "
+            "storefront remembers you.\n\n"
+            "**Summary.** The phone is both the account and the "
+            "confirmation: the customer signs in passwordless and the "
+            "order is bound to them right away."
+        ),
+    )
