@@ -4,7 +4,7 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-empty-state.js';
 
@@ -19,6 +19,7 @@ export class StockValuationPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
     private _layers: OpController;
+    private _products: ResourceController;
 
     static override styles = [
         PlatformPage.styles,
@@ -41,11 +42,23 @@ export class StockValuationPage extends PlatformPage {
         super();
         this._layers = this.useOp('stock/valuation_layers_list');
         this._layers.run({});
+        this._products = this.useResource('stock/products', { autoload: true });
+    }
+
+    private _productNames(): Map<string, string> {
+        const names = new Map<string, string>();
+        for (const row of this._products.items as { product_id?: unknown; name?: unknown }[]) {
+            if (typeof row.product_id === 'string' && typeof row.name === 'string') {
+                names.set(row.product_id, row.name);
+            }
+        }
+        return names;
     }
 
 
     override render() {
         const items = _layerItems(this._layers.lastResult);
+        const productNames = this._productNames();
         return html`
             <div class="wrap">
                 <h1>${this.t('valuation.title')}</h1>
@@ -70,7 +83,7 @@ export class StockValuationPage extends PlatformPage {
                                     <tr>
                                         <td class="num">${row.entry_no}</td>
                                         <td>${row.entry_kind}</td>
-                                        <td>${row.product_id}</td>
+                                        <td>${productNames.get(String(row.product_id)) ?? row.product_id}</td>
                                         <td class="num">${row.quantity}</td>
                                         <td class="num">${row.unit_cost}</td>
                                         <td class="num">${row.value}</td>

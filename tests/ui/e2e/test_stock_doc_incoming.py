@@ -196,7 +196,7 @@ async def test_stock_incoming_receipt(
 
     await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
     layer_row = page.locator(
-        "stock-valuation-page table tbody tr", has_text=product_id
+        "stock-valuation-page table tbody tr", has_text=product_name
     ).first
     await expect(layer_row).to_be_visible(timeout=30_000)
     await expect(layer_row).to_contain_text("inbound")

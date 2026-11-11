@@ -75,11 +75,12 @@ async def test_valuation_report(
 
     uoms = await stock_e2e_op(page, "stock/uoms_list", "stock/uoms_list/requested")
     uom_id = next(u["uom_id"] for u in uoms["items"] if u["name"] == "Units")
+    product_name = f"Какао {unique_id[:4]}"
     product = await stock_e2e_op(
         page,
         "stock/product_create", "stock/product_create/requested",
         {
-            "name": f"Какао {unique_id[:4]}",
+            "name": product_name,
             "sku": f"CCAO-{unique_id[:6]}",
             "uom_id": uom_id,
             "valuation_method": "fifo",
@@ -126,7 +127,7 @@ async def test_valuation_report(
         await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
 
     await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
-    rows = page.locator("stock-valuation-page table tbody tr", has_text=product_id)
+    rows = page.locator("stock-valuation-page table tbody tr", has_text=product_name)
     await expect(rows.first).to_be_visible(timeout=30_000)
     await expect(rows).to_have_count(2, timeout=15_000)
     await scenario.step(

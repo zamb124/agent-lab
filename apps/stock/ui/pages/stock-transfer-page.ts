@@ -5,7 +5,7 @@
 import { html, css } from 'lit';
 import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface TransferDetail {
@@ -35,6 +35,8 @@ export class StockTransferPage extends PlatformPage {
     private _assign: OpController;
     private _validate: OpController;
     private _cancel: OpController;
+    private _products: ResourceController;
+    private _locations: ResourceController;
 
     static override properties = {
         transferId: { attribute: 'transfer-id' },
@@ -68,6 +70,25 @@ export class StockTransferPage extends PlatformPage {
         this._assign = this.useOp('stock/transfer_assign');
         this._validate = this.useOp('stock/transfer_validate');
         this._cancel = this.useOp('stock/transfer_cancel');
+        this._products = this.useResource('stock/products', { autoload: true });
+        this._locations = this.useResource('stock/locations', { autoload: true });
+    }
+
+    /** Имена по справочникам; у внешних псевдо-локаций (partner:*) записи нет — показываем id. */
+    private _nameMaps(): { products: Map<string, string>; locations: Map<string, string> } {
+        const products = new Map<string, string>();
+        for (const row of this._products.items as { product_id?: unknown; name?: unknown }[]) {
+            if (typeof row.product_id === 'string' && typeof row.name === 'string') {
+                products.set(row.product_id, row.name);
+            }
+        }
+        const locations = new Map<string, string>();
+        for (const row of this._locations.items as { location_id?: unknown; name?: unknown }[]) {
+            if (typeof row.location_id === 'string' && typeof row.name === 'string') {
+                locations.set(row.location_id, row.name);
+            }
+        }
+        return { products, locations };
     }
 
     override connectedCallback(): void {
@@ -100,6 +121,7 @@ export class StockTransferPage extends PlatformPage {
         }
         const transfer = detail.transfer;
         const lines: NonNullable<TransferDetail['lines']> = detail.lines === undefined ? [] : detail.lines;
+        const names = this._nameMaps();
         return html`
             <div class="wrap">
                 <h1>${transfer.name}</h1>
@@ -121,9 +143,9 @@ export class StockTransferPage extends PlatformPage {
                     <tbody>
                         ${lines.map((line) => html`
                             <tr>
-                                <td>${line.product_id}</td>
-                                <td>${line.location_id}</td>
-                                <td>${line.location_dest_id}</td>
+                                <td>${names.products.get(String(line.product_id)) ?? line.product_id}</td>
+                                <td>${names.locations.get(String(line.location_id)) ?? line.location_id}</td>
+                                <td>${names.locations.get(String(line.location_dest_id)) ?? line.location_dest_id}</td>
                                 <td class="num">${line.quantity}</td>
                                 <td class="num">${line.done_quantity}</td>
                             </tr>

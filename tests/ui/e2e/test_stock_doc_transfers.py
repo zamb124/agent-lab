@@ -243,14 +243,26 @@ async def test_transfer_between_locations(
         },
     )
 
-    # Остаток в ячейке A: приход с явной зоной приёмки, проведён до done.
-    receipt_id = await _create_incoming(page, ctx, "10", dest_location_id=bin_a["location_id"])
+    # Остаток в зоне приёмки: приход проведён до done. Финальную ячейку выбирает
+    # putaway — читаем, куда товар реально лёг.
+    receipt_id = await _create_incoming(page, ctx, "10", dest_location_id=zone["location_id"])
     await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
     await stock_e2e_open_transfer(page, receipt_id)
     await stock_e2e_transfer_action(page, 0, "stock/transfer_confirm", "assigned")
     await stock_e2e_transfer_action(page, 2, "stock/transfer_validate", "done")
+    receipt = await stock_e2e_op(
+        page,
+        "stock/transfer_item", "stock/transfer_item/requested",
+        {"transfer_id": receipt_id},
+    )
+    receipt_dest = receipt["moves"][0]["location_dest_id"]
+    src_bin_id, dst_bin_id = (
+        (bin_a["location_id"], bin_b["location_id"])
+        if receipt_dest == bin_a["location_id"]
+        else (bin_b["location_id"], bin_a["location_id"])
+    )
 
-    # Внутреннее перемещение A -> B.
+    # Внутреннее перемещение из ячейки, где лежит остаток, во вторую ячейку.
     op_types = await stock_e2e_op(
         page,
         "stock/operation_types_list", "stock/operation_types_list/requested",
@@ -270,8 +282,8 @@ async def test_transfer_between_locations(
                     "product_id": ctx["product_id"],
                     "product_qty": "4",
                     "uom_id": ctx["uom_id"],
-                    "location_id": bin_a["location_id"],
-                    "location_dest_id": bin_b["location_id"],
+                    "location_id": src_bin_id,
+                    "location_dest_id": dst_bin_id,
                 }
             ],
         },

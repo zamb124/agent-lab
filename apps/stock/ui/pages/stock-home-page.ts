@@ -51,6 +51,8 @@ export class StockHomePage extends PlatformPage {
     declare _warehouseId: string;
     private _warehouses: ResourceController;
     private _pulse: OpController;
+    private _products: ResourceController;
+    private _locations: ResourceController;
 
     static override properties = {
         _pulse: { state: true },
@@ -86,6 +88,25 @@ export class StockHomePage extends PlatformPage {
         this._warehouses = this.useResource('stock/warehouses', { autoload: true });
         this._pulse = this.useOp('stock/warehouse_pulse');
         this._warehouseId = '';
+        this._products = this.useResource('stock/products', { autoload: true });
+        this._locations = this.useResource('stock/locations', { autoload: true });
+    }
+
+    /** Имена по справочникам; у внешних псевдо-локаций (partner:*) записи нет — показываем id. */
+    private _nameMaps(): { products: Map<string, string>; locations: Map<string, string> } {
+        const products = new Map<string, string>();
+        for (const row of this._products.items as { product_id?: unknown; name?: unknown }[]) {
+            if (typeof row.product_id === 'string' && typeof row.name === 'string') {
+                products.set(row.product_id, row.name);
+            }
+        }
+        const locations = new Map<string, string>();
+        for (const row of this._locations.items as { location_id?: unknown; name?: unknown }[]) {
+            if (typeof row.location_id === 'string' && typeof row.name === 'string') {
+                locations.set(row.location_id, row.name);
+            }
+        }
+        return { products, locations };
     }
 
     override updated(changed: PropertyValues<this>): void {
@@ -102,6 +123,7 @@ export class StockHomePage extends PlatformPage {
     override render() {
         const rawPulse = this._pulse.lastResult;
         const pulse = isWarehousePulse(rawPulse) ? rawPulse : null;
+        const names = this._nameMaps();
         return html`
             <div class="wrap">
                 <h1>${this.t('home.title')}</h1>
@@ -125,8 +147,8 @@ export class StockHomePage extends PlatformPage {
                             <tbody>
                                 ${(pulse.quants === undefined ? [] : pulse.quants).map((row: PulseQuantRow) => html`
                                     <tr>
-                                        <td>${row.product_id}</td>
-                                        <td>${row.location_id}</td>
+                                        <td>${names.products.get(String(row.product_id)) ?? row.product_id}</td>
+                                        <td>${names.locations.get(String(row.location_id)) ?? row.location_id}</td>
                                         <td class="num">${row.quantity}</td>
                                         <td class="num">${row.reserved_quantity}</td>
                                         <td class="num">${row.available_quantity}</td>

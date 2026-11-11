@@ -36,6 +36,14 @@ export class StockLocationsPage extends PlatformPage {
 
     override render() {
         const items = this._locations.items;
+        const names = new Map<string, string>();
+        for (const row of items as { location_id?: unknown; name?: unknown }[]) {
+            if (typeof row.location_id === 'string' && typeof row.name === 'string') {
+                names.set(row.location_id, row.name);
+            }
+        }
+        const nameOf = (id: unknown): unknown =>
+            typeof id === 'string' ? names.get(id) ?? id : '';
         return html`
             <div class="wrap">
                 <h1>${this.t('locations.title')}</h1>
@@ -56,7 +64,7 @@ export class StockLocationsPage extends PlatformPage {
                                     <tr>
                                         <td>${row.name}</td>
                                         <td>${row.usage}</td>
-                                        <td>${typeof row.parent_id === 'string' ? row.parent_id : ''}</td>
+                                        <td>${nameOf(row.parent_id)}</td>
                                         <td>${row.removal_method}</td>
                                     </tr>
                                 `)}

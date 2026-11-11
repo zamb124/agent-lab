@@ -43,15 +43,15 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 1 | `stock-incoming` | Провести поступление товара на склад | `test_stock_doc_incoming.py` | ✅ |
-| 2 | `receive-stock` | Приход товара на склад от поставщика | `test_stock_doc_transfers.py` | 📝 |
-| 2 | `transfer-between-locations` | Перемещение между складами | `test_stock_doc_transfers.py` | 📝 |
-| 3 | `transfers-journal` | Журнал движений, детали проводки | `test_stock_doc_transfers.py` | 📝 |
+| 2 | `receive-stock` | Приход товара на склад от поставщика | — | ⛔ дубль `stock-incoming` |
+| 2 | `transfer-between-locations` | Перемещение между складами | `test_stock_doc_transfers.py` | ✅ |
+| 3 | `transfers-journal` | Журнал движений, детали проводки | `test_stock_doc_transfers.py` | ✅ |
 
 ### valuation — Оценка запасов
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 3 | `valuation-report` | Стоимость запасов по складам | `test_stock_doc_valuation.py` | 📝 |
+| 3 | `valuation-report` | Стоимость запасов по складам | `test_stock_doc_valuation.py` | ✅ |
 
 ## Долг и заметки
 
