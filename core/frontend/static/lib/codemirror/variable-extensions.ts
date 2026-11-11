@@ -78,6 +78,7 @@ export interface CmEditorViewLike extends CmViewLike {
     };
     dom: HTMLElement;
     root: Document | ShadowRoot;
+    coordsAtPos(pos: number, side?: number): { left: number; right: number; top: number; bottom: number } | null;
     dispatch(spec: object): void;
     destroy(): void;
     requestMeasure(): void;

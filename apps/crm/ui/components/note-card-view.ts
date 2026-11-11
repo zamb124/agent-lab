@@ -46,6 +46,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
+import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-spinner.js';
 import { PlatformMarkdownEditor } from '@platform/lib/components/platform-markdown-editor.js';
@@ -191,6 +192,7 @@ export class CRMNoteCardView extends PlatformElement {
         _mentionQuery: { state: true },
         _mentionResults: { state: true },
         _mentionLoading: { state: true },
+        _mentionAnchorRect: { state: true },
         _mentionHoverEntityId: { state: true },
         _mentionHoverAnchorRect: { state: true },
         _mentionPreviewOpen: { state: true },
@@ -235,6 +237,7 @@ export class CRMNoteCardView extends PlatformElement {
     declare _mentionQuery: string;
     declare _mentionResults: Record<string, unknown>[];
     declare _mentionLoading: boolean;
+    declare _mentionAnchorRect: { left: number; top: number; width: number; height: number } | null;
     declare _mentionHoverEntityId: string;
     declare _mentionHoverAnchorRect: { left: number; top: number; width: number; height: number } | null;
     declare _mentionPreviewOpen: boolean;
@@ -1279,35 +1282,8 @@ export class CRMNoteCardView extends PlatformElement {
                 font-size: 14px;
             }
 
-            /* Popover упоминаний (существующая семантика) */
-            .mention-popover {
-                position: absolute;
-                z-index: 30;
-                top: calc(100% + 4px);
-                left: 0;
-                right: 0;
-                max-height: 240px;
-                overflow-y: auto;
-                background: var(--crm-surface-elevated);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                box-shadow: var(--glass-shadow-medium);
-            }
-            .mention-item {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: 8px 12px;
-                cursor: pointer;
-                width: 100%;
-                background: transparent;
-                border: none;
-                color: var(--text-primary);
-                text-align: left;
-                font-family: inherit;
-                font-size: 14px;
-            }
-            .mention-item:hover { background: var(--crm-note-action-bg); }
+            /* Списки выбора сущности/упоминания живут в platform-popover
+               (top layer, outside/Escape-dismiss); здесь только контент. */
             .mention-empty {
                 padding: 8px 12px;
                 color: var(--crm-note-text-muted);
@@ -1317,7 +1293,9 @@ export class CRMNoteCardView extends PlatformElement {
             .mention-popover--entity-list {
                 display: flex;
                 flex-direction: column;
-                min-width: 0;
+                min-width: 240px;
+                max-height: 280px;
+                overflow-y: auto;
             }
 
             .mention-row {
@@ -1465,6 +1443,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionQuery = '';
         this._mentionResults = [];
         this._mentionLoading = false;
+        this._mentionAnchorRect = null;
         this._mentionHoverEntityId = '';
         this._mentionHoverAnchorRect = null;
         this._mentionPreviewOpen = false;
@@ -2331,6 +2310,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionTriggerIndex = detail.from;
         this._mentionQuery = detail.query;
         this._mentionToIndex = detail.to;
+        this._mentionAnchorRect = detail.rect ?? null;
         this._mentionOpen = true;
         if (this._mentionDebounce !== null) {
             clearTimeout(this._mentionDebounce);
@@ -2376,6 +2356,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _closeMention() {
         this._mentionOpen = false;
+        this._mentionAnchorRect = null;
         this._mentionQuery = '';
         this._mentionResults = [];
         this._mentionLoading = false;
@@ -2405,39 +2386,40 @@ export class CRMNoteCardView extends PlatformElement {
         return ev.id;
     }
 
-    _renderEntityPickerPopover(kind: string, loading: boolean, queryMinLen: number, emptyKey: string, rows: Record<string, unknown>[], onPick: (item: Record<string, unknown>) => void, noRowsKey: string): unknown {
-        if (loading === true) {
-            return html`
-                <div class="mention-popover mention-popover--entity-list">
-                    <div class="mention-empty">${this.t('note_edit.mention_searching')}</div>
-                </div>
-            `;
+    _entitySearchAnchor(kind: 'voice' | 'context' | 'mention'): HTMLElement | null {
+        const selector = kind === 'mention'
+            ? '.description-edit-wrap'
+            : `.entity-search-wrap--${kind}`;
+        const el = this.renderRoot?.querySelector?.(selector);
+        return el instanceof HTMLElement ? el : null;
+    }
+
+    _closeEntitySearchPopover(kind: 'voice' | 'context'): void {
+        if (kind === 'voice') {
+            this._voiceSearchOpen = false;
+        } else {
+            this._contextSearchOpen = false;
         }
-        if (typeof queryMinLen === 'number' && queryMinLen > 0) {
+    }
+
+    _renderEntityPickerPopover(kind: 'voice' | 'context', loading: boolean, queryMinLen: number, emptyKey: string, rows: Record<string, unknown>[], onPick: (item: Record<string, unknown>) => void, noRowsKey: string): unknown {
+        const open = kind === 'voice' ? this._voiceSearchOpen : this._contextSearchOpen;
+        let body: unknown;
+        if (loading === true) {
+            body = html`<div class="mention-empty">${this.t('note_edit.mention_searching')}</div>`;
+        } else {
             const q = kind === 'voice'
                 ? (typeof this._voiceSearchQuery === 'string' ? this._voiceSearchQuery.trim() : '')
                 : (typeof this._contextSearchQuery === 'string' ? this._contextSearchQuery.trim() : '');
-            if (q.length < queryMinLen) {
-                return html`
-                    <div class="mention-popover mention-popover--entity-list">
-                        <div class="mention-empty">${this.t(emptyKey)}</div>
-                    </div>
-                `;
-            }
-        }
-        if (!Array.isArray(rows) || rows.length === 0) {
-            const key = typeof noRowsKey === 'string' && noRowsKey.length > 0
-                ? noRowsKey
-                : 'note_edit.entity_search_none';
-            return html`
-                <div class="mention-popover mention-popover--entity-list">
-                    <div class="mention-empty">${this.t(key)}</div>
-                </div>
-            `;
-        }
-        return html`
-            <div class="mention-popover mention-popover--entity-list">
-                ${rows.map(
+            if (typeof queryMinLen === 'number' && queryMinLen > 0 && q.length < queryMinLen) {
+                body = html`<div class="mention-empty">${this.t(emptyKey)}</div>`;
+            } else if (!Array.isArray(rows) || rows.length === 0) {
+                const key = typeof noRowsKey === 'string' && noRowsKey.length > 0
+                    ? noRowsKey
+                    : 'note_edit.entity_search_none';
+                body = html`<div class="mention-empty">${this.t(key)}</div>`;
+            } else {
+                body = rows.map(
                     (item) => html`
                         <button type="button" class="mention-row" @click=${() => onPick(item)}>
                             <span class="mention-row-lead">
@@ -2449,8 +2431,22 @@ export class CRMNoteCardView extends PlatformElement {
                             </span>
                         </button>
                     `,
-                )}
-            </div>
+                );
+            }
+        }
+        return html`
+            <platform-popover
+                trigger="manual"
+                role="listbox"
+                placement="bottom-start"
+                match-width
+                offset="4"
+                .anchor=${this._entitySearchAnchor(kind)}
+                ?open=${open}
+                @popover-dismiss=${() => this._closeEntitySearchPopover(kind)}
+            >
+                <div class="mention-popover--entity-list">${body}</div>
+            </platform-popover>
         `;
     }
 
@@ -2622,7 +2618,7 @@ export class CRMNoteCardView extends PlatformElement {
                             ?floated=${this._editVoiceEntityId.length > 0 || this._voiceSearchQuery.length > 0 || this._voiceSearchOpen}
                             editable
                         >
-                            <div class="entity-search-wrap">
+                            <div class="entity-search-wrap entity-search-wrap--voice">
                                 <input
                                     type="text"
                                     class="field-pill-input"
@@ -2666,7 +2662,7 @@ export class CRMNoteCardView extends PlatformElement {
                             ?floated=${this._editContextEntityId.length > 0 || this._contextSearchQuery.length > 0 || this._contextSearchOpen}
                             editable
                         >
-                            <div class="entity-search-wrap">
+                            <div class="entity-search-wrap entity-search-wrap--context">
                                 <input
                                     type="text"
                                     class="field-pill-input"
@@ -2764,45 +2760,42 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _renderMentionPopover() {
+        let body: unknown;
         if (this._mentionLoading) {
-            return html`
-                <div class="mention-popover mention-popover--entity-list">
-                    <div class="mention-empty">${this.t('note_edit.mention_searching')}</div>
-                </div>
-            `;
-        }
-        if (this._mentionQuery.length === 0) {
-            return html`
-                <div class="mention-popover mention-popover--entity-list">
-                    <div class="mention-empty">${this.t('note_edit.mention_min_query')}</div>
-                </div>
-            `;
-        }
-        if (this._mentionResults.length === 0) {
-            return html`
-                <div class="mention-popover mention-popover--entity-list">
-                    <div class="mention-empty">${this.t('note_edit.mention_no_results')}</div>
-                </div>
-            `;
+            body = html`<div class="mention-empty">${this.t('note_edit.mention_searching')}</div>`;
+        } else if (this._mentionQuery.length === 0) {
+            body = html`<div class="mention-empty">${this.t('note_edit.mention_min_query')}</div>`;
+        } else if (this._mentionResults.length === 0) {
+            body = html`<div class="mention-empty">${this.t('note_edit.mention_no_results')}</div>`;
+        } else {
+            body = this._mentionResults.map((item) => html`
+                <button
+                    type="button"
+                    class="mention-row"
+                    @click=${() => this._onMentionPick(item)}
+                >
+                    <span class="mention-row-lead">
+                        <platform-icon name=${this._pickerIconNameForItem(item)} size="16"></platform-icon>
+                    </span>
+                    <span class="mention-row-body">
+                        <span class="mention-name">${typeof item.name === 'string' ? item.name : ''}</span>
+                        <span class="mention-type">${this._pickerTypeLabelForItem(item)}</span>
+                    </span>
+                </button>
+            `);
         }
         return html`
-            <div class="mention-popover mention-popover--entity-list">
-                ${this._mentionResults.map((item) => html`
-                    <button
-                        type="button"
-                        class="mention-row"
-                        @click=${() => this._onMentionPick(item)}
-                    >
-                        <span class="mention-row-lead">
-                            <platform-icon name=${this._pickerIconNameForItem(item)} size="16"></platform-icon>
-                        </span>
-                        <span class="mention-row-body">
-                            <span class="mention-name">${typeof item.name === 'string' ? item.name : ''}</span>
-                            <span class="mention-type">${this._pickerTypeLabelForItem(item)}</span>
-                        </span>
-                    </button>
-                `)}
-            </div>
+            <platform-popover
+                trigger="manual"
+                role="listbox"
+                placement="bottom-start"
+                offset="4"
+                .anchor=${this._mentionAnchorRect ?? this._entitySearchAnchor('mention')}
+                ?open=${this._mentionOpen}
+                @popover-dismiss=${() => this._closeMention()}
+            >
+                <div class="mention-popover--entity-list">${body}</div>
+            </platform-popover>
         `;
     }
 

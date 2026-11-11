@@ -33,6 +33,7 @@ from apps.stock.models import (
 )
 from apps.stock.models.common import STOCK_DB
 from core.errors.boundary import PlatformNotFoundError
+from core.files.models import FileRecord
 from core.lanes import publish_lane_run
 from core.request_scope import command_idempotency_key
 from core.tracing.attributes import ATTR_TENANT_COMPANY_ID
@@ -111,6 +112,7 @@ class TaskService:
         warehouse_id: str,
         assigned_user_id: str | None = None,
         zone_location_id: str | None = None,
+        wave_id: str | None = None,
         limit: int = 100,
     ) -> list[StockMoveLine]:
         """Открытая очередь склада (или «моя очередь» оператора)."""
@@ -119,6 +121,7 @@ class TaskService:
             warehouse_id,
             assigned_user_id=assigned_user_id,
             zone_location_id=zone_location_id,
+            wave_id=wave_id,
             limit=limit,
         )
 
@@ -130,6 +133,7 @@ class TaskService:
         user_id: str,
         resource_id: str | None = None,
         zone_location_id: str | None = None,
+        wave_id: str | None = None,
         claim: bool = True,
     ) -> StockMoveLine | None:
         """Первое подходящее задание для оператора — и сразу захват.
@@ -142,6 +146,7 @@ class TaskService:
         """
         lines = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
             company_id, warehouse_id, zone_location_id=zone_location_id,
+            wave_id=wave_id,
             limit=200,
         )
         # Свободные или уже закреплённые за этим оператором — его
@@ -379,6 +384,7 @@ class TaskService:
         shortage: Decimal,
         reason: str,
         actor_user_id: str,
+        file_ids: list[str] | None = None,
         idempotency_key: str | None = None,
         command_type: str = "stock/move_lines/report_exception_requested",
     ) -> StockMoveLineExceptionResult:
@@ -387,8 +393,16 @@ class TaskService:
         Одна транзакция: строка укорачивается на недостачу (требование
         уходит в перерезерв), резерв на ячейке отпускается, на ячейку
         ставится задание пересчёта. Push ``stock/move_line/exception``
-        — точка подписки для эскалации (задача менеджеру в flows).
+        — точка подписки для эскалации (задача менеджеру в flows);
+        ``file_ids`` несёт фото-доказательства эскалации.
         """
+        attachments = file_ids or []
+        for file_id in attachments:
+            file = await FileRecord.by_file_id(file_id, company_id)
+            if file is None:
+                raise PlatformNotFoundError(
+                    "Attachment file not found", error_code="file_not_found"
+                )
         async with _mutation_span(
             "stock.move_line.exception",
             company_id=company_id,
@@ -401,6 +415,7 @@ class TaskService:
                 move_line_id=move_line_id,
                 shortage=shortage,
                 reason=reason,
+                file_ids=attachments,
                 idempotency_key=command_idempotency_key(idempotency_key),
                 actor_user_id=actor_user_id,
                 command_type=command_type,

@@ -236,7 +236,16 @@ export function computeFloatingPosition({
         }
     }
 
-    const coords = rawCoords(anchorRect, measured, side, align, offset);
+    const maxHeight = side === 'top'
+        ? Math.max(0, anchorRect.top - offset - viewportPadding)
+        : side === 'bottom'
+            ? Math.max(0, view.height - rectBottom(anchorRect) - offset - viewportPadding)
+            : Math.max(0, view.height - 2 * viewportPadding);
+    // Координаты считаются от высоты после maxHeight: иначе flip на тесную
+    // сторону уводит слой за экран (y = anchor.top - полная высота < 0).
+    const effective = { width: measured.width, height: Math.min(measured.height, maxHeight) };
+
+    const coords = rawCoords(anchorRect, effective, side, align, offset);
     let { x, y } = coords;
 
     if (shift) {
@@ -246,12 +255,6 @@ export function computeFloatingPosition({
             y = clamp(y, viewportPadding, view.height - measured.height - viewportPadding);
         }
     }
-
-    const maxHeight = side === 'top'
-        ? Math.max(0, anchorRect.top - offset - viewportPadding)
-        : side === 'bottom'
-            ? Math.max(0, view.height - rectBottom(anchorRect) - offset - viewportPadding)
-            : Math.max(0, view.height - 2 * viewportPadding);
 
     return {
         x: Math.round(x),

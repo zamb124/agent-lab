@@ -1535,10 +1535,15 @@ export class PlatformMarkdownEditor extends PlatformElement {
         if (match === null || mentionQuery === undefined) {
             return;
         }
+        const from = pos - mentionQuery.length - 1;
+        const caret = this._editorView?.coordsAtPos(from);
         this.emit('mention-query', {
             query: mentionQuery,
-            from: pos - mentionQuery.length - 1,
+            from,
             to: pos,
+            rect: caret
+                ? { top: caret.top, left: caret.left, width: caret.right - caret.left, height: caret.bottom - caret.top }
+                : null,
         });
     }
 
