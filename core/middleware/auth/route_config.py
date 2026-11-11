@@ -442,6 +442,14 @@ ROUTE_RULES: list[RouteRule] = [
     # Тот же префикс ``/<svc>/api``, что и у internal command bus
     RouteRule("*/api/ws/*", context_type="api", auth_required=True),
 
+    # A2A push webhook: bearer-токен проверяет сам endpoint
+    # (core/api/a2a_push.py против хеша в a2a_pending_calls) — без JWT/сессии.
+    RouteRule(
+        "/*/api/v1/internal/a2a/push",
+        context_type="anonymous",
+        auth_required=False,
+    ),
+
     # API агентов (новый путь)
     RouteRule("/flows/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/v1/*", context_type="api", auth_required=True),

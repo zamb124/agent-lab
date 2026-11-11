@@ -13,9 +13,7 @@ from apps.shop.models.api import (
     ShopAiDescribeRequest,
     ShopAiEnhancePhotoRequest,
     ShopAiParseMenuRequest,
-    ShopAiParseMenuResponse,
     ShopAiSuggestOptionsRequest,
-    ShopAiSuggestOptionsResponse,
     ShopBadgeIconsResponse,
     ShopBannerCreateRequest,
     ShopBannerResponse,
@@ -61,15 +59,14 @@ from apps.shop.models.api import (
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
     ShopAiBatchResponse,
+    ShopAiCallResponse,
     ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
-    ShopAiFileResponse,
     ShopAiGeneratePhotoPayload,
     ShopAiParseMenuPayload,
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
-    ShopAiTextResponse,
     ShopBannerCreatePayload,
     ShopBannerIdPayload,
     ShopBannersReorderPayload,
@@ -526,8 +523,8 @@ async def provision_domain(shop_id: str, domain_id: str, di: Di) -> ShopDomain:
 # --- AI ---
 
 
-@router.post("/{shop_id}/ai/describe", response_model=ShopAiTextResponse)
-async def ai_describe(shop_id: str, body: ShopAiDescribeRequest, di: Di) -> ShopAiTextResponse:
+@router.post("/{shop_id}/ai/describe", response_model=ShopAiCallResponse)
+async def ai_describe(shop_id: str, body: ShopAiDescribeRequest, di: Di) -> ShopAiCallResponse:
     return await op_ai_describe_product(
         ShopAiDescribePayload(
             shop_id=shop_id,
@@ -549,10 +546,10 @@ async def ai_describe_all(shop_id: str, di: Di) -> ShopAiBatchResponse:
     )
 
 
-@router.post("/{shop_id}/ai/enhance-photo", response_model=ShopAiFileResponse)
+@router.post("/{shop_id}/ai/enhance-photo", response_model=ShopAiCallResponse)
 async def ai_enhance_photo(
     shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di
-) -> ShopAiFileResponse:
+) -> ShopAiCallResponse:
     return await op_ai_enhance_photo(
         ShopAiEnhancePhotoPayload(shop_id=shop_id, file_id=body.file_id),
         user=require_context().user,
@@ -560,8 +557,8 @@ async def ai_enhance_photo(
     )
 
 
-@router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiFileResponse)
-async def ai_generate_photo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
+@router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiCallResponse)
+async def ai_generate_photo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiCallResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -569,8 +566,8 @@ async def ai_generate_photo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> S
     )
 
 
-@router.post("/{shop_id}/ai/describe-shop", response_model=ShopAiTextResponse)
-async def ai_describe_shop(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiTextResponse:
+@router.post("/{shop_id}/ai/describe-shop", response_model=ShopAiCallResponse)
+async def ai_describe_shop(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiCallResponse:
     return await op_ai_describe_shop(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -578,8 +575,8 @@ async def ai_describe_shop(shop_id: str, body: ShopAiBriefRequest, di: Di) -> Sh
     )
 
 
-@router.post("/{shop_id}/ai/generate-cover", response_model=ShopAiFileResponse)
-async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
+@router.post("/{shop_id}/ai/generate-cover", response_model=ShopAiCallResponse)
+async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiCallResponse:
     return await op_ai_generate_cover(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -587,8 +584,8 @@ async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> S
     )
 
 
-@router.post("/{shop_id}/ai/generate-logo", response_model=ShopAiFileResponse)
-async def ai_generate_logo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
+@router.post("/{shop_id}/ai/generate-logo", response_model=ShopAiCallResponse)
+async def ai_generate_logo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiCallResponse:
     return await op_ai_generate_logo(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -596,15 +593,15 @@ async def ai_generate_logo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> Sh
     )
 
 
-@router.post("/{shop_id}/ai/autofill", response_model=ShopResponse)
-async def ai_autofill(shop_id: str, di: Di) -> ShopResponse:
+@router.post("/{shop_id}/ai/autofill", response_model=ShopAiCallResponse)
+async def ai_autofill(shop_id: str, di: Di) -> ShopAiCallResponse:
     return await op_ai_autofill(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
 
 
-@router.post("/{shop_id}/ai/parse-menu", response_model=ShopAiParseMenuResponse)
+@router.post("/{shop_id}/ai/parse-menu", response_model=ShopAiCallResponse)
 async def ai_parse_menu(
     shop_id: str, body: ShopAiParseMenuRequest, di: Di
-) -> ShopAiParseMenuResponse:
+) -> ShopAiCallResponse:
     return await op_ai_parse_menu(
         ShopAiParseMenuPayload(shop_id=shop_id, text=body.text),
         user=require_context().user,
@@ -612,10 +609,10 @@ async def ai_parse_menu(
     )
 
 
-@router.post("/{shop_id}/ai/suggest-options", response_model=ShopAiSuggestOptionsResponse)
+@router.post("/{shop_id}/ai/suggest-options", response_model=ShopAiCallResponse)
 async def ai_suggest_options(
     shop_id: str, body: ShopAiSuggestOptionsRequest, di: Di
-) -> ShopAiSuggestOptionsResponse:
+) -> ShopAiCallResponse:
     return await op_ai_suggest_options(
         ShopAiSuggestOptionsPayload(
             shop_id=shop_id,

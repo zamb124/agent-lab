@@ -30,11 +30,13 @@ SHOP_REBUILD_AGGREGATE = declare_task(
 SHOP_AI_DESCRIBE_BATCH = declare_task(
     "shop_ai_describe_batch", queue="shop"
 )
+SHOP_AI_CALL = declare_task("shop_ai_call", queue="shop")
 SHOP_SEED_DEMO_COMPANY = declare_task(
     "shop_seed_demo_company", queue="shop", retry=True, max_retries=2
 )
 
 __all__ = [
+    "SHOP_AI_CALL",
     "SHOP_AI_DESCRIBE_BATCH",
     "SHOP_NOTIFY_BACK_IN_STOCK",
     "SHOP_NOTIFY_CUSTOMER",

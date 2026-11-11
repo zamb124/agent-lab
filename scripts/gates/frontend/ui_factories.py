@@ -275,11 +275,19 @@ def _check_app_registration(
     app_files = sorted(app_dir.glob("*-app.ts"))
     if not app_files:
         return
-    app_path = app_files[0]
-    registered = _parse_static_factory_idents(app_path)
-    if registered is None:
+    # У сервиса может быть несколько приложений (stock: консоль + ТСД) —
+    # фабрика валидна, если зарегистрирована хотя бы в одном `static factories`.
+    registered: set[str] = set()
+    app_rels: list[str] = []
+    for app_path in app_files:
+        parsed = _parse_static_factory_idents(app_path)
+        if parsed is None:
+            continue
+        registered.update(parsed)
+        app_rels.append(str(app_path.relative_to(ROOT)))
+    if not app_rels:
         return
-    app_rel = app_path.relative_to(ROOT)
+    app_rel = ", ".join(app_rels)
     name_to_rec: dict[str, dict] = {}
     for rec in factories:
         ident = rec.get("ident")

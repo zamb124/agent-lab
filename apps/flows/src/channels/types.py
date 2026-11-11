@@ -34,7 +34,7 @@ class FlowTaskResult(StrictBaseModel):
     """Результат выполнения flow на границе channel -> task."""
 
     response: str
-    task_state: ExecutionTaskState
+    task_state: ExecutionTaskState | None
     interrupt: InterruptData | None = None
     breakpoint_hit: str | None = Field(default=None, min_length=1)
     breakpoint_state: JsonObject | None = None

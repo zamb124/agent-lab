@@ -48,7 +48,7 @@ def _single_latin_to_cyrillic_table() -> dict[str, str]:
 _SINGLE_LATIN_TO_CYR = _single_latin_to_cyrillic_table()
 
 
-def apply_silero_ru_latin_to_cyrillic(text: str) -> str:
+def apply_ru_latin_to_cyrillic(text: str) -> str:
     """Транслитерирует разряды латиницы ``[A-Za-z]+`` в кириллицу (чтение латиницей по таблице из :data:`TRANSLIT_MAP`).
 
     Диграфы (``sh``, ``sch`` и т.д.) намеренно **не** используются: для смеси EN/RU
@@ -74,7 +74,7 @@ def apply_silero_ru_latin_to_cyrillic(text: str) -> str:
 
 
 TTS_INPUT_STEP_REGISTRY: dict[str, Callable[[str], str]] = {
-    "silero_ru_latin_to_cyrillic": apply_silero_ru_latin_to_cyrillic,
+    "ru_latin_to_cyrillic": apply_ru_latin_to_cyrillic,
 }
 
 TTS_INPUT_STEP_IDS: frozenset[str] = frozenset(TTS_INPUT_STEP_REGISTRY)
@@ -94,6 +94,6 @@ def apply_tts_input_steps(text: str, steps: Sequence[str]) -> str:
 __all__ = [
     "TTS_INPUT_STEP_IDS",
     "TTS_INPUT_STEP_REGISTRY",
-    "apply_silero_ru_latin_to_cyrillic",
+    "apply_ru_latin_to_cyrillic",
     "apply_tts_input_steps",
 ]

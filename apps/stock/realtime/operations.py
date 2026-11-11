@@ -126,6 +126,7 @@ from apps.stock.models.api import (
     StockWavesListPayload,
 )
 from apps.stock.models.resource import StockResourceLogoutResult
+from core.a2a.submit import A2ACallPending
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.catalog.contracts import CatalogPackagingView
@@ -506,13 +507,20 @@ async def op_transfers_confirm(
     scope = require_company()
     warehouse_id = await _warehouse_of_transfer(scope, payload.transfer_id)
     await _warehouse_editor(di, scope, warehouse_id)
-    return await di.move_engine.confirm_transfer(
-        company_id=scope.company_id,
-        transfer_id=payload.transfer_id,
-        idempotency_key=command_idempotency_key(payload.idempotency_key),
-        actor_user_id=scope.user_id,
-        command_type="stock/transfers/confirm_requested",
-    )
+    try:
+        return await di.move_engine.confirm_transfer(
+            company_id=scope.company_id,
+            transfer_id=payload.transfer_id,
+            idempotency_key=command_idempotency_key(payload.idempotency_key),
+            actor_user_id=scope.user_id,
+            command_type="stock/transfers/confirm_requested",
+        )
+    except A2ACallPending:
+        # Putaway-рефлекс ждёт flow: команда резюмится webhook'ом, отдаём
+        # текущее состояние накладной — события lane довезут итог realtime'ом.
+        return await di.move_engine.get_transfer(
+            company_id=scope.company_id, transfer_id=payload.transfer_id
+        )
 
 
 async def op_transfers_assign(
@@ -522,13 +530,18 @@ async def op_transfers_assign(
     scope = require_company()
     warehouse_id = await _warehouse_of_transfer(scope, payload.transfer_id)
     await _warehouse_editor(di, scope, warehouse_id)
-    return await di.move_engine.assign_transfer(
-        company_id=scope.company_id,
-        transfer_id=payload.transfer_id,
-        idempotency_key=command_idempotency_key(payload.idempotency_key),
-        actor_user_id=scope.user_id,
-        command_type="stock/transfers/assign_requested",
-    )
+    try:
+        return await di.move_engine.assign_transfer(
+            company_id=scope.company_id,
+            transfer_id=payload.transfer_id,
+            idempotency_key=command_idempotency_key(payload.idempotency_key),
+            actor_user_id=scope.user_id,
+            command_type="stock/transfers/assign_requested",
+        )
+    except A2ACallPending:
+        return await di.move_engine.get_transfer(
+            company_id=scope.company_id, transfer_id=payload.transfer_id
+        )
 
 
 async def op_transfers_validate(
@@ -538,15 +551,20 @@ async def op_transfers_validate(
     scope = require_company()
     warehouse_id = await _warehouse_of_transfer(scope, payload.transfer_id)
     await _warehouse_editor(di, scope, warehouse_id)
-    return await di.move_engine.validate_transfer(
-        company_id=scope.company_id,
-        transfer_id=payload.transfer_id,
-        create_backorder=payload.create_backorder,
-        idempotency_key=command_idempotency_key(payload.idempotency_key),
-        actor_user_id=scope.user_id,
-        command_type="stock/transfers/validate_requested",
-        causation_id=current_command_event_id(),
-    )
+    try:
+        return await di.move_engine.validate_transfer(
+            company_id=scope.company_id,
+            transfer_id=payload.transfer_id,
+            create_backorder=payload.create_backorder,
+            idempotency_key=command_idempotency_key(payload.idempotency_key),
+            actor_user_id=scope.user_id,
+            command_type="stock/transfers/validate_requested",
+            causation_id=current_command_event_id(),
+        )
+    except A2ACallPending:
+        return await di.move_engine.get_transfer(
+            company_id=scope.company_id, transfer_id=payload.transfer_id
+        )
 
 
 async def op_transfers_cancel(

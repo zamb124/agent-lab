@@ -50,6 +50,7 @@ from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
     EdgeConditionError,
     FlowInterrupt,
+    RemoteTaskParked,
 )
 from apps.flows.src.runtime.execution_context import (
     FlowExecutionContext,
@@ -413,6 +414,7 @@ class Flow:
                 state.interrupt = None
         elif not state.current_nodes:
             state.current_nodes = [self.entry]
+        state.remote_wait = None
 
         state.variables = {**self.variables, **state.variables}
         state.node_history = {}
@@ -523,7 +525,7 @@ class Flow:
                         await emitter.emit_node_start(node_id, node_type)
                         try:
                             result_state = await self.nodes[node_id].execute(run_state)
-                        except (FlowInterrupt, BreakpointInterrupt):
+                        except (FlowInterrupt, BreakpointInterrupt, RemoteTaskParked):
                             raise
                         except Exception as exc:
                             duration_ms = int((time.perf_counter() - started_at) * 1000)
@@ -671,6 +673,34 @@ class Flow:
                             event_type=event_type,
                             payload=event_payload,
                         )
+                        await emitter.flush_ui(self.interface)
+                        return state
+
+                    parks = [
+                        (node_id, exc, run_state)
+                        for node_id, _, exc, run_state in outcomes
+                        if isinstance(exc, RemoteTaskParked)
+                    ]
+                    if parks:
+                        node_id, parked, parked_state = parks[0]
+                        logger.info(
+                            "flow.remote_parked",
+                            flow_id=self.flow_id,
+                            node_id=node_id,
+                            a2a_task_id=parked.a2a_task_id,
+                        )
+                        state = self._merge_results(
+                            superstep_base_state,
+                            [*result_states, parked_state],
+                        )
+                        state.remote_wait = {
+                            "node_id": node_id,
+                            "activity_id": parked.activity_id,
+                            "a2a_task_id": parked.a2a_task_id,
+                            "base_url": parked.base_url,
+                        }
+                        state.current_nodes = current_nodes
+                        _ = await self._checkpoint_state(state)
                         await emitter.flush_ui(self.interface)
                         return state
 

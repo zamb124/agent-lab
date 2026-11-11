@@ -125,10 +125,10 @@ class TestA2AClient:
             await client.get_agent_card(error_server)
 
     @pytest.mark.asyncio
-    async def test_send_task_success(self, mock_agent_server):
-        """Успешная отправка задачи."""
+    async def test_submit_task_success(self, mock_agent_server):
+        """Успешная постановка задачи (returnImmediately)."""
         client = A2AClient()
-        result = await client.send_task(
+        result = await client.submit_task(
             base_url=mock_agent_server,
             content="Hello world",
             session_id="test-session",
@@ -138,10 +138,10 @@ class TestA2AClient:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_send_task_with_skill_id(self, mock_agent_server):
+    async def test_submit_task_with_skill_id(self, mock_agent_server):
         """Отправка с указанием branch_id."""
         client = A2AClient()
-        result = await client.send_task(
+        result = await client.submit_task(
             base_url=mock_agent_server,
             content="Test",
             branch_id="custom_skill",
@@ -150,41 +150,23 @@ class TestA2AClient:
         assert result.response
 
     @pytest.mark.asyncio
-    async def test_send_task_polls_get_task_when_submitted(self):
-        """returnImmediately: SUBMITTED → GetTask COMPLETED."""
+    async def test_submit_task_returns_submitted_without_polling(self):
+        """returnImmediately: SUBMITTED возвращается сразу, GetTask не вызывается."""
         methods: list[str] = []
 
         async def handle_rpc(request):
             data = await request.json()
             methods.append(data["method"])
-            if data["method"] == "SendMessage":
-                assert data["params"]["configuration"]["returnImmediately"] is True
-                return web.json_response({
-                    "jsonrpc": "2.0",
-                    "id": data["id"],
-                    "result": {
-                        "id": "task-async-1",
-                        "contextId": "ctx-1",
-                        "status": {"state": "TASK_STATE_SUBMITTED"},
-                        "artifacts": [],
-                    },
-                })
-            assert data["method"] == "GetTask"
-            assert data["params"]["id"] == "task-async-1"
+            assert data["method"] == "SendMessage"
+            assert data["params"]["configuration"]["returnImmediately"] is True
             return web.json_response({
                 "jsonrpc": "2.0",
                 "id": data["id"],
                 "result": {
                     "id": "task-async-1",
                     "contextId": "ctx-1",
-                    "status": {"state": "TASK_STATE_COMPLETED"},
-                    "artifacts": [
-                        {
-                            "artifactId": "done-1",
-                            "name": "response",
-                            "parts": [{"text": "done"}],
-                        }
-                    ],
+                    "status": {"state": "TASK_STATE_SUBMITTED"},
+                    "artifacts": [],
                 },
             })
 
@@ -192,19 +174,18 @@ class TestA2AClient:
         app.router.add_post("/", handle_rpc)
         async with ephemeral_web_server(app) as base_url:
             client = A2AClient()
-            result = await client.send_task(base_url=base_url, content="go")
+            result = await client.submit_task(base_url=base_url, content="go")
 
-        assert methods == ["SendMessage", "GetTask"]
-        assert result.status == "completed"
-        assert result.response == "done"
+        assert methods == ["SendMessage"]
+        assert result.status == "submitted"
 
     @pytest.mark.asyncio
-    async def test_send_task_error_response(self, error_server):
+    async def test_submit_task_error_response(self, error_server):
         """A2A ошибка в ответе."""
         client = A2AClient()
 
         with pytest.raises(A2AClientError, match="A2A error"):
-            await client.send_task(error_server, "Hello")
+            await client.submit_task(error_server, "Hello")
 
     @pytest.mark.asyncio
     async def test_check_health_success(self, mock_agent_server):

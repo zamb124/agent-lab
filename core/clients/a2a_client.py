@@ -1,9 +1,7 @@
-"""A2A Client — HTTP client for external agents (A2A Protocol 1.0 JSON-RPC)."""
+"""A2A Client — HTTP client for external agents (A2A Protocol 1.0 JSON-RPC + SSE)."""
 
 from __future__ import annotations
 
-import asyncio
-import time
 import uuid
 from collections.abc import Sequence
 
@@ -12,7 +10,7 @@ from pydantic import Field
 
 from core.a2a.methods import CANCEL_TASK, GET_TASK, SEND_MESSAGE
 from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
-from core.a2a.task_states import wire_task_state_to_platform
+from core.a2a.task_states import A2A_OPEN_TASK_STATES, wire_task_state_to_platform
 from core.context import get_context
 from core.http import get_httpx_client
 from core.internal_context_headers import build_internal_context_headers
@@ -25,9 +23,7 @@ logger = get_logger(__name__)
 
 A2A_PROTOCOL_VERSION = "1.0"
 A2A_VERSION_HEADER = "A2A-Version"
-_SEND_TASK_OPEN_STATES = frozenset({"submitted", "working"})
 _SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS = 30.0
-_SEND_TASK_POLL_INTERVAL_SECONDS = 0.3
 
 
 class A2ATaskResult(StrictBaseModel):
@@ -100,7 +96,7 @@ def _task_id_from_result(task_result: JsonObject) -> str:
 
 
 class A2AClient:
-    """HTTP client for A2A Protocol 1.0 SendMessage / AgentCard."""
+    """HTTP client for A2A Protocol 1.0 SendMessage/GetTask/CancelTask/AgentCard."""
 
     def __init__(self, timeout: float = 30.0) -> None:
         self.timeout: float = timeout
@@ -139,6 +135,7 @@ class A2AClient:
         accepted_output_modes: Sequence[str] | None = None,
         timeout: float | None = None,
         return_immediately: bool = False,
+        push_config: JsonObject | None = None,
     ) -> A2ATaskResult:
         """Send a structured A2A Message (Parts preserved, no text collapse on wire)."""
         if not parts:
@@ -159,12 +156,15 @@ class A2AClient:
             if accepted_output_modes is not None
             else ["text", "application/json", "*/*"]
         )
+        configuration: JsonObject = {
+            "acceptedOutputModes": modes,
+            "returnImmediately": return_immediately,
+        }
+        if push_config is not None:
+            configuration["taskPushNotificationConfig"] = dict(push_config)
         params_payload: JsonObject = {
             "message": message_payload,
-            "configuration": {
-                "acceptedOutputModes": modes,
-                "returnImmediately": return_immediately,
-            },
+            "configuration": configuration,
         }
         if metadata:
             params_payload["metadata"] = dict(metadata)
@@ -178,7 +178,7 @@ class A2AClient:
             rpc_label="SendMessage",
         )
 
-    async def send_task(
+    async def submit_task(
         self,
         base_url: str,
         content: str,
@@ -187,15 +187,16 @@ class A2AClient:
         metadata: JsonObject | None = None,
         headers: dict[str, str] | None = None,
         *,
-        timeout: float | None = None,
         task_id: str | None = None,
         parts: Sequence[JsonObject] | None = None,
+        push_config: JsonObject | None = None,
+        timeout: float | None = None,
     ) -> A2ATaskResult:
-        """Convenience SendMessage with a single text Part.
+        """Поставить A2A-задачу: SendMessage(returnImmediately=true), без ожидания terminal.
 
-        Internal callers (CRM skills, remote_flow) do not hold the peer HTTP
-        worker for the graph: SendMessageConfiguration.returnImmediately=true,
-        then GetTask until terminal/interrupted or timeout.
+        Возвращает субмитнутый `Task` (обычно SUBMITTED/WORKING). Доставка
+        результата — только `push_config` (webhook в pending-реестр);
+        синхронного ожидания и опроса `GetTask` в клиенте нет.
 
         `parts` заменяет одиночный text-Part целиком — для вызовов с файлами
         (`{"raw": <base64>, "mediaType": ..., "filename": ...}`).
@@ -205,38 +206,21 @@ class A2AClient:
         if branch_id and branch_id != "default":
             final_metadata["branch"] = branch_id
 
-        logger.debug("a2a.send_task", base_url=base_url, content_preview=content[:100])
-        overall_timeout = self.timeout if timeout is None else timeout
-        enqueue_timeout = min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, overall_timeout)
-        submitted = await self.send_message(
+        logger.debug("a2a.submit_task", base_url=base_url, content_preview=content[:100])
+        submit_timeout = min(
+            _SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS,
+            self.timeout if timeout is None else timeout,
+        )
+        return await self.send_message(
             base_url,
             parts=list(parts) if parts is not None else [{"text": content}],
             context_id=context_id,
             task_id=task_id,
             metadata=final_metadata or None,
             headers=headers,
-            timeout=enqueue_timeout,
+            timeout=submit_timeout,
             return_immediately=True,
-        )
-        if submitted.status not in _SEND_TASK_OPEN_STATES:
-            return submitted
-        task_id = _task_id_from_result(submitted.task)
-        deadline = time.monotonic() + overall_timeout
-        while time.monotonic() < deadline:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            polled = await self.get_task(
-                base_url,
-                task_id,
-                headers=headers,
-                timeout=min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, remaining),
-            )
-            if polled.status not in _SEND_TASK_OPEN_STATES:
-                return polled
-            await asyncio.sleep(min(_SEND_TASK_POLL_INTERVAL_SECONDS, max(remaining, 0.0)))
-        raise A2AClientError(
-            f"A2A task {task_id} did not complete within {overall_timeout}s"
+            push_config=push_config,
         )
 
     async def get_task(

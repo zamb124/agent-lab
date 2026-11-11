@@ -50,7 +50,16 @@ from apps.stock.models.storage_rules import (
 )
 from apps.stock.services.ids import new_id
 from core.catalog.models import CatalogProduct
-from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
+from apps.idle.tasks.task_names import TASK_A2A_CALL_FINISHED
+from apps.stock.tasks.task_names import STOCK_PUTAWAY_SHADOW_RECORD
+from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
+from core.a2a.submit import (
+    A2ACallPending,
+    a2a_fetch_terminal_result,
+    a2a_resume_nonce,
+    submit_a2a_call,
+)
+from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.config import get_settings
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import publish_lane_run
@@ -428,6 +437,7 @@ class PlacementService:
         operation_type: StockOperationType,
         move: StockMove,
         owner_entity_id: str | None = None,
+        actor_user_id: str = "system",
     ) -> StockDecision | None:
         """Выбор destination по `putaway_mode`; `None` — рефлекс не настроен.
 
@@ -464,6 +474,7 @@ class PlacementService:
                 )
             chosen = await self._call_flow(
                 company_id=company_id,
+                actor_user_id=actor_user_id,
                 flow_id=operation_type.putaway_flow_id,
                 move=move,
                 candidates=candidates,
@@ -475,15 +486,16 @@ class PlacementService:
                 )
         elif mode == ReflexMode.SHADOW:
             if operation_type.putaway_flow_id is not None:
-                chosen = await self._call_flow(
+                await self._submit_shadow_call(
                     company_id=company_id,
+                    actor_user_id=actor_user_id,
                     flow_id=operation_type.putaway_flow_id,
+                    operation_type=operation_type,
+                    warehouse=warehouse,
                     move=move,
                     candidates=candidates,
                 )
-            if chosen is None or chosen not in candidates:
-                chosen = candidates[0]
-            status = StockDecisionStatus.SUGGESTED
+            return None
         else:
             raise PlatformConflictError(
                 f"Unknown putaway mode {mode}", error_code="putaway_mode_invalid"
@@ -509,14 +521,36 @@ class PlacementService:
         self,
         *,
         company_id: str,
+        actor_user_id: str,
         flow_id: str,
         move: StockMove,
         candidates: list[str],
     ) -> str | None:
-        """Sync-вызов flow через A2A (единственный sync-вызов stock→flows)."""
+        """Putaway-решение flow по A2A без синхронного ожидания.
+
+        Resolved payload обслуживается из pending-ряда по ``dedup_key`` (re-run
+        команды после webhook-resume); нет строки — ``submit_a2a_call``
+        регистрирует pending + SendMessage с push config и поднимает
+        ``A2ACallPending``: команда накладной завершает ход и резюмится задачей
+        ``stock_transfer_command_resume`` из generic continuation.
+        """
+        nonce = a2a_resume_nonce()
+        if nonce is None:
+            raise PlatformConflictError(
+                "Putaway flow call outside A2A resume context",
+                error_code="putaway_flow_context",
+            )
+        dedup_key = f"stock:putaway:{move.move_id}:{nonce}"
+        row = await PlatformA2APendingCall.by_dedup_key("stock", dedup_key)
+        if row is not None:
+            if row.result_payload is not None:
+                return self._extract_choice_from_stored_payload(row.result_payload)
+            if row.status is PendingCallStatus.pending:
+                raise A2ACallPending(row.a2a_task_id)
+            raise PlatformConflictError(
+                "Putaway flow call failed", error_code="putaway_flow_failed"
+            )
         flows_base = get_settings().server.get_flows_service_url().rstrip("/")
-        timeout = get_stock_settings().putaway_flow_timeout_seconds
-        client = A2AClient(timeout=timeout)
         variables: JsonObject = {
             "company_id": company_id,
             "move_id": move.move_id,
@@ -524,18 +558,158 @@ class PlacementService:
             "quantity": str(move.product_uom_qty),
             "candidate_location_ids": candidates,
         }
-        try:
-            result = await client.send_task(
-                base_url=f"{flows_base}/flows/api/v1/{flow_id}",
-                content="Stock putaway: выбери location_id из candidate_location_ids",
-                metadata={"variables": variables},
-                timeout=timeout,
+        row = await submit_a2a_call(
+            a2a_client=A2AClient(),
+            service="stock",
+            company_id=company_id,
+            user_id=actor_user_id,
+            base_url=f"{flows_base}/flows/api/v1/{flow_id}",
+            content="Stock putaway: выбери location_id из candidate_location_ids",
+            continuation=TASK_A2A_CALL_FINISHED,
+            continuation_kwargs={},
+            deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
+            metadata={"variables": variables},
+            dedup_key=dedup_key,
+        )
+        raise A2ACallPending(row.a2a_task_id)
+
+    async def _submit_shadow_call(
+        self,
+        *,
+        company_id: str,
+        actor_user_id: str,
+        flow_id: str,
+        operation_type: StockOperationType,
+        warehouse: StockWarehouse,
+        move: StockMove,
+        candidates: list[str],
+    ) -> None:
+        """Теневое предложение: fire-and-record, команда не ждёт ответа flow.
+
+        Результат доезжает webhook'ом в ``stock_putaway_shadow_record`` и
+        пишется аудит-строкой ``StockDecision``. Повтор команды с тем же
+        ``dedup_key`` второй submit не делает.
+        """
+        nonce = a2a_resume_nonce()
+        if nonce is None:
+            raise PlatformConflictError(
+                "Putaway flow call outside A2A resume context",
+                error_code="putaway_flow_context",
             )
-        except A2AClientError as exc:
+        dedup_key = f"stock:putaway:{move.move_id}:{nonce}"
+        if await PlatformA2APendingCall.by_dedup_key("stock", dedup_key) is not None:
+            return
+        flows_base = get_settings().server.get_flows_service_url().rstrip("/")
+        variables: JsonObject = {
+            "company_id": company_id,
+            "move_id": move.move_id,
+            "product_id": move.product_id,
+            "quantity": str(move.product_uom_qty),
+            "candidate_location_ids": candidates,
+        }
+        _ = await submit_a2a_call(
+            a2a_client=A2AClient(),
+            service="stock",
+            company_id=company_id,
+            user_id=actor_user_id,
+            base_url=f"{flows_base}/flows/api/v1/{flow_id}",
+            content="Stock putaway: выбери location_id из candidate_location_ids",
+            continuation=STOCK_PUTAWAY_SHADOW_RECORD,
+            continuation_kwargs={
+                "company_id": company_id,
+                "warehouse_id": warehouse.warehouse_id,
+                "operation_type_id": operation_type.operation_type_id,
+                "move_id": move.move_id,
+                "transfer_id": move.transfer_id,
+                "flow_id": flow_id,
+                "candidate_location_ids": candidates,
+                "actor_user_id": actor_user_id,
+            },
+            deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
+            metadata={"variables": variables},
+            dedup_key=dedup_key,
+        )
+
+    async def record_shadow_decision(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        operation_type_id: str,
+        move_id: str,
+        transfer_id: str,
+        flow_id: str,
+        candidate_location_ids: list[str],
+        a2a_task_id: str,
+        a2a_state: str,
+        a2a_base_url: str,
+        actor_user_id: str,
+    ) -> StockDecision:
+        """Аудит-строка теневого предложения по терминальному push'у flow.
+
+        Completed → SUGGESTED с выбором (внекандидатный/пустой ответ —
+        первый кандидат, как при sync-режиме); терминальный сбой и дедлайн —
+        REJECTED без выбора: «тень» не имеет права молча подставить полку.
+        """
+        chosen: str | None = None
+        status = StockDecisionStatus.REJECTED
+        if a2a_state == "completed":
+            result = await a2a_fetch_terminal_result(
+                a2a_client=A2AClient(),
+                base_url=a2a_base_url,
+                a2a_task_id=a2a_task_id,
+                company_id=company_id,
+                user_id=actor_user_id,
+            )
+            if result.status == "completed":
+                candidate = self._extract_choice(result)
+                chosen = (
+                    candidate
+                    if candidate in candidate_location_ids
+                    else candidate_location_ids[0]
+                )
+                status = StockDecisionStatus.SUGGESTED
+        decision = StockDecision(
+            decision_id=new_id("dec"),
+            company_id=company_id,
+            warehouse_id=warehouse_id,
+            operation_type_id=operation_type_id,
+            reflex_point=ReflexPoint.PUTAWAY,
+            move_id=move_id,
+            transfer_id=transfer_id,
+            mode=ReflexMode.SHADOW,
+            flow_id=flow_id,
+            candidate_location_ids=candidate_location_ids,
+            chosen_location_id=chosen,
+            status=status,
+            created_at=utcnow(),
+            applied_at=None,
+        )
+        return await StockDecision.objects.create(instance=decision)
+
+    @staticmethod
+    def _extract_choice_from_stored_payload(payload: JsonObject) -> str | None:
+        """Выбор из stored webhook-результата — та же схема, что ``_extract_choice``."""
+        status = payload.get("status")
+        if status != "completed":
             raise PlatformConflictError(
                 "Putaway flow call failed", error_code="putaway_flow_failed"
-            ) from exc
-        return self._extract_choice(result)
+            )
+        task = payload.get("task")
+        artifacts = payload.get("artifacts")
+        response_text = payload.get("response")
+        result = A2ATaskResult(
+            task=(
+                require_json_object(task, "a2a.payload.task")
+                if isinstance(task, dict)
+                else {}
+            ),
+            artifacts=artifacts if isinstance(artifacts, list) else [],
+            status="completed",
+            response=response_text if isinstance(response_text, str) else "",
+            raw={},
+        )
+        return PlacementService._extract_choice(result)
 
     @staticmethod
     def _extract_choice(result: A2ATaskResult) -> str | None:

@@ -53,6 +53,7 @@ from apps.flows.src.models.code_api import (
     ValidateResponse,
 )
 from apps.flows.src.models.node_config import GraphNodeConfig
+from apps.flows.src.runtime.exceptions import RemoteTaskParked
 from apps.flows.src.runtime.flow_interface_context import flow_interface_scope
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.runtime.state_diff import compute_state_diff
@@ -1331,7 +1332,23 @@ async def _execute_node(
         state=state,
     )
     with flow_interface_scope(interface):
-        result_state = await node.run(state)
+        try:
+            result_state = await node.run(state)
+        except RemoteTaskParked as parked:
+            # Preview одиночной ноды не имеет resume-цикла: вызов реально ушёл,
+            # результат придёт webhook'ом — честно показываем submit.
+            result_state = state
+            result_state["remote_status"] = "submitted"
+            result_state.remote_wait = {
+                "node_id": parked.node_id,
+                "activity_id": parked.activity_id,
+                "a2a_task_id": parked.a2a_task_id,
+                "base_url": parked.base_url,
+            }
+            result_state.response = (
+                f"Remote A2A task {parked.a2a_task_id} submitted; "
+                "result arrives via push webhook"
+            )
     _ = await runtime.record_state_event(
         result_state.session_id,
         result_state,

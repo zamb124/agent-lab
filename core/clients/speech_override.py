@@ -66,7 +66,7 @@ class SpeechOverride(BaseModel):
         default=None,
         description=(
             "OpenAI-совместимый id модели у провайдера "
-            "(например `gigaam-v3` для litserve STT, `silero-tts-v5-5-ru` для litserve TTS)."
+            "(например `gigaam-v3` для litserve STT, `qwen3-tts-1.7b-customvoice-ru` для litserve TTS)."
         ),
     )
     voice: str | None = Field(

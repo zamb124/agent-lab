@@ -68,16 +68,15 @@ def test_tts_pairs_use_api_id_as_key(unique_id):
         unique_id=unique_id,
         tts=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"silero-tts-{unique_id}",
-                hf_model_id="snakers4/silero-models",
-                silero_bundle="v5_5_ru",
-                voice="xenia",
+                api_model_id=f"qwen-tts-{unique_id}",
+                hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+                voice="serena",
                 sample_rate=24000,
             ),
         ],
     )
     assert _pairs(build_tts_seed_entries(cfg)) == {
-        f"silero-tts-{unique_id}": "snakers4/silero-models"
+        f"qwen-tts-{unique_id}": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
     }
 
 

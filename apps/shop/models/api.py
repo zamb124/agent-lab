@@ -363,6 +363,13 @@ class ShopCategoriesReorderRequest(StrictBaseModel):
     items: list[ShopCategoryReorderItem] = Field(min_length=1, max_length=200)
 
 
+class ShopAiCallResponse(StrictBaseModel):
+    """Приём AI-вызова: результат придёт push-событием ``shop/ai_call/finished``."""
+
+    call_id: str
+    status: str = "pending"
+
+
 class ShopAiDescribeRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     category_name: str | None = Field(default=None, max_length=200)
@@ -430,10 +437,6 @@ class ShopAiSuggestOptionsRequest(StrictBaseModel):
     group_name: str | None = Field(default=None, max_length=200)
 
 
-class ShopAiSuggestOptionsResponse(StrictBaseModel):
-    items: list[ShopAiOptionSuggestion]
-
-
 class ShopAiMenuItem(StrictBaseModel):
     """Позиция, извлечённая AI из свободного текста меню."""
 
@@ -446,10 +449,6 @@ class ShopAiMenuItem(StrictBaseModel):
 
 class ShopAiParseMenuRequest(StrictBaseModel):
     text: str = Field(min_length=3, max_length=50_000)
-
-
-class ShopAiParseMenuResponse(StrictBaseModel):
-    items: list[ShopAiMenuItem]
 
 
 class ShopModifierOptionCreateRequest(StrictBaseModel):

@@ -79,7 +79,11 @@ from apps.flows.src.reflection import (
 from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
-from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.runtime.exceptions import (
+    BreakpointInterrupt,
+    FlowInterrupt,
+    RemoteTaskParked,
+)
 from apps.flows.src.runtime.execution_context import (
     FlowExecutionContext,
     execution_context_for,
@@ -123,11 +127,13 @@ from apps.flows.src.state.mutation_policy import (
     should_skip_field_on_user_returned_state_copy,
 )
 from apps.flows.src.streaming.emitter import EmitterFactory
+from apps.flows.src.tasks.task_names import TASK_FLOWS_REMOTE_TASK_FINISHED
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.materialize import ToolMaterializeInput
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from apps.flows.tools.tables.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
+from core.a2a.submit import submit_a2a_call
 from core.ai.providers import LLM_CAPABILITY_VALUES
 from core.ai.runtime import create_llm_client_from_call_config
 from core.authz.service import AuthzService
@@ -140,7 +146,7 @@ from core.capabilities import (
     execution_token_exp,
     issue_execution_token,
 )
-from core.clients.a2a_client import A2AClient
+from core.clients.a2a_client import A2AClient, A2AClientError
 from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.clients.llm.mock_control import (
     MOCK_MISS,
@@ -588,6 +594,9 @@ class BaseNode(ABC):
         )
         try:
             result = await invoke()
+        except RemoteTaskParked:
+            # Парк — activity остаётся `started` до webhook-continuation.
+            raise
         except Exception as exc:
             completed_failed = await self.execution.activities.complete(
                 activity_id=resolved_activity_id,
@@ -2248,42 +2257,88 @@ class RemoteFlowNode(BaseNode):
             "remote_flow.activity_input",
         )
 
+        activity_id = (
+            f"{state.session_id}:{state.durable_execution_branch_id or ''}:"
+            f"{self.node_id}:remote_flow"
+        )
+
         async def invoke() -> NodeRunResult:
-            result = await self.a2a_client.send_task(
+            context = get_request_context()
+            if context is None or context.active_company is None:
+                raise ValueError("RemoteFlowNode requires Context with active_company")
+            a2a_task_id = str(uuid.uuid4())
+            row = await submit_a2a_call(
+                a2a_client=self.a2a_client,
+                service="flows",
+                company_id=context.active_company.company_id,
+                user_id=context.user.user_id,
                 base_url=url,
                 content=content,
-                session_id=state.session_id,
+                context_id=state.session_id,
                 branch_id=self.branch_id,
+                a2a_task_id=a2a_task_id,
+                continuation=TASK_FLOWS_REMOTE_TASK_FINISHED,
+                continuation_kwargs={
+                    "session_id": state.session_id,
+                    "flow_id": state.session_flow_id,
+                    "branch_id": state.branch_id,
+                    "task_id": state.task_id,
+                    "context_id": state.context_id,
+                    "node_id": self.node_id,
+                    "activity_id": activity_id,
+                    "user_id": context.user.user_id,
+                    "context_data": context.to_dict(),
+                },
+                deadline_seconds=float(get_flows_settings().default_flow_timeout_seconds),
                 metadata=metadata,
                 headers=req_headers,
+                parent_task_id=state.task_id,
+            )
+            raise RemoteTaskParked(
+                activity_id=activity_id,
+                a2a_task_id=row.a2a_task_id,
+                node_id=self.node_id,
+                base_url=url,
             )
 
-            state.response = result.response
-            state["remote_status"] = result.status
-            state["remote_artifacts"] = result.artifacts
-
-            emitter = await self.emitter_factory.create(state)
-            for artifact_payload in result.artifacts:
-                remote_artifact = artifact_from_json_dict(artifact_payload)
-                # Parent task may already own the remote's artifact_id (e.g. "response")
-                # from a prior remote hop or local stream — scope into this node.
-                scoped_artifact = Artifact()
-                scoped_artifact.CopyFrom(remote_artifact)
-                remote_artifact_id = remote_artifact.artifact_id.strip()
-                if remote_artifact_id == "":
-                    raise ValueError("remote artifact.artifact_id is required")
-                scoped_artifact.artifact_id = f"remote:{self.node_id}:{remote_artifact_id}"
-                await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
-
-            return result.response
-
-        return await self._run_durable_activity(
+        remote_result = await self._run_durable_activity(
             state,
             activity_type="remote_flow",
             input_payload=input_payload,
             side_effect_policy=SideEffectPolicy.non_idempotent,
             invoke=invoke,
+            activity_id=activity_id,
+            idempotency_key=activity_id,
         )
+        remote = require_json_object(remote_result, "remote_flow.result")
+        status = remote.get("status")
+        if status != "completed":
+            error = remote.get("error")
+            detail = error if isinstance(error, str) and error else "unknown"
+            raise A2AClientError(f"Remote A2A task ended with status {status!r}: {detail}")
+        response_value = remote.get("response")
+        state.response = response_value if isinstance(response_value, str) else ""
+        state["remote_status"] = status
+        artifacts_value = remote.get("artifacts")
+        artifacts = artifacts_value if isinstance(artifacts_value, list) else []
+        state["remote_artifacts"] = artifacts
+
+        emitter = await self.emitter_factory.create(state)
+        for artifact_payload in artifacts:
+            remote_artifact = artifact_from_json_dict(
+                require_json_object(artifact_payload, "remote_flow.artifact")
+            )
+            # Parent task may already own the remote's artifact_id (e.g. "response")
+            # from a prior remote hop or local stream — scope into this node.
+            scoped_artifact = Artifact()
+            scoped_artifact.CopyFrom(remote_artifact)
+            remote_artifact_id = remote_artifact.artifact_id.strip()
+            if remote_artifact_id == "":
+                raise ValueError("remote artifact.artifact_id is required")
+            scoped_artifact.artifact_id = f"remote:{self.node_id}:{remote_artifact_id}"
+            await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
+
+        return state.response
 
     def _resolve_headers_dict(
         self,
@@ -2484,49 +2539,24 @@ class CodeAgentNode(BaseNode):
             "code_agent.activity_input",
         )
 
+        activity_id = (
+            f"{state.session_id}:{state.durable_execution_branch_id or ''}:"
+            f"{self.node_id}:code_agent"
+        )
+
         async def invoke() -> NodeRunResult:
             context = get_request_context()
-            if context is None or context.active_company is None:
-                raise ValueError("CodeAgentNode requires Context with active_company")
-            log_context = get_log_context()
-            request_id = log_context.get("request_id")
-            if not isinstance(request_id, str) or not request_id.strip():
-                raise ValueError("CodeAgentNode requires request_id")
-            trace_id = context.trace_id
-            if not isinstance(trace_id, str) or not trace_id.strip():
-                raise ValueError("CodeAgentNode requires trace_id")
-            company_id = context.active_company.company_id
-            user_id = context.user.user_id
-            if not user_id.strip():
-                raise ValueError("CodeAgentNode requires user_id")
-            settings = get_settings()
-            flows_settings = get_flows_settings()
-            namespace_raw = context.active_namespace
-            if not namespace_raw.strip() or namespace_raw.strip() == "default":
-                namespace = None
-            else:
-                namespace = namespace_raw.strip()
-            test_scope = resolve_test_scope()
-            claims = CapabilityExecutionTokenClaims(
-                company_id=company_id,
-                user_id=user_id,
-                flow_id=state.session_flow_id,
-                branch_id=state.branch_id,
-                session_id=state.session_id,
-                task_id=state.task_id,
-                context_id=state.context_id,
-                channel=context.channel,
-                request_id=request_id,
-                durable_execution_branch_id=state.durable_execution_branch_id,
-                durable_node_schedule_sequence=state.durable_node_schedule_sequence,
-                durable_superstep_sequence=state.durable_superstep_sequence,
-                source_node_id=self.node_id,
-                namespace=namespace,
-                test_scope=test_scope,
-                exp=execution_token_exp(flows_settings.capability_execution_token_ttl_seconds),
-            )
+            (
+                company_id,
+                user_id,
+                namespace,
+                request_id,
+                trace_id,
+                claims,
+            ) = self._code_agent_runtime_identity(state)
             execution_token = issue_execution_token(claims)
             files = await self.code_agent_source_service.list_files(catalog_id=catalog_id)
+            settings = get_settings()
             llm_url = f"{settings.server.get_service_url('flows').rstrip('/')}/flows/api/v1/llm/v1"
             gateway_url = settings.server.get_service_url("capability_gateway").rstrip("/")
             platform_env = self._platform_env(
@@ -2535,7 +2565,7 @@ class CodeAgentNode(BaseNode):
                 gateway_url=gateway_url,
                 state=state,
                 company_id=company_id,
-                context_channel=context.channel,
+                context_channel=context.channel if context else "",
                 request_id=request_id,
                 trace_id=trace_id,
                 namespace=namespace,
@@ -2579,7 +2609,7 @@ class CodeAgentNode(BaseNode):
                     task_id=state.task_id,
                     context_id=state.context_id,
                     branch_id=state.branch_id,
-                    channel=context.channel,
+                    channel=context.channel if context else "",
                     source_node_id=self.node_id,
                     request_id=request_id,
                     trace_id=trace_id,
@@ -2591,79 +2621,181 @@ class CodeAgentNode(BaseNode):
                     guest_env=guest_env,
                 )
             )
-            result = await self.a2a_client.send_task(
+            row = await submit_a2a_call(
+                a2a_client=self.a2a_client,
+                service="flows",
+                company_id=company_id,
+                user_id=user_id,
                 base_url=lease.a2a_url,
                 content=content,
-                session_id=state.session_id,
-                task_id=state.task_id,
+                context_id=state.session_id,
+                branch_id=state.branch_id,
+                continuation=TASK_FLOWS_REMOTE_TASK_FINISHED,
+                continuation_kwargs={
+                    "session_id": state.session_id,
+                    "flow_id": state.session_flow_id,
+                    "branch_id": state.branch_id,
+                    "task_id": state.task_id,
+                    "context_id": state.context_id,
+                    "node_id": self.node_id,
+                    "activity_id": activity_id,
+                    "user_id": user_id,
+                    "context_data": context.to_dict() if context else {},
+                },
+                deadline_seconds=float(get_flows_settings().default_flow_timeout_seconds),
                 metadata=metadata or None,
+                parent_task_id=state.task_id,
             )
-            state.response = result.response
-            state["code_agent_status"] = result.status
-            state["code_agent_artifacts"] = result.artifacts
+            raise RemoteTaskParked(
+                activity_id=activity_id,
+                a2a_task_id=row.a2a_task_id,
+                node_id=self.node_id,
+                base_url=lease.a2a_url,
+            )
 
-            emitter = await self.emitter_factory.create(state)
-            effect_envelopes: list[PlatformEffectEnvelope] = []
-            interrupt_payload: JsonObject | None = None
-            guest_state: JsonObject = {}
-            for artifact_payload in result.artifacts:
-                remote_artifact = artifact_from_json_dict(artifact_payload)
-                remote_artifact_id = remote_artifact.artifact_id.strip()
-                if remote_artifact_id == "":
-                    raise ValueError("code_agent artifact.artifact_id is required")
-                if remote_artifact_id == "platform_effects":
-                    effect_envelopes.extend(_platform_effects_from_artifact(artifact_payload))
-                elif remote_artifact_id == "interrupt":
-                    interrupt_payload = _interrupt_from_artifact(artifact_payload)
-                elif remote_artifact_id == "state":
-                    guest_state = _code_agent_state_from_artifact(artifact_payload)
-                scoped_artifact = Artifact()
-                scoped_artifact.CopyFrom(remote_artifact)
-                scoped_artifact.artifact_id = f"code_agent:{self.node_id}:{remote_artifact_id}"
-                await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
-
-            if effect_envelopes:
-                execution_context = CapabilityExecutionContext(
-                    execution_token=execution_token,
-                    company_id=company_id,
-                    user_id=user_id,
-                    flow_id=state.session_flow_id,
-                    branch_id=state.branch_id,
-                    session_id=state.session_id,
-                    task_id=state.task_id,
-                    context_id=state.context_id,
-                    channel=context.channel,
-                    request_id=request_id,
-                    trace_id=trace_id,
-                    durable_execution_branch_id=state.durable_execution_branch_id,
-                    durable_node_schedule_sequence=state.durable_node_schedule_sequence,
-                    durable_superstep_sequence=state.durable_superstep_sequence,
-                    source_node_id=self.node_id,
-                    namespace=namespace,
-                )
-                apply_capability_platform_effects(
-                    state,
-                    effect_envelopes,
-                    context=execution_context,
-                    manifest=await _load_capability_manifest(),
-                    interface=current_flow_interface(),
-                )
-            if interrupt_payload is not None:
-                body = parse_interrupt_body_from_external_dict(interrupt_payload)
-                InterruptManager.apply_interrupt(state, body, tool_call=None)
-                return None
-            node_result: JsonObject = dict(guest_state)
-            if "response" not in node_result:
-                node_result["response"] = result.response
-            return node_result
-
-        return await self._run_durable_activity(
+        remote_result = await self._run_durable_activity(
             state,
             activity_type="code_agent",
             input_payload=input_payload,
             side_effect_policy=SideEffectPolicy.non_idempotent,
             invoke=invoke,
+            activity_id=activity_id,
+            idempotency_key=activity_id,
         )
+        remote = require_json_object(remote_result, "code_agent.result")
+        status = remote.get("status")
+        if status != "completed":
+            error = remote.get("error")
+            detail = error if isinstance(error, str) and error else "unknown"
+            raise A2AClientError(
+                f"Code agent A2A task ended with status {status!r}: {detail}"
+            )
+        response_value = remote.get("response")
+        response_text = response_value if isinstance(response_value, str) else ""
+        state.response = response_text
+        state["code_agent_status"] = status
+        artifacts_value = remote.get("artifacts")
+        result_artifacts = artifacts_value if isinstance(artifacts_value, list) else []
+        state["code_agent_artifacts"] = result_artifacts
+
+        context = get_request_context()
+        (
+            company_id,
+            user_id,
+            namespace,
+            request_id,
+            trace_id,
+            claims,
+        ) = self._code_agent_runtime_identity(state)
+        execution_token = issue_execution_token(claims)
+
+        emitter = await self.emitter_factory.create(state)
+        effect_envelopes: list[PlatformEffectEnvelope] = []
+        interrupt_payload: JsonObject | None = None
+        guest_state: JsonObject = {}
+        for artifact_payload in result_artifacts:
+            artifact_dict = require_json_object(
+                artifact_payload, "code_agent.artifact"
+            )
+            remote_artifact = artifact_from_json_dict(artifact_dict)
+            remote_artifact_id = remote_artifact.artifact_id.strip()
+            if remote_artifact_id == "":
+                raise ValueError("code_agent artifact.artifact_id is required")
+            if remote_artifact_id == "platform_effects":
+                effect_envelopes.extend(
+                    _platform_effects_from_artifact(artifact_dict)
+                )
+            elif remote_artifact_id == "interrupt":
+                interrupt_payload = _interrupt_from_artifact(artifact_dict)
+            elif remote_artifact_id == "state":
+                guest_state = _code_agent_state_from_artifact(artifact_dict)
+            scoped_artifact = Artifact()
+            scoped_artifact.CopyFrom(remote_artifact)
+            scoped_artifact.artifact_id = (
+                f"code_agent:{self.node_id}:{remote_artifact_id}"
+            )
+            await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
+
+        if effect_envelopes:
+            execution_context = CapabilityExecutionContext(
+                execution_token=execution_token,
+                company_id=company_id,
+                user_id=user_id,
+                flow_id=state.session_flow_id,
+                branch_id=state.branch_id,
+                session_id=state.session_id,
+                task_id=state.task_id,
+                context_id=state.context_id,
+                channel=context.channel if context else "",
+                request_id=request_id,
+                trace_id=trace_id,
+                durable_execution_branch_id=state.durable_execution_branch_id,
+                durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+                durable_superstep_sequence=state.durable_superstep_sequence,
+                source_node_id=self.node_id,
+                namespace=namespace,
+            )
+            apply_capability_platform_effects(
+                state,
+                effect_envelopes,
+                context=execution_context,
+                manifest=await _load_capability_manifest(),
+                interface=current_flow_interface(),
+            )
+        if interrupt_payload is not None:
+            body = parse_interrupt_body_from_external_dict(interrupt_payload)
+            InterruptManager.apply_interrupt(state, body, tool_call=None)
+            return None
+        node_result: JsonObject = dict(guest_state)
+        if "response" not in node_result:
+            node_result["response"] = response_text
+        return node_result
+
+    def _code_agent_runtime_identity(
+        self,
+        state: ExecutionState,
+    ) -> tuple[str, str, str | None, str, str, CapabilityExecutionTokenClaims]:
+        """(company, user, namespace, request_id, trace_id, claims) для token/lease/effects."""
+        context = get_request_context()
+        if context is None or context.active_company is None:
+            raise ValueError("CodeAgentNode requires Context with active_company")
+        log_context = get_log_context()
+        request_id = log_context.get("request_id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            raise ValueError("CodeAgentNode requires request_id")
+        trace_id = context.trace_id
+        if not isinstance(trace_id, str) or not trace_id.strip():
+            raise ValueError("CodeAgentNode requires trace_id")
+        company_id = context.active_company.company_id
+        user_id = context.user.user_id
+        if not user_id.strip():
+            raise ValueError("CodeAgentNode requires user_id")
+        namespace_raw = context.active_namespace
+        if not namespace_raw.strip() or namespace_raw.strip() == "default":
+            namespace = None
+        else:
+            namespace = namespace_raw.strip()
+        claims = CapabilityExecutionTokenClaims(
+            company_id=company_id,
+            user_id=user_id,
+            flow_id=state.session_flow_id,
+            branch_id=state.branch_id,
+            session_id=state.session_id,
+            task_id=state.task_id,
+            context_id=state.context_id,
+            channel=context.channel,
+            request_id=request_id,
+            durable_execution_branch_id=state.durable_execution_branch_id,
+            durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+            durable_superstep_sequence=state.durable_superstep_sequence,
+            source_node_id=self.node_id,
+            namespace=namespace,
+            test_scope=resolve_test_scope(),
+            exp=execution_token_exp(
+                get_flows_settings().capability_execution_token_ttl_seconds
+            ),
+        )
+        return company_id, user_id, namespace, request_id, trace_id, claims
 
 
 async def _load_capability_manifest() -> CapabilityManifest:

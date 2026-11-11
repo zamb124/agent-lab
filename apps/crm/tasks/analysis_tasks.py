@@ -20,6 +20,7 @@ from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresErr
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
 from apps.crm.tasks.crm_context import set_crm_context
 from apps.crm.tasks.task_names import CRM_PROCESS_NOTE
+from core.a2a.submit import A2ACallPending, set_a2a_resume_context
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
@@ -81,6 +82,21 @@ async def process_note_task(
 ) -> JsonObject:
     """mode: 'analyze' | 'apply' | 'process'."""
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
+    _ = set_a2a_resume_context(
+        CRM_PROCESS_NOTE.name,
+        {
+            "task_id": task_id,
+            "note_id": note_id,
+            "company_id": company_id,
+            "namespace": namespace,
+            "auth_token": auth_token,
+            "user_id": user_id,
+            "interface_language": interface_language,
+            "config_payload": config_payload,
+            "mode": mode,
+        },
+        run_nonce=task_id,
+    )
     pipeline = di.note_processing_service
 
     try:
@@ -173,6 +189,10 @@ async def process_note_task(
                 rel_count = len(result.created_relationship_ids)
             else:
                 raise ValueError(f"Unknown mode: {mode}")
+    except A2ACallPending:
+        await _progress("waiting_ai", 60, "Ожидание ответа AI")
+        logger.info("crm.note.a2a_parked", task_id=task_id, note_id=note_id, mode=mode)
+        return {"status": "waiting_ai", "task_id": task_id}
     except ApplyAnalysisDraftEntityFailuresError as exc:
         failures_payload: list[dict[str, str]] = [
             {

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -84,9 +85,12 @@ from apps.crm.tasks.task_names import (
     CRM_REBUILD_DAILY_SUMMARY,
     CRM_REBUILD_PERIOD_SUMMARY,
 )
+from apps.idle.tasks.task_names import TASK_A2A_CALL_FINISHED
 from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
+from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
+from core.a2a.submit import A2ACallPending, a2a_resume_nonce, submit_a2a_call
 from core.authz.service import AuthzService
-from core.clients.a2a_client import A2AClient, A2ATaskResult
+from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
 from core.context import get_context, resolve_namespace_or_raise
 from core.errors.boundary import PlatformConflictError
 from core.llm_context import (
@@ -279,6 +283,15 @@ _MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "entity_subtype",
     "note_date",
 )
+
+
+def _a2a_call_id_fragment(value: JsonValue) -> str:
+    """Короткий стабильный фрагмент dedup call_id из входных данных вызова."""
+    return hashlib.sha1(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).encode(
+            "utf-8"
+        )
+    ).hexdigest()[:16]
 
 
 class ApplyAnalysisDraftEntityFailuresError(Exception):
@@ -2814,20 +2827,15 @@ class EntityService:
             "repair_context_json": repair_context_json,
         }
 
-        settings_global = get_settings()
-        flows_base_url = settings_global.server.get_flows_service_url().rstrip("/")
-        crm_settings = get_crm_settings()
-        timeout_sec = crm_settings.analysis_draft_repair_a2a_timeout_seconds
-
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base_url}/flows/api/v1/crm",
+        result_data = await self._call_crm_a2a_skill(
+            call_id=f"draft_repair:{note_id}",
             content="CRM: починка черновика AI-анализа заметки",
             branch_id="draft_repair",
-            metadata={"variables": variables},
-            timeout=timeout_sec,
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_draft_repair_a2a_timeout_seconds
+            ),
         )
-
-        result_data = self._extract_data_from_a2a_response(response)
         if not result_data or "patch_entities" not in result_data:
             raise ValueError("flow draft_repair response has no patch_entities")
 
@@ -4032,8 +4040,6 @@ class EntityService:
         namespace: str,
     ) -> _AnalyzePipelineState:
         """Вызывает AI agent через A2A API для анализа"""
-        settings = get_settings()
-
         extractable_entity_types = [et for et in entity_types if et.prompt and et.extractable]
         variables = require_json_object(
             {
@@ -4060,18 +4066,13 @@ class EntityService:
         if known_entities:
             variables["known_entities"] = known_entities
 
-        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
-        analyze_timeout_sec = get_crm_settings().analysis_a2a_timeout_seconds
-
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base_url}/flows/api/v1/crm",
+        result_data = await self._call_crm_a2a_skill(
+            call_id="analyze",
             content=text,
             branch_id="analyze",
-            metadata={"variables": variables},
-            timeout=analyze_timeout_sec,
+            variables=variables,
+            deadline_seconds=float(get_crm_settings().analysis_a2a_timeout_seconds),
         )
-
-        result_data = self._extract_data_from_a2a_response(response)
         if NOTE_ROOT_ENTITY_TYPE_ID not in result_data and "entities" not in result_data:
             raise ValueError(
                 "CRM analyze A2A did not return a structured payload (note/entities)"
@@ -4290,6 +4291,85 @@ class EntityService:
             if extracted:
                 found.append(extracted)
         return found
+
+    async def _call_crm_a2a_skill(
+        self,
+        *,
+        call_id: str,
+        content: str,
+        branch_id: str,
+        variables: JsonObject,
+        deadline_seconds: float,
+        extra_metadata: JsonObject | None = None,
+    ) -> JsonObject:
+        """Structured result_data CRM-ветки flows без синхронного ожидания.
+
+        Resolved payload обслуживается из pending-ряда по ``dedup_key`` (re-run
+        задачи после webhook-resume); нет активной строки — ``submit_a2a_call``
+        регистрирует pending + SendMessage с push config и поднимает
+        ``A2ACallPending``. Ожидания/опроса нет никогда.
+        """
+        nonce = a2a_resume_nonce() or "run"
+        dedup_key = f"crm:{call_id}:{nonce}"
+        row = await PlatformA2APendingCall.by_dedup_key("crm", dedup_key)
+        if row is not None:
+            if row.result_payload is not None:
+                return self._a2a_result_data_from_payload(row.result_payload)
+            if row.status is PendingCallStatus.pending:
+                raise A2ACallPending(row.a2a_task_id)
+            raise A2AClientError(
+                f"CRM A2A call {call_id!r} ended without result (status={row.status})"
+            )
+        settings = get_settings()
+        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
+        metadata: JsonObject = {"variables": variables}
+        if extra_metadata:
+            metadata.update(extra_metadata)
+        row = await submit_a2a_call(
+            a2a_client=self._a2a_client,
+            service="crm",
+            company_id=self._get_company_id(),
+            user_id=self._get_user_id(),
+            base_url=f"{flows_base_url}/flows/api/v1/crm",
+            content=content,
+            branch_id=branch_id,
+            continuation=TASK_A2A_CALL_FINISHED,
+            continuation_kwargs={},
+            deadline_seconds=deadline_seconds,
+            metadata=metadata,
+            dedup_key=dedup_key,
+        )
+        raise A2ACallPending(row.a2a_task_id)
+
+    def _a2a_result_data_from_payload(self, payload: JsonObject) -> JsonObject:
+        """result_data из stored webhook-результата — тот же extraction, что у A2ATaskResult."""
+        status = payload.get("status")
+        if status != "completed":
+            error = payload.get("error")
+            detail = error if isinstance(error, str) and error else "unknown"
+            raise A2AClientError(
+                f"CRM A2A task ended with status {status!r}: {detail}"
+            )
+        task = payload.get("task")
+        task_obj = (
+            require_json_object(task, "a2a.payload.task")
+            if isinstance(task, dict)
+            else {"artifacts": payload.get("artifacts") or []}
+        )
+        artifacts_value = payload.get("artifacts")
+        artifacts: list[JsonObject] = [
+            require_json_object(item, "a2a.payload.artifacts[]")
+            for item in artifacts_value
+        ] if isinstance(artifacts_value, list) else []
+        response_value = payload.get("response")
+        fake = A2ATaskResult(
+            task=task_obj,
+            artifacts=artifacts,
+            status="completed",
+            response=response_value if isinstance(response_value, str) else "",
+            raw={},
+        )
+        return self._extract_data_from_a2a_response(fake)
 
     def _extract_data_from_a2a_response(self, response: A2ATaskResult) -> JsonObject:
         """Structured JSON из artifacts, history и status text; telemetry node_* не побеждает."""
@@ -4873,21 +4953,25 @@ class EntityService:
         namespace: str | None,
     ) -> JsonObject:
         company_id = self._get_company_id()
-        settings = get_settings()
-        flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables: JsonObject = {
             **_crm_llm_interface_language_vars(),
             "notes_json": json.dumps(cards, ensure_ascii=False),
             "date": date_str,
             "namespace": self._normalize_namespace(namespace),
         }
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base}/flows/api/v1/crm",
+        return await self._call_crm_a2a_skill(
+            call_id=(
+                f"summarize_chunk:{date_str}:"
+                + _a2a_call_id_fragment(cards)
+            ),
             content="Daily summary: chunk",
             branch_id="summarize_chunk",
-            metadata={"variables": variables, "company_id": company_id},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
+            extra_metadata={"company_id": company_id},
         )
-        return self._extract_data_from_a2a_response(response)
 
     async def _call_summarize_merge_skill(
         self,
@@ -4896,21 +4980,25 @@ class EntityService:
         namespace: str | None,
     ) -> JsonObject:
         company_id = self._get_company_id()
-        settings = get_settings()
-        flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables: JsonObject = {
             **_crm_llm_interface_language_vars(),
             "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
             "date": date_str,
             "namespace": self._normalize_namespace(namespace),
         }
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base}/flows/api/v1/crm",
+        return await self._call_crm_a2a_skill(
+            call_id=(
+                f"summarize_merge:{date_str}:"
+                + _a2a_call_id_fragment(partial_payloads)
+            ),
             content="Daily summary: merge partials",
             branch_id="summarize_merge",
-            metadata={"variables": variables, "company_id": company_id},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
+            extra_metadata={"company_id": company_id},
         )
-        return self._extract_data_from_a2a_response(response)
 
     async def _call_period_summarize_merge_skill(
         self,
@@ -4920,8 +5008,6 @@ class EntityService:
         namespace: str | None,
     ) -> JsonObject:
         company_id = self._get_company_id()
-        settings = get_settings()
-        flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables: JsonObject = {
             **_crm_llm_interface_language_vars(),
             "partials_json": json.dumps(partial_payloads, ensure_ascii=False),
@@ -4929,13 +5015,19 @@ class EntityService:
             "date_to": date_to,
             "namespace": self._normalize_namespace(namespace),
         }
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base}/flows/api/v1/crm",
+        return await self._call_crm_a2a_skill(
+            call_id=(
+                f"period_summarize_merge:{date_from}:{date_to}:"
+                + _a2a_call_id_fragment(partial_payloads)
+            ),
             content="Period summary: merge daily summaries",
             branch_id="period_summarize_merge",
-            metadata={"variables": variables, "company_id": company_id},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
+            extra_metadata={"company_id": company_id},
         )
-        return self._extract_data_from_a2a_response(response)
 
     async def call_summarize_attachment(self, text: str, filename: str) -> str:
         """Суммаризировать текст вложения до компактного резюме через CRM flows skill.
@@ -4967,20 +5059,24 @@ class EntityService:
 
     async def _summarize_attachment_fragment(self, text: str, filename: str) -> str:
         company_id = self._get_company_id()
-        settings = get_settings()
-        flows_base = settings.server.get_flows_service_url().rstrip("/")
         variables: JsonObject = {
             **_crm_llm_interface_language_vars(),
             "text": text,
             "filename": filename,
         }
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base}/flows/api/v1/crm",
+        data = await self._call_crm_a2a_skill(
+            call_id=(
+                f"summarize_attachment:{filename}:"
+                + _a2a_call_id_fragment(text)
+            ),
             content="Summarize attachment",
             branch_id="summarize_attachment",
-            metadata={"variables": variables, "company_id": company_id},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
+            extra_metadata={"company_id": company_id},
         )
-        data = self._extract_data_from_a2a_response(response)
         summary = data.get("summary", "")
         if not isinstance(summary, str):
             raise ValueError(
@@ -6211,9 +6307,6 @@ class EntityService:
         self, extracted: AIExtractedEntity, candidate: CRMEntity
     ) -> DeduplicateResult:
         """Вызывает агента со skill deduplicate для сравнения сущностей"""
-        settings = get_settings()
-        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
-
         variables: JsonObject = {
             **_crm_llm_interface_language_vars(),
             "extracted_entity": {
@@ -6232,14 +6325,17 @@ class EntityService:
             },
         }
 
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base_url}/flows/api/v1/crm",
+        result_data = await self._call_crm_a2a_skill(
+            call_id=(
+                f"deduplicate:{extracted.name}:{candidate.entity_id}"
+            ),
             content=f"Compare: {extracted.name} vs {candidate.name}",
             branch_id="deduplicate",
-            metadata={"variables": variables},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
         )
-
-        result_data = self._extract_data_from_a2a_response(response)
         for _ in range(8):
             if "is_duplicate" in result_data or result_data.get("action"):
                 break
@@ -6336,9 +6432,6 @@ class EntityService:
         chunk: list[tuple[int, AIExtractedEntity, CRMEntity, float]],
     ) -> dict[int, DeduplicateResult]:
         """Один LLM-вызов для нескольких пар (извлечённая vs кандидат из RAG)."""
-        settings = get_settings()
-        flows_base_url = settings.server.get_flows_service_url().rstrip("/")
-
         pairs_for_prompt: list[JsonObject] = []
         for pair_index, (list_idx, extracted, candidate, similarity) in enumerate(chunk):
             pairs_for_prompt.append(
@@ -6368,14 +6461,18 @@ class EntityService:
             "pairs_json": json.dumps(pairs_for_prompt, ensure_ascii=False),
         }
 
-        response = await self._a2a_client.send_task(
-            base_url=f"{flows_base_url}/flows/api/v1/crm",
+        raw = await self._call_crm_a2a_skill(
+            call_id=(
+                "deduplicate_batch:"
+                + _a2a_call_id_fragment(pairs_for_prompt)
+            ),
             content="Batch deduplicate entity pairs",
             branch_id="deduplicate_batch",
-            metadata={"variables": variables},
+            variables=variables,
+            deadline_seconds=float(
+                get_crm_settings().analysis_a2a_timeout_seconds
+            ),
         )
-
-        raw = self._extract_data_from_a2a_response(response)
         result_data = self._normalize_deduplicate_batch_dict(raw)
         decisions_raw = result_data["decisions"]
         if not isinstance(decisions_raw, list):

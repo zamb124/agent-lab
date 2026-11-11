@@ -584,6 +584,14 @@ class ExecutionState(FlexibleBaseModel):
     # ========================================================================
 
     interrupt: InterruptData | None = Field(default=None, description="Данные прерывания")
+    remote_wait: JsonObject | None = Field(
+        default=None,
+        description=(
+            "Flow припаркован на A2A remote-вызове "
+            "({node_id, activity_id, a2a_task_id, base_url}): durable activity "
+            "`started`, run завершён без терминала; continuation возобновляет."
+        ),
+    )
     interrupt_path: list[InterruptPathItem] = Field(
         default_factory=list,
         description="Путь к месту прерывания"

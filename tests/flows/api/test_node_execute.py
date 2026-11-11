@@ -72,8 +72,10 @@ async def external_api_server():
 
 @pytest.fixture
 async def remote_flow_server():
-    """Тестовый A2A сервер для remote_flow тестов."""
+    """Тестовый A2A сервер для remote_flow тестов (submit-only, SUBMITTED)."""
     public = {"base": "http://127.0.0.1:0"}
+    received: list[dict] = []
+    received_headers: list[dict] = []
 
     async def handle_agent_card(request):
         return web.json_response({
@@ -86,7 +88,7 @@ async def remote_flow_server():
                     "protocolVersion": "1.0",
                 }
             ],
-            "capabilities": {"streaming": False, "pushNotifications": False},
+            "capabilities": {"streaming": False, "pushNotifications": True},
             "defaultInputModes": ["text"],
             "defaultOutputModes": ["text"],
             "skills": [],
@@ -96,29 +98,16 @@ async def remote_flow_server():
     async def handle_send_task(request):
         data = await request.json()
         assert data["method"] == "SendMessage"
-        content = data["params"]["message"]["parts"][0]["text"]
-        metadata = data["params"].get("metadata")
-        if metadata is None:
-            response_text = f"Remote response: {content}"
-        else:
-            response_text = (
-                f"Remote response: {content}\n"
-                f"METADATA:{json.dumps(metadata, ensure_ascii=False, sort_keys=True)}"
-            )
-
+        received.append(data)
+        received_headers.append(dict(request.headers))
         return web.json_response({
             "jsonrpc": "2.0",
             "id": data["id"],
             "result": {
-                "id": data["id"],
+                "id": data["params"]["message"]["taskId"],
                 "contextId": data["params"]["message"]["contextId"],
-                "status": {"state": "TASK_STATE_COMPLETED"},
-                "artifacts": [
-                    {
-                        "artifactId": "remote-1",
-                        "parts": [{"text": response_text}],
-                    }
-                ],
+                "status": {"state": "TASK_STATE_SUBMITTED"},
+                "artifacts": [],
             },
         })
 
@@ -128,7 +117,11 @@ async def remote_flow_server():
 
     async with ephemeral_web_server(app) as base_url:
         public["base"] = base_url
-        yield base_url
+        yield {
+            "url": base_url,
+            "received": received,
+            "headers": received_headers,
+        }
 
 
 def assert_execute_response(data, expected_success: bool, expected_error: str | None = None):
@@ -991,18 +984,24 @@ class TestExternalAPINode:
 
 
 class TestRemoteFlowNode:
-    """Тесты RemoteFlowNode (node_type: 'remote_flow')."""
+    """Тесты RemoteFlowNode (node_type: 'remote_flow') — submit-only семантика.
+
+    Preview одиночной ноды не резюмится: execute возвращает
+    ``remote_status="submitted"`` + ``remote_wait`` с a2a_task_id; результат
+    придёт webhook'ом в pending-continuation. Проверяем и провод
+    (SendMessage → сервер), и честный ответ preview.
+    """
 
     @pytest.mark.asyncio
     async def test_remote_flow_basic(self, client, app, remote_flow_server):
-        """Простой вызов."""
+        """Submit: SendMessage ушёл, preview вернул submitted + remote_wait."""
         state = {"content": "Hello from test"}
 
         response = await client.post(
             "/flows/api/v1/code/execute",
             json={
                 "node_type": "remote_flow",
-                "node_config": {"url": remote_flow_server},
+                "node_config": {"url": remote_flow_server["url"]},
                 "state": state
             }
         )
@@ -1010,13 +1009,21 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        assert "response" in data["output_state"]
-        assert "Remote response: Hello from test" in data["output_state"]["response"]
-        assert data["output_state"].get("remote_status") == "completed"
+        output = data["output_state"]
+        assert output["remote_status"] == "submitted"
+        assert output["remote_wait"]["a2a_task_id"]
+        assert output["remote_wait"]["base_url"] == remote_flow_server["url"]
+
+        assert len(remote_flow_server["received"]) == 1
+        sent = remote_flow_server["received"][0]
+        assert sent["params"]["message"]["parts"][0]["text"] == "Hello from test"
+        configuration = sent["params"]["configuration"]
+        assert configuration["returnImmediately"] is True
+        assert "taskPushNotificationConfig" in configuration
 
     @pytest.mark.asyncio
     async def test_remote_flow_with_skill_id(self, client, app, remote_flow_server):
-        """branch_id передаётся."""
+        """branch_id уходит в metadata.branch."""
         state = {"content": "Test"}
 
         response = await client.post(
@@ -1024,7 +1031,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "branch_id": "custom_skill"
                 },
                 "state": state
@@ -1034,7 +1041,9 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        assert "response" in data["output_state"]
+        assert len(remote_flow_server["received"]) == 1
+        metadata = remote_flow_server["received"][0]["params"]["metadata"]
+        assert metadata["branch"] == "custom_skill"
 
     @pytest.mark.asyncio
     async def test_remote_flow_metadata_template_resolved(self, client, app, remote_flow_server):
@@ -1050,7 +1059,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "branch_id": "custom_skill",
                     "metadata_template": json.dumps(
                         {
@@ -1070,15 +1079,14 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        response_text = data["output_state"]["response"]
-        assert "Hello meta" in response_text
-        assert "METADATA:" in response_text
-        metadata_json = response_text.split("METADATA:", 1)[1]
-        metadata = json.loads(metadata_json)
+        assert len(remote_flow_server["received"]) == 1
+        metadata = remote_flow_server["received"][0]["params"]["metadata"]
         assert metadata["branch"] == "custom_skill"
         assert metadata["flag"] is True
         assert metadata["variables"]["order_id"] == "ord-42"
         assert metadata["variables"]["token"] == "tok-secret"
+
+        remote_flow_server["received"].clear()
         state = {"content": "Mapped content"}
 
         response = await client.post(
@@ -1086,7 +1094,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "input_mapping": {"content": "@state:content"}
                 },
                 "state": state
@@ -1096,7 +1104,9 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        assert "Mapped content" in data["output_state"]["response"]
+        assert len(remote_flow_server["received"]) == 1
+        sent = remote_flow_server["received"][0]
+        assert sent["params"]["message"]["parts"][0]["text"] == "Mapped content"
 
     @pytest.mark.asyncio
     async def test_remote_flow_input_mapping_state_field(self, client, app, remote_flow_server):
@@ -1108,7 +1118,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "input_mapping": {"content": "@state:user_query"}
                 },
                 "state": state
@@ -1118,7 +1128,9 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        assert "Query from state field" in data["output_state"]["response"]
+        assert len(remote_flow_server["received"]) == 1
+        sent = remote_flow_server["received"][0]
+        assert sent["params"]["message"]["parts"][0]["text"] == "Query from state field"
 
     @pytest.mark.asyncio
     async def test_remote_flow_input_mapping_messages(self, client, app, remote_flow_server):
@@ -1132,7 +1144,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "input_mapping": {"content": "@state:last_message"}
                 },
                 "state": state
@@ -1142,8 +1154,9 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
-        assert "response" in data["output_state"]
-        assert "Last user message" in data["output_state"]["response"]
+        assert len(remote_flow_server["received"]) == 1
+        sent = remote_flow_server["received"][0]
+        assert sent["params"]["message"]["parts"][0]["text"] == "Last user message text"
 
     @pytest.mark.asyncio
     async def test_remote_flow_auth_headers(self, client, app, remote_flow_server):
@@ -1155,7 +1168,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "headers": {"Authorization": "Bearer token-123"}
                 },
                 "state": state
@@ -1165,6 +1178,8 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
+        assert len(remote_flow_server["headers"]) == 1
+        assert remote_flow_server["headers"][0].get("Authorization") == "Bearer token-123"
 
     @pytest.mark.asyncio
     async def test_remote_flow_auth_var_resolution(self, client, app, remote_flow_server):
@@ -1179,7 +1194,7 @@ class TestRemoteFlowNode:
             json={
                 "node_type": "remote_flow",
                 "node_config": {
-                    "url": remote_flow_server,
+                    "url": remote_flow_server["url"],
                     "headers": {"Authorization": "Bearer @var:remote_token"}
                 },
                 "state": state
@@ -1189,6 +1204,11 @@ class TestRemoteFlowNode:
 
         data = response.json()
         assert_execute_response(data, expected_success=True)
+        assert len(remote_flow_server["headers"]) == 1
+        assert (
+            remote_flow_server["headers"][0].get("Authorization")
+            == "Bearer var-token-456"
+        )
 
     @pytest.mark.asyncio
     async def test_remote_flow_missing_url(self, client, app):

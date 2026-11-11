@@ -48,6 +48,9 @@ INTERRUPTED_A2A_TASK_STATES: frozenset[A2ATaskStateValue] = frozenset(
     }
 )
 
+# Платформенные kebab-состояния открытой (не терминальной) A2A-задачи.
+A2A_OPEN_TASK_STATES: frozenset[str] = frozenset({"submitted", "working"})
+
 
 def platform_task_state_to_a2a(state: PlatformTaskStateName) -> A2ATaskStateValue:
     """Конвертирует platform kebab (`completed`, `input-required`, …) в A2A enum value."""
@@ -106,6 +109,7 @@ def make_task_status(
 __all__ = [
     "PlatformTaskStateName",
     "A2ATaskStateValue",
+    "A2A_OPEN_TASK_STATES",
     "TERMINAL_A2A_TASK_STATES",
     "INTERRUPTED_A2A_TASK_STATES",
     "platform_task_state_to_a2a",

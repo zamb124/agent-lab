@@ -39,6 +39,12 @@ from apps.stock.models import (
 from apps.stock.models.common import STOCK_DB, StockMoveSpec
 from apps.stock.models.enums import STOCK_QUANT_USAGES, StockRemovalStrategy
 from apps.stock.services.placement_service import PlacementService
+from apps.stock.tasks.task_names import STOCK_TRANSFER_COMMAND_RESUME
+from core.a2a.submit import (
+    a2a_resume_context_active,
+    clear_a2a_resume_context,
+    set_a2a_resume_context,
+)
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import LaneRun, publish_lane_run
 from core.request_scope import command_idempotency_key
@@ -52,6 +58,47 @@ class StockMoveEngine:
 
     def __init__(self, placement: PlacementService) -> None:
         self._placement: PlacementService = placement
+
+    async def get_transfer(
+        self, *, company_id: str, transfer_id: str
+    ) -> StockTransfer:
+        """Накладная по id — для op'ов, отвечающих текущим состоянием."""
+        return await self._require_transfer(company_id, transfer_id)
+
+    def _a2a_resume_guard(
+        self,
+        *,
+        command: str,
+        company_id: str,
+        transfer_id: str,
+        idempotency_key: str,
+        actor_user_id: str,
+        create_backorder: bool | None = None,
+    ):
+        """Resume-контекст для async putaway-вызовов внутри команды.
+
+        Внешняя команда (confirm, тянущий assign→validate цепочкой) ставит
+        контекст первой — вложенные вызовы его не перебивают, чтобы
+        webhook-resume повторил именно исходную команду. ``nonce`` —
+        resolved idempotency_key: re-run той же команды попадает в тот же
+        ``dedup_key`` pending-ряда.
+        """
+        if a2a_resume_context_active():
+            return None
+        resume_kwargs: dict[str, str | bool] = {
+            "company_id": company_id,
+            "transfer_id": transfer_id,
+            "command": command,
+            "idempotency_key": idempotency_key,
+            "actor_user_id": actor_user_id,
+        }
+        if create_backorder is not None:
+            resume_kwargs["create_backorder"] = create_backorder
+        return set_a2a_resume_context(
+            resume_task=STOCK_TRANSFER_COMMAND_RESUME.name,
+            resume_kwargs=resume_kwargs,
+            run_nonce=idempotency_key,
+        )
 
 
     def _span(self, name: str, *, company_id: str, warehouse_id: str | None, resource_id: str | None = None, extra: dict[str, OtelAttributeValue] | None = None):
@@ -174,54 +221,68 @@ class StockMoveEngine:
         частичном резерве автопроводка НЕ включается — нехватку решает
         человек (иначе слепая доказка).
         """
-        transfer = await self._require_transfer(company_id, transfer_id)
-        operation_type = await self._require_operation_type(
-            company_id, transfer.operation_type_id
-        )
-        reserve = operation_type.reservation_policy == ReservationPolicy.AT_CONFIRM
-        dests: dict[str, str] = {}
-        decisions: list[StockDecision] = []
-        if reserve:
-            dests, decisions = await self._resolve_dests(
-                company_id, transfer, operation_type
-            )
-        async with self._span(
-            "stock.transfer.confirm",
+        resolved_key = command_idempotency_key(idempotency_key)
+        guard = self._a2a_resume_guard(
+            command="confirm",
             company_id=company_id,
-            warehouse_id=transfer.warehouse_id,
-            resource_id=transfer_id,
-        ):
-            run = await StockTransfer.confirm_in_lane(
-                company_id=company_id,
-                transfer_id=transfer_id,
-                reserve=reserve,
-                dest_overrides=dests,
-                decisions=decisions,
-                removal_strategies=await self._resolve_strategies(
-                    company_id, transfer
-                ),
-                idempotency_key=command_idempotency_key(idempotency_key),
-                actor_user_id=actor_user_id,
-                command_type=command_type,
+            transfer_id=transfer_id,
+            idempotency_key=resolved_key,
+            actor_user_id=actor_user_id,
+        )
+        try:
+            transfer = await self._require_transfer(company_id, transfer_id)
+            operation_type = await self._require_operation_type(
+                company_id, transfer.operation_type_id
             )
-        await publish_lane_run(run, using=STOCK_DB)
-        confirmed = run.result
-        if operation_type.auto_validate:
-            assigned = await self.assign_transfer(
-                company_id=company_id,
-                transfer_id=transfer_id,
-                idempotency_key=idempotency_key,
-                actor_user_id=actor_user_id,
+            reserve = (
+                operation_type.reservation_policy == ReservationPolicy.AT_CONFIRM
             )
-            if assigned.state == StockTransferState.ASSIGNED:
-                confirmed = await self.validate_transfer(
+            dests: dict[str, str] = {}
+            decisions: list[StockDecision] = []
+            if reserve:
+                dests, decisions = await self._resolve_dests(
+                    company_id, transfer, operation_type, actor_user_id
+                )
+            async with self._span(
+                "stock.transfer.confirm",
+                company_id=company_id,
+                warehouse_id=transfer.warehouse_id,
+                resource_id=transfer_id,
+            ):
+                run = await StockTransfer.confirm_in_lane(
                     company_id=company_id,
                     transfer_id=transfer_id,
-                    idempotency_key=idempotency_key,
+                    reserve=reserve,
+                    dest_overrides=dests,
+                    decisions=decisions,
+                    removal_strategies=await self._resolve_strategies(
+                        company_id, transfer
+                    ),
+                    idempotency_key=resolved_key,
                     actor_user_id=actor_user_id,
-                    create_backorder=True,
+                    command_type=command_type,
                 )
-        return confirmed
+            await publish_lane_run(run, using=STOCK_DB)
+            confirmed = run.result
+            if operation_type.auto_validate:
+                assigned = await self.assign_transfer(
+                    company_id=company_id,
+                    transfer_id=transfer_id,
+                    idempotency_key=resolved_key,
+                    actor_user_id=actor_user_id,
+                )
+                if assigned.state == StockTransferState.ASSIGNED:
+                    confirmed = await self.validate_transfer(
+                        company_id=company_id,
+                        transfer_id=transfer_id,
+                        idempotency_key=resolved_key,
+                        actor_user_id=actor_user_id,
+                        create_backorder=True,
+                    )
+            return confirmed
+        finally:
+            if guard is not None:
+                clear_a2a_resume_context(guard)
 
     async def assign_transfer(
         self,
@@ -239,39 +300,52 @@ class StockMoveEngine:
         заказ «видит» свой товар на полках, другие документы его не
         заберут.
         """
-        transfer = await self._require_transfer(company_id, transfer_id)
-        operation_type = await self._require_operation_type(
-            company_id, transfer.operation_type_id
-        )
-        dests, decisions = await self._resolve_dests(
-            company_id, transfer, operation_type
-        )
-        async with self._span(
-            "stock.transfer.assign",
+        resolved_key = command_idempotency_key(idempotency_key)
+        guard = self._a2a_resume_guard(
+            command="assign",
             company_id=company_id,
-            warehouse_id=transfer.warehouse_id,
-            resource_id=transfer_id,
-        ):
-            run = await StockTransfer.assign_in_lane(
-                company_id=company_id,
-                transfer_id=transfer_id,
-                dest_overrides=dests,
-                decisions=decisions,
-                removal_strategies=await self._resolve_strategies(
-                    company_id, transfer
-                ),
-                idempotency_key=command_idempotency_key(idempotency_key),
-                actor_user_id=actor_user_id,
-                command_type=command_type,
+            transfer_id=transfer_id,
+            idempotency_key=resolved_key,
+            actor_user_id=actor_user_id,
+        )
+        try:
+            transfer = await self._require_transfer(company_id, transfer_id)
+            operation_type = await self._require_operation_type(
+                company_id, transfer.operation_type_id
             )
-        await publish_lane_run(run, using=STOCK_DB)
-        return run.result
+            dests, decisions = await self._resolve_dests(
+                company_id, transfer, operation_type, actor_user_id
+            )
+            async with self._span(
+                "stock.transfer.assign",
+                company_id=company_id,
+                warehouse_id=transfer.warehouse_id,
+                resource_id=transfer_id,
+            ):
+                run = await StockTransfer.assign_in_lane(
+                    company_id=company_id,
+                    transfer_id=transfer_id,
+                    dest_overrides=dests,
+                    decisions=decisions,
+                    removal_strategies=await self._resolve_strategies(
+                        company_id, transfer
+                    ),
+                    idempotency_key=resolved_key,
+                    actor_user_id=actor_user_id,
+                    command_type=command_type,
+                )
+            await publish_lane_run(run, using=STOCK_DB)
+            return run.result
+        finally:
+            if guard is not None:
+                clear_a2a_resume_context(guard)
 
     async def _resolve_dests(
         self,
         company_id: str,
         transfer: StockTransfer,
         operation_type: StockOperationType,
+        actor_user_id: str,
     ) -> tuple[dict[str, str], list[StockDecision]]:
         """Решение «куда ставить приход» до входа в транзакцию.
 
@@ -311,6 +385,7 @@ class StockMoveEngine:
                 operation_type=operation_type,
                 move=move,
                 owner_entity_id=transfer.owner_entity_id,
+                actor_user_id=actor_user_id,
             )
             if decision is None:
                 continue
@@ -362,38 +437,51 @@ class StockMoveEngine:
         по политике backorder типа операции (``always``/``never``/
         ``ask`` через ``create_backorder``).
         """
-        transfer = await self._require_transfer(company_id, transfer_id)
-        operation_type = await self._require_operation_type(
-            company_id, transfer.operation_type_id
-        )
-        dests, decisions = await self._resolve_dests(
-            company_id, transfer, operation_type
-        )
-        async with self._span(
-            "stock.transfer.validate",
+        resolved_key = command_idempotency_key(idempotency_key)
+        guard = self._a2a_resume_guard(
+            command="validate",
             company_id=company_id,
-            warehouse_id=transfer.warehouse_id,
-            resource_id=transfer_id,
-        ):
-            run = await StockTransfer.validate_in_lane(
-                company_id=company_id,
-                transfer_id=transfer_id,
-                reserve_dests=dests,
-                decisions=decisions,
-                removal_strategies=await self._resolve_strategies(
-                    company_id, transfer
-                ),
-                backorder_policy=operation_type.backorder_policy,
-                operation_code=operation_type.code.value,
-                create_backorder=create_backorder,
-                idempotency_key=command_idempotency_key(idempotency_key),
-                actor_user_id=actor_user_id,
-                command_type=command_type,
-                causation_id=causation_id,
+            transfer_id=transfer_id,
+            idempotency_key=resolved_key,
+            actor_user_id=actor_user_id,
+            create_backorder=create_backorder,
+        )
+        try:
+            transfer = await self._require_transfer(company_id, transfer_id)
+            operation_type = await self._require_operation_type(
+                company_id, transfer.operation_type_id
             )
-        await publish_lane_run(run, using=STOCK_DB)
-        await self.advance_chains(company_id, transfer.transfer_id)
-        return run.result
+            dests, decisions = await self._resolve_dests(
+                company_id, transfer, operation_type, actor_user_id
+            )
+            async with self._span(
+                "stock.transfer.validate",
+                company_id=company_id,
+                warehouse_id=transfer.warehouse_id,
+                resource_id=transfer_id,
+            ):
+                run = await StockTransfer.validate_in_lane(
+                    company_id=company_id,
+                    transfer_id=transfer_id,
+                    reserve_dests=dests,
+                    decisions=decisions,
+                    removal_strategies=await self._resolve_strategies(
+                        company_id, transfer
+                    ),
+                    backorder_policy=operation_type.backorder_policy,
+                    operation_code=operation_type.code.value,
+                    create_backorder=create_backorder,
+                    idempotency_key=resolved_key,
+                    actor_user_id=actor_user_id,
+                    command_type=command_type,
+                    causation_id=causation_id,
+                )
+            await publish_lane_run(run, using=STOCK_DB)
+            await self.advance_chains(company_id, transfer.transfer_id)
+            return run.result
+        finally:
+            if guard is not None:
+                clear_a2a_resume_context(guard)
 
     async def advance_chains(
         self, company_id: str, transfer_id: str

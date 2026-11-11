@@ -64,10 +64,10 @@ def test_parse_stt_body_no_default_and_no_model_raises_unprocessable():
 def test_parse_tts_body_uses_default_and_accepts_wav_response_format(unique_id):
     parsed = parse_tts_body(
         {"input": "Привет, мир", "response_format": "wav"},
-        default_api_model_id=f"silero-tts-{unique_id}",
+        default_api_model_id=f"qwen-tts-{unique_id}",
     )
     assert parsed.text == "Привет, мир"
-    assert parsed.model == f"silero-tts-{unique_id}"
+    assert parsed.model == f"qwen-tts-{unique_id}"
     assert parsed.voice_override is None
     assert parsed.response_format == "wav"
 
@@ -76,7 +76,7 @@ def test_parse_tts_body_unknown_response_format_raises_unprocessable(unique_id):
     with pytest.raises(WsCommandError) as exc_info:
         parse_tts_body(
             {"input": "Привет, мир", "response_format": "FLAC"},
-            default_api_model_id=f"silero-tts-{unique_id}",
+            default_api_model_id=f"qwen-tts-{unique_id}",
         )
     assert exc_info.value.code == "unprocessable"
 
@@ -85,11 +85,11 @@ def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
     parsed = parse_tts_body(
         {
             "input": "Тест",
-            "model": f"silero-tts-{unique_id}",
+            "model": f"qwen-tts-{unique_id}",
             "voice": "Baya",
             "response_format": "pcm",
         },
-        default_api_model_id=f"silero-tts-{unique_id}",
+        default_api_model_id=f"qwen-tts-{unique_id}",
     )
     assert parsed.voice_override == "baya"
 
@@ -99,11 +99,11 @@ def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
     parsed = parse_tts_body(
         {
             "input": "Тест",
-            "model": f"silero-tts-{unique_id}",
+            "model": f"qwen-tts-{unique_id}",
             "voice": "baya",
             "response_format": "pcm",
         },
-        default_api_model_id=f"silero-tts-{unique_id}",
+        default_api_model_id=f"qwen-tts-{unique_id}",
     )
     assert parsed.voice_override == "baya"
     assert parsed.response_format == "pcm"
@@ -112,7 +112,7 @@ def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
 def test_parse_tts_body_empty_input_raises_unprocessable(unique_id):
     with pytest.raises(WsCommandError) as exc_info:
         parse_tts_body(
-            {"input": "   "}, default_api_model_id=f"silero-tts-{unique_id}"
+            {"input": "   "}, default_api_model_id=f"qwen-tts-{unique_id}"
         )
     assert exc_info.value.code == "unprocessable"
 
@@ -121,7 +121,7 @@ def test_parse_tts_body_replaces_lone_surrogate_so_unicode_is_safe_for_tts():
     """Литерал U+D800 ломает UTF-8 в FFI; parse убирает через UTF-16 roundtrip."""
     parsed = parse_tts_body(
         {"input": "a" + chr(0xD800) + "b"},
-        default_api_model_id="silero-tts-default",
+        default_api_model_id="qwen-tts-default",
     )
     assert parsed.text == "a" + "\ufffd" + "b"
     assert chr(0xD800) not in parsed.text
@@ -131,20 +131,20 @@ def test_parse_tts_body_strips_format_chars_control_and_keeps_newline():
     text_in = "x\u200by\nz"
     parsed = parse_tts_body(
         {"input": text_in},
-        default_api_model_id="silero-tts-default",
+        default_api_model_id="qwen-tts-default",
     )
     assert "\u200b" not in parsed.text
     assert "\n" in parsed.text
     assert parsed.text == "xy\nz"
     zwj = parse_tts_body(
         {"input": "a\u200db"},
-        default_api_model_id="silero-tts-default",
+        default_api_model_id="qwen-tts-default",
     )
     assert "\u200d" not in zwj.text
     assert zwj.text == "ab"
     no_null = parse_tts_body(
         {"input": "a" + chr(0) + "b"},
-        default_api_model_id="silero-tts-default",
+        default_api_model_id="qwen-tts-default",
     )
     assert chr(0) not in no_null.text
     assert no_null.text == "ab"
@@ -154,21 +154,21 @@ def test_parse_vad_body_default_and_explicit_sample_rate(unique_id):
     pcm = _generate_pcm16_silence(sample_rate=16000, duration_s=0.05)
 
     parsed_default = parse_vad_body(
-        {"audio": pcm}, default_api_model_id=f"silero-{unique_id}"
+        {"audio": pcm}, default_api_model_id=f"vad-{unique_id}"
     )
-    assert parsed_default.model == f"silero-{unique_id}"
+    assert parsed_default.model == f"vad-{unique_id}"
     assert parsed_default.sample_rate_override is None
 
     parsed_explicit = parse_vad_body(
         {"file": pcm, "sample_rate": 8000},
-        default_api_model_id=f"silero-{unique_id}",
+        default_api_model_id=f"vad-{unique_id}",
     )
     assert parsed_explicit.sample_rate_override == 8000
 
 
 def test_parse_vad_body_missing_audio_raises_unprocessable(unique_id):
     with pytest.raises(WsCommandError) as exc_info:
-        parse_vad_body({}, default_api_model_id=f"silero-{unique_id}")
+        parse_vad_body({}, default_api_model_id=f"vad-{unique_id}")
     assert exc_info.value.code == "unprocessable"
 
 

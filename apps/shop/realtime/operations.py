@@ -28,8 +28,7 @@ from apps.shop.models import (
     order_status_label,
 )
 from apps.shop.models.api import (
-    ShopAiParseMenuResponse,
-    ShopAiSuggestOptionsResponse,
+    ShopAiCallResponse,
     ShopBadgeIconsResponse,
     ShopBadgeResponse,
     ShopBannerCreateRequest,
@@ -96,8 +95,10 @@ from apps.shop.models.enums import (
     ShopLoyaltyRewardKind,
     ShopOrderStatus,
 )
+from apps.shop.models.common import new_id
 from apps.shop.services.feed_service import feedback_response
 from apps.shop.tasks.task_names import (
+    SHOP_AI_CALL,
     SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_BACK_IN_STOCK,
     SHOP_PROVISION_DOMAIN,
@@ -116,12 +117,14 @@ from core.models import StrictBaseModel
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.request_scope import (
+    CompanyScope,
     optional_customer,
     require_company_admin,
     require_company_viewer,
     require_customer,
 )
 from core.tasks import enqueue
+from core.types import JsonValue
 from core.utils.geo import is_valid_delivery_zone
 from core.websocket import (
     EmptyPayload,
@@ -442,14 +445,6 @@ class ShopAiShopPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=300)
     description: str = Field(default="", max_length=1000)
-
-
-class ShopAiTextResponse(StrictBaseModel):
-    text: str
-
-
-class ShopAiFileResponse(StrictBaseModel):
-    file_id: str
 
 
 class ShopAiBatchResponse(StrictBaseModel):
@@ -1531,68 +1526,88 @@ async def op_public_storefront_geo(
 # --- AI-операции (канонический core.ai runtime, биллинг внутри клиентов) ---
 
 
+async def _ai_call(
+    *, verb: str, scope: CompanyScope, shop_id: str, kwargs: dict[str, JsonValue]
+) -> ShopAiCallResponse:
+    """Постановка AI-вызова в TaskIQ; результат — ``shop/ai_call/finished`` по ``call_id``."""
+    call_id = new_id("aicall")
+    _ = await enqueue(
+        SHOP_AI_CALL,
+        verb=verb,
+        call_id=call_id,
+        company_id=scope.company_id,
+        user_id=scope.user_id,
+        shop_id=shop_id,
+        kwargs=kwargs,
+    )
+    return ShopAiCallResponse(call_id=call_id)
+
+
 async def op_ai_describe_product(
     payload: ShopAiDescribePayload, *, user: User, di: Di
-) -> ShopAiTextResponse:
+) -> ShopAiCallResponse:
     """AI-описание блюда: по названию, при наличии — vision по фото."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        text = await di.ai_service.describe_product(
-            name=payload.name,
-            category_name=payload.category_name,
-            photo_file_id=payload.photo_file_id,
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiTextResponse(text=text)
+    return await _ai_call(
+        verb="describe_product",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={
+            "name": payload.name,
+            "category_name": payload.category_name,
+            "photo_file_id": payload.photo_file_id,
+        },
+    )
 
 
 async def op_ai_suggest_options(
     payload: ShopAiSuggestOptionsPayload, *, user: User, di: Di
-) -> ShopAiSuggestOptionsResponse:
+) -> ShopAiCallResponse:
     """AI-предложение опций-модификаторов по названию блюда."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        items = await di.ai_service.suggest_options(
-            product_name=payload.product_name, group_name=payload.group_name
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiSuggestOptionsResponse(items=items)
+    return await _ai_call(
+        verb="suggest_options",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={
+            "product_name": payload.product_name,
+            "group_name": payload.group_name,
+        },
+    )
 
 
 async def op_ai_enhance_photo(
     payload: ShopAiEnhancePhotoPayload, *, user: User, di: Di
-) -> ShopAiFileResponse:
+) -> ShopAiCallResponse:
     """Улучшение фото блюда через image_gen — вернёт новый file_id."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        file_id = await di.ai_service.enhance_product_photo(file_id=payload.file_id)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiFileResponse(file_id=file_id)
+    return await _ai_call(
+        verb="enhance_product_photo",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={"file_id": payload.file_id},
+    )
 
 
 async def op_ai_generate_photo(
     payload: ShopAiGeneratePhotoPayload, *, user: User, di: Di
-) -> ShopAiFileResponse:
+) -> ShopAiCallResponse:
     """Генерация фото товара с нуля — вернёт file_id."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        file_id = await di.ai_service.generate_product_photo(
-            name=payload.name, description=payload.description
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiFileResponse(file_id=file_id)
+    return await _ai_call(
+        verb="generate_product_photo",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={"name": payload.name, "description": payload.description},
+    )
 
 
 async def op_ai_describe_batch(
@@ -1614,67 +1629,71 @@ async def op_ai_describe_batch(
 
 async def op_ai_parse_menu(
     payload: ShopAiParseMenuPayload, *, user: User, di: Di
-) -> ShopAiParseMenuResponse:
+) -> ShopAiCallResponse:
     """AI-разбор свободного текста меню в позиции каталога (импорт-превью)."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        items = await di.ai_service.parse_menu(text=payload.text)
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiParseMenuResponse(items=items)
+    return await _ai_call(
+        verb="parse_menu",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={"text": payload.text},
+    )
 
 
 async def op_ai_describe_shop(
     payload: ShopAiShopPayload, *, user: User, di: Di
-) -> ShopAiTextResponse:
+) -> ShopAiCallResponse:
     """AI-описание магазина для витрины (улучшает черновик, если передан)."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     shop = await _shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        text = await di.ai_service.describe_shop(
-            name=payload.name, description=payload.description, city=shop.city or ""
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiTextResponse(text=text)
+    return await _ai_call(
+        verb="describe_shop",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={
+            "name": payload.name,
+            "description": payload.description,
+            "city": shop.city or "",
+        },
+    )
 
 
 async def op_ai_generate_cover(
     payload: ShopAiShopPayload, *, user: User, di: Di
-) -> ShopAiFileResponse:
+) -> ShopAiCallResponse:
     """AI-генерация обложки витрины — вернёт file_id."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        file_id = await di.ai_service.generate_shop_cover(
-            name=payload.name, description=payload.description
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiFileResponse(file_id=file_id)
+    return await _ai_call(
+        verb="generate_shop_cover",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={"name": payload.name, "description": payload.description},
+    )
 
 
 async def op_ai_generate_logo(
     payload: ShopAiShopPayload, *, user: User, di: Di
-) -> ShopAiFileResponse:
+) -> ShopAiCallResponse:
     """AI-генерация логотипа витрины — вернёт file_id."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    try:
-        file_id = await di.ai_service.generate_shop_logo(
-            name=payload.name, description=payload.description
-        )
-    except PlatformNotFoundError as exc:
-        raise_not_found(exc)
-    return ShopAiFileResponse(file_id=file_id)
+    return await _ai_call(
+        verb="generate_shop_logo",
+        scope=scope,
+        shop_id=payload.shop_id,
+        kwargs={"name": payload.name, "description": payload.description},
+    )
 
 
-async def op_ai_autofill(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
+async def op_ai_autofill(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ShopAiCallResponse:
     """AI-оформление витрины одной командой: описание и обложка в пустые поля.
 
     Заполненные вручную поля не перетираются — точечная перегенерация
@@ -1682,22 +1701,10 @@ async def op_ai_autofill(payload: ShopIdPayload, *, user: User, di: Di) -> ShopR
     """
     scope = await require_company_admin(di.authz_service)
     _ = user
-    shop = await _shop_in_scope(di, scope.company_id, payload.shop_id)
-    patch = ShopUpdateRequest()
-    description = shop.description or ""
-    if not description:
-        description = await di.ai_service.describe_shop(name=shop.name, city=shop.city or "")
-    patch.description = description
-    if not shop.cover_file_id:
-        patch.cover_file_id = await di.ai_service.generate_shop_cover(
-            name=shop.name, description=description
-        )
-    updated = await di.shop_service.update_shop(scope.company_id, shop.shop_id, patch)
-    await publish_shop_event(
-        SHOP_SHOP_UPDATED, updated.shop_id, updated.slug, updated.status, scope.company_id
+    _ = await _shop_in_scope(di, scope.company_id, payload.shop_id)
+    return await _ai_call(
+        verb="autofill", scope=scope, shop_id=payload.shop_id, kwargs={}
     )
-    await _enqueue_rebuild(di, updated.shop_id, updated.slug)
-    return await _shop_response(updated, di)
 
 
 async def _shop_in_scope(di: Di, company_id: str, shop_id: str) -> Shop:

@@ -717,7 +717,7 @@ class TTSProvidersConfig(BaseModel):
     provider: SpeechProvider = "litserve"
     default_model: str | None = Field(
         default=None,
-        description="OpenAI-совместимый id модели по умолчанию (например `silero-tts-v5-5-ru`).",
+        description="OpenAI-совместимый id модели по умолчанию (например `qwen3-tts-1.7b-customvoice-ru`).",
     )
     default_voice: str | None = None
     default_response_format: Literal["wav", "mp3", "ogg", "pcm"] = "wav"
@@ -1093,62 +1093,78 @@ class ProviderLitserveSTTModelEntry(BaseModel):
     )
 
 
-SILERO_TTS_RU_V5_BUNDLES: frozenset[str] = frozenset(
-    ("v5_ru", "v5_2_ru", "v5_3_ru", "v5_4_ru", "v5_5_ru")
+# Спикеры checkpoint-а ``Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`` (``talker_config.spk_id``).
+QWEN3_TTS_CUSTOM_VOICE_SPEAKERS: frozenset[str] = frozenset(
+    (
+        "aiden",
+        "dylan",
+        "eric",
+        "ono_anna",
+        "ryan",
+        "serena",
+        "sohee",
+        "uncle_fu",
+        "vivian",
+    )
 )
 
-SILERO_V5_RU_SPEAKERS_BY_BUNDLE: dict[str, frozenset[str]] = {
-    "v5_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
-    "v5_2_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
-    "v5_3_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
-    "v5_4_ru": frozenset(("aidar", "baya", "kseniya", "xenia")),
-    "v5_5_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
+# ISO 639-1 → имя языка в API ``generate_custom_voice`` (``codec_language_id`` модели).
+QWEN3_TTS_LANGUAGE_BY_LOCALE: dict[str, str] = {
+    "de": "German",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "zh": "Chinese",
 }
+
+# Частоты ответа локального TTS: нативный выход модели 24 kHz ресемплируется в любую из них.
+LITSERVE_TTS_SAMPLE_RATE_IDS: tuple[int, ...] = (8000, 16000, 24000, 44100, 48000)
 
 
 class ProviderLitserveTTSModelEntry(BaseModel):
-    """Описание одной TTS-модели (api id ↔ HF id + параметры синтеза по умолчанию)."""
+    """Описание одной TTS-модели Qwen3-TTS CustomVoice (api id ↔ HF id + параметры синтеза)."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_model_id: str
     hf_model_id: str
     revision: str | None = None
-    backend: Literal["silero"] = Field(
-        default="silero",
-        description="Runtime-адаптер TTS (silero: silero_tts + apply_tts).",
-    )
-    silero_language: Literal["ru"] = Field(
-        default="ru",
-        description="Код языка для ``silero.silero_tts`` (локальный каталог — русский v5).",
-    )
-    silero_bundle: str = Field(
-        description=(
-            "Идентификатор бандла модели Silero v5 для ``silero_tts(..., speaker=...)`` "
-            "(например ``v5_5_ru``); не путать с голосом ``voice`` для ``apply_tts``."
-        ),
-    )
     voice: str | None = Field(
         default=None,
-        description="Голос по умолчанию для ``apply_tts`` (например ``xenia``, ``aidar`` для v5_5_ru).",
+        description=(
+            "Спикер по умолчанию из ``QWEN3_TTS_CUSTOM_VOICE_SPEAKERS`` "
+            "(например ``serena``, ``vivian``)."
+        ),
     )
     synthesis_locale: str | None = Field(
         default=None,
         description=(
-            "ISO 639-1 (две буквы): при совпадении с языком сессии TTS в voice_resolver "
+            "ISO 639-1 (две буквы): язык синтеза из ``QWEN3_TTS_LANGUAGE_BY_LOCALE``. "
+            "При совпадении с языком сессии TTS в voice_resolver "
             "(query `language` WebSocket или company_voice_providers.tts) выбирается эта запись "
             "каталога вместо tier-default."
         ),
     )
     sample_rate: int | None = Field(
         default=None,
-        description="Sample rate выходного PCM (для ru v5 допустимы 8000, 24000, 48000).",
+        description=(
+            "Sample rate ответа по умолчанию из ``LITSERVE_TTS_SAMPLE_RATE_IDS`` "
+            "(нативный выход модели 24 kHz ресемплируется)."
+        ),
+    )
+    instruct: str | None = Field(
+        default=None,
+        description="Стилевая инструкция CustomVoice по умолчанию (эмоция, темп, манера).",
     )
     tts_input_steps: tuple[str, ...] = Field(
-        default=("silero_ru_latin_to_cyrillic",),
+        default=(),
         description=(
             "Именованные шаги подготовки текста после Unicode-нормализации на стороне LitServe. "
-            "Пустой кортеж — без доп. шагов (только проверка кириллицы для silero ru). "
             "Реестр шагов — ``core.utils.tts_input_steps.TTS_INPUT_STEP_REGISTRY``."
         ),
     )
@@ -1163,19 +1179,6 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         s = v.strip().lower()
         if not s:
             return None
-        return s
-
-    @field_validator("silero_bundle", mode="before")
-    @classmethod
-    def normalize_silero_bundle(cls, v: JsonValue) -> str:
-        if not isinstance(v, str):
-            raise ValueError(f"TTS silero_bundle: expected str, got {type(v).__name__}")
-        s = v.strip().lower()
-        if not s:
-            raise ValueError('TTS silero_bundle: cannot be empty')
-        if s not in SILERO_TTS_RU_V5_BUNDLES:
-            allowed = ", ".join(sorted(SILERO_TTS_RU_V5_BUNDLES))
-            raise ValueError(f"TTS silero_bundle={v!r} is not a supported Russian v5 bundle: {allowed}")
         return s
 
     @field_validator("synthesis_locale", mode="before")
@@ -1195,11 +1198,21 @@ class ProviderLitserveTTSModelEntry(BaseModel):
             raise ValueError('TTS synthesis_locale: ISO 639-1 required (at least 2 letters)')
         return base[:2]
 
+    @field_validator("instruct", mode="before")
+    @classmethod
+    def trim_instruct_optional(cls, v: JsonValue) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"TTS instruct: expected str or None, got {type(v).__name__}")
+        s = v.strip()
+        return s or None
+
     @field_validator("tts_input_steps", mode="before")
     @classmethod
     def normalize_tts_input_steps(cls, v: JsonValue) -> tuple[str, ...]:
         if v is None:
-            return ("silero_ru_latin_to_cyrillic",)
+            return ()
         if isinstance(v, str):
             raise ValueError('tts_input_steps: expected a tuple or list of step names, not str')
         if not isinstance(v, list | tuple):
@@ -1219,30 +1232,31 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         return tuple(out)
 
     @model_validator(mode="after")
-    def sample_rate_must_be_v5_ru_choice(self) -> Self:
+    def sample_rate_must_be_supported(self) -> Self:
         if self.sample_rate is None:
             return self
-        if self.sample_rate not in (8000, 24000, 48000):
-            raise ValueError(
-                f"TTS sample_rate={self.sample_rate}: for Silero ru v5 only 8000, 24000, 48000 are allowed"
-            )
+        if self.sample_rate not in LITSERVE_TTS_SAMPLE_RATE_IDS:
+            allowed = ", ".join(str(sr) for sr in LITSERVE_TTS_SAMPLE_RATE_IDS)
+            raise ValueError(f"TTS sample_rate={self.sample_rate}: allowed: {allowed}")
         return self
 
     @model_validator(mode="after")
-    def voice_must_match_silero_bundle(self) -> Self:
+    def voice_must_be_custom_voice_speaker(self) -> Self:
         if self.voice is None:
             return self
-        allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(self.silero_bundle)
-        if allowed is None:
-            raise ValueError(f"TTS: no voice table for silero_bundle={self.silero_bundle!r}")
-        if self.voice not in allowed:
-            opts = ", ".join(sorted(allowed))
+        if self.voice not in QWEN3_TTS_CUSTOM_VOICE_SPEAKERS:
+            allowed = ", ".join(sorted(QWEN3_TTS_CUSTOM_VOICE_SPEAKERS))
+            raise ValueError(f"TTS voice={self.voice!r}: allowed: {allowed}")
+        return self
+
+    @model_validator(mode="after")
+    def synthesis_locale_must_be_supported(self) -> Self:
+        if self.synthesis_locale is None:
+            return self
+        if self.synthesis_locale not in QWEN3_TTS_LANGUAGE_BY_LOCALE:
+            allowed = ", ".join(sorted(QWEN3_TTS_LANGUAGE_BY_LOCALE))
             raise ValueError(
-                'TTS voice={!r} is invalid for silero_bundle={!r}; allowed: {}'.format(
-                    self.voice,
-                    self.silero_bundle,
-                    opts,
-                )
+                f"TTS synthesis_locale={self.synthesis_locale!r}: allowed: {allowed}"
             )
         return self
 
@@ -1382,17 +1396,16 @@ class ProviderLitserveInfraConfig(BaseModel):
     tts_models: list["ProviderLitserveTTSModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveTTSModelEntry(
-                api_model_id="silero-tts-v5-5-ru",
-                hf_model_id="snakers4/silero-models",
-                silero_bundle="v5_5_ru",
-                voice="xenia",
+                api_model_id="qwen3-tts-1.7b-customvoice-ru",
+                hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+                voice="serena",
                 synthesis_locale="ru",
                 sample_rate=24000,
             ),
         ],
         description=(
             "Полный список TTS-моделей провайдера. Каждый элемент описывает одну модель "
-            "(api id для /v1/audio/speech, hf id каталога, silero_bundle, voice, sample_rate). "
+            "(api id для /v1/audio/speech, hf id весов, voice, synthesis_locale, sample_rate). "
             "Дефолт — самая старая ready-запись каталога. Расширяется из UI /litserve/models."
         ),
     )

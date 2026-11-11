@@ -26,6 +26,7 @@ from apps.crm.tasks.task_names import (
     CRM_REBUILD_PERIOD_SUMMARY,
     CRM_RECONCILE_DAILY_SUMMARY,
 )
+from core.a2a.submit import A2ACallPending, set_a2a_resume_context
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
@@ -105,12 +106,14 @@ async def rebuild_daily_summary_task(
     auth_token: str | None = None,
     user_id: str | None = None,
     task_id: str | None = None,
+    a2a_nonce: str | None = None,
     *,
     di: Di,
 ) -> JsonObject:
     """Пересчитывает и сохраняет summary в Redis state.
 
     task_id — опциональный идентификатор записи CRMTask для обновления прогресса.
+    a2a_nonce — nonce прогона для dedup припаркованных A2A-вызовов (resume).
     """
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
@@ -122,6 +125,21 @@ async def rebuild_daily_summary_task(
         namespace=namespace,
         auth_token=resolved_auth_token,
         user_id=user_id,
+    )
+    run_nonce = task_id or a2a_nonce or str(uuid.uuid4())
+    _ = set_a2a_resume_context(
+        CRM_REBUILD_DAILY_SUMMARY.name,
+        {
+            "company_id": company_id,
+            "date_str": date_str,
+            "namespace": namespace,
+            "reason": reason,
+            "auth_token": resolved_auth_token,
+            "user_id": user_id,
+            "task_id": task_id,
+            "a2a_nonce": run_nonce,
+        },
+        run_nonce=run_nonce,
     )
     if task_id:
         journal = await CRMTask.by_company_and_task_id(company_id, task_id)
@@ -163,6 +181,25 @@ async def rebuild_daily_summary_task(
                 date_str=date_str,
                 namespace=namespace,
             )
+    except A2ACallPending:
+        if task_id:
+            await CRMTask.patch_progress(
+                task_id,
+                company_id,
+                status="running",
+                stage="waiting_ai",
+                progress_pct=60,
+            )
+            await _snapshot_crm_task_if_present(
+                task_id=task_id, company_id=company_id
+            )
+        logger.info(
+            "crm.summary.daily_a2a_parked",
+            task_id=task_id,
+            company_id=company_id,
+            date=date_str,
+        )
+        return {"status": "waiting_ai", "date": date_str}
     except Exception as exc:
         if task_id:
             await CRMTask.patch_progress(
@@ -214,6 +251,7 @@ async def rebuild_period_summary_task(
     auth_token: str | None = None,
     user_id: str | None = None,
     task_id: str | None = None,
+    a2a_nonce: str | None = None,
     *,
     di: Di,
 ) -> JsonObject:
@@ -228,6 +266,22 @@ async def rebuild_period_summary_task(
         namespace=namespace,
         auth_token=resolved_auth_token,
         user_id=user_id,
+    )
+    run_nonce = task_id or a2a_nonce or str(uuid.uuid4())
+    _ = set_a2a_resume_context(
+        CRM_REBUILD_PERIOD_SUMMARY.name,
+        {
+            "company_id": company_id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "namespace": namespace,
+            "reason": reason,
+            "auth_token": resolved_auth_token,
+            "user_id": user_id,
+            "task_id": task_id,
+            "a2a_nonce": run_nonce,
+        },
+        run_nonce=run_nonce,
     )
     if task_id:
         journal = await CRMTask.by_company_and_task_id(company_id, task_id)
@@ -270,6 +324,24 @@ async def rebuild_period_summary_task(
                 date_to=date_to,
                 namespace=namespace,
             )
+    except A2ACallPending:
+        if task_id:
+            await CRMTask.patch_progress(
+                task_id,
+                company_id,
+                status="running",
+                stage="waiting_ai",
+                progress_pct=60,
+            )
+            await _snapshot_crm_task_if_present(
+                task_id=task_id, company_id=company_id
+            )
+        logger.info(
+            "crm.summary.period_a2a_parked",
+            task_id=task_id,
+            company_id=company_id,
+        )
+        return {"status": "waiting_ai", "date_from": date_from, "date_to": date_to}
     except Exception as exc:
         if task_id:
             await CRMTask.patch_progress(

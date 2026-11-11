@@ -59,9 +59,17 @@ TASK_REDIS_INVENTORY_TICK = declare_task("redis_inventory_tick", queue="idle", s
 
 TASK_REALTIME_PRESENCE_TICK = declare_task("realtime_presence_tick", queue="idle", scheduled=True)
 
+TASK_A2A_PENDING_SWEEP_TICK = declare_task(
+    "a2a_pending_sweep_tick", queue="idle", scheduled=True
+)
+
+TASK_A2A_CALL_FINISHED = declare_task("a2a_call_finished", queue="idle")
+
 TASK_NAMESPACE_PERSONAL_BACKFILL = declare_task("namespace_personal_backfill", queue="idle")
 
 __all__ = [
+    "TASK_A2A_CALL_FINISHED",
+    "TASK_A2A_PENDING_SWEEP_TICK",
     "TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK",
     "TASK_CALENDAR_SYNC_TICK",
     "TASK_FILE_RETENTION_BACKFILL_TICK",

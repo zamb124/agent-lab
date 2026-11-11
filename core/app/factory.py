@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError as PydanticValidationError
 from starlette.types import ExceptionHandler
 
+from core.api.a2a_push import a2a_push_router
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
@@ -698,6 +699,14 @@ def assemble_service_app(
             prefix=f"{brand_prefix}/api/platform",
         )
         app.include_router(platform_brand_router, prefix=brand_prefix, tags=["platform-brand"])
+
+        # A2A push webhook — один внутренний endpoint на всех сервисах.
+        app.include_router(a2a_push_router, prefix=api_prefix, tags=["a2a-push"])
+        logger.info(
+            "service.router_attached",
+            router="a2a_push",
+            prefix=f"{api_prefix}/internal/a2a/push",
+        )
 
     # Internal hop bus realtime → владелец команды: монтируется на каждом сервисе,
     # включая те, что без платформенных роутеров (search).

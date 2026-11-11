@@ -3139,6 +3139,10 @@ export interface ExecutionState {
      */
     "interrupt"?: InterruptData | null | undefined;
     /**
+     * Flow припаркован на A2A remote-вызове ({node_id, activity_id, a2a_task_id, base_url}): durable activity `started`, run завершён без терминала; continuation возобновляет.
+     */
+    "remote_wait"?: Record<string, JsonValue> | null | undefined;
+    /**
      * Путь к месту прерывания
      */
     "interrupt_path"?: InterruptPathItem[] | undefined;
@@ -8159,7 +8163,7 @@ export interface VoiceProvidersCatalogDTO {
     "vad_provider_ids"?: string[] | undefined;
     "tts_sample_rate_ids"?: number[] | undefined;
     "vad_sample_rate_ids"?: number[] | undefined;
-    "litserve_silero_tts_sample_rate_ids"?: number[] | undefined;
+    "litserve_tts_sample_rate_ids"?: number[] | undefined;
     "cloud_ru_tts_voice_ids"?: string[] | undefined;
     "yandex_tts_voice_ids"?: string[] | undefined;
     "sber_tts_voice_ids"?: string[] | undefined;

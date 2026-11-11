@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.clients.speech_provider_catalog import (
     BASE_SPEECH_LANGUAGE_IDS,
     CLOUD_RU_OPENAI_TTS_VOICE_IDS,
-    LITSERVE_SILERO_TTS_SAMPLE_RATE_IDS,
     SBER_TTS_VOICE_IDS,
     STT_TTS_PROVIDER_IDS,
     TTS_SAMPLE_RATE_IDS,
@@ -23,7 +22,10 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_stt_model_ids,
     cloud_ru_tts_model_ids,
 )
-from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
+from core.config.models import (
+    LITSERVE_TTS_SAMPLE_RATE_IDS,
+    QWEN3_TTS_CUSTOM_VOICE_SPEAKERS,
+)
 from core.models.base import StrictBaseModel
 
 if TYPE_CHECKING:
@@ -67,7 +69,7 @@ class VoiceProvidersCatalogDTO(BaseModel):
     vad_provider_ids: list[str] = Field(default_factory=list)
     tts_sample_rate_ids: list[int] = Field(default_factory=list)
     vad_sample_rate_ids: list[int] = Field(default_factory=list)
-    litserve_silero_tts_sample_rate_ids: list[int] = Field(default_factory=list)
+    litserve_tts_sample_rate_ids: list[int] = Field(default_factory=list)
     cloud_ru_tts_voice_ids: list[str] = Field(default_factory=list)
     yandex_tts_voice_ids: list[str] = Field(default_factory=list)
     sber_tts_voice_ids: list[str] = Field(default_factory=list)
@@ -91,9 +93,7 @@ def build_voice_providers_catalog_dto(
     tts_models = list(entries.tts)
     voice_hints: list[TtsLitserveVoiceHint] = []
     for tts in tts_models:
-        bundle = tts.silero_bundle.strip().lower()
-        allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(bundle, frozenset())
-        voice_ids = sorted(allowed) if allowed else []
+        voice_ids = sorted(QWEN3_TTS_CUSTOM_VOICE_SPEAKERS)
         voice_hints.append(
             TtsLitserveVoiceHint(
                 api_model_id=tts.api_model_id,
@@ -132,7 +132,7 @@ def build_voice_providers_catalog_dto(
         vad_provider_ids=sorted(VAD_PROVIDER_IDS),
         tts_sample_rate_ids=list(TTS_SAMPLE_RATE_IDS),
         vad_sample_rate_ids=sorted(vad_rates),
-        litserve_silero_tts_sample_rate_ids=list(LITSERVE_SILERO_TTS_SAMPLE_RATE_IDS),
+        litserve_tts_sample_rate_ids=list(LITSERVE_TTS_SAMPLE_RATE_IDS),
         cloud_ru_tts_voice_ids=list(CLOUD_RU_OPENAI_TTS_VOICE_IDS),
         yandex_tts_voice_ids=list(YANDEX_TTS_VOICE_IDS),
         sber_tts_voice_ids=list(SBER_TTS_VOICE_IDS),

@@ -43,7 +43,7 @@ async def test_litserve_tts_client_returns_audio_bytes(
 
     async def _handler(request: web.Request) -> web.StreamResponse:
         body = await request.json()
-        assert body["model"] == "silero-tts-v5-5-ru"
+        assert body["model"] == "qwen3-tts-1.7b-customvoice-ru"
         assert body["input"] == f"hello {unique_id}"
         assert body["response_format"] == "wav"
         assert body["voice"] == "alloy"
@@ -53,7 +53,7 @@ async def test_litserve_tts_client_returns_audio_bytes(
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="silero-tts-v5-5-ru",
+        model="qwen3-tts-1.7b-customvoice-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
@@ -68,7 +68,7 @@ async def test_litserve_tts_client_returns_audio_bytes(
     assert result.sample_rate == 24000
     assert result.response_format == "wav"
     assert result.voice == "alloy"
-    assert result.model == "silero-tts-v5-5-ru"
+    assert result.model == "qwen3-tts-1.7b-customvoice-ru"
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_litserve_tts_client_sends_utf16_sanitized_input(
     raw = "a" + chr(0xD800) + "b"
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="silero-tts-v5-5-ru",
+        model="qwen3-tts-1.7b-customvoice-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
@@ -112,7 +112,7 @@ async def test_litserve_tts_client_sanitizes_voice_in_payload(
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="silero-tts-v5-5-ru",
+        model="qwen3-tts-1.7b-customvoice-ru",
         default_voice="alloy\u200b",
         default_response_format="wav",
         default_sample_rate=24000,
@@ -128,14 +128,14 @@ async def test_litserve_tts_client_http_error_includes_upstream_detail(
     fake_speech_server: FakeSpeechServer, unique_id: str
 ) -> None:
     async def _handler(request: web.Request) -> web.StreamResponse:
-        assert (await request.json())["model"] == "silero-tts-v5-5-ru"
+        assert (await request.json())["model"] == "qwen3-tts-1.7b-customvoice-ru"
         return web.json_response({"detail": f"tts-fail-{unique_id}"}, status=500)
 
     fake_speech_server.route("POST", "/v1/audio/speech", _handler)
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="silero-tts-v5-5-ru",
+        model="qwen3-tts-1.7b-customvoice-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
@@ -161,7 +161,7 @@ async def test_litserve_tts_client_platform_internal_error_appends_log_hint(
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="silero-tts-v5-5-ru",
+        model="qwen3-tts-1.7b-customvoice-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,

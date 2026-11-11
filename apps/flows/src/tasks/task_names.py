@@ -37,6 +37,9 @@ TASK_MCP_CATALOG_RESYNC_TOOLS = declare_task(
     "mcp_catalog_resync_tools_task", queue="flows_worker", scheduled=True
 )
 TASK_DISPATCH_EMAIL_TRIGGERS = declare_task("dispatch_email_triggers", queue="flows_worker")
+TASK_FLOWS_REMOTE_TASK_FINISHED = declare_task(
+    "flows_remote_task_finished", queue="flows_worker"
+)
 
 __all__ = [
     "TASK_DISPATCH_EMAIL_TRIGGERS",
@@ -45,6 +48,7 @@ __all__ = [
     "TASK_EXECUTE_NODE",
     "TASK_EXECUTE_SCHEDULED",
     "TASK_EXECUTE_TOOL",
+    "TASK_FLOWS_REMOTE_TASK_FINISHED",
     "TASK_INIT_COMPANY_RESOURCES",
     "TASK_INVOKE_LLM",
     "TASK_MCP_CATALOG_CRAWL",

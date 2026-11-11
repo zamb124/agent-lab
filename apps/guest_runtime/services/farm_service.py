@@ -822,6 +822,92 @@ class GuestFarmService:
         )
         if invoke_context_id is None or invoke_context_id.strip() == "":
             raise ValueError("guest A2A context_id is required")
+
+        configuration = params.get("configuration")
+        config_obj = (
+            require_json_object(configuration, "a2a.configuration")
+            if isinstance(configuration, dict)
+            else {}
+        )
+        return_immediately = config_obj.get("returnImmediately") is True
+        push_config = config_obj.get("pushNotificationConfig")
+        if return_immediately:
+            # Канон A2A: SendMessage возвращает SUBMITTED сразу; invoke едет в
+            # фоне, терминал уходит push webhook'ом по pushNotificationConfig.
+            submitted: JsonObject = {
+                "id": invoke_task_id,
+                "contextId": invoke_context_id,
+                "status": {"state": "TASK_STATE_SUBMITTED"},
+                "artifacts": [],
+            }
+            await self._leases.store_task(
+                invoke_task_id,
+                json.dumps(submitted, ensure_ascii=False),
+                ttl_seconds=self._farm_config.max_lifetime_seconds,
+            )
+            push = (
+                require_json_object(push_config, "a2a.pushNotificationConfig")
+                if isinstance(push_config, dict)
+                else None
+            )
+            _ = asyncio.create_task(
+                self._invoke_and_notify(
+                    lease,
+                    slot,
+                    flow_id=flow_id,
+                    node_id=node_id,
+                    task_id=invoke_task_id,
+                    context_id=invoke_context_id,
+                    text=text,
+                    metadata=metadata,
+                    push_url=(
+                        push.get("url") if isinstance(push, dict) else None
+                    ),
+                    push_token=(
+                        push.get("token") if isinstance(push, dict) else None
+                    ),
+                )
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc.get("id"),
+                "result": submitted,
+            }
+
+        task = await self._invoke_and_build_task(
+            lease,
+            slot,
+            flow_id=flow_id,
+            node_id=node_id,
+            task_id=invoke_task_id,
+            context_id=invoke_context_id,
+            text=text,
+            metadata=metadata,
+        )
+        await self._leases.store_task(
+            invoke_task_id,
+            json.dumps(task, ensure_ascii=False),
+            ttl_seconds=self._farm_config.max_lifetime_seconds,
+        )
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc.get("id"),
+            "result": task,
+        }
+
+    async def _invoke_and_build_task(
+        self,
+        lease: GuestLease,
+        slot: GuestSlot,
+        *,
+        flow_id: str,
+        node_id: str,
+        task_id: str,
+        context_id: str,
+        text: str,
+        metadata: JsonObject,
+    ) -> JsonObject:
+        """shim/invoke + сборка терминального A2A Task (completed/failed)."""
         lease.in_flight += 1
         await self._leases.put_existing(
             lease, ttl_seconds=self._leases.remaining_ttl(lease)
@@ -852,13 +938,12 @@ class GuestFarmService:
             await self._leases.put_existing(
                 lease, ttl_seconds=self._leases.remaining_ttl(lease)
             )
-        task_id = invoke_task_id
         text_out = result_payload.get("text")
         if not isinstance(text_out, str):
             raise ValueError("guest invoke result.text required")
         task: JsonObject = {
             "id": task_id,
-            "contextId": invoke_context_id,
+            "contextId": context_id,
             "status": {"state": "TASK_STATE_COMPLETED"},
             "artifacts": [
                 {
@@ -913,16 +998,92 @@ class GuestFarmService:
                     ],
                 }
             )
+        return task
+
+    async def _invoke_and_notify(
+        self,
+        lease: GuestLease,
+        slot: GuestSlot,
+        *,
+        flow_id: str,
+        node_id: str,
+        task_id: str,
+        context_id: str,
+        text: str,
+        metadata: JsonObject,
+        push_url: JsonValue,
+        push_token: JsonValue,
+    ) -> None:
+        """Фоновый invoke после SUBMITTED: терминал → store_task + push webhook.
+
+        Push обязан уйти и на FAILED: вызывающий pending-ряд ждёт терминал.
+        Потерянный push добивает sweeper через ``deadline_exceeded``.
+        """
+        try:
+            task = await self._invoke_and_build_task(
+                lease,
+                slot,
+                flow_id=flow_id,
+                node_id=node_id,
+                task_id=task_id,
+                context_id=context_id,
+                text=text,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            task = require_json_object(
+                {
+                    "id": task_id,
+                    "contextId": context_id,
+                    "status": {
+                        "state": "TASK_STATE_FAILED",
+                        "message": {"parts": [{"text": str(exc)}]},
+                    },
+                    "artifacts": [],
+                },
+                "guest.task.failed",
+            )
         await self._leases.store_task(
             task_id,
             json.dumps(task, ensure_ascii=False),
             ttl_seconds=self._farm_config.max_lifetime_seconds,
         )
-        return {
-            "jsonrpc": "2.0",
-            "id": rpc.get("id"),
-            "result": task,
-        }
+        url = push_url if isinstance(push_url, str) and push_url.strip() else None
+        token = push_token if isinstance(push_token, str) else None
+        if url is None:
+            logger.warning(
+                "guest.a2a.no_push_config",
+                task_id=task_id,
+                flow_id=flow_id,
+                node_id=node_id,
+            )
+            return
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        for attempt in range(3):
+            try:
+                async with httpx2.AsyncClient(timeout=15.0) as client:
+                    response = await client.post(
+                        url, json={"task": task}, headers=headers
+                    )
+                if response.status_code < 500:
+                    break
+            except Exception as exc:
+                logger.warning(
+                    "guest.a2a.push_failed",
+                    task_id=task_id,
+                    attempt=attempt,
+                    error=str(exc),
+                )
+            await asyncio.sleep(0.5 * (attempt + 1))
+        else:
+            logger.error(
+                "guest.a2a.push_exhausted",
+                task_id=task_id,
+                flow_id=flow_id,
+                node_id=node_id,
+            )
 
     async def _get_task(self, rpc: JsonObject) -> JsonObject:
         params = require_json_object(rpc.get("params"), "a2a.params")

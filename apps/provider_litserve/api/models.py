@@ -38,8 +38,9 @@ class ProviderLitserveModelCreateRequest(BaseModel):
     params: JsonObject = Field(
         default_factory=dict,
         description=(
-            "Поля записи каталога сверх api/hf id (backend, revision, silero_bundle, "
-            "voice, sample_rate, threshold, dimension, …). Валидируются entry-моделью kind."
+            "Поля записи каталога сверх api/hf id (backend, revision, voice, "
+            "synthesis_locale, instruct, sample_rate, threshold, dimension, …). "
+            "Валидируются entry-моделью kind."
         ),
     )
 

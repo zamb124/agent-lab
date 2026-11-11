@@ -29,11 +29,10 @@ VOICE_RESPONSE_FORMAT_IDS: frozenset[SpeechResponseFormat] = frozenset(
 # пополнение из synthesis_locale моделей LitServe при сборке DTO.
 BASE_SPEECH_LANGUAGE_IDS: tuple[str, ...] = ("ru", "en")
 
-# Частоты дискретизации TTS в UI (Гц); подмножество для Silero ru v5 в LitServe —
-# см. ``litserve_silero_tts_sample_rate_ids`` в VoiceProvidersCatalogDTO.
+# Частоты дискретизации TTS в UI (Гц); LitServe-подмножество —
+# ``LITSERVE_TTS_SAMPLE_RATE_IDS`` в core.config.models и
+# ``litserve_tts_sample_rate_ids`` в VoiceProvidersCatalogDTO.
 TTS_SAMPLE_RATE_IDS: tuple[int, ...] = (8000, 16000, 24000, 44100, 48000)
-
-LITSERVE_SILERO_TTS_SAMPLE_RATE_IDS: tuple[int, ...] = (8000, 24000, 48000)
 
 # VAD silero_local (в процессе): только 8000 / 16000 Гц; LitServe VAD — также из vad_models conf.
 VAD_SAMPLE_RATE_BASE_IDS: tuple[int, ...] = (8000, 16000)

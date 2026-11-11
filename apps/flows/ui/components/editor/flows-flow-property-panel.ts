@@ -398,8 +398,8 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
     /** @param {unknown} catalog */
     _ttsSampleRateInts(ttsProv: unknown, catalog: unknown) {
         if (!isPlainObject(catalog)) return [];
-        if (ttsProv === 'litserve' && Array.isArray(catalog.litserve_silero_tts_sample_rate_ids)) {
-            return requireNumberIds(catalog.litserve_silero_tts_sample_rate_ids, 'litserve_silero_tts_sample_rate_ids');
+        if (ttsProv === 'litserve' && Array.isArray(catalog.litserve_tts_sample_rate_ids)) {
+            return requireNumberIds(catalog.litserve_tts_sample_rate_ids, 'litserve_tts_sample_rate_ids');
         }
         return optionalNumberIds(catalog.tts_sample_rate_ids, 'tts_sample_rate_ids');
     }

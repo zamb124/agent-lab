@@ -9,18 +9,16 @@ from core.config.models import ProviderLitserveTTSModelEntry
 def test_pick_prefers_matching_synthesis_locale() -> None:
     models = [
         ProviderLitserveTTSModelEntry(
-            api_model_id="silero-tts-ru-default",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_5_ru",
-            voice="xenia",
+            api_model_id="qwen3-tts-en",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
             sample_rate=24000,
             synthesis_locale="en",
         ),
         ProviderLitserveTTSModelEntry(
-            api_model_id="silero-tts-es-alt",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_ru",
-            voice="xenia",
+            api_model_id="qwen3-tts-es",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
             sample_rate=24000,
             synthesis_locale="es",
         ),
@@ -28,9 +26,9 @@ def test_pick_prefers_matching_synthesis_locale() -> None:
     out = vr._pick_tts_api_model_for_synthesis_locale(
         tts_models=models,
         session_locale="es-MX",
-        tier_model="silero-tts-ru-default",
+        tier_model="qwen3-tts-en",
     )
-    assert out == "silero-tts-es-alt"
+    assert out == "qwen3-tts-es"
 
 
 def test_pick_keeps_tier_when_no_locale_match() -> None:

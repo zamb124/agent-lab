@@ -15,6 +15,7 @@ from core.events import (
     publish_event_to_company,
     register_platform_event,
 )
+from core.types import JsonObject
 
 SHOP_SHOP_CREATED = "shop/shop/created"
 SHOP_SHOP_UPDATED = "shop/shop/updated"
@@ -92,6 +93,31 @@ async def publish_shop_event(
         company_id=company_id,
         type=event_type,
         payload=payload.model_dump(mode="json"),
+    )
+
+
+async def publish_shop_ai_call_finished(
+    *,
+    company_id: str,
+    call_id: str,
+    shop_id: str,
+    verb: str,
+    status: str,
+    result: JsonObject | None = None,
+    error: str | None = None,
+) -> None:
+    """Терминал AI-вызова: результат/ошибка по ``call_id`` — UI достраивает ответ op'а."""
+    await publish_event_to_company(
+        company_id=company_id,
+        type="shop/ai_call/finished",
+        payload={
+            "call_id": call_id,
+            "shop_id": shop_id,
+            "verb": verb,
+            "status": status,
+            "result": result,
+            "error": error,
+        },
     )
 
 

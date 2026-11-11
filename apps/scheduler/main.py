@@ -22,6 +22,7 @@ from apps.geo.tasks.task_names import (
     GEO_TILES_SYNC,
 )
 from apps.idle.tasks.task_names import (
+    TASK_A2A_PENDING_SWEEP_TICK,
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
     TASK_FILE_RETENTION_BACKFILL_TICK,
@@ -718,6 +719,14 @@ async def ensure_platform_schedules(
             log_label="WebSocket presence metrics",
             run_now_on_start=True,
         )
+    await _ensure_idle_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=TASK_A2A_PENDING_SWEEP_TICK.name,
+        interval_seconds=60,
+        payload={},
+        log_label="A2A pending calls sweep",
+    )
     await _ensure_calendar_schedule(
         scheduler_service=scheduler_service,
         config_enabled=settings.mcp_catalog.enabled and not is_testing(),

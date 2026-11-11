@@ -7,6 +7,10 @@
  * index.html), shared/lazy код — в `chunks/[name]-[hash].js`, минификация
  * вне --dev, sourcemap всегда (`linked` вне --dev, `inline` в --dev).
  *
+ * Соседние `ui/*.ts` верхнего уровня — дополнительные приложения того же
+ * сервиса: `ui/tsd.ts` собирается в `ui-dist/tsd.js` и делит shared-чанки
+ * с основным бандлом (stock: консоль + ТСД-терминал).
+ *
  * Файлы ui/, не попавшие в граф бандла (ассеты, vendor, html, css), копируются
  * в ui-dist/ как есть — mount продолжает отдавать их по тем же URL.
  *
@@ -90,14 +94,23 @@ function discoverApps(): UiApp[] {
     for (const svc of readdirSync(APPS_DIR)) {
         const uiDir = path.join(APPS_DIR, svc, 'ui');
         if (!existsSync(uiDir) || !statSync(uiDir).isDirectory()) continue;
-        const entry = path.join(uiDir, 'index.ts');
-        if (!existsSync(entry)) {
+        const indexEntry = path.join(uiDir, 'index.ts');
+        if (!existsSync(indexEntry)) {
             const hasSources = readdirSync(uiDir, { recursive: true }).some((f) => /\.tsx?$/.test(String(f)));
             if (!hasSources) continue;
-            throw new Error(`[build-ui] ${svc}: нет точки входа ${path.relative(ROOT, entry)}`);
+            throw new Error(`[build-ui] ${svc}: нет точки входа ${path.relative(ROOT, indexEntry)}`);
         }
         if (!APPS_FILTER || APPS_FILTER.has(svc)) {
-            apps.push({ svc, uiDir, entries: [entry], outDir: path.join(APPS_DIR, svc, 'ui-dist') });
+            // Дополнительные приложения сервиса — соседние `ui/*.ts` верхнего
+            // уровня (`index.ts` обязателен и всегда первый).
+            const entries = [
+                indexEntry,
+                ...readdirSync(uiDir)
+                    .filter((f) => f !== 'index.ts' && f.endsWith('.ts') && statSync(path.join(uiDir, f)).isFile())
+                    .sort()
+                    .map((f) => path.join(uiDir, f)),
+            ];
+            apps.push({ svc, uiDir, entries, outDir: path.join(APPS_DIR, svc, 'ui-dist') });
         }
     }
     return apps;

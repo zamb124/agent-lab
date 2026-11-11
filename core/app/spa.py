@@ -7,7 +7,7 @@ catch-all `/{segment}/{path}` обязан идти последним в таб
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -61,16 +61,28 @@ def mount_service_spa(
     ui_dir: Path,
     excluded_prefixes: Sequence[str] = _DEFAULT_EXCLUDED_PREFIXES,
     extra_static_mounts: Sequence[tuple[str, Path, str]] = (),
+    spa_pages: Mapping[str, str] = {},
 ) -> None:
     """Монтирует core-статику (`mount_core_frontend`), `/{segment}/ui/static` и catch-all `/{segment}/{path}` → index.html.
 
     `excluded_prefixes` — под-пути, которые SPA не обслуживает (API, статика, WS):
     для них catch-all отвечает 404, а не index.html.
+
+    `spa_pages` — дополнительные SPA-приложения того же ui-dist: ключ — первый
+    сегмент пути (`"tsd"` → `/{segment}/tsd`, `/{segment}/tsd/...`), значение —
+    имя html-файла в `ui-dist` (`"tsd.html"`). Совпадение точное по сегменту:
+    `/{segment}/tsdfoo` остаётся за catch-all основного SPA.
     """
     ui_static_dir = resolve_ui_static_dir(ui_dir)
     index_file = ui_static_dir / "index.html"
     if not index_file.is_file():
         raise FileNotFoundError(f"SPA index.html not found: {index_file}")
+    pages: dict[str, Path] = {}
+    for prefix, filename in spa_pages.items():
+        page_file = ui_static_dir / filename
+        if not page_file.is_file():
+            raise FileNotFoundError(f"SPA page not found: {page_file}")
+        pages[prefix] = page_file
 
     mount_core_frontend(app)
     app.mount(
@@ -91,7 +103,8 @@ def mount_service_spa(
     async def serve_service_spa(path: str = "") -> FileResponse:
         if path.startswith(excluded):
             raise HTTPException(status_code=404, detail="Not found")
-        return FileResponse(index_file)
+        page_file = pages.get(path.partition("/")[0])
+        return FileResponse(page_file if page_file is not None else index_file)
 
     _ = serve_service_spa
     logger.info(

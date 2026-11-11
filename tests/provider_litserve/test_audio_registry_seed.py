@@ -29,10 +29,9 @@ def _cfg(unique_id) -> ProviderLitserveInfraConfig:
         ],
         tts_models=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"silero-tts-{unique_id}",
-                hf_model_id="snakers4/silero-models",
-                silero_bundle="v5_5_ru",
-                voice="xenia",
+                api_model_id=f"qwen-tts-{unique_id}",
+                hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+                voice="serena",
                 sample_rate=24000,
             ),
         ],
@@ -59,7 +58,7 @@ def test_build_seed_entries_keeps_audio_api_ids(unique_id):
     for kind, entry in seeds:
         by_kind.setdefault(kind, {})[entry.api_model_id] = entry.hf_model_id
     assert by_kind["stt"][f"gigaam-{unique_id}"] == "ai-sage/GigaAM-v3"
-    assert by_kind["tts"][f"silero-tts-{unique_id}"] == "snakers4/silero-models"
+    assert by_kind["tts"][f"qwen-tts-{unique_id}"] == "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
     assert by_kind["vad"][f"silero-{unique_id}"] == "snakers4/silero-vad"
 
 

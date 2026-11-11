@@ -2,7 +2,9 @@
 оболочки (сервис platform): приглашения, профиль, почта, календарь, поиск,
 переменные, оплата, API-ключи, расписания, встраиваемые виджеты, доступы,
 голосовые провайдеры и произношение, выбор компании, вход в платформу,
-приём приглашения, настройки компании и страница поддержки.
+приём приглашения, настройки компании и страница поддержки,
+создание компании, личные настройки (тема/язык), каталог сервисов
+и публичные страницы сайта.
 
 Каждый сценарий — реальный маршрут: навигация по консоли, открытие модалки или
 страницы и действие, которое сделал бы обычный пользователь. Показанные данные
@@ -2024,5 +2026,421 @@ async def test_frontend_support_page(
             "ready-made letter in your mail app, just press Send.\n\n"
             "**Summary.** The fastest path is the support address at "
             "the top of the page; the form makes sure nothing is missed."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=240,
+    doc_slug="create-company",
+    title="Создать ещё одну компанию",
+    title_en="Create another company",
+    description=(
+        "**Для чего:** один аккаунт может вести несколько компаний — "
+        "например, отдельное юрлицо или тестовую площадку.\n\n"
+        "**Какие проблемы решает:** не нужна вторая учётная запись: "
+        "новая компания создаётся из меню аккаунта и сразу доступна "
+        "в переключателе.\n\n"
+        "**Результат:** у вас появилась новая компания, платформа сама "
+        "переключилась на неё — можно приглашать людей и настраивать."
+    ),
+    description_en=(
+        "**What for:** one account can run several companies — a "
+        "separate legal entity or a sandbox.\n\n"
+        "**Problems solved:** no second account needed: a new company "
+        "is created from the account menu and appears in the switcher "
+        "right away.\n\n"
+        "**Result:** a new company exists and the platform switched "
+        "to it — invite people and start configuring."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_frontend_create_company(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await _prepare_clean_page(page)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+
+    menu = await _open_user_menu(page)
+    await menu.locator("[data-menu-action='company-selector']").click()
+    await expect(menu.locator(".company-create-item")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте меню аккаунта и список компаний",
+        page,
+        screenshot_name="company-menu",
+        label_en="Open the account menu and the company list",
+        details=(
+            "Нажмите на своё имя внизу слева, затем на строку с текущей "
+            "компанией — откроется список ваших компаний и кнопка "
+            "«Создать компанию»."
+        ),
+        details_en=(
+            "Click your name at the bottom left, then the row with the "
+            "current company — the list of your companies and the "
+            "Create company button opens."
+        ),
+    )
+
+    await menu.locator(".company-create-item").click()
+    modal = page.locator("company-modal")
+    await expect(modal).to_be_visible(timeout=30_000)
+    company_name = f"Северный Сад {unique_id}"
+    await modal.locator("input.form-input").first.fill(company_name)
+    slug_input = modal.locator("input.form-input").nth(1)
+    await expect(slug_input).to_have_value(re.compile(r"[a-z0-9-]+"), timeout=30_000)
+    await scenario.step(
+        "Введите название новой компании",
+        page,
+        screenshot_name="create-company-modal",
+        label_en="Type the new company name",
+        details=(
+            "Напишите название — адрес (поддомен) предложится "
+            "автоматически и может быть поправлен. Кнопка «Создать» "
+            "запустит компанию."
+        ),
+        details_en=(
+            "Type the name — the address (subdomain) is suggested "
+            "automatically and can be edited. The Create button "
+            "provisions the company."
+        ),
+    )
+
+    await modal.locator(".btn.btn-primary").click()
+    await expect(modal).not_to_be_visible(timeout=60_000)
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=60_000)
+    menu = await _open_user_menu(page)
+    await menu.locator("[data-menu-action='company-selector']").click()
+    await expect(
+        menu.locator(".company-item").filter(has_text=company_name)
+    ).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Компания появилась в переключателе",
+        page,
+        screenshot_name="company-created",
+        label_en="The company appears in the switcher",
+        details=(
+            "**Демонстрация результата.** Новая компания создана и "
+            "уже есть в списке — между компаниями можно переключаться "
+            "в любой момент.\n\n"
+            "**Итог.** Одной учётной записи хватает на несколько "
+            "компаний; для каждой — свои люди, данные и настройки."
+        ),
+        details_en=(
+            "**Result demonstration.** The new company is created and "
+            "already in the list — you can switch between companies "
+            "at any time.\n\n"
+            "**Summary.** One account covers several companies; each "
+            "has its own people, data and settings."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="user-menu-preferences",
+    title="Меню аккаунта: тема, язык и выход",
+    title_en="Account menu: theme, language and sign-out",
+    description=(
+        "**Для чего:** меню аккаунта внизу слева собирает личные "
+        "настройки: сменить тему, язык интерфейса, открыть документацию "
+        "или выйти.\n\n"
+        "**Какие проблемы решает:** не нужно искать настройки по разделам — "
+        "тёмная тема и английский язык включаются в два клика.\n\n"
+        "**Результат:** интерфейс выглядит и говорит так, как удобно вам."
+    ),
+    description_en=(
+        "**What for:** the account menu at the bottom left gathers "
+        "personal preferences: theme, interface language, "
+        "documentation and sign-out.\n\n"
+        "**Problems solved:** no need to hunt settings across "
+        "sections — dark theme and English are two clicks away.\n\n"
+        "**Result:** the interface looks and speaks the way you like."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_user_menu_preferences(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    page = ui_page_system
+    await _prepare_clean_page(page)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+
+    menu = await _open_user_menu(page)
+    await expect(menu.locator("[data-menu-action='theme']")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте меню аккаунта",
+        page,
+        screenshot_name="user-menu",
+        label_en="Open the account menu",
+        details=(
+            "Нажмите на своё имя внизу слева: здесь профиль, список "
+            "компаний, почта, календарь, документация, язык, тема и "
+            "выход из аккаунта."
+        ),
+        details_en=(
+            "Click your name at the bottom left: profile, company "
+            "list, mail, calendar, documentation, language, theme "
+            "and sign-out live here."
+        ),
+    )
+
+    await menu.locator("[data-menu-action='theme']").click()
+    await expect(page.locator("html[data-theme='dark']")).to_be_attached(timeout=30_000)
+    await page.keyboard.press("Escape")
+    await scenario.step(
+        "Включите тёмную тему",
+        page,
+        screenshot_name="theme-dark",
+        label_en="Switch on the dark theme",
+        details=(
+            "Пункт «Тёмная тема» переключает оформление всей консоли — "
+            "привычнее работать вечером. Повторный клик возвращает "
+            "светлую."
+        ),
+        details_en=(
+            "The Dark theme item re-skins the whole console — easier "
+            "on the eyes in the evening. Click again to go back "
+            "to light."
+        ),
+    )
+
+    menu = await _open_user_menu(page)
+    await menu.locator("[data-menu-action='theme']").click()
+    await expect(page.locator("html[data-theme='light']")).to_be_attached(timeout=30_000)
+    await menu.locator("button.lang-option[data-locale='en']").click()
+    await expect(
+        page.locator("platform-user [data-menu-action='documentation'] .menu-item-label")
+    ).to_have_text("Documentation", timeout=30_000)
+    await scenario.step(
+        "Переключите язык интерфейса",
+        page,
+        screenshot_name="language-en",
+        label_en="Switch the interface language",
+        details=(
+            "Кнопки en|ru в строке «Language» переводят меню и "
+            "интерфейс. Язык запоминается — при следующем входе "
+            "консоль уже на нём.\n\n"
+            "**Итог.** Тема и язык — личные настройки: на других "
+            "сотрудников они не влияют."
+        ),
+        details_en=(
+            "The en|ru buttons in the Language row translate the menu "
+            "and the interface. The choice is remembered — the "
+            "console opens in it next time.\n\n"
+            "**Summary.** Theme and language are personal: they do "
+            "not affect your colleagues."
+        ),
+    )
+    await menu.locator("button.lang-option[data-locale='ru']").click()
+    await expect(
+        page.locator("platform-user [data-menu-action='documentation'] .menu-item-label")
+    ).to_have_text("Документация", timeout=30_000)
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=240,
+    doc_slug="services-hub",
+    title="Каталог сервисов: открыть другой продукт",
+    title_en="Services hub: open another product",
+    description=(
+        "**Для чего:** платформа — это несколько продуктов (Задачи, "
+        "Документы, Чат и другие). Каталог открывает любой из них "
+        "в один клик.\n\n"
+        "**Какие проблемы решает:** не нужно помнить адреса и выходить "
+        "в меню браузера — все продукты собраны в одной сетке со "
+        "статусами.\n\n"
+        "**Результат:** вы внутри нужного продукта и понимаете, "
+        "как туда попадать снова."
+    ),
+    description_en=(
+        "**What for:** the platform is several products (Tasks, "
+        "Documents, Chat and more). The hub opens any of them in "
+        "one click.\n\n"
+        "**Problems solved:** no addresses to remember — every "
+        "product sits in one grid with its status.\n\n"
+        "**Result:** you are inside the right product and know "
+        "how to get back."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_frontend_services_hub(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    page = ui_page_system
+    await _prepare_clean_page(page)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+
+    launcher_btn = page.locator("[aria-label*='launcher' i], [title*='launcher' i]").first
+    await launcher_btn.click()
+    services_modal = page.locator("platform-services-modal")
+    await expect(services_modal).to_be_visible(timeout=30_000)
+    tasks_tile = services_modal.locator("[data-service-id='worktracker']")
+    await expect(tasks_tile).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте каталог сервисов",
+        page,
+        screenshot_name="services-hub",
+        label_en="Open the services hub",
+        details=(
+            "Кнопка с логотипом вверху боковой панели (или пункт Apps "
+            "в меню аккаунта) открывает сетку всех продуктов платформы "
+            "с их статусами."
+        ),
+        details_en=(
+            "The logo button at the top of the sidebar (or the Apps "
+            "item in the account menu) opens a grid of every platform "
+            "product with its status."
+        ),
+    )
+
+    async with page.expect_popup() as popup_info:
+        await tasks_tile.click()
+    popup = await popup_info.value
+    await expect(popup.locator("worktracker-app")).to_be_visible(timeout=60_000)
+    await expect(services_modal).not_to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте продукт из каталога",
+        popup,
+        screenshot_name="service-opened",
+        label_en="Open a product from the hub",
+        details=(
+            "**Демонстрация результата.** Плитка «Tasks» открыла "
+            "приложение задач — так же запускаются Flows, Документы, "
+            "Чат и остальные продукты.\n\n"
+            "**Итог.** Вход в каждый продукт — из каталога сервисов "
+            "или из дашборда."
+        ),
+        details_en=(
+            "**Result demonstration.** The Tasks tile opened the "
+            "tasks app — Flows, Documents, Chat and the rest launch "
+            "the same way.\n\n"
+            "**Summary.** Every product opens from the services hub "
+            "or the dashboard."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="public-pages",
+    title="Публичные страницы: продукты, блог, о компании",
+    title_en="Public pages: products, blog, about",
+    description=(
+        "**Для чего:** часть сайта открыта без входа: страницы "
+        "продуктов, блог, информация о компании и роадмап.\n\n"
+        "**Какие проблемы решает:** можно спокойно изучить платформу "
+        "до регистрации и поделиться ссылкой с коллегой.\n\n"
+        "**Результат:** вы знаете, что смотреть на публичном сайте "
+        "и где лежат условия и политики."
+    ),
+    description_en=(
+        "**What for:** part of the site is open without signing in: "
+        "product pages, the blog, about and the roadmap.\n\n"
+        "**Problems solved:** you can study the platform before "
+        "registering and share a link with a colleague.\n\n"
+        "**Result:** you know what the public site offers and where "
+        "the terms and policies live."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_public_pages(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_anonymous: Page,
+) -> None:
+    page = ui_page_anonymous
+    await _prepare_clean_page(page)
+
+    _ = await page.goto(f"{frontend_ui.origin}/products/agents", wait_until="domcontentloaded")
+    product_page = page.locator("product-agents-page")
+    await expect(product_page).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+    await scenario.step(
+        "Откройте страницу продукта",
+        page,
+        screenshot_name="product-page",
+        label_en="Open a product page",
+        details=(
+            "Раздел «Продукты» в шапке сайта рассказывает о каждом "
+            "продукте платформы: агенты, задачи, документы, CRM, "
+            "магазин и другие — всё без входа."
+        ),
+        details_en=(
+            "The Products section in the site header describes every "
+            "platform product: agents, tasks, documents, CRM, shop "
+            "and more — all without signing in."
+        ),
+    )
+
+    _ = await page.goto(f"{frontend_ui.origin}/blog", wait_until="domcontentloaded")
+    await expect(page.locator("blog-list-page")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Загляните в блог",
+        page,
+        screenshot_name="blog-page",
+        label_en="Look into the blog",
+        details=(
+            "Блог публикует новости платформы и разборы сценариев "
+            "использования — удобно следить за обновлениями."
+        ),
+        details_en=(
+            "The blog posts platform news and usage walkthroughs — "
+            "a handy way to track updates."
+        ),
+    )
+
+    _ = await page.goto(f"{frontend_ui.origin}/about", wait_until="domcontentloaded")
+    await expect(page.locator("about-page")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте «О компании» и документы",
+        page,
+        screenshot_name="about-page",
+        label_en="Open About and the legal pages",
+        details=(
+            "**Демонстрация результата.** На «О компании» — контакты "
+            "и описание платформы; в футере — условия использования, "
+            "политика конфиденциальности и роадмап.\n\n"
+            "**Итог.** Всё публичное доступно без входа; после "
+            "регистрации эти страницы остаются по тем же адресам."
+        ),
+        details_en=(
+            "**Result demonstration.** About holds contacts and the "
+            "platform description; the footer links terms, privacy "
+            "policy and the roadmap.\n\n"
+            "**Summary.** Everything public works without signing "
+            "in; after registering the same URLs stay available."
         ),
     )

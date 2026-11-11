@@ -164,9 +164,8 @@ async def test_to_entry_tts_keeps_synthesis_locale(unique_id):
     try:
         tts = ProviderLitserveTTSModelEntry(
             api_model_id=api_id,
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_5_ru",
-            voice="xenia",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
             sample_rate=24000,
             synthesis_locale="ru",
         )
@@ -175,6 +174,6 @@ async def test_to_entry_tts_keeps_synthesis_locale(unique_id):
         entry = row.to_entry()
         assert isinstance(entry, ProviderLitserveTTSModelEntry)
         assert entry.synthesis_locale == "ru"
-        assert entry.voice == "xenia"
+        assert entry.voice == "serena"
     finally:
         await _cleanup(api_id)

@@ -11,13 +11,18 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import re
 
 from pydantic import TypeAdapter
 
+from apps.idle.tasks.task_names import TASK_A2A_CALL_FINISHED
 from apps.shop.config import ShopSettings
 from apps.shop.models.api import ShopAiMenuItem, ShopAiOptionSuggestion
-from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
+from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
+from core.a2a.submit import A2ACallPending, a2a_resume_nonce, submit_a2a_call
+from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.config import get_settings
 from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
 from core.files.models import FileRecord
@@ -46,43 +51,114 @@ class ShopAiService:
     """AI-операции магазина через ветки компанийского flow ``shop`` по A2A."""
 
     def __init__(self, settings: ShopSettings) -> None:
-        self._a2a: A2AClient = A2AClient(timeout=settings.ai_a2a_timeout_seconds)
+        self._a2a: A2AClient = A2AClient()
+        self._deadline_seconds: float = settings.ai_a2a_deadline_seconds
 
     async def _flow_task(
         self,
         branch_id: str,
         *,
+        company_id: str,
+        user_id: str,
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
     ) -> A2ATaskResult:
-        """Вызов ветки flow ``shop``: variables через metadata, файлы — Part.raw."""
-        flows_base_url = get_settings().server.get_flows_service_url().rstrip("/")
-        try:
-            return await self._a2a.send_task(
-                base_url=f"{flows_base_url}/flows/api/v1/{_FLOW_ID}",
-                content=content,
-                branch_id=branch_id,
-                metadata={"variables": variables},
-                timeout=self._a2a.timeout,
-                parts=parts,
-            )
-        except A2AClientError as exc:
+        """Вызов ветки flow ``shop`` без синхронного ожидания.
+
+        Resolved payload обслуживается из pending-ряда по ``dedup_key`` (re-run
+        ``shop_ai_call`` после webhook-resume); нет строки — ``submit_a2a_call``
+        регистрирует pending + SendMessage с push config и поднимает
+        ``A2ACallPending``. Ожидания/опроса нет никогда.
+        """
+        nonce = a2a_resume_nonce()
+        if nonce is None:
             raise PlatformUnavailableError(
-                f"ai flow task failed: {exc}", error_code="ai_upstream"
-            ) from exc
+                "ai flow call outside A2A resume context", error_code="ai_upstream"
+            )
+        fragment = hashlib.sha1(
+            json.dumps(
+                {
+                    "branch": branch_id,
+                    "content": content,
+                    "variables": variables,
+                    "files": [p.get("filename") for p in parts or []],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        dedup_key = f"shop:ai:{fragment}:{nonce}"
+        row = await PlatformA2APendingCall.by_dedup_key("shop", dedup_key)
+        if row is not None:
+            if row.result_payload is not None:
+                return self._result_from_stored_payload(row.result_payload)
+            if row.status is PendingCallStatus.pending:
+                raise A2ACallPending(row.a2a_task_id)
+            raise PlatformUnavailableError(
+                "ai flow task failed", error_code="ai_upstream"
+            )
+        flows_base_url = get_settings().server.get_flows_service_url().rstrip("/")
+        row = await submit_a2a_call(
+            a2a_client=self._a2a,
+            service="shop",
+            company_id=company_id,
+            user_id=user_id,
+            base_url=f"{flows_base_url}/flows/api/v1/{_FLOW_ID}",
+            content=content,
+            branch_id=branch_id,
+            continuation=TASK_A2A_CALL_FINISHED,
+            continuation_kwargs={},
+            deadline_seconds=self._deadline_seconds,
+            parts=parts,
+            metadata={"variables": variables},
+            dedup_key=dedup_key,
+        )
+        raise A2ACallPending(row.a2a_task_id)
+
+    @staticmethod
+    def _result_from_stored_payload(payload: JsonObject) -> A2ATaskResult:
+        """A2ATaskResult из stored webhook-результата (status/response/artifacts/task)."""
+        status = payload.get("status")
+        if status != "completed":
+            raise PlatformUnavailableError(
+                f"ai flow task ended with status {status!r}",
+                error_code="ai_upstream",
+            )
+        task = payload.get("task")
+        artifacts = payload.get("artifacts")
+        response_text = payload.get("response")
+        return A2ATaskResult(
+            task=(
+                require_json_object(task, "a2a.payload.task")
+                if isinstance(task, dict)
+                else {}
+            ),
+            artifacts=artifacts if isinstance(artifacts, list) else [],
+            status="completed",
+            response=response_text if isinstance(response_text, str) else "",
+            raw={},
+        )
 
     async def _flow_text(
         self,
         branch_id: str,
         *,
+        company_id: str,
+        user_id: str,
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
     ) -> str:
         """Вызов ветки flow и извлечение текста ответа."""
         response = await self._flow_task(
-            branch_id, content=content, variables=variables, parts=parts
+            branch_id,
+            company_id=company_id,
+            user_id=user_id,
+            content=content,
+            variables=variables,
+            parts=parts,
         )
         text = response.response.strip()
         if not text:
@@ -93,13 +169,20 @@ class ShopAiService:
         self,
         branch_id: str,
         *,
+        company_id: str,
+        user_id: str,
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
     ) -> JsonObject:
         """Вызов ветки flow и извлечение structured output: data-парты artifacts/history, затем JSON из текста."""
         response = await self._flow_task(
-            branch_id, content=content, variables=variables, parts=parts
+            branch_id,
+            company_id=company_id,
+            user_id=user_id,
+            content=content,
+            variables=variables,
+            parts=parts,
         )
 
         def _data_from_parts(parts_raw: JsonValue) -> list[JsonObject]:
@@ -165,6 +248,8 @@ class ShopAiService:
     async def describe_product(
         self,
         *,
+        company_id: str,
+        user_id: str,
         name: str,
         category_name: str | None = None,
         photo_file_id: str | None = None,
@@ -176,6 +261,8 @@ class ShopAiService:
         if photo_file_id:
             text = await self._flow_text(
                 _BRANCH_DESCRIBE_PHOTO,
+                company_id=company_id,
+                user_id=user_id,
                 content=f"Опиши блюдо «{name}» по фотографии",
                 variables=variables,
                 parts=[
@@ -186,13 +273,20 @@ class ShopAiService:
         else:
             text = await self._flow_text(
                 _BRANCH_DESCRIBE,
+                company_id=company_id,
+                user_id=user_id,
                 content=f"Опиши блюдо «{name}»",
                 variables=variables,
             )
         return text.strip('"').strip()[:500]
 
     async def suggest_options(
-        self, *, product_name: str, group_name: str | None = None
+        self,
+        *,
+        company_id: str,
+        user_id: str,
+        product_name: str,
+        group_name: str | None = None,
     ) -> list[ShopAiOptionSuggestion]:
         """Опции-модификаторы к блюду: ветка ``suggest_options`` (structured output)."""
         variables: JsonObject = {"product_name": product_name}
@@ -200,6 +294,8 @@ class ShopAiService:
             variables["group_name"] = group_name
         payload = await self._flow_json(
             _BRANCH_SUGGEST_OPTIONS,
+            company_id=company_id,
+            user_id=user_id,
             content=f"Предложи опции к блюду «{product_name}»",
             variables=variables,
         )
@@ -212,13 +308,20 @@ class ShopAiService:
         self,
         branch_id: str,
         *,
+        company_id: str,
+        user_id: str,
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
     ) -> str:
         """Ветка image_gen: разбор ``{"file_ids": [...]}`` из structured/text ответа."""
         payload = await self._flow_json(
-            branch_id, content=content, variables=variables, parts=parts
+            branch_id,
+            company_id=company_id,
+            user_id=user_id,
+            content=content,
+            variables=variables,
+            parts=parts,
         )
         file_ids_raw = payload.get("file_ids")
         if not isinstance(file_ids_raw, list) or not file_ids_raw:
@@ -228,10 +331,14 @@ class ShopAiService:
             raise PlatformNotFoundError("ai returned no image", error_code="ai_empty_result")
         return file_id
 
-    async def enhance_product_photo(self, *, file_id: str) -> str:
+    async def enhance_product_photo(
+        self, *, company_id: str, user_id: str, file_id: str
+    ) -> str:
         """Улучшение фото блюда: ветка ``enhance_photo`` (image_gen с референсом) → file_id."""
         return await self._flow_file_id(
             _BRANCH_ENHANCE_PHOTO,
+            company_id=company_id,
+            user_id=user_id,
             content="Улучши фотографию для витрины",
             variables={},
             parts=[
@@ -240,21 +347,29 @@ class ShopAiService:
             ],
         )
 
-    async def generate_product_photo(self, *, name: str, description: str = "") -> str:
+    async def generate_product_photo(
+        self, *, company_id: str, user_id: str, name: str, description: str = ""
+    ) -> str:
         """Генерация фото товара с нуля: ветка ``generate_photo`` (image_gen) → file_id."""
         variables: JsonObject = {"product_name": name}
         if description:
             variables["description"] = description
         return await self._flow_file_id(
             _BRANCH_GENERATE_PHOTO,
+            company_id=company_id,
+            user_id=user_id,
             content=f"Сгенерируй фотографию «{name}»",
             variables=variables,
         )
 
-    async def parse_menu(self, *, text: str) -> list[ShopAiMenuItem]:
+    async def parse_menu(
+        self, *, company_id: str, user_id: str, text: str
+    ) -> list[ShopAiMenuItem]:
         """Разбор свободного текста меню: ветка ``parse_menu`` (structured output)."""
         payload = await self._flow_json(
             _BRANCH_PARSE_MENU,
+            company_id=company_id,
+            user_id=user_id,
             content=text,
             variables={},
         )
@@ -264,7 +379,13 @@ class ShopAiService:
         return TypeAdapter(list[ShopAiMenuItem]).validate_python(items_raw)[:500]
 
     async def describe_shop(
-        self, *, name: str, description: str = "", city: str = ""
+        self,
+        *,
+        company_id: str,
+        user_id: str,
+        name: str,
+        description: str = "",
+        city: str = "",
     ) -> str:
         """Описание магазина для витрины: ветка ``describe_shop``."""
         variables: JsonObject = {"shop_name": name}
@@ -274,29 +395,39 @@ class ShopAiService:
             variables["city"] = city
         text = await self._flow_text(
             _BRANCH_DESCRIBE_SHOP,
+            company_id=company_id,
+            user_id=user_id,
             content=f"Напиши описание магазина «{name}»",
             variables=variables,
         )
         return text.strip('"').strip()[:500]
 
-    async def generate_shop_cover(self, *, name: str, description: str = "") -> str:
+    async def generate_shop_cover(
+        self, *, company_id: str, user_id: str, name: str, description: str = ""
+    ) -> str:
         """Генерация обложки витрины: ветка ``generate_cover`` (image_gen) → file_id."""
         variables: JsonObject = {"shop_name": name}
         if description:
             variables["description"] = description
         return await self._flow_file_id(
             _BRANCH_GENERATE_COVER,
+            company_id=company_id,
+            user_id=user_id,
             content=f"Сгенерируй обложку витрины «{name}»",
             variables=variables,
         )
 
-    async def generate_shop_logo(self, *, name: str, description: str = "") -> str:
+    async def generate_shop_logo(
+        self, *, company_id: str, user_id: str, name: str, description: str = ""
+    ) -> str:
         """Генерация логотипа магазина: ветка ``generate_logo`` (image_gen) → file_id."""
         variables: JsonObject = {"shop_name": name}
         if description:
             variables["description"] = description
         return await self._flow_file_id(
             _BRANCH_GENERATE_LOGO,
+            company_id=company_id,
+            user_id=user_id,
             content=f"Сгенерируй логотип «{name}»",
             variables=variables,
         )

@@ -68,7 +68,9 @@ from core.a2a import (
     mapping_from_struct,
     struct_from_mapping,
 )
+from core.a2a.pending_call import PlatformA2APendingCall
 from core.authz.service import AuthzService
+from core.clients.a2a_client import A2AClient, A2AClientError
 from core.clients.redis_client import RedisClient
 from core.config.testing import is_testing
 from core.context import require_context, set_current_channel
@@ -840,6 +842,18 @@ class A2AChannel(BaseChannel):
         )
 
         task = await self._cancel_task_in_state(cancel_task_id)
+
+        # Propagate cancel к припаркованным remote A2A-детям (RemoteFlowNode,
+        # CodeAgentNode): consume pending-строки + best-effort CancelTask на
+        # удалённую сторону. Continuation не ставится — родитель уже терминален.
+        canceled_children = await PlatformA2APendingCall.cancel_for_parent(
+            service="flows", parent_task_id=cancel_task_id
+        )
+        for child in canceled_children:
+            with contextlib.suppress(A2AClientError):
+                _ = await A2AClient().cancel_task(
+                    child.base_url, child.a2a_task_id
+                )
 
         if task:
             company_id, _ = self._task_access_scope()

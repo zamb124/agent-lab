@@ -30,10 +30,9 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
         ],
         tts_models=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"silero-tts-{unique_id}",
-                hf_model_id="snakers4/silero-models",
-                silero_bundle="v5_5_ru",
-                voice="xenia",
+                api_model_id=f"qwen-tts-{unique_id}",
+                hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+                voice="serena",
                 sample_rate=24000,
             ),
         ],
@@ -51,7 +50,7 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
 def test_from_seed_resolves_all_kinds(unique_id):
     catalog = ModelCatalog.from_seed(_cfg(unique_id))
     assert catalog.hf_model_id("stt", f"gigaam-{unique_id}") == "ai-sage/GigaAM-v3"
-    assert catalog.hf_model_id("tts", f"silero-tts-{unique_id}") == "snakers4/silero-models"
+    assert catalog.hf_model_id("tts", f"qwen-tts-{unique_id}") == "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
     assert catalog.hf_model_id("vad", f"silero-{unique_id}") == "snakers4/silero-vad"
 
 
@@ -74,7 +73,7 @@ def test_find_typed_returns_typed_entry(unique_id):
     stt = catalog.find_typed("stt", f"gigaam-{unique_id}")
     assert isinstance(stt, ProviderLitserveSTTModelEntry)
     assert stt.revision == "e2e_rnnt"
-    tts = catalog.find_typed("tts", f"silero-tts-{unique_id}")
+    tts = catalog.find_typed("tts", f"qwen-tts-{unique_id}")
     assert isinstance(tts, ProviderLitserveTTSModelEntry)
     vad = catalog.find_typed("vad", f"silero-{unique_id}")
     assert isinstance(vad, ProviderLitserveVADModelEntry)

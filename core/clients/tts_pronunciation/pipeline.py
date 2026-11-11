@@ -9,7 +9,7 @@
     2. Нормализация — числа, даты, валюты, аббревиатуры (по локали).
     3. Regex-правила (precompiled, порядок из БД).
     4. Alias + stress-правила (Aho-Corasick, longest-match, word-boundary).
-    5. Provider-final (silero_ru_latin_to_cyrillic и т.п.) — НЕ здесь;
+    5. Provider-final (ru_latin_to_cyrillic и т.п.) — НЕ здесь;
        остаётся внутри LocalTTSEngine для litserve.
 """
 

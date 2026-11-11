@@ -153,7 +153,8 @@ async def submit_task(request: TaskSubmitRequest, di: Di) -> JsonObject:
         raise WsCommandError("internal", error_msg, error_code="internal")
 
     task_result = FlowTaskResult.model_validate(result.return_value)
-    task_state = platform_task_state_to_a2a(task_result.task_state)
+    # None — flow припаркован на remote A2A-вызове: задача остаётся working.
+    task_state = platform_task_state_to_a2a(task_result.task_state or "working")
     response_text = task_result.response
 
     # Breakpoint или interrupt — оба используют input_required

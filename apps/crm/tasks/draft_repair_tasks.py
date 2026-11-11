@@ -13,6 +13,7 @@ from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.tasks.crm_context import set_crm_context
 from apps.crm.tasks.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT
+from core.a2a.submit import A2ACallPending, set_a2a_resume_context
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.types import JsonObject
@@ -119,6 +120,19 @@ async def repair_note_analysis_draft_task(
         user_id,
         interface_language=interface_language,
     )
+    _ = set_a2a_resume_context(
+        CRM_REPAIR_NOTE_ANALYSIS_DRAFT.name,
+        {
+            "note_id": note_id,
+            "company_id": company_id,
+            "namespace": namespace,
+            "auth_token": auth_token,
+            "user_id": user_id,
+            "interface_language": interface_language,
+            "task_id": task_id,
+        },
+        run_nonce=task_id or note_id,
+    )
     snapshot_user_id = user_id
 
     if task_id:
@@ -196,6 +210,22 @@ async def repair_note_analysis_draft_task(
             di=di,
         )
         return {"status": "complete", "note_id": note_id, "draft_version": updated.draft_version}
+    except A2ACallPending:
+        if task_id:
+            await CRMTask.patch_progress(
+                task_id,
+                company_id,
+                status="running",
+                stage="waiting_ai",
+                progress_pct=60,
+            )
+            await publish_crm_task_snapshot_for_user(
+                user_id=snapshot_user_id,
+                task_id=task_id,
+                company_id=company_id,
+            )
+        logger.info("crm.draft_repair.a2a_parked", task_id=task_id, note_id=note_id)
+        return {"status": "waiting_ai", "note_id": note_id}
     except Exception as exc:
         msg = str(exc).strip()
         if not msg:

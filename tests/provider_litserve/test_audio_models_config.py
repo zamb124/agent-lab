@@ -56,39 +56,96 @@ def test_default_stt_entry_has_gigaam_backend_and_revision(unique_id):
     assert default.revision == "e2e_rnnt"
 
 
-def test_default_tts_entry_has_silero_bundle_voice_sample_rate(unique_id):
+def test_default_tts_entry_has_qwen_custom_voice_fields(unique_id):
     cfg = ProviderLitserveInfraConfig()
     default = next(
         m for m in cfg.tts_models if m.api_model_id == cfg.tts_models[0].api_model_id
     )
-    assert default.backend == "silero"
-    assert default.hf_model_id == "snakers4/silero-models"
-    assert default.silero_bundle == "v5_5_ru"
-    assert default.silero_language == "ru"
-    assert default.voice == "xenia"
+    assert default.api_model_id == "qwen3-tts-1.7b-customvoice-ru"
+    assert default.hf_model_id == "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+    assert default.voice == "serena"
     assert default.synthesis_locale == "ru"
     assert default.sample_rate == 24000
-    assert default.tts_input_steps == ("silero_ru_latin_to_cyrillic",)
+    assert default.tts_input_steps == ()
 
 
 def test_tts_entry_unknown_input_step_raises(unique_id):
     with pytest.raises(ValidationError, match="unknown steps"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_5_ru",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
+            sample_rate=24000,
+            tts_input_steps=("ru_latin_to_cyrillic", "nope"),
+        )
+
+
+def test_tts_entry_unknown_voice_raises(unique_id):
+    with pytest.raises(ValidationError, match="allowed"):
+        ProviderLitserveTTSModelEntry(
+            api_model_id=f"t-{unique_id}",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
             voice="xenia",
             sample_rate=24000,
-            tts_input_steps=("silero_ru_latin_to_cyrillic", "nope"),
         )
+
+
+def test_tts_entry_voice_case_normalized(unique_id):
+    entry = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t-{unique_id}",
+        hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        voice="  SERENA ",
+        sample_rate=24000,
+    )
+    assert entry.voice == "serena"
+
+
+def test_tts_entry_unsupported_synthesis_locale_raises(unique_id):
+    with pytest.raises(ValidationError, match="synthesis_locale"):
+        ProviderLitserveTTSModelEntry(
+            api_model_id=f"t-{unique_id}",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
+            synthesis_locale="uk",
+            sample_rate=24000,
+        )
+
+
+def test_tts_entry_synthesis_locale_normalized(unique_id):
+    entry = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t-{unique_id}",
+        hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        voice="serena",
+        synthesis_locale="RU-ru",
+        sample_rate=24000,
+    )
+    assert entry.synthesis_locale == "ru"
+
+
+def test_tts_entry_instruct_trimmed_and_none_if_blank(unique_id):
+    entry = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t-{unique_id}",
+        hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        voice="serena",
+        instruct="  Спокойно, медленно. ",
+        sample_rate=24000,
+    )
+    assert entry.instruct == "Спокойно, медленно."
+    blank = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t2-{unique_id}",
+        hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        voice="serena",
+        instruct="   ",
+        sample_rate=24000,
+    )
+    assert blank.instruct is None
 
 
 def test_tts_entry_empty_input_steps_allowed(unique_id):
     entry = ProviderLitserveTTSModelEntry(
         api_model_id=f"t-{unique_id}",
-        hf_model_id="snakers4/silero-models",
-        silero_bundle="v5_5_ru",
-        voice="xenia",
+        hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        voice="serena",
         sample_rate=24000,
         tts_input_steps=(),
     )
@@ -146,47 +203,25 @@ def test_vad_threshold_out_of_range_raises_validation_error(unique_id):
         )
 
 
-def test_tts_sample_rate_not_v5_ru_choice_raises_validation_error(unique_id):
+def test_tts_sample_rate_not_in_supported_ids_raises_validation_error(unique_id):
     with pytest.raises(ValidationError, match="8000"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_5_ru",
-            voice="xenia",
+            hf_model_id="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            voice="serena",
             sample_rate=999,
         )
 
 
-def test_silero_tts_unknown_bundle_raises_validation_error(unique_id):
-    with pytest.raises(ValidationError, match="not a supported Russian v5 bundle"):
-        ProviderLitserveTTSModelEntry(
-            api_model_id=f"t-{unique_id}",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="not_a_bundle",
-            voice="xenia",
-            sample_rate=24000,
-        )
-
-
-def test_silero_tts_bundle_whitespace_normalized(unique_id):
-    entry = ProviderLitserveTTSModelEntry(
-        api_model_id=f"t-{unique_id}",
-        hf_model_id="snakers4/silero-models",
-        silero_bundle=" V5_5_RU ",
-        voice="xenia",
-        sample_rate=24000,
-    )
-    assert entry.silero_bundle == "v5_5_ru"
-
-
-def test_silero_tts_voice_eugene_invalid_for_v5_4_ru(unique_id):
-    with pytest.raises(ValidationError, match="is invalid for silero_bundle"):
-        ProviderLitserveTTSModelEntry(
-            api_model_id=f"t-{unique_id}",
-            hf_model_id="snakers4/silero-models",
-            silero_bundle="v5_4_ru",
-            voice="eugene",
-            sample_rate=24000,
+def test_tts_entry_extra_field_forbidden(unique_id):
+    with pytest.raises(ValidationError):
+        ProviderLitserveTTSModelEntry.model_validate(
+            {
+                "api_model_id": f"t-{unique_id}",
+                "hf_model_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+                "voice": "serena",
+                "silero_bundle": "v5_5_ru",
+            }
         )
 
 

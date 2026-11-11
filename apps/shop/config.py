@@ -55,11 +55,11 @@ class ShopSettings(BaseSettings):
         default=30.0,
         description="Таймаут ожидания результата taskiq (provisioning домена и т.п.).",
     )
-    ai_a2a_timeout_seconds: float = Field(
-        default=90.0,
+    ai_a2a_deadline_seconds: float = Field(
+        default=300.0,
         ge=15.0,
         le=600.0,
-        description="Бюджет ожидания A2A при вызове веток системного flow ``shop`` (describe/suggest_options), сек.",
+        description="Дедлайн ожидания webhook-результата веток системного flow ``shop``, сек.",
     )
     demo_seed_enabled: bool = Field(
         default=True,

@@ -37,6 +37,12 @@ WORKDIR /app
 RUN uv pip install --python /opt/venv/bin/python --force-reinstall --no-deps \
         "torchvision==0.27.1"
 
+# CLI-бинарь для python-обёртки ``sox`` (транзитивная зависимость qwen-tts-compat;
+# при импорте проверяет наличие бинаря, 12Hz-токенизатор вызовов не делает).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sox \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY --from=ui-builder /out/apps/ ./apps/

@@ -1150,10 +1150,23 @@ class BaseChannel(ABC):
                 logger.info("flows.channel.flow_cancelled", task_id=effective_task_id)
                 await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
+                await self._send_push_notification(
+                    params.task_id, params.context_id, "canceled", ""
+                )
                 return FlowTaskResult(response="", task_state="canceled")
             finally:
                 await cancellation_token.cleanup()
                 set_cancellation_token(None)
+
+            if state.remote_wait is not None:
+                logger.info(
+                    "flows.channel.remote_parked",
+                    session_id=params.session_id,
+                    node_id=state.remote_wait.get("node_id"),
+                    a2a_task_id=state.remote_wait.get("a2a_task_id"),
+                )
+                await self._save_state(params.session_id, state, snapshot=True)
+                return FlowTaskResult(response="", task_state=None)
 
             final_response = state.response or ""
 

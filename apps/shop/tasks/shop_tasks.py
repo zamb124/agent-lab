@@ -8,7 +8,12 @@
 from __future__ import annotations
 
 from apps.shop.di import Di
-from apps.shop.events import publish_shop_catalog_changed
+from apps.shop.events import (
+    SHOP_SHOP_UPDATED,
+    publish_shop_ai_call_finished,
+    publish_shop_catalog_changed,
+    publish_shop_event,
+)
 from apps.shop.models import (
     Shop,
     ShopBackInStock,
@@ -19,8 +24,10 @@ from apps.shop.models import (
     ShopProduct,
     order_status_label,
 )
+from apps.shop.models.api import ShopUpdateRequest
 from apps.shop.services.shop_service import shop_scopes
 from apps.shop.tasks.task_names import (
+    SHOP_AI_CALL,
     SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_BACK_IN_STOCK,
     SHOP_NOTIFY_CUSTOMER,
@@ -30,11 +37,16 @@ from apps.shop.tasks.task_names import (
     SHOP_REBUILD_STOREFRONT,
     SHOP_RECONCILE_DOMAINS_TICK,
 )
+from core.a2a.submit import (
+    A2ACallPending,
+    clear_a2a_resume_context,
+    set_a2a_resume_context,
+)
 from core.context import clear_context, set_context
 from core.context.job_context import build_job_context, pick_company_billing_user
 from core.identity.system_bootstrap import build_system_admin_job_context
 from core.logging import get_logger
-from core.models.identity_models import Company
+from core.models.identity_models import Company, User
 from core.tasks import enqueue, platform_task
 from core.types import JsonObject
 
@@ -218,6 +230,180 @@ async def shop_rebuild_aggregate(
         clear_context()
 
 
+@platform_task(SHOP_AI_CALL)
+async def shop_ai_call(
+    *,
+    verb: str,
+    call_id: str,
+    company_id: str,
+    user_id: str,
+    shop_id: str,
+    kwargs: JsonObject,
+    di: Di,
+) -> JsonObject:
+    """Один AI-вызов магазина: submit → park → resume → ``shop/ai_call/finished``.
+
+    Первый прогон ставит A2A-вызов и выходит по ``A2ACallPending``; generic
+    continuation (``a2a_call_finished``) кладёт результат в pending-ряд и
+    re-enqueue'ит эту же задачу — метод сервиса забирает payload по dedup_key.
+    Результат уходит realtime-событием с ``call_id`` из op-ответа.
+    """
+    company = await Company.get(company_id)
+    if company is None:
+        raise ValueError(f"shop_ai_call: company {company_id} not found")
+    user = await User.get(user_id)
+    if user is None:
+        raise ValueError(f"shop_ai_call: user {user_id} not found")
+    trace_id = f"shop:ai-call:{call_id}"
+    _ = set_context(
+        build_job_context(
+            company=company,
+            user=user,
+            host="shop-job.local",
+            trace_id=trace_id,
+            session_id=trace_id,
+            channel="shop",
+        )
+    )
+    token = set_a2a_resume_context(
+        resume_task=SHOP_AI_CALL.name,
+        resume_kwargs={
+            "verb": verb,
+            "call_id": call_id,
+            "company_id": company_id,
+            "user_id": user_id,
+            "shop_id": shop_id,
+            "kwargs": dict(kwargs),
+        },
+        run_nonce=call_id,
+    )
+    try:
+        svc = di.ai_service
+        match verb:
+            case "describe_product":
+                text = await svc.describe_product(
+                    company_id=company_id, user_id=user_id, **kwargs
+                )
+                result: JsonObject = {"text": text}
+            case "suggest_options":
+                items = await svc.suggest_options(
+                    company_id=company_id, user_id=user_id, **kwargs
+                )
+                result = {
+                    "items": [
+                        item.model_dump(mode="json") for item in items
+                    ]
+                }
+            case "enhance_product_photo":
+                result = {
+                    "file_id": await svc.enhance_product_photo(
+                        company_id=company_id, user_id=user_id, **kwargs
+                    )
+                }
+            case "generate_product_photo":
+                result = {
+                    "file_id": await svc.generate_product_photo(
+                        company_id=company_id, user_id=user_id, **kwargs
+                    )
+                }
+            case "parse_menu":
+                items = await svc.parse_menu(
+                    company_id=company_id, user_id=user_id, **kwargs
+                )
+                result = {
+                    "items": [
+                        item.model_dump(mode="json") for item in items
+                    ]
+                }
+            case "describe_shop":
+                result = {
+                    "text": await svc.describe_shop(
+                        company_id=company_id, user_id=user_id, **kwargs
+                    )
+                }
+            case "generate_shop_cover":
+                result = {
+                    "file_id": await svc.generate_shop_cover(
+                        company_id=company_id, user_id=user_id, **kwargs
+                    )
+                }
+            case "generate_shop_logo":
+                result = {
+                    "file_id": await svc.generate_shop_logo(
+                        company_id=company_id, user_id=user_id, **kwargs
+                    )
+                }
+            case "autofill":
+                result = await _ai_autofill(
+                    di,
+                    company_id=company_id,
+                    user_id=user_id,
+                    shop_id=shop_id,
+                )
+            case _:
+                raise ValueError(f"shop_ai_call: unknown verb {verb!r}")
+    except A2ACallPending:
+        return JsonObject({"status": "parked", "call_id": call_id})
+    except Exception as exc:
+        await publish_shop_ai_call_finished(
+            company_id=company_id,
+            call_id=call_id,
+            shop_id=shop_id,
+            verb=verb,
+            status="failed",
+            error=str(exc),
+        )
+        return JsonObject({"status": "failed", "call_id": call_id})
+    finally:
+        clear_a2a_resume_context(token)
+        clear_context()
+    await publish_shop_ai_call_finished(
+        company_id=company_id,
+        call_id=call_id,
+        shop_id=shop_id,
+        verb=verb,
+        status="completed",
+        result=result,
+    )
+    return JsonObject({"status": "completed", "call_id": call_id})
+
+
+async def _ai_autofill(
+    di: Di, *, company_id: str, user_id: str, shop_id: str
+) -> JsonObject:
+    """Autofill витрины: описание + обложка в пустые поля, как ``op_ai_autofill``."""
+    shop = await di.shop_service.get_shop(company_id, shop_id)
+    patch = ShopUpdateRequest()
+    description = shop.description or ""
+    if not description:
+        description = await di.ai_service.describe_shop(
+            company_id=company_id,
+            user_id=user_id,
+            name=shop.name,
+            city=shop.city or "",
+        )
+    patch.description = description
+    if not shop.cover_file_id:
+        patch.cover_file_id = await di.ai_service.generate_shop_cover(
+            company_id=company_id,
+            user_id=user_id,
+            name=shop.name,
+            description=description,
+        )
+    updated = await di.shop_service.update_shop(company_id, shop.shop_id, patch)
+    await publish_shop_event(
+        SHOP_SHOP_UPDATED,
+        updated.shop_id,
+        updated.slug,
+        updated.status,
+        company_id,
+    )
+    await di.storefront_service.invalidate_snapshot(updated.shop_id)
+    _ = await di.aggregate_service.sync_shop_items(updated)
+    _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=updated.slug)
+    return {"shop_id": updated.shop_id, "description": updated.description or ""}
+
+
 @platform_task(SHOP_AI_DESCRIBE_BATCH)
 async def shop_ai_describe_batch(
     shop_id: str,
@@ -249,6 +435,11 @@ async def shop_ai_describe_batch(
             channel="shop",
         )
     )
+    token = set_a2a_resume_context(
+        resume_task=SHOP_AI_DESCRIBE_BATCH.name,
+        resume_kwargs={"shop_id": shop_id, "company_id": company_id},
+        run_nonce=f"batch:{shop_id}",
+    )
     try:
         categories = {
             c.shop_category_id: c.name
@@ -268,32 +459,46 @@ async def shop_ai_describe_batch(
         ]
         updated = 0
         failed = 0
-        for product in products:
-            card = resolved[product.product_id]
-            try:
-                text = await di.ai_service.describe_product(
-                    name=card.name,
-                    category_name=categories.get(product.category_id or ""),
-                    photo_file_id=(
-                        card.image_file_ids[0] if card.image_file_ids else None
-                    ),
+        try:
+            for product in products:
+                card = resolved[product.product_id]
+                try:
+                    text = await di.ai_service.describe_product(
+                        company_id=company_id,
+                        user_id=billing_user.user_id,
+                        name=card.name,
+                        category_name=categories.get(product.category_id or ""),
+                        photo_file_id=(
+                            card.image_file_ids[0] if card.image_file_ids else None
+                        ),
+                    )
+                except A2ACallPending:
+                    raise
+                except Exception as exc:
+                    failed += 1
+                    logger.warning(
+                        "shop.ai_describe_batch.product_failed",
+                        shop_id=shop_id,
+                        shop_product_id=product.shop_product_id,
+                        error=str(exc),
+                    )
+                    continue
+                await di.shop_service.write_shop_overlay(
+                    company_id,
+                    shop_id,
+                    product.product_id,
+                    description=text,
                 )
-            except Exception as exc:
-                failed += 1
-                logger.warning(
-                    "shop.ai_describe_batch.product_failed",
-                    shop_id=shop_id,
-                    shop_product_id=product.shop_product_id,
-                    error=str(exc),
-                )
-                continue
-            await di.shop_service.write_shop_overlay(
-                company_id,
-                shop_id,
-                product.product_id,
-                description=text,
+                updated += 1
+        except A2ACallPending:
+            logger.info(
+                "shop.ai_describe_batch.a2a_parked",
+                shop_id=shop_id,
+                updated=updated,
             )
-            updated += 1
+            return JsonObject(
+                {"status": "parked", "updated": updated, "failed": failed}
+            )
         if updated:
             await di.storefront_service.invalidate_snapshot(shop_id)
             _ = await di.aggregate_service.sync_shop_items(shop)
@@ -303,4 +508,5 @@ async def shop_ai_describe_batch(
             {"updated": updated, "failed": failed, "total": len(products)}
         )
     finally:
+        clear_a2a_resume_context(token)
         clear_context()

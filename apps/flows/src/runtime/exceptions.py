@@ -45,6 +45,33 @@ class FlowInterrupt(Exception):
         return interrupt_body_public_question(self.body)
 
 
+class RemoteTaskParked(Exception):
+    """Flow припаркован на A2A remote-вызове (suspend без worker'а).
+
+    Нода отправила SendMessage(returnImmediately=true) с push config и
+    подняла это исключение: durable activity остаётся `started`, run loop
+    ставит `state.remote_wait` и завершает taskiq — задача A2A живёт в
+    `working`. Continuation (`flows_remote_task_finished`) по webhook
+    записывает `record_activity_completed` и ставит resume-запуск.
+    """
+
+    def __init__(
+        self,
+        *,
+        activity_id: str,
+        a2a_task_id: str,
+        node_id: str,
+        base_url: str,
+    ) -> None:
+        self.activity_id: str = activity_id
+        self.a2a_task_id: str = a2a_task_id
+        self.node_id: str = node_id
+        self.base_url: str = base_url
+        super().__init__(
+            f"Remote A2A task parked: node={node_id!r} a2a_task_id={a2a_task_id!r}"
+        )
+
+
 class BreakpointInterrupt(Exception):
     """
     Исключение для остановки выполнения агента на breakpoint.

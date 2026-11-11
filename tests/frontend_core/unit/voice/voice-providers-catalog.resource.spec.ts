@@ -29,7 +29,7 @@ function minimalCatalogPayload() {
         vad_provider_ids: [],
         tts_sample_rate_ids: [],
         vad_sample_rate_ids: [],
-        litserve_silero_tts_sample_rate_ids: [],
+        litserve_tts_sample_rate_ids: [],
         cloud_ru_tts_voice_ids: [],
         yandex_tts_voice_ids: [],
         sber_tts_voice_ids: [],

@@ -182,6 +182,15 @@ export interface ShopAiBatchResponse {
 }
 
 /**
+ * Приём AI-вызова: результат придёт push-событием ``shop/ai_call/finished``.
+ */
+export interface ShopAiCallResponse {
+    "call_id": string;
+    "status"?: string | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * ShopAiDescribeBatchPayload
  */
 export interface ShopAiDescribeBatchPayload {
@@ -210,14 +219,6 @@ export interface ShopAiEnhancePhotoPayload {
 }
 
 /**
- * ShopAiFileResponse
- */
-export interface ShopAiFileResponse {
-    "file_id": string;
-    [key: string]: unknown;
-}
-
-/**
  * ShopAiGeneratePhotoPayload
  */
 export interface ShopAiGeneratePhotoPayload {
@@ -228,40 +229,11 @@ export interface ShopAiGeneratePhotoPayload {
 }
 
 /**
- * Позиция, извлечённая AI из свободного текста меню.
- */
-export interface ShopAiMenuItem {
-    "name": string;
-    "price_minor": number;
-    "description"?: string | undefined;
-    "portion"?: string | undefined;
-    "category"?: string | undefined;
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiOptionSuggestion
- */
-export interface ShopAiOptionSuggestion {
-    "name": string;
-    "price_minor": number;
-    [key: string]: unknown;
-}
-
-/**
  * ShopAiParseMenuPayload
  */
 export interface ShopAiParseMenuPayload {
     "shop_id": string;
     "text": string;
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiParseMenuResponse
- */
-export interface ShopAiParseMenuResponse {
-    "items": ShopAiMenuItem[];
     [key: string]: unknown;
 }
 
@@ -282,22 +254,6 @@ export interface ShopAiSuggestOptionsPayload {
     "shop_id": string;
     "product_name": string;
     "group_name"?: string | null | undefined;
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiSuggestOptionsResponse
- */
-export interface ShopAiSuggestOptionsResponse {
-    "items": ShopAiOptionSuggestion[];
-    [key: string]: unknown;
-}
-
-/**
- * ShopAiTextResponse
- */
-export interface ShopAiTextResponse {
-    "text": string;
     [key: string]: unknown;
 }
 
@@ -1687,16 +1643,16 @@ export interface ShopUpdatePayload {
  * Типизированный dispatch/оп-результат по имени команды.
  */
 export interface ShopCommandMap {
-    "shop/ai/autofill_requested": { payload: ShopIdPayload; result: ShopResponse },
+    "shop/ai/autofill_requested": { payload: ShopIdPayload; result: ShopAiCallResponse },
     "shop/ai/describe_batch_requested": { payload: ShopAiDescribeBatchPayload; result: ShopAiBatchResponse },
-    "shop/ai/describe_requested": { payload: ShopAiDescribePayload; result: ShopAiTextResponse },
-    "shop/ai/describe_shop_requested": { payload: ShopAiShopPayload; result: ShopAiTextResponse },
-    "shop/ai/enhance_photo_requested": { payload: ShopAiEnhancePhotoPayload; result: ShopAiFileResponse },
-    "shop/ai/generate_cover_requested": { payload: ShopAiShopPayload; result: ShopAiFileResponse },
-    "shop/ai/generate_logo_requested": { payload: ShopAiShopPayload; result: ShopAiFileResponse },
-    "shop/ai/generate_photo_requested": { payload: ShopAiGeneratePhotoPayload; result: ShopAiFileResponse },
-    "shop/ai/parse_menu_requested": { payload: ShopAiParseMenuPayload; result: ShopAiParseMenuResponse },
-    "shop/ai/suggest_options_requested": { payload: ShopAiSuggestOptionsPayload; result: ShopAiSuggestOptionsResponse },
+    "shop/ai/describe_requested": { payload: ShopAiDescribePayload; result: ShopAiCallResponse },
+    "shop/ai/describe_shop_requested": { payload: ShopAiShopPayload; result: ShopAiCallResponse },
+    "shop/ai/enhance_photo_requested": { payload: ShopAiEnhancePhotoPayload; result: ShopAiCallResponse },
+    "shop/ai/generate_cover_requested": { payload: ShopAiShopPayload; result: ShopAiCallResponse },
+    "shop/ai/generate_logo_requested": { payload: ShopAiShopPayload; result: ShopAiCallResponse },
+    "shop/ai/generate_photo_requested": { payload: ShopAiGeneratePhotoPayload; result: ShopAiCallResponse },
+    "shop/ai/parse_menu_requested": { payload: ShopAiParseMenuPayload; result: ShopAiCallResponse },
+    "shop/ai/suggest_options_requested": { payload: ShopAiSuggestOptionsPayload; result: ShopAiCallResponse },
     "shop/badge_icons/list_requested": { payload: EmptyPayload; result: ShopBadgeIconsResponse },
     "shop/banners/create_requested": { payload: ShopBannerCreatePayload; result: ShopBannerResponse },
     "shop/banners/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopBannerResponse_ },

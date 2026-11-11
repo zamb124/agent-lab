@@ -13,11 +13,11 @@ from core.config.service_settings import ServiceSettingsCache
 class StockSettings(BaseSettings):
     """Настройки сервиса склада."""
 
-    putaway_flow_timeout_seconds: float = Field(
-        default=8.0,
+    putaway_flow_deadline_seconds: float = Field(
+        default=120.0,
         gt=0,
-        le=60.0,
-        description="Дедлайн inline-вызова flow рефлекса putaway; таймаут → move остаётся confirmed",
+        le=600.0,
+        description="Дедлайн ожидания webhook-решения flow рефлекса putaway; дедлайн → решение падает с конфликтом",
     )
 
 
