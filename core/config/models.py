@@ -1939,6 +1939,8 @@ class GoogleLLMProviderConfig(BaseModel):
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["google"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["google"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["google"])
+    image_models: list[str] = Field(default_factory=list)
+    """Image gen/edit модели: у google /models нет output_modalities, список — сиды каталога."""
 
 
 class GitHubModelsProviderConfig(BaseModel):

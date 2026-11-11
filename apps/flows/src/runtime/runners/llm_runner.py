@@ -679,7 +679,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 await self._checkpoint_state(state)
 
         effective_llm = resolve_effective_llm_config_for_node(self.node_config)
-        if effective_llm.capability == AICapability.IMAGE_GEN:
+        if effective_llm.capability in {AICapability.IMAGE_GEN, AICapability.IMAGE_EDIT}:
             await self._run_image_gen(
                 state, user_content, context_id=context_id, task_id=task_id
             )

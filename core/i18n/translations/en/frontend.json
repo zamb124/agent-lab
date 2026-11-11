@@ -978,6 +978,8 @@
             "cap_llm_vision_help": "Image and PDF understanding.",
             "cap_image_gen": "Image generation",
             "cap_image_gen_help": "Image generation (NanoBanana and compatible).",
+            "cap_image_edit": "Image editing",
+            "cap_image_edit_help": "Editing existing images by reference (crop, placement, enhance).",
             "cap_embedding": "Embeddings (RAG)",
             "cap_embedding_help": "Document vectorization for RAG.",
             "cap_rerank": "Rerank (RAG)",

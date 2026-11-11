@@ -2,7 +2,7 @@
 Загрузчик flows (bundles) и nodes в БД flows-сервиса.
 
 Читает ``apps/flows/registry.yaml``, для каждого id из секции ``flows`` подгружает
-каталог ``apps/flows/bundles/<bundle_id>/`` с ``flow.json`` и при необходимости
+каталог ``apps/flows/bundles/<bundle_id>/`` с ``flow.yaml`` (или ``flow.json``) и при необходимости
 ``nodes.json``. Резолвит tool refs через ``tool_repository``.
 
 Конфигурация тулов по пути в репозитории: ``apps/flows/tools/``.
@@ -50,6 +50,25 @@ from core.types import (
 )
 
 logger = get_logger(__name__)
+
+FLOW_CONFIG_FILE_NAMES: tuple[str, ...] = ("flow.yaml", "flow.yml", "flow.json")
+
+
+def find_bundle_flow_config(bundle_dir: Path) -> Path | None:
+    """Единственный flow-конфиг бандла: ``flow.yaml`` | ``flow.yml`` | ``flow.json``."""
+    found = [bundle_dir / name for name in FLOW_CONFIG_FILE_NAMES if (bundle_dir / name).is_file()]
+    if len(found) > 1:
+        names = ", ".join(sorted(path.name for path in found))
+        raise ValueError(f"Bundle '{bundle_dir.name}': ambiguous flow config files: {names}")
+    return found[0] if found else None
+
+
+def read_bundle_flow_config(config_path: Path) -> JsonObject:
+    """Читает flow-конфиг бандла (YAML или JSON) в JsonObject."""
+    text = config_path.read_text(encoding="utf-8")
+    if config_path.suffix in {".yaml", ".yml"}:
+        return require_json_object(parse_yaml_value(text, config_path.name), config_path.name)
+    return parse_json_object(text, config_path.name)
 
 _INLINE_SELF_CONTAINED_TOOL_TYPES = frozenset(
     {
@@ -364,9 +383,9 @@ class FlowsLoader:
     async def build_flow_bundle_config(self, bundle_id: str) -> FlowConfig | None:
         """Собирает FlowConfig из bundle без сохранения в БД."""
         bundle_dir = self.bundles_dir / bundle_id
-        config_path = bundle_dir / "flow.json"
-        if not config_path.exists():
-            logger.warning("flows.loader.flow_json_missing", bundle_dir=str(bundle_dir))
+        config_path = find_bundle_flow_config(bundle_dir)
+        if config_path is None:
+            logger.warning("flows.loader.flow_config_missing", bundle_dir=str(bundle_dir))
             return None
 
         if not self._defaults and self.registry_path.exists():
@@ -374,8 +393,8 @@ class FlowsLoader:
 
         await self.preload_nodes_to_cache(bundle_id)
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            raw_config = parse_json_object(f.read(), "flow.json")
+        raw_config = read_bundle_flow_config(config_path)
+        config_label = config_path.name
 
         nodes = await self._load_nodes_with_prompts(bundle_dir, raw_config)
         nodes = self._apply_defaults(nodes)
@@ -391,31 +410,37 @@ class FlowsLoader:
         raw_triggers = raw_config.get("triggers")
         if raw_triggers is not None:
             if not isinstance(raw_triggers, dict):
-                msg = "flow.json: поле triggers должно быть объектом {trigger_id: ...}"
+                msg = f"{config_label}: поле triggers должно быть объектом {{trigger_id: ...}}"
                 raise ValueError(msg)
             for trigger_key, trigger_obj in raw_triggers.items():
                 if not trigger_key.strip():
-                    msg = "flow.json: ключ в triggers должен быть непустой строкой (trigger_id)"
+                    msg = (
+                        f"{config_label}: ключ в triggers должен быть непустой строкой "
+                        "(trigger_id)"
+                    )
                     raise ValueError(msg)
                 if not isinstance(trigger_obj, dict):
-                    msg = f"flow.json: triggers['{trigger_key}'] должен быть объектом TriggerConfig"
+                    msg = (
+                        f"{config_label}: triggers['{trigger_key}'] должен быть "
+                        "объектом TriggerConfig"
+                    )
                     raise ValueError(msg)
                 triggers[trigger_key] = TriggerConfig.model_validate(trigger_obj)
 
         store_card_image_url = await self._resolve_store_card_image_url(raw_config, bundle_dir)
         raw_flow_id = raw_config.get("flow_id")
         if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
-            raise ValueError("flow.json: flow_id is required and must be a non-empty string")
+            raise ValueError(f"{config_label}: flow_id is required and must be a non-empty string")
         raw_name = raw_config.get("name")
         if not isinstance(raw_name, str) or not raw_name.strip():
-            raise ValueError("flow.json: name is required and must be a non-empty string")
+            raise ValueError(f"{config_label}: name is required and must be a non-empty string")
         raw_entry = raw_config.get("entry")
         if not isinstance(raw_entry, str) or not raw_entry.strip():
-            raise ValueError("flow.json: entry is required and must be a non-empty string")
+            raise ValueError(f"{config_label}: entry is required and must be a non-empty string")
 
         raw_hidden = raw_config.get("hidden", False)
         if not isinstance(raw_hidden, bool):
-            raise ValueError("flow.json: hidden must be boolean")
+            raise ValueError(f"{config_label}: hidden must be boolean")
 
         depends_on_flow_ids = self._read_bundle_depends_on_flow_ids(bundle_dir)
 
@@ -769,9 +794,9 @@ class FlowsLoader:
         self, node_config: JsonObject, ref_node_id: str, bundle_dir: Path
     ) -> JsonObject:
         """
-        Мержит ноду из flow.json (inline в bundle) с данными из nodes.json (через _nodes_cache).
+        Мержит ноду из flow-конфига бандла (inline) с данными из nodes.json (через _nodes_cache).
 
-        Поля из flow.json имеют приоритет над данными из nodes.json.
+        Поля из flow-конфига бандла имеют приоритет над данными из nodes.json.
         """
         cached_node = self._nodes_cache.get(ref_node_id)
         if not cached_node:
@@ -802,7 +827,7 @@ class FlowsLoader:
                 for t in cached_node.tools
             ]
 
-        # Переопределения из flow.json имеют приоритет
+        # Переопределения из flow-конфига бандла имеют приоритет
         for key, value in node_config.items():
             if value is not None and key != "node_id":
                 if key == "tools" and value:
@@ -859,13 +884,15 @@ class FlowsLoader:
         self, bundle_dir: Path, config: JsonObject
     ) -> dict[str, JsonObject]:
         """Загружает ветки (branches) и встраивает промпты для нод в каждой ветке."""
+        config_path = find_bundle_flow_config(bundle_dir)
+        config_label = config_path.name if config_path is not None else "flow config"
         raw_branches = config.get("branches")
         if raw_branches is None:
-            raise ValueError("flow.json: branches field is required (object of branches)")
+            raise ValueError(f"{config_label}: branches field is required (object of branches)")
         if not raw_branches:
             return {}
         if not isinstance(raw_branches, dict):
-            raise ValueError("flow.json: branches must be an object")
+            raise ValueError(f"{config_label}: branches must be an object")
 
         branches: dict[str, JsonObject] = {}
         for branch_id, branch_payload in raw_branches.items():
@@ -1310,11 +1337,10 @@ class FlowsLoader:
         return deps
 
     def _read_bundle_depends_on_flow_ids(self, bundle_dir: Path) -> list[str]:
-        config_path = bundle_dir / "flow.json"
-        if not config_path.exists():
+        config_path = find_bundle_flow_config(bundle_dir)
+        if config_path is None:
             return []
-        with open(config_path, "r", encoding="utf-8") as f:
-            raw_flow = parse_json_object(f.read(), f"{bundle_dir.name}.flow")
+        raw_flow = read_bundle_flow_config(config_path)
         return self._parse_bundle_depends_on_flow_ids(raw_flow, bundle_dir.name)
 
     def _expand_bundle_ids_with_dependencies(self, bundle_ids: list[str]) -> list[str]:
@@ -1357,10 +1383,9 @@ class FlowsLoader:
             return target_flow_id if target_flow_id is not None else bundle_id
         seen.add(bundle_id)
         bundle_dir = self.bundles_dir / bundle_id
-        config_path = bundle_dir / "flow.json"
-        if not config_path.exists():
+        if find_bundle_flow_config(bundle_dir) is None:
             raise ValueError(
-                f"Bundle directory '{bundle_id}' not found or has no flow.json: {bundle_dir}"
+                f"Bundle directory '{bundle_id}' not found or has no flow config: {bundle_dir}"
             )
         for companion_id in self._read_bundle_depends_on_flow_ids(bundle_dir):
             _ = await self._reload_bundle_chain(companion_id, seen=seen)
@@ -1420,11 +1445,11 @@ async def load_flows_to_db(
     """
     Загружает flows и nodes в БД из каталога с bundle-подпапками и registry.yaml.
 
-    Для каждого id из registry читается ``{bundles_dir}/{bundle_id}/flow.json`` (и nodes),
+    Для каждого id из registry читается ``{bundles_dir}/{bundle_id}/flow.yaml|flow.json`` (и nodes),
     tools подтягиваются из ``tool_repository`` и инлайнятся в конфиг.
 
     Аргументы:
-        bundles_dir: корень каталога с подпапками bundle (``{bundle_id}/flow.json``).
+        bundles_dir: корень каталога с подпапками bundle (``{bundle_id}/flow.yaml`` или ``flow.json``).
             По умолчанию: ``apps/flows/bundles``, реестр: ``apps/flows/registry.yaml``.
             Если ``bundles_dir`` задан явно: реестр ``{bundles_dir}/registry.yaml``.
 

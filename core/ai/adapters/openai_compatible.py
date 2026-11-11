@@ -32,7 +32,9 @@ class OpenAICompatibleModelCatalogAdapter(BaseModelCatalogAdapter):
             headers=self.provider_model_list_headers(),
             response_label=f"{self.provider}.models.response",
         )
-        records = self._extract_provider_model_records(payload, self.provider)
+        records = self._with_image_model_seed_records(
+            self._extract_provider_model_records(payload, self.provider)
+        )
         if probe_embeddings:
             records = await self._probe_embedding_dimensions(records)
         logger.info("ai.event", provider=self.provider, records_count=len(records))

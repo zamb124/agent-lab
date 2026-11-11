@@ -167,6 +167,7 @@ type LLMCapability = Literal[
     "llm_codegen",
     "llm_vision",
     "image_gen",
+    "image_edit",
 ]
 
 

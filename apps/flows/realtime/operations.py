@@ -72,7 +72,12 @@ from apps.flows.src.services.flow_speech_resolve import (
     triple_to_voice_ws_query_dict,
 )
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
-from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
+from apps.flows.src.services.flows_loader import (
+    FlowsLoader,
+    find_bundle_flow_config,
+    load_tools_to_db,
+    read_bundle_flow_config,
+)
 from core.ai.runtime import resolve_voice_tts_ws_voice
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject
@@ -464,12 +469,11 @@ def build_bundle_index(flows_root: Path) -> dict[str, str]:
         else:
             raise_internal(RuntimeError("Registry flow entry must be string or object"))
 
-        flow_path = bundles_dir / bundle_id / "flow.json"
-        if not flow_path.exists():
-            raise_internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
+        flow_path = find_bundle_flow_config(bundles_dir / bundle_id)
+        if flow_path is None:
+            raise_internal(RuntimeError(f"Bundle flow config not found for '{bundle_id}'"))
 
-        with open(flow_path, "r", encoding="utf-8") as flow_file:
-            raw_flow = parse_json_object(flow_file.read(), f"bundles.{bundle_id}.flow")
+        raw_flow = read_bundle_flow_config(flow_path)
 
         flow_id = raw_flow.get("flow_id")
         if not isinstance(flow_id, str) or not flow_id:
@@ -951,11 +955,10 @@ async def op_flows_store_bundles(
             raise_internal(RuntimeError("Registry flow entry must be string or object"))
         if not is_public:
             continue
-        flow_path = bundles_dir / bundle_id / "flow.json"
-        if not flow_path.exists():
-            raise_internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
-        with open(flow_path, "r", encoding="utf-8") as flow_file:
-            raw_flow = parse_json_object(flow_file.read(), f"bundles.{bundle_id}.flow")
+        flow_path = find_bundle_flow_config(bundles_dir / bundle_id)
+        if flow_path is None:
+            raise_internal(RuntimeError(f"Bundle flow config not found for '{bundle_id}'"))
+        raw_flow = read_bundle_flow_config(flow_path)
         hidden_value = raw_flow.get("hidden")
         if hidden_value is None:
             hidden_value = False

@@ -25,6 +25,7 @@ TOOL_TAG_WHITELIST: frozenset[str] = frozenset(
         "tables",
         "datasources",
         "flows",
+        "images",
         "text",
         "stock",
         "misc",

@@ -76,6 +76,7 @@ from apps.flows.src.reflection import (
     ReflectionTargetSnapshot,
     evaluate_reflection_gate,
 )
+from apps.flows.src.runners.remote import load_sandbox_capability_manifest
 from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
@@ -141,7 +142,6 @@ from core.billing.service import BillingService
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
-    CapabilityManifest,
     PlatformEffectEnvelope,
     execution_token_exp,
     issue_execution_token,
@@ -154,7 +154,6 @@ from core.clients.llm.mock_control import (
     resolve_entity_node_mock_result,
 )
 from core.clients.redis_client import RedisClient
-from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.context import get_context as get_request_context
 from core.datasources.models import DatasourceOperation
@@ -2739,7 +2738,7 @@ class CodeAgentNode(BaseNode):
                 state,
                 effect_envelopes,
                 context=execution_context,
-                manifest=await _load_capability_manifest(),
+                manifest=await load_sandbox_capability_manifest(),
                 interface=current_flow_interface(),
             )
         if interrupt_payload is not None:
@@ -2796,28 +2795,6 @@ class CodeAgentNode(BaseNode):
             ),
         )
         return company_id, user_id, namespace, request_id, trace_id, claims
-
-
-async def _load_capability_manifest() -> CapabilityManifest:
-    http = ServiceClient()
-    raw_gateway = await http.get(
-        "capability_gateway",
-        "/capability-gateway/api/v1/capabilities/manifest",
-        timeout=30.0,
-    )
-    raw_tools = await http.get(
-        "flows",
-        "/flows/api/v1/tool-runtime/manifest",
-        timeout=30.0,
-    )
-    gateway = CapabilityManifest.model_validate(raw_gateway)
-    tools = CapabilityManifest.model_validate(raw_tools)
-    by_name = {capability.name: capability for capability in gateway.capabilities}
-    by_name.update({capability.name: capability for capability in tools.capabilities})
-    return CapabilityManifest(
-        version=gateway.version,
-        capabilities=[by_name[name] for name in sorted(by_name)],
-    )
 
 
 def _platform_effects_from_artifact(artifact_payload: JsonObject) -> list[PlatformEffectEnvelope]:

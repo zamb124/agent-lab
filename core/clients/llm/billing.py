@@ -160,7 +160,7 @@ def billing_from_resolved_model(resolved: ResolvedAIModel) -> LLMClientBilling:
     if resolved.capability == AICapability.LLM_VISION:
         operation_code = BALANCE_BLOCK_OPERATION_VISION
         notification_service = "frontend"
-    elif resolved.capability == AICapability.IMAGE_GEN:
+    elif resolved.capability in {AICapability.IMAGE_GEN, AICapability.IMAGE_EDIT}:
         operation_code = BALANCE_BLOCK_OPERATION_IMAGE
         notification_service = _DEFAULT_NOTIFICATION_SERVICE
     resource_name = (

@@ -47,6 +47,7 @@ class AICapability(str, Enum):
     EMBEDDING = "embedding"
     RERANK = "rerank"
     IMAGE_GEN = "image_gen"
+    IMAGE_EDIT = "image_edit"
     VOICE_STT = "voice_stt"
     VOICE_TTS = "voice_tts"
     VOICE_VAD = "voice_vad"
@@ -66,6 +67,7 @@ LLM_CAPABILITIES: tuple[AICapability, ...] = (
     AICapability.LLM_CODEGEN,
     AICapability.LLM_VISION,
     AICapability.IMAGE_GEN,
+    AICapability.IMAGE_EDIT,
 )
 LLM_CAPABILITY_VALUES: frozenset[str] = frozenset(cap.value for cap in LLM_CAPABILITIES)
 

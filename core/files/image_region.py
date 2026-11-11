@@ -295,7 +295,7 @@ async def _photo_with_bytes(
     return photo
 
 
-async def _persist_page_reference(
+async def persist_page_reference(
     files_service: FilesService,
     *,
     source_file_id: str,
@@ -433,7 +433,7 @@ async def _crop_item_photo(
         return {**item, "photo": None}
 
     try:
-        page_ref = await _persist_page_reference(
+        page_ref = await persist_page_reference(
             files_service,
             source_file_id=source_file_id,
             page=page,

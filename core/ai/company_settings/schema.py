@@ -54,6 +54,7 @@ CapabilityLiteral = Literal[
     "embedding",
     "rerank",
     "image_gen",
+    "image_edit",
     "voice_stt",
     "voice_tts",
     "voice_vad",
@@ -406,6 +407,7 @@ class CompanyAIProviders(BaseModel):
     rerank: CompanyRerankOverride | None = None
     llm_context: LLMContextPatch | None = None
     image_gen: CompanyLLMOverride | None = None
+    image_edit: CompanyLLMOverride | None = None
     voice_stt: CompanyVoiceOverride | None = None
     voice_tts: CompanyVoiceOverride | None = None
     voice_vad: CompanyVoiceOverride | None = None
@@ -425,6 +427,7 @@ class CompanyAIProviders(BaseModel):
             ("llm_codegen", self.llm_codegen),
             ("llm_vision", self.llm_vision),
             ("image_gen", self.image_gen),
+            ("image_edit", self.image_edit),
         ):
             if ov is None:
                 continue
@@ -522,6 +525,8 @@ class CompanyAIProviders(BaseModel):
                 return self.rerank
             case AICapability.IMAGE_GEN:
                 return self.image_gen
+            case AICapability.IMAGE_EDIT:
+                return self.image_edit
             case AICapability.VOICE_STT:
                 return self.voice_stt
             case AICapability.VOICE_TTS:

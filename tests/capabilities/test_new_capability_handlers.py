@@ -88,6 +88,8 @@ async def test_manifest_exposes_new_capabilities(
     for name, namespace, method in (
         ("files.materialize_image_regions", "files", "materialize_image_regions"),
         ("files.fill_docx_template", "files", "fill_docx_template"),
+        ("images.generate", "images", "generate"),
+        ("images.edit", "images", "edit"),
         ("sandbox.codegen", "sandbox", "codegen"),
     ):
         assert name in by_name, name
@@ -161,6 +163,47 @@ async def test_files_materialize_image_regions_crops_pdf_page(
     )
     crop_file_id = photo.get("file_id")
     assert isinstance(crop_file_id, str) and crop_file_id.strip()
+
+
+@pytest.mark.asyncio
+async def test_images_generate_rejects_missing_prompt(
+    capability_gateway_di,
+    system_user_id: str,
+) -> None:
+    with pytest.raises(Exception, match="prompt"):
+        _ = await capability_gateway_di.capability_registry.call(
+            _request("images.generate", {}, user_id=system_user_id)
+        )
+
+
+@pytest.mark.asyncio
+async def test_images_edit_rejects_empty_references(
+    capability_gateway_di,
+    system_user_id: str,
+) -> None:
+    with pytest.raises(TypeError, match="references"):
+        _ = await capability_gateway_di.capability_registry.call(
+            _request(
+                "images.edit",
+                {"prompt": "crop it", "references": []},
+                user_id=system_user_id,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_images_edit_rejects_reference_without_file_id(
+    capability_gateway_di,
+    system_user_id: str,
+) -> None:
+    with pytest.raises(ValidationError, match="file_id"):
+        _ = await capability_gateway_di.capability_registry.call(
+            _request(
+                "images.edit",
+                {"prompt": "crop it", "references": [{"page": 0}]},
+                user_id=system_user_id,
+            )
+        )
 
 
 @pytest.mark.asyncio

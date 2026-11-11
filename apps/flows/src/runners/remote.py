@@ -8,7 +8,10 @@ from typing import override
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.flow_ui.effects import apply_capability_platform_effects
-from apps.flows.src.models.execution_limits import get_remote_code_runner_http_timeout_seconds
+from apps.flows.src.models.execution_limits import (
+    get_node_execution_wall_time_cap_seconds,
+    get_remote_code_runner_http_timeout_seconds,
+)
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runners.capability_context import capability_execution_context
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
@@ -117,15 +120,18 @@ async def load_sandbox_capability_manifest(
     # Gateway без AuthMiddleware: только platform caps + builtins.
     # Company tools — с текущего flows context (signed headers), иначе
     # sandbox не видит только что созданный tool_repository row.
+    # Таймаут = wall_time ноды: gateway/flows может быть занят длинным capability
+    # (read_file, images.edit) — короткий таймаут убивал ноду до старта кода.
+    manifest_timeout = float(get_node_execution_wall_time_cap_seconds())
     raw_gateway = await client.get(
         "capability_gateway",
         CAPABILITY_MANIFEST_PATH,
-        timeout=30.0,
+        timeout=manifest_timeout,
     )
     raw_tools = await client.get(
         "flows",
         TOOL_RUNTIME_MANIFEST_PATH,
-        timeout=30.0,
+        timeout=manifest_timeout,
     )
     gateway = CapabilityManifest.model_validate(raw_gateway)
     tools = CapabilityManifest.model_validate(raw_tools)

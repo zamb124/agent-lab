@@ -66,6 +66,7 @@ dependencies = [
     { name = "pywebpush" },
     { name = "reportlab" },
     { name = "segno" },
+    { name = "tenacity" },
     { name = "xlrd" },
 ]
 
@@ -213,6 +214,7 @@ requires-dist = [
     { name = "pywebpush", specifier = ">=2.5.0" },
     { name = "reportlab", specifier = ">=5.1.0" },
     { name = "segno", specifier = ">=1.6.6" },
+    { name = "tenacity", specifier = "==9.2.1" },
     { name = "xlrd", specifier = ">=2.0.2" },
 ]
 

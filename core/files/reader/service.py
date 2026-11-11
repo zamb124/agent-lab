@@ -75,6 +75,7 @@ from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
 from core.imports import module_sdk, typed_view
 from core.text_transforms import TextTransformService
+from core.tracing import attributes as tattr
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue
 
@@ -810,8 +811,21 @@ async def run_vision_on_image_bytes(
         trace_name,
         event_type="llm.vision",
         operation_category="llm",
-    ):
-        vision_result = await llm.invoke([message], json_output=False)
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_MIME: payload_mime,
+            tattr.ATTR_FILES_BYTES: len(raw),
+            tattr.ATTR_FILES_PAYLOAD_BYTES: len(payload),
+            tattr.ATTR_LLM_MODEL: resolved_llm.model,
+            tattr.ATTR_LLM_PROVIDER: resolved_llm.provider,
+        },
+    ) as span:
+        vision_result = await llm.invoke(
+            [message],
+            json_output=False,
+            extra_body={"reasoning_effort": "none"},
+        )
+        span.set_attribute(tattr.ATTR_FILES_CHARS, len(str(vision_result)))
     return str(vision_result)
 
 

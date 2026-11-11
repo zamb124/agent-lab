@@ -409,7 +409,12 @@
       "api_key": "YOUR_GOOGLE_LLM_API_KEY",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
       "models_url": "https://generativelanguage.googleapis.com/v1beta/openai/models",
-      "smoke_model": "gemini-2.5-flash-lite"
+      "smoke_model": "gemini-2.5-flash-lite",
+      "image_models": [
+        "gemini-3.1-flash-image",
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image-preview"
+      ]
     },
     "huggingface": {
       "api_key": "YOUR_HUGGINGFACE_API_KEY",

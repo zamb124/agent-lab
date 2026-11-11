@@ -88,11 +88,13 @@ from core.capabilities import (
     verify_execution_token,
 )
 from core.capabilities.tokens import assert_capability_allowed
+from core.clients.image_gen import ImageGenClient, ImageGenReference, ImageGenSpec
 from core.clients.nano_banana import NanoBananaClient
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.config import get_settings
+from core.context import require_active_company
 from core.data_tables.service import DataTableService
 from core.errors.boundary import PlatformNotFoundError
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
@@ -105,13 +107,18 @@ from core.files.create_spec import (
 )
 from core.files.docx_template import DocxTemplater
 from core.files.file_ref import FileRef, stored_file_ref
-from core.files.image_region import locate_image_regions, materialize_image_regions
+from core.files.image_region import (
+    locate_image_regions,
+    materialize_image_regions,
+    persist_page_reference,
+)
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import ExecutionPrincipal, SystemPrincipal
 from core.files.reader import FileReadError
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.models import ReadFileArgs, ReadFileEnvelope
+from core.files.reader.service import read_stored_file_by_id
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.files.writer import ContentMode, FileWriteError, FileWriter
@@ -120,8 +127,15 @@ from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company
 from core.text_transforms import TextTransformService
+from core.tracing import attributes as tracing_attr
+from core.tracing.context import (
+    reset_current_trace_context,
+    set_current_trace_context,
+)
 from core.tracing.operation_span import traced_operation
+from core.tracing.tracer import get_tracer
 from core.types import (
+    JsonArray,
     JsonObject,
     JsonValue,
     OtelAttributeValue,
@@ -628,6 +642,8 @@ class CapabilityRegistry:
             "files.read": self._files_read,
             "files.locate_image_regions": self._files_locate_image_regions,
             "files.materialize_image_regions": self._files_materialize_image_regions,
+            "images.generate": self._images_generate,
+            "images.edit": self._images_edit,
             "files.fill_docx_template": self._files_fill_docx_template,
             "http.request": self._http_request,
             "text.summarize": self._text_summarize,
@@ -1144,29 +1160,47 @@ class CapabilityRegistry:
             handler = self._tool_capability_call
         if handler is None:
             raise ValueError(f"Unknown capability: {request.name}")
-        async with traced_operation(
-            "capability_gateway.capability.call",
-            event_type="capability.call",
-            operation_category="capability",
-            resource_type="flow",
-            resource_id=request.context.flow_id,
-            extra_attributes={
-                "platform.capability.name": request.name,
-                "platform.flow.branch_id": request.context.branch_id,
-                "platform.flow.session_id": request.context.session_id,
-                "platform.flow.task_id": request.context.task_id,
-                "platform.flow.context_id": request.context.context_id,
-            },
-        ):
-            try:
-                capability_result = await handler(request)
-            except _CapabilityInterruptFromTool as exc:
-                return CapabilityCallResponse(
-                    status="interrupt",
-                    state=request.state,
-                    interrupt=CapabilityInterruptEnvelope.model_validate(exc.interrupt),
-                    platform_effects=exc.platform_effects,
-                )
+        # Platform-атрибуты вызова (session/task/flow) — для span и для вложенных
+        # операций (files.read, llm.*) через ContextVar; OTEL-родитель — из
+        # входящего traceparent (extract в api слое).
+        exec_ctx = request.context
+        trace_ctx = get_tracer().create_trace_context(
+            user_id=exec_ctx.user_id,
+            session_agent=exec_ctx.session_id,
+            task_id=exec_ctx.task_id,
+            context_id=exec_ctx.context_id,
+            flow_id=exec_ctx.flow_id,
+            branch_id=exec_ctx.branch_id,
+            channel=exec_ctx.channel,
+        )
+        ambient_token = set_current_trace_context(trace_ctx.to_dict())
+        try:
+            async with traced_operation(
+                "capability_gateway.capability.call",
+                event_type="capability.call",
+                operation_category="capability",
+                resource_type="flow",
+                resource_id=exec_ctx.flow_id,
+                trace_ctx=trace_ctx,
+                extra_attributes={
+                    tracing_attr.ATTR_CAPABILITY_NAME: request.name,
+                    "platform.flow.branch_id": exec_ctx.branch_id,
+                    "platform.flow.session_id": exec_ctx.session_id,
+                    "platform.flow.task_id": exec_ctx.task_id,
+                    "platform.flow.context_id": exec_ctx.context_id,
+                },
+            ):
+                try:
+                    capability_result = await handler(request)
+                except _CapabilityInterruptFromTool as exc:
+                    return CapabilityCallResponse(
+                        status="interrupt",
+                        state=request.state,
+                        interrupt=CapabilityInterruptEnvelope.model_validate(exc.interrupt),
+                        platform_effects=exc.platform_effects,
+                    )
+        finally:
+            reset_current_trace_context(ambient_token)
         if isinstance(capability_result, _CapabilityResult):
             return CapabilityCallResponse(
                 status="ok",
@@ -1364,6 +1398,90 @@ class CapabilityRegistry:
                 tags=["files", "images"],
                 sdk_namespace="files",
                 sdk_method="materialize_image_regions",
+            ),
+            "images.generate": CapabilityDefinition(
+                name="images.generate",
+                title="Generate images",
+                description=(
+                    "Generate images from a text prompt via universal image API "
+                    "(AICapability.IMAGE_GEN): prompt → file_ids of generated images. "
+                    "Geometry/format hints (aspect_ratio, image_size, output_format) are "
+                    "validated against the resolved model transport — unsupported parameters "
+                    "fail with unsupported_parameter. "
+                    "Тот же контракт, что tool images_generate."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "prompt": _string_schema("Текстовый промпт генерации"),
+                        "count": _integer_schema("Число изображений 1..4 (по умолчанию 1)"),
+                        "aspect_ratio": _string_schema("Соотношение сторон 'W:H' (например '1:1', '16:9')"),
+                        "image_size": _string_schema("Размер выхода: '1K', '2K' или '4K'"),
+                        "output_format": _string_schema("Формат выхода: 'png', 'jpeg' или 'webp'"),
+                        "seed": _integer_schema("Seed генерации (если поддерживается моделью)"),
+                        "negative_prompt": _string_schema("Негативный промпт (если поддерживается)"),
+                        "include_bytes_b64": _boolean_schema(
+                            "True — в files[] добавить bytes_b64 для превью"
+                        ),
+                    },
+                    required=["prompt"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "files": _array_schema(
+                            "Сгенерированные файлы: {file_id, content_type, original_name, bytes_b64?}"
+                        ),
+                        "text": _string_schema("Сопроводительный текст модели, если был"),
+                    },
+                    required=["files"],
+                ),
+                languages=_supported_languages(),
+                tags=["images"],
+                sdk_namespace="images",
+                sdk_method="generate",
+            ),
+            "images.edit": CapabilityDefinition(
+                name="images.edit",
+                title="Edit images",
+                description=(
+                    "Edit/generate images from a prompt plus reference images via "
+                    "universal image API (AICapability.IMAGE_GEN). references[] items are "
+                    "{file_id} or {file_id, page} — PDF page is rasterized to an image "
+                    "first. crop/mask/instruction edits are prompt-driven (no bbox). "
+                    "Returns files[{file_id, content_type, original_name, bytes_b64?}]. "
+                    "Тот же контракт, что tool images_edit."
+                ),
+                input_schema=_schema_object(
+                    properties={
+                        "prompt": _string_schema("Инструкция редактирования/промпт"),
+                        "references": _array_schema(
+                            "Референсы: [{file_id, page?}]; page растризует страницу PDF"
+                        ),
+                        "mask_file_id": _string_schema("file_id маски (если поддерживается моделью)"),
+                        "count": _integer_schema("Число изображений 1..4 (по умолчанию 1)"),
+                        "aspect_ratio": _string_schema("Соотношение сторон 'W:H'"),
+                        "image_size": _string_schema("Размер выхода: '1K', '2K' или '4K'"),
+                        "output_format": _string_schema("Формат выхода: 'png', 'jpeg' или 'webp'"),
+                        "seed": _integer_schema("Seed генерации (если поддерживается моделью)"),
+                        "negative_prompt": _string_schema("Негативный промпт (если поддерживается)"),
+                        "include_bytes_b64": _boolean_schema(
+                            "True — в files[] добавить bytes_b64 для превью"
+                        ),
+                    },
+                    required=["prompt", "references"],
+                ),
+                output_schema=_schema_object(
+                    properties={
+                        "files": _array_schema(
+                            "Результат: {file_id, content_type, original_name, bytes_b64?}"
+                        ),
+                        "text": _string_schema("Сопроводительный текст модели, если был"),
+                    },
+                    required=["files"],
+                ),
+                languages=_supported_languages(),
+                tags=["images"],
+                sdk_namespace="images",
+                sdk_method="edit",
             ),
             "files.fill_docx_template": CapabilityDefinition(
                 name="files.fill_docx_template",
@@ -2181,6 +2299,122 @@ class CapabilityRegistry:
                 include_bytes_b64=include_bytes_b64,
             )
         return {"sections": materialized}
+
+    def _image_gen_spec_kwargs(self, request: CapabilityCallRequest) -> JsonObject:
+        """kwargs → поля ImageGenSpec (без references; их собирает caller).
+
+        Типы и границы не проверяются здесь: ``ImageGenSpec.model_validate``
+        на вызове — единственная типизированная валидация контракта.
+        """
+        kwargs = request.kwargs
+        spec_kwargs: JsonObject = {
+            "prompt": _required_string(kwargs.get("prompt"), "prompt")
+        }
+        for key in (
+            "aspect_ratio", "image_size", "output_format",
+            "negative_prompt", "mask_file_id", "count", "seed",
+        ):
+            value = kwargs.get(key)
+            if value is not None:
+                spec_kwargs[key] = value
+        return spec_kwargs
+
+    def _parse_image_gen_references(
+        self,
+        request: CapabilityCallRequest,
+    ) -> list[ImageGenReference]:
+        raw_refs = request.kwargs.get("references")
+        if not isinstance(raw_refs, list) or not raw_refs:
+            raise TypeError("references must be a non-empty array")
+        return [ImageGenReference.model_validate(item) for item in raw_refs]
+
+    async def _resolve_image_gen_reference_ids(
+        self,
+        refs: list[ImageGenReference],
+    ) -> list[str]:
+        """references[{file_id,page?}] → file_ids картинок; page растризует PDF-страницу."""
+        company_id = require_active_company().company_id
+        record_cache: dict[str, FileRecord] = {}
+        page_ref_cache: dict[tuple[str, int], str] = {}
+        file_ids: list[str] = []
+        for ref in refs:
+            if ref.page is None:
+                file_ids.append(ref.file_id)
+                continue
+            file_ids.append(
+                await persist_page_reference(
+                    self._files_service,
+                    source_file_id=ref.file_id,
+                    page=ref.page,
+                    company_id=company_id,
+                    record_cache=record_cache,
+                    page_ref_cache=page_ref_cache,
+                )
+            )
+        return file_ids
+
+    async def _image_gen_result_files(
+        self,
+        file_ids: list[str],
+        *,
+        include_bytes_b64: bool,
+    ) -> JsonArray:
+        out: JsonArray = []
+        for file_id in file_ids:
+            record = await FileRecord.get(file_id)
+            if record is None:
+                raise ValueError(f"images.*: produced file not found: {file_id}")
+            entry: JsonObject = require_json_object(
+                stored_file_ref(record).model_dump(mode="json"),
+                "images.result.file",
+            )
+            if include_bytes_b64:
+                raw, _name = await read_stored_file_by_id(file_id)
+                entry["bytes_b64"] = base64.b64encode(raw).decode("ascii")
+            out.append(entry)
+        return out
+
+    def _require_image_gen_enabled(self) -> None:
+        if not get_settings().nano_banana.enabled:
+            raise ValueError("images.*: nano_banana.enabled is required")
+
+    async def _images_generate(self, request: CapabilityCallRequest) -> JsonObject:
+        self._require_image_gen_enabled()
+        spec_kwargs = self._image_gen_spec_kwargs(request)
+        include_bytes_b64 = bool(request.kwargs.get("include_bytes_b64"))
+        context = await self._context_service.build_context(request.context)
+        with self._context_service.activate(context):
+            result = await ImageGenClient(self._billing_service).generate(
+                ImageGenSpec.model_validate(spec_kwargs)
+            )
+            files = await self._image_gen_result_files(
+                result.file_ids, include_bytes_b64=include_bytes_b64
+            )
+        response: JsonObject = {"files": files}
+        if result.text is not None:
+            response["text"] = result.text
+        return response
+
+    async def _images_edit(self, request: CapabilityCallRequest) -> JsonObject:
+        self._require_image_gen_enabled()
+        spec_kwargs = self._image_gen_spec_kwargs(request)
+        refs = self._parse_image_gen_references(request)
+        include_bytes_b64 = bool(request.kwargs.get("include_bytes_b64"))
+        context = await self._context_service.build_context(request.context)
+        with self._context_service.activate(context):
+            spec_kwargs["references"] = tuple(
+                await self._resolve_image_gen_reference_ids(refs)
+            )
+            result = await ImageGenClient(self._billing_service).edit(
+                ImageGenSpec.model_validate(spec_kwargs)
+            )
+            files = await self._image_gen_result_files(
+                result.file_ids, include_bytes_b64=include_bytes_b64
+            )
+        response: JsonObject = {"files": files}
+        if result.text is not None:
+            response["text"] = result.text
+        return response
 
     async def _files_fill_docx_template(self, request: CapabilityCallRequest) -> JsonObject:
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")

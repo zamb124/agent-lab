@@ -978,6 +978,8 @@
             "cap_llm_vision_help": "Распознавание содержимого изображений и PDF.",
             "cap_image_gen": "Генерация изображений",
             "cap_image_gen_help": "Создание изображений (NanoBanana и совместимые).",
+            "cap_image_edit": "Редактирование изображений",
+            "cap_image_edit_help": "Изменение существующих изображений по референсу (crop, размещение, enhance).",
             "cap_embedding": "Эмбеддинги (RAG)",
             "cap_embedding_help": "Векторизация документов RAG.",
             "cap_rerank": "Реранк (RAG)",

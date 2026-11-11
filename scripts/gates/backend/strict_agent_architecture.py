@@ -14,7 +14,9 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
+
+import yaml
 
 from scripts.gates.kit import REPO_ROOT
 
@@ -247,7 +249,7 @@ def _line_number(text: str, index: int) -> int:
 
 def _scan_deleted_symbols() -> list[Violation]:
     violations: list[Violation] = []
-    for path in _iter_files(TEXT_SCAN_PATHS, (".py", ".json")):
+    for path in _iter_files(TEXT_SCAN_PATHS, (".py", ".json", ".yaml", ".yml")):
         text = path.read_text(encoding="utf-8")
         for pattern, message in FORBIDDEN_DELETED_SYMBOLS:
             for match in pattern.finditer(text):
@@ -375,8 +377,13 @@ def _scan_bundle_edge_contracts() -> list[Violation]:
     if not root.exists():
         return []
     violations: list[Violation] = []
-    for path in root.rglob("*.json"):
-        value = json.loads(path.read_text(encoding="utf-8"))
+    for path in root.rglob("*"):
+        if path.suffix == ".json":
+            value = json.loads(path.read_text(encoding="utf-8"))
+        elif path.suffix in {".yaml", ".yml"} and path.name.startswith("flow."):
+            value = cast(object, yaml.safe_load(path.read_text(encoding="utf-8")))
+        else:
+            continue
         violations.extend(_walk_json_edges(path, value, ""))
     return violations
 

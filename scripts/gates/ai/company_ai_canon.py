@@ -270,6 +270,7 @@ VENDOR_URL_WHITELIST_PATHS = (
     "core/clients/voice_resolver.py",
     "core/clients/stt_client.py",
     "core/clients/tts_client.py",
+    "core/clients/image_gen.py",
     "core/clients/nano_banana.py",
     "core/config/",
     "core/files/reader/",

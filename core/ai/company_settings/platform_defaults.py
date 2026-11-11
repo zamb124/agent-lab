@@ -13,6 +13,7 @@ _LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
         AICapability.LLM_CODEGEN,
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
+        AICapability.IMAGE_EDIT,
     }
 )
 

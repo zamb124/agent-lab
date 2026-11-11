@@ -274,6 +274,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
 
         if "image" in output_set:
             capabilities.add(AICapability.IMAGE_GEN)
+            if "image" in input_set:
+                capabilities.add(AICapability.IMAGE_EDIT)
 
         can_generate_text = (
             "text" in output_set
@@ -455,6 +457,28 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             return self._extract_github_catalog_model_records(payload)
         payload_object = require_json_object(payload, f"{provider}.models.response")
         return self._extract_openai_compatible_model_records(payload_object, provider)
+
+    def _with_image_model_seed_records(self, records: list[AIModelRecord]) -> list[AIModelRecord]:
+        """Сиды image-моделей из конфига провайдера (``llm.<provider>.image_models``).
+
+        Нужен там, где live-каталог не помечает image output (у google нет
+        output_modalities в /models): seed-запись получает image modalities,
+        merge добавляет IMAGE_GEN/IMAGE_EDIT к совпавшей записи каталога.
+        """
+        cfg = self._configured_llm_provider()
+        image_models = cfg.image_models if isinstance(cfg, GoogleLLMProviderConfig) else ()
+        if not image_models:
+            return records
+        seeds = self._records_from_array(
+            [{"id": model_id} for model_id in image_models if model_id.strip()],
+            provider=self.provider,
+            primary_key="id",
+            forced_input_modalities=("text", "image"),
+            forced_output_modalities=("text", "image"),
+        )
+        if not seeds:
+            return records
+        return self._merge_model_records([*records, *seeds])
 
     def _merge_model_records(self, records: list[AIModelRecord]) -> list[AIModelRecord]:
         merged: dict[str, AIModelRecord] = {}

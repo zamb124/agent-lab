@@ -18,6 +18,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.files.files", "create_file"),
     ("apps.flows.tools.files.files", "files_locate_image_regions"),
     ("apps.flows.tools.files.files", "files_materialize_image_regions"),
+    ("apps.flows.tools.images.images", "images_generate"),
+    ("apps.flows.tools.images.images", "images_edit"),
     ("apps.flows.tools.documents.documents", "documents_open_file"),
     ("apps.flows.tools.documents.documents", "documents_replace_text"),
     ("apps.flows.tools.documents.documents", "documents_append_text"),

@@ -257,6 +257,7 @@ def resolve_company_llm(
         AICapability.LLM_CODEGEN,
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
+        AICapability.IMAGE_EDIT,
     }:
         raise ValueError(f"resolve_company_llm: capability {capability} is not an LLM capability")
 
@@ -388,6 +389,7 @@ def resolve_company_custom_llm_provider_ref(
         AICapability.LLM_CODEGEN,
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
+        AICapability.IMAGE_EDIT,
     }:
         raise ValueError(f"resolve_company_custom_llm_provider_ref: capability {capability} is not an LLM capability")
     aip = load_company_ai_providers()

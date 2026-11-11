@@ -31,6 +31,7 @@ _LLM_CAPABILITY_VALUES = {
     AICapability.LLM_CODEGEN.value,
     AICapability.LLM_VISION.value,
     AICapability.IMAGE_GEN.value,
+    AICapability.IMAGE_EDIT.value,
 }
 
 

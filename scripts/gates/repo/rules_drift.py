@@ -95,7 +95,7 @@ EXTERNAL_NAMES = frozenset({
     "FinishAuthorize", "CardData", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "VARCHAR", "on_startup", "on_shutdown",
     "search_graph", "search_code", "trace_path", "query_graph", "get_code_snippet", "get_architecture",
     "get_graph_schema", "qualified_name", "name_pattern", "semantic_query", "available_projects",
-    "include_tests", "path_filter", "risk_labels", "data_flow", "cross_service", "extensionFilter",
+    "include_tests", "path_filter", "file_pattern", "risk_labels", "data_flow", "cross_service", "extensionFilter",
 })
 # Примеры в запретах и именовании: образцы запрещённых форм, а не символы кода.
 EXAMPLE_NAMES = frozenset({

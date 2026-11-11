@@ -112,6 +112,7 @@ def create_llm_client_from_ai_model(
         AICapability.LLM_CODEGEN,
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
+        AICapability.IMAGE_EDIT,
     }:
         raise ValueError(f"capability {resolved.capability.value!r} is not executable as LLM")
     if resolved.model is None or not resolved.model.strip():

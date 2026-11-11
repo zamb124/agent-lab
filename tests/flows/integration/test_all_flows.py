@@ -14,8 +14,12 @@ import pytest
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.services.flows_loader import (
+    find_bundle_flow_config,
+    read_bundle_flow_config,
+)
 from core.clients.llm import setup_mock_responses
-from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 from tests.fixtures.billing import make_test_billing_service
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
@@ -64,18 +68,21 @@ def _get_flow_id(config: JsonObject) -> str | None:
     return flow_id if isinstance(flow_id, str) and flow_id else None
 
 
-def _load_flow_json(flow_json: Path) -> JsonObject:
-    return parse_json_object(flow_json.read_text(encoding="utf-8"), str(flow_json))
+def _load_flow_config(flow_dir: Path) -> tuple[JsonObject, Path] | None:
+    config_path = find_bundle_flow_config(flow_dir)
+    if config_path is None:
+        return None
+    return read_bundle_flow_config(config_path), config_path
 
 
 def get_all_flow_ids() -> list[str]:
-    """Получает список ID всех flows из файлов flow.json."""
+    """Получает список ID всех flows из файлов flow.yaml/flow.json."""
     flow_ids: list[str] = []
     for flow_dir in AGENTS_DIR.iterdir():
         if flow_dir.is_dir() and not flow_dir.name.startswith("_"):
-            flow_json = flow_dir / "flow.json"
-            if flow_json.exists():
-                config = _load_flow_json(flow_json)
+            loaded = _load_flow_config(flow_dir)
+            if loaded is not None:
+                config, _ = loaded
                 flow_id = _get_flow_id(config)
                 if flow_id and flow_id not in SKIP_FLOWS:
                     flow_ids.append(flow_id)
@@ -83,16 +90,16 @@ def get_all_flow_ids() -> list[str]:
 
 
 def get_all_agent_configs_from_files() -> list[JsonObject]:
-    """Загружает все flow.json напрямую из файлов."""
+    """Загружает все flow.yaml/flow.json напрямую из файлов."""
     configs: list[JsonObject] = []
     for flow_dir in AGENTS_DIR.iterdir():
         if flow_dir.is_dir() and not flow_dir.name.startswith("_"):
-            flow_json = flow_dir / "flow.json"
-            if flow_json.exists():
-                config = _load_flow_json(flow_json)
+            loaded = _load_flow_config(flow_dir)
+            if loaded is not None:
+                config, config_path = loaded
                 flow_id = _get_flow_id(config)
                 if flow_id and flow_id not in SKIP_FLOWS:
-                    config["_path"] = str(flow_json)
+                    config["_path"] = str(config_path)
                     configs.append(config)
     return configs
 
