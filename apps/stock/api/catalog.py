@@ -82,6 +82,8 @@ from apps.stock.models.api import (
     StockScanCommitPayload,
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
+    StockScanOpenPayload,
+    StockScanOpenResponse,
     StockScanQuantityPayload,
     StockScanStepPayload,
     StockScanStepResponse,
@@ -151,6 +153,7 @@ from apps.stock.realtime.operations import (
     op_routes_list,
     op_scan_commit,
     op_scan_count_commit,
+    op_scan_open,
     op_scan_quantity,
     op_scan_step,
     op_storage_types_create,
@@ -832,6 +835,11 @@ async def resolve_barcode(di: Di, barcode: str) -> StockBarcodeResolveResponse:
 
 
 # --- Скан-сессии ТСД ---
+
+
+@router.post("/scan/open", response_model=StockScanOpenResponse)
+async def scan_open(di: Di, body: StockScanOpenPayload) -> StockScanOpenResponse:
+    return await op_scan_open(body, user=_user(), di=di)
 
 
 @router.post("/scan/step", response_model=StockScanStepResponse)

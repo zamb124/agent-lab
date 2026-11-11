@@ -18,8 +18,7 @@ from apps.flows.src.tasks.task_names import (
     TASK_FLOWS_REMOTE_TASK_FINISHED,
     TASK_PROCESS_FLOW,
 )
-from core.a2a.submit import a2a_fetch_terminal_result
-from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
+from core.a2a.submit import a2a_fetch_terminal_result, a2a_task_outcome
 from core.a2a.task_states import A2A_OPEN_TASK_STATES
 from core.clients.a2a_client import A2AClient, A2AClientError
 from core.context import set_context
@@ -29,44 +28,6 @@ from core.tasks import enqueue, platform_task
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
-
-
-def _outcome_from_task_payload(task_obj: JsonObject, a2a_state: str) -> JsonObject:
-    """Outcome из полного Task, доставленного push webhook'ом (без GetTask)."""
-    artifacts_value = task_obj.get("artifacts")
-    artifacts = (
-        [
-            require_json_object(item, "a2a.payload.task.artifacts[]")
-            for item in artifacts_value
-        ]
-        if isinstance(artifacts_value, list)
-        else []
-    )
-    try:
-        response_text = extract_text_from_task_json(task_obj)
-    except ValueError:
-        response_text = ""
-    if a2a_state != "completed":
-        status_obj = task_obj.get("status")
-        error_text = a2a_state
-        if isinstance(status_obj, dict):
-            message_obj = status_obj.get("message")
-            if isinstance(message_obj, dict):
-                detail = extract_text_from_parts_json(message_obj.get("parts"))
-                if detail:
-                    error_text = detail
-        return {
-            "response": "",
-            "status": a2a_state,
-            "artifacts": artifacts,
-            "error": error_text,
-        }
-    return {
-        "response": response_text,
-        "status": a2a_state,
-        "artifacts": artifacts,
-        "error": None,
-    }
 
 
 async def _resolve_remote_outcome(
@@ -88,7 +49,7 @@ async def _resolve_remote_outcome(
     """
     task_payload = a2a_payload.get("task")
     if isinstance(task_payload, dict):
-        return _outcome_from_task_payload(
+        return a2a_task_outcome(
             require_json_object(task_payload, "a2a.payload.task"), a2a_state
         )
     try:
@@ -145,8 +106,6 @@ async def flows_remote_task_finished(
     di: Di,
 ) -> JsonObject:
     """Завершить припаркованный remote A2A-вызов и возобновить flow."""
-    if context_data is None:
-        raise ValueError("Context is required for remote task continuation")
     context = Context.from_dict(context_data)
     context.session_id = session_id
     _ = set_context(context)
@@ -155,7 +114,7 @@ async def flows_remote_task_finished(
     company_id = context.active_company.company_id
 
     if a2a_state == "deadline_exceeded":
-        outcome = {
+        outcome: JsonObject = {
             "response": "",
             "status": "failed",
             "artifacts": [],
@@ -166,6 +125,7 @@ async def flows_remote_task_finished(
             a2a_client=A2AClient(),
             a2a_task_id=a2a_task_id,
             a2a_state=a2a_state,
+            a2a_payload=a2a_payload,
             a2a_base_url=a2a_base_url,
             company_id=company_id,
             user_id=user_id,

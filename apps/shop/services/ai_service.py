@@ -127,7 +127,15 @@ class ShopAiService:
                 error_code="ai_upstream",
             )
         task = payload.get("task")
-        artifacts = payload.get("artifacts")
+        artifacts_value = payload.get("artifacts")
+        artifacts: list[JsonObject] = (
+            [
+                require_json_object(item, "a2a.payload.artifacts[]")
+                for item in artifacts_value
+            ]
+            if isinstance(artifacts_value, list)
+            else []
+        )
         response_text = payload.get("response")
         return A2ATaskResult(
             task=(
@@ -135,7 +143,7 @@ class ShopAiService:
                 if isinstance(task, dict)
                 else {}
             ),
-            artifacts=artifacts if isinstance(artifacts, list) else [],
+            artifacts=artifacts,
             status="completed",
             response=response_text if isinstance(response_text, str) else "",
             raw={},

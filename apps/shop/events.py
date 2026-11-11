@@ -23,6 +23,7 @@ SHOP_SHOP_PUBLISHED = "shop/shop/published"
 SHOP_CATALOG_CHANGED = "shop/catalog/changed"
 SHOP_ORDER_CREATED = "shop/order/created"
 SHOP_ORDER_STATUS_CHANGED = "shop/order/status_changed"
+SHOP_AI_CALL_FINISHED = "shop/ai_call/finished"
 
 
 class ShopShopEventPayload(BaseModel):
@@ -51,6 +52,18 @@ class ShopOrderEventPayload(BaseModel):
     delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
     total_minor: int
     currency: str
+
+
+class ShopAiCallFinishedEventPayload(BaseModel):
+    """Payload `shop/ai_call/finished` — терминал AI-вызова по ``call_id`` из op-ответа."""
+
+    call_id: str
+    shop_id: str
+    verb: str
+    status: str
+    result: JsonObject | None = None
+    error: str | None = None
+    error_code: str | None = None
 
 
 register_platform_event(
@@ -83,6 +96,11 @@ register_platform_event(
     ShopOrderEventPayload,
     description="Изменён статус заказа shop.",
 )
+register_platform_event(
+    SHOP_AI_CALL_FINISHED,
+    ShopAiCallFinishedEventPayload,
+    description="Завершился AI-вызов магазина: результат или ошибка по call_id.",
+)
 
 
 async def publish_shop_event(
@@ -105,19 +123,22 @@ async def publish_shop_ai_call_finished(
     status: str,
     result: JsonObject | None = None,
     error: str | None = None,
+    error_code: str | None = None,
 ) -> None:
     """Терминал AI-вызова: результат/ошибка по ``call_id`` — UI достраивает ответ op'а."""
+    payload = ShopAiCallFinishedEventPayload(
+        call_id=call_id,
+        shop_id=shop_id,
+        verb=verb,
+        status=status,
+        result=result,
+        error=error,
+        error_code=error_code,
+    )
     await publish_event_to_company(
         company_id=company_id,
-        type="shop/ai_call/finished",
-        payload={
-            "call_id": call_id,
-            "shop_id": shop_id,
-            "verb": verb,
-            "status": status,
-            "result": result,
-            "error": error,
-        },
+        type=SHOP_AI_CALL_FINISHED,
+        payload=payload.model_dump(mode="json"),
     )
 
 
@@ -174,15 +195,18 @@ async def publish_shop_order_event(
 
 
 __all__ = [
+    "SHOP_AI_CALL_FINISHED",
     "SHOP_CATALOG_CHANGED",
     "SHOP_ORDER_CREATED",
     "SHOP_ORDER_STATUS_CHANGED",
     "SHOP_SHOP_CREATED",
     "SHOP_SHOP_PUBLISHED",
     "SHOP_SHOP_UPDATED",
+    "ShopAiCallFinishedEventPayload",
     "ShopCatalogChangedEventPayload",
     "ShopOrderEventPayload",
     "ShopShopEventPayload",
+    "publish_shop_ai_call_finished",
     "publish_shop_catalog_changed",
     "publish_shop_event",
     "publish_shop_order_event",

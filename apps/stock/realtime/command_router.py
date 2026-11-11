@@ -60,6 +60,7 @@ from apps.stock.models.api import (
     StockRoutesListPayload,
     StockScanCommitPayload,
     StockScanCountCommitPayload,
+    StockScanOpenPayload,
     StockScanQuantityPayload,
     StockScanStepPayload,
     StockStorageTypeCreatePayload,
@@ -141,6 +142,7 @@ from apps.stock.realtime.operations import (
     op_routes_list,
     op_scan_commit,
     op_scan_count_commit,
+    op_scan_open,
     op_scan_quantity,
     op_scan_step,
     op_stock_company_init,
@@ -433,6 +435,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/barcode/resolve_requested": Operation(
         payload_model=StockBarcodeResolvePayload, fn=op_barcode_resolve
+    ),
+    "stock/scan/open_requested": Operation(
+        payload_model=StockScanOpenPayload, fn=op_scan_open
     ),
     "stock/scan/step_requested": Operation(
         payload_model=StockScanStepPayload, fn=op_scan_step

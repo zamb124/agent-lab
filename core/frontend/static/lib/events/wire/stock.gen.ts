@@ -329,7 +329,7 @@ export interface ScanContext {
 /**
  * Какая сущность распознана в штрихкоде.
  */
-export type ScanEntityKind = "product" | "packaging" | "lot" | "serial" | "location" | "container" | "unknown";
+export type ScanEntityKind = "product" | "packaging" | "lot" | "serial" | "location" | "container" | "document" | "resource" | "unknown";
 
 /**
  * ScanFlow
@@ -1959,6 +1959,26 @@ export interface StockScanExpected {
 }
 
 /**
+ * Открыть скан-сессию по документу — backend выбирает поток.
+ */
+export interface StockScanOpenPayload {
+    "warehouse_id": string;
+    "move_id"?: string | null | undefined;
+    "transfer_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockScanOpenResponse
+ */
+export interface StockScanOpenResponse {
+    "context": ScanContext;
+    "move_id": string;
+    "expected"?: StockScanExpected | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockScanQuantityPayload
  */
 export interface StockScanQuantityPayload {
@@ -2629,6 +2649,7 @@ export interface StockCommandMap {
     "stock/routes/list_requested": { payload: StockRoutesListPayload; result: StockItemsResponse_StockRoute_ },
     "stock/scan/commit_requested": { payload: StockScanCommitPayload; result: StockMove },
     "stock/scan/count_commit_requested": { payload: StockScanCountCommitPayload; result: StockScanCountCommitResponse },
+    "stock/scan/open_requested": { payload: StockScanOpenPayload; result: StockScanOpenResponse },
     "stock/scan/quantity_requested": { payload: StockScanQuantityPayload; result: StockScanStepResponse },
     "stock/scan/step_requested": { payload: StockScanStepPayload; result: StockScanStepResponse },
     "stock/storage_types/create_requested": { payload: StockStorageTypeCreatePayload; result: StockStorageType },
@@ -2857,6 +2878,9 @@ export interface StockEventMap {
     "stock/scan/count_commit_failed": PlatformCommandEventPayload,
     "stock/scan/count_commit_requested": PlatformCommandEventPayload,
     "stock/scan/count_commit_succeeded": PlatformCommandEventPayload,
+    "stock/scan/open_failed": PlatformCommandEventPayload,
+    "stock/scan/open_requested": PlatformCommandEventPayload,
+    "stock/scan/open_succeeded": PlatformCommandEventPayload,
     "stock/scan/quantity_failed": PlatformCommandEventPayload,
     "stock/scan/quantity_requested": PlatformCommandEventPayload,
     "stock/scan/quantity_succeeded": PlatformCommandEventPayload,

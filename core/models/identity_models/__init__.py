@@ -33,6 +33,9 @@ from core.models.identity_models.namespace import (
 from core.models.identity_models.user import (
     User,
 )
+from core.models.identity_models.user_badge import (
+    UserBadge,
+)
 from core.models.identity_models.user_provider_record import (
     UserProviderRecord,
 )
@@ -59,5 +62,6 @@ __all__ = [
     "NamespaceKind",
     "Namespace",
     "User",
+    "UserBadge",
     "UserProviderRecord",
 ]

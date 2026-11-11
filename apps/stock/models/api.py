@@ -704,6 +704,20 @@ class StockScanStepResponse(StrictBaseModel):
     expected: StockScanExpected | None = None
 
 
+class StockScanOpenPayload(StrictBaseModel):
+    """Открыть скан-сессию по документу — backend выбирает поток."""
+
+    warehouse_id: str
+    move_id: str | None = None
+    transfer_id: str | None = None
+
+
+class StockScanOpenResponse(StrictBaseModel):
+    context: ScanContext
+    move_id: str
+    expected: StockScanExpected | None = None
+
+
 class StockScanCommitPayload(StrictBaseModel):
     """Коммит набранного: строки контекста → проводка move одной транзакцией."""
 

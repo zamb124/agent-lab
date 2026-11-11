@@ -2,12 +2,34 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from httpx2 import AsyncClient
 
 from apps.shop.models.shop import Shop
+from tests.fixtures.platform_events import (
+    PlatformEventsReceive,
+    platform_events_listener,
+    wait_platform_event_payload,
+)
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"
+
+_AI_FINISHED_EVENT = "shop/ai_call/finished"
+_AI_FINISHED_TIMEOUT = 45.0
+
+
+async def _await_ai_finished(
+    receive: PlatformEventsReceive, call_id: str
+) -> dict[str, Any]:
+    """Ждёт терминальное ``shop/ai_call/finished`` по ``call_id`` и отдаёт payload."""
+    return await wait_platform_event_payload(
+        receive,
+        _AI_FINISHED_EVENT,
+        timeout=_AI_FINISHED_TIMEOUT,
+        match=lambda payload: payload.get("call_id") == call_id,
+    )
 
 # Минимальный валидный PNG 1x1 — реальные байты через FilesService → A2A Part.raw.
 _PNG_BYTES = bytes.fromhex(
@@ -228,18 +250,22 @@ class TestAiOperations:
     async def test_ai_describe_returns_text_or_clean_error(
         self, shop_client: AsyncClient, shop_di, unique_id: str
     ) -> None:
-        """AI-описание: MockLLM в TESTING или честная ошибка провайдера."""
+        """AI-описание: op → call_id, терминал — ``shop/ai_call/finished`` событием."""
         slug = f"ai-{unique_id[:8]}"
         shop = await _published_shop(shop_client, slug)
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/describe",
-            json={"name": "Пицца четыре сыра"},
-        )
-        assert resp.status_code in (200, 400, 409, 503)
-        if resp.status_code == 200:
-            assert resp.json()["text"]
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/describe",
+                json={"name": "Пицца четыре сыра"},
+            )
+            assert resp.status_code == 200, resp.text
+            call_id = resp.json()["call_id"]
+            payload = await _await_ai_finished(receive, call_id)
+        if payload["status"] == "completed":
+            assert payload["result"]["text"]
         else:
-            assert resp.json().get("error_code")
+            assert payload["status"] == "failed"
+            assert payload["error"] or payload["error_code"]
 
     async def test_ai_ops_require_shop(self, shop_client: AsyncClient) -> None:
         resp = await shop_client.post(f"{_SHOPS}/shop_missing/ai/describe", json={"name": "x"})
@@ -285,12 +311,15 @@ class TestAiOperations:
         shop = await _published_shop(shop_client, f"aiv-{unique_id[:8]}")
         file_id = await _create_image_file(shop_di, "dish.png")
         await mock_llm_redis([{"type": "text", "content": "Сочная маргарита на тонком тесте"}])
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/describe",
-            json={"name": "Маргарита", "photo_file_id": file_id},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["text"] == "Сочная маргарита на тонком тесте"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/describe",
+                json={"name": "Маргарита", "photo_file_id": file_id},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["text"] == "Сочная маргарита на тонком тесте"
 
         calls = await mock_llm_capture()
         file_parts = [
@@ -305,14 +334,17 @@ class TestAiOperations:
     async def test_ai_describe_photo_unknown_file_404(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        """describe по несуществующему фото — fail-closed file_not_found до LLM."""
+        """describe по несуществующему фото — fail-closed file_not_found в событии."""
         shop = await _published_shop(shop_client, f"aix-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/describe",
-            json={"name": "Маргарита", "photo_file_id": "file_0000000000aa"},
-        )
-        assert resp.status_code == 404
-        assert resp.json().get("error_code") == "file_not_found"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/describe",
+                json={"name": "Маргарита", "photo_file_id": "file_0000000000aa"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "failed", payload
+        assert payload["error_code"] == "file_not_found"
 
     async def test_ai_enhance_photo_image_gen_branch(
         self,
@@ -333,12 +365,15 @@ class TestAiOperations:
                 }
             ]
         )
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/enhance-photo",
-            json={"file_id": source_id},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/enhance-photo",
+                json={"file_id": source_id},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["file_id"] == generated_id
 
     async def test_ai_generate_photo_image_gen_branch(
         self,
@@ -351,36 +386,45 @@ class TestAiOperations:
         shop = await _published_shop(shop_client, f"aig-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "generated.png")
         await mock_llm_redis([{"type": "text", "content": f"new image stored: {generated_id}"}])
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/generate-photo",
-            json={"name": "Том ям", "description": "Острый суп с креветками"},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/generate-photo",
+                json={"name": "Том ям", "description": "Острый суп с креветками"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["file_id"] == generated_id
 
     async def test_ai_generate_photo_empty_result_fails_closed(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        """image_gen без file_id в ответе LLM — fail-closed ai_upstream, выдумок нет."""
+        """image_gen без file_id в ответе LLM — fail-closed, выдумок нет."""
         shop = await _published_shop(shop_client, f"aif-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/generate-photo",
-            json={"name": "Том ям"},
-        )
-        assert resp.status_code == 503
-        assert resp.json().get("error_code") == "ai_upstream"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/generate-photo",
+                json={"name": "Том ям"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "failed", payload
+        assert payload["error_code"] in ("ai_empty_result", "ai_upstream")
 
     async def test_ai_enhance_photo_unknown_file_404(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
         """enhance несуществующего файла — file_not_found до обращения к LLM."""
         shop = await _published_shop(shop_client, f"aiu-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/enhance-photo",
-            json={"file_id": "file_0000000000aa"},
-        )
-        assert resp.status_code == 404
-        assert resp.json().get("error_code") == "file_not_found"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/enhance-photo",
+                json={"file_id": "file_0000000000aa"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "failed", payload
+        assert payload["error_code"] == "file_not_found"
 
     async def test_ai_describe_shop_flow_branch(
         self,
@@ -393,12 +437,15 @@ class TestAiOperations:
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"aid-{unique_id[:8]}")
         await mock_llm_redis([{"type": "text", "content": "Уютная пиццерия у парка"}])
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/describe-shop",
-            json={"name": "Пицца Парк", "description": "пицца и всё"},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["text"] == "Уютная пиццерия у парка"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/describe-shop",
+                json={"name": "Пицца Парк", "description": "пицца и всё"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["text"] == "Уютная пиццерия у парка"
 
         calls = await mock_llm_capture()
         rendered = "\n".join(
@@ -432,12 +479,15 @@ class TestAiOperations:
                 }
             ]
         )
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
-            json={"text": "Пицца\nМаргарита — 450\nНапитки\nЛатте 220"},
-        )
-        assert resp.status_code == 200, resp.text
-        items = resp.json()["items"]
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
+                json={"text": "Пицца\nМаргарита — 450\nНапитки\nЛатте 220"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        items = payload["result"]["items"]
         assert [item["name"] for item in items] == ["Маргарита", "Латте"]
         assert items[0]["price_minor"] == 45000
         assert items[0]["portion"] == "450 г"
@@ -449,12 +499,15 @@ class TestAiOperations:
         """parse-menu без позиций в ответе LLM — честный ai_empty_result."""
         await _reset_shop_flow()
         shop = await _published_shop(shop_client, f"aiq-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
-            json={"text": "просто текст без меню"},
-        )
-        assert resp.status_code == 404
-        assert resp.json().get("error_code") == "ai_empty_result"
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
+                json={"text": "просто текст без меню"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "failed", payload
+        assert payload["error_code"] == "ai_empty_result"
 
     async def test_ai_generate_cover_image_gen_branch(
         self,
@@ -468,12 +521,15 @@ class TestAiOperations:
         shop = await _published_shop(shop_client, f"aic-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "cover.png")
         await mock_llm_redis([{"type": "text", "content": f"cover stored: {generated_id}"}])
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/generate-cover",
-            json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/generate-cover",
+                json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["file_id"] == generated_id
 
     async def test_ai_generate_logo_image_gen_branch(
         self,
@@ -487,12 +543,15 @@ class TestAiOperations:
         shop = await _published_shop(shop_client, f"ail-{unique_id[:8]}")
         generated_id = await _create_image_file(shop_di, "logo.png")
         await mock_llm_redis([{"type": "text", "content": f"logo stored: {generated_id}"}])
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/generate-logo",
-            json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
-        )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/generate-logo",
+                json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        assert payload["result"]["file_id"] == generated_id
 
     async def test_ai_autofill_fills_empty_fields(
         self,
@@ -511,11 +570,14 @@ class TestAiOperations:
                 {"type": "text", "content": f"cover stored: {generated_id}"},
             ]
         )
-        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert body["description"] == "Уютная пиццерия у парка"
-        assert body["cover_file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        result = payload["result"]
+        assert result["description"] == "Уютная пиццерия у парка"
+        assert result["cover_file_id"] == generated_id
 
     async def test_ai_autofill_keeps_manual_fields(
         self,
@@ -535,8 +597,11 @@ class TestAiOperations:
         await mock_llm_redis(
             [{"type": "text", "content": f"cover stored: {generated_id}"}]
         )
-        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert body["description"] == "Наш текст"
-        assert body["cover_file_id"] == generated_id
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
+            assert resp.status_code == 200, resp.text
+            payload = await _await_ai_finished(receive, resp.json()["call_id"])
+        assert payload["status"] == "completed", payload
+        result = payload["result"]
+        assert result["description"] == "Наш текст"
+        assert result["cover_file_id"] == generated_id

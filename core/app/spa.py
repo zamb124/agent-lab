@@ -61,7 +61,7 @@ def mount_service_spa(
     ui_dir: Path,
     excluded_prefixes: Sequence[str] = _DEFAULT_EXCLUDED_PREFIXES,
     extra_static_mounts: Sequence[tuple[str, Path, str]] = (),
-    spa_pages: Mapping[str, str] = {},
+    spa_pages: Mapping[str, str] | None = None,
 ) -> None:
     """Монтирует core-статику (`mount_core_frontend`), `/{segment}/ui/static` и catch-all `/{segment}/{path}` → index.html.
 
@@ -77,6 +77,8 @@ def mount_service_spa(
     index_file = ui_static_dir / "index.html"
     if not index_file.is_file():
         raise FileNotFoundError(f"SPA index.html not found: {index_file}")
+    if spa_pages is None:
+        spa_pages = {}
     pages: dict[str, Path] = {}
     for prefix, filename in spa_pages.items():
         page_file = ui_static_dir / filename

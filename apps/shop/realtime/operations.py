@@ -90,12 +90,12 @@ from apps.shop.models.api import (
     normalize_shop_theme,
 )
 from apps.shop.models.badge_icons import BADGE_ICONS
+from apps.shop.models.common import new_id
 from apps.shop.models.enums import (
     ShopFeedbackChip,
     ShopLoyaltyRewardKind,
     ShopOrderStatus,
 )
-from apps.shop.models.common import new_id
 from apps.shop.services.feed_service import feedback_response
 from apps.shop.tasks.task_names import (
     SHOP_AI_CALL,

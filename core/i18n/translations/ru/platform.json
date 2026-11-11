@@ -1120,7 +1120,17 @@
     "geo_override_not_found": "Правка адреса не найдена",
     "geo_suppression_not_found": "Скрытие объекта не найдено",
     "geo_edge_override_not_found": "Закрытие дороги не найдено",
-    "geo_import_source_unknown": "Неизвестный источник импорта"
+    "geo_import_source_unknown": "Неизвестный источник импорта",
+    "badge_not_found": "Бейдж не найден",
+    "badge_owner_not_found": "Сотрудник бейджа не найден",
+    "badge_login_denied": "Вход по бейджу запрещён",
+    "badge_company_required": "Вход по бейджу требует поддомен компании",
+    "badge_company_not_found": "Компания не найдена",
+    "badge_login_rate_limited": "Слишком много попыток входа по бейджу",
+    "badge_conflict": "Код бейджа уже привязан к другому сотруднику",
+    "badge_empty": "Код бейджа не может быть пустым",
+    "badge_user_not_found": "Пользователь не найден",
+    "badge_user_not_member": "Пользователь не состоит в компании"
   },
   "json_tree": {
     "empty": "Пусто",

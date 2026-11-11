@@ -326,6 +326,45 @@ export type AuthzTitleStatus = "loaded" | "missing" | "unavailable";
 export type AuthzWhyReason = "direct_grant" | "group_membership" | "parent_inherit" | "company_visible";
 
 /**
+ * BadgeBindPayload
+ */
+export interface BadgeBindPayload {
+    "user_id": string;
+    "code": string;
+    [key: string]: unknown;
+}
+
+/**
+ * BadgeListPayload
+ */
+export interface BadgeListPayload {
+    "user_id"?: string | null | undefined;
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * BadgeResponse
+ */
+export interface BadgeResponse {
+    "badge_id": string;
+    "code": string;
+    "user_id": string;
+    "user_name": string;
+    "created_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * BadgeUnbindPayload
+ */
+export interface BadgeUnbindPayload {
+    "badge_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * Результат смены тарифного плана компании.
  */
 export interface BillingPlanChangeResponse {
@@ -1437,6 +1476,17 @@ export interface OffsetPage_ApiKeyRecord_ {
 }
 
 /**
+ * OffsetPage[BadgeResponse]
+ */
+export interface OffsetPage_BadgeResponse_ {
+    "items": BadgeResponse[];
+    "total": number;
+    "limit": number;
+    "offset": number;
+    [key: string]: unknown;
+}
+
+/**
  * OffsetPage[EmbedConfig]
  */
 export interface OffsetPage_EmbedConfig_ {
@@ -2123,6 +2173,9 @@ export interface FrontendCommandMap {
     "frontend/authz_explorer/objects_requested": { payload: AuthzExplorerObjectsPayload; result: AuthzExplorerObjectsResponse },
     "frontend/authz_explorer/revoke_requested": { payload: AuthzExplorerRevokeRequest; result: AuthzExplorerRevokeResponse },
     "frontend/authz_explorer/why_requested": { payload: AuthzExplorerWhyPayload; result: AuthzExplorerWhyResponse },
+    "frontend/badges/bind_requested": { payload: BadgeBindPayload; result: BadgeResponse },
+    "frontend/badges/list_requested": { payload: BadgeListPayload; result: OffsetPage_BadgeResponse_ },
+    "frontend/badges/unbind_requested": { payload: BadgeUnbindPayload; result: BadgeResponse },
     "frontend/billing/payment_history_requested": { payload: EmptyPayload; result: ListResponse_TransactionResponse_ },
     "frontend/billing/plan_change_requested": { payload: ChangePlanRequest; result: BillingPlanChangeResponse },
     "frontend/billing/subscription_requested": { payload: EmptyPayload; result: BillingSubscription },
@@ -2244,6 +2297,15 @@ export interface FrontendEventMap {
     "frontend/authz_explorer/why_failed": PlatformCommandEventPayload,
     "frontend/authz_explorer/why_requested": PlatformCommandEventPayload,
     "frontend/authz_explorer/why_succeeded": PlatformCommandEventPayload,
+    "frontend/badges/bind_failed": PlatformCommandEventPayload,
+    "frontend/badges/bind_requested": PlatformCommandEventPayload,
+    "frontend/badges/bind_succeeded": PlatformCommandEventPayload,
+    "frontend/badges/list_failed": PlatformCommandEventPayload,
+    "frontend/badges/list_requested": PlatformCommandEventPayload,
+    "frontend/badges/list_succeeded": PlatformCommandEventPayload,
+    "frontend/badges/unbind_failed": PlatformCommandEventPayload,
+    "frontend/badges/unbind_requested": PlatformCommandEventPayload,
+    "frontend/badges/unbind_succeeded": PlatformCommandEventPayload,
     "frontend/billing/payment_history_failed": PlatformCommandEventPayload,
     "frontend/billing/payment_history_requested": PlatformCommandEventPayload,
     "frontend/billing/payment_history_succeeded": PlatformCommandEventPayload,

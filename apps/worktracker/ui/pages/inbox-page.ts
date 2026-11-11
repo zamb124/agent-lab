@@ -302,32 +302,58 @@ export class WorktrackerInboxPage extends PlatformPage {
         `;
     }
 
+    private _renderNoQueueMembership() {
+        return html`
+            <platform-empty-state icon="inbox" title=${this.t('inbox_page.empty_no_queue_membership')}>
+                <button
+                    type="button"
+                    class="btn btn-primary queue-empty-cta"
+                    @click=${() => this.navigate('queues', {})}
+                >${this.t('inbox_page.go_to_queues')}</button>
+            </platform-empty-state>
+        `;
+    }
+
+    private _renderAssignedSection() {
+        return html`
+            <worktracker-list-section
+                title=${this.t('inbox_page.section_assigned')}
+                .count=${this._assignedItems.length}
+            >
+                ${this._assignedItems.map((item) => this._renderRow(item))}
+            </worktracker-list-section>
+        `;
+    }
+
     private _renderQueueSection() {
+        return html`
+            <worktracker-list-section
+                title=${this.t('inbox_page.section_queue')}
+                .count=${this._queueItems.length}
+            >
+                ${this._queueItems.map((item) => this._renderRow(item))}
+            </worktracker-list-section>
+        `;
+    }
+
+    private _renderBody() {
+        const hasAssigned = this._assignedItems.length > 0;
+        const hasQueue = this._queueItems.length > 0;
         if (!this._queuesLoaded) {
-            return nothing;
+            return hasAssigned ? this._renderAssignedSection() : this._renderEmpty('inbox_page.empty_assigned');
         }
         if (this._memberQueueIds.length === 0) {
-            return html`
-                <platform-empty-state icon="inbox" title=${this.t('inbox_page.empty_no_queue_membership')}>
-                    <button
-                        type="button"
-                        class="btn btn-primary queue-empty-cta"
-                        @click=${() => this.navigate('queues', {})}
-                    >${this.t('inbox_page.go_to_queues')}</button>
-                </platform-empty-state>
-            `;
+            return hasAssigned
+                ? this._renderAssignedSection()
+                : this._renderNoQueueMembership();
         }
-        if (this._queueItems.length > 0) {
-            return html`
-                <worktracker-list-section
-                    title=${this.t('inbox_page.section_queue')}
-                    .count=${this._queueItems.length}
-                >
-                    ${this._queueItems.map((item) => this._renderRow(item))}
-                </worktracker-list-section>
-            `;
+        if (!hasAssigned && !hasQueue) {
+            return this._renderEmpty('inbox_page.empty_all');
         }
-        return this._renderEmpty('inbox_page.empty_queue');
+        return html`
+            ${hasAssigned ? this._renderAssignedSection() : nothing}
+            ${hasQueue ? this._renderQueueSection() : nothing}
+        `;
     }
 
     private _openCreateTask() {
@@ -345,15 +371,7 @@ export class WorktrackerInboxPage extends PlatformPage {
                 ></worktracker-icon-action>
             </worktracker-page-header>
             <div class="wt-page">
-                ${this._assignedItems.length > 0 ? html`
-                    <worktracker-list-section
-                        title=${this.t('inbox_page.section_assigned')}
-                        .count=${this._assignedItems.length}
-                    >
-                        ${this._assignedItems.map((item) => this._renderRow(item))}
-                    </worktracker-list-section>
-                ` : this._renderEmpty('inbox_page.empty_assigned')}
-                ${this._renderQueueSection()}
+                ${this._renderBody()}
             </div>
         `;
     }

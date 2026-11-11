@@ -50,7 +50,7 @@ from core.lanes import LaneRun, publish_lane_run
 from core.request_scope import command_idempotency_key
 from core.tracing.attributes import ATTR_TENANT_COMPANY_ID
 from core.tracing.operation_span import traced_operation
-from core.types import OtelAttributeValue
+from core.types import JsonObject, OtelAttributeValue
 
 
 class StockMoveEngine:
@@ -85,7 +85,7 @@ class StockMoveEngine:
         """
         if a2a_resume_context_active():
             return None
-        resume_kwargs: dict[str, str | bool] = {
+        resume_kwargs: JsonObject = {
             "company_id": company_id,
             "transfer_id": transfer_id,
             "command": command,
@@ -268,14 +268,14 @@ class StockMoveEngine:
                 assigned = await self.assign_transfer(
                     company_id=company_id,
                     transfer_id=transfer_id,
-                    idempotency_key=resolved_key,
+                    idempotency_key=f"{resolved_key}:assign",
                     actor_user_id=actor_user_id,
                 )
                 if assigned.state == StockTransferState.ASSIGNED:
                     confirmed = await self.validate_transfer(
                         company_id=company_id,
                         transfer_id=transfer_id,
-                        idempotency_key=resolved_key,
+                        idempotency_key=f"{resolved_key}:validate",
                         actor_user_id=actor_user_id,
                         create_backorder=True,
                     )

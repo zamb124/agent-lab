@@ -22,6 +22,7 @@ from decimal import Decimal
 
 import pytest
 
+from apps.stock.di import StockDi
 from apps.stock.models.common import STOCK_DB, StockMoveSpec, new_id
 from apps.stock.models.decision import StockDecision
 from apps.stock.models.enums import (
@@ -54,6 +55,7 @@ from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
 )
+from core.types import require_json_object
 from core.utils.time import utcnow
 
 from .test_stock_domain import StockEnv, _make_env, _receipt, _stock_quant
@@ -721,13 +723,25 @@ class TestPutawayModes:
                 "putaway_flow_id": f"flow_missing_{unique_id}",
             }
         )
-        with pytest.raises(PlatformConflictError) as exc:
-            _ = await env.di.placement_service.resolve_putaway(
-                company_id=env.company_id,
-                warehouse=env.warehouse,
-                operation_type=inline,
-                move=move,
-            )
+        from core.a2a.submit import set_a2a_resume_context
+
+        token = set_a2a_resume_context(
+            resume_task="stock_transfer_command_resume",
+            resume_kwargs={},
+            run_nonce=f"test-{unique_id}",
+        )
+        try:
+            with pytest.raises(PlatformConflictError) as exc:
+                _ = await env.di.placement_service.resolve_putaway(
+                    company_id=env.company_id,
+                    warehouse=env.warehouse,
+                    operation_type=inline,
+                    move=move,
+                )
+        finally:
+            from core.a2a.submit import clear_a2a_resume_context
+
+            clear_a2a_resume_context(token)
         assert exc.value.error_code == "putaway_flow_failed"
 
 
@@ -1020,7 +1034,8 @@ class TestAtConfirmReserve:
 class TestShadowPutaway:
     """SHADOW-режим: рефлекс советует, но решение остаётся suggest."""
 
-    async def test_shadow_decision_is_suggested(self, stock_di, unique_id: str) -> None:
+    async def test_shadow_decision_is_suggested(self, stock_di: StockDi, unique_id: str) -> None:
+        """SHADOW: команда не ждёт flow — решение пишет continuation по webhook."""
         env = await _env(stock_di, unique_id)
         op = env.op_types[StockOperationCode.INCOMING]
         shadow = op.model_copy(update={"putaway_mode": ReflexMode.SHADOW})
@@ -1043,12 +1058,110 @@ class TestShadowPutaway:
             ],
         )
         move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
+        # Команда завершает ход без решения: flow идёт фоном, ответ — webhook'ом.
         decision = await env.di.placement_service.resolve_putaway(
             company_id=env.company_id,
             warehouse=env.warehouse,
             operation_type=shadow,
             move=move,
         )
-        assert decision is not None
+        assert decision is None
+
+        # Симулируем терминальный push: remote GetTask отдаёт completed-выбор.
+        from aiohttp import web
+
+        from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
+
+        location = await _bin(env, f"shadow-{unique_id}")
+
+        async def handle_rpc(request: web.Request) -> web.Response:
+            data = require_json_object(await request.json(), "rpc")
+            params = require_json_object(data.get("params"), "rpc.params")
+            if data.get("method") == "GetTask":
+                return web.json_response(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": data.get("id"),
+                        "result": {
+                            "id": params.get("id"),
+                            "status": {"state": "TASK_STATE_COMPLETED"},
+                            "artifacts": [
+                                {
+                                    "artifactId": "pick",
+                                    "name": "choice",
+                                    "parts": [
+                                        {
+                                            "data": {
+                                                "chosen_location_id": location.location_id
+                                            }
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                )
+            return web.json_response(
+                {"jsonrpc": "2.0", "id": data.get("id"), "error": {"code": -32601}}
+            )
+
+        app = web.Application()
+        _ = app.router.add_post("/", handle_rpc)
+        async with ephemeral_web_server(app) as base_url:
+            decision = await env.di.placement_service.record_shadow_decision(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                operation_type_id=shadow.operation_type_id,
+                move_id=move.move_id,
+                transfer_id=transfer.transfer_id,
+                flow_id="flow_shadow",
+                candidate_location_ids=[location.location_id],
+                a2a_task_id=f"shadow-{unique_id}",
+                a2a_state="completed",
+                a2a_base_url=base_url,
+                actor_user_id="test",
+            )
         assert decision.status == StockDecisionStatus.SUGGESTED
         assert decision.applied_at is None
+        assert decision.chosen_location_id == location.location_id
+
+    async def test_shadow_failed_terminal_writes_rejected(
+        self, stock_di: StockDi, unique_id: str
+    ) -> None:
+        """Терминальный сбой тени — REJECTED без подстановки полки."""
+        env = await _env(stock_di, unique_id)
+        op = env.op_types[StockOperationCode.INCOMING]
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=op.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("1"),
+                    uom_id=env.uom_id,
+                )
+            ],
+        )
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
+        decision = await env.di.placement_service.record_shadow_decision(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=op.operation_type_id,
+            move_id=move.move_id,
+            transfer_id=transfer.transfer_id,
+            flow_id="flow_shadow",
+            candidate_location_ids=["loc-any"],
+            a2a_task_id=f"shadow-fail-{unique_id}",
+            a2a_state="failed",
+            a2a_base_url="http://unused",
+            actor_user_id="test",
+        )
+        assert decision.status == StockDecisionStatus.REJECTED
+        assert decision.chosen_location_id is None

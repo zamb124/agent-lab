@@ -28,6 +28,7 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import (
     JsonArray,
     JsonObject,
@@ -216,6 +217,10 @@ async def send_webhook(
 ) -> JsonObject:
     """Отправляет webhook."""
     headers = {"Content-Type": "application/json"}
+
+    test_scope = resolve_test_scope()
+    if test_scope is not None:
+        headers[TEST_SCOPE_HEADER] = test_scope
 
     if token:
         headers["Authorization"] = f"Bearer {token}"

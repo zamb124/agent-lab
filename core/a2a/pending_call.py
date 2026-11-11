@@ -184,7 +184,7 @@ class PlatformA2APendingCall(PlatformModel):
         """Активная/resolved строка по dedup-ключу вызова (повторный прогон задачи)."""
         return await (
             cls.objects.filter(service=service, dedup_key=dedup_key)
-            .order_by_desc("created_at")
+            .order_by("-created_at")
             .first()
         )
 

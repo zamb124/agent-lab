@@ -327,6 +327,33 @@ class AuthService:
 
         return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
+    async def login_badge(self, user: User, company_id: str) -> AuthResult:
+        """Сессия по бейджу сотрудника (ТСД): скан метки вместо пароля.
+
+        Членство в ``company_id`` — обязательное условие; ``active_company_id``
+        пользователя переключается на складскую компанию.
+        """
+        roles = user.companies.get(company_id)
+        if not roles:
+            return AuthResult(success=False, error_message="Сотрудник не состоит в компании")
+
+        if user.active_company_id != company_id:
+            user.active_company_id = company_id
+            _ = await self._persist_user(user)
+
+        session = await self._create_session(user, AuthProvider.BADGE, "badge", None)
+
+        token_service = get_token_service()
+        jwt_token = token_service.create_token(
+            user_id=user.user_id,
+            company_id=company_id,
+            roles=roles,
+            session_id=session.session_id,
+            email=user.email,
+        )
+        logger.info("auth.badge.login", user_id=user.user_id, company_id=company_id)
+        return AuthResult(success=True, user=user, session=session, token=jwt_token)
+
     async def get_user_by_session(self, session_id: str) -> User | None:
         """Получает пользователя по ID сессии"""
         session = await AuthSession.get(session_id)

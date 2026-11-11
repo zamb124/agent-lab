@@ -28,7 +28,11 @@ from apps.stock.models import (
     StockLocation,
     StockLot,
     StockMove,
+    StockMoveLine,
+    StockMoveLineKind,
     StockMoveState,
+    StockOperationCode,
+    StockOperationType,
     StockQuant,
     StockTransfer,
 )
@@ -37,6 +41,7 @@ from apps.stock.models.scan import (
     ScanContext,
     ScanEntityKind,
     ScanError,
+    ScanFlow,
     ScanResolution,
     ScanStepResult,
     scan_commit_ready,
@@ -68,6 +73,8 @@ _ENTITY_KIND = {
     StockBarcodeEntityType.LOCATION: ScanEntityKind.LOCATION,
     StockBarcodeEntityType.CONTAINER: ScanEntityKind.CONTAINER,
     StockBarcodeEntityType.LOT: ScanEntityKind.LOT,
+    StockBarcodeEntityType.TRANSFER: ScanEntityKind.DOCUMENT,
+    StockBarcodeEntityType.RESOURCE: ScanEntityKind.RESOURCE,
 }
 """Тип носителя индекса → тип сущности скан-машины."""
 
@@ -140,6 +147,80 @@ class ScanService:
                     quantity=resolution.quantity or qty,
                 )
         return resolution
+
+    async def open_session(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        move_id: str | None,
+        transfer_id: str | None,
+    ) -> tuple[StockMove, ScanContext]:
+        """Старт doc-driven сессии: backend выбирает поток по документу.
+
+        Документ диктует экран: ``kind=container`` линий → перевозка тары,
+        ``kind=count`` → пересчёт, иначе код типа операции (приёмка →
+        ``receive``, отгрузка → ``pick``, внутренняя → ``move``). За
+        ``transfer_id`` берётся первый move с открытыми строками.
+        """
+        if move_id is not None:
+            move = await StockMove.by_id(company_id, move_id)
+            if move is None or move.warehouse_id != warehouse_id:
+                raise PlatformNotFoundError(
+                    "Move not found", error_code="move_not_found"
+                )
+        elif transfer_id is not None:
+            move = None
+            for candidate in await StockMove.list_for_transfer_by_created_at_asc(
+                company_id, transfer_id
+            ):
+                if candidate.warehouse_id != warehouse_id:
+                    continue
+                if await StockMoveLine.list_open_for_move_by_created_at_asc(
+                    company_id, candidate.move_id
+                ):
+                    move = candidate
+                    break
+            if move is None:
+                raise PlatformNotFoundError(
+                    "No open work on document", error_code="document_no_work"
+                )
+        else:
+            raise PlatformConflictError(
+                "Pass move_id or transfer_id", error_code="scan_open_input_invalid"
+            )
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(
+            company_id, move.move_id
+        )
+        if not lines:
+            raise PlatformConflictError(
+                "Document has no open work", error_code="document_no_work"
+            )
+        flow = await self._session_flow(company_id, move, lines[0].kind)
+        return move, ScanContext(flow=flow)
+
+    @staticmethod
+    async def _session_flow(
+        company_id: str, move: StockMove, line_kind: StockMoveLineKind
+    ) -> ScanFlow:
+        if line_kind == StockMoveLineKind.CONTAINER:
+            return ScanFlow.CONTAINER_MOVE
+        if line_kind == StockMoveLineKind.COUNT:
+            return ScanFlow.COUNT
+        if move.operation_type_id is None:
+            return ScanFlow.MOVE
+        operation_type = await StockOperationType.by_id(
+            company_id, move.operation_type_id
+        )
+        if operation_type is None:
+            return ScanFlow.MOVE
+        match operation_type.code:
+            case StockOperationCode.INCOMING:
+                return ScanFlow.RECEIVE
+            case StockOperationCode.OUTGOING:
+                return ScanFlow.PICK
+            case _:
+                return ScanFlow.MOVE
 
     def step(
         self, *, context: ScanContext, resolution: ScanResolution

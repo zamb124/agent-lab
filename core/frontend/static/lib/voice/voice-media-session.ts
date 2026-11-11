@@ -401,6 +401,8 @@ export class VoiceMediaSession extends EventTarget {
     private _outboundFrameTail: SpliceTailState;
     /** mute sink: тянуть граф к destination без эха на колонках */
     private _captureSinkGain: GainNode | null;
+    /** Перезахват mic-трека после 'ended' в полёте — один за раз. */
+    private _micReacquireInFlight: boolean;
     private _recording: boolean;
     private _playbackCtx: AudioContext | null;
     private _playbackCursor: number;
@@ -477,6 +479,7 @@ export class VoiceMediaSession extends EventTarget {
         this._outboundFrameTail = { tail: new Int16Array(0) };
         /** @type {GainNode|null} — mute sink: тянуть граф к destination без эха на колонках */
         this._captureSinkGain = null;
+        this._micReacquireInFlight = false;
         this._recording = false;
 
         /** @type {AudioContext|null} */
@@ -827,6 +830,12 @@ export class VoiceMediaSession extends EventTarget {
         if (audioTrack === null) {
             throw new Error('VoiceMediaSession: в MediaStream нет audio-дорожки');
         }
+        /** iOS: пользователь может отключить микрофон-маршрут (системный индикатор)
+         *  или выдернуть гарнитуру — трек получает 'ended', uplink умирает молча.
+         *  Перезахват выбирает оставшийся вход (встроенный микрофон/наушники). */
+        audioTrack.onended = () => {
+            this._onMicTrackEnded();
+        };
 
         this._captureResamplerState = {
             tail: new Float32Array(0),
@@ -836,6 +845,30 @@ export class VoiceMediaSession extends EventTarget {
         this._outboundFrameTail = { tail: new Int16Array(0) };
 
         await this._initAudioContextMicCaptureFromMediaStream();
+    }
+
+    private _onMicTrackEnded(): void {
+        if (this._closed || !this._recording || this._micReacquireInFlight) {
+            return;
+        }
+        this._micReacquireInFlight = true;
+        void this._reacquireMicCaptureAsync().finally(() => {
+            this._micReacquireInFlight = false;
+        });
+    }
+
+    /** Перезахват микрофона после 'ended' трека (смена аудио-маршрута iOS, отключение гарнитуры). */
+    private async _reacquireMicCaptureAsync(): Promise<void> {
+        this._teardownCapture();
+        try {
+            await this.startRecording();
+            _voiceClientDebug('mic_reacquired', {});
+        } catch (err) {
+            this._dispatch('error', {
+                code: 'voice/client/microphone_reacquire_failed',
+                detail: err instanceof Error ? err.message : String(err),
+            });
+        }
     }
 
     /**
@@ -885,26 +918,40 @@ export class VoiceMediaSession extends EventTarget {
         const hasAudioWorklet = typeof ctx.audioWorklet?.addModule === 'function';
 
         if (hasAudioWorklet) {
-            // Worklet не входит в бандл: сборка кладёт его в embed-dist, который отдаётся по /static/core/lib.
-            // Путь от origin бандла одинаково работает в SPA сервисов и во встраивании на чужой сайт.
-            const workletUrl = new URL(
-                '/static/core/lib/voice/worklets/voice-mic-capture.processor.js',
-                import.meta.url,
-            ).href;
-            await ctx.audioWorklet.addModule(workletUrl);
-            const wNode = new AudioWorkletNode(ctx, 'voice-mic-capture', {
-                numberOfInputs: 1,
-                numberOfOutputs: 1,
-                channelCount: 1,
-                outputChannelCount: [1],
-            });
-            this._captureWorkletNode = wNode;
-            wNode.port.onmessage = (event) => {
-                void this._handleMicWorkletFrameAsync(event.data);
-            };
-            source.connect(wNode);
-            wNode.connect(sinkGain);
-            usedMicWorklet = true;
+            try {
+                // Worklet не входит в бандл: сборка кладёт его в embed-dist, который отдаётся по /static/core/lib.
+                // Путь от origin бандла одинаково работает в SPA сервисов и во встраивании на чужой сайт.
+                const workletUrl = new URL(
+                    '/static/core/lib/voice/worklets/voice-mic-capture.processor.js',
+                    import.meta.url,
+                ).href;
+                await ctx.audioWorklet.addModule(workletUrl);
+                const wNode = new AudioWorkletNode(ctx, 'voice-mic-capture', {
+                    numberOfInputs: 1,
+                    numberOfOutputs: 1,
+                    channelCount: 1,
+                    outputChannelCount: [1],
+                });
+                this._captureWorkletNode = wNode;
+                wNode.port.onmessage = (event) => {
+                    void this._handleMicWorkletFrameAsync(event.data);
+                };
+                source.connect(wNode);
+                wNode.connect(sinkGain);
+                usedMicWorklet = true;
+            } catch (err) {
+                /** iOS/Safari: `addModule`/`AudioWorkletNode` отказывают на `interrupted`
+                 *  AudioContext (смена аудио-маршрута, возврат из фона) — AbortError.
+                 *  ScriptProcessor-ветка ниже — тот же путь захвата, что и для браузеров без AudioWorklet. */
+                _voiceClientDebug('mic_worklet_unavailable', {
+                    error: err instanceof Error ? err.message : String(err),
+                });
+                if (this._captureWorkletNode !== null) {
+                    this._captureWorkletNode.port.onmessage = null;
+                    this._captureWorkletNode.disconnect();
+                    this._captureWorkletNode = null;
+                }
+            }
         }
 
         if (!usedMicWorklet && typeof ctx.createScriptProcessor === 'function') {
@@ -1509,6 +1556,7 @@ export class VoiceMediaSession extends EventTarget {
         }
         if (this._mediaStream) {
             for (const track of this._mediaStream.getTracks()) {
+                track.onended = null;
                 track.stop();
             }
             this._mediaStream = null;

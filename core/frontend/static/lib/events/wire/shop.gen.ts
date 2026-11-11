@@ -182,6 +182,20 @@ export interface ShopAiBatchResponse {
 }
 
 /**
+ * Payload `shop/ai_call/finished` — терминал AI-вызова по ``call_id`` из op-ответа.
+ */
+export interface ShopAiCallFinishedEventPayload {
+    "call_id": string;
+    "shop_id": string;
+    "verb": string;
+    "status": string;
+    "result"?: Record<string, JsonValue> | null | undefined;
+    "error"?: string | null | undefined;
+    "error_code"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Приём AI-вызова: результат придёт push-событием ``shop/ai_call/finished``.
  */
 export interface ShopAiCallResponse {
@@ -1762,6 +1776,7 @@ export interface ShopEventMap {
     "shop/ai/suggest_options_failed": PlatformCommandEventPayload,
     "shop/ai/suggest_options_requested": PlatformCommandEventPayload,
     "shop/ai/suggest_options_succeeded": PlatformCommandEventPayload,
+    "shop/ai_call/finished": ShopAiCallFinishedEventPayload,
     "shop/badge_icons/list_failed": PlatformCommandEventPayload,
     "shop/badge_icons/list_requested": PlatformCommandEventPayload,
     "shop/badge_icons/list_succeeded": PlatformCommandEventPayload,

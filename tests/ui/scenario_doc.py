@@ -203,10 +203,12 @@ async def _await_page_ready(page: Page) -> None:
     await _await_stable_layout(page)
 
 
-async def _await_screenshot_ready(page: Page) -> None:
-    await _force_light_theme(page)
+async def _await_screenshot_ready(page: Page, *, preserve_theme: bool = False) -> None:
+    if not preserve_theme:
+        await _force_light_theme(page)
     await _await_page_ready(page)
-    await _force_light_theme(page)
+    if not preserve_theme:
+        await _force_light_theme(page)
     await _await_stable_layout(page)
 
 
@@ -482,8 +484,13 @@ class ScenarioRecorder:
         screenshot_name: str | None = None,
         details: str | None = None,
         details_en: str | None = None,
+        preserve_theme: bool = False,
     ) -> None:
-        """Фиксирует шаг; при переданном page ждёт готовность UI и делает скриншот."""
+        """Фиксирует шаг; при переданном page ждёт готовность UI и делает скриншот.
+
+        preserve_theme=True не светлит DOM перед кадром — для шагов, где
+        демонстрируется сама тёмная тема.
+        """
         rel: str | None = None
         le = _strip_optional(label_en)
         if page is not None and not self.disabled():
@@ -496,7 +503,7 @@ class ScenarioRecorder:
                 label_en=le,
                 screenshot_name=screenshot_name,
             )
-            await _await_screenshot_ready(page)
+            await _await_screenshot_ready(page, preserve_theme=preserve_theme)
             await page.screenshot(
                 path=str(shot_dir / fname),
                 full_page=full_page,

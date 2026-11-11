@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 
+from apps.idle.tasks.task_names import TASK_A2A_CALL_FINISHED
 from apps.stock.config import get_stock_settings
 from apps.stock.models import (
     ReflexMode,
@@ -49,8 +50,6 @@ from apps.stock.models.storage_rules import (
     check_placement,
 )
 from apps.stock.services.ids import new_id
-from core.catalog.models import CatalogProduct
-from apps.idle.tasks.task_names import TASK_A2A_CALL_FINISHED
 from apps.stock.tasks.task_names import STOCK_PUTAWAY_SHADOW_RECORD
 from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
 from core.a2a.submit import (
@@ -59,7 +58,8 @@ from core.a2a.submit import (
     a2a_resume_nonce,
     submit_a2a_call,
 )
-from core.clients.a2a_client import A2AClient, A2ATaskResult
+from core.catalog.models import CatalogProduct
+from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
 from core.config import get_settings
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import publish_lane_run
@@ -96,9 +96,7 @@ class PutawaySuggestion:
     allowed: bool
 
 
-_PUTAWAY_USAGES = frozenset(
-    {StockLocationUsage.BIN, StockLocationUsage.CONTAINER}
-)
+_PUTAWAY_USAGES = frozenset({StockLocationUsage.BIN, StockLocationUsage.CONTAINER})
 
 
 def _strategy_rank(
@@ -208,9 +206,7 @@ class PlacementService:
         делают цепочки ``putaway_strategies`` типов хранения ячеек
         (``suggest``); фильтрацию «кому куда» — ``StockPutawayRule``.
         """
-        ordered, _rule_ids = await self._collect(
-            company_id, warehouse, move, owner_entity_id
-        )
+        ordered, _rule_ids = await self._collect(company_id, warehouse, move, owner_entity_id)
         return ordered
 
     async def _collect(
@@ -272,24 +268,19 @@ class PlacementService:
         * C-03, ``storage_product_mixed``, allowed=False — если
           ``include_rejected``: видно, почему ячейка не предложена.
         """
-        ordered, rule_ids = await self._collect(
-            company_id, warehouse, move, owner_entity_id
-        )
+        ordered, rule_ids = await self._collect(company_id, warehouse, move, owner_entity_id)
         if not ordered:
             return []
         locations = await StockLocation.found_in_company_by_ids(company_id, ordered)
         bins = [
             loc
             for loc_id in ordered
-            if (loc := locations.get(loc_id)) is not None
-            and loc.usage in _PUTAWAY_USAGES
+            if (loc := locations.get(loc_id)) is not None and loc.usage in _PUTAWAY_USAGES
         ]
         bin_ids = [loc.location_id for loc in bins]
         storage_types = await StockStorageType.found_in_company_by_ids(
             company_id,
-            sorted(
-                {loc.storage_type_id for loc in bins if loc.storage_type_id}
-            ),
+            sorted({loc.storage_type_id for loc in bins if loc.storage_type_id}),
         )
         quants = await StockQuant.list_unordered_for_locations(company_id, bin_ids)
         children = await StockLocation.unordered_child_containers_by_parent(company_id, bin_ids)
@@ -301,9 +292,7 @@ class PlacementService:
         # проверка ёмкости видела уже стоящий груз, а не только приход.
         product_by_id = await CatalogProduct.found_in_company_by_ids(
             company_id,
-            sorted(
-                {q.product_id for q in quants} | {move.product_id}
-            ),
+            sorted({q.product_id for q in quants} | {move.product_id}),
         )
         move_product = product_by_id.get(move.product_id)
         weight = (
@@ -336,8 +325,7 @@ class PlacementService:
                 product_ids=frozenset(q.product_id for q in inside),
                 lot_ids=frozenset(q.lot_id for q in inside if q.lot_id),
                 container_type_ids=frozenset(
-                    c.container_type_id for c in child_containers
-                    if c.container_type_id
+                    c.container_type_id for c in child_containers if c.container_type_id
                 ),
                 container_count=len(child_containers),
                 has_loose=bool(inside),
@@ -345,8 +333,7 @@ class PlacementService:
                     (
                         q.quantity * p.weight
                         for q in inside
-                        if (p := product_by_id.get(q.product_id))
-                        is not None
+                        if (p := product_by_id.get(q.product_id)) is not None
                         and p.weight is not None
                     ),
                     Decimal("0"),
@@ -355,8 +342,7 @@ class PlacementService:
                     (
                         q.quantity * p.volume
                         for q in inside
-                        if (p := product_by_id.get(q.product_id))
-                        is not None
+                        if (p := product_by_id.get(q.product_id)) is not None
                         and p.volume is not None
                     ),
                     Decimal("0"),
@@ -393,8 +379,7 @@ class PlacementService:
                     if matched is None:
                         reason, allowed = (
                             ("manual", False)
-                            if StockPutawayStrategy.MANUAL
-                            in storage_type.putaway_strategies
+                            if StockPutawayStrategy.MANUAL in storage_type.putaway_strategies
                             else ("strategy_no_match", False)
                         )
                     else:
@@ -558,19 +543,24 @@ class PlacementService:
             "quantity": str(move.product_uom_qty),
             "candidate_location_ids": candidates,
         }
-        row = await submit_a2a_call(
-            a2a_client=A2AClient(),
-            service="stock",
-            company_id=company_id,
-            user_id=actor_user_id,
-            base_url=f"{flows_base}/flows/api/v1/{flow_id}",
-            content="Stock putaway: выбери location_id из candidate_location_ids",
-            continuation=TASK_A2A_CALL_FINISHED,
-            continuation_kwargs={},
-            deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
-            metadata={"variables": variables},
-            dedup_key=dedup_key,
-        )
+        try:
+            row = await submit_a2a_call(
+                a2a_client=A2AClient(),
+                service="stock",
+                company_id=company_id,
+                user_id=actor_user_id,
+                base_url=f"{flows_base}/flows/api/v1/{flow_id}",
+                content="Stock putaway: выбери location_id из candidate_location_ids",
+                continuation=TASK_A2A_CALL_FINISHED,
+                continuation_kwargs={},
+                deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
+                metadata={"variables": variables},
+                dedup_key=dedup_key,
+            )
+        except A2AClientError as exc:
+            raise PlatformConflictError(
+                "Putaway flow call failed", error_code="putaway_flow_failed"
+            ) from exc
         raise A2ACallPending(row.a2a_task_id)
 
     async def _submit_shadow_call(
@@ -607,28 +597,33 @@ class PlacementService:
             "quantity": str(move.product_uom_qty),
             "candidate_location_ids": candidates,
         }
-        _ = await submit_a2a_call(
-            a2a_client=A2AClient(),
-            service="stock",
-            company_id=company_id,
-            user_id=actor_user_id,
-            base_url=f"{flows_base}/flows/api/v1/{flow_id}",
-            content="Stock putaway: выбери location_id из candidate_location_ids",
-            continuation=STOCK_PUTAWAY_SHADOW_RECORD,
-            continuation_kwargs={
-                "company_id": company_id,
-                "warehouse_id": warehouse.warehouse_id,
-                "operation_type_id": operation_type.operation_type_id,
-                "move_id": move.move_id,
-                "transfer_id": move.transfer_id,
-                "flow_id": flow_id,
-                "candidate_location_ids": candidates,
-                "actor_user_id": actor_user_id,
-            },
-            deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
-            metadata={"variables": variables},
-            dedup_key=dedup_key,
-        )
+        try:
+            _ = await submit_a2a_call(
+                a2a_client=A2AClient(),
+                service="stock",
+                company_id=company_id,
+                user_id=actor_user_id,
+                base_url=f"{flows_base}/flows/api/v1/{flow_id}",
+                content="Stock putaway: выбери location_id из candidate_location_ids",
+                continuation=STOCK_PUTAWAY_SHADOW_RECORD,
+                continuation_kwargs={
+                    "company_id": company_id,
+                    "warehouse_id": warehouse.warehouse_id,
+                    "operation_type_id": operation_type.operation_type_id,
+                    "move_id": move.move_id,
+                    "transfer_id": move.transfer_id,
+                    "flow_id": flow_id,
+                    "candidate_location_ids": candidates,
+                    "actor_user_id": actor_user_id,
+                },
+                deadline_seconds=get_stock_settings().putaway_flow_deadline_seconds,
+                metadata={"variables": variables},
+                dedup_key=dedup_key,
+            )
+        except A2AClientError as exc:
+            raise PlatformConflictError(
+                "Putaway flow call failed", error_code="putaway_flow_failed"
+            ) from exc
 
     async def record_shadow_decision(
         self,
@@ -664,9 +659,7 @@ class PlacementService:
             if result.status == "completed":
                 candidate = self._extract_choice(result)
                 chosen = (
-                    candidate
-                    if candidate in candidate_location_ids
-                    else candidate_location_ids[0]
+                    candidate if candidate in candidate_location_ids else candidate_location_ids[0]
                 )
                 status = StockDecisionStatus.SUGGESTED
         decision = StockDecision(
@@ -696,15 +689,16 @@ class PlacementService:
                 "Putaway flow call failed", error_code="putaway_flow_failed"
             )
         task = payload.get("task")
-        artifacts = payload.get("artifacts")
+        artifacts_value = payload.get("artifacts")
+        artifacts: list[JsonObject] = (
+            [require_json_object(item, "a2a.payload.artifacts[]") for item in artifacts_value]
+            if isinstance(artifacts_value, list)
+            else []
+        )
         response_text = payload.get("response")
         result = A2ATaskResult(
-            task=(
-                require_json_object(task, "a2a.payload.task")
-                if isinstance(task, dict)
-                else {}
-            ),
-            artifacts=artifacts if isinstance(artifacts, list) else [],
+            task=(require_json_object(task, "a2a.payload.task") if isinstance(task, dict) else {}),
+            artifacts=artifacts,
             status="completed",
             response=response_text if isinstance(response_text, str) else "",
             raw={},
@@ -758,7 +752,7 @@ class PlacementService:
     def _json_object_or_none(text: str) -> JsonObject | None:
         try:
             return require_json_object(cast(object, json.loads(text)), "putaway_response")
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     async def apply_decision(
@@ -782,13 +776,9 @@ class PlacementService:
             )
         transfer = await StockTransfer.by_id(company_id, move.transfer_id)
         if transfer is None:
-            raise PlatformNotFoundError(
-                "Transfer not found", error_code="transfer_not_found"
-            )
+            raise PlatformNotFoundError("Transfer not found", error_code="transfer_not_found")
         warehouse = await StockWarehouse.by_id(company_id, transfer.warehouse_id)
-        operation_type = await StockOperationType.by_id(
-            company_id, transfer.operation_type_id
-        )
+        operation_type = await StockOperationType.by_id(company_id, transfer.operation_type_id)
         if warehouse is None or operation_type is None:
             raise PlatformConflictError(
                 "Transfer warehouse/operation type missing",
@@ -838,9 +828,7 @@ class PlacementService:
 
     # --- Removal: откуда снять при отборе ---
 
-    async def resolve_for_move(
-        self, *, company_id: str, move: StockMove
-    ) -> StockRemovalStrategy:
+    async def resolve_for_move(self, *, company_id: str, move: StockMove) -> StockRemovalStrategy:
         """Стратегия отбора одной строки накладной по цепочке приоритета.
 
         Более конкретное правило побеждает: ``product.removal_strategy``
@@ -858,13 +846,8 @@ class PlacementService:
             return product.removal_strategy
         source = await StockLocation.by_id(company_id, move.location_id)
         if source is not None and source.storage_type_id is not None:
-            storage_type = await StockStorageType.by_id(
-                company_id, source.storage_type_id
-            )
-            if (
-                storage_type is not None
-                and storage_type.removal_strategy is not None
-            ):
+            storage_type = await StockStorageType.by_id(company_id, source.storage_type_id)
+            if storage_type is not None and storage_type.removal_strategy is not None:
                 return storage_type.removal_strategy
         if move.warehouse_id is None:
             raise PlatformConflictError(
@@ -885,7 +868,5 @@ class PlacementService:
         """Карта ``move_id → стратегия`` для пакетной раскладки резерва."""
         result: dict[str, StockRemovalStrategy] = {}
         for move in moves:
-            result[move.move_id] = await self.resolve_for_move(
-                company_id=company_id, move=move
-            )
+            result[move.move_id] = await self.resolve_for_move(company_id=company_id, move=move)
         return result

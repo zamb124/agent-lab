@@ -18,12 +18,14 @@ from apps.flows.src.runtime.exceptions import RemoteTaskParked
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import RemoteFlowNode, create_node
+from apps.flows.src.state.execution_state import ExecutionState
 from core.a2a.pending_call import PlatformA2APendingCall
+from core.types import JsonObject
 from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
 
-def _remote_outcome(content: str, *, prefix: str) -> dict:
+def _remote_outcome(content: str, *, prefix: str) -> JsonObject:
     """Outcome в формате `flows_remote_task_finished` (result_json.result)."""
     return {
         "response": f"{prefix}: {content}",
@@ -39,7 +41,7 @@ def _remote_outcome(content: str, *, prefix: str) -> dict:
     }
 
 
-async def _complete_remote_activity(di, activity_id: str, outcome: dict) -> None:
+async def _complete_remote_activity(di, activity_id: str, outcome: JsonObject) -> None:
     """Симулирует webhook-continuation — то же, что `flows_remote_task_finished`."""
     completed = await di.workflow_runtime.record_activity_completed(
         activity_id=activity_id,
@@ -48,8 +50,17 @@ async def _complete_remote_activity(di, activity_id: str, outcome: dict) -> None
     assert completed, f"activity {activity_id} not completed"
 
 
-def _make_remote_node(di, url: str, node_config_extra: dict | None = None) -> RemoteFlowNode:
-    config = {"type": "remote_flow", "url": url}
+def _wait_activity_id(state: ExecutionState) -> str:
+    """activity_id из remote_wait-маркера припаркованного состояния."""
+    wait = state.remote_wait
+    assert wait is not None
+    activity_id = wait["activity_id"]
+    assert isinstance(activity_id, str)
+    return activity_id
+
+
+def _make_remote_node(di, url: str, node_config_extra: JsonObject | None = None) -> RemoteFlowNode:
+    config: JsonObject = {"type": "remote_flow", "url": url}
     if node_config_extra:
         config.update(node_config_extra)
     return RemoteFlowNode(
@@ -59,7 +70,6 @@ def _make_remote_node(di, url: str, node_config_extra: dict | None = None) -> Re
         redis_client=di.node_constructor.redis_client,
         a2a_client=di.node_constructor.a2a_client,
         emitter_factory=di.node_constructor.emitter_factory,
-        billing_service=di.node_constructor.billing_service,
     )
 
 
@@ -70,7 +80,7 @@ class TestRemoteFlowNode:
     async def remote_flow_server(self):
         """Каноничный A2A-агент: принимает client taskId, возвращает SUBMITTED."""
         public = {"base": "http://127.0.0.1:0"}
-        received: list[dict] = []
+        received: list[JsonObject] = []
 
         async def handle_agent_card(request):
             return web.json_response({
@@ -107,7 +117,7 @@ class TestRemoteFlowNode:
     @pytest.mark.asyncio
     async def test_create_remote_flow_node(self, di):
         """Создание RemoteFlowNode через create_node."""
-        node_config = {
+        node_config: JsonObject = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
             "branch_id": "custom",
@@ -121,12 +131,13 @@ class TestRemoteFlowNode:
     @pytest.mark.asyncio
     async def test_create_remote_flow_node_default_skill(self, di):
         """branch_id по умолчанию = 'default'."""
-        node_config = {
+        node_config: JsonObject = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
         }
         node = await create_node("remote_test", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
 
+        assert isinstance(node, RemoteFlowNode)
         assert node.branch_id == "default"
 
     @pytest.mark.asyncio
@@ -182,7 +193,9 @@ class TestRemoteFlowNode:
 
         assert result["response"] == "Remote says: Hello from flow"
         assert result["remote_status"] == "completed"
-        assert len(result["remote_artifacts"]) == 1
+        remote_artifacts = result["remote_artifacts"]
+        assert isinstance(remote_artifacts, list)
+        assert len(remote_artifacts) == 1
         # Повторного SendMessage не было — replay взял persisted result.
         assert len(remote_flow_server["received"]) == 1
 
@@ -315,7 +328,7 @@ class TestFlowWithRemoteAgent:
 
         await _complete_remote_activity(
             di,
-            parked_state.remote_wait["activity_id"],
+            _wait_activity_id(parked_state),
             _remote_outcome("Hello remote", prefix="Processed"),
         )
 
@@ -368,7 +381,7 @@ async def run(args, state):
 
         await _complete_remote_activity(
             di,
-            parked_state.remote_wait["activity_id"],
+            _wait_activity_id(parked_state),
             _remote_outcome("HELLO", prefix="Processed"),
         )
         result = await run_flow(di=di, flow=flow, state=parked_state)
@@ -420,7 +433,7 @@ async def run(args, state):
 
         await _complete_remote_activity(
             di,
-            parked_state.remote_wait["activity_id"],
+            _wait_activity_id(parked_state),
             _remote_outcome("test", prefix="Processed"),
         )
         result = await run_flow(di=di, flow=flow, state=parked_state)
@@ -589,7 +602,7 @@ async def run(args, state):
 
         await _complete_remote_activity(
             di,
-            parked_state.remote_wait["activity_id"],
+            _wait_activity_id(parked_state),
             _remote_outcome("Query from function node", prefix="Received"),
         )
         result = await run_flow(di=di, flow=flow, state=parked_state)

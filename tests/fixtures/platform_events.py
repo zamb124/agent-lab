@@ -16,7 +16,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis_async
 
@@ -55,7 +55,7 @@ async def platform_events_listener() -> AsyncIterator[PlatformEventsReceive]:
 
     client = redis_async.from_url(settings.database.redis_url, decode_responses=True)
     last_entries = await client.xrevrange(PLATFORM_EVENTS_STREAM, count=1)
-    last_entry_id = last_entries[0][0] if last_entries else None
+    last_entry_id = str(last_entries[0][0]) if last_entries else None
     state = {"last_id": initial_platform_events_cursor(last_entry_id)}
 
     async def _receive(
@@ -77,7 +77,8 @@ async def platform_events_listener() -> AsyncIterator[PlatformEventsReceive]:
             if not read_result:
                 continue
             for _stream_name, entries in read_result:
-                for entry_id, fields in entries:
+                stream_entries = cast(list[tuple[Any, dict[str, Any]]], entries)
+                for entry_id, fields in stream_entries:
                     state["last_id"] = entry_id
                     raw_event = fields.get("event")
                     if not isinstance(raw_event, str):
@@ -101,3 +102,27 @@ async def platform_events_listener() -> AsyncIterator[PlatformEventsReceive]:
         yield _receive
     finally:
         await client.aclose()
+
+
+async def wait_platform_event_payload(
+    receive: PlatformEventsReceive,
+    event_type: str,
+    *,
+    timeout: float,
+    match: Callable[[dict[str, Any]], bool],
+) -> dict[str, Any]:
+    """Ждёт событие ``event_type``, payload которого удовлетворяет ``match``.
+
+    ``receive`` читает стрим порциями до таймаута; короткие чтения подряд не
+    теряют события (курсор двигается внутри листенера), поэтому выходим сразу
+    по совпадению, а не ждём весь ``timeout``.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        events = await receive(event_type, None, 2.0)
+        for event in events:
+            payload = event.get("payload")
+            if isinstance(payload, dict) and match(payload):
+                return payload
+        if asyncio.get_event_loop().time() >= deadline:
+            raise AssertionError(f"{event_type} не пришёл за {timeout}с")

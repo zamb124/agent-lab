@@ -21,12 +21,12 @@ from core.a2a.pending_call import (
     PlatformA2APendingCall,
 )
 from core.a2a.pending_join import PlatformA2APendingJoin
-from core.a2a.submit import a2a_fetch_terminal_result
+from core.a2a.submit import a2a_fetch_terminal_result, a2a_task_outcome
 from core.a2a.task_states import A2A_OPEN_TASK_STATES
 from core.clients.a2a_client import A2AClient, A2AClientError
 from core.logging import get_logger
-from core.tasks import enqueue, platform_task
-from core.types import JsonObject
+from core.tasks import enqueue_dynamic, platform_task
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,7 @@ async def _resolve_sweep_outcome(
         return A2A_STATE_DEADLINE_EXCEEDED, {}
     if result.status in _OPEN_STATES:
         try:
-            await a2a_client.cancel_task(
+            _ = await a2a_client.cancel_task(
                 row.base_url,
                 row.a2a_task_id,
                 timeout=10.0,
@@ -78,13 +78,15 @@ async def _sweep_pending_calls(now: datetime, a2a_client: A2AClient) -> JsonObje
             continue
         a2a_state, a2a_payload = await _resolve_sweep_outcome(expired, a2a_client)
         try:
-            _ = await enqueue(
+            _ = await enqueue_dynamic(
                 expired.continuation_task,
-                a2a_task_id=expired.a2a_task_id,
-                a2a_state=a2a_state,
-                a2a_payload=a2a_payload,
-                a2a_base_url=expired.base_url,
-                **expired.continuation_kwargs,
+                {
+                    "a2a_task_id": expired.a2a_task_id,
+                    "a2a_state": a2a_state,
+                    "a2a_payload": a2a_payload,
+                    "a2a_base_url": expired.base_url,
+                    **expired.continuation_kwargs,
+                },
             )
         except Exception as exc:
             _ = await PlatformA2APendingCall.restore_pending(expired.a2a_task_id)
@@ -107,11 +109,13 @@ async def _sweep_pending_joins(now: datetime) -> JsonObject:
             skipped += 1
             continue
         try:
-            _ = await enqueue(
+            _ = await enqueue_dynamic(
                 expired.join_task,
-                join_group=expired.join_group,
-                a2a_state=A2A_STATE_DEADLINE_EXCEEDED,
-                **expired.join_kwargs,
+                {
+                    "join_group": expired.join_group,
+                    "a2a_state": A2A_STATE_DEADLINE_EXCEEDED,
+                    **expired.join_kwargs,
+                },
             )
         except Exception as exc:
             _ = await PlatformA2APendingJoin.restore_pending(expired.join_group)
@@ -189,37 +193,55 @@ async def a2a_call_finished(
             "error": f"A2A task {a2a_task_id} exceeded its deadline",
         }
     else:
-        try:
-            result = await a2a_fetch_terminal_result(
-                a2a_client=A2AClient(),
-                base_url=a2a_base_url,
-                a2a_task_id=a2a_task_id,
-                company_id=row.company_id,
-                user_id=row.user_id,
+        task_payload = a2a_payload.get("task")
+        if isinstance(task_payload, dict):
+            # Push доставил полный Task — GetTask не нужен.
+            result_payload = a2a_task_outcome(
+                require_json_object(task_payload, "a2a.payload.task"), a2a_state
             )
-            if result.status in A2A_OPEN_TASK_STATES:
+        else:
+            try:
+                result = await a2a_fetch_terminal_result(
+                    a2a_client=A2AClient(),
+                    base_url=a2a_base_url,
+                    a2a_task_id=a2a_task_id,
+                    company_id=row.company_id,
+                    user_id=row.user_id,
+                )
+                if result.status in A2A_OPEN_TASK_STATES:
+                    result_payload = {
+                        "status": "failed",
+                        "response": "",
+                        "artifacts": [],
+                        "error": f"remote still {result.status} at continuation",
+                    }
+                else:
+                    result_payload = {
+                        "status": result.status,
+                        "response": result.response,
+                        "artifacts": result.artifacts,
+                        "task": result.task,
+                        "error": None,
+                    }
+            except A2AClientError as exc:
                 result_payload = {
-                    "status": "failed",
+                    "status": a2a_state,
                     "response": "",
                     "artifacts": [],
-                    "error": f"remote still {result.status} at continuation",
+                    "error": str(exc),
                 }
-            else:
-                result_payload = {
-                    "status": result.status,
-                    "response": result.response,
-                    "artifacts": result.artifacts,
-                    "task": result.task,
-                    "error": None,
-                }
-        except A2AClientError as exc:
-            result_payload = {
-                "status": a2a_state,
-                "response": "",
-                "artifacts": [],
-                "error": str(exc),
-            }
 
+    return await _finish_call(row, a2a_task_id, result_payload, resume_task, resume_kwargs)
+
+
+async def _finish_call(
+    row: PlatformA2APendingCall,
+    a2a_task_id: str,
+    result_payload: JsonObject,
+    resume_task: str | None,
+    resume_kwargs: JsonObject | None,
+) -> JsonObject:
+    """store_result + re-enqueue вызывающей задачи (общий хвост continuation)."""
     stored = await PlatformA2APendingCall.store_result(
         a2a_task_id, result_payload
     )
@@ -237,7 +259,7 @@ async def a2a_call_finished(
         )
         return {"stored": True, "resumed": False, "reason": "resume_missing"}
 
-    _ = await enqueue(resume_task, **resume_kwargs)
+    _ = await enqueue_dynamic(resume_task, resume_kwargs)
     logger.info(
         "a2a.call_finished.resumed",
         a2a_task_id=a2a_task_id,

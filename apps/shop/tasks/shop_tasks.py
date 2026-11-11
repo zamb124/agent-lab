@@ -230,6 +230,22 @@ async def shop_rebuild_aggregate(
         clear_context()
 
 
+def _req_str(kwargs: JsonObject, key: str) -> str:
+    value = kwargs.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"shop_ai_call: kwargs.{key} must be a non-empty str")
+    return value
+
+
+def _opt_str(kwargs: JsonObject, key: str) -> str | None:
+    value = kwargs.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"shop_ai_call: kwargs.{key} must be a str")
+    return value
+
+
 @platform_task(SHOP_AI_CALL)
 async def shop_ai_call(
     *,
@@ -282,12 +298,19 @@ async def shop_ai_call(
         match verb:
             case "describe_product":
                 text = await svc.describe_product(
-                    company_id=company_id, user_id=user_id, **kwargs
+                    company_id=company_id,
+                    user_id=user_id,
+                    name=_req_str(kwargs, "name"),
+                    category_name=_opt_str(kwargs, "category_name"),
+                    photo_file_id=_opt_str(kwargs, "photo_file_id"),
                 )
                 result: JsonObject = {"text": text}
             case "suggest_options":
                 items = await svc.suggest_options(
-                    company_id=company_id, user_id=user_id, **kwargs
+                    company_id=company_id,
+                    user_id=user_id,
+                    product_name=_req_str(kwargs, "product_name"),
+                    group_name=_opt_str(kwargs, "group_name"),
                 )
                 result = {
                     "items": [
@@ -297,18 +320,25 @@ async def shop_ai_call(
             case "enhance_product_photo":
                 result = {
                     "file_id": await svc.enhance_product_photo(
-                        company_id=company_id, user_id=user_id, **kwargs
+                        company_id=company_id,
+                        user_id=user_id,
+                        file_id=_req_str(kwargs, "file_id"),
                     )
                 }
             case "generate_product_photo":
                 result = {
                     "file_id": await svc.generate_product_photo(
-                        company_id=company_id, user_id=user_id, **kwargs
+                        company_id=company_id,
+                        user_id=user_id,
+                        name=_req_str(kwargs, "name"),
+                        description=_opt_str(kwargs, "description") or "",
                     )
                 }
             case "parse_menu":
                 items = await svc.parse_menu(
-                    company_id=company_id, user_id=user_id, **kwargs
+                    company_id=company_id,
+                    user_id=user_id,
+                    text=_req_str(kwargs, "text"),
                 )
                 result = {
                     "items": [
@@ -318,19 +348,29 @@ async def shop_ai_call(
             case "describe_shop":
                 result = {
                     "text": await svc.describe_shop(
-                        company_id=company_id, user_id=user_id, **kwargs
+                        company_id=company_id,
+                        user_id=user_id,
+                        name=_req_str(kwargs, "name"),
+                        description=_opt_str(kwargs, "description") or "",
+                        city=_opt_str(kwargs, "city") or "",
                     )
                 }
             case "generate_shop_cover":
                 result = {
                     "file_id": await svc.generate_shop_cover(
-                        company_id=company_id, user_id=user_id, **kwargs
+                        company_id=company_id,
+                        user_id=user_id,
+                        name=_req_str(kwargs, "name"),
+                        description=_opt_str(kwargs, "description") or "",
                     )
                 }
             case "generate_shop_logo":
                 result = {
                     "file_id": await svc.generate_shop_logo(
-                        company_id=company_id, user_id=user_id, **kwargs
+                        company_id=company_id,
+                        user_id=user_id,
+                        name=_req_str(kwargs, "name"),
+                        description=_opt_str(kwargs, "description") or "",
                     )
                 }
             case "autofill":
@@ -345,6 +385,7 @@ async def shop_ai_call(
     except A2ACallPending:
         return JsonObject({"status": "parked", "call_id": call_id})
     except Exception as exc:
+        exc_code = getattr(exc, "error_code", None)
         await publish_shop_ai_call_finished(
             company_id=company_id,
             call_id=call_id,
@@ -352,6 +393,7 @@ async def shop_ai_call(
             verb=verb,
             status="failed",
             error=str(exc),
+            error_code=exc_code if isinstance(exc_code, str) else None,
         )
         return JsonObject({"status": "failed", "call_id": call_id})
     finally:
@@ -401,7 +443,11 @@ async def _ai_autofill(
     await di.storefront_service.invalidate_snapshot(updated.shop_id)
     _ = await di.aggregate_service.sync_shop_items(updated)
     _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=updated.slug)
-    return {"shop_id": updated.shop_id, "description": updated.description or ""}
+    return {
+        "shop_id": updated.shop_id,
+        "description": updated.description or "",
+        "cover_file_id": updated.cover_file_id,
+    }
 
 
 @platform_task(SHOP_AI_DESCRIBE_BATCH)

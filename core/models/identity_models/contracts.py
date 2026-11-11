@@ -27,6 +27,7 @@ class AuthProvider(str, Enum):
     GITHUB = "github"
     APPLE = "apple"
     DEMO = "demo"
+    BADGE = "badge"
 
 
 ANONYMOUS_USER_ID = "anonymous"

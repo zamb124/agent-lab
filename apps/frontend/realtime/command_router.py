@@ -158,6 +158,11 @@ from apps.frontend.realtime.platform_tracing_operations import (
     op_platform_tracing_trace_tree,
 )
 from core.authz.explorer import AuthzExplorerRevokeRequest
+from core.identity.badge_operations import (
+    BADGES_BIND_OPERATION,
+    BADGES_LIST_OPERATION,
+    BADGES_UNBIND_OPERATION,
+)
 from core.identity.team_operations import TEAM_MEMBERS_LIST_OPERATION
 from core.llm_context import LLMContextPatch
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
@@ -199,6 +204,9 @@ FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendDi]] = {
         payload_model=TeamMemberRolesUpdatePayload, fn=op_team_member_roles_update
     ),
     "frontend/team/remove_requested": Operation(payload_model=TeamMemberIdPayload, fn=op_team_member_remove),
+    "frontend/badges/list_requested": BADGES_LIST_OPERATION,
+    "frontend/badges/bind_requested": BADGES_BIND_OPERATION,
+    "frontend/badges/unbind_requested": BADGES_UNBIND_OPERATION,
     "frontend/invites/generate_requested": Operation(payload_model=InviteGeneratePayload, fn=op_invites_generate),
     "frontend/api_keys/list_requested": Operation(payload_model=OffsetPayload, fn=op_api_keys_list),
     "frontend/api_keys/create_requested": Operation(payload_model=ApiKeyCreate, fn=op_api_keys_create),

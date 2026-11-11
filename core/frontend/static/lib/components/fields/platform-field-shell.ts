@@ -81,13 +81,18 @@ export class PlatformFieldShell extends PlatformElement {
 
             :host([fill]) fieldset.field-pill {
                 flex: 1 1 auto;
+                min-height: 0;
                 display: flex;
                 flex-direction: column;
             }
 
+            /* min-height: 0 по всей цепочке: без него flex-item не сжимается
+               ниже высоты контента и редактор (CodeMirror и т.п.) визуально
+               переполняет пилюлю поверх соседей вместо внутреннего скролла. */
             :host([fill]) .field-pill-body,
             :host([fill]) .field-pill-control {
                 flex: 1 1 auto;
+                min-height: 0;
             }
 
             :host([fill]) .field-pill-control {
@@ -97,6 +102,7 @@ export class PlatformFieldShell extends PlatformElement {
             :host([fill]) .field-pill-control-main {
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
 
             :host([fill]) .field-pill-control-main slot:not([name])::slotted(*) {

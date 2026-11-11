@@ -75,7 +75,7 @@ from core.logging.attributes import (
     LOG_TASK_ID,
     LOG_TRACE_ID,
 )
-from core.test_scope import resolve_test_scope
+from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import (
     JsonObject,
     JsonValue,
@@ -1059,6 +1059,9 @@ class GuestFarmService:
             )
             return
         headers = {"Content-Type": "application/json"}
+        test_scope = resolve_test_scope()
+        if test_scope is not None:
+            headers[TEST_SCOPE_HEADER] = test_scope
         if token:
             headers["Authorization"] = f"Bearer {token}"
         for attempt in range(3):

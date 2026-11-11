@@ -4367,7 +4367,7 @@ class EntityService:
             artifacts=artifacts,
             status="completed",
             response=response_value if isinstance(response_value, str) else "",
-            raw={},
+            raw={"result": task_obj},
         )
         return self._extract_data_from_a2a_response(fake)
 

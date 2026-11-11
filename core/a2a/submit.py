@@ -23,11 +23,12 @@ from datetime import datetime, timedelta, timezone
 
 from core.a2a.pending_call import PlatformA2APendingCall
 from core.a2a.push_callback import a2a_push_callback_url, mint_callback_token
+from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
 from core.clients.a2a_client import A2AClient, A2AClientError
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.tasks.registry import TaskSpec
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -90,8 +91,8 @@ def a2a_resume_nonce() -> str | None:
 def clear_a2a_resume_context(
     token: contextvars.Token[JsonObject | None],
 ) -> None:
-    _RESUME_TASK.set(None)
-    _RESUME_NONCE.set(None)
+    _ = _RESUME_TASK.set(None)
+    _ = _RESUME_NONCE.set(None)
     _ = _RESUME_KWARGS.reset(token)
 
 
@@ -180,6 +181,51 @@ async def submit_a2a_call(
     return row
 
 
+def a2a_task_outcome(task_obj: JsonObject, a2a_state: str) -> JsonObject:
+    """Нормализованный outcome терминальной A2A-задачи из полного Task JSON.
+
+    Один формат для всех continuation-задач: ``{status, response, artifacts,
+    task, error}``. ``task`` — исходный Task ProtoJSON (сохраняется целиком,
+    вызывающий код достаёт структурированные артефакты из него).
+    """
+    artifacts_value = task_obj.get("artifacts")
+    artifacts = (
+        [
+            require_json_object(item, "a2a.task.artifacts[]")
+            for item in artifacts_value
+        ]
+        if isinstance(artifacts_value, list)
+        else []
+    )
+    try:
+        response_text = extract_text_from_task_json(task_obj)
+    except ValueError:
+        response_text = ""
+    if a2a_state != "completed":
+        error_text = a2a_state
+        status_obj = task_obj.get("status")
+        if isinstance(status_obj, dict):
+            message_obj = status_obj.get("message")
+            if isinstance(message_obj, dict):
+                detail = extract_text_from_parts_json(message_obj.get("parts"))
+                if detail:
+                    error_text = detail
+        return {
+            "status": a2a_state,
+            "response": "",
+            "artifacts": artifacts,
+            "task": task_obj,
+            "error": error_text,
+        }
+    return {
+        "status": a2a_state,
+        "response": response_text,
+        "artifacts": artifacts,
+        "task": task_obj,
+        "error": None,
+    }
+
+
 async def a2a_fetch_terminal_result(
     *,
     a2a_client: A2AClient,
@@ -209,6 +255,7 @@ async def a2a_fetch_terminal_result(
 __all__ = [
     "A2ACallPending",
     "a2a_fetch_terminal_result",
+    "a2a_task_outcome",
     "a2a_resume_context_active",
     "a2a_resume_nonce",
     "clear_a2a_resume_context",

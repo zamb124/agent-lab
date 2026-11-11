@@ -16,10 +16,9 @@ from fastapi.responses import JSONResponse, Response
 
 from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
 from core.a2a.push_callback import hash_callback_token
-from core.a2a.task_states import wire_task_state_to_platform
-from core.a2a.task_states import A2A_OPEN_TASK_STATES
+from core.a2a.task_states import A2A_OPEN_TASK_STATES, wire_task_state_to_platform
 from core.logging import get_logger
-from core.tasks import enqueue
+from core.tasks import enqueue_dynamic
 from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
@@ -76,8 +75,11 @@ async def a2a_push(request: Request) -> Response:
     if token is None:
         return _error(401, "bearer token required")
 
-    body = parse_json_object(await request.body(), "a2a.push")
-    task_id, platform_state = _task_id_and_state(body)
+    try:
+        body = parse_json_object(await request.body(), "a2a.push")
+        task_id, platform_state = _task_id_and_state(body)
+    except ValueError as exc:
+        return _error(400, str(exc))
     if task_id is None:
         return _error(400, "StreamResponse statusUpdate.taskId or task.id required")
 
@@ -99,13 +101,15 @@ async def a2a_push(request: Request) -> Response:
         return Response(status_code=200)
 
     try:
-        _ = await enqueue(
+        _ = await enqueue_dynamic(
             consumed.continuation_task,
-            a2a_task_id=consumed.a2a_task_id,
-            a2a_state=platform_state,
-            a2a_payload=body,
-            a2a_base_url=consumed.base_url,
-            **consumed.continuation_kwargs,
+            {
+                "a2a_task_id": consumed.a2a_task_id,
+                "a2a_state": platform_state,
+                "a2a_payload": body,
+                "a2a_base_url": consumed.base_url,
+                **consumed.continuation_kwargs,
+            },
         )
     except Exception:
         _ = await PlatformA2APendingCall.restore_pending(task_id)

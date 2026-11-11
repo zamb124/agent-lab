@@ -1120,7 +1120,17 @@
     "geo_override_not_found": "Address override not found",
     "geo_suppression_not_found": "Feature suppression not found",
     "geo_edge_override_not_found": "Road closure override not found",
-    "geo_import_source_unknown": "Unknown import source"
+    "geo_import_source_unknown": "Unknown import source",
+    "badge_not_found": "Badge not found",
+    "badge_owner_not_found": "Badge owner not found",
+    "badge_login_denied": "Badge login denied",
+    "badge_company_required": "Badge login requires a company subdomain",
+    "badge_company_not_found": "Company not found",
+    "badge_login_rate_limited": "Too many badge login attempts",
+    "badge_conflict": "Badge code is already bound to another user",
+    "badge_empty": "Badge code must be non-empty",
+    "badge_user_not_found": "User not found",
+    "badge_user_not_member": "User is not a company member"
   },
   "json_tree": {
     "empty": "Empty",

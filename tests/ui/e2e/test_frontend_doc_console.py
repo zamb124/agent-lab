@@ -2064,7 +2064,12 @@ async def test_frontend_create_company(
     frontend_ui: AppUI,
     ui_page_system: Page,
     unique_id: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Создание компании редиректит на новый поддомен; под localhost Chromium
+    # не шлёт Domain=localhost-cookie на другой поддомен — под lvh.me cookie
+    # .lvh.me покрывает все поддомены (боевой путь Domain=.linnex.io).
+    monkeypatch.setenv("UI_E2E_USE_LVH_ME", "1")
     page = ui_page_system
     await _prepare_clean_page(page)
     await frontend_ui.open(page)
@@ -2211,6 +2216,7 @@ async def test_frontend_user_menu_preferences(
         "Включите тёмную тему",
         page,
         screenshot_name="theme-dark",
+        preserve_theme=True,
         label_en="Switch on the dark theme",
         details=(
             "Пункт «Тёмная тема» переключает оформление всей консоли — "
@@ -2227,34 +2233,35 @@ async def test_frontend_user_menu_preferences(
     menu = await _open_user_menu(page)
     await menu.locator("[data-menu-action='theme']").click()
     await expect(page.locator("html[data-theme='light']")).to_be_attached(timeout=30_000)
-    await menu.locator("button.lang-option[data-locale='en']").click()
+    await menu.locator("button.lang-option[data-locale='ru']").click()
     await expect(
         page.locator("platform-user [data-menu-action='documentation'] .menu-item-label")
-    ).to_have_text("Documentation", timeout=30_000)
+    ).to_have_text("Документация", timeout=30_000)
     await scenario.step(
         "Переключите язык интерфейса",
         page,
-        screenshot_name="language-en",
+        screenshot_name="language-switch",
         label_en="Switch the interface language",
         details=(
             "Кнопки en|ru в строке «Language» переводят меню и "
-            "интерфейс. Язык запоминается — при следующем входе "
-            "консоль уже на нём.\n\n"
+            "интерфейс — на кадре меню уже по-русски. Язык "
+            "запоминается: при следующем входе консоль уже на нём.\n\n"
             "**Итог.** Тема и язык — личные настройки: на других "
             "сотрудников они не влияют."
         ),
         details_en=(
             "The en|ru buttons in the Language row translate the menu "
-            "and the interface. The choice is remembered — the "
-            "console opens in it next time.\n\n"
+            "and the interface — the shot shows the menu in Russian. "
+            "The choice is remembered: the console opens in it next "
+            "time.\n\n"
             "**Summary.** Theme and language are personal: they do "
             "not affect your colleagues."
         ),
     )
-    await menu.locator("button.lang-option[data-locale='ru']").click()
+    await menu.locator("button.lang-option[data-locale='en']").click()
     await expect(
         page.locator("platform-user [data-menu-action='documentation'] .menu-item-label")
-    ).to_have_text("Документация", timeout=30_000)
+    ).to_have_text("Documentation", timeout=30_000)
 
 
 @pytest.mark.scenario(
@@ -2322,6 +2329,15 @@ async def test_frontend_services_hub(
         ),
     )
 
+    # Лончер строит dev-URL (порт 8021); тест-стек слушает worktracker на 9021.
+    # Мост dev-порта на порт стека — тот же приём, что у centrifugo_ws_bridge для WS.
+    await page.context.route(
+        re.compile(r"://[^/]+:8021/"),
+        lambda route: route.fulfill(
+            status=302,
+            headers={"location": route.request.url.replace(":8021", ":9021")},
+        ),
+    )
     async with page.expect_popup() as popup_info:
         await tasks_tile.click()
     popup = await popup_info.value

@@ -12,13 +12,19 @@ from decimal import Decimal
 import pytest
 
 from apps.stock.models import (
+    StockLayoutPreset,
     StockMove,
+    StockMoveLine,
+    StockMoveLineKind,
     StockMoveState,
     StockOperationCode,
     StockQuant,
+    StockRemovalStrategy,
+    StockTracking,
     ValuationMethod,
 )
-from apps.stock.models.common import StockMoveSpec
+from apps.stock.models.common import STOCK_DB, StockMoveSpec
+from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from apps.stock.models.scan import (
     ScanContext,
     ScanEntityKind,
@@ -31,7 +37,7 @@ from apps.stock.models.scan import (
     scan_quantity,
     scan_step,
 )
-from tests.stock.test_stock_domain import _make_env
+from tests.stock.test_stock_domain import _make_env, _receipt
 
 _COMPANY = "system"
 
@@ -509,3 +515,277 @@ class TestWavesAndExceptions:
         assert quant is not None
         assert quant.reserved_quantity == Decimal("4")
         assert quant.quantity == Decimal("10")
+
+
+async def _open_transfer(env, code: StockOperationCode, qty: Decimal) -> str:
+    """confirm+assign накладной → transfer_id с открытой строкой."""
+    op = env.op_types[code]
+    transfer = await env.di.move_engine.create_transfer(
+        company_id=env.company_id,
+        warehouse_id=env.warehouse.warehouse_id,
+        operation_type_id=op.operation_type_id,
+        partner_entity_id=None,
+        owner_entity_id=None,
+        scheduled_at=None,
+        origin_document_type=None,
+        origin_document_id=None,
+        barcode=None,
+        moves=[
+            StockMoveSpec(
+                product_id=env.product.product_id,
+                product_qty=qty,
+                uom_id=env.uom_id,
+                unit_price=None,
+            )
+        ],
+    )
+    _ = await env.di.move_engine.confirm_transfer(
+        company_id=env.company_id, transfer_id=transfer.transfer_id
+    )
+    _ = await env.di.move_engine.assign_transfer(
+        company_id=env.company_id, transfer_id=transfer.transfer_id
+    )
+    return transfer.transfer_id
+
+
+class TestScanOpenSession:
+    """Doc-driven вход в скан-сессию: backend выбирает поток по документу."""
+
+    @pytest.mark.asyncio
+    async def test_open_incoming_gives_receive(self, stock_di, unique_id: str) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.INCOMING, Decimal("5")
+        )
+        move, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=transfer_id,
+        )
+        assert context.flow == ScanFlow.RECEIVE
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer_id
+        )
+        assert move.move_id == moves[0].move_id
+
+    @pytest.mark.asyncio
+    async def test_open_outgoing_gives_pick(self, stock_di, unique_id: str) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        _ = await _receipt(env, Decimal("8"), Decimal("2"))
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.OUTGOING, Decimal("3")
+        )
+        _, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=transfer_id,
+        )
+        assert context.flow == ScanFlow.PICK
+
+    @pytest.mark.asyncio
+    async def test_open_internal_gives_move(self, stock_di, unique_id: str) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        _ = await _receipt(env, Decimal("8"), Decimal("2"))
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.INTERNAL, Decimal("2")
+        )
+        _, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=transfer_id,
+        )
+        assert context.flow == ScanFlow.MOVE
+
+    @pytest.mark.asyncio
+    async def test_open_by_move_id(self, stock_di, unique_id: str) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.INCOMING, Decimal("5")
+        )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer_id
+        )
+        move, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=moves[0].move_id,
+            transfer_id=None,
+        )
+        assert move.move_id == moves[0].move_id
+        assert context.flow == ScanFlow.RECEIVE
+
+    @pytest.mark.asyncio
+    async def test_open_requires_an_id(self, stock_di, unique_id: str) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.open_session(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_id=None,
+                transfer_id=None,
+            )
+        assert exc.value.error_code == "scan_open_input_invalid"
+
+    @pytest.mark.asyncio
+    async def test_open_done_transfer_has_no_work(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        transfer_id = await _receipt(env, Decimal("5"), Decimal("2"))
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.open_session(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_id=None,
+                transfer_id=transfer_id,
+            )
+        assert exc.value.error_code == "document_no_work"
+
+    @pytest.mark.asyncio
+    async def test_open_move_from_other_warehouse(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.INCOMING, Decimal("5")
+        )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer_id
+        )
+        other = await env.di.warehouse_service.create_warehouse(
+            company_id=env.company_id,
+            code=f"WHX{unique_id[:6]}",
+            name=f"Other {unique_id}",
+            owner_user_id="test_user",
+            layout_preset=StockLayoutPreset.SIMPLE,
+            removal_strategy=StockRemovalStrategy.FIFO,
+        )
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.scan_service.open_session(
+                company_id=env.company_id,
+                warehouse_id=other.warehouse_id,
+                move_id=moves[0].move_id,
+                transfer_id=None,
+            )
+        assert exc.value.error_code == "move_not_found"
+
+    @pytest.mark.asyncio
+    async def test_open_picks_move_with_open_lines(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Накладная с двумя move: первый закрыт — сессия открывает второй."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        second = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"Widget B {unique_id}",
+            sku=f"SKUB-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+        )
+        op = env.op_types[StockOperationCode.INCOMING]
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=op.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("4"),
+                    uom_id=env.uom_id,
+                    unit_price=None,
+                ),
+                StockMoveSpec(
+                    product_id=second.product_id,
+                    product_qty=Decimal("2"),
+                    uom_id=env.uom_id,
+                    unit_price=None,
+                ),
+            ],
+        )
+        _ = await env.di.move_engine.confirm_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        _ = await env.di.move_engine.assign_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        assert len(moves) == 2
+        # Закрываем первый move вручную — сессия должна перескочить на второй.
+        _ = await StockMove.objects.filter(
+            company_id=env.company_id, move_id=moves[0].move_id
+        ).update(using=STOCK_DB, state=StockMoveState.DONE)
+        _ = await StockMoveLine.objects.filter(
+            company_id=env.company_id, move_id=moves[0].move_id
+        ).update(using=STOCK_DB, state=StockMoveState.DONE)
+        move, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=transfer.transfer_id,
+        )
+        assert move.move_id == moves[1].move_id
+        assert context.flow == ScanFlow.RECEIVE
+
+    @pytest.mark.asyncio
+    async def test_session_flow_task_kinds(self, stock_di, unique_id: str) -> None:
+        """kind строки сильнее типа операции: тара → container_move,
+        пересчёт → count на любом документе."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        transfer_id = await _open_transfer(
+            env, StockOperationCode.INCOMING, Decimal("5")
+        )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer_id
+        )
+        move = moves[0]
+        assert (
+            await env.di.scan_service._session_flow(
+                env.company_id, move, StockMoveLineKind.CONTAINER
+            )
+            == ScanFlow.CONTAINER_MOVE
+        )
+        assert (
+            await env.di.scan_service._session_flow(
+                env.company_id, move, StockMoveLineKind.COUNT
+            )
+            == ScanFlow.COUNT
+        )
+        assert (
+            await env.di.scan_service._session_flow(
+                env.company_id, move, StockMoveLineKind.QUANTITY
+            )
+            == ScanFlow.RECEIVE
+        )

@@ -9,6 +9,10 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
+from tests.fixtures.platform_events import (
+    platform_events_listener,
+    wait_platform_event_payload,
+)
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -413,17 +417,25 @@ class TestAiSuggestOptions:
         отвечает честным ``ai_empty_result``; 200 с items — на живом провайдере.
         """
         shop, _ = await _shop_with_product(shop_client, f"ais-{unique_id[:8]}")
-        resp = await shop_client.post(
-            f"{_SHOPS}/{shop['shop_id']}/ai/suggest-options",
-            json={"product_name": "Пицца Маргарита", "group_name": "Добавки"},
-        )
-        if resp.status_code == 200:
-            items = resp.json()["items"]
+        async with platform_events_listener() as receive:
+            resp = await shop_client.post(
+                f"{_SHOPS}/{shop['shop_id']}/ai/suggest-options",
+                json={"product_name": "Пицца Маргарита", "group_name": "Добавки"},
+            )
+            assert resp.status_code == 200, resp.text
+            payload = await wait_platform_event_payload(
+                receive,
+                "shop/ai_call/finished",
+                timeout=45.0,
+                match=lambda p: p.get("call_id") == resp.json()["call_id"],
+            )
+        if payload["status"] == "completed":
+            items = payload["result"]["items"]
             assert items
             assert all("name" in i and "price_minor" in i for i in items)
         else:
-            assert resp.status_code == 404, resp.text
-            assert resp.json()["error_code"] == "ai_empty_result"
+            assert payload["status"] == "failed"
+            assert payload["error_code"] == "ai_empty_result"
 
     async def test_suggest_options_requires_shop(
         self, shop_client: AsyncClient

@@ -31,8 +31,8 @@
     "claim": "Claim",
     "complete": "Complete",
     "empty_assigned": "No assigned tasks.",
-    "empty_queue": "No tasks in queue inbox.",
     "empty_no_queue_membership": "You are not a member of any queue",
+    "empty_all": "No tasks — nothing assigned to you and nothing in your queues.",
     "go_to_queues": "Go to queues"
   },
   "my_page": {

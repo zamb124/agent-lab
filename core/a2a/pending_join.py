@@ -14,9 +14,8 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import ClassVar, Self
 
-from oxyde import F
+from oxyde import F, Index
 from oxyde import Field as DbField
-from oxyde import Index
 
 from core.models.platform_model import PlatformModel
 from core.types import JsonObject

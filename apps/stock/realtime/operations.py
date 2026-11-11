@@ -97,6 +97,8 @@ from apps.stock.models.api import (
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
     StockScanExpected,
+    StockScanOpenPayload,
+    StockScanOpenResponse,
     StockScanQuantityPayload,
     StockScanStepPayload,
     StockScanStepResponse,
@@ -1702,6 +1704,28 @@ async def op_scan_step(
         hint=result.hint,
         expected=await _scan_expected(
             scope.company_id, payload.warehouse_id, payload.move_id
+        ),
+    )
+
+
+async def op_scan_open(
+    payload: StockScanOpenPayload, *, user: User, di: Di
+) -> StockScanOpenResponse:
+    """Открытие doc-driven сессии: backend выбирает поток и подсказку."""
+    _ = user
+    scope = require_company()
+    await _warehouse_editor(di, scope, payload.warehouse_id)
+    move, context = await di.scan_service.open_session(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        move_id=payload.move_id,
+        transfer_id=payload.transfer_id,
+    )
+    return StockScanOpenResponse(
+        context=context,
+        move_id=move.move_id,
+        expected=await _scan_expected(
+            scope.company_id, payload.warehouse_id, move.move_id
         ),
     )
 

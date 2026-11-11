@@ -10,6 +10,7 @@ from apps.shop.di import Di
 from apps.shop.models import ShopDomain
 from apps.shop.models.api import (
     ShopAiBriefRequest,
+    ShopAiCallResponse,
     ShopAiDescribeRequest,
     ShopAiEnhancePhotoRequest,
     ShopAiParseMenuRequest,
@@ -59,7 +60,6 @@ from apps.shop.models.api import (
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
     ShopAiBatchResponse,
-    ShopAiCallResponse,
     ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,

@@ -44,6 +44,7 @@ from core.files.hooks import index_file_in_rag
 from core.files.image_variants.service import ImageVariantService
 from core.files.service import FilesService
 from core.identity.auth_service import AuthService
+from core.identity.badge_service import BadgeService
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
 from core.integrations.oauth_service import OAuthService
 from core.mail.attachment_index import MailAttachmentFileIndex
@@ -201,6 +202,7 @@ class PlatformDi(
 ):
     auth_service: AuthService
     authz_service: AuthzService
+    badge_service: BadgeService
     billing_service: BillingService
     calendar_service: CalendarService
     catalog_service: CatalogService

@@ -14,6 +14,15 @@ from starlette.responses import JSONResponse, Response
 
 from core.context import get_context, require_context
 from core.di.platform import Di
+from core.identity.badge_operations import (
+    BadgeBindPayload,
+    BadgeListPayload,
+    BadgeResponse,
+    BadgeUnbindPayload,
+    op_badges_bind,
+    op_badges_list,
+    op_badges_unbind,
+)
 from core.identity.flow_employee import flow_employee_curator_user_ids, is_flow_employee
 from core.identity.team_operations import (
     TeamMemberResponse,
@@ -169,3 +178,35 @@ async def stop_act_as(request: Request) -> Response:
     )
     attach_session_auth_cookie(response, request, token)
     return response
+
+
+# --- Бейджи сотрудников (REST-зеркало frontend/badges/*_requested) ---
+
+
+@router.get("/badges", response_model=OffsetPage[BadgeResponse])
+async def list_badges(
+    di: Di,
+    user_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[BadgeResponse]:
+    """Бейджи компании, опционально — одного сотрудника; Check `company` admin."""
+    return await op_badges_list(
+        BadgeListPayload(user_id=user_id, limit=limit, offset=offset),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/badges", response_model=BadgeResponse)
+async def bind_badge(body: BadgeBindPayload, di: Di) -> BadgeResponse:
+    """Привязать код бейджа к сотруднику компании; Check `company` admin."""
+    return await op_badges_bind(body, user=require_context().user, di=di)
+
+
+@router.delete("/badges/{badge_id}", response_model=BadgeResponse)
+async def unbind_badge(badge_id: str, di: Di) -> BadgeResponse:
+    """Отозвать бейдж; Check `company` admin."""
+    return await op_badges_unbind(
+        BadgeUnbindPayload(badge_id=badge_id), user=require_context().user, di=di
+    )

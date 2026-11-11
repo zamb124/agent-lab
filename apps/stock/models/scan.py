@@ -67,6 +67,10 @@ class ScanEntityKind(StrEnum):
     SERIAL = "serial"
     LOCATION = "location"
     CONTAINER = "container"
+    DOCUMENT = "document"
+    """Накладная/ордер — скан документа открывает его исполнение."""
+    RESOURCE = "resource"
+    """Техника/терминал — скан привязывает ресурс к оператору."""
     UNKNOWN = "unknown"
 
 

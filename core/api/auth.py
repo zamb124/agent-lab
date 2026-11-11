@@ -53,6 +53,39 @@ class DemoLoginRequest(BaseModel):
     password: str
 
 
+class BadgeLoginRequest(BaseModel):
+    """Скан бейджа сотрудника — код с физического носителя."""
+
+    code: str = PydanticField(min_length=1, max_length=128)
+
+
+def _set_session_cookies(
+    response: Response, host: str, session_id: str, token: str
+) -> None:
+    """Ставит `session_id`/`auth_token` — единый контракт входа платформы."""
+    cookie_domain = get_cookie_domain(host)
+    is_production = get_settings().server.env == "production"
+    cookie_max_age = TokenService.SESSION_EXPIRES
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        domain=cookie_domain,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        domain=cookie_domain,
+        httponly=False,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+
+
 def _request_token_data(request: Request) -> TokenData | None:
     return get_request_token_data(request)
 
@@ -136,29 +169,45 @@ async def login_demo(
     response = JSONResponse(
         content={"redirect_url": redirect_url, "success": True},
     )
-    is_production = settings.server.env == "production"
-    cookie_domain = get_cookie_domain(target_host)
-    cookie_max_age = TokenService.SESSION_EXPIRES
-
-    response.set_cookie(
-        key="session_id",
-        value=result.session.session_id,
-        domain=cookie_domain,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
-        max_age=cookie_max_age,
-    )
-    response.set_cookie(
-        key="auth_token",
-        value=result.token,
-        domain=cookie_domain,
-        httponly=False,
-        secure=is_production,
-        samesite="lax",
-        max_age=cookie_max_age,
+    _set_session_cookies(
+        response, target_host, result.session.session_id, result.token
     )
 
+    return response
+
+
+@router.post("/login/badge")
+async def login_badge(
+    request: Request,
+    body: BadgeLoginRequest,
+    di: Di,
+) -> JSONResponse:
+    """Вход по бейджу сотрудника — общий для любых терминалов платформы.
+
+    Терминал без сессии: компания берётся из Host (subdomain), ответ
+    ставит те же `session_id`/`auth_token` куки, что и OAuth/demo-вход.
+    Logout — общий `/auth/logout`.
+    """
+    host = request.headers.get("host", "")
+    company = await di.badge_service.resolve_login_company(host)
+    client_ip = request.client.host if request.client is not None else ""
+    result = await di.badge_service.login_badge(
+        company_id=company.company_id, code=body.code, client_ip=client_ip
+    )
+    session = result.session
+    token = result.token
+    user = result.user
+    if session is None or token is None or user is None:
+        raise HTTPException(status_code=500, detail="badge login returned incomplete result")
+
+    response = JSONResponse(
+        content={
+            "user_id": user.user_id,
+            "company_id": company.company_id,
+            "display_name": user.name,
+        }
+    )
+    _set_session_cookies(response, host, session.session_id, token)
     return response
 
 
@@ -346,37 +395,16 @@ async def _complete_oauth_callback(
             redirect_url = build_url(target_host, "/select-company")
 
     response = RedirectResponse(url=redirect_url)
-    is_production = settings.server.env == "production"
-
-    cookie_domain = get_cookie_domain(target_host)
 
     logger.info(
         "auth.cookies.set",
         session_id=session.session_id,
         token_prefix=token[:8],
-        domain=cookie_domain,
-        secure=is_production,
+        domain=get_cookie_domain(target_host),
+        secure=settings.server.env == "production",
     )
 
-    cookie_max_age = TokenService.SESSION_EXPIRES
-    response.set_cookie(
-        key="session_id",
-        value=session.session_id,
-        domain=cookie_domain,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
-        max_age=cookie_max_age,
-    )
-    response.set_cookie(
-        key="auth_token",
-        value=token,
-        domain=cookie_domain,
-        httponly=False,
-        secure=is_production,
-        samesite="lax",
-        max_age=cookie_max_age,
-    )
+    _set_session_cookies(response, target_host, session.session_id, token)
 
     logger.info("auth.completed", user_id=user.user_id)
     return response

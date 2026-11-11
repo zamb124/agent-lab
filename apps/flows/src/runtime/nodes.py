@@ -2251,7 +2251,6 @@ class RemoteFlowNode(BaseNode):
                 "branch_id": self.branch_id,
                 "headers": req_headers,
                 "metadata": metadata,
-                "state_hash": self._state_hash_for_activity(state),
             },
             "remote_flow.activity_input",
         )
@@ -2533,7 +2532,6 @@ class CodeAgentNode(BaseNode):
                 "invoke_argv": list(self.invoke_argv),
                 "content": content,
                 "session_id": state.session_id,
-                "state_hash": self._state_hash_for_activity(state),
             },
             "code_agent.activity_input",
         )

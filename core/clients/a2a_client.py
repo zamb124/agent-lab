@@ -10,7 +10,7 @@ from pydantic import Field
 
 from core.a2a.methods import CANCEL_TASK, GET_TASK, SEND_MESSAGE
 from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
-from core.a2a.task_states import A2A_OPEN_TASK_STATES, wire_task_state_to_platform
+from core.a2a.task_states import wire_task_state_to_platform
 from core.context import get_context
 from core.http import get_httpx_client
 from core.internal_context_headers import build_internal_context_headers
@@ -87,12 +87,6 @@ def _require_artifacts(task_result: JsonObject) -> list[JsonObject]:
         artifacts.append(artifact)
     return artifacts
 
-
-def _task_id_from_result(task_result: JsonObject) -> str:
-    task_id = task_result.get("id")
-    if not isinstance(task_id, str) or task_id.strip() == "":
-        raise A2AClientError("A2A Task.id is required")
-    return task_id
 
 
 class A2AClient:

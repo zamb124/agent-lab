@@ -14,7 +14,7 @@
 """
 
 from core.tasks.broker import resolve_broker_for_task
-from core.tasks.kicker import enqueue
+from core.tasks.kicker import enqueue, enqueue_dynamic
 from core.tasks.log_labels import build_log_labels
 from core.tasks.registry import (
     TaskPriority,
@@ -37,6 +37,7 @@ __all__ = [
     "build_log_labels",
     "declare_task",
     "enqueue",
+    "enqueue_dynamic",
     "get_task_spec",
     "platform_task",
     "register_queue_broker",

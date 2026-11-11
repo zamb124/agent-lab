@@ -18,6 +18,8 @@ setup_worker_logging_early("idle_worker", logging_config=_idle_worker_settings.l
 set_settings(_idle_worker_settings)
 set_files_route_segment(resolve_files_route_segment("idle_worker"))
 
+import importlib
+
 from apps.idle.di import IdleDi
 from apps.idle.tasks.task_names import TASK_INIT_SYSTEM_COMPANY
 from apps.worker_manifest import wire_worker
@@ -29,6 +31,16 @@ from core.tasks import enqueue
 from core.tasks.worker_bootstrap import build_worker, connect_redis_with_backoff
 
 logger = get_logger(__name__)
+
+# Declaration-модули сервисов, чьи задачи generic continuation ``a2a_call_finished``
+# re-enqueue'ит по имени (resume_task из resume-контекста): producer-импорт для
+# разрешения TaskSpec в реестре без загрузки impl-модулей.
+for _decl_module in (
+    "apps.crm.tasks.task_names",
+    "apps.shop.tasks.task_names",
+    "apps.stock.tasks.task_names",
+):
+    _ = importlib.import_module(_decl_module)
 
 
 async def connect_idle_worker_redis(redis_client: RedisClient) -> None:
