@@ -322,6 +322,8 @@ async def test_shop_menu_live_listing_price_and_archive(
     assert resp.status_code == 200, resp.text
     await expect(card).not_to_be_visible(timeout=15_000)
 
+    await page.locator("shop-menu-page").get_by_text("All items").first.click()
+
     created_name = f"RT новинка {unique_id[:4]}"
     resp = await shop_client_http.post(
         f"/shop/api/v1/shops/{storefront.shop_id}/products",

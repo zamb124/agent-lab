@@ -15,7 +15,10 @@ from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.shop_service import shop_scopes
 from apps.shop.services.storefront_service import StorefrontService
 from apps.shop.tasks.task_names import SHOP_REBUILD_STOREFRONT
-from core.catalog.events import CATALOG_PRODUCT_OVERLAY_CHANGED
+from core.catalog.events import (
+    CATALOG_PRODUCT_FACET_CHANGED,
+    CATALOG_PRODUCT_OVERLAY_CHANGED,
+)
 from core.catalog.service import CatalogService
 from core.clients.geo_client import GeoClient
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -238,7 +241,9 @@ class AggregateService:
 
         Durable-вызов из consumer-группы ``shop``: снапшот и
         ``shop_market_items`` пересобираются, ``SHOP_REBUILD_STOREFRONT``
-        прогревает кэш. Не-shop overlay'и игнорируются.
+        прогревает кэш. События с ``facet != "shop"`` (stock-фасет,
+        складские overlay'и) не меняют витринные проекции и пропускаются;
+        у shop-событий ``instance_id`` — прямой адресат витрины.
         """
         data = event.payload if isinstance(event.payload, dict) else {}
         product_id = data.get("product_id")
@@ -248,16 +253,13 @@ class AggregateService:
                 product_id = product.get("product_id")
         if not isinstance(product_id, str):
             return
-        if (
-            event.type == CATALOG_PRODUCT_OVERLAY_CHANGED
-            and data.get("facet") != "shop"
-        ):
-            return
-        instance_id = (
-            data.get("instance_id")
-            if event.type == CATALOG_PRODUCT_OVERLAY_CHANGED
-            else None
+        scoped_type = event.type in (
+            CATALOG_PRODUCT_OVERLAY_CHANGED,
+            CATALOG_PRODUCT_FACET_CHANGED,
         )
+        if scoped_type and data.get("facet") != "shop":
+            return
+        instance_id = data.get("instance_id") if scoped_type else None
         shop_ids = (
             [instance_id]
             if isinstance(instance_id, str)

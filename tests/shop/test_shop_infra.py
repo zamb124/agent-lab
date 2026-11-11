@@ -166,3 +166,80 @@ class TestAggregate:
             params={"q": f"пампушкамы {marker}"},
         )
         assert any(i["shop_slug"] == slug for i in by_typo.json()["items"])
+
+    async def test_facet_delete_event_removes_market_item(
+        self, shop_client: AsyncClient, shop_di, unique_id: str
+    ) -> None:
+        """Durable-путь удаления листинга: ``instance_id`` в facet-событии —
+        прямой адресат витрины. Строки продукта к этому моменту уже нет,
+        обратный поиск витрин её бы не нашёл и проекция осталась бы грязной."""
+        from apps.shop.models import ShopMarketItem
+        from core.catalog.events import CATALOG_PRODUCT_FACET_CHANGED
+        from core.events import PlatformEvent
+        from core.models.identity_models import SYSTEM_COMPANY_ID
+        from core.utils.background import run_with_log_context
+
+        slug = f"evdel-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "EvDel", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
+        )
+        shop_id = resp.json()["shop_id"]
+        await shop_client.post(f"{_SHOPS}/{shop_id}/publish")
+        prod = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/products",
+            json={"name": f"Позиция {unique_id[:6]}", "price_minor": 100},
+        )
+        product_id = prod.json()["product_id"]
+        item_key = f"{shop_id}:{product_id}"
+        assert await ShopMarketItem.get(item_key) is not None
+        await shop_di.shop_service.delete_product(SYSTEM_COMPANY_ID, shop_id, product_id)
+        task = run_with_log_context(
+            shop_di.aggregate_service.handle_catalog_event(
+                PlatformEvent(
+                    type=CATALOG_PRODUCT_FACET_CHANGED,
+                    company_id=SYSTEM_COMPANY_ID,
+                    payload={
+                        "product_id": product_id,
+                        "facet": "shop",
+                        "instance_id": shop_id,
+                    },
+                )
+            ),
+            name="test.catalog_facet_event",
+            background_kind="startup",
+        )
+        await task
+        assert await ShopMarketItem.get(item_key) is None
+
+    async def test_other_facet_event_skips_rebuild(
+        self, shop_client: AsyncClient, shop_di, unique_id: str
+    ) -> None:
+        """``facet != "shop"`` не трогает витринные проекции: строка не
+        восстанавливается — handler проигнорировал stock-facet событие."""
+        from apps.shop.models import ShopMarketItem
+        from core.catalog.events import CATALOG_PRODUCT_FACET_CHANGED
+        from core.events import PlatformEvent
+        from core.models.identity_models import SYSTEM_COMPANY_ID
+
+        slug = f"evskip-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "EvSkip", "kind": "restaurant", "lat": 55.7512, "lng": 37.6184}
+        )
+        shop_id = resp.json()["shop_id"]
+        await shop_client.post(f"{_SHOPS}/{shop_id}/publish")
+        prod = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/products",
+            json={"name": f"Позиция {unique_id[:6]}", "price_minor": 100},
+        )
+        product_id = prod.json()["product_id"]
+        item_key = f"{shop_id}:{product_id}"
+        assert await ShopMarketItem.get(item_key) is not None
+        await ShopMarketItem.delete_by_shop(shop_id)
+        await shop_di.aggregate_service.handle_catalog_event(
+            PlatformEvent(
+                type=CATALOG_PRODUCT_FACET_CHANGED,
+                company_id=SYSTEM_COMPANY_ID,
+                payload={"product_id": product_id, "facet": "stock"},
+            )
+        )
+        assert await ShopMarketItem.get(item_key) is None

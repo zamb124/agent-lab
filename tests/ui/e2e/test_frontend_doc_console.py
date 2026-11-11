@@ -1299,6 +1299,15 @@ async def test_frontend_access_explorer(
     await member_row.click()
     grant_row = access_page.locator(".grant-row").filter(has_text=namespace)
     await expect(grant_row).to_be_visible(timeout=30_000)
+    # Фильтр по типу «пространство»: в общей БД копятся технические гранты
+    # прошлых прогонов (ящики и т.п.) — для кадра оставляем только
+    # понятные пользователю права на пространства.
+    type_chip = access_page.locator(".summary .chip").filter(
+        has_text=re.compile(r"(Workspace|Пространство)\s*·")
+    )
+    await expect(type_chip).to_be_visible(timeout=30_000)
+    await type_chip.click()
+    await expect(access_page.locator(".grant-row").filter(has_text="mailbind")).to_have_count(0)
     await scenario.step(
         "Посмотрите список прав сотрудника",
         page,
@@ -1322,6 +1331,7 @@ async def test_frontend_access_explorer(
     await expect(why).to_contain_text(
         re.compile(r"Выдан напрямую|Granted directly")
     )
+    await why.scroll_into_view_if_needed()
     await scenario.step(
         "Узнайте, откуда взялось право",
         page,
