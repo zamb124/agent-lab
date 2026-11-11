@@ -24,7 +24,7 @@ CI (`scripts/gates/voice/resolver_usage.py`).
    `language` на WebSocket voice или поле company для `tts`) и в PG-каталоге
    `provider_litserve_models` (`litserve_catalog_entries`, TTL-кэш) есть
    ready-запись TTS с тем же `synthesis_locale` (ISO 639-1), её `api_model_id`
-   подменяет результат шагов 1–4 для выбора модели Silero TTS по локали.
+   подменяет результат шагов 1–4 для выбора локальной TTS-модели по локали.
 
 Если итоговое значение обязательного поля после всех шагов отсутствует —
 `raise ValueError` без маскировки.

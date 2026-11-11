@@ -556,8 +556,8 @@ class LitserveSpeechBackendConfig(BaseModel):
         default=120.0,
         gt=0.0,
         description=(
-            "Таймаут HTTP к provider-litserve (секунды). Локальный Silero TTS на CPU может "
-            "держать ответ дольше 60 с при холодном старте; при необходимости поднять через "
+            "Таймаут HTTP к provider-litserve (секунды). Локальный TTS может "
+            "держать ответ дольше 60 с при холодном старте модели; при необходимости поднять через "
             "VOICE__STT__LITSERVE__TIMEOUT_S / VOICE__TTS__LITSERVE__TIMEOUT_S / VOICE__VAD__LITSERVE__TIMEOUT_S."
         ),
     )

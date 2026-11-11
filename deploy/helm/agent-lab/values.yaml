@@ -1079,9 +1079,9 @@ litserve:
   nodeName: master
   port: 8014
   serviceName: provider-litserve
-  # PVC под HF cache: GigaAM v3 (~3 Gi), Silero TTS v5 (~150 Mi), Silero VAD (~50 Mi),
+  # PVC под HF cache: GigaAM v3 (~3 Gi), Qwen3-TTS 1.7B (~4 Gi), Silero VAD (~50 Mi),
   # Qwen3-Embedding-0.6B, Qwen3-Reranker-0.6B + запас
-  # (gigaam/silero-tts/silero-vad/qwen/flagllm) → берём 100Gi.
+  # (gigaam/qwen3-tts/silero-vad/qwen/flagllm) → берём 100Gi.
   modelCacheSize: 100Gi
   rerankModelId: Qwen/Qwen3-Reranker-0.6B
   embeddingModelId: Qwen/Qwen3-Embedding-0.6B

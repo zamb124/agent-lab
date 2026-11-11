@@ -11,7 +11,7 @@ Streaming chunked TTS: клиент шлёт текст, получает пот
 * валидация: пустой ``text`` → ``422``;
 * заголовок ``X-Voice-Provider`` проставляется;
 * ошибка batch TTS от ``provider_litserve`` в форме ``TTSLitserveHttpError``
-  (например ``422`` за неверный текст под ru Silero) маппится в тот же HTTP-код
+  (например ``422`` за невалидный вход локального TTS) маппится в тот же HTTP-код
   на ``/synthesize``, не ``500``.
 """
 
@@ -149,7 +149,7 @@ async def test_synthesize_litserve_upstream_422_returns_same_detail(
     monkeypatch: pytest.MonkeyPatch,
     unique_id: str,
 ) -> None:
-    """Ошибка batch TTS от litserve (например, только латиница под ru Silero) → HTTP 422, не 500."""
+    """Ошибка batch TTS от litserve (например, невалидный вход локального TTS) → HTTP 422, не 500."""
 
     class _Litserve422Streamer(BaseTTSStreamer):
         @property

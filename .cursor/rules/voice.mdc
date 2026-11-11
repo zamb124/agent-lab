@@ -26,7 +26,7 @@ alwaysApply: false
 - Резолвер — `core/clients/voice_resolver.py`: `resolve_stt_settings`, `get_stt_client`/`get_tts_client`/`get_vad_client`, `get_stt_streamer`/`get_tts_streamer`, `resolve_tts_pronunciation`, `resolve_effective_tts_voice_for_ws`; инвалидация кэша — `invalidate_company_overrides_cache`, `invalidate_platform_pronunciation_cache`.
 - Сессия — `apps/voice/services/` (`voice_session.py` `VoiceSession`, `voice_client_channel.py` `VoiceClientChannel`, `voice_barge_in.py` `BargeInController`, `speak_worker.py`, `voice_chunker.py`, `voice_transport_interrupt.py`, `session_providers.py`) + `apps/voice/workers/` (`ws_receiver.py`, `stt_worker.py` с `VadCallbackState`) — asyncio-циклы внутри сессии, не TaskIQ.
 - Кадры WS — `apps/voice/models.py`: `VoiceMediaConfigFrame`, `VoiceMediaUplinkConfig`, `VoiceTranscriptFrame`, `VoiceVadFrame`, `VoiceTtsStateFrame`, `VoiceErrorFrame`, `VoicePingFrame`, `VoiceFinalizeDoneFrame`, `VoiceSpeakCommand`, `VoiceProvidersHealth`.
-- Pronunciation — `core/clients/tts_pronunciation/`: платформенные и компанейные правила, `CompiledPronunciation`; шаги входа TTS — реестр `core.utils.tts_input_steps` (`silero_ru_latin_to_cyrillic` и др.).
+- Pronunciation — `core/clients/tts_pronunciation/`: платформенные и компанейные правила, `CompiledPronunciation`; шаги входа TTS — реестр `core.utils.tts_input_steps` (`ru_latin_to_cyrillic` и др.).
 - Тестовые провайдеры — `MockSTTProvider`/`MockTTSProvider`/`MockVADProvider` (`apps/voice/providers/*/mock.py`), только `tests/voice/`.
 
 ## Инварианты
@@ -62,7 +62,7 @@ alwaysApply: false
 1. Связь `apps/voice` → `apps/flows`, A2A и агентская логика внутри шлюза.
 2. Второй resolver или прямая сборка провайдера (URL, ключ, модель) вне `voice_resolver`; secrets компании в JSON-ответах.
 3. Per-company `vad`-override и второй акустический сервис/WS-протокол.
-4. Имена голосов чужих провайдеров (OpenAI и т.п.) для Silero-моделей litserve.
+4. Имена голосов чужих провайдеров (OpenAI и т.п.) для локальных TTS-моделей litserve.
 
 ## Гейты
 

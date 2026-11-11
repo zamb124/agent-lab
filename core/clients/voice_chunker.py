@@ -11,7 +11,7 @@
 speak-воркером voice-сессии (`apps/voice/services/speak_worker.py`).
 
 ``flush()`` отдаёт остаток списком сегментов длиной не больше ``chunk_max_chars``,
-чтобы бэкенды вроде Silero не получали один огромный ``input``.
+чтобы TTS-бэкенды не получали один огромный ``input``.
 """
 
 from __future__ import annotations

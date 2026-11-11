@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## Модель
 
-- `ProviderLitserveModel` (`core/models/provider_litserve_model.py`, shared DB, таблица `provider_litserve_models`) — единственный источник истины каталога. `kind` ∈ `embedding` | `rerank` | `stt` | `tts` | `vad`; `status` ∈ `pending` | `downloading` | `ready` | `failed` | `deleting` | `deleted`; `params` (JSONB) — типизированные поля записи (revision, dimension, context_length, silero_*…).
+- `ProviderLitserveModel` (`core/models/provider_litserve_model.py`, shared DB, таблица `provider_litserve_models`) — единственный источник истины каталога. `kind` ∈ `embedding` | `rerank` | `stt` | `tts` | `vad`; `status` ∈ `pending` | `downloading` | `ready` | `failed` | `deleting` | `deleted`; `params` (JSONB) — типизированные поля записи (revision, dimension, context_length, voice, synthesis_locale, instruct…)..
 - `LitserveCatalogEntry` = `ProviderLitserveModelPair` (embedding/rerank) | typed entry (`ProviderLitserveSTT/TTS/VADModelEntry`); `row.to_entry()` — round-trip `params` → typed.
 - `ProviderLitserveCatalogEntries` — DTO ready-каталога по kind для платформенных резолверов; читается через `litserve_catalog_entries()` (in-process TTL-кэш 60 с).
 - `ModelCatalog` (`apps/provider_litserve/catalog.py`) — иммутабельный boot-time снимок ready-строк; `from_seed(cfg)` — только conf (тесты, ASGI); `load(enabled_kinds=)` — из БД.

@@ -22,10 +22,10 @@ from typing import ClassVar, Literal, Protocol, TypeAlias
 
 import numpy as np
 import torch
-import torchaudio
+import torchaudio  # pyright: ignore[reportMissingTypeStubs] — пакет без stub-ов
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
-from qwen_tts import Qwen3TTSModel
+from qwen_tts import Qwen3TTSModel  # pyright: ignore[reportMissingTypeStubs] — пакет без stub-ов
 
 from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
@@ -53,7 +53,7 @@ class LocalTTSModel(Protocol):
         self,
         text: str,
         speaker: str,
-        language: str | None = None,
+        language: str,
         instruct: str | None = None,
     ) -> tuple[list[np.ndarray], int]: ...
 
@@ -264,7 +264,7 @@ class LocalTTSEngine:
             device=self._device,
         )
         started = time.monotonic()
-        model = Qwen3TTSModel.from_pretrained(
+        model = Qwen3TTSModel.from_pretrained(  # pyright: ignore[reportUnknownMemberType] — пакет без stub-ов
             entry.hf_model_id,
             revision=entry.revision,
             device_map=self._device,
@@ -376,7 +376,11 @@ class LocalTTSEngine:
                             instruct=entry.instruct,
                         )
                         model_sample_rate = fs
-                        wav_parts.append(torch.from_numpy(np.concatenate(wavs)))
+                        wav_parts.append(
+                            torch.from_numpy(  # pyright: ignore[reportUnknownMemberType] — стабы torch не типизируют from_numpy
+                                np.concatenate(wavs)
+                            )
+                        )
                 except Exception as exc:
                     logger.exception("provider_litserve.tts.model", model=api_model_id, exc=exc)
                     raise

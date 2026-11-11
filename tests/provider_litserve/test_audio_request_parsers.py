@@ -86,12 +86,12 @@ def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
         {
             "input": "Тест",
             "model": f"qwen-tts-{unique_id}",
-            "voice": "Baya",
+            "voice": "Serena",
             "response_format": "pcm",
         },
         default_api_model_id=f"qwen-tts-{unique_id}",
     )
-    assert parsed.voice_override == "baya"
+    assert parsed.voice_override == "serena"
 
 
 def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
@@ -100,12 +100,12 @@ def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
         {
             "input": "Тест",
             "model": f"qwen-tts-{unique_id}",
-            "voice": "baya",
+            "voice": "serena",
             "response_format": "pcm",
         },
         default_api_model_id=f"qwen-tts-{unique_id}",
     )
-    assert parsed.voice_override == "baya"
+    assert parsed.voice_override == "serena"
     assert parsed.response_format == "pcm"
 
 

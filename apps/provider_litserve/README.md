@@ -101,4 +101,4 @@ curl -sS http://127.0.0.1:8014/v1/models
 
 ## Зависимости
 
-Группа **`litserve`** (инференс-стек: `litserve`, `sentence-transformers`, `FlagEmbedding`, `silero-*`); тяжёлые модели подтягиваются ею же.
+Группа **`litserve`** (инференс-стек: `litserve`, `sentence-transformers`, `FlagEmbedding`, `silero-vad`, `qwen-tts-compat`); тяжёлые модели подтягиваются ею же.

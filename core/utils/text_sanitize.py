@@ -6,7 +6,7 @@ import unicodedata
 
 
 def sanitize_text_for_speech_backend(text: str) -> str:
-    """Приводит текст к безопасному для FFI бэкендов речи UTF-8 (в т.ч. Silero, облачные API).
+    """Приводит текст к безопасному для бэкендов речи UTF-8 (локальный TTS, облачные API).
 
     Порядок: NFKC, замена lone surrogate, удаление Cc (кроме \\n/\\r/\\t),
     удаление категории Cf (форматные: ZWSP, ZWJ, BOM и т.п. — часто ломают

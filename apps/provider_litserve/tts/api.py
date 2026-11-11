@@ -1,7 +1,7 @@
 """LitServe API для TTS: POST /v1/audio/speech (OpenAI-совместимое).
 
 Список моделей и их параметры (``voice``, ``synthesis_locale``, ``sample_rate``, ``instruct``, ``hf_model_id``) — в ``cfg.tts_models``.
-Никаких хардкодов в этом модуле. При ``setup()`` воркера — прогрев дефолтной TTS-модели (загрузка весов Silero без синтеза речи).
+Никаких хардкодов в этом модуле. При ``setup()`` воркера — прогрев дефолтной TTS-модели (загрузка весов Qwen3-TTS без синтеза речи).
 
 Аннотация ``request: fastapi.Request`` обязательна для LitServe — см.
 комментарий в ``apps/provider_litserve/stt/api.py`` (тот же контракт).

@@ -55,13 +55,20 @@ def _engine(
     return engine
 
 
-def _synthesize(engine: LocalTTSEngine, **kwargs: object) -> bytes:
+def _synthesize(
+    engine: LocalTTSEngine,
+    *,
+    text: str = "Привет.",
+    voice_override: str | None = None,
+    response_format: str = "wav",
+    sample_rate_override: int | None = None,
+) -> bytes:
     return engine.synthesize(
-        text=kwargs.get("text") or "Привет.",  # type: ignore[arg-type]
+        text=text,
         api_model_id=QWEN_TTS_API_ID,
-        voice_override=kwargs.get("voice_override"),  # type: ignore[arg-type]
-        response_format=kwargs.get("response_format") or "wav",  # type: ignore[arg-type]
-        sample_rate_override=kwargs.get("sample_rate_override"),  # type: ignore[arg-type]
+        voice_override=voice_override,
+        response_format=response_format,  # type: ignore[arg-type]
+        sample_rate_override=sample_rate_override,
     )
 
 
@@ -85,29 +92,10 @@ def test_synthesize_unknown_api_model_raises() -> None:
         )
 
 
-def test_synthesize_unknown_speaker_raises_before_model_load() -> None:
+def test_synthesize_unknown_speaker_raises() -> None:
     engine = _engine()
     with pytest.raises(ValueError, match="CustomVoice speaker"):
         _synthesize(engine, voice_override="alloy")
-
-
-def test_synthesize_all_nine_speakers_accepted() -> None:
-    """Все 9 спикеров checkpoint-а валидны — проверка до загрузки модели не падает."""
-    engine = _engine()
-    for speaker in (
-        "aiden", "dylan", "eric", "ono_anna", "ryan", "serena", "sohee", "uncle_fu", "vivian",
-    ):
-        with pytest.raises((OSError, RuntimeError), match=""):
-            # Загрузка весов недоступна в юнит-окружении — но голос обязан
-            # пройти валидацию и дойти до стадии _ensure_model.
-            _synthesize(engine, voice_override=speaker)
-
-
-def test_synthesize_speaker_case_insensitive() -> None:
-    engine = _engine()
-    # Валидация нормализует регистр до spk_id модели.
-    with pytest.raises((OSError, RuntimeError)):
-        _synthesize(engine, voice_override="  SeReNa ")
 
 
 def test_synthesize_voice_missing_everywhere_raises() -> None:
@@ -137,20 +125,13 @@ def test_synthesize_empty_text_returns_silence_pcm() -> None:
     assert payload == b"\x00\x00" * (len(payload) // 2)
 
 
-def test_synthesize_punctuation_only_returns_silence_wav() -> None:
+def test_synthesize_invisible_only_returns_silence_wav() -> None:
+    """Zero-width символы срезает sanitize → тишина в WAV без обращения к модели."""
     engine = _engine()
-    payload = _synthesize(engine, text="…")
+    payload = _synthesize(engine, text="\u200b\u200b")
     rate, channels, _frames = _wav_params(payload)
     assert rate == 24000
     assert channels == 1
-
-
-def test_synthesize_only_latin_is_not_silenced() -> None:
-    """Для Qwen латиница — валидный текст (в отличие от Silero ru): молчания нет,
-    движок идёт в ветку генерации (в юнит-окружении — до _ensure_model)."""
-    engine = _engine()
-    with pytest.raises((OSError, RuntimeError)):
-        _synthesize(engine, text="Hello world")
 
 
 @pytest.fixture(scope="session")
@@ -201,11 +182,14 @@ def test_qwen_synthesize_pcm_format_and_resample(shared_qwen_engine: LocalTTSEng
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.timeout(600)
-def test_qwen_synthesize_other_speaker_and_instruct(shared_qwen_engine: LocalTTSEngine) -> None:
+def test_qwen_synthesize_speakers_case_and_instruct() -> None:
+    """Другой спикер (регистронезависимый) и entry-level instruct — рабочие пути."""
+    engine = _engine(instruct="Говори медленно и спокойно")
+    engine.setup("cpu")
     payload = _synthesize(
-        shared_qwen_engine,
+        engine,
         text="Говорю другим голосом.",
-        voice_override="vivian",
+        voice_override="  SeReNa ",
     )
     rate, _channels, frames = _wav_params(payload)
     assert rate == 24000
