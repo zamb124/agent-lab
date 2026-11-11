@@ -39,7 +39,7 @@ Helpers: `wiki_e2e_helpers.py` (namespace через API, open_page, title_input
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `public-link` | Публичная ссылка на раздел | `test_wiki_workspace.py` | ✅ |
-| 3 | `access-roles` | Роли читатель/редактор в пространстве | новый | 📝 |
+| 3 | `access-roles` | Роли читатель/редактор в пространстве | `test_wiki_workspace.py` | ✅ |
 
 ## Долг и заметки
 

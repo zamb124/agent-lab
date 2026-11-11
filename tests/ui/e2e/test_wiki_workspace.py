@@ -5,6 +5,9 @@ from __future__ import annotations
 import pytest
 from playwright.async_api import Page, expect
 
+from tests.ui.e2e.sync_e2e_helpers import (
+    sync_e2e_activate_namespace_for_next_load,
+)
 from tests.ui.e2e.wiki_e2e_helpers import (
     wiki_api_create_page,
     wiki_e2e_open_page,
@@ -534,5 +537,134 @@ async def test_wiki_semantic_vs_text_search(
             "usual.\n\n"
             "**Summary.** Don't remember exact words — search by "
             "meaning: the knowledge base will find what you need."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="wiki",
+    tag="access",
+    doc_slug="access-roles",
+    title="Wiki: доступ к странице и роли участников",
+    title_en="Wiki: page access and member roles",
+    description=(
+        "**Для чего:** любую страницу можно закрыть от всей компании и "
+        "открыть только выбранным людям — с ролью «Читатель» или "
+        "«Редактор».\n\n"
+        "**Какие проблемы решает:** внутренний регламент или черновик не "
+        "должен видеть весь офис — показываем его только тем, кому нужно.\n\n"
+        "**Результат:** страница ограничена, участник добавлен читателем "
+        "и открывает её у себя."
+    ),
+    description_en=(
+        "**Purpose:** any page can be closed from the whole company and "
+        "opened only to selected people — with «Viewer» or «Editor» "
+        "role.\n\n"
+        "**Problems solved:** an internal policy or draft should not be "
+        "visible to the whole office — show it only to those who need "
+        "it.\n\n"
+        "**Result:** the page is restricted, a member is added as viewer "
+        "and opens it on their side."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_wiki_access_roles(
+    scenario: ScenarioRecorder,
+    wiki_ui: AppUI,
+    ui_page_system: Page,
+    ui_page_system_member: Page,
+    auth_token_system: str,
+    auth_token_system_user2: str,
+    ui_user_system_member,
+    unique_id: str, frontend_di,
+) -> None:
+    page = ui_page_system
+    namespace = await wiki_e2e_open_with_namespace(
+        wiki_ui, page, unique_id, suffix="acl", di=frontend_di
+    )
+    page_id = await wiki_api_create_page(
+        wiki_ui.origin,
+        auth_token_system,
+        namespace=namespace,
+        title=f"Регламент {unique_id}",
+        markdown="# Регламент\n\nВнутренний документ только для своих.",
+    )
+    await wiki_e2e_open_page(page, wiki_ui.origin, page_id)
+
+    await page.locator("wiki-page-view [data-wiki-page-menu]").click()
+    await page.locator('platform-menu [data-menu-item="access"]').click()
+    access_modal = page.locator("wiki-page-access-modal")
+    await expect(access_modal).to_be_visible(timeout=15_000)
+
+    await access_modal.locator("[data-wiki-visibility]").click()
+    await expect(
+        access_modal.locator("[data-wiki-member-add]")
+    ).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Страница ограничена — появился список участников",
+        page,
+        label_en="Page restricted — members list appeared",
+        screenshot_name="restricted-members-section",
+        details=(
+            "В окне «Доступ» включаем «Только участники»: теперь страницу "
+            "не видит вся компания — только владелец и люди из списка."
+        ),
+        details_en=(
+            "In the «Access» dialog turn on «Members only»: the page is "
+            "no longer visible to the whole company — only to the owner "
+            "and people on the list."
+        ),
+    )
+
+    member_field = access_modal.locator("platform-field").nth(0)
+    await ui_set_platform_field(member_field, ui_user_system_member.user_id)
+    await access_modal.locator("[data-wiki-member-add]").click()
+    member_row = access_modal.locator(
+        f'[data-wiki-member="{ui_user_system_member.user_id}"]'
+    )
+    await expect(member_row).to_be_visible(timeout=15_000)
+    await expect(member_row).to_contain_text("Чтение", timeout=15_000)
+    await scenario.step(
+        "Участник добавлен с ролью «Читатель»",
+        page,
+        label_en="Member added with «Viewer» role",
+        screenshot_name="member-added-viewer",
+        details=(
+            "В строке «Добавить участника» выбираем коллегу и роль: "
+            "«Читатель» — только читает, «Редактор» — может править. "
+            "Коллега появляется в списке со своей ролью."
+        ),
+        details_en=(
+            "In «Add member» pick a colleague and a role: «Viewer» — "
+            "read only, «Editor» — can edit. The colleague appears in "
+            "the list with their role."
+        ),
+    )
+
+    member = ui_page_system_member
+    await sync_e2e_activate_namespace_for_next_load(member, namespace)
+    await wiki_e2e_set_locale_ru(member)
+    await wiki_e2e_open_page(member, wiki_ui.origin, page_id)
+    await expect(
+        member.locator("wiki-page-view")
+    ).to_contain_text("Внутренний документ только для своих.", timeout=30_000)
+    await scenario.step(
+        "Читатель открыл страницу",
+        member,
+        label_en="Viewer opened the page",
+        screenshot_name="viewer-opens-page",
+        details=(
+            "Участник открывает ту же страницу в своей базе знаний и "
+            "читает документ — остальная компания его не видит.\n\n"
+            "**Итог.** Ограниченная страница доступна только выбранным "
+            "людям с нужной ролью."
+        ),
+        details_en=(
+            "The member opens the same page in their knowledge base and "
+            "reads the document — the rest of the company cannot see it.\n\n"
+            "**Summary.** A restricted page is only available to selected "
+            "people with the right role."
         ),
     )
