@@ -8,7 +8,7 @@
 
 ## Step 1. Open the agent chat
 
-Open the Green Garden Assistant chat. Execution history is available for dialogs that have run at least once.
+Open the Green Garden Assistant chat. After each reply, trace and log buttons are available under the message.
 
 ![Open the agent chat](inspect-traces-logs--01-observability-chat-opened.png)
 

@@ -14,6 +14,8 @@ Drag a Channel node and open its settings. Here you choose how to deliver the re
 
 ## Step 2. Choose Telegram and set the bot
 
+Keep Telegram as the channel and set the bot token (in this tutorial — «@zeleniy_sad_bot»). The agent then knows where to send notifications.
+
 ![Choose Telegram and set the bot](notify-in-telegram--02-telegram-channel-configured.png)
 
 ## Step 3. Review channel settings before publishing

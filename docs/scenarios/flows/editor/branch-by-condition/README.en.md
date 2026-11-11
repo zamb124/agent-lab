@@ -32,4 +32,8 @@ In the editor header, choose Run mode. A chat panel opens on the right where you
 
 ## Step 5. Verify the returns branch
 
+**Result demonstration.** Send «нужен возврат» and wait for a returns-path reply in the run chat — the Returns Agent branch ran. The canvas highlights the path that executed.
+
+**Summary.** You can now route Green Garden customers down different branches using link conditions.
+
 ![Verify the returns branch](branch-by-condition--05-returns-path-highlighted.png)

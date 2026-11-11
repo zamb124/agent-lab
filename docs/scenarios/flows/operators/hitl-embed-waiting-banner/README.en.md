@@ -18,16 +18,10 @@ Write that you need an operator for a return without a receipt. The agent routes
 
 ![Describe the disputed return](hitl-embed-waiting-banner--02-embed-hitl-sent.png)
 
-## Step 3. Wait for the waiting banner
+## Step 3. Wait for the banner — the input is locked
 
-The widget shows a banner that an operator has the request. This is the same signal as in the Flows chat.
-
-![Wait for the waiting banner](hitl-embed-waiting-banner--03-embed-waiting-banner.png)
-
-## Step 4. Confirm the input is read-only
-
-**Result demonstration.** In single-reply the customer cannot send another message from the widget — the dialog waits for the operator.
+The widget shows a banner that an operator has the request and the composer becomes read-only — in single-reply mode the customer cannot send another message.
 
 **Summary.** On the store site HITL looks the same as in the product: a waiting banner and a locked composer.
 
-![Confirm the input is read-only](hitl-embed-waiting-banner--04-embed-composer-readonly.png)
+![Wait for the banner — the input is locked](hitl-embed-waiting-banner--03-embed-waiting-banner.png)

@@ -26,4 +26,8 @@ Click the execution history button in the chat or choose the menu item. A modal 
 
 ## Step 4. Review the event list
 
+**Result demonstration.** The list shows events from the last run — you can pick a moment to replay or branch from.
+
+**Summary.** You can now review Green Garden agent execution history and find the step you need.
+
 ![Review the event list](time-travel-history--04-durable-history-events.png)

@@ -20,7 +20,7 @@
 
 ## Шаг 3. Добавьте переменные и обновите промпт
 
-Создайте переменную greeting и впишите в промпт адрес support@zeleniy-sad.ru и секрет @var:telegram_bot_token_3a1f5b0b. Так контакты меняются без правки всего текста.
+Создайте переменную greeting и впишите в промпт адрес support@zeleniy-sad.ru и секрет @var:telegram_bot_token_6bba1095. Так контакты меняются без правки всего текста.
 
 ![Добавьте переменные и обновите промпт](parameters-and-secrets--03-prompt-with-variables.png)
 

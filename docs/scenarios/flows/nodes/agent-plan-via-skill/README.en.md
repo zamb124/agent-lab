@@ -14,7 +14,7 @@ On the Flows home start creating an agent, pick the plain template, and name it 
 
 ## Step 2. Open Studio in Tools mode
 
-In Studio open Skills and tools and choose Tools. Here you add library tools without a Skill.
+In agent Studio open Skills and tools and choose Tools mode. Only here can you attach the planning Skill.
 
 ![Open Studio in Tools mode](agent-plan-via-skill--02-agent-plan-studio-tools.png)
 
@@ -26,6 +26,20 @@ Click Add skill, find agent-planning, and confirm. A Skill chip appears on the n
 
 ## Step 4. Publish the agent and open chat
 
-Publish the settings and open the assistant chat. Next the same multi-step customer request — the plan appears without a Skill.
+Publish the changes and open the Green Garden Assistant chat. Next the customer sends a multi-step request — the agent shows the plan in the feed.
 
 ![Publish the agent and open chat](agent-plan-via-skill--04-agent-plan-chat-opened.png)
+
+## Step 5. Send a multi-step request and see the checklist
+
+Send a request with several actions (find the order, check delivery, confirm contents). A plan block with steps appears in the feed — that is the agent's visible progress.
+
+![Send a multi-step request and see the checklist](agent-plan-via-skill--05-agent-plan-checklist-appeared.png)
+
+## Step 6. Check plan progress and the reply
+
+**Result demonstration.** The completed step Find the customer order is struck through, the current one is Check delivery status; next to it is the agent's short order reply.
+
+**Summary.** You can attach the planning Skill and follow multi-step progress in chat.
+
+![Check plan progress and the reply](agent-plan-via-skill--06-agent-plan-progress-demo.png)

@@ -8,7 +8,7 @@
 
 ## Step 1. Open the triggers list
 
-In the editor menu choose Triggers. A platform event connects the agent to actions in other services without a separate webhook.
+In the editor menu choose Triggers. Create a webhook here alongside schedule and Telegram.
 
 ![Open the triggers list](webhook-trigger--01-webhook-triggers-modal.png)
 

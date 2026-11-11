@@ -26,4 +26,8 @@ In the ⋯ menu choose Sessions. A table of past dialogs opens with last activit
 
 ## Step 4. Find the recent dialog in the table
 
+**Result demonstration.** The table has at least one row with recent activity — your test session was saved and you can reopen it.
+
+**Summary.** You can now find past Green Garden dialogs and return to them from the editor.
+
 ![Find the recent dialog in the table](find-past-sessions--04-session-row-visible.png)

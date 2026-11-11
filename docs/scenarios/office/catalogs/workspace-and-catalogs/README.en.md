@@ -13,3 +13,11 @@ Select workspace, create root and nested catalogs, edit settings, and navigate t
 ## Step 3. Nested catalog created
 
 ![Nested catalog created](workspace-and-catalogs--03-nested-catalog-created.png)
+
+## Step 4. Catalog renamed
+
+![Catalog renamed](workspace-and-catalogs--04-catalog-renamed.png)
+
+## Step 5. Catalog tree and breadcrumbs
+
+![Catalog tree and breadcrumbs](workspace-and-catalogs--05-catalog-tree-and-breadcrumbs.png)
