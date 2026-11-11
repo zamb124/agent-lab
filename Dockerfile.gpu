@@ -43,6 +43,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends sox \
     && rm -rf /var/lib/apt/lists/*
 
+# qwen-tts-compat добавлен в pyproject позже последней сборки agent-lab-base-gpu —
+# ставим явно, пока база не пересобрана с новым lockfile.
+RUN uv pip install --python /opt/venv/bin/python "qwen-tts-compat==0.1.1.post1"
+
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY --from=ui-builder /out/apps/ ./apps/

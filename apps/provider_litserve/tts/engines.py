@@ -46,6 +46,40 @@ logger = get_logger(__name__)
 TTSRawBody: TypeAlias = Mapping[str, JsonValue]
 
 
+_qwen_tts_encoder_compat_applied = False
+
+
+def _apply_qwen_tts_encoder_compat() -> None:
+    """Обход read-only @property ``MimiModel`` на transformers 5.x.
+
+    Вендорный ``Qwen3TTSTokenizerV2Encoder.__init__`` присваивает ``None`` в
+    ``self.upsample``/``self.decoder_transformer`` — на transformers>=5 это
+    deprecated read-only @property (делегируют в ``self.decoder.*``), и
+    присваивание падает с ``AttributeError``. Здесь повторяем исходный
+    смысл — освободить decoder-половину Mimi, построенную ``super().__init__``:
+    ``decoder_transformer`` вынимается из ``_modules``, ``self.decoder``
+    зануляется. Upstream: vendored tokenizer_12hz пакета ``qwen-tts-compat``.
+    """
+    global _qwen_tts_encoder_compat_applied
+    if _qwen_tts_encoder_compat_applied:
+        return
+    from qwen_tts.core.tokenizer_12hz.modeling_qwen3_tts_tokenizer_v2 import (  # pyright: ignore[reportMissingTypeStubs] — пакет без stub-ов
+        Qwen3TTSTokenizerV2Encoder,
+    )
+    from transformers.models.mimi.configuration_mimi import MimiConfig
+    from transformers.models.mimi.modeling_mimi import MimiModel
+
+    def _init(self: Qwen3TTSTokenizerV2Encoder, config: MimiConfig) -> None:
+        MimiModel.__init__(self, config)
+        self.config = config
+        _ = self._modules.pop("decoder_transformer", None)  # pyright: ignore[reportPrivateUsage] — обход read-only property transformers 5.x
+        self.decoder = None
+        self.post_init()
+
+    Qwen3TTSTokenizerV2Encoder.__init__ = _init
+    _qwen_tts_encoder_compat_applied = True
+
+
 class LocalTTSModel(Protocol):
     """Срез ``qwen_tts.Qwen3TTSModel``, используемый движком."""
 
@@ -263,6 +297,7 @@ class LocalTTSEngine:
             hf_model_id=entry.hf_model_id,
             device=self._device,
         )
+        _apply_qwen_tts_encoder_compat()
         started = time.monotonic()
         model = Qwen3TTSModel.from_pretrained(  # pyright: ignore[reportUnknownMemberType] — пакет без stub-ов
             entry.hf_model_id,
