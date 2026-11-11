@@ -74,7 +74,7 @@ async def _force_light_theme(page: Page) -> None:
         """
         () => {
             try {
-                window.localStorage.setItem('platform_theme', 'light');
+                window.localStorage.setItem('platform:core:theme', 'light');
             } catch (_) {}
             document.documentElement.removeAttribute('data-platform-theme-lock');
             document.documentElement.setAttribute('data-theme', 'light');

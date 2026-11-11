@@ -405,7 +405,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
             .overlay-meta {
                 position: absolute;
-                top: 20px;
+                top: 64px;
                 right: 70px;
                 z-index: 12;
                 display: flex;
@@ -645,7 +645,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        this._canvasPathHint = this.t('graph_page.hint_browse');
+        this._canvasPathHint = 'graph_page.hint_browse';
 
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
             this._onGraphRouterChanged();
@@ -1112,7 +1112,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._shortestPathEdges = [];
             this._graphNodes = [];
             this._graphEdges = [];
-            this._canvasPathHint = this.t('graph_page.hint_route_not_found');
+            this._canvasPathHint = 'graph_page.hint_route_not_found';
             this.toast('crm:graph_page.warn_path_not_found', {
                 type: 'warning',
                 vars: { source: this._pathSourceId, target: this._pathTargetId },
@@ -1148,7 +1148,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._graphNodes = nodes;
         this._graphEdges = merged;
         this._canvasPathState = 'built';
-        this._canvasPathHint = this.t('graph_page.hint_routes_dual');
+        this._canvasPathHint = 'graph_page.hint_routes_dual';
     }
 
     _mergePathEdgesByKind(directedEdges: Record<string, unknown>[], undirectedEdges: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -1435,7 +1435,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (this._graphDataMode !== 'influence') this._defaultOverviewActive = false;
         if (this._graphDataMode !== 'path') {
             this._canvasPathState = 'idle';
-            this._canvasPathHint = this.t('graph_page.hint_browse');
+            this._canvasPathHint = 'graph_page.hint_browse';
         }
         this._rebuildGraphByMode();
     }
@@ -1467,12 +1467,12 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._pathSourceId = node.id;
             this._pathTargetId = '';
             this._canvasPathState = 'pick_target';
-            this._canvasPathHint = this.t('graph_page.hint_click_target');
+            this._canvasPathHint = 'graph_page.hint_click_target';
             return;
         }
         if (this._canvasPathState === 'pick_target') {
             if (node.id === this._pathSourceId) {
-                this._canvasPathHint = this.t('graph_page.hint_pick_other_target');
+                this._canvasPathHint = 'graph_page.hint_pick_other_target';
                 this.toast('crm:graph_page.warn_source_target_same', { type: 'warning' });
                 return;
             }
@@ -1598,7 +1598,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._pathTargetId = '';
             this._graphDataMode = 'path';
             this._canvasPathState = 'pick_target';
-            this._canvasPathHint = this.t('graph_page.hint_click_target');
+            this._canvasPathHint = 'graph_page.hint_click_target';
         } else if (action === 'graph-from' && nodeId) {
             this._applyGraphFromNode(nodeId);
         }
@@ -1687,7 +1687,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
         if (actionId === 'path_mode') {
             this._canvasPathState = 'pick_source';
-            this._canvasPathHint = this.t('graph_page.hint_click_source');
+            this._canvasPathHint = 'graph_page.hint_click_source';
             this._graphDataMode = 'path';
             this._entitySearchQuery = '';
             this._shortestPathEdges = [];
@@ -1705,7 +1705,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
         if (actionId === 'reset_path') {
             this._canvasPathState = 'idle';
-            this._canvasPathHint = this.t('graph_page.hint_browse');
+            this._canvasPathHint = 'graph_page.hint_browse';
             this._pathSourceId = '';
             this._pathTargetId = '';
             this._shortestPathEdges = [];
@@ -1768,7 +1768,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._graphDataMode = 'influence';
             this._defaultOverviewActive = this._canvasView !== 'mindmap';
             this._canvasPathState = 'idle';
-            this._canvasPathHint = this.t('graph_page.hint_browse');
+            this._canvasPathHint = 'graph_page.hint_browse';
             this._shortestPathEdges = [];
             this._reloadAll();
             return;
@@ -1976,7 +1976,7 @@ export class CRMGraphWorkspace extends PlatformElement {
                     <crm-graph-legend
                         .nodes=${this._graphNodes}
                         .entityTypeColors=${entityTypeColors}
-                        .canvasHint=${this._canvasView === 'mindmap' ? this.t('mindmap.overlay_title') : this._canvasPathHint}
+                        .canvasHint=${this._canvasView === 'mindmap' ? this.t('mindmap.overlay_title') : (this._canvasPathHint ? this.t(this._canvasPathHint) : '')}
                         .selectedNodeId=${this._selectedNodeId}
                         .selectedEdgeId=${this._selectedEdgeId}
                     ></crm-graph-legend>

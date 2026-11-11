@@ -26,7 +26,7 @@ from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
 _FORCE_LIGHT_THEME_INIT_SCRIPT = """
 (() => {
     try {
-        window.localStorage.setItem('platform_theme', 'light');
+        window.localStorage.setItem('platform:core:theme', 'light');
         window.localStorage.setItem('pwa-banner-dismissed', 'true');
     } catch (_) {}
     const root = document.documentElement;

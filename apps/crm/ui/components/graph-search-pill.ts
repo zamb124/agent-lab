@@ -51,10 +51,16 @@ export class CRMGraphSearchPill extends PlatformElement {
                 pointer-events: none;
             }
 
+            :host {
+                --graph-control-height: 36px;
+            }
+
             .pill {
                 display: flex;
                 align-items: center;
                 gap: 0;
+                height: var(--graph-control-height);
+                box-sizing: border-box;
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: 999px;
@@ -68,7 +74,8 @@ export class CRMGraphSearchPill extends PlatformElement {
                 background: transparent;
                 color: var(--text-primary);
                 font-size: 13px;
-                padding: 8px 14px;
+                padding: 0 14px;
+                height: 100%;
                 width: 180px;
                 outline: none;
             }
@@ -100,7 +107,9 @@ export class CRMGraphSearchPill extends PlatformElement {
             .mode-pill {
                 display: inline-flex;
                 align-items: center;
-                padding: 5px 10px;
+                height: var(--graph-control-height);
+                box-sizing: border-box;
+                padding: 0 12px;
                 border-radius: 999px;
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
@@ -126,6 +135,8 @@ export class CRMGraphSearchPill extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 2px;
+                height: var(--graph-control-height);
+                box-sizing: border-box;
                 pointer-events: auto;
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
@@ -161,11 +172,13 @@ export class CRMGraphSearchPill extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 6px;
+                height: var(--graph-control-height);
+                box-sizing: border-box;
                 pointer-events: auto;
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: 999px;
-                padding: 4px 12px;
+                padding: 0 12px;
                 backdrop-filter: blur(6px);
             }
 
