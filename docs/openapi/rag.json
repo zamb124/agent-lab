@@ -3481,22 +3481,6 @@
         ],
         "title": "ListResponse[MailboxBinding]"
       },
-      "ListResponse_TeamMemberResponse_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TeamMemberResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[TeamMemberResponse]"
-      },
       "ListResponse_UserSearchResult_": {
         "properties": {
           "items": {
@@ -5746,6 +5730,37 @@
           "offset"
         ],
         "title": "OffsetPage[RAGDocument]"
+      },
+      "OffsetPage_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[TeamMemberResponse]"
       },
       "PersonalMailboxConnectPayload": {
         "properties": {

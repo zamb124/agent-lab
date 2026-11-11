@@ -13149,6 +13149,9 @@
                     "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                   },
                   {
+                    "$ref": "#/components/schemas/FlowUIAgentPlan"
+                  },
+                  {
                     "$ref": "#/components/schemas/FlowUIHtml"
                   }
                 ],
@@ -13159,6 +13162,7 @@
                     "action_result": "#/components/schemas/FlowUIActionResult",
                     "activity": "#/components/schemas/FlowUIActivity",
                     "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                    "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                     "alert": "#/components/schemas/FlowUIAlert",
                     "audio": "#/components/schemas/FlowUIAudio",
                     "avatar": "#/components/schemas/FlowUIAvatar",
@@ -13828,6 +13832,9 @@
                     "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                   },
                   {
+                    "$ref": "#/components/schemas/FlowUIAgentPlan"
+                  },
+                  {
                     "$ref": "#/components/schemas/FlowUIHtml"
                   }
                 ],
@@ -13838,6 +13845,7 @@
                     "action_result": "#/components/schemas/FlowUIActionResult",
                     "activity": "#/components/schemas/FlowUIActivity",
                     "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                    "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                     "alert": "#/components/schemas/FlowUIAlert",
                     "audio": "#/components/schemas/FlowUIAudio",
                     "avatar": "#/components/schemas/FlowUIAvatar",
@@ -16723,6 +16731,78 @@
           "icon": "bot"
         }
       },
+      "FlowUIAgentPlan": {
+        "properties": {
+          "block_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "title": "Block Id"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUICondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "span": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Span",
+            "default": 12
+          },
+          "align": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end"
+            ],
+            "title": "Align",
+            "default": "start"
+          },
+          "valign": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end"
+            ],
+            "title": "Valign",
+            "default": "start"
+          },
+          "type": {
+            "type": "string",
+            "const": "agent_plan",
+            "title": "Type",
+            "default": "agent_plan"
+          },
+          "plan": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Plan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "block_id"
+        ],
+        "title": "FlowUIAgentPlan",
+        "description": "Карточка AgentPlan в ленте: ``plan`` — сериализованный ``AgentPlan`` модели flows.",
+        "x-flow-ui-block": {
+          "group": "platform",
+          "icon": "checklist"
+        }
+      },
       "FlowUIAlert": {
         "properties": {
           "block_id": {
@@ -17024,6 +17104,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -17034,6 +17117,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -17957,6 +18041,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -17967,6 +18054,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -18174,6 +18262,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -18184,6 +18275,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -20257,6 +20349,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -20267,6 +20362,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -20486,6 +20582,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -20496,6 +20595,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -20863,6 +20963,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -20873,6 +20976,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -21197,6 +21301,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -21207,6 +21314,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -21468,6 +21576,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -21478,6 +21589,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -22622,6 +22734,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -22632,6 +22747,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -22838,6 +22954,9 @@
                   "$ref": "#/components/schemas/FlowUISuggestedPrompts"
                 },
                 {
+                  "$ref": "#/components/schemas/FlowUIAgentPlan"
+                },
+                {
                   "$ref": "#/components/schemas/FlowUIHtml"
                 }
               ],
@@ -22848,6 +22967,7 @@
                   "action_result": "#/components/schemas/FlowUIActionResult",
                   "activity": "#/components/schemas/FlowUIActivity",
                   "agent_identity": "#/components/schemas/FlowUIAgentIdentity",
+                  "agent_plan": "#/components/schemas/FlowUIAgentPlan",
                   "alert": "#/components/schemas/FlowUIAlert",
                   "audio": "#/components/schemas/FlowUIAudio",
                   "avatar": "#/components/schemas/FlowUIAvatar",
@@ -27116,22 +27236,6 @@
           "items"
         ],
         "title": "ListResponse[MailboxBinding]"
-      },
-      "ListResponse_TeamMemberResponse_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TeamMemberResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[TeamMemberResponse]"
       },
       "ListResponse_TriggerResponse_": {
         "properties": {
@@ -32893,6 +32997,37 @@
           "offset"
         ],
         "title": "OffsetPage[SessionConfig]"
+      },
+      "OffsetPage_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[TeamMemberResponse]"
       },
       "OffsetPage_ToolResponse_": {
         "properties": {

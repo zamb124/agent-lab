@@ -7559,22 +7559,6 @@
         ],
         "title": "ListResponse[MailboxBinding]"
       },
-      "ListResponse_TeamMemberResponse_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TeamMemberResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[TeamMemberResponse]"
-      },
       "ListResponse_TransactionResponse_": {
         "properties": {
           "items": {
@@ -10015,6 +9999,37 @@
           "offset"
         ],
         "title": "OffsetPage[ServiceStatus]"
+      },
+      "OffsetPage_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[TeamMemberResponse]"
       },
       "OffsetPage_dict_str__JsonValue__": {
         "properties": {
