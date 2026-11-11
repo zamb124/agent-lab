@@ -310,19 +310,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
             and token_data.company_id != company.company_id
             and extract_subdomain(request.headers.get("host", "")) is not None
         ):
-            if company.company_id not in user.companies:
+            if company.company_id in user.companies:
+                jwt_str, session_td = await rebind_session_to_company(
+                    user=user,
+                    company=company,
+                )
+                request.state.reissue_auth_token = jwt_str
+                request.state.session_token_data = session_td
+                token_data = session_td
+                auth_token = jwt_str
+            elif not self.route_matcher.allows_no_subdomain(request.url.path):
                 raise HTTPException(
                     status_code=403,
                     detail='You do not have access to the company at this address (subdomain).',
                 )
-            jwt_str, session_td = await rebind_session_to_company(
-                user=user,
-                company=company,
-            )
-            request.state.reissue_auth_token = jwt_str
-            request.state.session_token_data = session_td
-            token_data = session_td
-            auth_token = jwt_str
 
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:

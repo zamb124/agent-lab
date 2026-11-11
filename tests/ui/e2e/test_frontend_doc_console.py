@@ -1753,6 +1753,7 @@ async def test_frontend_join_company(
     await expect(anon_join).to_be_visible(timeout=30_000)
     await expect(anon_join.locator(".invite-preview")).to_be_visible(timeout=30_000)
     await expect(anon_join.locator(".provider-button").first).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(anon)
     await scenario.step(
         "Откройте ссылку-приглашение",
         anon,
@@ -1779,6 +1780,7 @@ async def test_frontend_join_company(
     await expect(member_join).to_be_visible(timeout=30_000)
     await expect(member_join.locator(".logged-in platform-user-chip")).to_be_visible(timeout=30_000)
     await expect(member_join.locator(".btn")).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(member)
     await scenario.step(
         "Проверьте и примите приглашение",
         member,
@@ -1863,7 +1865,7 @@ async def test_frontend_company_settings(
     await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
 
     _ = await page.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
-    settings = page.locator("settings-page")
+    settings = page.locator("frontend-settings-page")
     await expect(settings).to_be_visible(timeout=30_000)
     await expect(settings.locator(".info-grid")).to_be_visible(timeout=30_000)
     await _dismiss_cookie_banner(page)
@@ -1995,10 +1997,14 @@ async def test_frontend_support_page(
     )
 
     fields = support.locator("platform-field")
-    await ui_set_platform_field(fields.nth(0), "Анна Смирнова")
-    await ui_set_platform_field(fields.nth(1), "anna@example.com")
+    await ui_set_platform_field(fields.nth(0), "anna@example.com")
     await ui_set_platform_field(
-        fields.nth(2), "Не приходит письмо-приглашение для нового сотрудника"
+        fields.nth(1), "Не приходит письмо-приглашение"
+    )
+    await ui_set_platform_field(
+        fields.nth(2),
+        "Добрый день! Пригласили нового сотрудника Анну, "
+        "но письмо ей не пришло. Помогите, пожалуйста.",
     )
     await scenario.step(
         "Заполните форму обращения",
@@ -2006,14 +2012,14 @@ async def test_frontend_support_page(
         screenshot_name="support-form-filled",
         label_en="Fill in the contact form",
         details=(
-            "**Демонстрация результата.** Укажите имя, почту для ответа "
-            "и опишите вопрос — кнопка отправки откроет готовое письмо "
+            "**Демонстрация результата.** Укажите почту для ответа, "
+            "тему и опишите вопрос — кнопка отправки откроет готовое письмо "
             "в вашей почтовой программе, останется нажать «Отправить».\n\n"
             "**Итог.** Самый быстрый путь — письмо на адрес поддержки "
             "вверху страницы; форма нужна, чтобы ничего не забыть."
         ),
         details_en=(
-            "**Result demonstration.** Enter your name, reply email "
+            "**Result demonstration.** Enter your reply email, subject "
             "and describe the issue — the submit button opens a "
             "ready-made letter in your mail app, just press Send.\n\n"
             "**Summary.** The fastest path is the support address at "

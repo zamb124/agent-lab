@@ -1,4 +1,4 @@
-"""UI E2E сценарии Worktracker: операторский цикл HITL.
+"""UI E2E сценарии Worktracker: операторский цикл HITL и «Мои задачи» сотрудника.
 
 Сквозной пример «Зелёный сад» — см. docs/scenarios/flows/CATALOG.md (блок 4a, B1–B5).
 """
@@ -715,7 +715,7 @@ async def test_worktracker_my_tasks(
     fields = create_modal.locator("platform-field")
     await ui_set_platform_field(fields.nth(0), f"Позвонить поставщику удобрений ({unique_id})")
     await ui_set_platform_field(fields.nth(1), "Уточнить сроки поставки и цены на компост")
-    await create_modal.locator(".header-btn.n").click()
+    await create_modal.locator(".footer-actions .btn.btn-primary").click()
     created_row = my_page.locator("platform-work-item-row").filter(
         has_text="Позвонить поставщику удобрений"
     ).first

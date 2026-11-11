@@ -19,10 +19,7 @@ from apps.frontend.realtime.company_operations import (
     op_invites_generate,
 )
 from core.context import get_context, require_context
-from core.identity.company_membership import (
-    set_company_member_roles,
-    sync_existing_company_member,
-)
+from core.identity.company_membership import set_company_member_roles
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
@@ -179,10 +176,12 @@ async def accept_invite(
     if user.user_id in company.members:
         roles_list = list(company.members[user.user_id])
         logger.info("frontend.event", user_id=user.user_id, company_id=company.company_id)
-        await sync_existing_company_member(
+        # Roster может рассинхронизироваться с user.companies (пересид компании,
+        # внешняя мутация) — set_company_member_roles лечит обе стороны и FGA.
+        roles_list = await set_company_member_roles(
             authz=di.authz_service,
-            company_id=company.company_id,
-            user_id=user.user_id,
+            company=company,
+            user=user,
             roles=roles_list,
         )
         new_session_token, _ = await rebind_session_to_company(

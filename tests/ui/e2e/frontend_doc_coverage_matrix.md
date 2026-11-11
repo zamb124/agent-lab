@@ -56,6 +56,9 @@ platform, тег `tools`.
 | 1 | `sign-in` | Вход в платформу | `test_frontend_doc_console.py` | ✅ |
 | 1 | `select-company` | Выбор компании для работы | `test_frontend_doc_console.py` | ✅ |
 | 1 | `invite-team-member` | Пригласить коллегу по ссылке | `test_frontend_doc_console.py` | ✅ |
+| 1 | `join-company` | Вход по приглашению (вход + принятие) | `test_frontend_doc_console.py` | ✅ |
+| 2 | `company-settings` | Настройки компании: имя, бюджет, подключения | `test_frontend_doc_console.py` | ✅ |
+| 2 | `support` | Публичная страница поддержки | `test_frontend_doc_console.py` | ✅ |
 | 2 | `search-everything` | Поиск встроенным движком | `test_frontend_doc_console.py` | ✅ |
 | 2 | `access-explorer` | Кто и почему имеет доступ | `test_frontend_doc_console.py` | ✅ |
 | 3 | `company-variables` | Переменные компании | `test_frontend_doc_console.py` | ✅ |
@@ -73,7 +76,10 @@ platform, тег `tools`.
 
 ## Покрытие вне этой матрицы
 
-- Все страницы из таблицы поверхностей покрыты сценариями выше; `join` — отдельный анонимный маршрут принятия приглашения, документируется со стороны invites.
+- Все страницы из таблицы поверхностей покрыты сценариями выше. `join` покрыт
+  `join-company`: аноним видит превью и OAuth-кнопки, вошедший — кнопку принятия.
+- Worktracker `my-tasks` («Мои задачи» сотрудника) покрыт в
+  `test_worktracker_operators.py`, сервис `worktracker`, тег `general`.
 - Access: OpenFGA-грант сеется напрямую через `authz_service.write`; фильтр чипа `platform_namespace` оставляет в кадре только понятные права на пространства (в общей БД копятся технические гранты ящиков/документов).
 - Voice: карточки только STT/TTS (`KINDS`), VAD на странице нет; словарь произношения — реальные правила + dry-run подмена текста.
 - Login/select-company: cookie-баннер на /login лежит под auth-модалкой — снятие через `dispatch_event('click')` на кнопке «OK»; PWA-промпт скрыт состоянием «вернувшийся пользователь» (`localStorage` dismissed-ключ).

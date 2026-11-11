@@ -381,6 +381,10 @@ services:
       general:
         label_ru: Общее
         label_en: General
+        order: 10
+      general:
+        label_ru: Общее
+        label_en: General
         order: 1
 
   crm:

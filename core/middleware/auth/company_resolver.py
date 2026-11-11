@@ -22,6 +22,15 @@ _INVITE_ACCEPT_PATHS = frozenset({
     "/frontend/api/invites/accept",
 })
 
+# GET идентичности вошедшего: ответ содержит только данные самого пользователя
+# и его session company — данных host-компании в нём нет. Без этого исключения
+# вошедший пользователь чужой компании не может даже открыть /join: проба
+# auth/me падает 403 до рендера карточки приглашения.
+_IDENTITY_READ_PATHS = frozenset({
+    "/api/auth/me",
+    "/frontend/api/auth/me",
+})
+
 # In-process TTL-кэш для горячих lookup auth middleware.
 # Каждый HTTP-запрос ранее тащил 3 DB-запроса: subdomain->company_id, company,
 # user (для membership). На production это десятки тысяч запросов в секунду,
@@ -182,6 +191,8 @@ class CompanyResolver:
                 company_id=company_id,
                 path=request.url.path,
             )
+            return
+        if request.method == "GET" and request.url.path in _IDENTITY_READ_PATHS:
             return
         logger.warning(
             "auth.company.membership_denied",
