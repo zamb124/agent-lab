@@ -62,7 +62,8 @@
         "priority_low": "Low",
         "priority_normal": "Normal",
         "priority_high": "High",
-        "priority_urgent": "Urgent"
+        "priority_urgent": "Urgent",
+        "field_namespace": "Space"
     },
     "workspace_picker": {
         "title": "Namespace",

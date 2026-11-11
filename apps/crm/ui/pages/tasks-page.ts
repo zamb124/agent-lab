@@ -162,10 +162,8 @@ export class CRMTasksPage extends CRMNamespacePage {
     }
 
     _openCreate() {
-        const namespace = this._crmNamespaceSel.value;
-        if (typeof namespace !== 'string' || namespace.length === 0) {
-            throw new Error('CRMTasksPage._openCreate: namespace required');
-        }
+        // Пустой namespace («Все пространства») легален: модалка даст выбор.
+        const namespace = this._crmNamespaceSel.value ?? '';
         this.openModal('crm.activity_task_create', { namespace });
     }
 
