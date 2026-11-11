@@ -43,7 +43,7 @@ from tests.ui.e2e.worktracker_e2e_helpers import (
     worktracker_open_queues,
     worktracker_open_task_page,
 )
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.personas import UiTestUser
 from tests.ui.scenario_doc import ScenarioRecorder
 
@@ -613,3 +613,131 @@ async def test_worktracker_track_work_on_board(
         ),
     )
     _ = GREEN_GARDEN_OPERATOR
+
+
+@pytest.mark.scenario(
+    service="worktracker",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="my-tasks",
+    title="Мои задачи: всё, что назначено мне",
+    description=(
+        "**Для чего:** страница «Мои задачи» показывает список дел, которые "
+        "назначили лично вам — коллега, руководитель или агент платформы.\n\n"
+        "**Какие проблемы решает:** не нужно спрашивать в чате, что на вас "
+        "висит: весь список в одном месте, а свою задачу можно добавить "
+        "прямо здесь.\n\n"
+        "**Результат:** вы видите свои задачи, открываете любую для деталей "
+        "и создаёте личную задачу за минуту."
+    ),
+    title_en="My tasks: everything assigned to me",
+    description_en=(
+        "**What for:** the My tasks page lists work assigned personally to "
+        "you — by a colleague, a manager or a platform agent.\n\n"
+        "**Problems solved:** no need to ask in chat what's on you: the "
+        "whole list is in one place, and you can add your own task right "
+        "here.\n\n"
+        "**Result:** you see your tasks, open any of them for details and "
+        "create a personal task in a minute."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_worktracker_my_tasks(
+    scenario: ScenarioRecorder,
+    worktracker_ui: AppUI,
+    ui_page_system: Page,
+    ui_user_system: UiTestUser,
+    auth_token_system: str,
+    unique_id: str,
+) -> None:
+    user_id = ui_user_system.user_id
+    if not isinstance(user_id, str) or user_id == "":
+        raise AssertionError("ui_user_system.user_id required")
+
+    seeded_title = f"Сверить остатки рассады ({unique_id})"
+    await worktracker_api_create_work_item(
+        worktracker_ui.origin,
+        auth_token_system,
+        {
+            "title": seeded_title,
+            "description": "Поручение от «Помощника Зелёного сада»",
+            "kind": "generic",
+            "assignment": {"assignee_kind": "users", "user_ids": [user_id]},
+        },
+    )
+
+    page = ui_page_system
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    await page.goto(f"{worktracker_ui.origin}/worktracker/my", wait_until="domcontentloaded")
+    my_page = page.locator("worktracker-my-tasks-page")
+    await expect(my_page).to_be_visible(timeout=30_000)
+    seeded_row = my_page.locator("platform-work-item-row").filter(has_text=seeded_title).first
+    await expect(seeded_row).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте «Мои задачи»",
+        page,
+        screenshot_name="my-tasks-list",
+        label_en="Open My tasks",
+        details=(
+            "В сервисе задач в боковом меню выберите «Мои задачи». Здесь только то, "
+            "что назначено лично вам — без чужих поручений и общих очередей."
+        ),
+        details_en=(
+            "In the tasks service, pick My tasks in the side menu. It shows only "
+            "work assigned personally to you — no colleagues' errands or shared queues."
+        ),
+    )
+
+    await seeded_row.click()
+    detail_panel = page.locator("work-item-detail-panel")
+    await expect(detail_panel).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте задачу для деталей",
+        page,
+        screenshot_name="my-task-detail",
+        label_en="Open a task for details",
+        details=(
+            "Нажатие на строку открывает карточку задачи справа: описание, статус и "
+            "обсуждение. Здесь же задачу можно взять в работу или закрыть."
+        ),
+        details_en=(
+            "Clicking a row opens the task card on the right: description, status "
+            "and discussion. You can start the task or close it right here."
+        ),
+    )
+
+    await page.keyboard.press("Escape")
+    await page.locator("worktracker-my-tasks-page worktracker-icon-action[icon='plus']").click()
+    create_modal = page.locator("worktracker-work-item-create-modal")
+    await expect(create_modal).to_be_visible(timeout=30_000)
+    fields = create_modal.locator("platform-field")
+    await ui_set_platform_field(fields.nth(0), f"Позвонить поставщику удобрений ({unique_id})")
+    await ui_set_platform_field(fields.nth(1), "Уточнить сроки поставки и цены на компост")
+    await create_modal.locator(".header-btn.n").click()
+    created_row = my_page.locator("platform-work-item-row").filter(
+        has_text="Позвонить поставщику удобрений"
+    ).first
+    await expect(created_row).to_be_visible(timeout=30_000)
+    await expect(page.locator("glass-toast").last).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Создайте личную задачу",
+        page,
+        screenshot_name="my-task-created",
+        label_en="Create a personal task",
+        details=(
+            "**Демонстрация результата.** Кнопка «+» в шапке создаёт задачу, которая "
+            "сразу назначается вам и появляется в списке. Так удобно фиксировать "
+            "обещания себе: позвонить, проверить, отправить.\n\n"
+            "**Итог.** Теперь вы знаете, где живут ваши задачи: список «Мои задачи» "
+            "показывает поручения и позволяет добавить своё за секунду."
+        ),
+        details_en=(
+            "**Result demonstration.** The + button in the header creates a task "
+            "assigned to you right away — it appears in the list at once. A handy "
+            "way to record promises to yourself: call, check, send.\n\n"
+            "**Summary.** Now you know where your work lives: the My tasks list "
+            "shows assigned items and lets you add your own in a second."
+        ),
+    )

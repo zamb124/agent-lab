@@ -378,6 +378,10 @@ services:
         label_ru: Операторы
         label_en: Operators
         order: 0
+      general:
+        label_ru: Общее
+        label_en: General
+        order: 1
 
   crm:
     label_ru: NetWorkle

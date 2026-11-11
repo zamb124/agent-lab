@@ -1,7 +1,8 @@
 """Сценарии документации консоли компании (сервис frontend) и инструментов
 оболочки (сервис platform): приглашения, профиль, почта, календарь, поиск,
 переменные, оплата, API-ключи, расписания, встраиваемые виджеты, доступы,
-голосовые провайдеры и произношение, выбор компании и вход в платформу.
+голосовые провайдеры и произношение, выбор компании, вход в платформу,
+приём приглашения, настройки компании и страница поддержки.
 
 Каждый сценарий — реальный маршрут: навигация по консоли, открытие модалки или
 страницы и действие, которое сделал бы обычный пользователь. Показанные данные
@@ -14,10 +15,12 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+import httpx2
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from tests.ui.e2e_worker import ui_e2e_scope_headers
 from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
@@ -1688,5 +1691,332 @@ async def test_frontend_sign_in(
             "**Summary.** If sign-in fails, make sure you authorized "
             "with the right account in the chosen service, or contact "
             "support (the question icon at the top of the window)."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="join-company",
+    title="Войти в компанию по приглашению",
+    title_en="Join a company via an invite link",
+    description=(
+        "**Для чего:** коллега прислал вам ссылку-приглашение — по ней "
+        "вы попадаете в его компанию без поиска и регистрации вручную.\n\n"
+        "**Какие проблемы решает:** не нужно знать адрес компании или "
+        "просить доступ у администратора: ссылка сама показывает, куда "
+        "вы приглашены и на какую роль.\n\n"
+        "**Результат:** вы принимаете приглашение и компания появляется "
+        "в вашем списке — можно переключиться и работать."
+    ),
+    description_en=(
+        "**What for:** a colleague sent you an invite link — it takes "
+        "you into their company with no manual search or signup.\n\n"
+        "**Problems solved:** no need to know the company address or ask "
+        "an admin for access: the link itself shows where you are "
+        "invited and in which role.\n\n"
+        "**Result:** you accept the invite and the company appears in "
+        "your list — switch to it and start working."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_join_company(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_anonymous: Page,
+    ui_page_company2: Page,
+    auth_token_system: str,
+) -> None:
+    # Приглашение — настоящее, сгенерированное владельцем компании через тот же
+    # REST, что вызывает кнопка «Скопировать ссылку» в команде. Принимает его
+    # пользователь другой компании: честный путь «вошёл во вторую организацию».
+    async with httpx2.AsyncClient(
+        base_url=frontend_ui.origin,
+        cookies={"auth_token": auth_token_system},
+        headers=ui_e2e_scope_headers(),
+        timeout=60.0,
+    ) as client:
+        generated = await client.post("/frontend/api/invites/generate", json={"role": "viewer"})
+    assert generated.status_code == 200, generated.text
+    invite_url = generated.json()["invite_url"]
+    short_code = invite_url.rstrip("/").split("/")[-1]
+    join_url = f"{frontend_ui.origin}/join?c={short_code}"
+
+    anon = ui_page_anonymous
+    await _prepare_clean_page(anon)
+    await anon.goto(join_url, wait_until="domcontentloaded")
+    anon_join = anon.locator("join-page")
+    await expect(anon_join).to_be_visible(timeout=30_000)
+    await expect(anon_join.locator(".invite-preview")).to_be_visible(timeout=30_000)
+    await expect(anon_join.locator(".provider-button").first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте ссылку-приглашение",
+        anon,
+        screenshot_name="join-invite-preview",
+        label_en="Open the invite link",
+        details=(
+            "Ссылка открывает карточку приглашения: видно название "
+            "компании, вашу роль и кто пригласил. Если вы ещё не вошли "
+            "на платформу — выберите привычный сервис ниже и подтвердите "
+            "вход; страница сама вернёт вас к приглашению."
+        ),
+        details_en=(
+            "The link opens an invite card: the company name, your "
+            "role and who invited you. Not signed in yet? Pick a "
+            "familiar service below and confirm — the page brings you "
+            "back to the invite by itself."
+        ),
+    )
+
+    member = ui_page_company2
+    await _prepare_clean_page(member)
+    await member.goto(join_url, wait_until="domcontentloaded")
+    member_join = member.locator("join-page")
+    await expect(member_join).to_be_visible(timeout=30_000)
+    await expect(member_join.locator(".logged-in platform-user-chip")).to_be_visible(timeout=30_000)
+    await expect(member_join.locator(".btn")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Проверьте и примите приглашение",
+        member,
+        screenshot_name="join-accept-card",
+        label_en="Review and accept the invite",
+        details=(
+            "Уже вошли? Страница показывает, под какой учётной записью "
+            "вы присоединитесь, и кнопку принятия. Проверьте компанию и "
+            "роль в карточке выше — и нажмите «Присоединиться»."
+        ),
+        details_en=(
+            "Already signed in? The page shows which account you will "
+            "join under and the accept button. Check the company and "
+            "role in the card above — then press Join."
+        ),
+    )
+
+    await member_join.locator(".btn").click()
+    await expect(member_join.locator(".btn")).to_be_hidden(timeout=30_000)
+    await scenario.step(
+        "Компания появилась в вашем списке",
+        member,
+        screenshot_name="join-accepted",
+        label_en="The company is now in your list",
+        details=(
+            "**Демонстрация результата.** Приглашение принято — "
+            "компания добавлена в ваш список. Переключиться на неё "
+            "можно через страницу выбора компании или меню аккаунта.\n\n"
+            "**Итог.** Весь путь — ссылка, вход, «Присоединиться». "
+            "Отдельных паролей и заявок администратору не нужно."
+        ),
+        details_en=(
+            "**Result demonstration.** The invite is accepted — the "
+            "company is added to your list. Switch to it via the "
+            "company picker or the account menu.\n\n"
+            "**Summary.** The whole path is: link, sign in, Join. "
+            "No separate passwords or admin requests needed."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="company-settings",
+    title="Настройки компании: имя, бюджет и подключения",
+    title_en="Company settings: name, budget and connections",
+    description=(
+        "**Для чего:** страница «Настройки» собирает всё про компанию: "
+        "как она называется, сколько может тратить и какие сервисы "
+        "подключены.\n\n"
+        "**Какие проблемы решает:** владельцу и администратору не нужно "
+        "искать параметры по разным разделам — профиль компании, "
+        "AI-провайдеры и интеграции на одной странице.\n\n"
+        "**Результат:** вы видите данные компании, понимаете, где "
+        "менять название и месячный бюджет, и где подключать сервисы."
+    ),
+    description_en=(
+        "**What for:** the Settings page gathers everything about the "
+        "company: its name, how much it may spend and which services "
+        "are connected.\n\n"
+        "**Problems solved:** the owner and admins don't need to hunt "
+        "options across sections — company profile, AI providers and "
+        "integrations live on one page.\n\n"
+        "**Result:** you see the company data, know where to change "
+        "the name and monthly budget, and where to connect services."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_company_settings(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    page = ui_page_system
+    await _prepare_clean_page(page)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+
+    _ = await page.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
+    settings = page.locator("settings-page")
+    await expect(settings).to_be_visible(timeout=30_000)
+    await expect(settings.locator(".info-grid")).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+    await scenario.step(
+        "Откройте «Настройки»",
+        page,
+        screenshot_name="settings-company-tab",
+        label_en="Open Settings",
+        details=(
+            "Раздел «Настройки» в консоли компании. Первый экран — "
+            "профиль: название, тариф, владелец и поле месячного "
+            "бюджета — предел трат на платные функции. Вкладки сверху "
+            "ведут к остальным разделам."
+        ),
+        details_en=(
+            "The Settings section of the company console. The first "
+            "screen is the profile: name, plan, owner and the monthly "
+            "budget field — the spending cap for paid features. The "
+            "tabs above lead to the remaining sections."
+        ),
+    )
+
+    ai_tab = settings.locator("button.tab").nth(1)
+    await ai_tab.click()
+    await expect(settings.locator(".capability-card").first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Посмотрите AI-провайдеров",
+        page,
+        screenshot_name="settings-ai-providers",
+        label_en="Review AI providers",
+        details=(
+            "Вкладка «AI-провайдеры» показывает, какие умные функции "
+            "включены: чат, поиск, распознавание речи. По умолчанию "
+            "работают настройки платформы — менять их нужно только "
+            "для своих ключей и моделей."
+        ),
+        details_en=(
+            "The AI providers tab shows which smart features are on: "
+            "chat, search, speech recognition. Platform defaults work "
+            "out of the box — change them only for your own keys and "
+            "models."
+        ),
+    )
+
+    integrations_tab = settings.locator("button.tab").filter(
+        has_text=re.compile(r"интеграц|integrat", re.I)
+    ).first
+    await integrations_tab.click()
+    await expect(settings.locator(".integration-card").first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте вкладку «Интеграции»",
+        page,
+        screenshot_name="settings-integrations",
+        label_en="Open the Integrations tab",
+        details=(
+            "**Демонстрация результата.** «Интеграции» — каталог "
+            "подключений компании: почта, календарь, внешние сервисы. "
+            "Кнопка «Подключить» ведёт в нужный раздел.\n\n"
+            "**Итог.** Теперь вы знаете, где лежат настройки компании: "
+            "профиль и бюджет — на первой вкладке, умные функции — "
+            "в AI-провайдерах, подключения — в интеграциях."
+        ),
+        details_en=(
+            "**Result demonstration.** Integrations is the company's "
+            "connections catalogue: mail, calendar, external services. "
+            "The Connect button leads to the right section.\n\n"
+            "**Summary.** Now you know where company settings live: "
+            "profile and budget on the first tab, smart features in "
+            "AI providers, connections in integrations."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    timeout_seconds=180,
+    doc_slug="support",
+    title="Написать в поддержку",
+    title_en="Contact support",
+    description=(
+        "**Для чего:** страница поддержки помогает задать вопрос "
+        "команде платформы — по почте или через форму.\n\n"
+        "**Какие проблемы решает:** не нужно искать контакты: адрес "
+        "и форма собраны на одной странице, доступной даже без входа.\n\n"
+        "**Результат:** вы знаете, куда писать при вопросах и сбоях — "
+        "форма откроет письмо в вашей почтовой программе."
+    ),
+    description_en=(
+        "**What for:** the support page helps you ask the platform "
+        "team — by email or via the form.\n\n"
+        "**Problems solved:** no need to hunt for contacts: the "
+        "address and the form are on one page, reachable even "
+        "without signing in.\n\n"
+        "**Result:** you know where to write with questions and "
+        "issues — the form opens a letter in your mail app."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_support_page(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_anonymous: Page,
+) -> None:
+    page = ui_page_anonymous
+    await _prepare_clean_page(page)
+    _ = await page.goto(f"{frontend_ui.origin}/support", wait_until="domcontentloaded")
+    support = page.locator("support-page")
+    await expect(support).to_be_visible(timeout=30_000)
+    await expect(support.locator("platform-field").first).to_be_visible(timeout=30_000)
+    await _dismiss_cookie_banner(page)
+    await scenario.step(
+        "Откройте страницу поддержки",
+        page,
+        screenshot_name="support-page",
+        label_en="Open the support page",
+        details=(
+            "Страница поддержки доступна по прямой ссылке даже без "
+            "входа в консоль. Вверху — почта команды, ниже — форма "
+            "обращения."
+        ),
+        details_en=(
+            "The support page is reachable by a direct link even "
+            "without signing in to the console. The team email is on "
+            "top, the contact form below."
+        ),
+    )
+
+    fields = support.locator("platform-field")
+    await ui_set_platform_field(fields.nth(0), "Анна Смирнова")
+    await ui_set_platform_field(fields.nth(1), "anna@example.com")
+    await ui_set_platform_field(
+        fields.nth(2), "Не приходит письмо-приглашение для нового сотрудника"
+    )
+    await scenario.step(
+        "Заполните форму обращения",
+        page,
+        screenshot_name="support-form-filled",
+        label_en="Fill in the contact form",
+        details=(
+            "**Демонстрация результата.** Укажите имя, почту для ответа "
+            "и опишите вопрос — кнопка отправки откроет готовое письмо "
+            "в вашей почтовой программе, останется нажать «Отправить».\n\n"
+            "**Итог.** Самый быстрый путь — письмо на адрес поддержки "
+            "вверху страницы; форма нужна, чтобы ничего не забыть."
+        ),
+        details_en=(
+            "**Result demonstration.** Enter your name, reply email "
+            "and describe the issue — the submit button opens a "
+            "ready-made letter in your mail app, just press Send.\n\n"
+            "**Summary.** The fastest path is the support address at "
+            "the top of the page; the form makes sure nothing is missed."
         ),
     )
