@@ -636,7 +636,7 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     private get _graphViewValue(): CrmGraphViewSlice {
-        const v = this._graphViewValue;
+        const v = this._graphView.value;
         if (!v) {
             throw new Error('CRMGraphWorkspace: graph_view slice value missing');
         }
