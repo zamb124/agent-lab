@@ -429,6 +429,14 @@ services:
         label_ru: Общее
         label_en: General
         order: 1
+      search:
+        label_ru: Поиск
+        label_en: Search
+        order: 2
+      documents:
+        label_ru: Документы
+        label_en: Documents
+        order: 3
 
   frontend:
     label_ru: Frontend
@@ -610,6 +618,10 @@ services:
         label_ru: Оценка запасов
         label_en: Valuation
         order: 5
+      stock-report:
+        label_ru: Отчёты по остаткам
+        label_en: Stock reports
+        order: 6
 
   geo:
     label_ru: Geo

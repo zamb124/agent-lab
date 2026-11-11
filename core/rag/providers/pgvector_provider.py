@@ -868,6 +868,8 @@ class PgVectorProvider(BaseRAGProvider):
                     name=row.document_name or "",
                     namespace=namespace_id,
                     status="completed",
+                    created_at=row.created_at.isoformat(),
+                    chunks_count=row.total_chunks,
                     metadata={
                         k: v
                         for k, v in meta.items()
@@ -902,6 +904,8 @@ class PgVectorProvider(BaseRAGProvider):
                     name=row.document_name or "",
                     namespace=namespace_id,
                     status="completed",
+                    created_at=row.created_at.isoformat(),
+                    chunks_count=row.total_chunks,
                     metadata={
                         key: value
                         for key, value in meta.items()

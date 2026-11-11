@@ -216,6 +216,7 @@ async def op_documents_list(
                 name=status.document_name,
                 namespace=status.namespace_id,
                 status=status.status,
+                created_at=status.created_at.isoformat(),
                 metadata={
                     "file_size": status.file_size,
                     "error_message": status.error_message,

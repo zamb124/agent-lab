@@ -25,7 +25,9 @@ interface RagDocument {
     name?: string;
     document_id?: string;
     created_at?: string | number | Date;
-    pages?: unknown;
+    status?: string;
+    chunks_count?: number;
+    metadata?: Record<string, unknown>;
     [key: string]: unknown;
 }
 
@@ -185,6 +187,17 @@ export class NamespacePage extends PlatformPage {
         if (file !== null) this._uploadFile(file);
     }
 
+    private _statusLabel(doc: RagDocument): string {
+        switch (doc.status) {
+            case 'completed':
+                return this.t('namespace_detail.status_indexed');
+            case 'failed':
+                return this.t('namespace_detail.status_failed');
+            default:
+                return this.t('namespace_detail.status_processing');
+        }
+    }
+
     private _findNamespace(): Record<string, unknown> | null {
         for (const ns of this._namespaces.items) {
             if (ns.name === this.namespaceId) return ns;
@@ -260,8 +273,9 @@ export class NamespacePage extends PlatformPage {
                                         ${doc.name}
                                     </div>
                                     <div class="document-meta">
-                                        <span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at === undefined || doc.created_at === null ? '' : doc.created_at).toLocaleDateString()}</span>
-                                        ${typeof doc.pages === 'number' ? html`<span>${this.t('namespace_detail.pages_count', { count: doc.pages })}</span>` : ''}
+                                        ${doc.created_at === undefined || doc.created_at === null ? '' : html`<span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at).toLocaleDateString()}</span>`}
+                                        <span class="doc-status" data-status=${doc.status === undefined ? '' : doc.status}>${this._statusLabel(doc)}</span>
+                                        ${doc.status === 'failed' && doc.metadata && typeof doc.metadata.error_message === 'string' ? html`<span>${doc.metadata.error_message}</span>` : ''}
                                     </div>
                                 </div>
                                 <div class="document-actions">

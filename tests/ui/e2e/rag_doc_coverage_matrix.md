@@ -27,17 +27,18 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `semantic-search-demo` | Найти документ по смыслу, не по словам | `test_rag_doc_search.py` | 📝 |
+| 2 | `semantic-search-demo` | Найти документ по смыслу, не по словам | `test_rag_doc_search.py` | ✅ |
 
 ### documents (новый тег)
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `upload-and-index-documents` | Загрузить файл и дождаться индекса | `test_rag_doc_search.py` | 📝 |
-| 3 | `index-status-and-reembed` | Статус индекса, переиндексация | новый | 📝 |
+| 2 | `upload-and-index-documents` | Загрузить файл и дождаться индекса | `test_rag_doc_search.py` | ✅ |
+| 3 | `index-status-and-reembed` | Статус индекса, переиндексация | — | ⛔ |
 
 ## Долг и заметки
 
+- `index-status-and-reembed`: в UI нет контроля переиндексации (только статус в карточке документа) — документировать нечего.
 - Индексация может быть долгой — в сценарии ждать статус через UI (не sleep); embedding идёт через provider_litserve (уже в стеке).
-- Теги `search`/`documents` добавить в taxonomy с первым сценарием.
+- Теги `search`/`documents` добавлены в taxonomy.
 - featured_slug: `rag-first-namespace` (после создания).
