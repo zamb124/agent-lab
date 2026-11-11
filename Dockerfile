@@ -29,7 +29,7 @@ WORKDIR /app
 # воспроизводимо, свежая база приезжает с пересборками.
 ARG GEOIP_DB_VERSION=2026-11
 RUN mkdir -p /app/data/geoip && \
-    python -c "import urllib.request; urllib.request.urlretrieve('https://download.db-ip.com/free/dbip-country-lite-${GEOIP_DB_VERSION}.csv.gz', '/app/data/geoip/dbip-country.csv.gz')"
+    python -c "import urllib.request; req = urllib.request.Request('https://download.db-ip.com/free/dbip-country-lite-${GEOIP_DB_VERSION}.csv.gz', headers={'User-Agent': 'curl/8'}); open('/app/data/geoip/dbip-country.csv.gz', 'wb').write(urllib.request.urlopen(req, timeout=120).read())"
 COPY core/geoip/NOTICE.md /app/data/geoip/NOTICE.md
 COPY core/ ./core/
 COPY apps/ ./apps/

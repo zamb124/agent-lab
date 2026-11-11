@@ -1110,6 +1110,49 @@ groups:
     labels:
       severity: warning
       service: frontend
+  - uid: seo-report-failures
+    title: SEO Telegram Report Failing
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 9000
+        to: 0
+      datasourceUid: loki
+      model:
+        # CronJob seo-report (*/1h) пишет seo.report_failed в stdout —
+        # Loki лейбл service=seo-report берётся из pod label app.
+        expr: sum(count_over_time({namespace="platform", service="seo-report"} | json | message=~"seo[.]report_failed" [2.5h]))
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B >= 1
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: SEO hourly Telegram report failing
+      description: CronJob seo-report posts the hourly seo.visit digest to the alerts Telegram chat every hour. Failures mean Loki queries or the Telegram send are broken — report silence does not mean zero traffic.
+    labels:
+      severity: warning
+      service: seo-report
   - uid: browser-cdp-disconnects
     title: Browser CDP Endpoint Flapping
     condition: C

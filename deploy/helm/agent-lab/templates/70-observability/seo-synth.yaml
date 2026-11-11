@@ -112,3 +112,80 @@ spec:
                 {{- include "agentlab.confVolumeMount" . | nindent 16 }}
           volumes:
             {{- include "agentlab.confVolume" . | nindent 12 }}
+---
+# SEO-отчёт: раз в час scripts.seo.report собирает агрегаты seo.visit из Loki
+# (уникальные посетители, страны, краулеры, страницы, документация, referer)
+# и шлёт HTML-сообщение в Telegram-канал LinnexAlerts (те же секреты, что и у
+# Grafana contact point). Пустой час — seo.report_skipped без сообщения;
+# фейл отправки — seo.report_failed → алерт seo-report-failures.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seo-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: seo-report
+spec:
+  schedule: "23 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      activeDeadlineSeconds: 180
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: seo-report
+        spec:
+          restartPolicy: Never
+          {{- include "agentlab.podImagePullSecrets" . | nindent 10 }}
+          {{- include "agentlab.nodeSchedule" (list . "master") | nindent 10 }}
+          containers:
+            - name: seo-report
+              image: {{ include "agentlab.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - python
+                - -m
+                - scripts.seo.report
+              env:
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+                - name: TELEGRAM_ALERTS_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.platformSecretName }}
+                      key: alerts-telegram-bot-token
+                      optional: true
+                - name: TELEGRAM_ALERTS_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.platformSecretName }}
+                      key: alerts-telegram-chat-id
+                      optional: true
+                # api.telegram.org недоступен напрямую — исходящий прокси;
+                # NO_PROXY обязателен, иначе запросы к Loki поедут в прокси.
+                {{- if .Values.platformSecrets.proxyUrl }}
+                - name: HTTPS_PROXY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.platformSecretName }}
+                      key: proxy-url
+                      optional: true
+                - name: NO_PROXY
+                  value: "localhost,127.0.0.1,.svc,.cluster.local,10.0.0.0/8"
+                {{- end }}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                {{- include "agentlab.confVolumeMount" . | nindent 16 }}
+          volumes:
+            {{- include "agentlab.confVolume" . | nindent 12 }}
