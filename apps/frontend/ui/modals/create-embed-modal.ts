@@ -27,14 +27,6 @@ function failureMessage(payload: unknown, fallback: string): string {
     return payload.message;
 }
 
-function inputChecked(event: Event): boolean {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) {
-        throw new Error('create-embed-modal: checkbox required');
-    }
-    return target.checked;
-}
-
 function inputValue(event: Event): string {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
@@ -85,7 +77,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                 display: flex; align-items: center; gap: var(--space-2);
             }
             .radio-row label.checked { background: var(--glass-solid-medium); border-color: var(--accent); }
-            .switch-row { display: flex; align-items: center; gap: var(--space-2); }
             input[type=color] { width: 60px; height: 36px; padding: 0; border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); }
         `,
     ];
@@ -583,18 +574,17 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                     ${this._isSystemCompany()
                         ? html`
                               <div class="form-group full">
-                                  <label class="switch-row">
-                                      <input
-                                          type="checkbox"
-                                          .checked=${this._landingVisible}
-                                          @change=${(e: CustomEvent) => {
-                                              this._landingVisible = inputChecked(e);
-                                              this.isDirty = true;
-                                          }}
-                                      />
-                                      <span>${this.t('embed_create_modal.label_landing_visible')}</span>
-                                  </label>
-                                  <div class="hint">${this.t('embed_create_modal.landing_visible_hint')}</div>
+                                  <platform-field
+                                      type="boolean"
+                                      mode="edit"
+                                      .label=${this.t('embed_create_modal.label_landing_visible')}
+                                      .value=${this._landingVisible}
+                                      .hint=${this.t('embed_create_modal.landing_visible_hint')}
+                                      @change=${(e: CustomEvent) => {
+                                          this._landingVisible = e.detail.value === true;
+                                          this.isDirty = true;
+                                      }}
+                                  ></platform-field>
                               </div>
                               ${this._landingVisible
                                   ? html`
@@ -694,46 +684,43 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
 
                     <div class="form-group full">
                         <label class="form-label">${this.t('embed_create_modal.section_voice')}</label>
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                .checked=${this._voiceEnabled}
-                                @change=${(e: Event) => {
-                                    this._voiceEnabled = inputChecked(e);
-                                    if (!this._voiceEnabled) {
-                                        this._voiceDefaultOn = false;
-                                    }
-                                    this.isDirty = true;
-                                }}
-                            />
-                            <span>${this.t('embed_create_modal.label_voice_enabled')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.voice_enabled_hint')}</div>
+                        <platform-field
+                            type="boolean"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_voice_enabled')}
+                            .value=${this._voiceEnabled}
+                            .hint=${this.t('embed_create_modal.voice_enabled_hint')}
+                            @change=${(e: CustomEvent) => {
+                                this._voiceEnabled = e.detail.value === true;
+                                if (!this._voiceEnabled) {
+                                    this._voiceDefaultOn = false;
+                                }
+                                this.isDirty = true;
+                            }}
+                        ></platform-field>
                     </div>
 
                     <div class="form-group full">
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                ?disabled=${!this._voiceEnabled}
-                                .checked=${this._voiceDefaultOn}
-                                @change=${(e: Event) => { this._voiceDefaultOn = inputChecked(e); this.isDirty = true; }}
-                            />
-                            <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
+                        <platform-field
+                            type="boolean"
+                            mode="edit"
+                            ?disabled=${!this._voiceEnabled}
+                            .label=${this.t('embed_create_modal.label_voice_default_on')}
+                            .value=${this._voiceDefaultOn}
+                            .hint=${this.t('embed_create_modal.voice_default_on_hint')}
+                            @change=${(e: CustomEvent) => { this._voiceDefaultOn = e.detail.value === true; this.isDirty = true; }}
+                        ></platform-field>
                     </div>
 
                     <div class="form-group full">
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                .checked=${this._sessionShareEnabled}
-                                @change=${(e: CustomEvent) => { this._sessionShareEnabled = inputChecked(e); this.isDirty = true; }}
-                            />
-                            <span>${this.t('embed_create_modal.label_session_share_enabled')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.session_share_enabled_hint')}</div>
+                        <platform-field
+                            type="boolean"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_session_share_enabled')}
+                            .value=${this._sessionShareEnabled}
+                            .hint=${this.t('embed_create_modal.session_share_enabled_hint')}
+                            @change=${(e: CustomEvent) => { this._sessionShareEnabled = e.detail.value === true; this.isDirty = true; }}
+                        ></platform-field>
                     </div>
 
                     <div class="full">
@@ -772,15 +759,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
 
                     ${this._presentation === 'drawer' ? html`
                     <div class="form-group">
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                .checked=${this._showLauncher}
-                                @change=${(e: Event) => { this._showLauncher = inputChecked(e); this.isDirty = true; }}
-                            />
-                            <span>${this.t('embed_create_modal.label_show_launcher')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.show_launcher_hint')}</div>
+                        <platform-field
+                            type="boolean"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_show_launcher')}
+                            .value=${this._showLauncher}
+                            .hint=${this.t('embed_create_modal.show_launcher_hint')}
+                            @change=${(e: CustomEvent) => { this._showLauncher = e.detail.value === true; this.isDirty = true; }}
+                        ></platform-field>
                     </div>
                     ` : nothing}
                 </div>

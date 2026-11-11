@@ -5,7 +5,8 @@
 Док-группы: `service="platform"` (оболочка, onboarding, core-поверхности) и
 `service="frontend"` (страницы frontend-сервиса). `frontend-app`, `/`, port 9004,
 fixture `frontend_ui`. Mail/calendar — модалки из user-menu `platform-user`
-(`platform.mail`, calendar) в любом shell → документируем в блоке platform.
+(`platform.mail`, `platform.calendar`) в любом shell → документируем в блоке
+platform, тег `tools`.
 
 ## UI-поверхности
 
@@ -33,31 +34,32 @@ fixture `frontend_ui`. Mail/calendar — модалки из user-menu `platform
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 1 | `main-dashboard-user-menu` | Вход, дашборд, user-menu | `test_platform_onboarding_scenarios.py` | ✅ |
-| 1 | `invite-team-member` | Пригласить коллегу в компанию | новый | 📝 |
-| 1 | `profile-and-settings` | Профиль, язык, тема | новый | 📝 |
 
-### mail (новый тег platform)
+### tools — Инструменты (platform)
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `mail-connect-and-inbox` | Почта из user-menu: подключение ящика, входящие | проверить IMAP-seed в стеке | 📝 |
-| 2 | `calendar-modal` | Календарь из user-menu | новый | 📝 |
+| 1 | `profile-and-settings` | Профиль и настройки компании | `test_frontend_doc_console.py` | 🚧 |
+| 2 | `mail-connect-and-inbox` | Почта из user-menu: ящик, входящие, чтение | `test_frontend_doc_console.py` | 🚧 |
+| 2 | `calendar-modal` | Календарь из user-menu | `test_frontend_doc_console.py` | 🚧 |
 
-### dashboard (новый тег frontend или platform)
+### getting-started — С чего начать (frontend)
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 1 | `dashboard-tour` | Дашборд: что видит сотрудник | `test_frontend_doc_dashboard.py` | ✅ |
-| 2 | `search-everything` | Поиск по платформе | новый | 📝 |
 
-### settings (frontend)
+### general — Общее (frontend)
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `company-variables` | Переменные компании | новый | 📝 |
-| 3 | `billing-and-limits` | Тариф, лимиты, оплата | новый | 📝 |
-| 3 | `api-keys-create` | API-ключ для интеграции | новый | 📝 |
-| 3 | `scheduler-tasks` | Расписания фоновых задач | новый | 📝 |
+| 1 | `invite-team-member` | Пригласить коллегу по ссылке | `test_frontend_doc_console.py` | 🚧 |
+| 2 | `search-everything` | Поиск встроенным движком | `test_frontend_doc_console.py` | 🚧 |
+| 3 | `company-variables` | Переменные компании | `test_frontend_doc_console.py` | 🚧 |
+| 3 | `billing-and-limits` | Тариф, расход, счета | `test_frontend_doc_console.py` | 🚧 |
+| 3 | `api-keys-create` | API-ключ для интеграции | `test_frontend_doc_console.py` | 🚧 |
+| 3 | `scheduler-tasks` | Расписания фоновых задач | `test_frontend_doc_console.py` | 🚧 |
+| 3 | `embed-widget` | Чат-виджет агента на сайте | `test_frontend_doc_console.py` | 🚧 |
 
 ### namespaces — Пространства (frontend)
 
@@ -65,8 +67,8 @@ fixture `frontend_ui`. Mail/calendar — модалки из user-menu `platform
 |---|---|---|---|---|
 | 2 | `console-namespaces` | Управление пространствами | `test_frontend_namespaces.py` | ✅ |
 
-## Долг и заметки
+## Покрытие вне этой матрицы
 
-- Сервис `frontend` и `platform` разделены в taxonomy намеренно: platform = shell/user-menu, frontend = страницы компании — уточнить границу при реализации, не плодить дубли.
-- Mail: модалка `platform.mail` требует подключённого ящика (core/mail, IMAP) — проверить наличие mail-seed/провайдера в тестовом стеке до написания сценария; без него — только модалка подключения.
-- Теги `mail`/`dashboard`/`settings` добавить в taxonomy с первыми сценариями.
+- `access/`, `company-voice-providers/`, `login`/`select-company` — проверить, покрыты ли существующими сценариями (`test_frontend_access.py` и др.), иначе добавить.
+- Mail: сид — `flows_seed_ui_mail_mailbox` (ACTIVE connection + USER binding) + `StoredMailMessage` в `INBOX`. Живой IMAP-синк в стеке недоступен — показывается local-first состояние (папки/письма из общей БД).
+- Search: `public_search_run` идёт через flow → runet-индекс. Если SERP в стеке пуст — документируем страницу и честное состояние результатов.

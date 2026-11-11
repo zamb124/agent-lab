@@ -102,10 +102,5 @@
     "err_google_oauth_only": "Для Google используйте OAuth",
     "err_username_required": "Введите имя пользователя",
     "err_app_password_required": "Введите пароль приложения",
-    "err_caldav_base_url_required": "Введите адрес CalDAV-сервера",
-    "modal": {
-        "close": "Закрыть",
-        "fullscreen_enter": "На весь экран",
-        "fullscreen_exit": "Свернуть окно"
-    }
+    "err_caldav_base_url_required": "Введите адрес CalDAV-сервера"
 }

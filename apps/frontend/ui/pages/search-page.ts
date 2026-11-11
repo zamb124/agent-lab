@@ -3136,7 +3136,7 @@ export class PublicSearchPage extends PlatformPage {
                                 <span>AI</span>
                             </button>
                         </div>
-                        <p class="source-snippet">${result.snippet}</p>
+                        <p class="source-snippet">${unsafeHTML(markdownToHtml(result.snippet))}</p>
                         ${insight !== null ? html`<p class="source-insight">${insight.relevance_hint}</p>` : html``}
                         ${this._renderSourceAiDescription(result)}
                     </div>
@@ -3473,7 +3473,7 @@ export class PublicSearchPage extends PlatformPage {
                                         <span class="source-rank">${source.index}</span>
                                         <a class="source-title" href=${source.url} target="_blank" rel="noopener">${source.title}</a>
                                     </div>
-                                    <p class="source-snippet">${source.snippet !== '' ? source.snippet : source.url}</p>
+                                    <p class="source-snippet">${unsafeHTML(markdownToHtml(source.snippet !== '' ? source.snippet : source.url))}</p>
                                 </div>
                             </article>
                         `,

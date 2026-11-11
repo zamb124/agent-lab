@@ -1,4 +1,7 @@
 {
     "save": "Save",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "close": "Close",
+    "fullscreen_enter": "Enter fullscreen",
+    "fullscreen_exit": "Exit fullscreen"
 }

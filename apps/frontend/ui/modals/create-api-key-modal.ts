@@ -29,21 +29,7 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
     static override styles: CSSResultGroup = [
         PlatformFormModal.styles,
         css`
-            .scopes-list { display: flex; flex-direction: column; gap: var(--space-2); }
-            .scope-row {
-                display: flex; align-items: flex-start; gap: var(--space-3);
-                padding: var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-            }
-            .scope-row:hover { border-color: var(--accent); }
-            .scope-row.checked { border-color: var(--accent); background: var(--glass-solid-medium); }
-            .scope-row input { margin-top: 4px; }
-            .scope-text { display: flex; flex-direction: column; gap: 2px; }
-            .scope-name { color: var(--text-primary); font-weight: var(--font-medium); font-size: var(--text-sm); }
-            .scope-desc { color: var(--text-secondary); font-size: var(--text-xs); }
+            .scopes-list { display: flex; flex-direction: column; gap: var(--space-3); }
         `,
     ];
 
@@ -86,9 +72,9 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
-    _toggleScope(scopeId: string) {
+    _setScope(scopeId: string, enabled: boolean) {
         const next = new Set(this._scopes);
-        if (next.has(scopeId)) next.delete(scopeId); else next.add(scopeId);
+        if (enabled) next.add(scopeId); else next.delete(scopeId);
         this._scopes = next;
         this.isDirty = true;
     }
@@ -116,22 +102,21 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
                 <div class="form-group">
                     <label class="form-label">${this.t('api_key_modal.label_scopes')}</label>
                     <div class="scopes-list">
-                        ${SCOPE_DEFS.map((s) => {
-                            const checked = this._scopes.has(s.id);
-                            return html`
-                                <label class="scope-row ${checked ? 'checked' : ''}">
-                                    <input
-                                        type="checkbox"
-                                        .checked=${checked}
-                                        @change=${() => this._toggleScope(s.id)}
-                                    />
-                                    <span class="scope-text">
-                                        <span class="scope-name">${this.t(s.name_key)}</span>
-                                        <span class="scope-desc">${this.t(s.desc_key)}</span>
-                                    </span>
-                                </label>
-                            `;
-                        })}
+                        ${SCOPE_DEFS.map((s) => html`
+                            <platform-field
+                                type="boolean"
+                                mode="edit"
+                                .label=${this.t(s.name_key)}
+                                .hint=${this.t(s.desc_key)}
+                                .value=${this._scopes.has(s.id)}
+                                @change=${(e: CustomEvent) => {
+                                    if (typeof e.detail?.value !== 'boolean') {
+                                        throw new Error('api-key-create: scope toggle expects detail.value boolean');
+                                    }
+                                    this._setScope(s.id, e.detail.value);
+                                }}
+                            ></platform-field>
+                        `)}
                     </div>
                     ${this.renderFieldError('scopes')}
                 </div>

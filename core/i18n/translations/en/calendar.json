@@ -102,10 +102,5 @@
     "err_google_oauth_only": "Use OAuth for Google",
     "err_username_required": "Username is required",
     "err_app_password_required": "App password is required",
-    "err_caldav_base_url_required": "CalDAV server URL is required",
-    "modal": {
-        "close": "Close",
-        "fullscreen_enter": "Enter fullscreen",
-        "fullscreen_exit": "Exit fullscreen"
-    }
+    "err_caldav_base_url_required": "CalDAV server URL is required"
 }
