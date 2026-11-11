@@ -401,6 +401,14 @@ services:
         label_ru: Заметки
         label_en: Notes
         order: 3
+      entities:
+        label_ru: Записи и граф
+        label_en: Records and graph
+        order: 4
+      setup:
+        label_ru: Настройка пространства
+        label_en: Space setup
+        order: 5
 
   rag:
     label_ru: RAG
