@@ -32,6 +32,7 @@ from typing import (
     ClassVar,
     Generic,
     Literal,
+    NamedTuple,
     Protocol,
     TypeAlias,
     TypedDict,
@@ -49,10 +50,11 @@ from transformers import (
     AutoModelForCTC,
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
+    PreTrainedConfig,
     pipeline,
 )
-from transformers.dynamic_module_utils import get_class_from_dynamic_module
-from transformers.utils import cached_file
+from transformers.dynamic_module_utils import get_class_from_dynamic_module  # pyright: ignore[reportUnknownVariableType] — стабы transformers не типизируют dynamic_module_utils
+from transformers.utils.hub import cached_file  # pyright: ignore[reportUnknownVariableType] — стабы transformers не типизируют utils.hub
 
 from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
@@ -73,8 +75,17 @@ STTModelDTypeName: TypeAlias = Literal["float16", "float32"]
 ModelT = TypeVar("ModelT")
 
 
+class GigaAMIncompatibleKeys(NamedTuple):
+    missing_keys: list[str]
+    unexpected_keys: list[str]
+
+
 class GigaAMModel(Protocol):
     def to(self, device: str) -> "GigaAMModel": ...
+
+    def load_state_dict(
+        self, state_dict: Mapping[str, torch.Tensor], strict: bool = True
+    ) -> GigaAMIncompatibleKeys: ...
 
     def transcribe(self, wav_path: str) -> str: ...
 
@@ -395,7 +406,7 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
         # modeling_gigaam собирает FeatureExtractor через hydra и падает на
         # смешении cpu/meta-тензоров (torchaudio melscale_fbanks). Поэтому
         # класс конструируется напрямую на CPU, веса заливаются вручную.
-        config = AutoConfig.from_pretrained(
+        config: PreTrainedConfig = AutoConfig.from_pretrained(  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType] — remote-конфиг не типизирован
             hf_model_id,
             revision=revision,
             trust_remote_code=True,
@@ -414,9 +425,15 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
             revision=revision,
             token=self._cfg.hf_token,
         )
-        state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+        if weights_path is None:
+            raise RuntimeError(
+                f"provider_litserve STT: {hf_model_id}@{revision}: pytorch_model.bin не найден в репозитории"
+            )
+        state_dict: Mapping[str, torch.Tensor] = torch.load(  # pyright: ignore[reportAny] — torch.load возвращает Any
+            weights_path, map_location="cpu", weights_only=True
+        )
         _ = model.load_state_dict(state_dict)
-        model = cast(GigaAMModel, model.to(self._device))
+        model = model.to(self._device)
         logger.info("provider_litserve.stt.gigaam.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started)
         return model
 
