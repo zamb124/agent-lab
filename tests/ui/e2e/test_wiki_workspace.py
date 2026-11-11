@@ -414,3 +414,125 @@ async def test_wiki_public_link(
         ui_page_anonymous,
         label_en="Subpage opened via the same link",
     )
+
+
+@pytest.mark.scenario(
+    service="wiki",
+    tag="search",
+    doc_slug="semantic-vs-text-search",
+    title="Wiki: поиск по тексту и по смыслу",
+    title_en="Wiki: text search vs meaning search",
+    description=(
+        "**Для чего:** база знаний ищет двумя способами — по точным "
+        "словам и по смыслу фразы.\n\n"
+        "**Какие проблемы решает:** не помните точное название "
+        "документа? Режим «Смысл» найдёт страницу по описанию, "
+        "даже если слова в запросе другие.\n\n"
+        "**Результат:** страница найдена по смыслу — без точного "
+        "совпадения слов."
+    ),
+    description_en=(
+        "**Purpose:** the knowledge base searches two ways — by exact "
+        "words and by the meaning of a phrase.\n\n"
+        "**Problems solved:** can't remember the exact document title? "
+        "The «Meaning» mode finds the page by description even when "
+        "the words differ.\n\n"
+        "**Result:** the page is found by meaning — with no exact "
+        "word match."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_wiki_semantic_vs_text_search(
+    scenario: ScenarioRecorder,
+    wiki_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str, frontend_di,
+) -> None:
+    page = ui_page_system
+    namespace = await wiki_e2e_open_with_namespace(
+        wiki_ui, page, unique_id, suffix="sem", di=frontend_di
+    )
+
+    # Страница написана «своими словами»: точной фразы запроса в ней нет.
+    page_id = await wiki_api_create_page(
+        wiki_ui.origin,
+        auth_token_system,
+        namespace=namespace,
+        title=f"Ежегодный отдых {unique_id}",
+        markdown=(
+            "# Ежегодный отдых\n\nСотрудник подаёт заявление на "
+            "ежегодный оплачиваемый отпуск за две недели до даты."
+        ),
+    )
+
+    _ = await page.goto(f"{wiki_ui.origin}/wiki/search")
+    search_input = page.locator("wiki-search-page [data-wiki-search-input]")
+    await expect(search_input).to_be_visible(timeout=30_000)
+
+    # Запрос другими словами: «Страницы» (точный текст) ничего не находят.
+    await search_input.fill("как уйти в отпуск")
+    empty = page.locator("wiki-search-page .state")
+    await expect(empty).to_contain_text("Ничего не найдено", timeout=30_000)
+    await scenario.step(
+        "Поиск по тексту не нашёл",
+        page,
+        screenshot_name="lexical-empty",
+        label_en="Text search found nothing",
+        details=(
+            "В запросе нет слов из документа — режим «Страницы» ищет "
+            "точные совпадения и честно отвечает «Ничего не найдено». "
+            "Это не значит, что страницы нет."
+        ),
+        details_en=(
+            "The query has none of the document's words — the «Pages» "
+            "mode looks for exact matches and honestly reports "
+            "«Nothing found». That doesn't mean the page is missing."
+        ),
+    )
+
+    await page.locator("wiki-search-page platform-segmented-control") \
+        .get_by_role("button", name="Смысл", exact=True).click()
+    hit = page.locator(f'wiki-search-page [data-wiki-hit="{page_id}"]')
+    await expect(hit).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "«Смысл» нашёл страницу",
+        page,
+        screenshot_name="semantic-hit",
+        label_en="Meaning found the page",
+        details=(
+            "Переключаемся на «Смысл»: поиск понимает, что «уйти в "
+            "отпуск» — это про «ежегодный отдых», и показывает нужную "
+            "страницу. Работает настоящий смысловой индекс базы знаний."
+        ),
+        details_en=(
+            "Switch to «Meaning»: search understands that «going on "
+            "leave» is about «annual rest» and shows the right page. "
+            "This runs the real semantic index of the knowledge base."
+        ),
+    )
+
+    await hit.click()
+    await expect(wiki_e2e_title_input(page)).to_have_value(
+        f"Ежегодный отдых {unique_id}", timeout=30_000
+    )
+    await scenario.step(
+        "Страница открылась",
+        page,
+        screenshot_name="semantic-page-opened",
+        label_en="The page opened",
+        details=(
+            "Клик по результату открывает страницу — дальше читаете "
+            "и правите как обычно.\n\n"
+            "**Итог.** Не помните точные слова — ищите по смыслу: "
+            "база знаний найдёт нужное."
+        ),
+        details_en=(
+            "Clicking the result opens the page — read and edit as "
+            "usual.\n\n"
+            "**Summary.** Don't remember exact words — search by "
+            "meaning: the knowledge base will find what you need."
+        ),
+    )

@@ -32,7 +32,7 @@ Helpers: `wiki_e2e_helpers.py` (namespace через API, open_page, title_input
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `search-pages` | Поиск по тексту | `test_wiki_workspace.py` | ✅ |
-| 2 | `semantic-vs-text-search` | Поиск по смыслу (RAG) | новый — нужен `rag_service` | 📝 |
+| 2 | `semantic-vs-text-search` | Поиск по смыслу (RAG) | `test_wiki_workspace.py` | ✅ |
 
 ### access — Доступ
 

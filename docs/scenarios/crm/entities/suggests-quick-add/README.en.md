@@ -20,7 +20,7 @@ Before applying, the platform shows exactly what will happen: the note draft unf
 
 ## Step 3. Draft records in the card index
 
-The draft is applied: the record Пётр Сидоров d7ad19 appeared in the card index as a first-class object — you can open it, link it and track tasks against it.
+The draft is applied: the record Пётр Сидоров ec1b15 appeared in the card index as a first-class object — you can open it, link it and track tasks against it.
 
 **Summary.** AI suggestions turn notes into a live card index with a single confirmation.
 

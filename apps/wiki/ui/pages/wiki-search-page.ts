@@ -251,7 +251,7 @@ export class WikiSearchPage extends PlatformPage {
                 <platform-segmented-control
                     density="compact"
                     .value=${this._mode}
-                    .options=${this._modeOptions()}
+                    .items=${this._modeOptions()}
                     @change=${(event: CustomEvent<{ value?: unknown }>) => this._onModeChange(event)}
                 ></platform-segmented-control>
 
