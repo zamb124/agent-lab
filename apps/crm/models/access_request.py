@@ -7,6 +7,7 @@ from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index, Query, atomic
+from pydantic import PrivateAttr
 
 from core.models.platform_model import PlatformModel
 
@@ -39,6 +40,24 @@ class AccessRequest(PlatformModel):
     include_dependencies: bool = DbField(default=False)
     max_depth: int = DbField(default=1)
     created_entity_id: str | None = DbField(default=None, max_length=100)
+    _resource_title: str | None = PrivateAttr(default=None)
+    _requester_name: str | None = PrivateAttr(default=None)
+
+    @property
+    def resource_title(self) -> str | None:
+        return self._resource_title
+
+    @resource_title.setter
+    def resource_title(self, value: str | None) -> None:
+        self._resource_title = value
+
+    @property
+    def requester_name(self) -> str | None:
+        return self._requester_name
+
+    @requester_name.setter
+    def requester_name(self, value: str | None) -> None:
+        self._requester_name = value
 
     @classmethod
     async def create(cls, access_request: Self) -> Self:

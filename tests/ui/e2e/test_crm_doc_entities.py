@@ -183,3 +183,133 @@ async def test_crm_entity_detail_and_links_scenario(
             "index: fields, links and a quick hop to neighbours."
         ),
     )
+
+
+@pytest.mark.scenario(
+    service="crm",
+    tag="entities",
+    doc_slug="relationship-types",
+    title="Свои типы связей",
+    title_en="Custom link types",
+    description=(
+        "**Для чего:** описать связи компании своими словами — «Поставщик», "
+        "«Партнёр», «Рекомендатель» — когда встроенных типов не хватает.\n\n"
+        "**Какие проблемы решает:** без своего типа связь записывается "
+        "как «прочее» и теряет смысл. Свой тип виден в карточке, на "
+        "графе и в подписях связей.\n\n"
+        "**Результат:** в каталоге связей появился ваш тип, и его можно "
+        "выбирать при связывании записей."
+    ),
+    description_en=(
+        "**Purpose:** describe company links in your own words — "
+        "Supplier, Partner, Referrer — when built-in types are not "
+        "enough.\n\n"
+        "**Problems solved:** without a custom type a link is saved as "
+        "miscellaneous and loses meaning. A custom type is visible on "
+        "the card, the graph and link labels.\n\n"
+        "**Result:** your type appears in the link catalogue, ready to "
+        "pick when linking records."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120, func_only=True)
+async def test_crm_relationship_types_scenario(
+    scenario: ScenarioRecorder,
+    crm_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    type_id = f"supplier_{unique_id[:8]}"
+    type_name = f"Поставщик {unique_id[:6]}"
+
+    await crm_ui.open(page)
+    await page.set_viewport_size(_DESKTOP)
+    await page.goto(
+        f"{crm_ui.origin}/crm/relationship_types", wait_until="domcontentloaded"
+    )
+    types_page = page.locator("crm-relationship-types-page")
+    await expect(types_page).to_be_visible(timeout=60_000)
+    await expect(
+        types_page.locator(".type-card").first
+    ).to_be_visible(timeout=60_000)
+    await scenario.step(
+        "Каталог типов связей",
+        page,
+        screenshot_name="relationship-types-list",
+        label_en="Link type catalogue",
+        details=(
+            "Раздел «Настройки → Типы связей» показывает все виды связей: "
+            "встроенные (с пометкой «системный») и добавленные вами. У "
+            "каждого типа — имя, идентификатор, направление и цвет для "
+            "графа."
+        ),
+        details_en=(
+            "The Settings → Link types section lists every link kind: "
+            "built-in (marked system) and the ones you added. Each "
+            "type has a name, an identifier, a direction and a graph "
+            "colour."
+        ),
+    )
+
+    add_button = types_page.get_by_role(
+        "button", name=re.compile("Добавить тип|Add type")
+    )
+    await expect(add_button).to_be_visible(timeout=30_000)
+    await add_button.click()
+    form = types_page.locator(".form-grid")
+    await expect(form).to_be_visible(timeout=30_000)
+    form_fields = form.locator("platform-field")
+    await ui_set_platform_field(form_fields.nth(0), type_id)
+    await ui_set_platform_field(form_fields.nth(1), type_name)
+    await ui_set_platform_field(
+        form_fields.nth(2), "Компания поставляет нам товары и материалы"
+    )
+    await scenario.step(
+        "Новый тип связи",
+        page,
+        screenshot_name="relationship-type-form",
+        label_en="New link type",
+        details=(
+            "«Добавить тип» раскрывает форму: идентификатор (латиницей, "
+            "например `supplier`), понятное имя, описание, обратный тип "
+            "(«поставляет» ↔ «покупает у»), цвет и направление. Вес "
+            "влияет на то, насколько важной связь выглядит на графе."
+        ),
+        details_en=(
+            "Add type unfolds a form: identifier (latin, e.g. "
+            "`supplier`), a friendly name, a description, the inverse "
+            "type (supplies ↔ buys from), a colour and direction. "
+            "Weight affects how important the link looks on the graph."
+        ),
+    )
+
+    submit = types_page.get_by_role(
+        "button", name=re.compile("Создать|Create")
+    )
+    await expect(submit).to_be_enabled(timeout=10_000)
+    await submit.click()
+    new_card = types_page.locator(".type-card", has_text=type_name)
+    await expect(new_card).to_be_visible(timeout=60_000)
+    await new_card.scroll_into_view_if_needed()
+    await scenario.step(
+        "Тип в каталоге",
+        page,
+        screenshot_name="relationship-type-created",
+        label_en="Type created",
+        details=(
+            f"«{type_name}» появился в каталоге рядом со встроенными "
+            "типами — теперь его можно выбирать при добавлении связи в "
+            "карточке записи.\n\n"
+            "**Итог.** Свои типы связей делают картотеку точнее: "
+            "каждая связь читается словами вашего бизнеса."
+        ),
+        details_en=(
+            f"{type_name} now sits in the catalogue next to built-in "
+            "types — ready to pick when adding a link on a record "
+            "card.\n\n"
+            "**Summary.** Custom link types make the card index "
+            "sharper: every link reads in your business's own words."
+        ),
+    )

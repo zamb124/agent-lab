@@ -14,6 +14,7 @@ from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.logging import get_logger
+from core.models.identity_models import User
 from core.rag import BaseRAGProvider
 from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -418,13 +419,23 @@ class AccessRequestService:
         offset: int = 0,
     ) -> list[AccessRequest]:
         """Заявки компании, ORDER BY created_at DESC, окно limit и offset. status None не фильтрует."""
-        return await (
+        rows = await (
             AccessRequest.query_by_status_in_company(company_id, status)
             .order_by("-created_at")
             .limit(limit)
             .offset(offset)
             .all()
         )
+        entities = await CRMEntity.get_many(
+            [row.resource_id for row in rows if row.resource_type == "entity"]
+        )
+        requesters = await User.get_many([row.requester_id for row in rows])
+        for row in rows:
+            entity = entities.get(row.resource_id)
+            row.resource_title = entity.name if entity is not None else None
+            requester = requesters.get(row.requester_id)
+            row.requester_name = requester.name if requester is not None else None
+        return rows
 
     async def count_access_requests(
         self,

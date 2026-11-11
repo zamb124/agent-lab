@@ -199,6 +199,32 @@ async def crm_api_list_suggests(
     return [item for item in items if isinstance(item, dict)]
 
 
+async def crm_api_create_access_request(
+    origin: str,
+    auth_token: str,
+    *,
+    resource_id: str,
+    message: str,
+) -> str:
+    async with _crm_client(origin, auth_token) as client:
+        response = await client.post(
+            f"{CRM_API_PREFIX}/access-requests",
+            json={
+                "resource_type": "entity",
+                "resource_id": resource_id,
+                "message": message,
+            },
+        )
+    if response.status_code != 200:
+        raise AssertionError(
+            f"POST access-requests failed: {response.status_code} {response.text}"
+        )
+    access_request_id = response.json().get("access_request_id")
+    if not isinstance(access_request_id, str) or not access_request_id:
+        raise AssertionError("access-requests response must contain access_request_id")
+    return access_request_id
+
+
 async def crm_api_create_relationship(
     origin: str,
     auth_token: str,
