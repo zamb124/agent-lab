@@ -211,6 +211,68 @@ class TestAggregate:
         await task
         assert await ShopMarketItem.get(item_key) is None
 
+    async def test_product_updated_event_rebuilds_all_shops(
+        self, shop_client: AsyncClient, shop_di, unique_id: str
+    ) -> None:
+        """Fan-out ``product/updated``: мастер в двух витринах — обратный
+        поиск по листингам находит обе, архив снимает позицию из каждой
+        проекции; повторная обработка идемпотентна."""
+        from apps.shop.models import ShopMarketItem
+        from core.catalog.events import CATALOG_PRODUCT_UPDATED
+        from core.events import PlatformEvent
+        from core.models.identity_models import SYSTEM_COMPANY_ID
+        from core.utils.background import run_with_log_context
+
+        shop_ids: list[str] = []
+        product_id = ""
+        for i in range(2):
+            slug = f"fan{i}-{unique_id[:6]}"
+            resp = await shop_client.post(
+                _SHOPS,
+                json={
+                    "slug": slug,
+                    "name": f"Fan {i}",
+                    "kind": "restaurant",
+                    "lat": 55.7512,
+                    "lng": 37.6184,
+                },
+            )
+            shop_id = resp.json()["shop_id"]
+            await shop_client.post(f"{_SHOPS}/{shop_id}/publish")
+            shop_ids.append(shop_id)
+            body: dict[str, object] = {
+                "name": f"Общий товар {unique_id[:6]}",
+                "price_minor": 100 + i,
+            }
+            if product_id:
+                body["product_id"] = product_id
+            prod = await shop_client.post(
+                f"{_SHOPS}/{shop_id}/products", json=body
+            )
+            assert prod.status_code == 200, prod.text
+            product_id = prod.json()["product_id"]
+        keys = [f"{sid}:{product_id}" for sid in shop_ids]
+        for key in keys:
+            assert await ShopMarketItem.get(key) is not None
+
+        product = await shop_di.catalog_service.update_product(
+            company_id=SYSTEM_COMPANY_ID, product_id=product_id, is_archived=True
+        )
+        event = PlatformEvent(
+            type=CATALOG_PRODUCT_UPDATED,
+            company_id=SYSTEM_COMPANY_ID,
+            payload={"product": product.model_dump(mode="json")},
+        )
+        for _ in range(2):
+            task = run_with_log_context(
+                shop_di.aggregate_service.handle_catalog_event(event),
+                name="test.catalog_product_event",
+                background_kind="startup",
+            )
+            await task
+            for key in keys:
+                assert await ShopMarketItem.get(key) is None
+
     async def test_other_facet_event_skips_rebuild(
         self, shop_client: AsyncClient, shop_di, unique_id: str
     ) -> None:
