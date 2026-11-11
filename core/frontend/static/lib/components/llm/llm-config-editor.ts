@@ -229,6 +229,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                         this.capability.startsWith('llm_')
                         || this._isEmbeddingCapability()
                         || this.capability === 'image_gen'
+                        || this.capability === 'image_edit'
                         || this.capability === 'rerank'
                         || this.capability === 'voice_stt'
                         || this.capability === 'voice_tts'
@@ -243,7 +244,11 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = typeof this.config?.provider === 'string' ? this.config.provider : '';
         return (
             this.mode === 'company_capability'
-            && (this.capability.startsWith('llm_') || this.capability === 'image_gen')
+            && (
+                this.capability.startsWith('llm_')
+                || this.capability === 'image_gen'
+                || this.capability === 'image_edit'
+            )
             && provider.length > 0
         );
     }
