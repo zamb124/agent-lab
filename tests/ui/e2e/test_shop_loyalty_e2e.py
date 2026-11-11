@@ -235,3 +235,134 @@ async def test_loyalty_feature_disabled_hides_ui(
     await page.locator(".acctnav [data-tab='orders']").click()
     await expect(page.locator(".loycard")).to_have_count(0)
     await _shot(page, "phone-loyalty-off", sf.slug)
+
+
+@pytest.mark.scenario(
+    service="shop",
+    tag="promos",
+    doc_slug="loyalty-points",
+    title="Награды лояльности у покупателя",
+    title_en="Customer loyalty rewards",
+    description=(
+        "**Для чего:** покупатель видит, что за заказы ему начисляют "
+        "награду — и тратит её на следующий заказ прямо в чекауте.\n\n"
+        "**Какие проблемы решает:** программа лояльности работает сама: "
+        "прогресс виден во вкладке «Заказы», а награда применяется одной "
+        "кнопкой — без промокодов и бумажных карт.\n\n"
+        "**Результат:** награда списалась скидкой на заказ — в деталях "
+        "заказа видна строка «Награда лояльности»."
+    ),
+    description_en=(
+        "**Purpose:** the customer sees rewards accruing for orders — "
+        "and spends them on the next order right at checkout.\n\n"
+        "**Problems solved:** the loyalty program works by itself: "
+        "progress is visible on the Orders tab, and the reward applies "
+        "with one tap — no promo codes or paper cards.\n\n"
+        "**Result:** the reward was spent as a discount — the order "
+        "details show a «Loyalty reward» line."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(150)
+async def test_loyalty_points_scenario(
+    page: Page,
+    loyalty_storefront: Storefront,
+    shop_client_http: httpx2.AsyncClient,
+    auth_headers_system: dict[str, str],
+    unique_id: str,
+    scenario,
+) -> None:
+    sf = loyalty_storefront
+    headers = {**auth_headers_system, **ui_e2e_scope_headers()}
+    await page.set_viewport_size(_PHONE)
+    phone = _phone(unique_id)
+
+    code = await _place_order(page, sf, phone)
+    assert code
+    order_id = await _order_id(shop_client_http, headers, sf.shop_id, code)
+    for status in ("accepted", "preparing", "done"):
+        await _set_status(shop_client_http, headers, sf.shop_id, order_id, status)
+
+    _ = await page.goto(_page_url(sf.slug) + "?tab=orders&fresh=1", wait_until="load")
+    card = page.locator(".loycard")
+    await expect(card).to_be_visible(timeout=15_000)
+    await expect(card.locator(".loybadge")).to_have_text("Награда доступна")
+    await scenario.step(
+        "Награда во вкладке «Заказы»",
+        page,
+        screenshot_name="loyalty-card",
+        label_en="Reward on the Orders tab",
+        details=(
+            "Покупатель открывает витрину и видит во вкладке «Заказы» "
+            "карточку лояльности: сколько заказов до награды и что он "
+            "получит. Как только цель достигнута — появляется бейдж "
+            "«Награда доступна»."
+        ),
+        details_en=(
+            "The customer opens the storefront and sees a loyalty card "
+            "on the Orders tab: how many orders until the reward and "
+            "what it will be. Once the goal is reached, a «Reward "
+            "available» badge appears."
+        ),
+    )
+
+    await page.locator(".acctnav [data-tab='catalog']").click()
+    await page.locator(f".item[data-pid='{sf.plain_product_id}'] .add").click()
+    await page.locator("#cart").click()
+    await expect(page.locator("#sheet.show")).to_be_visible()
+    loy = page.locator("#loyRow")
+    await expect(loy).to_be_visible(timeout=10_000)
+    await loy.click()
+    await expect(loy.locator(".lswt")).to_have_class("lswt on")
+    await expect(page.locator(".loysave")).to_contain_text("Награда лояльности")
+    await scenario.step(
+        "Награда применяется одной кнопкой",
+        page,
+        screenshot_name="loyalty-toggle",
+        label_en="Applying the reward with one tap",
+        details=(
+            "При оформлении заказа покупатель включает награду "
+            "тумблером — сумма сразу пересчитывается со скидкой. "
+            "Промокоды и карты не нужны."
+        ),
+        details_en=(
+            "At checkout the customer flips the reward toggle — the "
+            "total instantly recalculates with the discount. No promo "
+            "codes or cards needed."
+        ),
+    )
+
+    await page.locator("#ca").fill("Тверская, 1")
+    await page.locator("#payBtn").click()
+    code_el = page.locator(".done .code")
+    await expect(code_el).to_be_visible(timeout=15_000)
+    code2 = ((await code_el.text_content()) or "").lstrip("#").strip()
+    await page.keyboard.press("Escape")
+    await expect(page.locator("#sheet.show")).to_have_count(0)
+
+    _ = await page.goto(
+        _page_url(sf.slug) + f"?tab=orders&order={code2}&fresh=2", wait_until="load"
+    )
+    trow = page.locator(".trow", has_text="Награда лояльности")
+    await expect(trow).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Скидка в деталях заказа",
+        page,
+        screenshot_name="loyalty-order-detail",
+        label_en="Discount in the order details",
+        details=(
+            "В деталях заказа скидка видна отдельной строкой «Награда "
+            "лояльности» — покупатель всегда понимает, за что заплатил "
+            "меньше.\n\n"
+            "**Итог.** Лояльность мотивирует вернуться: награда копится "
+            "сама и тратится в один клик."
+        ),
+        details_en=(
+            "In the order details the discount shows as a separate "
+            "«Loyalty reward» line — the customer always knows why "
+            "they paid less.\n\n"
+            "**Summary.** Loyalty brings customers back: the reward "
+            "accrues by itself and is spent in one tap."
+        ),
+    )
