@@ -212,10 +212,12 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
                 ${items.map((m) => html`
                     <div class="member-row">
                         <span class="name">${m.display_name}</span>
-                        <platform-button variant="ghost" danger density="dense"
+                        <platform-button variant="ghost" danger icon-only density="dense"
+                                title=${this.t('catalog_members_modal.remove_member')}
+                                aria-label=${this.t('catalog_members_modal.remove_member')}
                                 ?disabled=${this._remove.busy}
                                 @click=${() => this._onRemove(m.user_id)}>
-                            ${this.t('catalog_members_modal.remove_member')}
+                            <platform-icon name="x" size="16"></platform-icon>
                         </platform-button>
                     </div>
                 `)}

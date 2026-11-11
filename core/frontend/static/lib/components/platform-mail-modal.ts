@@ -4630,11 +4630,15 @@ export class PlatformMailModal extends PlatformModal {
                         <platform-user-chip user-id=${textOrEmpty(member.user_id)} size="sm"></platform-user-chip>
                         <platform-button
                             variant="ghost"
+                            danger
+                            icon-only
+                            density="dense"
+                            title=${this.t('role_member_remove')}
                             @click=${() => this.dispatch(MAIL_EVENTS.BINDING_MEMBER_REMOVE_REQUESTED, {
                                 mailbox_binding_id: binding.mailbox_binding_id,
                                 user_id: member.user_id,
                             })}
-                        >${this.t('role_member_remove')}</platform-button>
+                        ><platform-icon name="x" size="16"></platform-icon></platform-button>
                     </div>
                 `)}
                 <div class="settings-row-form">

@@ -492,9 +492,12 @@ export class WikiPageAccessModal extends PlatformModal {
                               </span>
                               <platform-button
                                   variant="ghost"
-                                  size="sm"
+                                  danger
+                                  icon-only
+                                  density="dense"
+                                  title=${this.t('access.member_remove')}
                                   @click=${() => this._removeMember(missingAsEmpty(member.user_id))}
-                              >${this.t('access.member_remove')}</platform-button>
+                              ><platform-icon name="x" size="16"></platform-icon></platform-button>
                           </div>
                       `)}
                 <div class="add-row">

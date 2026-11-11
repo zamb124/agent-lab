@@ -11,7 +11,6 @@ import type { OpController, ResourceController } from '@platform/lib/base/use-re
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { TeamMemberRecord } from '@platform/lib/events/reducers/team.js';
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-empty-state.js';
@@ -19,6 +18,8 @@ import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 import type { PropertyValues } from 'lit';
 
 function missingAsEmpty(value: unknown): string {
@@ -59,7 +60,6 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
-        buttonStyles,
         worktrackerSurfacesStyles,
         css`
             :host { display: flex; flex-direction: column; min-height: 0; flex: 1; width: 100%; }
@@ -221,9 +221,15 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                 ${members.map((userId) => html`
                     <div class="member-row">
                         <platform-user-chip user-id=${userId} size="sm" .interactive=${false}></platform-user-chip>
-                        <button class="btn btn-secondary" @click=${() => this._removeMember(userId)}>
-                            ${this.t('queue_detail_page.remove_member')}
-                        </button>
+                        <platform-button
+                            variant="ghost"
+                            danger
+                            icon-only
+                            density="dense"
+                            title=${this.t('queue_detail_page.remove_member')}
+                            aria-label=${this.t('queue_detail_page.remove_member')}
+                            @click=${() => this._removeMember(userId)}
+                        ><platform-icon name="x" size="16"></platform-icon></platform-button>
                     </div>
                 `)}
             </div>
