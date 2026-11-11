@@ -417,6 +417,8 @@
     "kind_handoff_route_reply": "Ответ в handoff",
     "kind_handoff_completed": "Handback",
     "kind_span": "Span",
+    "running": "выполняется…",
+    "status_running": "RUNNING",
     "detail_title": "Детали span",
     "detail_attributes": "Атрибуты (JSON)"
   },

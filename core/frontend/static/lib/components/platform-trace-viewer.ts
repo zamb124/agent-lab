@@ -198,6 +198,20 @@ export class PlatformTraceViewer extends PlatformElement {
                 border-radius: 2px;
                 min-width: 2px;
             }
+            .bar-fill--running {
+                animation: traceRunningPulse 1.4s ease-in-out infinite;
+            }
+            .badge--running {
+                background: var(--warning-bg);
+                color: var(--warning);
+            }
+            .tl-bar--running {
+                animation: traceRunningPulse 1.4s ease-in-out infinite;
+            }
+            @keyframes traceRunningPulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.45; }
+            }
             .dur {
                 font-size: 10px;
                 color: var(--text-tertiary);
@@ -267,9 +281,11 @@ export class PlatformTraceViewer extends PlatformElement {
         const barPct = treeDurationBarPct(node, parent, traceSpanMs);
         const barColor = serviceHueCssVar(node.serviceKey);
         const dur =
-            node.durationMs != null
-                ? html`<span class="dur">${node.durationMs} ms</span>`
-                : html`<span class="dur"></span>`;
+            node.isRunning
+                ? html`<span class="dur">${this.t('trace_viewer.running')}</span>`
+                : node.durationMs != null
+                  ? html`<span class="dur">${node.durationMs} ms</span>`
+                  : html`<span class="dur"></span>`;
 
         const rows: unknown[] = [
             html`
@@ -291,13 +307,16 @@ export class PlatformTraceViewer extends PlatformElement {
                         <div class="title-row">
                             <span class="title" @click=${() => this._select(node.raw)}>${node.title}</span>
                             <span class="badge">${this.t(`trace_viewer.kind_${node.uiKind}`)}</span>
+                            ${node.isRunning
+                                ? html`<span class="badge badge--running">${this.t('trace_viewer.status_running')}</span>`
+                                : nothing}
                         </div>
                         ${node.subtitle.length > 0 ? html`<div class="meta">${node.subtitle}</div>` : nothing}
                     </div>
                     <div class="bar-cell">
                         <div class="bar-track">
                             <div
-                                class="bar-fill"
+                                class="bar-fill${node.isRunning ? ' bar-fill--running' : ''}"
                                 style="width:${barPct}%; background:${barColor};"
                             ></div>
                         </div>
@@ -508,7 +527,7 @@ export class PlatformTraceViewer extends PlatformElement {
                             </div>
                             <div class="tl-track">
                                 <div
-                                    class="tl-bar"
+                                    class="tl-bar${r.node.isRunning ? ' tl-bar--running' : ''}"
                                     style="left:${r.leftPct}%; width:${r.widthPct}%; background:${color};"
                                 ></div>
                             </div>

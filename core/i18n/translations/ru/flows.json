@@ -2577,9 +2577,13 @@
   "execution_panel": {
     "title": "Тестовый запуск",
     "tab_chat": "Чат",
+    "tab_spans": "Спаны",
     "tab_trace": "Трассировка",
     "tab_state": "Состояние",
     "tabs_aria": "Вкладки панели выполнения",
+    "spans_empty": "Спанов пока нет — запустите flow или откройте во время выполнения",
+    "spans_waiting": "Ждём спаны…",
+    "live_spans_title": "Выполняющиеся спаны — открыть вкладку «Спаны»",
     "status_idle": "Ожидание",
     "status_running": "Выполняется",
     "status_passed": "Успех",

@@ -7,9 +7,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections.abc import Sequence
 from pathlib import Path
+
+from opentelemetry.trace import Span
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
@@ -78,8 +81,14 @@ from core.files.reader.universal import (
 )
 from core.files.types import ext_to_mime
 from core.logging import get_logger
+from core.tracing import attributes as tattr
+from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
+
+# Верхний предел параллельных vision-вызовов на страницу: бережёт rate-limit провайдера,
+# но убирает последовательное ожидание по числу картинок (page 3 menu_bar.pdf: 6 assets).
+_PAGE_VISION_OCR_MAX_CONCURRENT = 4
 
 
 def _file_ref_identity_for_source(
@@ -133,6 +142,32 @@ async def file_ref_from_source(
     file_id: str | None = None,
 ) -> tuple[FileRef, bytes, str]:
     normalized_file_id = file_id.strip() if isinstance(file_id, str) and file_id.strip() else None
+    async with traced_operation(
+        "core.files.reader.resolve",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_SOURCE: type(source).__name__,
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_FILE_ID: normalized_file_id,
+        },
+    ) as span:
+        return await _file_ref_from_source_inner(
+            reader,
+            source,
+            file_name=file_name,
+            normalized_file_id=normalized_file_id,
+            span=span,
+        )
+
+
+async def _file_ref_from_source_inner(
+    reader: FileReader,
+    source: SourceInput | FileRef,
+    *,
+    file_name: str | None,
+    normalized_file_id: str | None,
+    span: Span,
+) -> tuple[FileRef, bytes, str]:
     if isinstance(source, FileRef):
         file_ref = source
         if normalized_file_id is not None and file_ref.file_id is None:
@@ -143,6 +178,8 @@ async def file_ref_from_source(
         display_name = (
             file_name.strip() if isinstance(file_name, str) and file_name.strip() else None
         ) or resolved_name
+        span.set_attribute(tattr.ATTR_FILES_FILE_NAME, display_name)
+        span.set_attribute(tattr.ATTR_FILES_BYTES, len(raw))
         return file_ref.model_copy(update={"original_name": display_name}), raw, display_name
 
     opts = ReadOptions(source_file_id=normalized_file_id)
@@ -158,6 +195,9 @@ async def file_ref_from_source(
         raw=raw,
         resolved_file_id=resolved_id,
     )
+    span.set_attribute(tattr.ATTR_FILES_FILE_NAME, display_name)
+    span.set_attribute(tattr.ATTR_FILES_BYTES, len(raw))
+    span.set_attribute(tattr.ATTR_FILES_FILE_TYPE, file_type.detected_kind.value)
     file_ref = FileRef(
         original_name=display_name,
         file_id=ref_file_id,
@@ -252,45 +292,59 @@ async def _vision_ocr_image_bytes(
     page_index: int,
     image_checksum: str | None,
 ) -> str:
-    if image_checksum is not None:
-        cached = await load_vision_image(
-            file_id=file_id,
-            checksum=checksum,
-            page=page_index,
-            image_checksum=image_checksum,
-        )
-        if cached is not None:
-            return cached
-    else:
-        cached = await load_vision_page(file_id=file_id, checksum=checksum, page=page_index)
-        if cached is not None:
-            return cached
+    async with traced_operation(
+        "core.files.reader.vision_ocr",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_MIME: mime,
+            tattr.ATTR_FILES_PAGE_INDEX: page_index,
+            tattr.ATTR_FILES_FILE_ID: file_id,
+            tattr.ATTR_FILES_BYTES: len(image_bytes),
+        },
+    ) as span:
+        if image_checksum is not None:
+            cached = await load_vision_image(
+                file_id=file_id,
+                checksum=checksum,
+                page=page_index,
+                image_checksum=image_checksum,
+            )
+            if cached is not None:
+                span.set_attribute(tattr.ATTR_FILES_CACHE, "hit")
+                return cached
+        else:
+            cached = await load_vision_page(file_id=file_id, checksum=checksum, page=page_index)
+            if cached is not None:
+                span.set_attribute(tattr.ATTR_FILES_CACHE, "hit")
+                return cached
 
-    vision_text = await run_vision_on_image_bytes(
-        image_bytes,
-        file_name=file_name,
-        mime=mime,
-        prompt=prompt,
-        vision_model=vision_model,
-        compression=compression,
-        trace_name="core.files.reader.page_vision",
-    )
-    if image_checksum is not None:
-        await store_vision_image(
-            file_id=file_id,
-            checksum=checksum,
-            page=page_index,
-            image_checksum=image_checksum,
-            text=vision_text,
+        span.set_attribute(tattr.ATTR_FILES_CACHE, "miss")
+        vision_text = await run_vision_on_image_bytes(
+            image_bytes,
+            file_name=file_name,
+            mime=mime,
+            prompt=prompt,
+            vision_model=vision_model,
+            compression=compression,
+            trace_name="core.files.reader.page_vision",
         )
-    else:
-        await store_vision_page(
-            file_id=file_id,
-            checksum=checksum,
-            page=page_index,
-            text=vision_text,
-        )
-    return vision_text
+        if image_checksum is not None:
+            await store_vision_image(
+                file_id=file_id,
+                checksum=checksum,
+                page=page_index,
+                image_checksum=image_checksum,
+                text=vision_text,
+            )
+        else:
+            await store_vision_page(
+                file_id=file_id,
+                checksum=checksum,
+                page=page_index,
+                text=vision_text,
+            )
+        return vision_text
 
 
 async def _persist_page_assets(
@@ -305,26 +359,82 @@ async def _persist_page_assets(
         return []
     if source_file_id is None or not source_file_id.strip():
         raise ValueError("index persist requires source file_id")
-    files_service = FileReader.require_files_service()
-    refs: list[FileRef] = []
-    for image_index, asset in enumerate(assets, start=1):
-        content_type = _require_asset_content_type(asset.content_type)
-        ext = _asset_extension(content_type)
-        original_name = f"{file_name}#p{page_index + 1}_img{image_index}.{ext}"
-        refs.append(
-            await persist_extract_asset(
-                files_service=files_service,
-                namespace_id=persist_namespace,
-                source_file_id=source_file_id.strip(),
-                original_name=original_name,
-                content_type=content_type,
-                data=_asset_bytes(asset, file_name=file_name, page_index=page_index),
+    async with traced_operation(
+        "core.files.reader.persist_assets",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_PAGE_INDEX: page_index,
+            tattr.ATTR_FILES_ASSETS_COUNT: len(assets),
+            tattr.ATTR_FILES_FILE_ID: source_file_id,
+        },
+    ):
+        files_service = FileReader.require_files_service()
+        refs: list[FileRef] = []
+        for image_index, asset in enumerate(assets, start=1):
+            content_type = _require_asset_content_type(asset.content_type)
+            ext = _asset_extension(content_type)
+            original_name = f"{file_name}#p{page_index + 1}_img{image_index}.{ext}"
+            refs.append(
+                await persist_extract_asset(
+                    files_service=files_service,
+                    namespace_id=persist_namespace,
+                    source_file_id=source_file_id.strip(),
+                    original_name=original_name,
+                    content_type=content_type,
+                    data=_asset_bytes(asset, file_name=file_name, page_index=page_index),
+                )
             )
-        )
-    return refs
+        return refs
 
 
 async def _materialize_read_page(
+    page: ReadPage,
+    *,
+    kind: FileReadKind,
+    file_name: str,
+    prompt: str,
+    vision_model: str | None,
+    compression: CompressionMode,
+    file_id: str | None,
+    checksum: str | None,
+    persist_namespace: str | None,
+    force_vision: bool,
+    forced_lane: ReadLane | None,
+    include_nested: bool,
+) -> tuple[UniversalPage, bool]:
+    async with traced_operation(
+        "core.files.reader.page",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_PAGE_INDEX: page.index,
+            tattr.ATTR_FILES_ASSETS_COUNT: len(page.assets),
+            tattr.ATTR_FILES_LANE: (
+                forced_lane.value if forced_lane is not None else None
+            ),
+            tattr.ATTR_FILES_CHARS: len(page.text),
+        },
+    ) as span:
+        materialized, vision_used = await _materialize_read_page_inner(
+            page,
+            kind=kind,
+            file_name=file_name,
+            prompt=prompt,
+            vision_model=vision_model,
+            compression=compression,
+            file_id=file_id,
+            checksum=checksum,
+            persist_namespace=persist_namespace,
+            force_vision=force_vision,
+            forced_lane=forced_lane,
+            include_nested=include_nested,
+        )
+        span.set_attribute(tattr.ATTR_FILES_LANE, materialized.content_mode.value)
+        return materialized, vision_used
+
+
+async def _materialize_read_page_inner(
     page: ReadPage,
     *,
     kind: FileReadKind,
@@ -359,21 +469,34 @@ async def _materialize_read_page(
         and (force_vision or not text_usable)
     )
     if need_vision:
-        for image_index, asset in enumerate(page.assets, start=1):
-            ocr_text = await _vision_ocr_image_bytes(
-                _asset_bytes(asset, file_name=file_name, page_index=page.index),
-                file_name=f"{file_name}#p{page.index + 1}:img{image_index}",
-                mime=_require_asset_content_type(asset.content_type),
-                prompt=prompt,
-                vision_model=vision_model,
-                compression=compression,
-                file_id=file_id,
-                checksum=checksum,
-                page_index=page.index,
-                image_checksum=asset.checksum,
-            )
-            vision_used = True
-            ocr_blocks.append(f"[image {image_index}]\n{ocr_text}")
+        sem = asyncio.Semaphore(_PAGE_VISION_OCR_MAX_CONCURRENT)
+
+        async def _ocr_image(image_index: int, asset: ReadAsset) -> str:
+            async with sem:
+                return await _vision_ocr_image_bytes(
+                    _asset_bytes(asset, file_name=file_name, page_index=page.index),
+                    file_name=f"{file_name}#p{page.index + 1}:img{image_index}",
+                    mime=_require_asset_content_type(asset.content_type),
+                    prompt=prompt,
+                    vision_model=vision_model,
+                    compression=compression,
+                    file_id=file_id,
+                    checksum=checksum,
+                    page_index=page.index,
+                    image_checksum=asset.checksum,
+                )
+
+        ocr_texts = await asyncio.gather(
+            *[
+                _ocr_image(image_index, asset)
+                for image_index, asset in enumerate(page.assets, start=1)
+            ]
+        )
+        vision_used = True
+        ocr_blocks.extend(
+            f"[image {image_index}]\n{ocr_text}"
+            for image_index, ocr_text in enumerate(ocr_texts, start=1)
+        )
 
     merged = _merge_page_text(base_text=merge_text, image_ocr_blocks=ocr_blocks)
     text_blocks = list(page.blocks)
@@ -623,6 +746,41 @@ async def _extract_document(
     resolved_raw: bytes,
     resolved_name: str,
 ) -> FileExtract:
+    async with traced_operation(
+        "core.files.reader.extract",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: _display_name(file_ref),
+            tattr.ATTR_FILES_FILE_ID: file_id,
+            tattr.ATTR_FILES_BYTES: len(resolved_raw),
+            tattr.ATTR_FILES_LANE: forced_lane.value if forced_lane is not None else None,
+        },
+    ) as span:
+        extract = await _extract_document_inner(
+            file_ref,
+            args,
+            file_id=file_id,
+            forced_lane=forced_lane,
+            resolved_raw=resolved_raw,
+            resolved_name=resolved_name,
+        )
+        span.set_attribute(tattr.ATTR_FILES_FILE_TYPE, extract.kind.value)
+        span.set_attribute(tattr.ATTR_FILES_MIME, extract.mime_type)
+        span.set_attribute(tattr.ATTR_FILES_PAGES_COUNT, len(extract.pages))
+        span.set_attribute(tattr.ATTR_FILES_CHARS, extract.content_chars_total)
+        span.set_attribute(tattr.ATTR_FILES_LANE, extract.read_lane.value)
+        return extract
+
+
+async def _extract_document_inner(
+    file_ref: FileRef,
+    args: ReadFileArgs,
+    *,
+    file_id: str | None,
+    forced_lane: ReadLane | None,
+    resolved_raw: bytes,
+    resolved_name: str,
+) -> FileExtract:
     file_name = _display_name(file_ref)
     reader = FileReader()
     info = reader.recognize_file_type(file_name=file_name, head=resolved_raw[:8192])
@@ -639,15 +797,26 @@ async def _extract_document(
     if info.detected_kind == FileReadKind.PDF and forced_lane != ReadLane.TEXT:
         pages_total = pdf_page_count(resolved_raw)
         target_indices, lazy = _lazy_native_indices(pages_total, args)
-        source_pages = list(
-            iter_pdf_read_pages(
-                resolved_raw,
-                resolved_name,
-                page_indices=target_indices,
-                force_raster=force_vision,
-                warnings=warnings,
+        async with traced_operation(
+            "core.files.reader.parse",
+            operation_category="files",
+            extra_attributes={
+                tattr.ATTR_FILES_FILE_NAME: file_name,
+                tattr.ATTR_FILES_FILE_TYPE: FileReadKind.PDF.value,
+                tattr.ATTR_FILES_MIME: "application/pdf",
+                tattr.ATTR_FILES_BYTES: len(resolved_raw),
+                tattr.ATTR_FILES_PAGES_COUNT: pages_total,
+            },
+        ):
+            source_pages = list(
+                iter_pdf_read_pages(
+                    resolved_raw,
+                    resolved_name,
+                    page_indices=target_indices,
+                    force_raster=force_vision,
+                    warnings=warnings,
+                )
             )
-        )
         kind = FileReadKind.PDF
         mime_type = "application/pdf"
         page_layout = PageLayout(
@@ -660,7 +829,18 @@ async def _extract_document(
             )
     else:
         opts = read_options_from_args(args, source_file_id=file_id, include_asset_bytes=True)
-        result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
+        async with traced_operation(
+            "core.files.reader.parse",
+            operation_category="files",
+            extra_attributes={
+                tattr.ATTR_FILES_FILE_NAME: file_name,
+                tattr.ATTR_FILES_FILE_TYPE: info.detected_kind.value,
+                tattr.ATTR_FILES_BYTES: len(resolved_raw),
+            },
+        ) as parse_span:
+            result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
+            parse_span.set_attribute(tattr.ATTR_FILES_FILE_TYPE, result.detected_kind.value)
+            parse_span.set_attribute(tattr.ATTR_FILES_MIME, result.content_type or "application/octet-stream")
         source_pages = read_pages_for_layout(result, file_name=file_name)
         kind = result.detected_kind
         mime_type = result.content_type or "application/octet-stream"
@@ -757,14 +937,24 @@ async def _get_or_extract(
                 + "use the universal read_file or a vision/stt tool"
             )
 
-    cached = await load_file_extract(file_id=file_id, checksum=None)
-    if cached is not None and not cached_extract_is_stale(cached):
-        return await _rehydrate_nested_from_raw(
-            cached,
-            raw=resolved_raw,
-            args=args,
-            resolved_name=resolved_name,
-        )
+    async with traced_operation(
+        "core.files.reader.extract_cache",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: _display_name(file_ref),
+            tattr.ATTR_FILES_FILE_ID: file_id,
+        },
+    ) as cache_span:
+        cached = await load_file_extract(file_id=file_id, checksum=None)
+        if cached is not None and not cached_extract_is_stale(cached):
+            cache_span.set_attribute(tattr.ATTR_FILES_CACHE, "hit")
+            return await _rehydrate_nested_from_raw(
+                cached,
+                raw=resolved_raw,
+                args=args,
+                resolved_name=resolved_name,
+            )
+        cache_span.set_attribute(tattr.ATTR_FILES_CACHE, "miss")
 
     return await _extract_document(
         file_ref,
@@ -818,19 +1008,58 @@ async def read_files_to_envelope(
     for file_ref in file_refs:
         file_budget = per_file_budget + carryover
         try:
-            extract = await reader.read(file_ref, args)
-            extract, nested, recursive_texts, omitted, warn = await _deliver_nested(
-                extract, args, prompt=prompt
-            )
-            file_result = await render_file_result(
-                extract,
-                args,
-                tool_name=tool_name,
-                budget=file_budget,
-                nested=nested,
-                recursive_texts=recursive_texts,
-                omitted_anchors=omitted,
-            )
+            async with traced_operation(
+                "core.files.reader.read",
+                operation_category="files",
+                extra_attributes={
+                    tattr.ATTR_FILES_FILE_NAME: file_ref.original_name,
+                    tattr.ATTR_FILES_FILE_ID: _file_id_of(file_ref),
+                },
+            ) as read_span:
+                extract = await reader.read(file_ref, args)
+                async with traced_operation(
+                    "core.files.reader.nested",
+                    operation_category="files",
+                    extra_attributes={
+                        tattr.ATTR_FILES_FILE_NAME: extract.file_name,
+                        tattr.ATTR_FILES_FILE_ID: extract.file_id,
+                        tattr.ATTR_FILES_ASSETS_COUNT: sum(
+                            len(page.nested) for page in extract.pages
+                        ),
+                    },
+                ):
+                    extract, nested, recursive_texts, omitted, warn = await _deliver_nested(
+                        extract, args, prompt=prompt
+                    )
+                async with traced_operation(
+                    "core.files.reader.render",
+                    operation_category="files",
+                    extra_attributes={
+                        tattr.ATTR_FILES_FILE_NAME: extract.file_name,
+                        tattr.ATTR_FILES_FILE_ID: extract.file_id,
+                        tattr.ATTR_FILES_PAGES_COUNT: extract.page_layout.pages_total,
+                    },
+                ):
+                    file_result = await render_file_result(
+                        extract,
+                        args,
+                        tool_name=tool_name,
+                        budget=file_budget,
+                        nested=nested,
+                        recursive_texts=recursive_texts,
+                        omitted_anchors=omitted,
+                    )
+                read_span.set_attribute(
+                    tattr.ATTR_FILES_NESTED_COUNT, len(file_result.nested)
+                )
+                read_span.set_attribute(
+                    tattr.ATTR_FILES_NESTED_BYTES,
+                    sum(len(item.bytes_b64 or "") for item in file_result.nested),
+                )
+                read_span.set_attribute(
+                    tattr.ATTR_FILES_CHARS,
+                    sum(item.span_chars for item in file_result.results),
+                )
             if warn:
                 file_result = file_result.model_copy(update={"warnings": warn})
         except (FileReadError, ValueError) as exc:

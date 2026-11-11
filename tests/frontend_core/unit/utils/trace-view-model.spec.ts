@@ -134,6 +134,57 @@ describe('trace-view-model', () => {
         expect(pruned[0]?.children[0]?.id).to.equal('keep');
     });
 
+    it('normalizeSpanNode: RUNNING-спан без end_time — isRunning, live duration', () => {
+        const roots = [
+            {
+                span_id: 'r1',
+                trace_id: 't1',
+                operation_name: 'files.read.parse',
+                service_name: 'capability_gateway',
+                start_time: '2025-01-01T10:00:00.000Z',
+                end_time: null,
+                duration_ms: null,
+                status: 'RUNNING',
+                attributes: {},
+                children: [],
+            },
+            {
+                span_id: 'r2',
+                trace_id: 't1',
+                operation_name: 'flows.flow.run',
+                service_name: 'flows',
+                start_time: '2025-01-01T10:00:00.000Z',
+                end_time: '2025-01-01T10:00:01.000Z',
+                duration_ms: 1000,
+                status: 'OK',
+                attributes: {},
+                children: [],
+            },
+        ];
+        const n = normalizeTraceRoots(roots);
+        expect(n[0]?.isRunning).to.be.true;
+        expect(n[0]?.endMs).to.equal(null);
+        expect(n[0]?.durationMs).to.equal(null);
+        expect(n[1]?.isRunning).to.be.false;
+    });
+
+    it('computeTraceTimeRangeMs: RUNNING-спан тянет диапазон до now', () => {
+        const roots = [
+            {
+                span_id: 'r',
+                start_time: '2025-01-01T10:00:00.000Z',
+                end_time: null,
+                duration_ms: null,
+                status: 'RUNNING',
+                attributes: {},
+                children: [],
+            },
+        ];
+        const r = computeTraceTimeRangeMs(roots);
+        if (r === null) throw new Error('expected non-null range');
+        expect(r.max).to.be.greaterThan(Date.parse('2025-01-01T10:00:00.000Z'));
+    });
+
     it('treeDurationBarPct относительно родителя', () => {
         const roots = [
             {

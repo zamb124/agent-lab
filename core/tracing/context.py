@@ -4,7 +4,7 @@ TraceContext для propagation между процессами (API → TaskIQ 
 
 from __future__ import annotations
 
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 
 from pydantic import BaseModel, Field
 
@@ -19,9 +19,14 @@ def get_current_trace_context() -> JsonObject | None:
     return _trace_context_var.get()
 
 
-def set_current_trace_context(trace_context: JsonObject | None) -> None:
-    """Устанавливает trace context в ContextVar."""
-    _ = _trace_context_var.set(trace_context)
+def set_current_trace_context(trace_context: JsonObject | None) -> Token[JsonObject | None]:
+    """Устанавливает trace context в ContextVar; token — для reset в scoped-владельце."""
+    return _trace_context_var.set(trace_context)
+
+
+def reset_current_trace_context(token: Token[JsonObject | None]) -> None:
+    """Восстанавливает прежнее значение ContextVar по token'у set_current_trace_context."""
+    _trace_context_var.reset(token)
 
 
 class TraceContext(BaseModel):

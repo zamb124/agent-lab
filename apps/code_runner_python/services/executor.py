@@ -19,6 +19,8 @@ import textwrap
 import traceback
 from pathlib import Path
 
+from opentelemetry.propagate import inject as otel_inject
+
 from core.capabilities import (
     CodeExecutionRequest,
     CodeExecutionResponse,
@@ -37,7 +39,9 @@ from core.capabilities.sandbox_libraries import (
     PYTHON_SANDBOX_BUILTINS,
 )
 from core.config import get_settings
+from core.tracing.context import reset_current_trace_context, set_current_trace_context
 from core.tracing.operation_span import traced_operation
+from core.tracing.tracer import get_tracer
 
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_python"
@@ -95,12 +99,23 @@ class _PythonWorker:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._process: asyncio.subprocess.Process | None = None
 
-    async def invoke(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
+    async def invoke(
+        self,
+        request: CodeExecutionRequest,
+        *,
+        traceparent: str | None = None,
+    ) -> CodeExecutionResponse:
         async with self._lock:
             process = await self._ensure_process()
             assert process.stdin is not None
             assert process.stdout is not None
-            payload = request.model_dump_json().encode("utf-8") + b"\n"
+            payload_object = request.model_dump(mode="json", exclude_none=True)
+            if traceparent:
+                payload_object["traceparent"] = traceparent
+            payload = (
+                json.dumps(payload_object, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                + b"\n"
+            )
             try:
                 process.stdin.write(payload)
                 await process.stdin.drain()
@@ -216,18 +231,22 @@ class _PythonWorker:
     async def _ensure_process(self) -> asyncio.subprocess.Process:
         if self._process is not None and self._process.returncode is None:
             return self._process
-        self._process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-I",
-            "-S",
-            str(self._worker_path),
-            self._gateway_url,
-            str(self._sandbox_site),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            limit=WORKER_IPC_STREAM_LIMIT_BYTES,
-        )
+        async with traced_operation(
+            "code_runner_python.worker.ensure_process",
+            operation_category="code_runner",
+        ):
+            self._process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-I",
+                "-S",
+                str(self._worker_path),
+                self._gateway_url,
+                str(self._sandbox_site),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                limit=WORKER_IPC_STREAM_LIMIT_BYTES,
+            )
         return self._process
 
     async def _restart(self) -> None:
@@ -273,42 +292,71 @@ class PythonSandboxExecutor:
                 exception_type="UnsupportedLanguageError",
             )
 
-        async with traced_operation(
-            "code_runner_python.execute",
-            event_type="code_runner.execute",
-            operation_category="code_runner",
-            extra_attributes={
-                "platform.code_runner.language": request.language,
-                "platform.code_runner.kind": request.kind,
-                "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
-                "platform.code_runner.runtime": "warm_worker_pool",
-                "platform.code_runner.sandbox_profile": request.sandbox.profile,
-                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
-                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
-            },
-        ):
-            try:
-                worker = await self._acquire_worker()
-            except Exception as exc:
-                return self._failed_response(
-                    request=request,
-                    stage="runtime",
-                    message=str(exc),
-                    exception_type=type(exc).__name__,
-                    traceback_text="".join(traceback.format_exception(exc)),
-                )
-            try:
-                return await worker.invoke(request)
-            except Exception as exc:
-                return self._failed_response(
-                    request=request,
-                    stage="runtime",
-                    message=str(exc),
-                    exception_type=type(exc).__name__,
-                    traceback_text="".join(traceback.format_exception(exc)),
-                )
-            finally:
-                self._release_worker(worker)
+        exec_ctx = request.context
+        trace_ctx = get_tracer().create_trace_context(
+            user_id=exec_ctx.user_id,
+            session_agent=exec_ctx.session_id,
+            task_id=exec_ctx.task_id,
+            context_id=exec_ctx.context_id,
+            flow_id=exec_ctx.flow_id,
+            branch_id=exec_ctx.branch_id,
+            channel=exec_ctx.channel,
+        )
+        ambient_token = set_current_trace_context(trace_ctx.to_dict())
+        try:
+            async with traced_operation(
+                "code_runner_python.execute",
+                event_type="code_runner.execute",
+                operation_category="code_runner",
+                trace_ctx=trace_ctx,
+                extra_attributes={
+                    "platform.code_runner.language": request.language,
+                    "platform.code_runner.kind": request.kind,
+                    "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
+                    "platform.code_runner.runtime": "warm_worker_pool",
+                    "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                    "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                    "platform.code_runner.sandbox_network": request.sandbox.network.mode,
+                    "platform.flow.branch_id": exec_ctx.branch_id,
+                    "platform.flow.session_id": exec_ctx.session_id,
+                    "platform.flow.task_id": exec_ctx.task_id,
+                    "platform.flow.context_id": exec_ctx.context_id,
+                },
+            ):
+                try:
+                    async with traced_operation(
+                        "code_runner_python.worker.acquire",
+                        operation_category="code_runner",
+                    ):
+                        worker = await self._acquire_worker()
+                except Exception as exc:
+                    return self._failed_response(
+                        request=request,
+                        stage="runtime",
+                        message=str(exc),
+                        exception_type=type(exc).__name__,
+                        traceback_text="".join(traceback.format_exception(exc)),
+                    )
+                try:
+                    async with traced_operation(
+                        "code_runner_python.worker.invoke",
+                        operation_category="code_runner",
+                    ):
+                        carrier: dict[str, str] = {}
+                        otel_inject(carrier)
+                        return await worker.invoke(request, traceparent=carrier.get("traceparent"))
+                except Exception as exc:
+                    return self._failed_response(
+                        request=request,
+                        stage="runtime",
+                        message=str(exc),
+                        exception_type=type(exc).__name__,
+                        traceback_text="".join(traceback.format_exception(exc)),
+                    )
+                finally:
+                    self._release_worker(worker)
+        finally:
+            reset_current_trace_context(ambient_token)
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
         security_error = self._verify_validation_request(request)
@@ -322,42 +370,69 @@ class PythonSandboxExecutor:
                 exception_type="UnsupportedLanguageError",
             )
 
-        async with traced_operation(
-            "code_runner_python.validate",
-            event_type="code_runner.validate",
-            operation_category="code_runner",
-            extra_attributes={
-                "platform.code_runner.language": request.language,
-                "platform.code_runner.kind": request.kind,
-                "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
-                "platform.code_runner.runtime": "warm_worker_pool",
-                "platform.code_runner.sandbox_profile": request.sandbox.profile,
-                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
-                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
-            },
-        ):
-            try:
-                worker = await self._acquire_worker()
-            except Exception as exc:
-                return self._failed_validation_response(
-                    request=request,
-                    stage="runtime",
-                    message=str(exc),
-                    exception_type=type(exc).__name__,
-                    traceback_text="".join(traceback.format_exception(exc)),
-                )
-            try:
-                return await worker.validate(request)
-            except Exception as exc:
-                return self._failed_validation_response(
-                    request=request,
-                    stage="runtime",
-                    message=str(exc),
-                    exception_type=type(exc).__name__,
-                    traceback_text="".join(traceback.format_exception(exc)),
-                )
-            finally:
-                self._release_worker(worker)
+        exec_ctx = request.context
+        trace_ctx = get_tracer().create_trace_context(
+            user_id=exec_ctx.user_id,
+            session_agent=exec_ctx.session_id,
+            task_id=exec_ctx.task_id,
+            context_id=exec_ctx.context_id,
+            flow_id=exec_ctx.flow_id,
+            branch_id=exec_ctx.branch_id,
+            channel=exec_ctx.channel,
+        )
+        ambient_token = set_current_trace_context(trace_ctx.to_dict())
+        try:
+            async with traced_operation(
+                "code_runner_python.validate",
+                event_type="code_runner.validate",
+                operation_category="code_runner",
+                trace_ctx=trace_ctx,
+                extra_attributes={
+                    "platform.code_runner.language": request.language,
+                    "platform.code_runner.kind": request.kind,
+                    "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
+                    "platform.code_runner.runtime": "warm_worker_pool",
+                    "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                    "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                    "platform.code_runner.sandbox_network": request.sandbox.network.mode,
+                    "platform.flow.branch_id": exec_ctx.branch_id,
+                    "platform.flow.session_id": exec_ctx.session_id,
+                    "platform.flow.task_id": exec_ctx.task_id,
+                    "platform.flow.context_id": exec_ctx.context_id,
+                },
+            ):
+                try:
+                    async with traced_operation(
+                        "code_runner_python.worker.acquire",
+                        operation_category="code_runner",
+                    ):
+                        worker = await self._acquire_worker()
+                except Exception as exc:
+                    return self._failed_validation_response(
+                        request=request,
+                        stage="runtime",
+                        message=str(exc),
+                        exception_type=type(exc).__name__,
+                        traceback_text="".join(traceback.format_exception(exc)),
+                    )
+                try:
+                    async with traced_operation(
+                        "code_runner_python.worker.validate_invoke",
+                        operation_category="code_runner",
+                    ):
+                        return await worker.validate(request)
+                except Exception as exc:
+                    return self._failed_validation_response(
+                        request=request,
+                        stage="runtime",
+                        message=str(exc),
+                        exception_type=type(exc).__name__,
+                        traceback_text="".join(traceback.format_exception(exc)),
+                    )
+                finally:
+                    self._release_worker(worker)
+        finally:
+            reset_current_trace_context(ambient_token)
 
     async def _acquire_worker(self) -> _PythonWorker:
         """Берёт первый свободный worker из очереди.
@@ -581,6 +656,8 @@ class PythonSandboxExecutor:
                     headers["X-Request-Id"] = context["request_id"]
                 if context.get("trace_id"):
                     headers["X-Trace-Id"] = context["trace_id"]
+                if current_request.get("traceparent"):
+                    headers["traceparent"] = current_request["traceparent"]
                 http_request = urllib.request.Request(
                     gateway_url + capability_call_path,
                     data=payload,

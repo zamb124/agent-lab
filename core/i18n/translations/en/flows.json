@@ -2578,9 +2578,13 @@
   "execution_panel": {
     "title": "Test run",
     "tab_chat": "Chat",
+    "tab_spans": "Spans",
     "tab_trace": "Trace",
     "tab_state": "State",
     "tabs_aria": "Execution panel tabs",
+    "spans_empty": "No spans yet — run the flow or open during execution",
+    "spans_waiting": "Waiting for spans…",
+    "live_spans_title": "Running spans — open the Spans tab",
     "status_idle": "Idle",
     "status_running": "Running",
     "status_passed": "Passed",

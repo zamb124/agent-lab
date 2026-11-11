@@ -8,6 +8,7 @@ llm_summarize. При ``schema`` — forced tool ``submit_page_summary`` (text+t
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from collections.abc import Sequence
@@ -22,9 +23,14 @@ from core.files.reader.nested import nested_bytes
 from core.files.reader.parts import nested_image_label, nested_to_raw_part
 from core.files.reader.service import FileReader
 from core.files.reader.vision import prepare_visual_payload
+from core.text_transforms import TextTransformService
+from core.tracing import attributes as tattr
+from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 
 _DEFAULT_SUMMARY_CONTEXT_TOKENS: int = 32_000
+# Параллелизм structured-суммаризации: одна страница = один LLM-вызов, порядок сохраняет gather.
+_SUMMARIZE_PAGE_MAX_CONCURRENT: int = 4
 _CHARS_PER_TOKEN: int = 3
 _BATCH_SAFETY_FRACTION: float = 0.5
 _MIN_BATCH_CHARS: int = 4_000
@@ -176,25 +182,28 @@ async def summarize_llm_pages(
     if prompt.strip():
         instruction = f"{_SEGMENT_INSTRUCTION}\nAdditional focus: {prompt.strip()}"
 
+    batches = _pack_batches(pages, batch_chars=batch_chars)
     results: dict[int, str] = {}
-    for batch in _pack_batches(pages, batch_chars=batch_chars):
+    for batch_index, batch in enumerate(batches):
         has_images = any(_page_image_items(page) for page in batch)
-        if has_images:
-            media_parts = _batch_media_parts(batch, compression=compression)
-            # Первый Part — marker+text первой страницы; instruction передаём отдельно.
-            response = await service.summarize(
-                "",
+        async with traced_operation(
+            "core.files.reader.summarize_batch",
+            operation_category="files",
+            extra_attributes={
+                tattr.ATTR_FILES_BATCH_INDEX: batch_index,
+                tattr.ATTR_FILES_BATCHES_COUNT: len(batches),
+                tattr.ATTR_FILES_PAGES_COUNT: len(batch),
+                tattr.ATTR_FILES_CHARS: sum(len(page.text) for page in batch),
+                tattr.ATTR_FILES_HAS_IMAGES: has_images,
+            },
+        ):
+            response = await _summarize_batch(
+                batch,
+                has_images=has_images,
+                compression=compression,
                 instruction=instruction,
-                model=model or None,
-                media_parts=media_parts,
-            )
-        else:
-            marked_parts = [f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}" for page in batch]
-            marked = "\n\n".join(marked_parts)
-            response = await service.summarize(
-                marked,
-                instruction=instruction,
-                model=model or None,
+                model=model,
+                service=service,
             )
         indices = [page.index for page in batch]
         parsed = _parse_segments(response, indices)
@@ -206,6 +215,33 @@ async def summarize_llm_pages(
                 results[page.index] = chunk
 
     return [results.get(page.index, "") for page in pages]
+
+
+async def _summarize_batch(
+    batch: list[UniversalPage],
+    *,
+    has_images: bool,
+    compression: CompressionMode,
+    instruction: str,
+    model: str,
+    service: TextTransformService,
+) -> str:
+    if has_images:
+        media_parts = _batch_media_parts(batch, compression=compression)
+        # Первый Part — marker+text первой страницы; instruction передаём отдельно.
+        return await service.summarize(
+            "",
+            instruction=instruction,
+            model=model or None,
+            media_parts=media_parts,
+        )
+    marked_parts = [f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}" for page in batch]
+    marked = "\n\n".join(marked_parts)
+    return await service.summarize(
+        marked,
+        instruction=instruction,
+        model=model or None,
+    )
 
 
 async def _summarize_structured_pages(
@@ -224,28 +260,58 @@ async def _summarize_structured_pages(
     """
     service = FileReader.require_text_transform()
     focus = prompt.strip()
-    out: list[str] = []
-    for page in pages:
-        page_text = f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}"
-        images = _page_image_items(page)
-        if images and not page.text.strip():
-            media_parts: list[Part] = [Part(text=page_text)]
-            for item in images:
-                media_parts.append(Part(text=nested_image_label(item.anchor)))
-                media_parts.append(_prepared_image_part(item, compression=compression))
-            payload = await service.summarize_structured(
-                "",
-                schema=schema,
-                instruction=focus or None,
-                model=model or None,
-                media_parts=media_parts,
-            )
-        else:
-            payload = await service.summarize_structured(
-                page_text,
-                schema=schema,
-                instruction=focus or None,
-                model=model or None,
-            )
-        out.append(json.dumps(payload, ensure_ascii=False))
-    return out
+    sem = asyncio.Semaphore(_SUMMARIZE_PAGE_MAX_CONCURRENT)
+
+    async def _summarize_one(page: UniversalPage) -> JsonObject:
+        async with sem:
+            async with traced_operation(
+                "core.files.reader.summarize_page",
+                operation_category="files",
+                extra_attributes={
+                    tattr.ATTR_FILES_PAGE_INDEX: page.index,
+                    tattr.ATTR_FILES_CHARS: len(page.text),
+                    tattr.ATTR_FILES_HAS_IMAGES: bool(_page_image_items(page)),
+                },
+            ):
+                return await _summarize_structured_page(
+                    page,
+                    schema=schema,
+                    focus=focus,
+                    model=model,
+                    compression=compression,
+                    service=service,
+                )
+
+    payloads = await asyncio.gather(*[_summarize_one(page) for page in pages])
+    return [json.dumps(payload, ensure_ascii=False) for payload in payloads]
+
+
+async def _summarize_structured_page(
+    page: UniversalPage,
+    *,
+    schema: JsonObject,
+    focus: str,
+    model: str,
+    compression: CompressionMode,
+    service: TextTransformService,
+) -> JsonObject:
+    page_text = f"{_PAGE_MARKER_PREFIX}{page.index}===\n{page.text}"
+    images = _page_image_items(page)
+    if images and not page.text.strip():
+        media_parts: list[Part] = [Part(text=page_text)]
+        for item in images:
+            media_parts.append(Part(text=nested_image_label(item.anchor)))
+            media_parts.append(_prepared_image_part(item, compression=compression))
+        return await service.summarize_structured(
+            "",
+            schema=schema,
+            instruction=focus or None,
+            model=model or None,
+            media_parts=media_parts,
+        )
+    return await service.summarize_structured(
+        page_text,
+        schema=schema,
+        instruction=focus or None,
+        model=model or None,
+    )

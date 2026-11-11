@@ -23,6 +23,8 @@ from core.files.reader.summarizers.structural import (
     summarize_outline_pages,
     summarize_tabular_pages,
 )
+from core.tracing import attributes as tattr
+from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 
 _TABULAR_EXTENSIONS: frozenset[str] = frozenset({".csv", ".tsv"})
@@ -67,13 +69,25 @@ async def summarize_pages(
         if schema is not None
         else resolve_summarizer(kind=kind, file_name=file_name)
     )
-    summaries = await summarizer(
-        pages,
-        prompt=prompt,
-        model=model,
-        compression=compression,
-        schema=schema,
-    )
+    async with traced_operation(
+        "core.files.reader.summarize",
+        operation_category="files",
+        extra_attributes={
+            tattr.ATTR_FILES_FILE_NAME: file_name,
+            tattr.ATTR_FILES_FILE_TYPE: kind.value,
+            tattr.ATTR_FILES_PAGES_COUNT: len(pages),
+            tattr.ATTR_FILES_SUMMARY_MODE: (
+                "llm" if summarizer is DEFAULT_SUMMARIZER else "structural"
+            ),
+        },
+    ):
+        summaries = await summarizer(
+            pages,
+            prompt=prompt,
+            model=model,
+            compression=compression,
+            schema=schema,
+        )
     results: list[PageResult] = []
     for page, summary in zip(pages, summaries, strict=True):
         results.append(

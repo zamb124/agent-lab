@@ -47,18 +47,33 @@ async def _run_loki(awaitable: Awaitable[list[LokiLogEntry]]) -> list[LokiLogEnt
         raise_observability(exc)
 
 
-async def _tempo_spans(awaitable: Awaitable[list[JsonObject]]) -> list[JsonObject]:
+async def _tempo_spans_or_error(
+    awaitable: Awaitable[list[JsonObject]],
+) -> tuple[list[JsonObject], TempoClientError | None]:
     try:
-        return await awaitable
+        return await awaitable, None
     except TempoClientError as exc:
-        raise_observability(exc)
+        return [], exc
 
 
-async def _tempo_trace_ids(awaitable: Awaitable[list[str]]) -> list[str]:
+async def _tempo_spans_by_attribute(
+    di: Di,
+    attribute: str,
+    value: str,
+    limit: int,
+) -> tuple[list[JsonObject], TempoClientError | None]:
     try:
-        return await awaitable
+        raw_ids = await di.tempo_client.search_trace_ids_by_attribute(
+            attribute, value, limit=limit
+        )
+        spans: list[JsonObject] = []
+        seen: set[str] = set()
+        for tid in raw_ids:
+            for span in await di.tempo_client.get_trace(tid):
+                _append_unique_span(spans, seen, span)
+        return spans, None
     except TempoClientError as exc:
-        raise_observability(exc)
+        return [], exc
 
 
 def _require_loki(di: Di) -> LokiClient:
@@ -105,16 +120,19 @@ def _append_unique_span(
         all_spans.append(span)
 
 
-async def _spans_for_trace_ids(
-    di: Di,
-    trace_ids: list[str],
+def _merge_tempo_and_db_spans(
+    tempo_spans: list[JsonObject],
+    db_spans: list[Span],
 ) -> list[JsonObject]:
+    """Tempo — финальные спаны; Postgres — живые RUNNING-строки. Дедуп по span_id."""
     all_spans: list[JsonObject] = []
-    seen_span_ids: set[str] = set()
-    for tid in trace_ids:
-        spans = await _tempo_spans(di.tempo_client.get_trace(tid))
-        for span in spans:
-            _append_unique_span(all_spans, seen_span_ids, span)
+    seen: set[str] = set()
+    for span in tempo_spans:
+        _append_unique_span(all_spans, seen, span)
+    for span_record in db_spans:
+        if span_record.span_id not in seen:
+            seen.add(span_record.span_id)
+            all_spans.append(span_record.to_json_object())
     return all_spans
 
 
@@ -130,6 +148,31 @@ def _tree_response(
     return ObservabilityTraceTreeResponse(
         spans_count=len(spans),
         spans=build_span_tree(spans),
+        session_id=session_id,
+        task_id=task_id,
+        trace_id=trace_id,
+        parent_session_id=parent_session_id,
+        handoff_depth=handoff_depth,
+    )
+
+
+def _merged_tree_or_raise(
+    tempo_spans: list[JsonObject],
+    tempo_error: TempoClientError | None,
+    db_spans: list[Span],
+    *,
+    session_id: str = "",
+    task_id: str = "",
+    trace_id: str = "",
+    parent_session_id: str = "",
+    handoff_depth: int | None = None,
+) -> ObservabilityTraceTreeResponse:
+    """503 — только когда Tempo упал и в Postgres тоже пусто."""
+    merged = _merge_tempo_and_db_spans(tempo_spans, db_spans)
+    if tempo_error is not None and not merged:
+        raise_observability(tempo_error)
+    return _tree_response(
+        merged,
         session_id=session_id,
         task_id=task_id,
         trace_id=trace_id,
@@ -263,13 +306,13 @@ async def op_flows_traces_by_session(
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     session_id = _require_lookup(payload.session_id, "session_id")
-    raw_ids = await _tempo_trace_ids(
-        di.tempo_client.search_trace_ids_by_attribute(
-            _ATTR_SESSION_AGENT, session_id, limit=payload.limit
-        )
+    tempo_spans, tempo_error = await _tempo_spans_by_attribute(
+        di, _ATTR_SESSION_AGENT, session_id, payload.limit
     )
-    spans = await _spans_for_trace_ids(di, raw_ids)
-    return _tree_response(spans, session_id=session_id)
+    db_spans = await Span.list_by_session_agent_desc(session_id, limit=payload.limit * 50)
+    return _merged_tree_or_raise(
+        tempo_spans, tempo_error, db_spans, session_id=session_id
+    )
 
 
 async def op_flows_traces_by_task(
@@ -280,13 +323,13 @@ async def op_flows_traces_by_task(
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     task_id = _require_lookup(payload.task_id, "task_id")
-    raw_ids = await _tempo_trace_ids(
-        di.tempo_client.search_trace_ids_by_attribute(
-            _ATTR_TASK_ID, task_id, limit=payload.limit
-        )
+    tempo_spans, tempo_error = await _tempo_spans_by_attribute(
+        di, _ATTR_TASK_ID, task_id, payload.limit
     )
-    spans = await _spans_for_trace_ids(di, raw_ids)
-    return _tree_response(spans, task_id=task_id)
+    db_spans = await Span.list_by_task_id_asc(task_id)
+    return _merged_tree_or_raise(
+        tempo_spans, tempo_error, db_spans, task_id=task_id
+    )
 
 
 async def op_flows_traces_by_trace(
@@ -297,8 +340,13 @@ async def op_flows_traces_by_trace(
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     trace_id = _require_lookup(payload.trace_id, "trace_id")
-    spans = await _tempo_spans(di.tempo_client.get_trace(trace_id))
-    return _tree_response(spans, trace_id=trace_id)
+    tempo_spans, tempo_error = await _tempo_spans_or_error(
+        di.tempo_client.get_trace(trace_id)
+    )
+    db_spans = await Span.list_for_trace_by_start_time_asc(trace_id)
+    return _merged_tree_or_raise(
+        tempo_spans, tempo_error, db_spans, trace_id=trace_id
+    )
 
 
 async def op_flows_traces_handoff_chain(
@@ -315,18 +363,14 @@ async def op_flows_traces_handoff_chain(
     trace_id = parent_state.handoff_trace_id
     if trace_id is None:
         raise_not_found(LookupError("handoff_trace_id not set on parent session"))
-    tempo_spans = await _tempo_spans(di.tempo_client.get_trace(trace_id))
+    tempo_spans, tempo_error = await _tempo_spans_or_error(
+        di.tempo_client.get_trace(trace_id)
+    )
     db_spans = await Span.list_for_trace_by_start_time_asc(trace_id)
-    all_spans: list[JsonObject] = []
-    seen: set[str] = set()
-    for span in tempo_spans:
-        _append_unique_span(all_spans, seen, span)
-    for span_record in db_spans:
-        if span_record.span_id not in seen:
-            seen.add(span_record.span_id)
-            all_spans.append(span_record.to_json_object())
-    return _tree_response(
-        all_spans,
+    return _merged_tree_or_raise(
+        tempo_spans,
+        tempo_error,
+        db_spans,
         parent_session_id=parent_session_id,
         trace_id=trace_id,
         handoff_depth=parent_state.handoff_depth,

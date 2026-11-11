@@ -1,6 +1,8 @@
 """HTTP API capability-gateway."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from opentelemetry import context as otel_context
+from opentelemetry.propagate import extract as otel_extract
 
 from apps.capability_gateway.di import Di
 from core.capabilities import (
@@ -67,7 +69,11 @@ async def get_documentation(
 async def call_capability(
     di: Di,
     request: CapabilityCallRequest,
+    http_request: Request,
 ) -> CapabilityCallResponse:
+    # W3C traceparent от вызывающего (flows runner через ServiceClient): спаны
+    # capability и вложенных операций продолжают OTEL-дерево родителя.
+    otel_token = otel_context.attach(otel_extract(http_request.headers))
     try:
         return await di.capability_registry.call(request)
     except ServiceClientError as exc:
@@ -76,3 +82,5 @@ async def call_capability(
         if status_code is not None and 400 <= status_code < 500:
             _raise_peer_client_error(exc, status_code)
         raise
+    finally:
+        otel_context.detach(otel_token)

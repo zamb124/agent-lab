@@ -21,7 +21,10 @@ from apps.code_runner_go.services.executor import (
     GoSandboxExecutor,
 )
 from apps.code_runner_node.services.executor import NodeSandboxExecutor
-from apps.code_runner_python.services.executor import PythonSandboxExecutor
+from apps.code_runner_python.services.executor import (
+    PythonSandboxExecutor,
+    _PythonWorker,
+)
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -355,6 +358,87 @@ class TestPythonExecutorInProcess:
         executor = PythonSandboxExecutor()
         source = executor._worker_source()
         _ = compile(source, "<python_worker_source>", "exec")
+
+    def test_worker_source_forwards_traceparent_to_gateway(self) -> None:
+        executor = PythonSandboxExecutor()
+        source = executor._worker_source()
+        assert 'current_request.get("traceparent")' in source
+        assert 'headers["traceparent"]' in source
+
+    @staticmethod
+    def _worker_with_fake_process(
+        response: CodeExecutionResponse,
+    ) -> tuple[_PythonWorker, bytearray]:
+        from asyncio.subprocess import Process
+        from pathlib import Path
+        from typing import cast
+
+        class _FakeStdin:
+            buffer: bytearray
+
+            def __init__(self) -> None:
+                self.buffer = bytearray()
+
+            def write(self, data: bytes) -> None:
+                self.buffer.extend(data)
+
+            async def drain(self) -> None:
+                pass
+
+        class _FakeStdout:
+            _line: bytes
+
+            def __init__(self, line: bytes) -> None:
+                self._line = line
+
+            async def readline(self) -> bytes:
+                return self._line
+
+        class _FakeProcess:
+            returncode: int | None
+            stdin: _FakeStdin
+            stdout: _FakeStdout
+
+            def __init__(self, line: bytes) -> None:
+                self.returncode = None
+                self.stdin = _FakeStdin()
+                self.stdout = _FakeStdout(line)
+
+        process = _FakeProcess(response.model_dump_json().encode("utf-8") + b"\n")
+        written = process.stdin.buffer
+        worker = _PythonWorker(
+            worker_path=Path("worker.py"),
+            gateway_url="http://localhost/capability-gateway",
+            sandbox_site=Path("sandbox-site"),
+        )
+        worker._process = cast(Process, cast(object, process))
+        return worker, written
+
+    def test_invoke_injects_traceparent_into_ipc_payload(self) -> None:
+        import asyncio
+        import json
+
+        worker, written = self._worker_with_fake_process(
+            CodeExecutionResponse(status="completed", result={"ok": True})
+        )
+        request = _execution_request("python", "async def run(args, state):\n    return args\n")
+        traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        response = asyncio.run(worker.invoke(request, traceparent=traceparent))
+
+        payload = json.loads(written.decode("utf-8"))
+        assert payload["traceparent"] == traceparent
+        assert response.status == "completed"
+
+    def test_invoke_omits_traceparent_when_not_provided(self) -> None:
+        import asyncio
+        import json
+
+        worker, written = self._worker_with_fake_process(CodeExecutionResponse(status="completed"))
+        request = _execution_request("python", "async def run(args, state):\n    return args\n")
+        _ = asyncio.run(worker.invoke(request))
+
+        payload = json.loads(written.decode("utf-8"))
+        assert "traceparent" not in payload
 
     def test_execute_rejects_wrong_language_without_worker(self) -> None:
         import asyncio

@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 
 from opentelemetry.trace import Span
 
 import core.tracing.attributes as attr
-from core.types import OtelAttributes, OtelAttributeValue
+from core.types import OtelAttributeValue
 
 from .context import TraceContext
 from .tracer import get_tracer
@@ -31,7 +31,7 @@ async def traced_operation(
     resource_type: str | None = None,
     resource_id: str | None = None,
     trace_ctx: TraceContext | None = None,
-    extra_attributes: OtelAttributes | None = None,
+    extra_attributes: Mapping[str, OtelAttributeValue | None] | None = None,
 ) -> AsyncGenerator[Span, None]:
     """
     operation_name: стабильная строка вида service.area.action.
@@ -40,8 +40,13 @@ async def traced_operation(
     billing_cost_origin: ``"platform"`` или ``"company"``; при ``"company"`` settlement создаст
         UsageRecord с ``cost=0`` (баланс не трогается, см. core/billing/service.py).
     billing_custom_provider_id: id custom OpenAI-compatible провайдера компании (опц., для аналитики).
+    extra_attributes: None-значения отбрасываются — атрибут просто не ставится.
     """
-    merged: dict[str, OtelAttributeValue] = dict(extra_attributes) if extra_attributes is not None else {}
+    merged: dict[str, OtelAttributeValue] = (
+        {k: v for k, v in extra_attributes.items() if v is not None}
+        if extra_attributes is not None
+        else {}
+    )
     if operation_category:
         merged[attr.ATTR_OPERATION_CATEGORY] = operation_category
     if billing_usage_type:

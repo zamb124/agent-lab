@@ -371,6 +371,60 @@ class Span(PlatformModel):
                 raise
 
     @classmethod
+    async def upsert_span(cls, span: Span) -> None:
+        """Вставка спана; при существующей строке span_id — обновление финальных полей.
+
+        Используется для «горячих» спанов: строка создаётся при открытии спана
+        (status RUNNING, end_time NULL) и обновляется при закрытии. Пустой
+        service_name — ValueError.
+        """
+        if span.service_name == "":
+            raise ValueError("span.service_name is required to persist the span")
+        attributes: JsonObject = dict(span.attributes)
+        if span.event_type is not None and trace_attr.ATTR_EVENT_TYPE not in attributes:
+            attributes[trace_attr.ATTR_EVENT_TYPE] = span.event_type
+        if span.resource_type is not None and trace_attr.ATTR_RESOURCE_TYPE not in attributes:
+            attributes[trace_attr.ATTR_RESOURCE_TYPE] = span.resource_type
+        if span.resource_id is not None and trace_attr.ATTR_RESOURCE_ID not in attributes:
+            attributes[trace_attr.ATTR_RESOURCE_ID] = span.resource_id
+        status_message = span.status_message
+        if status_message is not None and len(status_message) > _STATUS_MESSAGE_MAX_LEN:
+            status_message = status_message[: _STATUS_MESSAGE_MAX_LEN]
+        stored = span.model_copy(
+            update={"attributes": attributes, "status_message": status_message}
+        )
+        try:
+            _ = await Span.objects.create(instance=stored)
+        except IntegrityError:
+            existing = await Span.objects.filter(span_id=stored.span_id).first()
+            if existing is None:
+                raise
+            merged = existing.model_copy(
+                update={
+                    "operation_name": stored.operation_name,
+                    "kind": stored.kind,
+                    "end_time": stored.end_time,
+                    "duration_ms": stored.duration_ms,
+                    "status": stored.status,
+                    "status_message": stored.status_message,
+                    "company_id": stored.company_id,
+                    "namespace": stored.namespace,
+                    "user_id": stored.user_id,
+                    "user_name": stored.user_name,
+                    "user_groups": stored.user_groups,
+                    "session_auth": stored.session_auth,
+                    "session_agent": stored.session_agent,
+                    "channel": stored.channel,
+                    "event_type": stored.event_type,
+                    "resource_type": stored.resource_type,
+                    "resource_id": stored.resource_id,
+                    "attributes": stored.attributes,
+                    "events": stored.events,
+                }
+            )
+            _ = await merged.save()
+
+    @classmethod
     async def span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
         cls,
         *,

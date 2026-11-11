@@ -30,6 +30,7 @@ export interface TraceViewNode {
     endMs: number | null;
     durationMs: number | null;
     hasError: boolean;
+    isRunning: boolean;
     serviceKey: string;
     childCount: number;
     children: TraceViewNode[];
@@ -201,6 +202,8 @@ export function normalizeSpanNode(raw: TraceSpanRaw | unknown): TraceViewNode {
 
     const st = typeof s.status === 'string' ? s.status : '';
     const hasError = st.toUpperCase() === 'ERROR' || st.toLowerCase() === 'error';
+    // RUNNING-строка платформенной БД: span открыт, end_time ещё не записан.
+    const isRunning = st.toUpperCase() === 'RUNNING' || (endMs == null && !hasError);
 
     const rawChildren = Array.isArray(s.children) ? s.children : [];
     const children = rawChildren.map((c) => normalizeSpanNode(assertTraceSpanRaw(c)));
@@ -214,6 +217,7 @@ export function normalizeSpanNode(raw: TraceSpanRaw | unknown): TraceViewNode {
         endMs,
         durationMs,
         hasError,
+        isRunning,
         serviceKey: svc.length > 0 ? svc : 'unknown',
         childCount: children.length,
         children,
@@ -346,6 +350,8 @@ export function computeTraceTimeRangeMs(rootsRaw: unknown[]): { min: number; max
         }
         if (endMs != null) {
             ends.push(endMs);
+        } else if (typeof node.status === 'string' && node.status.toUpperCase() === 'RUNNING') {
+            ends.push(Date.now());
         } else {
             ends.push(startMs);
         }
@@ -430,7 +436,8 @@ export function flattenTimelineRows(node: TraceViewNode, traceMin: number, trace
     /** @type {Array<{ node: TraceViewNode, depth: number, leftPct: number, widthPct: number }>} */
     const rows: Array<{ node: TraceViewNode; depth: number; leftPct: number; widthPct: number }> = [];
     const startMs = node.startMs;
-    const endMs = node.endMs;
+    // У running span end_time ещё нет — бар тянется до правого края (now).
+    const endMs = node.endMs != null ? node.endMs : node.isRunning ? traceMax : null;
     let leftPct = 0;
     let widthPct = 100;
     if (startMs != null && endMs != null) {

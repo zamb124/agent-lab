@@ -30,8 +30,11 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-trace-viewer.js';
 import { PlatformFlowUI } from '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/flow-ui/components/flow-ui-run-trace.js';
+import { normalizeTraceRoots } from '@platform/lib/utils/trace-view-model.js';
+import type { TraceSpanRaw, TraceViewNode } from '@platform/lib/utils/trace-view-model.js';
 import {
     asString,
     deriveRunPanelStatus,
@@ -62,6 +65,7 @@ interface PanelPointerState {
 export class FlowsExecutionPanel extends PlatformElement {
     private _boundPanelPointerMove: (event: MouseEvent) => void;
     static i18nNamespace = 'flows';
+    static livePollIntervalMs = 1500;
 
     static override properties: PropertyDeclarations = {
         flowId: { type: String },
@@ -330,6 +334,41 @@ export class FlowsExecutionPanel extends PlatformElement {
                 line-height: 1.5;
                 margin: 0;
             }
+            .live-spans {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-1) var(--space-2);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--warning-border);
+                background: var(--warning-bg);
+                color: var(--warning);
+                font-size: var(--text-xs);
+                cursor: pointer;
+                overflow: hidden;
+                animation: execPanelPulse 1.4s ease-in-out infinite;
+            }
+            .live-span {
+                font-family: var(--font-mono);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+            }
+            .live-more {
+                flex-shrink: 0;
+                font-weight: var(--font-semibold);
+            }
+            .spans-empty {
+                flex: 1;
+                display: grid;
+                place-items: center;
+                padding: var(--space-4);
+                text-align: center;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+            }
             .persist-wrap {
                 display: inline-flex;
                 align-items: center;
@@ -341,6 +380,9 @@ export class FlowsExecutionPanel extends PlatformElement {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _ui: ControllerFor<'flows/execution_ui'>;
+    private _tracesBySession: OpController;
+    private _tracesByTask: OpController;
+    private _livePollTimer: ReturnType<typeof setTimeout> | null;
     private _localeSel: SelectController<string>;
     private _panelRect: PanelRect | null;
     private _dragState: PanelPointerState | null;
@@ -357,6 +399,9 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._panelTab = 'chat';
         this._editor = this.useOp('flows/editor');
         this._ui = this.useSlice('flows/execution_ui');
+        this._tracesBySession = this.useOp('flows/traces_by_session');
+        this._tracesByTask = this.useOp('flows/traces_by_task');
+        this._livePollTimer = null;
         this._layoutExpanded = false;
         this._collapsed = false;
         this._panelRect = null;
@@ -382,6 +427,7 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     override disconnectedCallback(): void {
         this._endPanelPointerInteraction();
+        this._clearLivePollTimer();
         super.disconnectedCallback();
     }
 
@@ -418,6 +464,120 @@ export class FlowsExecutionPanel extends PlatformElement {
             void this._platformChat().stopVoice();
         }
         super.updated(changedProperties);
+        this._syncLivePolling();
+    }
+
+    /** Live-поллинг OTEL-спанов: вкладка «Спаны» или активный запуск. */
+    private _livePollWanted(): boolean {
+        const isOpen = this._editor.state.executionPanelOpen === true;
+        if (!isOpen || this._collapsed) {
+            return false;
+        }
+        if (this._panelTab === 'spans') {
+            return true;
+        }
+        return this._editor.state.agentExecutionRunning === true;
+    }
+
+    private _clearLivePollTimer(): void {
+        if (this._livePollTimer !== null) {
+            clearTimeout(this._livePollTimer);
+            this._livePollTimer = null;
+        }
+    }
+
+    private _syncLivePolling(): void {
+        if (!this._livePollWanted() || !this._hasLiveTarget()) {
+            this._clearLivePollTimer();
+            return;
+        }
+        if (this._livePollTimer === null && !this._tracesBySession.busy && !this._tracesByTask.busy) {
+            this._loadLiveSpans();
+            return;
+        }
+        if (this._livePollTimer === null) {
+            this._scheduleLivePoll();
+        }
+    }
+
+    private _scheduleLivePoll(): void {
+        this._livePollTimer = setTimeout(() => {
+            this._livePollTimer = null;
+            this._loadLiveSpans();
+        }, FlowsExecutionPanel.livePollIntervalMs);
+    }
+
+    private _hasLiveTarget(): boolean {
+        const session = this._runSession();
+        return (
+            this._buildSessionId().length > 0 ||
+            (typeof session.taskId === 'string' && session.taskId.length > 0)
+        );
+    }
+
+    private _loadLiveSpans(): void {
+        if (!this._livePollWanted() || !this._hasLiveTarget()) {
+            return;
+        }
+        const session = this._runSession();
+        const sessionId = this._buildSessionId();
+        const runs: Array<Promise<unknown>> = [];
+        if (typeof session.taskId === 'string' && session.taskId.length > 0) {
+            runs.push(this._tracesByTask.run({ task_id: session.taskId }));
+        }
+        if (sessionId.length > 0) {
+            runs.push(this._tracesBySession.run({ session_id: sessionId }));
+        }
+        if (runs.length === 0) {
+            return;
+        }
+        void Promise.all(runs)
+            .catch(() => null)
+            .finally(() => {
+                if (this._livePollWanted()) {
+                    this._scheduleLivePoll();
+                }
+                this.requestUpdate();
+            });
+    }
+
+    private _liveSpansRoots(): TraceSpanRaw[] {
+        const candidates: unknown[] = [
+            this._tracesByTask.lastResult,
+            this._tracesBySession.lastResult,
+        ];
+        for (const data of candidates) {
+            if (isPlainObject(data) && Array.isArray(data.spans) && data.spans.length > 0) {
+                return data.spans as TraceSpanRaw[];
+            }
+        }
+        return [];
+    }
+
+    /** RUNNING-спаны живого дерева, свежие первыми (для прогрессии в чате). */
+    private _runningLiveSpans(roots: TraceSpanRaw[]): TraceViewNode[] {
+        const out: TraceViewNode[] = [];
+        const walk = (node: TraceViewNode): void => {
+            if (node.isRunning) {
+                out.push(node);
+            }
+            for (const child of node.children) {
+                walk(child);
+            }
+        };
+        for (const root of normalizeTraceRoots(roots)) {
+            walk(root);
+        }
+        out.sort((a, b) => (b.startMs ?? 0) - (a.startMs ?? 0));
+        return out;
+    }
+
+    private _onLiveSpanSelect(e: CustomEvent): void {
+        const detail = isPlainObject(e.detail) ? e.detail : null;
+        if (detail === null || !isPlainObject(detail.span)) {
+            throw new Error('flows-execution-panel: trace-span-select requires detail.span');
+        }
+        this.openModal('flows.span_details', { span: detail.span });
     }
 
     _onFlowUiSubmitStart(e: CustomEvent) {
@@ -857,7 +1017,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _setPanelTab(tab: unknown) {
-        if (tab !== 'chat' && tab !== 'trace' && tab !== 'state') {
+        if (tab !== 'chat' && tab !== 'spans' && tab !== 'trace' && tab !== 'state') {
             throw new Error('flows-execution-panel: invalid tab');
         }
         this._panelTab = tab;
@@ -882,6 +1042,8 @@ export class FlowsExecutionPanel extends PlatformElement {
         const statusLabelKey = `execution_panel.status_${panelStatus}`;
         const tab = this._panelTab;
         const locale = asString(this._localeSel.value);
+        const liveRoots = this._liveSpansRoots();
+        const liveRunning = this._runningLiveSpans(liveRoots);
 
         return html`
             <div
@@ -982,6 +1144,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                         .value=${tab}
                         .items=${[
                             { value: 'chat', label: this.t('execution_panel.tab_chat') },
+                            { value: 'spans', label: this.t('execution_panel.tab_spans') },
                             { value: 'trace', label: this.t('execution_panel.tab_trace') },
                             { value: 'state', label: this.t('execution_panel.tab_state') },
                         ]}
@@ -1013,6 +1176,35 @@ export class FlowsExecutionPanel extends PlatformElement {
 
                 <div class="panel-body" ?hidden=${this._collapsed}>
                     <div class="tab-panel" data-tab="chat" ?hidden=${tab !== 'chat'}>
+                        ${liveRunning.length > 0
+                            ? html`
+                                <div
+                                    class="live-spans"
+                                    role="button"
+                                    tabindex="0"
+                                    title=${this.t('execution_panel.live_spans_title')}
+                                    @click=${() => this._setPanelTab('spans')}
+                                    @keydown=${(e: KeyboardEvent) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            this._setPanelTab('spans');
+                                        }
+                                    }}
+                                >
+                                    <platform-icon name="trace-timeline" size="12"></platform-icon>
+                                    ${liveRunning
+                                        .slice(0, 3)
+                                        .map(
+                                            (node) => html`
+                                                <span class="live-span">${node.title}</span>
+                                            `,
+                                        )}
+                                    ${liveRunning.length > 3
+                                        ? html`<span class="live-more">+${liveRunning.length - 3}</span>`
+                                        : nothing}
+                                </div>
+                            `
+                            : nothing}
                         <platform-flow-ui
                             display="panel"
                             profile="editor_test"
@@ -1027,6 +1219,29 @@ export class FlowsExecutionPanel extends PlatformElement {
                             @browser-preview-open=${this._onBrowserPreviewOpen}
                         ></platform-flow-ui>
                     </div>
+
+                    ${tab === 'spans' ? html`
+                        <div class="tab-panel" data-tab="spans">
+                            <div class="trace-panel-inner">
+                                ${liveRoots.length > 0
+                                    ? html`
+                                        <platform-trace-viewer
+                                            .roots=${liveRoots}
+                                            @trace-span-select=${this._onLiveSpanSelect}
+                                        ></platform-trace-viewer>
+                                    `
+                                    : html`
+                                        <div class="spans-empty">
+                                            ${this.t(
+                                                runInFlight
+                                                    ? 'execution_panel.spans_waiting'
+                                                    : 'execution_panel.spans_empty',
+                                            )}
+                                        </div>
+                                    `}
+                            </div>
+                        </div>
+                    ` : nothing}
 
                     ${tab === 'trace' ? html`
                         <div class="tab-panel" data-tab="trace">

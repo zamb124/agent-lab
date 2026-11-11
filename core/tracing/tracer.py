@@ -35,7 +35,7 @@ from core.types import (
     require_json_object,
 )
 
-from .context import TraceContext
+from .context import TraceContext, get_current_trace_context
 from .operation_log_mirror import log_operation_finished, log_tool_call_finished
 from .provider import ensure_tracer_provider
 
@@ -166,22 +166,25 @@ class PlatformTracer:
         span_id = uuid.uuid4().hex[:16]
         return trace_id, span_id
 
-    async def _save_span(
+    def _build_span_data(
         self,
         span: OtelSpan,
         operation_name: str,
         kind: str,
         start_time: datetime,
+        *,
+        end_time: datetime | None,
+        status: str,
+        status_message: str | None,
         trace_ctx: TraceContext | None,
         extra_attrs: OtelAttributes | None = None,
-    ) -> None:
-        """Сохраняет span в PostgreSQL."""
-        if not get_settings().tracing.postgres_enabled:
-            logger.debug("tracing.span_not_persisted", operation_name=operation_name)
-            return
-
-        end_time = datetime.now(timezone.utc)
-        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+    ) -> Span:
+        """Собирает доменную модель Span из SDK span (старт или финал)."""
+        duration_ms = (
+            int((end_time - start_time).total_seconds() * 1000)
+            if end_time is not None
+            else None
+        )
 
         ctx = span.get_span_context()
         trace_id = format(ctx.trace_id, "032x")
@@ -190,12 +193,6 @@ class PlatformTracer:
 
         parent_ctx = readable_span.parent
         parent_span_id = format(parent_ctx.span_id, "016x") if parent_ctx else None
-
-        status = "OK"
-        status_message = None
-        if readable_span.status.status_code == StatusCode.ERROR:
-            status = "ERROR"
-            status_message = readable_span.status.description
 
         all_attrs = require_json_object(
             _json_from_otel_attributes(readable_span.attributes),
@@ -251,7 +248,7 @@ class PlatformTracer:
 
         channel_val = trace_ctx.channel if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_CHANNEL)
 
-        span_data = Span(
+        return Span(
             span_id=span_id,
             trace_id=trace_id,
             parent_span_id=parent_span_id,
@@ -266,10 +263,10 @@ class PlatformTracer:
             company_id=company_id,
             namespace=namespace,
             user_id=trace_ctx.user_id if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_USER_ID),
-            user_name=trace_ctx.user_name if trace_ctx else None,
+            user_name=trace_ctx.user_name if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_USER_NAME),
             user_groups=trace_ctx.user_groups if trace_ctx else None,
-            session_auth=trace_ctx.session_auth if trace_ctx else None,
-            session_agent=trace_ctx.session_agent if trace_ctx else None,
+            session_auth=trace_ctx.session_auth if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_SESSION_AUTH),
+            session_agent=trace_ctx.session_agent if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_SESSION_AGENT),
             channel=channel_val,
             event_type=_optional_json_string(all_attrs, attr.ATTR_EVENT_TYPE),
             resource_type=_optional_json_string(all_attrs, attr.ATTR_RESOURCE_TYPE),
@@ -278,13 +275,73 @@ class PlatformTracer:
             events=_serialize_span_events(readable_span),
         )
 
-        await Span.insert_span_once(span_data)
+    async def _save_span_started(
+        self,
+        span: OtelSpan,
+        start_time: datetime,
+        trace_ctx: TraceContext | None,
+    ) -> None:
+        """Running-строка спана при открытии: status=RUNNING, end_time NULL.
+
+        operation_name/kind берутся из SDK span (значения, переданные в
+        ``start_as_current_span``). Закрытие перезаписывает строку финальным
+        состоянием через тот же upsert.
+        """
+        if not get_settings().tracing.postgres_enabled:
+            return
+        readable_span = _sdk_span(span)
+        span_data = self._build_span_data(
+            span,
+            readable_span.name,
+            readable_span.kind.name,
+            start_time,
+            end_time=None,
+            status="RUNNING",
+            status_message=None,
+            trace_ctx=trace_ctx,
+        )
+        await Span.upsert_span(span_data)
+
+    async def _save_span(
+        self,
+        span: OtelSpan,
+        operation_name: str,
+        kind: str,
+        start_time: datetime,
+        trace_ctx: TraceContext | None,
+        extra_attrs: OtelAttributes | None = None,
+    ) -> None:
+        """Сохраняет span в PostgreSQL."""
+        if not get_settings().tracing.postgres_enabled:
+            logger.debug("tracing.span_not_persisted", operation_name=operation_name)
+            return
+
+        end_time = datetime.now(timezone.utc)
+        readable_span = _sdk_span(span)
+        status = "OK"
+        status_message = None
+        if readable_span.status.status_code == StatusCode.ERROR:
+            status = "ERROR"
+            status_message = readable_span.status.description
+
+        span_data = self._build_span_data(
+            span,
+            operation_name,
+            kind,
+            start_time,
+            end_time=end_time,
+            status=status,
+            status_message=status_message,
+            trace_ctx=trace_ctx,
+            extra_attrs=extra_attrs,
+        )
+        await Span.upsert_span(span_data)
 
         log_operation_finished(
             operation_name=operation_name,
-            duration_ms=duration_ms,
+            duration_ms=int(span_data.duration_ms or 0),
             status="error" if status == "ERROR" else "ok",
-            span_attributes=all_attrs,
+            span_attributes=span_data.attributes,
         )
 
     def create_trace_context(
@@ -374,7 +431,16 @@ class PlatformTracer:
         )
 
     def _base_attributes(self, trace_ctx: TraceContext | None) -> dict[str, OtelAttributeValue]:
-        """Возвращает базовые атрибуты для всех spans."""
+        """Возвращает базовые атрибуты для всех spans.
+
+        Без явного ``trace_ctx`` — из ``get_current_trace_context()`` (ContextVar
+        процесса: TaskIQ worker, capability-gateway): спаны внутри задачи
+        наследуют session/task/flow атрибуты.
+        """
+        if trace_ctx is None:
+            ambient = get_current_trace_context()
+            if ambient is not None:
+                trace_ctx = TraceContext.from_dict(ambient)
         if trace_ctx is None:
             return {}
 
@@ -423,6 +489,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -451,6 +518,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -487,6 +555,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -528,6 +597,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -556,6 +626,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -590,6 +661,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -620,6 +692,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -657,6 +730,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -843,6 +917,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -918,6 +993,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)
@@ -957,6 +1033,7 @@ class PlatformTracer:
             set_status_on_exception=False,
         ) as span:
             try:
+                await self._save_span_started(span, start_time, trace_ctx)
                 yield span
             except Exception as exc:
                 self.set_error(span, exc)

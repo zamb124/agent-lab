@@ -19,7 +19,7 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 export class FlowsTracingModal extends PlatformModal {
     static modalKind = 'flows.tracing';
     static i18nNamespace = 'flows';
-    static pollIntervalMs = 500;
+    static pollIntervalMs = 1500;
     static pollMaxAttempts = 6;
 
     static override properties: PropertyDeclarations = {
@@ -189,16 +189,8 @@ export class FlowsTracingModal extends PlatformModal {
         if (!this.open || !this._hasLoadTarget()) {
             return;
         }
-        if (this._activeSpans().length > 0) {
-            return;
-        }
         if (this._busy()) {
             this._scheduleNextPoll();
-            return;
-        }
-        if (this._pollAttempt >= FlowsTracingModal.pollMaxAttempts) {
-            this._pollExhausted = true;
-            this.requestUpdate();
             return;
         }
         this._pollAttempt += 1;
@@ -211,19 +203,13 @@ export class FlowsTracingModal extends PlatformModal {
         }
         Promise.all(runs)
             .catch(() => null)
-            .finally(() => this._syncPollingAfterRender());
+            .finally(() => this._scheduleNextPoll());
     }
 
     _scheduleNextPoll() {
-        if (!this.open || this._pollTimer !== null) {
-            return;
-        }
-        if (!this._hasLoadTarget() || this._pollExhausted || this._activeSpans().length > 0) {
-            return;
-        }
-        if (this._pollAttempt >= FlowsTracingModal.pollMaxAttempts) {
-            this._pollExhausted = true;
-            this.requestUpdate();
+        // Live-обновление: поллинг продолжается и после первых данных —
+        // RUNNING-спаны приходят и закрываются на ходу.
+        if (!this.open || this._pollTimer !== null || !this._hasLoadTarget()) {
             return;
         }
         this._pollTimer = setTimeout(() => {
@@ -235,10 +221,6 @@ export class FlowsTracingModal extends PlatformModal {
 
     _syncPollingAfterRender() {
         if (!this.open) {
-            this._clearPollTimer();
-            return;
-        }
-        if (this._activeSpans().length > 0) {
             this._clearPollTimer();
             return;
         }

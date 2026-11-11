@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Message, Part, Role
+from opentelemetry import trace as otel_trace
+from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
 from core.a2a.codec import mapping_from_struct
+from core.ai.llm_config import ReasoningEffort
 from core.ai.models import ResolvedAIModel
+from core.ai.provider_error import AI_PROVIDER_IO_ERRORS
 from core.ai.providers import AICapability, split_provider_prefixed_model
 from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
@@ -18,9 +23,13 @@ from core.ai.runtime import (
     resolve_vision_ai_model,
 )
 from core.billing.service import BillingService
+from core.clients.llm.client import LLMClient
 from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
+from core.logging import get_logger
 from core.text_transforms.chunking import split_text_into_markdown_chunks
+from core.tracing import attributes as tattr
+from core.tracing.operation_span import traced_operation
 from core.types import (
     JsonObject,
     JsonValue,
@@ -40,6 +49,44 @@ _DEFAULT_SUMMARY_INSTRUCTION = (
     "Output only the summary, no preamble."
 )
 _INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT: JsonObject = {"profile": "off", "budget": "max"}
+_SUMMARIZATION_REASONING_EFFORT: ReasoningEffort = "none"
+_SUMMARIZE_FIRST_TOKEN_TIMEOUT_SECONDS: float = 30.0
+_SUMMARIZE_ATTEMPT_TIMEOUT_SECONDS: float = 180.0
+_SUMMARIZE_MAX_ATTEMPTS: int = 3
+
+logger = get_logger(__name__)
+
+
+def _log_summarize_retry(retry_state: RetryCallState) -> None:
+    exc = retry_state.outcome.exception() if retry_state.outcome is not None else None
+    span = otel_trace.get_current_span()
+    if span.is_recording():
+        span.set_attribute(tattr.ATTR_LLM_ATTEMPTS, retry_state.attempt_number + 1)
+        if exc is not None:
+            span.set_attribute(tattr.ATTR_LLM_ATTEMPT_ERROR, type(exc).__name__)
+    logger.warning(
+        "text_transforms.summarize_attempt_failed",
+        attempt=retry_state.attempt_number,
+        max_attempts=_SUMMARIZE_MAX_ATTEMPTS,
+        error=str(exc),
+        error_type=type(exc).__name__ if exc is not None else "unknown",
+    )
+
+
+# Ретраи LLM-суммаризации: провайдерские флаки (таймаут первого токена,
+# обрыв/столл стрима, HTTP-ошибка, ответ без tool_calls или с пустым текстом) —
+# транзиентны; детерминированные ошибки валидации сюда не попадают.
+_summarize_retry = retry(
+    retry=retry_if_exception_type(AI_PROVIDER_IO_ERRORS),
+    stop=stop_after_attempt(_SUMMARIZE_MAX_ATTEMPTS),
+    before_sleep=_log_summarize_retry,
+    reraise=True,
+)
+
+
+def _summarize_first_token_bound(llm: object) -> None:
+    if isinstance(llm, LLMClient):
+        llm.first_token_timeout = _SUMMARIZE_FIRST_TOKEN_TIMEOUT_SECONDS
 
 SUBMIT_PAGE_SUMMARY_TOOL_NAME: str = "submit_page_summary"
 
@@ -75,6 +122,33 @@ class TextTransformService:
         provider: str | None = None,
         model: str | None = None,
         media_parts: Sequence[Part] | None = None,
+    ) -> str:
+        async with traced_operation(
+            "core.text_transforms.summarize",
+            operation_category="llm",
+            extra_attributes={
+                tattr.ATTR_FILES_CHARS: len(text),
+                tattr.ATTR_FILES_HAS_IMAGES: bool(media_parts),
+            },
+        ):
+            return await self._summarize_inner(
+                text,
+                max_output_tokens=max_output_tokens,
+                instruction=instruction,
+                provider=provider,
+                model=model,
+                media_parts=media_parts,
+            )
+
+    async def _summarize_inner(
+        self,
+        text: str,
+        *,
+        max_output_tokens: int | None,
+        instruction: str | None,
+        provider: str | None,
+        model: str | None,
+        media_parts: Sequence[Part] | None,
     ) -> str:
         stripped = text.strip()
         media = list(media_parts) if media_parts is not None else []
@@ -117,11 +191,22 @@ class TextTransformService:
                 billing_service=self.billing_service,
                 max_tokens=max_output_tokens,
             )
-        out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
-        summary = get_message_text(out).strip()
-        if not summary:
-            raise ValueError('summarize: empty model response')
-        return summary
+        _summarize_first_token_bound(llm)
+
+        @_summarize_retry
+        async def _once() -> str:
+            async with asyncio.timeout(_SUMMARIZE_ATTEMPT_TIMEOUT_SECONDS):
+                out = await llm.chat(
+                    messages,
+                    llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT,
+                    reasoning_effort=_SUMMARIZATION_REASONING_EFFORT,
+                )
+            summary = get_message_text(out).strip()
+            if not summary:
+                raise ValueError('summarize: empty model response')
+            return summary
+
+        return await _once()
 
     async def summarize_structured(
         self,
@@ -137,6 +222,33 @@ class TextTransformService:
 
         ``schema`` — JSON Schema object root параметров tool. Ответ — arguments tool call.
         """
+        async with traced_operation(
+            "core.text_transforms.summarize_structured",
+            operation_category="llm",
+            extra_attributes={
+                tattr.ATTR_FILES_CHARS: len(text),
+                tattr.ATTR_FILES_HAS_IMAGES: bool(media_parts),
+            },
+        ):
+            return await self._summarize_structured_inner(
+                text,
+                schema=schema,
+                instruction=instruction,
+                provider=provider,
+                model=model,
+                media_parts=media_parts,
+            )
+
+    async def _summarize_structured_inner(
+        self,
+        text: str,
+        *,
+        schema: JsonObject,
+        instruction: str | None,
+        provider: str | None,
+        model: str | None,
+        media_parts: Sequence[Part] | None,
+    ) -> JsonObject:
         schema_type = schema.get("type")
         if schema_type != "object":
             raise ValueError("summarize_structured: schema.type must be 'object'")
@@ -197,18 +309,34 @@ class TextTransformService:
                 resolved,
                 billing_service=self.billing_service,
             )
-        out = await llm.chat(
-            messages,
-            tools=tools,
-            extra_body=extra_body,
-            llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT,
-        )
-        return _submit_page_summary_arguments(out)
+        _summarize_first_token_bound(llm)
+
+        @_summarize_retry
+        async def _once() -> JsonObject:
+            async with asyncio.timeout(_SUMMARIZE_ATTEMPT_TIMEOUT_SECONDS):
+                out = await llm.chat(
+                    messages,
+                    tools=tools,
+                    extra_body=extra_body,
+                    llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT,
+                    reasoning_effort=_SUMMARIZATION_REASONING_EFFORT,
+                )
+            return _submit_page_summary_arguments(out)
+
+        return await _once()
 
     async def format_markdown(
         self,
         text: str,
     ) -> str:
+        async with traced_operation(
+            "core.text_transforms.format_markdown",
+            operation_category="llm",
+            extra_attributes={tattr.ATTR_FILES_CHARS: len(text)},
+        ):
+            return await self._format_markdown_inner(text)
+
+    async def _format_markdown_inner(self, text: str) -> str:
         stripped = text.strip()
         if not stripped:
             raise ValueError('format_markdown: text is empty')

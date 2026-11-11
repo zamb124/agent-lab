@@ -124,6 +124,9 @@ ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS = "platform.llm.context.max_input_tokens"
 ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH = "platform.llm.context.model_context_length"
 ATTR_LLM_CONTEXT_COMPILE_MS = "platform.llm.context.compile_ms"
 ATTR_LLM_CONTEXT_TOOL_BLOCKS_COMPACTED = "platform.llm.context.tool_blocks_compacted"
+# число LLM-попыток внутри одной операции (retry) и тип последней ошибки попытки
+ATTR_LLM_ATTEMPTS = "platform.llm.attempts"
+ATTR_LLM_ATTEMPT_ERROR = "platform.llm.attempt_error"
 
 ATTR_TASK_QUEUE_WAIT_MS = "platform.task.queue_wait_ms"
 ATTR_TASK_LOCK_WAIT_MS = "platform.task.lock_wait_ms"
@@ -149,6 +152,35 @@ ATTR_ERROR_TYPE = "platform.error.type"
 
 # Файлы
 ATTR_FILES_COUNT = "platform.files.count"
+ATTR_FILES_FILE_ID = "platform.files.file_id"
+ATTR_FILES_FILE_NAME = "platform.files.file_name"
+ATTR_FILES_FILE_TYPE = "platform.files.file_type"
+ATTR_FILES_MIME = "platform.files.mime"
+ATTR_FILES_BYTES = "platform.files.bytes"
+ATTR_FILES_SOURCE = "platform.files.source"
+# cache lookup: hit / miss / store
+ATTR_FILES_CACHE = "platform.files.cache"
+# лейн чтения страницы: text / vision / hybrid
+ATTR_FILES_LANE = "platform.files.lane"
+ATTR_FILES_PAGE_INDEX = "platform.files.page_index"
+ATTR_FILES_PAGES_COUNT = "platform.files.pages_count"
+# вид nested-актива (изображение, вложение, …)
+ATTR_FILES_ASSET_KIND = "platform.files.asset_kind"
+ATTR_FILES_ASSETS_COUNT = "platform.files.assets_count"
+ATTR_FILES_BATCH_INDEX = "platform.files.batch_index"
+ATTR_FILES_BATCHES_COUNT = "platform.files.batches_count"
+ATTR_FILES_CHARS = "platform.files.chars"
+ATTR_FILES_HAS_IMAGES = "platform.files.has_images"
+# режим суммаризации: structural / llm
+ATTR_FILES_SUMMARY_MODE = "platform.files.summary_mode"
+# байты payload после prepare_visual_payload — фактический вход vision LLM (до base64)
+ATTR_FILES_PAYLOAD_BYTES = "platform.files.payload_bytes"
+# nested в FileResult конверта: число элементов и суммарный размер bytes_b64
+ATTR_FILES_NESTED_COUNT = "platform.files.nested_count"
+ATTR_FILES_NESTED_BYTES = "platform.files.nested_bytes"
+
+# Capability gateway
+ATTR_CAPABILITY_NAME = "platform.capability.name"
 
 # Состояние
 ATTR_STATE_SNAPSHOT = "platform.state.snapshot"

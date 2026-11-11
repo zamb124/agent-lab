@@ -15,6 +15,7 @@ from typing import Unpack
 from typing import cast as type_cast
 
 import httpx2
+from opentelemetry.propagate import inject as otel_inject
 
 from core.config import get_settings
 from core.context import get_context
@@ -145,6 +146,10 @@ class ServiceClient:
         test_scope = resolve_test_scope()
         if test_scope is not None:
             headers[TEST_SCOPE_HEADER] = test_scope
+
+        # W3C traceparent/tracestate активного OTEL span: peer-сервис продолжает
+        # то же trace-дерево (capability-gateway, tool-runtime, …).
+        otel_inject(headers)
 
         return headers
 
