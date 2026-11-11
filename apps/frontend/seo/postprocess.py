@@ -65,6 +65,20 @@ def _set(pattern: re.Pattern[str], html: str, value: str) -> str:
     return pattern.sub(lambda m: m.group(1) + value + m.group(2), html, count=1)
 
 
+def _set_or_inject(
+    pattern: re.Pattern[str], html: str, value: str, tag: str, injections: list[str]
+) -> str:
+    """Переписать существующий meta-тег или поставить его в head-инъекции.
+
+    Продуктовая мета владеется сервером: если SPA не успел дорисовать og:* —
+    тег обязан появиться из postprocess, а не пропасть из снапшота.
+    """
+    if pattern.search(html):
+        return _set(pattern, html, value)
+    injections.append(tag)
+    return html
+
+
 def _set_title(html: str, title: str) -> str:
     """Первый ``<title>`` → заданный текст, остальные удаляются.
 
@@ -129,21 +143,38 @@ def postprocess_snapshot(
     out = _set(_OG_IMAGE_RE, out, og_image)
     out = _set(_META_NAME_IMG_RE, out, og_image)
 
-    # 프로덕트 페이지는 SPA가 connect 시점에 meta를 sync하다 번들 로드 전
-    # raw key가 박히는 이력이 있다 — head 타이틀/설명을 확정값으로 덮는다.
+    head_injections: list[str] = []
+
+    # Продуктовая страница: SPA синкает meta после загрузки i18n-бандла и в
+    # снапшот запечатывался сырой i18n-ключ — title/description/og/twitter
+    # владеются сервером: отсутствующие в снапшоте теги инжектятся в head.
     if page.kind == "product":
         doc_title, doc_description = product_document_meta(page, brand, locale)
         out = _set_title(out, doc_title)
-        out = _set(_OG_TITLE_RE, out, doc_title)
-        out = _set(_TWITTER_TITLE_RE, out, doc_title)
-        out = _set(_DESCRIPTION_RE, out, doc_description)
-        out = _set(_OG_DESCRIPTION_RE, out, doc_description)
-        out = _set(_TWITTER_DESCRIPTION_RE, out, doc_description)
+        out = _set_or_inject(
+            _OG_TITLE_RE, out, doc_title,
+            f'<meta property="og:title" content="{doc_title}">', head_injections,
+        )
+        out = _set_or_inject(
+            _TWITTER_TITLE_RE, out, doc_title,
+            f'<meta name="twitter:title" content="{doc_title}">', head_injections,
+        )
+        out = _set_or_inject(
+            _DESCRIPTION_RE, out, doc_description,
+            f'<meta name="description" content="{doc_description}">', head_injections,
+        )
+        out = _set_or_inject(
+            _OG_DESCRIPTION_RE, out, doc_description,
+            f'<meta property="og:description" content="{doc_description}">', head_injections,
+        )
+        out = _set_or_inject(
+            _TWITTER_DESCRIPTION_RE, out, doc_description,
+            f'<meta name="twitter:description" content="{doc_description}">', head_injections,
+        )
 
     out = _EXISTING_LD_RE.sub("", out)
     out = _EXISTING_HREFLANG_RE.sub("", out)
 
-    head_injections: list[str] = []
     ru_url = page_url(seo_base_url, page.path, "ru")
     en_url = page_url(seo_base_url, page.path, "en")
     head_injections.append(f'<link rel="alternate" hreflang="ru" href="{ru_url}"/>')

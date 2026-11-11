@@ -29,9 +29,16 @@ storage_config:
 
 limits_config:
   retention_period: 24h  # логи — максимум сутки (короткий горизонт)
+  # SEO-потоки (log_type=seo от alloy) живут 60 дней — аналитика
+  # посетителей/ботов и история индексации считаются по месяцу.
+  retention_stream:
+    - selector: '{log_type="seo"}'
+      priority: 1
+      period: 1440h
   # Лёгкий стек: режем длинные/тяжёлые запросы, которые укладывали
-  # алерт-движок в DeadlineExceeded.
-  max_query_length: 25h
+  # алерт-движок в DeadlineExceeded. Потолок 31d — месячные панели
+  # SEO-дашборда (данные seo-стримов хранятся 60d).
+  max_query_length: 745h
   max_query_lookback: 0s
   max_entries_limit_per_query: 5000
   # Панели redis inventory топ-N префиксов разворачивают >500 серий

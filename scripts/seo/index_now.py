@@ -89,7 +89,14 @@ def _indexnow_key() -> str | None:
     return str(value).strip()
 
 
-def submit(urls: list[str], *, key: str, dry_run: bool) -> tuple[int, int | None]:
+def _provider(endpoint: str) -> str:
+    """Короткое имя провайдера по URL эндпоинта (для поля providers события)."""
+    return endpoint.split("://", 1)[-1].split("/", 1)[0]
+
+
+def submit(
+    urls: list[str], *, key: str, dry_run: bool
+) -> tuple[int, int | None, dict[str, int | None]]:
     base = resolve_seo_base_url()
     payload = {
         "host": base.removeprefix("https://").removeprefix("http://"),
@@ -101,9 +108,10 @@ def submit(urls: list[str], *, key: str, dry_run: bool) -> tuple[int, int | None
     if dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2)[:4000])
         print(f"index_now dry-run: {len(urls)} urls")
-        return 0, None
-    statuses: dict[str, int] = {}
+        return 0, None, {}
+    statuses: dict[str, int | None] = {}
     for endpoint in INDEXNOW_ENDPOINTS:
+        provider = _provider(endpoint)
         try:
             response = httpx2.post(
                 endpoint,
@@ -112,9 +120,10 @@ def submit(urls: list[str], *, key: str, dry_run: bool) -> tuple[int, int | None
                 timeout=30.0,
             )
         except httpx2.HTTPError as exc:
+            statuses[provider] = None
             print(f"index_now: {len(urls)} urls → {endpoint} transport error: {exc}")
             continue
-        statuses[endpoint] = response.status_code
+        statuses[provider] = response.status_code
         print(f"index_now: {len(urls)} urls → {endpoint} HTTP {response.status_code}")
     # IndexNow: 200/202 — принято; прочее (403 ключ, 422 payload) — провал.
     # Фейлом считается отказ хотя бы одного эндпоинта: RU-выдача зависит
@@ -124,10 +133,16 @@ def submit(urls: list[str], *, key: str, dry_run: bool) -> tuple[int, int | None
         (status for status in statuses.values() if status not in (200, 202)),
         next(iter(statuses.values()), None),
     )
-    return (0 if ok else 1), worst
+    return (0 if ok else 1), worst, statuses
 
 
-def _emit_event(event: str, *, urls: int, http_status: int | None) -> None:
+def _emit_event(
+    event: str,
+    *,
+    urls: int,
+    http_status: int | None,
+    providers: dict[str, int | None],
+) -> None:
     """Машинная строка для Loki: CronJob seo-indexnow пишет её в stdout,
     Grafana-алерт ловит ``seo.indexnow_failed`` (``| json | message=``)."""
     print(json.dumps({
@@ -135,6 +150,7 @@ def _emit_event(event: str, *, urls: int, http_status: int | None) -> None:
         "level": "WARNING" if event.endswith("failed") else "INFO",
         "urls": urls,
         "http_status": http_status,
+        "providers": providers,
     }, ensure_ascii=False))
 
 
@@ -159,15 +175,16 @@ def main() -> int:
         for url in urls[:20]:
             print(f"  {url}")
         print(f"... всего {len(urls)}; задайте ключ и повторите для отправки")
-        _emit_event("seo.indexnow_skipped", urls=len(urls), http_status=None)
+        _emit_event("seo.indexnow_skipped", urls=len(urls), http_status=None, providers={})
         return 0
-    code, status = submit(urls, key=key, dry_run=args.dry_run)
+    code, status, providers = submit(urls, key=key, dry_run=args.dry_run)
     if args.dry_run:
         return code
     _emit_event(
         "seo.indexnow_failed" if code else "seo.indexnow_ok",
         urls=len(urls),
         http_status=status,
+        providers=providers,
     )
     return code
 

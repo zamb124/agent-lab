@@ -25,6 +25,12 @@ FROM base-with-core AS builder-all
 # ============================================
 FROM builder-all AS base-final
 WORKDIR /app
+# GeoIP DB-IP Lite (CC-BY): IP→страна для seo.visit-аналитики. Пин месяца —
+# воспроизводимо, свежая база приезжает с пересборками.
+ARG GEOIP_DB_VERSION=2026-11
+RUN mkdir -p /app/data/geoip && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://download.db-ip.com/free/dbip-country-lite-${GEOIP_DB_VERSION}.csv.gz', '/app/data/geoip/dbip-country.csv.gz')"
+COPY core/geoip/NOTICE.md /app/data/geoip/NOTICE.md
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY scripts/ ./scripts/

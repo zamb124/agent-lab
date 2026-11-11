@@ -21,6 +21,7 @@ from core.config.models import (
     EventsConfig,
     FilesConfig,
     GeocodingConfig,
+    GeoIpConfig,
     GoogleWorkspaceConfig,
     GuestRuntimeFarmConfig,
     LanesConfig,
@@ -117,6 +118,7 @@ class BaseSettings(PydanticBaseSettings):
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
     customer_auth: CustomerAuthConfig = Field(default_factory=CustomerAuthConfig)
     geocoding: GeocodingConfig = Field(default_factory=GeocodingConfig)
+    geoip: GeoIpConfig = Field(default_factory=GeoIpConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)

@@ -2444,6 +2444,21 @@ class PublicSiteConfig(BaseModel):
     google_analytics_measurement_id: str | None = None
 
 
+class GeoIpConfig(BaseModel):
+    """IP→страна для SEO-аналитики посетителей (DB-IP Lite CSV внутри образа).
+
+    База — gzipped CSV ``start_ip,end_ip,cc``; скачивается в Dockerfile
+    (``ARG GEOIP_DB_VERSION``), тесты подменяют ``db_path`` на fixture.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    # False по умолчанию: база существует только в собранном образе, включается
+    # в проде через app-conf.k8s-overlay.json (geoip.enabled=true).
+    enabled: bool = False
+    db_path: str = "/app/data/geoip/dbip-country.csv.gz"
+
+
 class LegalConfig(BaseModel):
     """Публичные реквизиты оператора платформы (ООО «ЛАЙНЕКС»)."""
 

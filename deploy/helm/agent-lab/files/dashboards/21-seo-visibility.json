@@ -1,0 +1,645 @@
+{
+ "schemaVersion": 39,
+ "uid": "seo-visibility",
+ "title": "SEO Visibility",
+ "tags": [
+  "seo",
+  "visitors",
+  "indexing",
+  "linnex"
+ ],
+ "timezone": "utc",
+ "refresh": "5m",
+ "time": {
+  "from": "now-30d",
+  "to": "now"
+ },
+ "editable": true,
+ "panels": [
+  {
+   "id": 1,
+   "title": "Посетители",
+   "type": "row",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 2,
+   "title": "Уникальные посетители (период)",
+   "type": "stat",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 0,
+    "y": 1
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(count by (visitor) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" | visitor!=\"\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    }
+   }
+  },
+  {
+   "id": 3,
+   "title": "Визиты людей (период)",
+   "type": "stat",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 1
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" [$__range]))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "Запросы ботов (период)",
+   "type": "stat",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 12,
+    "y": 1
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"true\" [$__range]))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    }
+   }
+  },
+  {
+   "id": 5,
+   "title": "Стран покрыто",
+   "type": "stat",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 1
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(count by (country) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" | country!=\"\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    }
+   }
+  },
+  {
+   "id": 6,
+   "title": "Визиты по поверхности / мин",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 5
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (surface) (rate({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" [$__interval])) * 60",
+     "legendFormat": "{{surface}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 7,
+   "title": "Люди vs боты / мин",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 5
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (bot) (rate({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" [$__interval])) * 60",
+     "legendFormat": "bot={{bot}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 8,
+   "title": "Топ стран (люди)",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 0,
+    "y": 11
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(20, sum by (country) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" | country!=\"\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "title": "Топ краулеров (боты)",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 11
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(20, sum by (ua_family) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"true\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "title": "Топ UA (люди)",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 11
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(20, sum by (ua_family) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "title": "Топ referer",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 0,
+    "y": 19
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(15, sum by (referer) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" | bot=\"false\" | referer!=\"direct\" | referer!=\"internal\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "title": "Топ страниц",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 19
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "topk(20, sum by (path) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" [$__range])))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "title": "Визиты по host",
+   "type": "table",
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 19
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (host) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" [$__range]))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "title": "Визиты по локали",
+   "type": "table",
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 0,
+    "y": 27
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (locale) (count_over_time({service=\"frontend\",log_type=\"seo\"} | json | message=\"seo.visit\" [$__range]))",
+     "refId": "A",
+     "instant": true,
+     "queryType": "range"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "renameByName": {
+       "Value": "Count"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "title": "Снапшоты и индексация",
+   "type": "row",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 33
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 16,
+   "title": "Снапшоты: отдача по источнику / мин",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 34
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (source) (rate({service=\"frontend\",log_type=\"seo\"} | json | message=~\"seo.snapshot.*\" | message=\"seo.snapshot.served\" [$__interval])) * 60",
+     "legendFormat": "{{source}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 17,
+   "title": "Снапшоты: записи и фейлы / мин",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 34
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate({service=\"frontend\",log_type=\"seo\"} | json | message=~\"seo.snapshot.*\" | message=\"seo.snapshot.wrote\" [$__interval])) * 60",
+     "legendFormat": "wrote",
+     "refId": "A",
+     "queryType": "range"
+    },
+    {
+     "expr": "sum(rate({service=\"frontend\",log_type=\"seo\"} | json | message=~\"seo.snapshot.*\" | message=~\"seo.snapshot.*failed\" [$__interval])) * 60",
+     "legendFormat": "failed",
+     "refId": "B",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 18,
+   "title": "IndexNow события / ч",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 40
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (message) (count_over_time({service=\"seo-indexnow\",log_type=\"seo\"} | json | message=~\"seo.indexnow_.*\" [1h]))",
+     "legendFormat": "{{message}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  },
+  {
+   "id": 19,
+   "title": "Smoke-синтетика / ч",
+   "type": "timeseries",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 40
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "sum by (message) (count_over_time({service=\"seo-synth\",log_type=\"seo\"} | json | message=~\"seo.smoke_.*\" [1h]))",
+     "legendFormat": "{{message}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    }
+   },
+   "interval": "5m"
+  }
+ ]
+}

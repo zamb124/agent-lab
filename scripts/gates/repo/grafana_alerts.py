@@ -20,9 +20,10 @@ Grafana 13 падает panic ``assignment to entry in nil map`` при прав
 7. У группы есть ``name``, ``folder``, ``interval`` — без них группа
    не провижинится и правила молча не доедут.
 8. Для loki-запросов ``relativeTimeRange.from`` + максимальный range-
-   селектор ``[Nh]`` в ``model.expr`` не превышает лимит Loki ``1d1h`` —
-   Grafana расширяет интервал запроса на range-вектор; переполнение даёт
-   ``sse.dataQueryError``, правило висит в health=error и не алертит.
+   селектор ``[Nh]`` в ``model.expr`` не превышает ``limits_config
+   .max_query_length`` из ``files/loki.yaml`` — Grafana расширяет интервал
+   запроса на range-вектор; переполнение даёт ``sse.dataQueryError``,
+   правило висит в health=error и не алертит.
 9. Loki-правило на отношении (``sum(...) / sum(...)``) или квантиле
    (``quantile_over_time``) обязано иметь volume floor — math-условие
    с ``&&`` на второй запрос объёма. Процент/квантиль на малой выборке
@@ -39,14 +40,22 @@ import yaml
 from scripts.gates.kit import REPO_ROOT, report
 
 ALERTS_DIR = REPO_ROOT / "deploy" / "helm" / "agent-lab" / "files" / "grafana-alerts"
+LOKI_CONFIG = REPO_ROOT / "deploy" / "helm" / "agent-lab" / "files" / "loki.yaml"
 
 _DATASOURCES = {"loki", "prometheus", "__expr__"}
 _NO_DATA_STATES = {"Alerting", "NoData", "OK"}
 _EXEC_ERR_STATES = {"Alerting", "Error", "OK"}
 _SEVERITIES = {"critical", "warning"}
-_LOKI_MAX_QUERY_SECONDS = 25 * 60 * 60
 _RANGE_RE = re.compile(r"\[(\d+)([smhd])\]")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+_DURATION_RE = re.compile(r"(\d+)([smhd])")
+
+
+def _loki_max_query_seconds() -> int:
+    """``limits_config.max_query_length`` из loki.yaml — предел окна запроса."""
+    doc = yaml.safe_load(LOKI_CONFIG.read_text())
+    value = doc["limits_config"]["max_query_length"]
+    return sum(int(n) * _UNIT_SECONDS[u] for n, u in _DURATION_RE.findall(str(value)))
 _RATIO_OR_QUANTILE_RE = re.compile(r"quantile_over_time\(|/\s*\(?\s*sum")
 
 
@@ -127,9 +136,9 @@ def _check_query(where: str, entry: object, ref_ids: set[str], errors: list[str]
         if isinstance(expr, str):
             ranges = [int(n) * _UNIT_SECONDS[u] for n, u in _RANGE_RE.findall(expr)]
             window = int(time_range.get("from") or 0) + max(ranges, default=0)
-            if window > _LOKI_MAX_QUERY_SECONDS:
+            if window > _loki_max_query_seconds():
                 errors.append(
-                    f"{where}: from + range {window}s > лимита Loki {_LOKI_MAX_QUERY_SECONDS}s — правило уйдёт в health=error"
+                    f"{where}: from + range {window}s > loki max_query_length {_loki_max_query_seconds()}s — правило уйдёт в health=error"
                 )
 
 

@@ -985,6 +985,131 @@ groups:
     labels:
       severity: warning
       service: seo-indexnow
+  - uid: seo-bot-crawl-silent
+    title: SEO Bot Crawl Silent 72h
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 259200
+        to: 0
+      datasourceUid: loki
+      model:
+        # Хиты известных краулеров (bot=true) по seo.visit; seo-smoke и
+        # пререндер снапшотов в визиты не попадают (UA-классификатор).
+        expr: sum(count_over_time({namespace="platform", service="frontend", log_type="seo"} | json | message="seo.visit" | bot="true" [72h]))
+        refId: A
+    - refId: D
+      queryType: instant
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: loki
+      model:
+        # Страховка от мёртвого пайплайна: smoke-события есть → поверхность
+        # и лог-стрим живы, значит ноль ботов — реальная тишина, а не обрыв.
+        expr: sum(count_over_time({namespace="platform", service="seo-synth", log_type="seo"} | json | message=~"seo[.]smoke_.*" [24h]))
+        refId: D
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: E
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: D
+        reducer: last
+        refId: E
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B == 0 && $E > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    annotations:
+      summary: No search/LLM crawler hits on public surface for 72h
+      description: Zero bot=true seo.visit events on frontend for 72h while smoke checks confirm the surface and log pipeline are alive — engines stopped crawling (robots directive, indexing drop) or bot traffic routes elsewhere.
+    labels:
+      severity: warning
+      service: frontend
+  - uid: seo-visits-silent
+    title: SEO Visitor Stream Silent 24h
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: loki
+      model:
+        # Человеческие визиты (bot=false) по seo.visit.
+        expr: sum(count_over_time({namespace="platform", service="frontend", log_type="seo"} | json | message="seo.visit" | bot="false" [24h]))
+        refId: A
+    - refId: D
+      queryType: instant
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum(count_over_time({namespace="platform", service="seo-synth", log_type="seo"} | json | message=~"seo[.]smoke_.*" [24h]))
+        refId: D
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: E
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: D
+        reducer: last
+        refId: E
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B == 0 && $E > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    annotations:
+      summary: No human visits on public surface for 24h
+      description: Zero bot=false seo.visit events for 24h while seo-synth emits smoke events — either analytics middleware stopped emitting or the public site truly received no visitors in a day.
+    labels:
+      severity: warning
+      service: frontend
   - uid: browser-cdp-disconnects
     title: Browser CDP Endpoint Flapping
     condition: C

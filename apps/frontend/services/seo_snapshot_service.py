@@ -166,6 +166,12 @@ class SeoSnapshotService:
             _ = await self._redis.set(
                 self._stale_key(page.path, locale), html, ttl=_SNAPSHOT_STALE_TTL_SECONDS
             )
+            logger.info(
+                "seo.snapshot.wrote",
+                path=page.path,
+                locale=locale,
+                bytes=len(html),
+            )
         except Exception as exc:
             logger.warning("seo.snapshot.cache_set_failed", error=str(exc))
         return html
@@ -180,6 +186,14 @@ class SeoSnapshotService:
         свежий ключ не истёк (иначе warmup лишь перечитывает свой же кэш
         и весь реестр истекает одной массой).
         """
+        def _served(source: str) -> None:
+            logger.info(
+                "seo.snapshot.served",
+                path=page.path,
+                locale=locale,
+                source=source,
+            )
+
         key = self._cache_key(page.path, locale)
         if not force_refresh:
             try:
@@ -188,13 +202,16 @@ class SeoSnapshotService:
                 logger.warning("seo.snapshot.cache_get_failed", error=str(exc))
                 cached = None
             if cached:
+                _served("fresh")
                 return cached
 
         stale = await self._stale_snapshot(page, locale)
+        stale_source = "stale" if stale is not None else "miss"
 
         if not force_refresh:
             try:
                 if await self._redis.get(self._fail_key(page.path, locale)):
+                    _served(stale_source)
                     return stale
             except Exception as exc:
                 logger.warning("seo.snapshot.fail_get_failed", error=str(exc))
@@ -210,10 +227,12 @@ class SeoSnapshotService:
             logger.warning("seo.snapshot.lock_failed", error=str(exc))
             acquired = True
         if not acquired:
+            _served(stale_source)
             return stale
 
         try:
             html = await self._render_store(page, locale)
+            _served("rendered" if html is not None else stale_source)
             return html if html is not None else stale
         finally:
             # Лидер закончил: снимаем lock, чтобы ретрай не ждал TTL.

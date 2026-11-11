@@ -1,4 +1,4 @@
-""""
+""" "
 Сервис frontend — FastAPI-приложение для управления платформой
 """
 
@@ -51,6 +51,7 @@ from apps.frontend.config import (
 )
 from apps.frontend.di import Di, FrontendDi
 from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
+from apps.frontend.seo.analytics_middleware import SeoAnalyticsMiddleware
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (
@@ -80,6 +81,7 @@ from core.config import get_settings
 from core.config.testing import is_testing
 from core.db.storage import SharedStorage
 from core.di import recipe
+from core.geoip import get_geoip_resolver
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
     consume_flow_preview_handoff,
@@ -105,6 +107,7 @@ _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
     r"|"
     r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
 )
+
 
 def _flow_preview_preferred_lang(request: Request) -> str:
     """ru | en по Accept-Language (первый упомянутый язык)."""
@@ -140,6 +143,7 @@ def _short_link_redirect_location(target: str) -> str:
     if p.query:
         loc = f"{loc}?{p.query}"
     return loc
+
 
 async def _seed_platform_pronunciation_rules() -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
@@ -209,6 +213,13 @@ async def frontend_startup(
     await redis_client.connect()
     logger.info("frontend.redis.connected")
 
+    geoip = get_frontend_settings().geoip
+    if geoip.enabled:
+        # ~1с синхронного парсина CSV — вне event loop; отсутствие файла
+        # при включённом geoip = ошибка конфигурации, падает стартап.
+        resolver = get_geoip_resolver(geoip)
+        _ = await asyncio.to_thread(resolver.country_of, "0.0.0.0")
+
     if is_testing():
         return
     _ = await ensure_system_admin_membership(
@@ -245,6 +256,7 @@ async def frontend_startup(
         background_kind="polling",
     )
 
+
 # Приложение собирает create_service_app: middleware и FrontendDi.
 _frontend_settings = get_frontend_settings()
 _frontend_cors_regex = _frontend_settings.cors_allow_origin_regex
@@ -261,6 +273,7 @@ app = create_service_app(
     FrontendDi,
     database="shared_url",
     operations=FRONTEND_OPERATIONS,
+    extra_middlewares=[(SeoAnalyticsMiddleware, {})],
     lifecycle=(recipe(frontend_startup),),
     routers=[],
     services_spa_index=_UI_STATIC_PATH / "index.html",
@@ -311,11 +324,7 @@ mount_core_frontend(app)
 
 # Монтирование apps/frontend/ui (само приложение; ui-dist/ после `npm run build:ui`)
 if _UI_STATIC_PATH.exists():
-    app.mount(
-        "/static/frontend",
-        StaticFiles(directory=str(_UI_STATIC_PATH)),
-        name="frontend-ui"
-    )
+    app.mount("/static/frontend", StaticFiles(directory=str(_UI_STATIC_PATH)), name="frontend-ui")
     logger.info("frontend.ui_mounted", path=str(_UI_STATIC_PATH))
 
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
@@ -329,6 +338,7 @@ _PLATFORM_PWA_ROUTE_PATHS = frozenset({"/manifest.json", "/sw.js", "/offline.htm
 for route in list(app.routes):
     if isinstance(route, Route) and route.path in _PLATFORM_PWA_ROUTE_PATHS:
         app.routes.remove(route)
+
 
 @app.get("/api/health")
 @app.get("/health")
@@ -356,6 +366,7 @@ async def flow_embed_page_host(request: Request, embed: str = "") -> Response:
         return Response(status_code=200, content=b"")
     return HTMLResponse(build_flow_embed_page_html(embed_id=embed_id))
 
+
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
 async def resolve_short_link(request: Request, di: Di, code: str):
     trimmed = code.strip()
@@ -365,7 +376,9 @@ async def resolve_short_link(request: Request, di: Di, code: str):
         if row_head is not None and row_head.kind == SHORT_LINK_KIND_FLOW_PREVIEW_EMBED:
             now = datetime.now(UTC)
             if row_head.expires_at <= now:
-                raise WsCommandError("not_found", "Link not found or expired", error_code="not_found")
+                raise WsCommandError(
+                    "not_found", "Link not found or expired", error_code="not_found"
+                )
             return Response(status_code=200, content=b"")
         target_head = await di.short_link_service.resolve_absolute_redirect_url(trimmed)
         if target_head is None:
@@ -447,9 +460,7 @@ async def flow_preview_guest_page(request: Request, di: Di, h: str = ""):
     platform_ui_origin = page_origin
     # Только same-origin `/static/core/...`: страница на нашем домене; CDN-скрипт может быть иной сборки
     # и ломать нативный ESM (bare `@platform/*` без import map).
-    script_url = (
-        f"{page_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
-    )
+    script_url = f"{page_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
 
     html_out = build_flow_preview_guest_html(
         script_url=script_url,
@@ -473,9 +484,12 @@ async def get_public_legal(request: Request, di: Di) -> JSONResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
+        raise WsCommandError(
+            "ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload"
+        )
     brand = resolve_brand(str(host).strip())
     return JSONResponse(content=brand.legal.model_dump())
+
 
 _PWA_MANIFEST_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "manifest.json"
@@ -502,7 +516,9 @@ async def get_pwa_manifest(request: Request, di: Di) -> JSONResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
+        raise WsCommandError(
+            "ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload"
+        )
     brand = resolve_brand(str(host).strip())
     manifest_payload: JsonObject = parse_json_object(
         _PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8"),
@@ -522,7 +538,9 @@ async def get_pwa_service_worker(request: Request, di: Di) -> Response:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
+        raise WsCommandError(
+            "ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload"
+        )
     brand = resolve_brand(str(host).strip())
     body = _render_pwa_brand_template(_PWA_SW_TEMPLATE_PATH, brand.platform_name)
     return Response(
@@ -541,7 +559,9 @@ async def get_pwa_offline_page(request: Request, di: Di) -> Response:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
+        raise WsCommandError(
+            "ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload"
+        )
     brand = resolve_brand(str(host).strip())
     body = _render_pwa_brand_template(_PWA_OFFLINE_TEMPLATE_PATH, brand.platform_name)
     return Response(content=body, media_type="text/html; charset=utf-8")

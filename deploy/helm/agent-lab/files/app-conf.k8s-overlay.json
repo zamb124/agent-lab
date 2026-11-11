@@ -1,39 +1,42 @@
 {
-  "mail": {
-    "system": {
-      "enabled": true,
-      "mail_domain": "linnex.io",
-      "provider": "ispmanager",
-      "imap_host": "sm36.hosting.reg.ru",
-      "imap_port": 993,
-      "smtp_host": "sm36.hosting.reg.ru",
-      "smtp_port": 465,
-      "use_ssl": true,
-      "ispmanager": {
-        "base_url": "https://sm36.hosting.reg.ru:1500/ispmgr",
-        "authinfo_user": "u3582003",
-        "authinfo_password": null
-      }
-    },
-    "live_test": {
-      "enabled": false
-    }
+ "mail": {
+  "system": {
+   "enabled": true,
+   "mail_domain": "linnex.io",
+   "provider": "ispmanager",
+   "imap_host": "sm36.hosting.reg.ru",
+   "imap_port": 993,
+   "smtp_host": "sm36.hosting.reg.ru",
+   "smtp_port": 465,
+   "use_ssl": true,
+   "ispmanager": {
+    "base_url": "https://sm36.hosting.reg.ru:1500/ispmgr",
+    "authinfo_user": "u3582003",
+    "authinfo_password": null
+   }
   },
-  "services": {
-    "browser": {
-      "browser": {
-        "cdp_endpoints": {
-          "lightpanda": null
-        }
-      }
-    },
-    "provider_litserve": {
-      "provider_litserve": {
-        "infra": {
-          "embedding_accelerator": "auto",
-          "rerank_accelerator": "auto"
-        }
-      }
-    }
+  "live_test": {
+   "enabled": false
   }
+ },
+ "services": {
+  "browser": {
+   "browser": {
+    "cdp_endpoints": {
+     "lightpanda": null
+    }
+   }
+  },
+  "provider_litserve": {
+   "provider_litserve": {
+    "infra": {
+     "embedding_accelerator": "auto",
+     "rerank_accelerator": "auto"
+    }
+   }
+  }
+ },
+ "geoip": {
+  "enabled": true
+ }
 }
