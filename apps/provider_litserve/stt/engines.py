@@ -5,8 +5,10 @@
 
 Backend выбирается полем ``entry.backend``:
 
-* ``gigaam`` — модели семейства ``ai-sage/GigaAM-v3`` (AutoModel +
-  ``trust_remote_code=True``, метод ``model.transcribe(file)`` с временным
+* ``gigaam`` — модели семейства ``ai-sage/GigaAM-v3`` (remote code
+  ``modeling_gigaam.GigaAMModel`` через ``trust_remote_code``: конструируется
+  напрямую на CPU с ручной заливкой ``pytorch_model.bin`` — обход meta-device
+  инициализации transformers>=5; метод ``model.transcribe(file)`` с временным
   WAV-файлом).
 * ``huggingface_ctc`` — generic CTC-модели через ``AutoModelForCTC`` +
   ``AutoProcessor`` (например wav2vec2).
@@ -43,12 +45,14 @@ import torch
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict
 from transformers import (
-    AutoModel,
+    AutoConfig,
     AutoModelForCTC,
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     pipeline,
 )
+from transformers.dynamic_module_utils import get_class_from_dynamic_module
+from transformers.utils import cached_file
 
 from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
@@ -152,18 +156,6 @@ class WhisperASRPipeline(Protocol):
         *,
         generate_kwargs: WhisperGenerateKwargs | None = None,
     ) -> WhisperPipelineResult: ...
-
-
-class GigaAMModelLoader(Protocol):
-    def __call__(
-        self,
-        hf_model_id: str,
-        *,
-        revision: str | None,
-        trust_remote_code: bool,
-        token: str | None,
-        low_cpu_mem_usage: bool,
-    ) -> GigaAMModel: ...
 
 
 class _ProcessorLoader[T](Protocol):
@@ -399,18 +391,32 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
             device=self._device,
         )
         started = time.monotonic()
-        load_model = cast(GigaAMModelLoader, AutoModel.from_pretrained)
-        model = load_model(
+        # transformers>=5 конструирует модели на meta-device безусловно;
+        # modeling_gigaam собирает FeatureExtractor через hydra и падает на
+        # смешении cpu/meta-тензоров (torchaudio melscale_fbanks). Поэтому
+        # класс конструируется напрямую на CPU, веса заливаются вручную.
+        config = AutoConfig.from_pretrained(
             hf_model_id,
             revision=revision,
             trust_remote_code=True,
             token=self._cfg.hf_token,
-            low_cpu_mem_usage=True,
         )
-        try:
-            _ = model.to(self._device)
-        except Exception:  # noqa: BLE001 - GigaAM сам управляет device через .transcribe
-            pass
+        model_cls = get_class_from_dynamic_module(
+            "modeling_gigaam.GigaAMModel",
+            hf_model_id,
+            revision=revision,
+            token=self._cfg.hf_token,
+        )
+        model = cast(GigaAMModel, model_cls(config))
+        weights_path = cached_file(
+            hf_model_id,
+            "pytorch_model.bin",
+            revision=revision,
+            token=self._cfg.hf_token,
+        )
+        state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+        _ = model.load_state_dict(state_dict)
+        model = cast(GigaAMModel, model.to(self._device))
         logger.info("provider_litserve.stt.gigaam.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started)
         return model
 
