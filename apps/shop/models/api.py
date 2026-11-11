@@ -273,8 +273,16 @@ class ShopNutrition(StrictBaseModel):
 
 
 class ShopProductResponse(StrictBaseModel):
-    shop_product_id: str
+    """Листинг витрины: фасет + эффективный контент каталога.
+
+    ``product_id`` — канонический id ``catalog_products``; имя/описание/
+    галерея уже resolved по цепочке ``shop:<shop_id> → shop → base``,
+    ``sources[field]`` — кто дал значение (``base`` | ``shop`` |
+    ``shop:<id>``) для chain-toggle UI.
+    """
+
     shop_id: str
+    product_id: str
     category_id: str | None
     name: str
     description: str
@@ -282,12 +290,17 @@ class ShopProductResponse(StrictBaseModel):
     badges: list[str]
     price_minor: int
     photo_file_id: str | None
+    image_file_ids: list[str]
+    sources: dict[str, str]
     nutrition: ShopNutrition
     is_available: bool
+    is_archived: bool
     sort: int
 
 
 class ShopProductCreateRequest(StrictBaseModel):
+    product_id: str | None = None
+    """Подключить существующий товар каталога; без него — создать новый."""
     category_id: str | None = None
     name: str = Field(min_length=1, max_length=300)
     description: str = ""

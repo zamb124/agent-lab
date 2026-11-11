@@ -1123,7 +1123,7 @@
     },
     "company_voice_providers_page": {
         "title": "Company voice providers",
-        "subtitle": "Per-company override for STT/TTS/VAD providers. Override is applied on top of deployment-default. Editable by company owner/admin only.",
+        "subtitle": "Company voice services: speech recognition, voice synthesis and voice activity detection. Platform defaults apply unless changed; editable by the company owner and admins.",
         "title_stt": "Speech-to-text (STT)",
         "title_tts": "Text-to-speech (TTS)",
         "title_vad": "Voice activity detector (VAD)",

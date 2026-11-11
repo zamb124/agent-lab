@@ -97,7 +97,7 @@ class TestReadIsolation:
             owner_entity_id=None,
         )
         # Партия компании A тоже невидима для B.
-        tracked = await env_a.di.catalog_service.create_product(
+        tracked = await env_a.di.stock_catalog_service.create_product(
             company_id=env_a.company_id,
             name=f"LT {unique_id}",
             sku=f"LT-{unique_id}",
@@ -107,9 +107,8 @@ class TestReadIsolation:
             tracking=StockTracking.LOT,
             is_storable=True,
             category="general",
-            barcode=None,
         )
-        lot = await env_a.di.catalog_service.create_lot(
+        lot = await env_a.di.stock_catalog_service.create_lot(
             company_id=env_a.company_id,
             product_id=tracked.product_id,
             name=f"LOT-{unique_id}",

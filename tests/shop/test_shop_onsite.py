@@ -32,7 +32,7 @@ async def _shop(
         json={"name": "Паста", "price_minor": 45000},
     )
     assert resp.status_code == 200, resp.text
-    shop["product_id"] = resp.json()["shop_product_id"]
+    shop["product_id"] = resp.json()["product_id"]
     return shop
 
 

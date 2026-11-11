@@ -145,13 +145,13 @@ class TestShelves:
             f"{_SHOPS}/{shop_id}/shelves",
             json={
                 "kind": "manual",
-                "product_ids": [_id(latte, "shop_product_id")],
+                "product_ids": [_id(latte, "product_id")],
             },
         )
         assert resp.status_code == 200, resp.text
         snap = await _snapshot(shop_public_client, slug)
         shelf = next(s for s in _rows(snap, "shelves") if s["kind"] == "manual")
-        assert _str_rows(shelf, "product_ids") == [_id(latte, "shop_product_id")]
+        assert _str_rows(shelf, "product_ids") == [_id(latte, "product_id")]
 
     async def test_new_shelf_resolves_recent_products(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -166,7 +166,7 @@ class TestShelves:
         assert resp.status_code == 200, resp.text
         snap = await _snapshot(shop_public_client, slug)
         shelf = next(s for s in _rows(snap, "shelves") if s["kind"] == "new")
-        assert _id(latte, "shop_product_id") in _str_rows(shelf, "product_ids")
+        assert _id(latte, "product_id") in _str_rows(shelf, "product_ids")
 
     async def test_comeback_shelf_resolves_unavailable_products(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
@@ -176,7 +176,7 @@ class TestShelves:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         cake = await _product(shop_client, shop_id, "Тирамису")
-        pid = _id(cake, "shop_product_id")
+        pid = _id(cake, "product_id")
         _ = await _product(shop_client, shop_id, "Латте")
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/products/{pid}", json={"is_available": False}
@@ -199,7 +199,7 @@ class TestBanners:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         product = await _product(shop_client, shop_id, "Сет")
-        product_id = _id(product, "shop_product_id")
+        product_id = _id(product, "product_id")
         resp = await shop_client.post(
             f"{_SHOPS}/{shop_id}/banners",
             json={
@@ -311,7 +311,7 @@ class TestFeaturesAndNutrition:
                 "carb_g": 55.0,
             },
         )
-        product_id = _id(product, "shop_product_id")
+        product_id = _id(product, "product_id")
         resp = await shop_client.post(
             f"{_SHOPS}/{shop_id}/modifier-groups",
             json={"name": "Топпинг", "selection_mode": "multi"},
@@ -352,7 +352,7 @@ class TestFeaturesAndNutrition:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         product = await _product(shop_client, shop_id, "Тирамису")
-        product_id = _id(product, "shop_product_id")
+        product_id = _id(product, "product_id")
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/products/{product_id}",
             json={"is_available": False},
@@ -372,7 +372,7 @@ class TestNotifyBack:
         product = await _product(shop_client, _id(shop, "shop_id"), "Тирамису")
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/notify-back",
-            json={"product_id": _id(product, "shop_product_id")},
+            json={"product_id": _id(product, "product_id")},
         )
         assert resp.status_code in (401, 403), resp.text
 
@@ -386,7 +386,7 @@ class TestNotifyBack:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         product = await _product(shop_client, shop_id, "Тирамису")
-        pid = _id(product, "shop_product_id")
+        pid = _id(product, "product_id")
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/products/{pid}", json={"is_available": False}
         )
@@ -438,9 +438,9 @@ class TestPersonal:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         latte = await _product(shop_client, shop_id, "Латте")
-        latte_id = _id(latte, "shop_product_id")
+        latte_id = _id(latte, "product_id")
         gone = await _product(shop_client, shop_id, "Тирамису")
-        gone_id = _id(gone, "shop_product_id")
+        gone_id = _id(gone, "product_id")
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/products/{gone_id}",
             json={"is_available": False},
@@ -508,7 +508,7 @@ class TestFavorites:
         product = await _product(shop_client, _id(shop, "shop_id"), "Латте")
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/favorites",
-            json={"product_id": _id(product, "shop_product_id"), "favorite": True},
+            json={"product_id": _id(product, "product_id"), "favorite": True},
         )
         assert resp.status_code in (401, 403), resp.text
 
@@ -522,9 +522,9 @@ class TestFavorites:
         shop = await _published_shop(shop_client, slug)
         shop_id = _id(shop, "shop_id")
         latte = await _product(shop_client, shop_id, "Латте")
-        latte_id = _id(latte, "shop_product_id")
+        latte_id = _id(latte, "product_id")
         raf = await _product(shop_client, shop_id, "Раф")
-        raf_id = _id(raf, "shop_product_id")
+        raf_id = _id(raf, "product_id")
 
         customer = await auth_customer(shop_public_client, slug)
         customer_id = str(customer["customer_id"])
@@ -583,7 +583,7 @@ class TestFavorites:
         _ = await _published_shop(shop_client, slug)
         other = await _published_shop(shop_client, f"fy-{unique_id[:8]}")
         foreign = await _product(shop_client, _id(other, "shop_id"), "Чужой")
-        foreign_id = _id(foreign, "shop_product_id")
+        foreign_id = _id(foreign, "product_id")
 
         _ = await auth_customer(shop_public_client, slug)
         resp = await shop_public_client.post(

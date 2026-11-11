@@ -12,7 +12,8 @@
 | Страница | Что видит пользователь |
 |---|---|
 | `stock-home-page` | Обзор склада |
-| `stock-locations-page` | Дерево локаций/складов |
+| `stock-locations-page` | Карта склада: дерево локаций + карточка локации |
+| `stock-stock-report-page` | Остатки по локациям с субсуммами |
 | `stock-products-page` | Каталог товаров |
 | `stock-transfer-page` | Оформление перемещения |
 | `stock-transfers-page` | Журнал перемещений |
@@ -31,6 +32,7 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `locations-tree` | Создать склад и зоны хранения | `test_stock_doc_locations.py` | ✅ |
+| 2 | `stock-by-location` | Остатки по локациям: где что лежит | `test_stock_doc_stock_report.py` | 🚧 |
 
 ### products — Товары
 

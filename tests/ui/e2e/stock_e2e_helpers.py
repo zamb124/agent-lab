@@ -84,9 +84,9 @@ async def stock_e2e_open(page: Page, stock_ui: AppUI) -> None:
     )
 
 
-async def stock_e2e_nav(page: Page, index: int, *, page_selector: str) -> None:
-    """Переход по сайдбару: index пункта (0 home, 1 transfers, 2 products, 3 locations, 4 valuation)."""
-    item = page.locator("stock-sidebar button.nav-item").nth(index)
+async def stock_e2e_nav(page: Page, route_key: str, *, page_selector: str) -> None:
+    """Переход по сайдбару nav-tree: клик по листу с ``data-route-key`` и ожидание страницы."""
+    item = page.locator(f"stock-sidebar [data-route-key='{route_key}']")
     await expect(item).to_be_visible(timeout=10_000)
     await item.click()
     await expect(page.locator(page_selector)).to_be_visible(timeout=15_000)

@@ -236,9 +236,9 @@ async def _seed_shop_orders(
         patch.raise_for_status()
         products = await _get(client, f"{SHOP_ADMIN_API}/shops/{shop_id}/products")
         product_ids = [
-            str(p["shop_product_id"])
+            str(p["product_id"])
             for p in products.get("items", [])
-            if isinstance(p, dict) and p.get("shop_product_id")
+            if isinstance(p, dict) and p.get("product_id")
         ][:3]
         if not product_ids:
             raise AssertionError(f"у витрины {slug} нет товаров для заказов")

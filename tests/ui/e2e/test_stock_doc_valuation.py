@@ -63,9 +63,7 @@ async def test_valuation_report(
     await page.set_viewport_size(_DESKTOP)
     await stock_e2e_open(page, stock_ui)
 
-    warehouses = await stock_e2e_op(page, "stock/warehouses", "stock/warehouses/list_requested")
-    existing_codes = [w["code"] for w in warehouses["items"]]
-    warehouse_code = ("0" + min(existing_codes)) if existing_codes else "MAIN"
+    warehouse_code = f"0-{unique_id[:8].upper()}"
     warehouse = await stock_e2e_op(
         page,
         "stock/warehouse_create", "stock/warehouse_create/requested",
@@ -119,59 +117,65 @@ async def test_valuation_report(
         )
         transfer_ids.append(transfer["transfer_id"])
 
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     for transfer_id in transfer_ids:
         await stock_e2e_open_transfer(page, transfer_id)
         await stock_e2e_transfer_action(page, 0, "stock/transfer_confirm", "assigned")
         await stock_e2e_transfer_action(page, 2, "stock/transfer_validate", "done")
-        await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+        await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
 
-    await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
-    rows = page.locator("stock-valuation-page table tbody tr", has_text=product_name)
-    await expect(rows.first).to_be_visible(timeout=30_000)
-    await expect(rows).to_have_count(2, timeout=15_000)
+    await stock_e2e_nav(page, 'stock_valuation', page_selector="stock-valuation-page")
+    report_row = page.locator("stock-valuation-page tr.row", has_text=product_name)
+    await expect(report_row).to_be_visible(timeout=30_000)
     await scenario.step(
-        "Откройте «Оценку»",
+        "Откройте «Оценку» — отчёт",
         page,
-        screenshot_name="valuation-layers",
-        label_en="Open Valuation",
+        screenshot_name="valuation-report",
+        label_en="Open Valuation report",
         details=(
-            "В меню слева выберите «Оценку». Каждая проведённая приёмка "
-            "записала стоимостной слой: у одного товара две строки — 10 шт. "
-            "по 200 и 6 шт. по 260, как в документах. Тип «inbound» "
-            "показывает, что слой пришёл с поступлением."
+            "В меню слева раскройте «Оценку» и выберите «Отчёт». Здесь "
+            "остаток каждого товара — в деньгах: «Какао» стоит 3560 "
+            "(10 шт. по 200 + 6 шт. по 260, как в приёмках). Сводка сверху "
+            "отвечает «сколько стоит склад» целиком."
         ),
         details_en=(
-            "Choose «Valuation» in the left menu. Every validated receipt "
-            "wrote a cost layer: the same product has two rows — 10 units "
-            "at 200 and 6 at 260, exactly as in the documents. The "
-            "«inbound» type shows the layer came from a receipt."
+            "Expand «Valuation» in the left menu and choose «Report». "
+            "Each product's on-hand stock is shown in money: the cocoa "
+            "position is worth 3560 (10 units at 200 + 6 at 260, exactly "
+            "as in the receipts). The summary above answers how much the "
+            "warehouse is worth in total."
         ),
     )
 
+    await report_row.click()
+    await expect(page.locator("stock-valuation-journal-page")).to_be_visible(timeout=15_000)
+    rows = page.locator("stock-valuation-journal-page table tbody tr", has_text=product_name)
+    await expect(rows).to_have_count(2, timeout=15_000)
     await scenario.step(
-        "Как это читать",
+        "Журнал по товару",
         page,
-        screenshot_name="valuation-read",
-        label_en="How to read it",
+        screenshot_name="valuation-journal",
+        label_en="Product journal",
         details=(
-            "**Демонстрация результата.** Стоимость склада — сумма живых "
-            "слоёв: 10×200 + 6×260 = 3560 по этому товару. Когда товар "
-            "уходит, слои списываются в порядке метода оценки (для fifo — "
-            "сначала более ранний приход), поэтому себестоимость отгрузки "
-            "всегда посчитана из реальных цен, а не «в среднем».\n\n"
-            "**Итог.** Оценка — это стоимостной леджер склада: отсюда "
-            "видно, во сколько обошёлся каждый приход и сколько денег "
-            "сейчас лежит на полках."
+            "Клик по строке отчёта открывает журнал проводок по товару: "
+            "две записи «Приход» — 10 шт. по 200 и 6 шт. по 260 со ссылками "
+            "на документы-приёмки. Когда товар уходит, слои списываются в "
+            "порядке метода оценки (для fifo — сначала более ранний "
+            "приход), поэтому себестоимость отгрузки всегда посчитана из "
+            "реальных цен.\n\n"
+            "**Итог.** Оценка — это стоимостной леджер склада: отчёт "
+            "отвечает «сколько денег на полках», журнал — «почему сумма "
+            "такая»."
         ),
         details_en=(
-            "**Result demonstration.** The warehouse's value is the sum "
-            "of live layers: 10×200 + 6×260 = 3560 for this product. When "
-            "goods leave, layers are consumed in the valuation order "
-            "(fifo takes the earliest receipt first), so the delivery's "
-            "cost of goods always comes from real prices.\n\n"
-            "**Summary.** Valuation is the warehouse's cost ledger: it "
-            "shows what each receipt cost and how much money is on the "
-            "shelves right now."
+            "Clicking a report row opens the product's journal: two "
+            "«Inbound» records — 10 units at 200 and 6 at 260 — each "
+            "linked to its receipt. When goods leave, layers are consumed "
+            "in the valuation order (fifo takes the earliest receipt "
+            "first), so the delivery's cost of goods always comes from "
+            "real prices.\n\n"
+            "**Summary.** Valuation is the warehouse's cost ledger: the "
+            "report answers how much money is on the shelves, the journal "
+            "explains why."
         ),
     )

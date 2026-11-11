@@ -178,6 +178,8 @@ from apps.shop.realtime.operations import (
     op_telegram_connect,
     op_telegram_disconnect,
 )
+from core.catalog import operations as catalog_ops
+from core.catalog.models import CatalogProduct
 from core.context import require_context
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import EmptyPayload
@@ -359,6 +361,28 @@ async def remove_table(shop_id: str, table_id: str, di: Di) -> EmptyPayload:
 # --- Товары ---
 
 
+@router.get(
+    "/{shop_id}/catalog-products/suggest",
+    response_model=ListResponse[CatalogProduct],
+)
+async def suggest_catalog_products(
+    shop_id: str,
+    di: Di,
+    name: Annotated[str | None, Query(max_length=300)] = None,
+    sku: Annotated[str | None, Query(max_length=128)] = None,
+    barcode: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=20)] = 8,
+) -> ListResponse[CatalogProduct]:
+    _ = shop_id
+    return await catalog_ops.op_products_suggest(
+        catalog_ops.CatalogProductsSuggestPayload(
+            name=name, sku=sku, barcode=barcode, limit=limit
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
 @router.get("/{shop_id}/products", response_model=ListResponse[ShopProductResponse])
 async def list_products(shop_id: str, di: Di) -> ListResponse[ShopProductResponse]:
     return await op_products_list(
@@ -413,7 +437,7 @@ async def update_product(
         ShopProductUpdatePayload.model_validate(
             {
                 "shop_id": shop_id,
-                "shop_product_id": product_id,
+                "product_id": product_id,
                 **payload.model_dump(exclude_unset=True),
             }
         ),
@@ -425,7 +449,7 @@ async def update_product(
 @router.delete("/{shop_id}/products/{product_id}", response_model=EmptyPayload)
 async def remove_product(shop_id: str, product_id: str, di: Di) -> EmptyPayload:
     return await op_products_remove(
-        ShopProductIdPayload(shop_id=shop_id, shop_product_id=product_id),
+        ShopProductIdPayload(shop_id=shop_id, product_id=product_id),
         user=require_context().user,
         di=di,
     )

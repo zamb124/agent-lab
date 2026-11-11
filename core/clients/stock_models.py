@@ -48,7 +48,7 @@ class StockProductCreateArgs(BaseModel):
     tracking: str = Field(default="none", description="none | lot | serial")
     is_storable: bool = True
     category: str = Field(default="", max_length=128)
-    barcode: str | None = Field(default=None, max_length=128)
+    barcodes: list[str] = Field(default_factory=list, max_length=20)
     weight: str | None = None
     volume: str | None = None
     removal_strategy: str | None = Field(

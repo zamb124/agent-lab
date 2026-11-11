@@ -24,9 +24,7 @@ _DESKTOP = ViewportSize(width=1440, height=900)
 
 async def _prepare_stock_ctx(page: Page, unique_id: str) -> dict[str, str]:
     """Склад + товар + Units: минимальный контекст документов."""
-    warehouses = await stock_e2e_op(page, "stock/warehouses", "stock/warehouses/list_requested")
-    existing_codes = [w["code"] for w in warehouses["items"]]
-    warehouse_code = ("0" + min(existing_codes)) if existing_codes else "MAIN"
+    warehouse_code = f"0-{unique_id[:8].upper()}"
     warehouse = await stock_e2e_op(
         page,
         "stock/warehouse_create", "stock/warehouse_create/requested",
@@ -127,7 +125,7 @@ async def test_transfers_journal(
     ctx = await _prepare_stock_ctx(page, unique_id)
     draft_id = await _create_incoming(page, ctx, "8")
 
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     draft_row = page.locator(f"stock-transfers-page tr[data-id='{draft_id}']")
     await expect(draft_row).to_be_visible(timeout=30_000)
     await scenario.step(
@@ -246,7 +244,7 @@ async def test_transfer_between_locations(
     # Остаток в зоне приёмки: приход проведён до done. Финальную ячейку выбирает
     # putaway — читаем, куда товар реально лёг.
     receipt_id = await _create_incoming(page, ctx, "10", dest_location_id=zone["location_id"])
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     await stock_e2e_open_transfer(page, receipt_id)
     await stock_e2e_transfer_action(page, 0, "stock/transfer_confirm", "assigned")
     await stock_e2e_transfer_action(page, 2, "stock/transfer_validate", "done")
@@ -290,7 +288,7 @@ async def test_transfer_between_locations(
     )
     move_id = move["transfer_id"]
 
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     move_row = page.locator(f"stock-transfers-page tr[data-id='{move_id}']")
     await expect(move_row).to_be_visible(timeout=30_000)
     await scenario.step(

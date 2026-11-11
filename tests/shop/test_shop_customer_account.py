@@ -69,10 +69,10 @@ class TestMyOrders:
             headers=_HOST,
         ) as client:
             await auth_customer(client, slug_a, phone=phone)
-            first = await _order(client, slug_a, product_a["shop_product_id"])
+            first = await _order(client, slug_a, product_a["product_id"])
             # Верификация во второй витрине мержит scope: заказ в другой компании.
             await auth_customer(client, slug_b, phone=phone)
-            second = await _order(client, slug_b, product_b["shop_product_id"])
+            second = await _order(client, slug_b, product_b["product_id"])
 
             resp = await client.get(f"{PUBLIC_PREFIX}/my/orders")
             assert resp.status_code == 200, resp.text
@@ -99,7 +99,7 @@ class TestMyOrders:
         slug = f"det-{unique_id[:8]}"
         shop, product = await _shop_with_product(shop_client, slug)
         created = await _order(
-            shop_public_client, slug, product["shop_product_id"]
+            shop_public_client, slug, product["product_id"]
         )
         detail = await shop_public_client.get(
             f"{PUBLIC_PREFIX}/my/orders/{created['public_code']}"
@@ -143,7 +143,7 @@ class TestMyOrders:
             f"{_SHOPS}/{shop['shop_id']}",
             json={"delivery_fee_minor": 10000},
         )
-        pickup = await _order(shop_public_client, slug, product["shop_product_id"])
+        pickup = await _order(shop_public_client, slug, product["product_id"])
         body = (
             await shop_public_client.get(
                 f"{PUBLIC_PREFIX}/my/orders/{pickup['public_code']}"
@@ -154,7 +154,7 @@ class TestMyOrders:
         delivery = await _order(
             shop_public_client,
             slug,
-            product["shop_product_id"],
+            product["product_id"],
             delivery_type="delivery",
             address="ул. Ленина, 1",
         )
@@ -173,7 +173,7 @@ class TestMyOrders:
         """Чужой public_code для детали и отмены — not-found, а не access-denied."""
         slug = f"own-{unique_id[:8]}"
         _, product = await _shop_with_product(shop_client, slug)
-        created = await _order(shop_public_client, slug, product["shop_product_id"])
+        created = await _order(shop_public_client, slug, product["product_id"])
 
         async with AsyncClient(
             transport=ASGITransport(app=shop_app),
@@ -197,7 +197,7 @@ class TestMyOrders:
     ) -> None:
         slug = f"cnc-{unique_id[:8]}"
         _, product = await _shop_with_product(shop_client, slug)
-        created = await _order(shop_public_client, slug, product["shop_product_id"])
+        created = await _order(shop_public_client, slug, product["product_id"])
         code = created["public_code"]
 
         cancel = await shop_public_client.post(

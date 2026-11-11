@@ -68,7 +68,7 @@ from apps.stock.models.move_line import StockMoveLine
 from apps.stock.models.operation_type import StockOperationType
 from apps.stock.models.product import StockProduct
 from apps.stock.models.route import StockRoute
-from apps.stock.models.unit_of_measure import UnitOfMeasure
+from core.catalog.models import CatalogProduct, CatalogUom
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.events.contract import PlatformEvent
 from core.lanes import LaneOutcome, LaneRun, LaneScope, run_in_lanes
@@ -152,6 +152,18 @@ class StockTransfer(PlatformModel):
         return await cls.objects.filter(
             company_id=company_id, transfer_id=transfer_id
         ).for_update().get_or_none()
+
+    @classmethod
+    async def list_ids_by_name_icontains(
+        cls, company_id: str, text: str
+    ) -> list[str]:
+        """Id накладных компании, чей ``name`` содержит ``text`` (резолв умного поиска). Пустой text — []."""
+        if text == "":
+            return []
+        rows = await cls.objects.filter(
+            company_id=company_id, name__icontains=text
+        ).all()
+        return [row.transfer_id for row in rows]
 
     @classmethod
     async def list_by_created_at_desc(
@@ -342,9 +354,9 @@ class StockTransfer(PlatformModel):
             residual = move.product_qty - posted.done_qty
             if residual <= STOCK_ZERO:
                 continue
-            product = await StockProduct.by_id(company_id, move.product_id)
+            product = await CatalogProduct.by_id(company_id, move.product_id)
             doc_qty = (
-                await UnitOfMeasure.convert(
+                await CatalogUom.convert(
                     residual, product.uom_id, move.uom_id
                 )
                 if product is not None
@@ -481,12 +493,13 @@ class StockTransfer(PlatformModel):
                         "Move requires location_id/location_dest_id",
                         error_code="move_locations_missing",
                     )
-                product = await StockProduct.by_id(company_id, spec.product_id)
-                if product is None:
+                facet = await StockProduct.by_id(company_id, spec.product_id)
+                product = await CatalogProduct.by_id(company_id, spec.product_id)
+                if facet is None or product is None or product.is_archived:
                     raise PlatformNotFoundError(
                         "Product not found", error_code="product_not_found"
                     )
-                spec_uom = await UnitOfMeasure.by_id(company_id, spec.uom_id)
+                spec_uom = await CatalogUom.by_id(company_id, spec.uom_id)
                 if spec_uom is None:
                     raise PlatformNotFoundError(
                         "Unit of measure not found", error_code="uom_not_found"
@@ -499,7 +512,7 @@ class StockTransfer(PlatformModel):
                         "Packaging uom belongs to another product",
                         error_code="uom_product_mismatch",
                     )
-                product_qty = await UnitOfMeasure.convert(
+                product_qty = await CatalogUom.convert(
                     spec.product_qty, spec.uom_id, product.uom_id
                 )
                 if spec.route_id is not None:

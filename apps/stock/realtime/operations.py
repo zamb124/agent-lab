@@ -19,7 +19,6 @@ from apps.stock.models import (
     StockMoveLineClaimResult,
     StockMoveLineExceptionResult,
     StockOperationType,
-    StockProduct,
     StockPutawayRule,
     StockQuant,
     StockReorderRule,
@@ -31,7 +30,6 @@ from apps.stock.models import (
     StockValueLayer,
     StockWarehouse,
     StockWave,
-    UnitOfMeasure,
 )
 from apps.stock.models.api import (
     StockBarcodeResolvePayload,
@@ -44,9 +42,11 @@ from apps.stock.models.api import (
     StockContainersListPayload,
     StockContainerTypeCreatePayload,
     StockContainerTypesListPayload,
+    StockContainerTypeUpdatePayload,
     StockItemsResponse,
     StockLocationCreatePayload,
     StockLocationIdPayload,
+    StockLocationsCountDuePayload,
     StockLocationsListPayload,
     StockLocationUpdatePayload,
     StockLotCreatePayload,
@@ -60,17 +60,18 @@ from apps.stock.models.api import (
     StockMoveLinesQueuePayload,
     StockMoveLinesReleasePayload,
     StockMoveLineUpdatePayload,
+    StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
     StockPackagingCreatePayload,
     StockPackagingIdPayload,
     StockPackagingsListPayload,
-    StockPackagingView,
     StockPagePayload,
     StockProductCreatePayload,
     StockProductIdPayload,
     StockProductUpdatePayload,
     StockProductValueResponse,
+    StockProductView,
     StockPutawayRuleCreatePayload,
     StockPutawayRuleDeletePayload,
     StockPutawayRulesListPayload,
@@ -87,6 +88,8 @@ from apps.stock.models.api import (
     StockResourcesListPayload,
     StockResourceTypeCreatePayload,
     StockResourceTypesListPayload,
+    StockResourceTypeUpdatePayload,
+    StockResourceUpdatePayload,
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
@@ -99,6 +102,7 @@ from apps.stock.models.api import (
     StockScanStepResponse,
     StockStorageTypeCreatePayload,
     StockStorageTypesListPayload,
+    StockStorageTypeUpdatePayload,
     StockTransferCreatePayload,
     StockTransferDetail,
     StockTransferIdPayload,
@@ -106,8 +110,11 @@ from apps.stock.models.api import (
     StockTransfersListPayload,
     StockTransferValidatePayload,
     StockValuationCorrectionPayload,
+    StockValuationLayersPage,
     StockValuationLayersPayload,
     StockValuationProductValuePayload,
+    StockValuationReportPayload,
+    StockValuationReportResponse,
     StockValuationRevaluePayload,
     StockWarehouseCreatePayload,
     StockWarehouseIdPayload,
@@ -121,11 +128,13 @@ from apps.stock.models.api import (
 from apps.stock.models.resource import StockResourceLogoutResult
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
+from core.catalog.contracts import CatalogPackagingView
+from core.catalog.models import CatalogUom
 from core.context.command import current_command_event_id
 from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.identity_models import User
-from core.pagination import OffsetPage
+from core.pagination import CursorPage, OffsetPage
 from core.request_scope import (
     CompanyScope,
     command_idempotency_key,
@@ -179,31 +188,32 @@ async def _warehouse_of_transfer(
 
 async def op_products_list(
     payload: StockPagePayload, *, user: User, di: Di
-) -> OffsetPage[StockProduct]:
+) -> OffsetPage[StockProductView]:
     _ = user
     scope = await require_company_viewer(di.authz_service)
-    return await di.catalog_service.list_products(
+    return await di.stock_catalog_service.list_products(
         company_id=scope.company_id, limit=payload.limit, offset=payload.offset
     )
 
 
 async def op_products_item(
     payload: StockProductIdPayload, *, user: User, di: Di
-) -> StockProduct:
+) -> StockProductView:
     _ = user
     scope = await require_company_viewer(di.authz_service)
-    return await di.catalog_service.get_product(
+    return await di.stock_catalog_service.get_product(
         company_id=scope.company_id, product_id=payload.product_id
     )
 
 
 async def op_products_create(
     payload: StockProductCreatePayload, *, user: User, di: Di
-) -> StockProduct:
+) -> StockProductView:
     _ = user
     scope = await _company_editor(di)
-    return await di.catalog_service.create_product(
+    return await di.stock_catalog_service.create_product(
         company_id=scope.company_id,
+        product_id=payload.product_id,
         name=payload.name,
         sku=payload.sku,
         uom_id=payload.uom_id,
@@ -212,7 +222,7 @@ async def op_products_create(
         tracking=payload.tracking,
         is_storable=payload.is_storable,
         category=payload.category,
-        barcode=payload.barcode,
+        barcodes=payload.barcodes,
         weight=payload.weight,
         volume=payload.volume,
         use_expiration=payload.use_expiration,
@@ -226,22 +236,19 @@ async def op_products_create(
 
 async def op_products_update(
     payload: StockProductUpdatePayload, *, user: User, di: Di
-) -> StockProduct:
+) -> StockProductView:
     _ = user
     scope = await _company_editor(di)
-    return await di.catalog_service.update_product(
+    return await di.stock_catalog_service.update_product(
         company_id=scope.company_id,
         product_id=payload.product_id,
-        name=payload.name,
-        sku=payload.sku,
-        barcode=payload.barcode,
+        barcodes=payload.barcodes,
         is_active=payload.is_active,
         valuation_method=payload.valuation_method,
         standard_price=payload.standard_price,
         tracking=payload.tracking,
         category=payload.category,
-        weight=payload.weight,
-        volume=payload.volume,
+        overlay=payload.overlay,
         use_expiration=payload.use_expiration,
         expiration_days=payload.expiration_days,
         best_before_days=payload.best_before_days,
@@ -320,6 +327,22 @@ async def op_locations_update(
         pick_sequence=payload.pick_sequence,
         putaway_blocked=payload.putaway_blocked,
         removal_blocked=payload.removal_blocked,
+    )
+
+
+async def op_locations_count_due(
+    payload: StockLocationsCountDuePayload, *, user: User, di: Di
+) -> StockItemsResponse[StockLocation]:
+    """Ячейки склада с просроченным пересчётом — экран «Инвентаризация»."""
+    _ = user
+    scope = require_company()
+    await _warehouse_viewer(di, scope, payload.warehouse_id)
+    return StockItemsResponse(
+        items=await di.topology_service.list_due_bins(
+            company_id=scope.company_id,
+            warehouse_id=payload.warehouse_id,
+            limit=payload.limit,
+        )
     )
 
 
@@ -772,11 +795,37 @@ async def op_move_apply_decision(
 # --- Остатки / инвентаризация ---
 
 
+async def op_moves_list(
+    payload: StockMovesListPayload, *, user: User, di: Di
+) -> CursorPage[StockMove]:
+    """Журнал движений: лента «что куда поехало» — keyset-страница."""
+    _ = user
+    scope = require_company()
+    if payload.warehouse_id is not None:
+        await _warehouse_viewer(di, scope, payload.warehouse_id)
+    else:
+        _ = await require_company_viewer(di.authz_service)
+    return await di.warehouse_service.list_moves_by_created_at_desc(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        location_id=payload.location_id,
+        subtree=payload.subtree,
+        product_id=payload.product_id,
+        state=payload.state,
+        limit=payload.limit,
+        cursor=payload.cursor,
+    )
+
+
 async def op_quants_list(
     payload: StockQuantsListPayload, *, user: User, di: Di
 ) -> OffsetPage[StockQuant]:
     _ = user
-    scope = await require_company_viewer(di.authz_service)
+    scope = require_company()
+    if payload.warehouse_id is not None:
+        await _warehouse_viewer(di, scope, payload.warehouse_id)
+    else:
+        _ = await require_company_viewer(di.authz_service)
     return await di.placement_service.list_quants(
         company_id=scope.company_id,
         location_id=payload.location_id,
@@ -784,6 +833,8 @@ async def op_quants_list(
         owner_entity_id=payload.owner_entity_id,
         limit=payload.limit,
         offset=payload.offset,
+        warehouse_id=payload.warehouse_id,
+        subtree_location_id=payload.subtree_location_id,
     )
 
 
@@ -822,7 +873,7 @@ async def op_quants_inventory_apply(
 
 async def op_valuation_layers_list(
     payload: StockValuationLayersPayload, *, user: User, di: Di
-) -> OffsetPage[StockValueLayer]:
+) -> StockValuationLayersPage:
     _ = user
     scope = require_company()
     if payload.warehouse_id is not None:
@@ -833,6 +884,30 @@ async def op_valuation_layers_list(
         company_id=scope.company_id,
         product_id=payload.product_id,
         warehouse_id=payload.warehouse_id,
+        transfer_id=payload.transfer_id,
+        entry_kinds=payload.entry_kinds,
+        date_from=payload.date_from,
+        date_to=payload.date_to,
+        open_only=payload.open_only,
+        search=payload.search,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+
+
+async def op_valuation_report(
+    payload: StockValuationReportPayload, *, user: User, di: Di
+) -> StockValuationReportResponse:
+    _ = user
+    scope = require_company()
+    if payload.warehouse_id is not None:
+        await _warehouse_viewer(di, scope, payload.warehouse_id)
+    else:
+        _ = await require_company_viewer(di.authz_service)
+    return await di.valuation_service.report_by_value_desc(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        search=payload.search,
         limit=payload.limit,
         offset=payload.offset,
     )
@@ -906,7 +981,7 @@ async def op_lots_list(
     _ = user
     scope = await require_company_viewer(di.authz_service)
     return StockItemsResponse(
-        items=await di.catalog_service.list_lots(
+        items=await di.stock_catalog_service.list_lots(
             company_id=scope.company_id, product_id=payload.product_id
         )
     )
@@ -917,7 +992,7 @@ async def op_lots_create(
 ) -> StockLot:
     _ = user
     scope = await _company_editor(di)
-    return await di.catalog_service.create_lot(
+    return await di.stock_catalog_service.create_lot(
         company_id=scope.company_id,
         product_id=payload.product_id,
         name=payload.name,
@@ -961,6 +1036,35 @@ async def op_storage_types_create(
         max_weight=payload.max_weight,
         max_volume=payload.max_volume,
         removal_strategy=payload.removal_strategy,
+        cycle_count_days=payload.cycle_count_days,
+    )
+
+
+async def op_storage_types_update(
+    payload: StockStorageTypeUpdatePayload, *, user: User, di: Di
+) -> StockStorageType:
+    _ = user
+    scope = require_company()
+    row = await StockStorageType.by_id(scope.company_id, payload.storage_type_id)
+    if row is None:
+        raise PlatformNotFoundError(
+            "Storage type not found", error_code="storage_type_not_found"
+        )
+    await _warehouse_editor(di, scope, row.warehouse_id)
+    return await di.topology_service.update_storage_type(
+        company_id=scope.company_id,
+        storage_type_id=payload.storage_type_id,
+        name=payload.name,
+        container_policy=payload.container_policy,
+        allowed_container_type_ids=payload.allowed_container_type_ids,
+        max_containers=payload.max_containers,
+        product_mixing=payload.product_mixing,
+        allow_mixed_lots=payload.allow_mixed_lots,
+        max_weight=payload.max_weight,
+        max_volume=payload.max_volume,
+        putaway_strategies=payload.putaway_strategies,
+        removal_strategy=payload.removal_strategy,
+        cycle_count_days=payload.cycle_count_days,
     )
 
 
@@ -1192,6 +1296,35 @@ async def op_container_types_create(
     )
 
 
+async def op_container_types_update(
+    payload: StockContainerTypeUpdatePayload, *, user: User, di: Di
+) -> StockContainerType:
+    _ = user
+    scope = require_company()
+    row = await StockContainerType.by_id(
+        scope.company_id, payload.container_type_id
+    )
+    if row is None:
+        raise PlatformNotFoundError(
+            "Container type not found", error_code="container_type_not_found"
+        )
+    await _warehouse_editor(di, scope, row.warehouse_id)
+    return await di.topology_service.update_container_type(
+        company_id=scope.company_id,
+        container_type_id=payload.container_type_id,
+        name=payload.name,
+        kind=payload.kind,
+        max_weight=payload.max_weight,
+        tare_weight=payload.tare_weight,
+        max_volume=payload.max_volume,
+        length=payload.length,
+        width=payload.width,
+        height=payload.height,
+        is_reusable=payload.is_reusable,
+        allowed_parent_type_ids=payload.allowed_parent_type_ids,
+    )
+
+
 async def op_resource_types_list(
     payload: StockResourceTypesListPayload, *, user: User, di: Di
 ) -> StockItemsResponse[StockResourceType]:
@@ -1223,6 +1356,31 @@ async def op_resource_types_create(
     )
 
 
+async def op_resource_types_update(
+    payload: StockResourceTypeUpdatePayload, *, user: User, di: Di
+) -> StockResourceType:
+    _ = user
+    scope = require_company()
+    row = await StockResourceType.by_id(
+        scope.company_id, payload.resource_type_id
+    )
+    if row is None:
+        raise PlatformNotFoundError(
+            "Resource type not found", error_code="resource_type_not_found"
+        )
+    await _warehouse_editor(di, scope, row.warehouse_id)
+    return await di.topology_service.update_resource_type(
+        company_id=scope.company_id,
+        resource_type_id=payload.resource_type_id,
+        name=payload.name,
+        allowed_container_type_ids=payload.allowed_container_type_ids,
+        handles_loose=payload.handles_loose,
+        max_level=payload.max_level,
+        max_load_weight=payload.max_load_weight,
+        storage_type_ids=payload.storage_type_ids,
+    )
+
+
 async def op_resources_list(
     payload: StockResourcesListPayload, *, user: User, di: Di
 ) -> StockItemsResponse[StockResource]:
@@ -1245,6 +1403,26 @@ async def op_resources_create(
     return await di.topology_service.create_resource(
         company_id=scope.company_id,
         warehouse_id=payload.warehouse_id,
+        resource_type_id=payload.resource_type_id,
+        code=payload.code,
+        barcode=payload.barcode,
+    )
+
+
+async def op_resources_update(
+    payload: StockResourceUpdatePayload, *, user: User, di: Di
+) -> StockResource:
+    _ = user
+    scope = require_company()
+    row = await StockResource.by_id(scope.company_id, payload.resource_id)
+    if row is None:
+        raise PlatformNotFoundError(
+            "Resource not found", error_code="resource_not_found"
+        )
+    await _warehouse_editor(di, scope, row.warehouse_id)
+    return await di.topology_service.update_resource(
+        company_id=scope.company_id,
+        resource_id=payload.resource_id,
         resource_type_id=payload.resource_type_id,
         code=payload.code,
         barcode=payload.barcode,
@@ -1355,7 +1533,7 @@ async def op_containers_move(
 
 async def op_packagings_list(
     payload: StockPackagingsListPayload, *, user: User, di: Di
-) -> StockItemsResponse[StockPackagingView]:
+) -> StockItemsResponse[CatalogPackagingView]:
     _ = user
     scope = await require_company_viewer(di.authz_service)
     return StockItemsResponse(
@@ -1367,7 +1545,7 @@ async def op_packagings_list(
 
 async def op_packagings_create(
     payload: StockPackagingCreatePayload, *, user: User, di: Di
-) -> StockPackagingView:
+) -> CatalogPackagingView:
     _ = user
     scope = await _company_editor(di)
     return await di.catalog_service.create_packaging(
@@ -1376,7 +1554,6 @@ async def op_packagings_create(
         name=payload.name,
         quantity=payload.quantity,
         barcode=payload.barcode,
-        container_type_id=payload.container_type_id,
         weight=payload.weight,
         volume=payload.volume,
     )
@@ -1384,7 +1561,7 @@ async def op_packagings_create(
 
 async def op_packagings_delete(
     payload: StockPackagingIdPayload, *, user: User, di: Di
-) -> StockPackagingView:
+) -> CatalogPackagingView:
     _ = user
     scope = await _company_editor(di)
     return await di.catalog_service.delete_packaging(
@@ -1397,7 +1574,7 @@ async def op_packagings_delete(
 
 async def op_uoms_list(
     payload: EmptyPayload, *, user: User, di: Di
-) -> StockItemsResponse[UnitOfMeasure]:
+) -> StockItemsResponse[CatalogUom]:
     _ = user
     _ = payload
     scope = await require_company_viewer(di.authz_service)

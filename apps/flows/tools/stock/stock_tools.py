@@ -117,7 +117,7 @@ async def stock_products_create(
     standard_price: str = "0",
     tracking: str = "none",
     category: str = "",
-    barcode: str | None = None,
+    barcodes: list[str] | None = None,
 ) -> JsonObject:
     _ = state
     return await StockClient().create_product(
@@ -129,7 +129,7 @@ async def stock_products_create(
             standard_price=standard_price,
             tracking=tracking,
             category=category,
-            barcode=barcode,
+            barcodes=barcodes or [],
         )
     )
 

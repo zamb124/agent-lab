@@ -367,7 +367,7 @@ class TestLeastContainers:
         целиком — строка kind=container, проводка увозит всё
         содержимое к партнёру."""
         env = await _env(stock_di, unique_id)
-        env.product = await env.di.catalog_service.create_product(
+        env.product = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"LC {unique_id}",
             sku=f"LC-{unique_id}",
@@ -377,7 +377,6 @@ class TestLeastContainers:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=None,
             removal_strategy=StockRemovalStrategy.LEAST_CONTAINERS,
         )
         ctype = await _container_type(env, f"lc-{unique_id}")

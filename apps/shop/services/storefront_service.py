@@ -31,7 +31,8 @@ from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.feed_service import FeedService
 from apps.shop.services.loyalty_service import LoyaltyService
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
-from apps.shop.services.shop_service import ShopService
+from apps.shop.services.shop_service import ShopService, shop_scopes
+from core.catalog.service import CatalogService
 from core.clients.geocoding.base import Geocoder
 from core.clients.redis_client import RedisClient
 from core.errors.boundary import PlatformUnavailableError
@@ -57,6 +58,7 @@ class StorefrontService:
         feed_service: FeedService,
         loyalty_service: LoyaltyService,
         geocoder: Geocoder,
+        catalog_service: CatalogService,
     ) -> None:
         self._settings: ShopSettings = settings
         self._redis: RedisClient = redis
@@ -64,6 +66,7 @@ class StorefrontService:
         self._feed: FeedService = feed_service
         self._loyalty: LoyaltyService = loyalty_service
         self._geocoder: Geocoder = geocoder
+        self._catalog: CatalogService = catalog_service
 
     async def resolve_shop_by_host(self, host: str) -> Shop | None:
         """Магазин по Host заголовка: slug-витрина или активный кастомный домен."""
@@ -181,8 +184,22 @@ class StorefrontService:
         карточкой без кнопки заказа.
         """
         categories = await ShopCategory.list_by_shop_by_sort_asc(shop.shop_id)
-        products = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
-        modifier_tree = await load_modifier_tree_by_sort_asc([p.shop_product_id for p in products])
+        listings = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
+        resolved = await self._catalog.resolve_many(
+            company_id=shop.company_id,
+            product_ids=[p.product_id for p in listings],
+            scopes=shop_scopes(shop.shop_id),
+        )
+        # Архив в мастере «выключает везде» — позиция уходит с витрины.
+        products = [
+            p
+            for p in listings
+            if (res := resolved.get(p.product_id)) is not None
+            and not res.product.is_archived
+        ]
+        modifier_tree = await load_modifier_tree_by_sort_asc(
+            shop.shop_id, [p.product_id for p in products]
+        )
         promos = await ShopPromo.list_active_by_shop_by_priority_desc(shop.shop_id)
         tables = await ShopTable.list_by_shop_by_created_asc(shop.shop_id)
         shelves = await ShopShelf.list_active_by_shop_by_sort_asc(shop.shop_id)
@@ -317,17 +334,21 @@ class StorefrontService:
             ],
             "products": [
                 {
-                    "id": p.shop_product_id,
+                    "id": p.product_id,
                     "category_id": p.category_id,
-                    "name": p.name,
-                    "description": p.description,
+                    "name": resolved[p.product_id].name,
+                    "description": resolved[p.product_id].description,
                     "portion": p.portion,
                     "badges": list(p.badges),
                     "price_minor": p.price_minor,
                     "price_from_minor": min_price_minor(
-                        p, modifier_tree.get(p.shop_product_id, [])
+                        p, modifier_tree.get(p.product_id, [])
                     ),
-                    "photo_file_id": p.photo_file_id,
+                    "photo_file_id": (
+                        resolved[p.product_id].image_file_ids[0]
+                        if resolved[p.product_id].image_file_ids
+                        else None
+                    ),
                     "nutrition": dict(p.nutrition),
                     "is_available": p.is_available,
                     "modifier_groups": [
@@ -354,7 +375,7 @@ class StorefrontService:
                                 if o.is_available
                             ],
                         }
-                        for ag in modifier_tree.get(p.shop_product_id, [])
+                        for ag in modifier_tree.get(p.product_id, [])
                     ],
                 }
                 for p in products

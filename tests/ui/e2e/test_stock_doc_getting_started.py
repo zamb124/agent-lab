@@ -60,12 +60,8 @@ async def test_stock_overview(
     await stock_e2e_open(page, stock_ui)
 
     # --- Минимальный набор данных тем же op-каналом, что и SPA ---
-    warehouses = await stock_e2e_op(page, "stock/warehouses", "stock/warehouses/list_requested")
-    warehouse_code = (
-        ("0" + min(w["code"] for w in warehouses["items"]))
-        if warehouses["items"] else "MAIN"
-    )
-    warehouse = await stock_e2e_op(
+    warehouse_code = f"0-{unique_id[:8].upper()}"
+    _ = await stock_e2e_op(
         page,
         "stock/warehouse_create", "stock/warehouse_create/requested",
         {"code": warehouse_code, "name": f"Основной склад {unique_id[:4]}"},
@@ -107,7 +103,7 @@ async def test_stock_overview(
         ),
     )
 
-    await stock_e2e_nav(page, 2, page_selector="stock-products-page")
+    await stock_e2e_nav(page, 'stock_products', page_selector="stock-products-page")
     await scenario.step(
         "Посмотрите каталог товаров",
         page,
@@ -125,7 +121,7 @@ async def test_stock_overview(
         ),
     )
 
-    await stock_e2e_nav(page, 3, page_selector="stock-locations-page")
+    await stock_e2e_nav(page, 'stock_locations', page_selector="stock-locations-page")
     await scenario.step(
         "Откройте карту ячеек склада",
         page,
@@ -145,7 +141,7 @@ async def test_stock_overview(
         ),
     )
 
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     await scenario.step(
         "Загляните в журнал документов",
         page,
@@ -163,7 +159,7 @@ async def test_stock_overview(
         ),
     )
 
-    await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
+    await stock_e2e_nav(page, 'stock_valuation', page_selector="stock-valuation-page")
     await scenario.step(
         "Откройте денежную оценку запасов",
         page,

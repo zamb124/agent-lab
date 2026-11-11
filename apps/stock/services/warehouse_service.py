@@ -20,6 +20,7 @@ from apps.stock.models import (
     StockLocationUsage,
     StockMove,
     StockMoveLine,
+    StockMoveState,
     StockOperationCode,
     StockOperationType,
     StockPartnerRole,
@@ -31,7 +32,7 @@ from apps.stock.models import (
 from apps.stock.services.ids import new_id
 from apps.stock.services.stock_access_service import StockAccessService
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
-from core.pagination import OffsetPage
+from core.pagination import CursorPage, OffsetPage
 from core.utils.time import utcnow
 
 
@@ -350,6 +351,44 @@ class WarehouseService:
             company_id, warehouse_id=warehouse_id, state=state
         )
         return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
+
+    async def list_moves_by_created_at_desc(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str | None,
+        location_id: str | None,
+        subtree: bool,
+        product_id: str | None,
+        state: StockMoveState | None,
+        limit: int,
+        cursor: str | None,
+    ) -> CursorPage[StockMove]:
+        """Журнал движений — keyset-страница ORDER BY created_at DESC.
+
+        ``location_id`` фильтрует движения, где локация — источник ИЛИ
+        приёмник; ``subtree=True`` расширяет его до всего поддерева
+        («все движения зоны»).
+        """
+        location_ids: list[str] | None = None
+        if location_id is not None:
+            if subtree:
+                location_ids = (
+                    await StockLocation.list_subtree_ids_by_parent_path_asc(
+                        company_id, location_id
+                    )
+                )
+            else:
+                location_ids = [location_id]
+        return await StockMove.list_page_by_created_at_desc(
+            company_id,
+            warehouse_id=warehouse_id,
+            location_ids=location_ids,
+            product_id=product_id,
+            state=state,
+            limit=limit,
+            cursor=cursor,
+        )
 
     async def get_transfer(
         self, *, company_id: str, transfer_id: str

@@ -47,7 +47,7 @@ interface PromoRow {
 }
 
 interface ProductRow {
-    shop_product_id: string;
+    product_id: string;
     name: string;
     price_minor: number;
 }
@@ -384,8 +384,8 @@ export class ShopPromosPage extends PlatformPage {
     private _chips(all: ProductRow[], selected: Set<string>, onToggle: (id: string) => void) {
         return html`<div class="chips">
             ${all.map((p) => html`
-                <button class="chip ${selected.has(p.shop_product_id) ? 'on' : ''}"
-                    @click=${() => onToggle(p.shop_product_id)}>${p.name}</button>
+                <button class="chip ${selected.has(p.product_id) ? 'on' : ''}"
+                    @click=${() => onToggle(p.product_id)}>${p.name}</button>
             `)}
         </div>`;
     }
@@ -436,7 +436,7 @@ export class ShopPromosPage extends PlatformPage {
                     ${d.bundle.map((it, idx) => html`
                         <div class="bundle-row">
                             <platform-field type="enum" mode="edit" .value=${it.product_id}
-                                .config=${{ values: products.map((p) => ({ value: p.shop_product_id, label: p.name })) }}
+                                .config=${{ values: products.map((p) => ({ value: p.product_id, label: p.name })) }}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                     const bundle = d.bundle.map((x, i) => i === idx ? { ...x, product_id: _str(e) } : x);
                                     this._patchDraft({ bundle });

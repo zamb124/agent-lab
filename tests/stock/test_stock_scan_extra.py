@@ -604,12 +604,10 @@ class TestScanResolve:
         self, stock_di, unique_id: str
     ) -> None:
         env = await _env(stock_di, unique_id)
-        _ = await env.di.catalog_service.update_product(
+        _ = await env.di.stock_catalog_service.update_product(
             company_id=env.company_id,
             product_id=env.product.product_id,
-            name=None,
-            sku=None,
-            barcode=f"BC-{unique_id}",
+            barcodes=[f"BC-{unique_id}"],
             is_active=None,
             valuation_method=None,
             standard_price=None,
@@ -621,11 +619,60 @@ class TestScanResolve:
         assert res.entity_kind == ScanEntityKind.PRODUCT
         assert res.entity_id == env.product.product_id
 
+    async def test_product_multiple_barcodes_unique(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """У товара несколько кодов; каждый уникален между товарами."""
+        env = await _env(stock_di, unique_id)
+        view = await env.di.stock_catalog_service.update_product(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            barcodes=[f"BC1-{unique_id}", f"BC2-{unique_id}", f"BC3-{unique_id}"],
+        )
+        assert view.barcodes == [
+            f"BC1-{unique_id}", f"BC2-{unique_id}", f"BC3-{unique_id}"
+        ]
+        for code in view.barcodes:
+            res = await env.di.scan_service.resolve(
+                company_id=env.company_id, barcode=code
+            )
+            assert res.entity_kind == ScanEntityKind.PRODUCT
+            assert res.entity_id == env.product.product_id
+        # Код чужого товара → barcode_conflict.
+        other = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"Other {unique_id}",
+            sku=f"OT-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.stock_catalog_service.update_product(
+                company_id=env.company_id,
+                product_id=other.product_id,
+                barcodes=[f"BC2-{unique_id}"],
+            )
+        assert exc.value.error_code == "barcode_conflict"
+        # PUT-форма: убранный код больше не резолвится.
+        _ = await env.di.stock_catalog_service.update_product(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            barcodes=[f"BC3-{unique_id}"],
+        )
+        with pytest.raises(PlatformNotFoundError):
+            _ = await env.di.scan_service.resolve(
+                company_id=env.company_id, barcode=f"BC1-{unique_id}"
+            )
+
     async def test_lot_barcode_carries_product(
         self, stock_di, unique_id: str
     ) -> None:
         env = await _env(stock_di, unique_id)
-        product = await env.di.catalog_service.create_product(
+        product = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"LT {unique_id}",
             sku=f"LT-{unique_id}",
@@ -635,9 +682,8 @@ class TestScanResolve:
             tracking=StockTracking.LOT,
             is_storable=True,
             category="general",
-            barcode=None,
         )
-        lot = await env.di.catalog_service.create_lot(
+        lot = await env.di.stock_catalog_service.create_lot(
             company_id=env.company_id,
             product_id=product.product_id,
             name=f"LOT-{unique_id}",

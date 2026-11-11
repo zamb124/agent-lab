@@ -765,25 +765,6 @@
     --documents-explorer-toolbar-bg: var(--glass-solid-subtle);
     --documents-empty-bg: rgba(255, 255, 255, 0.02);
     --documents-empty-border: rgba(115, 124, 233, 0.35);
-    --documents-action-primary: #6284e8;
-    --documents-action-primary-hover: #5678dc;
-    --documents-action-primary-border: rgba(98, 132, 232, 0.45);
-    --documents-title-gradient: linear-gradient(
-        135deg,
-        rgba(180, 140, 255, 0.95) 0%,
-        rgba(140, 180, 255, 0.95) 50%,
-        rgba(110, 200, 240, 0.95) 100%
-    );
-    --documents-explorer-tree-width: 15rem;
-    --documents-explorer-details-width: 20rem;
-    --documents-explorer-table-row-height: 3.25rem;
-    --documents-explorer-grid-min: 11.25rem;
-    --documents-explorer-toolbar-height: 3rem;
-    --documents-explorer-control-height: 2.25rem;
-    --documents-explorer-btn-radius: var(--radius-md);
-    --documents-action-primary: #6284e8;
-    --documents-action-primary-hover: #5678dc;
-    --documents-action-primary-border: rgba(98, 132, 232, 0.45);
 
     /* Paper Stage (document editor shell around OnlyOffice) */
     --documents-stage-ambient: radial-gradient(

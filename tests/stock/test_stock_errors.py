@@ -38,7 +38,7 @@ async def _tracked_env(stock_di, unique_id: str, tracking: StockTracking):
     env = await _make_env(
         stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
     )
-    env.product = await stock_di.catalog_service.create_product(
+    env.product = await stock_di.stock_catalog_service.create_product(
         company_id=env.company_id,
         name=f"Tracked {unique_id}",
         sku=f"TRK-{unique_id}",
@@ -48,13 +48,12 @@ async def _tracked_env(stock_di, unique_id: str, tracking: StockTracking):
         tracking=tracking,
         is_storable=True,
         category="general",
-        barcode=None,
     )
     return env
 
 
 async def _lot(stock_di, env, name: str):
-    return await stock_di.catalog_service.create_lot(
+    return await stock_di.stock_catalog_service.create_lot(
         company_id=env.company_id,
         product_id=env.product.product_id,
         name=name,
@@ -605,7 +604,7 @@ class TestUomErrors:
         env = await _make_env(
             stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
         )
-        other = await env.di.catalog_service.create_product(
+        other = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"Other {unique_id}",
             sku=f"OTH-{unique_id}",
@@ -615,7 +614,6 @@ class TestUomErrors:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=None,
         )
         pack = await env.di.catalog_service.create_packaging(
             company_id=env.company_id,
@@ -623,7 +621,6 @@ class TestUomErrors:
             name=f"box{unique_id[:4]}",
             quantity=Decimal("10"),
             barcode=None,
-            container_type_id=None,
             weight=None,
             volume=None,
         )
@@ -715,7 +712,7 @@ class TestTrackingErrors:
         self, stock_di, unique_id: str
     ) -> None:
         env = await _tracked_env(stock_di, unique_id, StockTracking.LOT)
-        other = await env.di.catalog_service.create_product(
+        other = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"Other {unique_id}",
             sku=f"OTH-{unique_id}",
@@ -725,9 +722,8 @@ class TestTrackingErrors:
             tracking=StockTracking.LOT,
             is_storable=True,
             category="general",
-            barcode=None,
         )
-        foreign = await env.di.catalog_service.create_lot(
+        foreign = await env.di.stock_catalog_service.create_lot(
             company_id=env.company_id,
             product_id=other.product_id,
             name=f"LOTF-{unique_id[:6]}",
@@ -892,12 +888,9 @@ class TestValuationErrors:
         )
         _ = await _receipt(env, Decimal("2"), Decimal("10"))
         with pytest.raises(PlatformConflictError) as exc_valuation_method_locked:
-            await env.di.catalog_service.update_product(
+            await env.di.stock_catalog_service.update_product(
                 company_id=env.company_id,
                 product_id=env.product.product_id,
-                name=None,
-                sku=None,
-                barcode=None,
                 is_active=None,
                 valuation_method=ValuationMethod.AVERAGE,
                 standard_price=None,

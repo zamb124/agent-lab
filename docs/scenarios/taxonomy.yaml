@@ -242,10 +242,14 @@ services:
         label_ru: Первые шаги
         label_en: First steps
         order: 1
+      tools:
+        label_ru: Инструменты
+        label_en: Tools
+        order: 2
       ui-kit:
         label_ru: UI Kit
         label_en: UI Kit
-        order: 2
+        order: 3
 
   sync:
     label_ru: Sync

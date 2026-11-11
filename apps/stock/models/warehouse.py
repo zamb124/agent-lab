@@ -61,6 +61,16 @@ class StockWarehouse(PlatformModel):
         ).get_or_none()
 
     @classmethod
+    async def found_in_company_by_ids(cls, company_id: str, warehouse_ids: list[str]) -> dict[str, Self]:
+        """Найденные склады компании по id. Пустой список — {}. Отсутствующие id не входят. Порядка нет."""
+        if not warehouse_ids:
+            return {}
+        rows = await cls.objects.filter(
+            company_id=company_id, warehouse_id__in=warehouse_ids
+        ).all()
+        return {row.warehouse_id: row for row in rows}
+
+    @classmethod
     async def list_by_code_asc(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:

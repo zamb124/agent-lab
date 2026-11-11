@@ -5203,7 +5203,7 @@
           "rag_document",
           "office_document",
           "wiki_page",
-          "shop_product",
+          "product",
           "platform_default"
         ],
         "title": "FileRetentionKind"
@@ -5252,7 +5252,7 @@
           "code_agent_source",
           "platform_auxiliary",
           "generated_ephemeral",
-          "shop_product"
+          "product"
         ],
         "title": "FileSourceKind"
       },
@@ -5533,7 +5533,7 @@
             ],
             "title": "Shop Id"
           },
-          "shop_product_id": {
+          "product_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -5542,7 +5542,7 @@
                 "type": "null"
               }
             ],
-            "title": "Shop Product Id"
+            "title": "Product Id"
           }
         },
         "additionalProperties": false,

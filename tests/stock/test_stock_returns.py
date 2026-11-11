@@ -344,12 +344,9 @@ class TestReturnValuation:
         """STANDARD-карточка 100 ₽, приход был по 4 ₽ → возврат
         идёт по 4 ₽ (себестоимость исходной проводки)."""
         env = await _env(stock_di, unique_id, ValuationMethod.STANDARD)
-        _ = await env.di.catalog_service.update_product(
+        _ = await env.di.stock_catalog_service.update_product(
             company_id=env.company_id,
             product_id=env.product.product_id,
-            name=None,
-            sku=None,
-            barcode=None,
             is_active=None,
             valuation_method=None,
             standard_price=Decimal("100"),
@@ -404,7 +401,7 @@ class TestReturnTracking:
         env = await _make_env(
             stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
         )
-        env.product = await stock_di.catalog_service.create_product(
+        env.product = await stock_di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"Tracked {unique_id}",
             sku=f"TRK-{unique_id}",
@@ -414,7 +411,6 @@ class TestReturnTracking:
             tracking=tracking,
             is_storable=True,
             category="general",
-            barcode=None,
         )
         return env
 
@@ -422,7 +418,7 @@ class TestReturnTracking:
         self, env: StockEnv, qty: Decimal, lot_name: str
     ) -> str:
         op = env.op_types[StockOperationCode.INCOMING]
-        lot = await env.di.catalog_service.create_lot(
+        lot = await env.di.stock_catalog_service.create_lot(
             company_id=env.company_id,
             product_id=env.product.product_id,
             name=lot_name,

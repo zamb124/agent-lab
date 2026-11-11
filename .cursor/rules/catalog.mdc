@@ -1,0 +1,29 @@
+---
+description: "Единый каталог товаров (core/catalog): мастер catalog_products, ЕИ catalog_uoms, штрихкоды catalog_barcodes, overlay catalog_product_overrides"
+globs:
+  - "core/catalog/**"
+  - "migrations/shared/**"
+alwaysApply: false
+---
+
+# Catalog
+
+Единая мастер-карта товара компании в `platform_shared` (`core/catalog`): общий контент (имя, описание, галерея, SKU, вес/объём, базовая ЕИ, GTIN) хранится один раз, а сервисы держат свои фасеты — `stock_products` (складская политика → `stock.mdc`) и `shop_products` (листинг витрины → `shop.mdc`). Канонический идентификатор товара везде — `product_id`; сервисных товарных id нет. Контракты — `core/catalog/contracts.py`, события — `core/catalog/events.py`, сервис — `CatalogService` (компонент `PlatformDi.catalog_service`).
+
+## Модель
+
+- `CatalogProduct` (`catalog_products`) — мастер: `product_id`, `company_id`, `sku` (уникален в компании), `name`, `description`, `image_file_ids` (галерея файлов, первый — обложка), `uom_id` — базовая ЕИ, `weight`/`volume`, `is_archived` (архив глушит товар везде, строка и история остаются). `CatalogProduct.by_id(company_id, product_id) -> CatalogProduct | None` — карточка по id. `CatalogProduct.list_page_by_created_desc(company_id, *, query, include_archived, limit, cursor) -> CursorPage` — keyset-страница `(created_at, product_id) DESC` с ILIKE-фильтром по name/sku.
+- `CatalogUom` (`catalog_uoms`) — единица измерения или упаковка товара (AUoM): `category`, `factor` (базовых единиц в одной этой), `product_id` пустой — глобальная ЕИ, не пустой — упаковка этого товара. `CatalogUom.convert` переводит количество между ЕИ через factor. `CatalogUom.list_packagings_by_product_id_and_factor_asc(company_id, product_id=None) -> list[CatalogUom]` — упаковки, `ORDER BY product_id, factor ASC`. `product_id is None` не фильтрует. Предела нет.
+- `CatalogBarcode` (`catalog_barcodes`) — торговый код: `barcode` → `product_id` или `uom_id` упаковки, уникален в компании. `CatalogBarcode.resolve(company_id, barcode) -> CatalogBarcode | None` — владелец кода. Конфликт привязки — `barcode_conflict`. Логистические метки (ячейки, тара, партии, SSCC) живут в `stock_barcodes`, не здесь.
+- `CatalogProductOverride` (`catalog_product_overrides`) — полевой override контента для scope `(product_id, facet, instance_id)`: `name`/`description`/`image_file_ids`, `NULL` — наследовать. Scope `instance_id=None` — сервисный ракурс целиком (`facet`=`shop`/`stock`), `instance_id=<id>` — конкретный экземпляр (витрина `shop:<shop_id>`).
+- `CatalogService.resolve(company_id, product_id, scopes)` / `resolve_many` — эффективная карточка `ResolvedProduct`: поля берутся из ближайшего scope в цепочке (экземпляр → сервис → base), `sources[field]` — кто дал значение (UI chain-toggle). Цепочка витрины — `shop_scopes(shop_id)` в `apps/shop/services/shop_service.py`: `shop:<shop_id>` → `shop` → base.
+- `catalog/product/created|updated`, `catalog/product_overlay/changed` и `catalog/product_facet/changed` (payload `product`/`product_id`+`facet`+`instance_id`) — двойная публикация: `publish_event_to_company` (UI-списки товаров обновляются онлайн — `extraEffect` ресурсов stock/shop; wire-типы попадают в `stock.gen.ts`/`shop.gen.ts` через `EXTRA_EVENT_PREFIXES` в `scripts/build/wire_types.py`) и `publish_domain_event` — точка инвалидации проекций сервисов. `product_facet/changed` публикует сервис при мутации своего фасета (attach, учётная политика stock). Consumer group `shop` (`apps/shop/worker.py`) пересобирает снапшоты витрин и проекцию `shop_market_items` по этим событиям; не-shop overlay'ы пропускаются.
+
+## Инварианты
+
+1. Запись override — `CatalogService.set_overlay(*, company_id, product_id, scope, overlay, resolve_scopes)`: PUT-семантика, `None` поля — наследование; пустой overlay удаляет строку. Прямые UPDATE общих полей мастера из сервисов запрещены.
+2. Создание — `CatalogService.create_product(company_id, name, ...)`; `suggest_duplicates` ищет кандидатов по имени/SKU/штрихкоду до создания. Сервис-владелец аттачит существующую карточку по `product_id` или создаёт новую и пишет отличия overlay'ом.
+3. `CatalogService.update_product` правит базовые поля (имя/SKU/вес/архив) и публикует `catalog/product/updated`.
+4. `ensure_company_uoms` сидит референс-ЕИ компании; `list_packagings`/`create_packaging`/`delete_packaging` — AUoM товара; `bind_barcode`/`replace_product_barcodes`/`resolve_code` — штрихкоды.
+5. `get_product_detail` — `CatalogProductDetail`: мастер + все overlay'ы + штрихкоды + `CatalogPackagingView` (`packaging_id`=`uom_id`, `quantity`=`factor/factor базовой ЕИ`).
+6. Фасет своего сервиса не слушает события каталога — его мутации идут вместе с записью overlay и rebuild-потоком сервиса.

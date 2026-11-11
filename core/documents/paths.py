@@ -99,8 +99,10 @@ def source_catalog_path(source_kind: FileSourceKind, source_ref: FileSourceRef) 
         namespace_id = _require(source_ref.namespace_id, "namespace_id required for wiki_page placement")
         wiki_page_id = _require(source_ref.wiki_page_id, "wiki_page_id required for wiki_page placement")
         return ["Wiki", namespace_id, wiki_page_id]
-    if kind is FileSourceKind.SHOP_PRODUCT:
-        shop_id = _require(source_ref.shop_id, "shop_id required for shop_product placement")
+    if kind is FileSourceKind.PRODUCT:
+        if source_ref.product_id:
+            return ["Products", source_ref.product_id]
+        shop_id = _require(source_ref.shop_id, "shop_id or product_id required for product placement")
         return ["Shop", shop_id]
     if kind is FileSourceKind.CODE_AGENT_SOURCE:
         node_id = _require(source_ref.node_id, "node_id required for code_agent_source placement")
@@ -153,7 +155,7 @@ def source_anchor(
         FileSourceKind.CALENDAR_EVENT,
         FileSourceKind.BROWSER_ARTIFACT,
         FileSourceKind.RAG_DOCUMENT,
-        FileSourceKind.SHOP_PRODUCT,
+        FileSourceKind.PRODUCT,
     }:
         path = source_catalog_path(source_kind, source_ref)
         return SourceAnchor(len(path) - 1, None, True)

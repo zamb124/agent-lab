@@ -25,6 +25,7 @@ from apps.shop.models.enums import (
 )
 from apps.shop.models.favorite import ShopFavorite
 from apps.shop.models.loyalty_program import ShopLoyaltyProgram
+from apps.shop.models.market_item import ShopMarketItem
 from apps.shop.models.modifier_group import ShopModifierGroup
 from apps.shop.models.modifier_option import ShopModifierOption
 from apps.shop.models.order import ShopOrder, delivery_details_label
@@ -54,6 +55,8 @@ __all__ = [
     "ShopKind",
     "ShopLoyaltyProgram",
     "ShopLoyaltyRewardKind",
+    "ShopMarketItem",
+    "ShopMarketItem",
     "ShopModifierGroup",
     "ShopModifierOption",
     "ShopOrder",

@@ -83,6 +83,49 @@ export interface ActivityLifecyclePayload {
 export type ActivityStatus = "scheduled" | "started" | "completed" | "failed" | "canceled";
 
 /**
+ * Активный план выполнения агента (один на ExecutionState).
+ */
+export interface AgentPlan {
+    /**
+     * Id плана
+     */
+    "agent_plan_id": string;
+    /**
+     * Опциональный заголовок плана
+     */
+    "title"?: string | null | undefined;
+    /**
+     * Плоский список шагов
+     */
+    "steps": AgentPlanStep[];
+    [key: string]: unknown;
+}
+
+/**
+ * Один шаг плана агента.
+ */
+export interface AgentPlanStep {
+    /**
+     * Стабильный id шага
+     */
+    "step_id": string;
+    /**
+     * Краткий заголовок шага
+     */
+    "title": string;
+    /**
+     * Статус шага
+     */
+    "status"?: AgentPlanStepStatus | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * AgentPlanStepStatus
+ */
+export type AgentPlanStepStatus = "pending" | "in_progress" | "completed" | "need_help" | "failed";
+
+/**
  * Catalog skill. Таблица ``agent_skills`` в базе flows.
  */
 export interface AgentSkill {
@@ -555,6 +598,26 @@ export interface ChildWorkflowLifecyclePayload {
     "child_execution_position": WorkflowExecutionPosition;
     "status": "running" | "suspended" | "completed" | "failed";
     "error"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Durable связь родительской ноды с отдельной child workflow-сессией.
+ */
+export interface ChildWorkflowLink {
+    "node_id": string;
+    "child_session_id": string;
+    "child_flow_id": string;
+    "child_flow_branch_id": string;
+    "child_execution_branch_id": string;
+    "parent_session_id": string;
+    "parent_execution_branch_id": string;
+    "parent_node_schedule_sequence": number;
+    "status": "running" | "suspended" | "completed" | "failed";
+    /**
+     * Handoff или обычный child workflow
+     */
+    "handoff"?: boolean | undefined;
     [key: string]: unknown;
 }
 
@@ -1393,6 +1456,18 @@ export interface DurableHistoryPayload {
 }
 
 /**
+ * DurableManualPatchPayload
+ */
+export interface DurableManualPatchPayload {
+    "session_id"?: string | undefined;
+    "sequence": number;
+    "state": ExecutionState;
+    "execution_branch_id"?: string | null | undefined;
+    "activate"?: boolean | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * DurableRetryPayload
  */
 export interface DurableRetryPayload {
@@ -1427,6 +1502,17 @@ export interface DurableSessionStatePayload {
     "session_id"?: string | null | undefined;
     "context_id"?: string | null | undefined;
     "flow_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * DurableSessionStateUpdatePayload
+ */
+export interface DurableSessionStateUpdatePayload {
+    "session_id"?: string | null | undefined;
+    "context_id"?: string | null | undefined;
+    "flow_id"?: string | null | undefined;
+    "state": ExecutionState;
     [key: string]: unknown;
 }
 
@@ -2918,6 +3004,252 @@ export interface ExecuteResponse {
 export type ExecutionBranchReason = "start" | "fork" | "rewind" | "retry" | "manual_patch";
 
 /**
+ * Запись об исключении, обработанном как ответ (режим exception_as_response).
+ */
+export interface ExecutionExceptionRecord {
+    /**
+     * Нода, в контексте которой произошло исключение
+     */
+    "node_id": string;
+    /**
+     * node_run — падение _run_impl; tool — ошибка вызова инструмента в llm_node
+     */
+    "source": "node_run" | "tool";
+    /**
+     * Имя класса исключения (type(exc).__name__)
+     */
+    "exception_type": string;
+    /**
+     * Текст исключения
+     */
+    "message": string;
+    /**
+     * Имя tool при source=tool
+     */
+    "tool_name"?: string | null | undefined;
+    /**
+     * ID tool_call при source=tool
+     */
+    "tool_call_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Типизированное состояние выполнения агента.
+ * 
+ * Замена dict state с магическими __полями__.
+ * Все системные поля явно типизированы и доступны через свойства.
+ * 
+ * Zero-Guess принципы:
+ * - FlexibleBaseModel (extra='allow') - для runtime данных
+ * - Явные типы для системных полей
+ * - Нет магии, все через свойства
+ * 
+ * Примеры:
+ *     >>> state = ExecutionState.create(
+ *     ...     task_id="task-123",
+ *     ...     context_id="ctx-456",
+ *     ...     user_id="user-789",
+ *     ...     content="Hello"
+ *     ... )
+ *     >>> state.task_id  # Типизированный доступ
+ *     'task-123'
+ */
+export interface ExecutionState {
+    /**
+     * ID задачи A2A
+     */
+    "task_id": string;
+    /**
+     * ID контекста A2A
+     */
+    "context_id": string;
+    /**
+     * ID актора выполнения (сотрудник-агент или инициатор)
+     */
+    "user_id": string;
+    /**
+     * Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника.
+     */
+    "initiator_user_id"?: string | null | undefined;
+    /**
+     * ID сессии в формате flow_id:context_id
+     */
+    "session_id": string;
+    /**
+     * Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows
+     */
+    "flow_config_version"?: string | null | undefined;
+    /**
+     * Финальный A2A TaskState, сохранённый в БД только на terminal boundary.
+     */
+    "terminal_task_state"?: "completed" | "input-required" | "canceled" | "failed" | "rejected" | "auth-required" | "handback" | "unknown" | null | undefined;
+    /**
+     * Текст ошибки для terminal_task_state='failed'/'rejected'/'unknown'.
+     */
+    "terminal_task_error"?: string | null | undefined;
+    /**
+     * Текущие ноды для выполнения
+     */
+    "current_nodes"?: string[] | undefined;
+    /**
+     * ID branch
+     */
+    "branch_id"?: string | undefined;
+    /**
+     * Входное сообщение
+     */
+    "content"?: string | null | undefined;
+    /**
+     * Ответ агента
+     */
+    "response"?: string | null | undefined;
+    /**
+     * Произвольный результат ноды или tool (CodeNode, inline execute)
+     */
+    "result"?: JsonValue | undefined;
+    /**
+     * Данные валидации ноды (условия рёбер вида validation.valid == true)
+     */
+    "validation"?: Record<string, JsonValue> | null | undefined;
+    /**
+     * История сообщений
+     */
+    "messages"?: {
+    [key: string]: unknown;
+}[] | undefined;
+    /**
+     * Группы пользователя
+     */
+    "user_groups"?: string[] | undefined;
+    /**
+     * Резолвнутые переменные
+     */
+    "variables"?: Record<string, JsonValue> | undefined;
+    /**
+     * Снимок по trigger_id: { payload, context } — не смешивать с variables
+     */
+    "triggers"?: Record<string, TriggerRuntimeSnapshot> | undefined;
+    /**
+     * Прикреплённые файлы
+     */
+    "files"?: FileRef[] | undefined;
+    /**
+     * Данные прерывания
+     */
+    "interrupt"?: InterruptData | null | undefined;
+    /**
+     * Путь к месту прерывания
+     */
+    "interrupt_path"?: InterruptPathItem[] | undefined;
+    /**
+     * При resume после operator handoff: correlation_id задачи до сброса interrupt, чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам
+     */
+    "hitl_handoff_correlation_id"?: string | null | undefined;
+    /**
+     * Текст closing operator reply, уже отправленный в Redis как operator_reply. Если final_response совпадает — emit_complete не дублирует его в UI completed.
+     */
+    "hitl_streamed_closing_text"?: string | null | undefined;
+    /**
+     * История вызовов нод за последний проход Flow.run: {node_id: {type, calls: [...]}}. Сбрасывается в начале каждого Flow.run; лимит повторных заходов в code-ноду считается только в этом проходе.
+     */
+    "node_history"?: Record<string, Record<string, JsonValue>> | undefined;
+    /**
+     * Результаты выполнения tools {tool_id: result}
+     */
+    "tool_results"?: Record<string, JsonValue> | undefined;
+    /**
+     * Реестр исключений, обработанных как ответ (exception_as_response на ноде)
+     */
+    "execution_exceptions"?: ExecutionExceptionRecord[] | undefined;
+    /**
+     * Состояния вложенных субагентов
+     */
+    "nested_states"?: Record<string, NestedStateData> | undefined;
+    /**
+     * Durable child workflow links по node_id; хранит session_id child flow для resume без snapshot-копии child state в родителе.
+     */
+    "child_workflows"?: Record<string, ChildWorkflowLink> | undefined;
+    /**
+     * ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить
+     */
+    "handoff_parent_session_id"?: string | null | undefined;
+    /**
+     * Глубина цепочки handoff (для отладки и лимитов)
+     */
+    "handoff_depth"?: number | undefined;
+    /**
+     * OTEL trace_id цепочки handoff parent↔child для observability
+     */
+    "handoff_trace_id"?: string | null | undefined;
+    /**
+     * Переменные, явно возвращаемые родителю через handback_to_parent
+     */
+    "handback_return_variables"?: Record<string, JsonValue> | undefined;
+    /**
+     * История рассуждений агента
+     */
+    "reasoning_history"?: Record<string, JsonValue>[] | undefined;
+    /**
+     * Typed reflection/test-time compute gate history
+     */
+    "reflection_history"?: ReflectionRecord[] | undefined;
+    /**
+     * Текущее pending рассуждение
+     */
+    "pending_reasoning"?: Record<string, JsonValue> | null | undefined;
+    /**
+     * Активный AgentPlan (flat checklist); перетирается agent_plan_write
+     */
+    "agent_plan"?: AgentPlan | null | undefined;
+    /**
+     * Активные breakpoints для нод (node_id -> enabled)
+     */
+    "breakpoints"?: Record<string, boolean> | undefined;
+    /**
+     * ID ноды, на которой сработал breakpoint
+     */
+    "breakpoint_hit"?: string | null | undefined;
+    /**
+     * Projection snapshot на момент срабатывания breakpoint
+     */
+    "breakpoint_state"?: Record<string, JsonValue> | null | undefined;
+    /**
+     * Scheduled tasks созданные в текущей сессии
+     */
+    "scheduled_tasks"?: Record<string, JsonValue>[] | undefined;
+    /**
+     * AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания
+     */
+    "join_arrived_preds"?: Record<string, string[]> | undefined;
+    /**
+     * Дедлайн одного вызова run flow: time.monotonic() <= flow_deadline_monotonic; None — wall-clock лимит не задан для этой сессии
+     */
+    "flow_deadline_monotonic"?: number | null | undefined;
+    /**
+     * Секунд wall-clock, заданных на этот run (для ошибок и отладки)
+     */
+    "flow_timeout_effective_seconds"?: number | null | undefined;
+    /**
+     * История изменений системного промпта
+     */
+    "prompt_history"?: PromptHistoryItem[] | undefined;
+    /**
+     * Событие текущего хода от интерактивного блока интерфейса
+     */
+    "ui_action"?: FlowUIAction | null | undefined;
+    /**
+     * Блоки, отрендеренные агентом, по целям рендера (slot_id)
+     */
+    "ui_slots"?: Record<string, (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[]> | undefined;
+    /**
+     * Закрытый offset сообщений для episodic memory context layer
+     */
+    "llm_context_memory_cursor"?: Record<string, number> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Доменная delta для проекции ExecutionState.
  */
 export interface ExecutionStateDelta {
@@ -3478,6 +3810,16 @@ export interface FlowToolReference {
 export type FlowType = "local" | "external";
 
 /**
+ * Событие хода от интерактивного блока; живёт в ``ExecutionState.ui_action``.
+ */
+export interface FlowUIAction {
+    "name": string;
+    "source": string;
+    "payload"?: Record<string, JsonValue> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * FlowUIActionPreview
  */
 export interface FlowUIActionPreview {
@@ -3550,6 +3892,20 @@ export interface FlowUIAgentIdentity {
 }
 
 /**
+ * Карточка AgentPlan в ленте: ``plan`` — сериализованный ``AgentPlan`` модели flows.
+ */
+export interface FlowUIAgentPlan {
+    "block_id": string;
+    "visible_when"?: FlowUICondition | null | undefined;
+    "span"?: number | undefined;
+    "align"?: "start" | "center" | "end" | undefined;
+    "valign"?: "start" | "center" | "end" | undefined;
+    "type"?: "agent_plan" | undefined;
+    "plan"?: Record<string, JsonValue> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * FlowUIAlert
  */
 export interface FlowUIAlert {
@@ -3584,7 +3940,7 @@ export interface FlowUIAssistRequest {
 export interface FlowUIAssistResult {
     "scope": "page" | "block";
     "page"?: FlowUIPage | null | undefined;
-    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[] | undefined;
+    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[] | undefined;
     [key: string]: unknown;
 }
 
@@ -3727,7 +4083,7 @@ export interface FlowUICode {
  */
 export interface FlowUIColumn {
     "width": number;
-    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[] | undefined;
+    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[] | undefined;
     [key: string]: unknown;
 }
 
@@ -4099,7 +4455,7 @@ export interface FlowUIPage {
     "page_id": string;
     "title"?: string | undefined;
     "show_title"?: boolean | undefined;
-    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[] | undefined;
+    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[] | undefined;
     [key: string]: unknown;
 }
 
@@ -4142,7 +4498,7 @@ export interface FlowUIReflection {
 export interface FlowUIRender {
     "kind"?: "render" | undefined;
     "slot_id": string;
-    "blocks": (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[];
+    "blocks": (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[];
     [key: string]: unknown;
 }
 
@@ -4170,7 +4526,7 @@ export interface FlowUISection {
     "valign"?: "start" | "center" | "end" | undefined;
     "type"?: "section" | undefined;
     "title"?: string | undefined;
-    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[] | undefined;
+    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[] | undefined;
     [key: string]: unknown;
 }
 
@@ -4379,7 +4735,7 @@ export interface FlowUISwitch {
  */
 export interface FlowUITab {
     "title": string;
-    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIHtml)[] | undefined;
+    "blocks"?: (FlowUISection | FlowUIColumns | FlowUITabs | FlowUIHeading | FlowUIMarkdownText | FlowUIImage | FlowUIVideo | FlowUIAudio | FlowUICode | FlowUIBadge | FlowUIAlert | FlowUIMetric | FlowUIProgress | FlowUIStatus | FlowUIEmptyState | FlowUIDivider | FlowUITextInput | FlowUINumberInput | FlowUISelect | FlowUICheckbox | FlowUISwitch | FlowUISlider | FlowUIDateInput | FlowUIDateTimeInput | FlowUIFileUpload | FlowUIVoiceInput | FlowUIButton | FlowUILink | FlowUIDataTable | FlowUIChart | FlowUIJsonView | FlowUIFileCard | FlowUIFileList | FlowUIConversation | FlowUISlot | FlowUIAgentIdentity | FlowUIAvatar | FlowUIRunTrace | FlowUIToolActivity | FlowUIBrowserPreview | FlowUISkillActivity | FlowUIActionPreview | FlowUIActionResult | FlowUIReflection | FlowUIActivity | FlowUISuggestedPrompts | FlowUIAgentPlan | FlowUIHtml)[] | undefined;
     [key: string]: unknown;
 }
 
@@ -4878,6 +5234,48 @@ export interface HandoffCompletedPayload {
 }
 
 /**
+ * Передача управления дочернему flow — родитель suspended до handback.
+ */
+export interface HandoffInterrupt {
+    "kind"?: "handoff" | undefined;
+    /**
+     * Текст для UI конечного пользователя
+     */
+    "question": string;
+    /**
+     * internal — flow платформы; external — federated A2A handoff (ownership transfer)
+     */
+    "target_kind"?: "internal" | "external" | undefined;
+    "target_flow_id": string;
+    "target_branch_id"?: string | undefined;
+    /**
+     * Имя целевого flow для UI
+     */
+    "target_name": string;
+    /**
+     * ID remote_flow из registry для target_kind=external
+     */
+    "remote_flow_id"?: string | null | undefined;
+    /**
+     * Переменные, ЯВНО передаваемые дочернему flow
+     */
+    "variables"?: Record<string, JsonValue> | undefined;
+    /**
+     * Opt-in HandoffContextResource для shared context policy
+     */
+    "handoff_context_resource_key"?: string | null | undefined;
+    /**
+     * Почему произошёл handoff
+     */
+    "reason"?: string | null | undefined;
+    /**
+     * Глубина handoff-цепочки для UI
+     */
+    "depth"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * HandoffMode
  */
 export type HandoffMode = "single_reply" | "takeover";
@@ -4952,12 +5350,68 @@ export interface IntegrationDeletedResponse {
 }
 
 /**
+ * Корневая модель прерывания в ExecutionState.
+ */
+export interface InterruptData {
+    "body": UserMessageInterrupt | OperatorTaskInterrupt | OAuthInterrupt | HandoffInterrupt;
+    "system"?: InterruptSystemContext | undefined;
+    "correlation_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Элемент пути прерывания.
+ */
+export interface InterruptPathItem {
+    /**
+     * Тип: tool, llm_node, flow
+     */
+    "node_type": string;
+    /**
+     * ID ноды/tool
+     */
+    "node_id": string;
+    /**
+     * Данные tool_call
+     */
+    "tool_call"?: LLMToolCall | null | undefined;
+    /**
+     * Durable session_id child workflow для resume FlowNode
+     */
+    "child_session_id"?: string | null | undefined;
+    /**
+     * ID child flow
+     */
+    "child_flow_id"?: string | null | undefined;
+    /**
+     * Branch child flow
+     */
+    "child_flow_branch_id"?: string | null | undefined;
+    /**
+     * Durable execution branch id child workflow для resume FlowNode
+     */
+    "child_execution_branch_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * InterruptRaisedPayload
  */
 export interface InterruptRaisedPayload {
     "current_nodes": string[];
     "node_id"?: string | null | undefined;
     "preserved_node_writes"?: NodeWriteRecordedPayload[] | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Служебные поля прерывания (путь, task_id, tool_call).
+ */
+export interface InterruptSystemContext {
+    "tool_call"?: LLMToolCall | null | undefined;
+    "path"?: Record<string, JsonValue>[] | undefined;
+    "task_id"?: string | null | undefined;
+    "context_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -5040,6 +5494,27 @@ export interface LLMContextRetrievalPatch {
     "rerank_max_candidates"?: number | null | undefined;
     "freshness_weight"?: number | null | undefined;
     "freshness_half_life_days"?: number | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Canonical LLM tool call produced by providers and executed by Flow tools.
+ */
+export interface LLMToolCall {
+    "id": string;
+    "name": string;
+    "arguments"?: Record<string, JsonValue> | undefined;
+    "type"?: "function" | undefined;
+    "function"?: LLMToolCallFunction | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * OpenAI-compatible function payload preserved in assistant history.
+ */
+export interface LLMToolCallFunction {
+    "name": string;
+    "arguments": string;
     [key: string]: unknown;
 }
 
@@ -5577,6 +6052,27 @@ export type MCPTransportType = "http" | "sse";
 export type MergeMode = "merge" | "replace";
 
 /**
+ * Данные вложенного состояния для субагентов.
+ */
+export interface NestedStateData {
+    /**
+     * История сообщений субагента
+     */
+    "messages"?: {
+    [key: string]: unknown;
+}[] | undefined;
+    /**
+     * Путь прерывания внутри субагента
+     */
+    "interrupt_path"?: InterruptPathItem[] | undefined;
+    /**
+     * Вложенные состояния суб-субагентов
+     */
+    "nested_states"?: Record<string, NestedStateData> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * NodeCompletedPayload
  */
 export interface NodeCompletedPayload {
@@ -6029,6 +6525,18 @@ export interface NodeWriteRecordedPayload {
 export type NoneType = null;
 
 /**
+ * Пауза до завершения OAuth-авторизации пользователя во внешнем сервисе.
+ */
+export interface OAuthInterrupt {
+    "kind"?: "oauth_required" | undefined;
+    "question": string;
+    "auth_url": string;
+    "provider": string;
+    "service": string;
+    [key: string]: unknown;
+}
+
+/**
  * ObservabilityLogsQueryPayload
  */
 export interface ObservabilityLogsQueryPayload {
@@ -6247,6 +6755,33 @@ export interface OperatorMessageRequest {
 }
 
 /**
+ * Пауза до действия оператора; в чате пользователю показывается question (статусная строка).
+ */
+export interface OperatorTaskInterrupt {
+    "kind"?: "operator_task" | undefined;
+    /**
+     * Текст для UI конечного пользователя (без внутренних деталей задачи)
+     */
+    "question": string;
+    "task_title": string;
+    "assignee_queue": string;
+    /**
+     * single_reply — один ответ оператора; takeover — полный перехват диалога
+     */
+    "handoff_mode"?: HandoffMode | undefined;
+    /**
+     * ID WorkItem операторской задачи (для user-reply в takeover)
+     */
+    "work_item_id"?: string | null | undefined;
+    "handoff_command_id": string;
+    "execution_branch_id": string;
+    "node_schedule_sequence": number;
+    "node_id": string;
+    "tool_call_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Действие отправки сообщения в канал.
  * 
  * Используется в trigger.output_actions для автоматической отправки
@@ -6398,6 +6933,37 @@ export interface PlatformEventFilterField {
 }
 
 /**
+ * Запись истории изменений системного промпта.
+ */
+export interface PromptHistoryItem {
+    /**
+     * MD5 хеш промпта для сравнения
+     */
+    "prompt_hash": string;
+    /**
+     * Рендеренный промпт
+     */
+    "prompt": string;
+    /**
+     * Исходный шаблон
+     */
+    "template": string;
+    /**
+     * Использованные переменные
+     */
+    "variables_used"?: Record<string, JsonValue> | undefined;
+    /**
+     * ID ноды которая сгенерировала промпт
+     */
+    "node_id": string;
+    /**
+     * Время создания ISO
+     */
+    "timestamp": string;
+    [key: string]: unknown;
+}
+
+/**
  * Конфигурация ReAct цикла для llm_node
  */
 export interface ReactConfig {
@@ -6435,6 +7001,54 @@ export type ReactLoopMode = "auto" | "explicit";
  * Не пересекается с NodeType и с полем type у inline-tool (тип исполнения: code, flow, …).
  */
 export type ReactToolRole = "standard" | "reason" | "exit";
+
+/**
+ * Одна конкретная проблема, найденная критиком.
+ */
+export interface ReflectionCritiqueIssue {
+    "criterion_id": string;
+    "severity": "info" | "warning" | "error" | "critical";
+    "finding": string;
+    "evidence": string;
+    "required_action": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Структурированный ответ критика от модели.
+ */
+export interface ReflectionCritiqueResult {
+    "decision": "approved" | "needs_revision" | "blocked";
+    "confidence": number;
+    "summary": string;
+    "issues"?: ReflectionCritiqueIssue[] | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Детерминированный результат gate, применённый к workflow state.
+ */
+export interface ReflectionGateResult {
+    "policy_id": string;
+    "gate": "final_answer" | "transaction" | "quality";
+    "target": ReflectionTarget;
+    "approved": boolean;
+    "blocked_reasons": string[];
+    "critique": ReflectionCritiqueResult;
+    "exit_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Запись истории state для завершённого reflection gate.
+ */
+export interface ReflectionRecord {
+    "node_id": string;
+    "execution_branch_id": string;
+    "node_schedule_sequence": number;
+    "result": ReflectionGateResult;
+    [key: string]: unknown;
+}
 
 /**
  * Срез проекции state, который проверяет критик.
@@ -7341,6 +7955,26 @@ export interface TriggerResponse {
 }
 
 /**
+ * payload — полный объект входа (Telegram Update, тело webhook, …).
+ * context — поля, явно вынесенные в output_mapping (левая часть: context.*).
+ */
+export interface TriggerRuntimeSnapshot {
+    /**
+     * Сырой payload события триггера
+     */
+    "payload": {
+    [key: string]: unknown;
+};
+    /**
+     * Нормализованные поля из output_mapping (chat_id, user_id, …)
+     */
+    "context"?: {
+    [key: string]: unknown;
+} | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Статус триггера.
  */
 export type TriggerStatus = "inactive" | "active" | "error";
@@ -7444,6 +8078,15 @@ export interface UserInputAppliedPayload {
     "task_id": string;
     "context_id": string;
     "is_resume": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * Запрос ввода у пользователя в чате (аналог ask_user).
+ */
+export interface UserMessageInterrupt {
+    "kind"?: "user_message" | undefined;
+    "question": string;
     [key: string]: unknown;
 }
 
@@ -7699,10 +8342,10 @@ export interface FlowsCommandMap {
     "flows/durable/branches_requested": { payload: DurableSessionIdPayload; result: WorkflowBranchesResponse },
     "flows/durable/fork_requested": { payload: DurableForkPayload; result: WorkflowBranchResult },
     "flows/durable/history_requested": { payload: DurableHistoryPayload; result: WorkflowHistoryResponse },
-    "flows/durable/manual_patch_requested": { payload: unknown; result: WorkflowBranchResult },
+    "flows/durable/manual_patch_requested": { payload: DurableManualPatchPayload; result: WorkflowBranchResult },
     "flows/durable/retry_from_failure_requested": { payload: DurableRetryPayload; result: WorkflowBranchResult },
     "flows/durable/rewind_requested": { payload: DurableRewindPayload; result: WorkflowBranchResult },
-    "flows/durable/state_at_requested": { payload: DurableStateAtPayload; result: unknown },
+    "flows/durable/state_at_requested": { payload: DurableStateAtPayload; result: ExecutionState },
     "flows/evaluation/annotation_create_requested": { payload: EvaluationAnnotationCreateRequest; result: EvaluationAnnotation },
     "flows/evaluation/annotation_delete_requested": { payload: EvaluationAnnotationIdPayload; result: EvaluationDeletedResponse },
     "flows/evaluation/annotation_update_requested": { payload: EvaluationAnnotationUpdateRequest; result: EvaluationAnnotation },
@@ -7837,8 +8480,8 @@ export interface FlowsCommandMap {
     "flows/resources/update_requested": { payload: ResourceUpdatePayload; result: ResourceDefinition },
     "flows/sessions/list_requested": { payload: SessionListPayload; result: OffsetPage_SessionConfig_ },
     "flows/sessions/remove_requested": { payload: SessionIdPayload; result: SessionDeletedResponse },
-    "flows/sessions/state_requested": { payload: DurableSessionStatePayload; result: unknown },
-    "flows/sessions/state_update_requested": { payload: unknown; result: unknown },
+    "flows/sessions/state_requested": { payload: DurableSessionStatePayload; result: ExecutionState },
+    "flows/sessions/state_update_requested": { payload: DurableSessionStateUpdatePayload; result: ExecutionState },
     "flows/tool_runtime/call_requested": { payload: ToolRuntimeCallPayload; result: CapabilityCallResponse },
     "flows/tool_runtime/manifest_requested": { payload: ToolRuntimeManifestPayload; result: CapabilityManifest },
     "flows/tools/contract_requested": { payload: ToolsToolIdPayload; result: ToolDefinition },

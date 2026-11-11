@@ -602,6 +602,17 @@ async def shop_client_http(shop_service):
 
 
 @pytest_asyncio.fixture
+async def stock_client_http(stock_service):
+    """HTTP клиент Stock API (реальный Granian :9026)."""
+    _ = stock_service
+    async with AsyncClient(
+        base_url="http://127.0.0.1:9026",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def realtime_client_http(realtime_service):
     """HTTP клиент bus `realtime` (реальный Granian :9025)."""
     async with AsyncClient(

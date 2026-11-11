@@ -88,20 +88,20 @@ class TestModifierAdmin:
             shop_client, shop_id, gid, "Сыр", price_minor=5000, max_per_option=3
         )
         assert option["price_minor"] == 5000
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         listing = await shop_client.get(f"{_SHOPS}/{shop_id}/modifier-groups")
         assert listing.status_code == 200
         g = listing.json()["groups"][0]
         assert g["name"] == "Добавки"
         assert g["options"][0]["name"] == "Сыр"
-        assert g["product_ids"] == [product["shop_product_id"]]
+        assert g["product_ids"] == [product["product_id"]]
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/modifier-groups/{gid}", json={"min_selected": 1}
         )
         assert resp.status_code == 200
         assert resp.json()["min_selected"] == 1
         resp = await shop_client.delete(
-            f"{_SHOPS}/{shop_id}/products/{product['shop_product_id']}/modifier-groups/{gid}"
+            f"{_SHOPS}/{shop_id}/products/{product['product_id']}/modifier-groups/{gid}"
         )
         assert resp.status_code == 200
         listing = await shop_client.get(f"{_SHOPS}/{shop_id}/modifier-groups")
@@ -130,11 +130,11 @@ class TestModifierPricing:
             shop_client, shop_id, gid, "Сыр", price_minor=5000, max_per_option=5
         )
         bacon = await _make_option(shop_client, shop_id, gid, "Бекон", price_minor=7000)
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [
                     {"option_id": cheese["shop_modifier_option_id"], "qty": 2},
                     {"option_id": bacon["shop_modifier_option_id"], "qty": 1},
@@ -155,10 +155,10 @@ class TestModifierPricing:
         )
         gid = group["shop_modifier_group_id"]
         await _make_option(shop_client, shop_id, gid, "Большая", price_minor=10000)
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], []),
+            json=_order_body(product["product_id"], []),
         )
         assert resp.status_code == 409
 
@@ -183,12 +183,12 @@ class TestModifierPricing:
         addons = await _make_group(shop_client, shop_id, "Добавки")
         agid = addons["shop_modifier_group_id"]
         cheese = await _make_option(shop_client, shop_id, agid, "Сыр", price_minor=5000)
-        await _attach(shop_client, shop_id, product["shop_product_id"], sgid)
-        await _attach(shop_client, shop_id, product["shop_product_id"], agid)
+        await _attach(shop_client, shop_id, product["product_id"], sgid)
+        await _attach(shop_client, shop_id, product["product_id"], agid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [
                     {"option_id": small["shop_modifier_option_id"], "qty": 1},
                     {"option_id": cheese["shop_modifier_option_id"], "qty": 1},
@@ -209,11 +209,11 @@ class TestModifierPricing:
         opt = await _make_option(
             shop_client, shop_id, gid, "Сыр", price_minor=5000, max_per_option=2
         )
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [{"option_id": opt["shop_modifier_option_id"], "qty": 3}],
             ),
         )
@@ -231,11 +231,11 @@ class TestModifierPricing:
         gid = group["shop_modifier_group_id"]
         a = await _make_option(shop_client, shop_id, gid, "Чесночный")
         b = await _make_option(shop_client, shop_id, gid, "Томатный")
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [
                     {"option_id": a["shop_modifier_option_id"], "qty": 1},
                     {"option_id": b["shop_modifier_option_id"], "qty": 1},
@@ -253,7 +253,7 @@ class TestModifierPricing:
         group = await _make_group(shop_client, shop_id, "Добавки")
         gid = group["shop_modifier_group_id"]
         opt = await _make_option(shop_client, shop_id, gid, "Сыр", price_minor=5000)
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/modifier-options/{opt['shop_modifier_option_id']}",
             json={"is_available": False},
@@ -262,7 +262,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [{"option_id": opt["shop_modifier_option_id"], "qty": 1}],
             ),
         )
@@ -270,7 +270,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [{"option_id": "shopmodopt_missing", "qty": 1}],
             ),
         )
@@ -296,12 +296,12 @@ class TestModifierPricing:
         )
         small = await _make_option(shop_client, shop_id, sgid, "Маленькая")
         nopt = await _make_option(shop_client, shop_id, ngid, "Доп. сыр", price_minor=3000)
-        await _attach(shop_client, shop_id, product["shop_product_id"], sgid)
+        await _attach(shop_client, shop_id, product["product_id"], sgid)
         # Nested-опция без родительского выбора — отказ.
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [
                     {"option_id": small["shop_modifier_option_id"], "qty": 1},
                     {"option_id": nopt["shop_modifier_option_id"], "qty": 1},
@@ -313,7 +313,7 @@ class TestModifierPricing:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [
                     {"option_id": big["shop_modifier_option_id"], "qty": 1},
                     {"option_id": nopt["shop_modifier_option_id"], "qty": 1},
@@ -350,8 +350,8 @@ class TestModifierSnapshot:
             f"{_SHOPS}/{shop_id}/modifier-options/{hidden['shop_modifier_option_id']}",
             json={"is_available": False},
         )
-        await _attach(shop_client, shop_id, product["shop_product_id"], sgid)
-        await _attach(shop_client, shop_id, product["shop_product_id"], agid)
+        await _attach(shop_client, shop_id, product["product_id"], sgid)
+        await _attach(shop_client, shop_id, product["product_id"], agid)
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
         assert snap.status_code == 200, snap.text
         p = snap.json()["products"][0]
@@ -374,11 +374,11 @@ class TestModifierSnapshot:
         cheese = await _make_option(
             shop_client, shop_id, gid, "Сыр", price_minor=5000, max_per_option=5
         )
-        await _attach(shop_client, shop_id, product["shop_product_id"], gid)
+        await _attach(shop_client, shop_id, product["product_id"], gid)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 [{"option_id": cheese["shop_modifier_option_id"], "qty": 2}],
             ),
         )

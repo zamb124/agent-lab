@@ -40,6 +40,7 @@ from apps.shop.realtime.company_operations import ShopScheduledResponse
 from apps.shop.seed import DEMO_TEMPLATES
 from apps.shop.services.seed_service import ShopSeedService
 from core.authz.company_sync import sync_company_member_roles
+from core.catalog.models import CatalogProduct
 from core.context import clear_context, set_context
 from core.context.job_context import build_job_context
 from core.models.identity_models import Company, User
@@ -253,7 +254,12 @@ class TestDemoSeedService:
 
             products = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
             assert len(products) == len(tpl.products)
-            assert all(p.photo_file_id for p in products)
+            for p in products:
+                catalog = await CatalogProduct.by_id(
+                    company.company_id, p.product_id
+                )
+                assert catalog is not None, p.product_id
+                assert catalog.image_file_ids, p.product_id
 
             promos = await ShopPromo.list_by_shop_by_sort_asc(shop.shop_id)
             assert len(promos) == len(tpl.promos)
@@ -339,7 +345,7 @@ class TestDemoSeedService:
 
             products = await ShopProduct.list_by_shop_by_sort_asc(shop.shop_id)
             by_key = {
-                p.shop_product_id.rsplit(":", 1)[-1]: p for p in products
+                p.product_id.rsplit(":", 1)[-1]: p for p in products
             }
             for spec in tpl.products:
                 product = by_key[spec.key]
@@ -379,13 +385,13 @@ class TestDemoSeedService:
             snap_product_ids = {
                 str(p["id"]) for p in snap_products
             }
-            assert snap_product_ids == {p.shop_product_id for p in products}
+            assert snap_product_ids == {p.product_id for p in products}
             snap_shelves = _obj_list(snapshot, "shelves")
             for shelf in snap_shelves:
                 for pid in _str_list(shelf["product_ids"]):
                     assert pid in snap_product_ids, f"{tpl.key}: stale shelf ref"
             unavailable_ids = {
-                p.shop_product_id for p in products if not p.is_available
+                p.product_id for p in products if not p.is_available
             }
             comeback = [s for s in snap_shelves if s["kind"] == "comeback"]
             assert comeback, f"{tpl.key}: comeback shelf missing"

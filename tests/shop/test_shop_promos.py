@@ -120,12 +120,12 @@ class TestPromoEngine:
             action={
                 "type": "percent_items",
                 "pct": 20,
-                "product_ids": [product["shop_product_id"]],
+                "product_ids": [product["product_id"]],
             },
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": product["shop_product_id"], "qty": 2}]),
+            json=_order_body([{"product_id": product["product_id"], "qty": 2}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["total_minor"] == 2 * 50000 - 2 * 10000
@@ -154,7 +154,7 @@ class TestPromoEngine:
             "-10%",
             action={"type": "percent_order", "pct": 10},
         )
-        items = [{"product_id": product["shop_product_id"], "qty": 3}]
+        items = [{"product_id": product["product_id"], "qty": 3}]
         preview = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
             json=_cart_body(items),
@@ -186,8 +186,8 @@ class TestPromoEngine:
             action={"type": "n_plus_m_free", "n": 2, "m": 1},
         )
         items = [
-            {"product_id": pizza["shop_product_id"], "qty": 2},
-            {"product_id": cola["shop_product_id"], "qty": 1},
+            {"product_id": pizza["product_id"], "qty": 2},
+            {"product_id": cola["product_id"], "qty": 1},
         ]
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(items)
@@ -198,7 +198,7 @@ class TestPromoEngine:
         # Второй заказ: 3 пиццы → бесплатна одна пицца.
         resp2 = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": pizza["shop_product_id"], "qty": 3}]),
+            json=_order_body([{"product_id": pizza["product_id"], "qty": 3}]),
         )
         assert resp2.status_code == 200
         assert resp2.json()["total_minor"] == 2 * 50000
@@ -217,14 +217,14 @@ class TestPromoEngine:
                 "type": "fixed_bundle_price",
                 "price_minor": 80000,
                 "items": [
-                    {"product_id": pizza["shop_product_id"], "qty": 1},
-                    {"product_id": cola["shop_product_id"], "qty": 1},
+                    {"product_id": pizza["product_id"], "qty": 1},
+                    {"product_id": cola["product_id"], "qty": 1},
                 ],
             },
         )
         items = [
-            {"product_id": pizza["shop_product_id"], "qty": 1},
-            {"product_id": cola["shop_product_id"], "qty": 1},
+            {"product_id": pizza["product_id"], "qty": 1},
+            {"product_id": cola["product_id"], "qty": 1},
         ]
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=_order_body(items)
@@ -234,7 +234,7 @@ class TestPromoEngine:
         # Одна пицца без колы — комбо не собирается, скидки нет.
         resp2 = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": pizza["shop_product_id"], "qty": 1}]),
+            json=_cart_body([{"product_id": pizza["product_id"], "qty": 1}]),
         )
         assert resp2.status_code == 200
         assert resp2.json()["discount_minor"] == 0
@@ -262,7 +262,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": product["shop_product_id"], "qty": 2}]),
+            json=_cart_body([{"product_id": product["product_id"], "qty": 2}]),
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -285,7 +285,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
-            json=_cart_body([{"product_id": product["shop_product_id"], "qty": 1}]),
+            json=_cart_body([{"product_id": product["product_id"], "qty": 1}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["discount_minor"] == 0
@@ -305,7 +305,7 @@ class TestPromoEngine:
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body([{"product_id": product["shop_product_id"], "qty": 1}]),
+            json=_order_body([{"product_id": product["product_id"], "qty": 1}]),
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["total_minor"] == 50000
@@ -325,7 +325,7 @@ class TestPromoEngine:
             condition={"type": "min_total", "minor": 80000},
             action={"type": "free_delivery"},
         )
-        items = [{"product_id": product["shop_product_id"], "qty": 1}]
+        items = [{"product_id": product["product_id"], "qty": 1}]
         preview = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
             json=_cart_body(items, delivery_type="delivery"),

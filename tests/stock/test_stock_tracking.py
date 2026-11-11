@@ -52,7 +52,7 @@ async def _env(stock_di, unique_id: str) -> StockEnv:
 async def _tracked_product(
     env: StockEnv, suffix: str, tracking: StockTracking, **kwargs
 ):
-    return await env.di.catalog_service.create_product(
+    return await env.di.stock_catalog_service.create_product(
         company_id=env.company_id,
         name=f"Trk {suffix}",
         sku=f"TRK-{suffix}",
@@ -62,13 +62,12 @@ async def _tracked_product(
         tracking=tracking,
         is_storable=True,
         category="general",
-        barcode=None,
         **kwargs,
     )
 
 
 async def _lot(env: StockEnv, product_id: str, name: str, **kwargs):
-    return await env.di.catalog_service.create_lot(
+    return await env.di.stock_catalog_service.create_lot(
         company_id=env.company_id,
         product_id=product_id,
         name=name,

@@ -103,6 +103,7 @@ from apps.shop.tasks.task_names import (
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
 )
+from core.catalog.events import publish_catalog_product_facet_changed
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformBoundaryError,
@@ -180,7 +181,7 @@ class ShopTableUpdatePayload(ShopTableUpdateRequest):
 
 class ShopProductIdPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
-    shop_product_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1)
 
 
 class ShopProductCreatePayload(ShopProductCreateRequest):
@@ -193,7 +194,7 @@ class ShopProductsImportPayload(ShopProductsImportRequest):
 
 class ShopProductUpdatePayload(ShopProductUpdateRequest):
     shop_id: str = Field(min_length=1)
-    shop_product_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1)
 
 
 class ShopProductsReorderPayload(ShopProductsReorderRequest):
@@ -456,7 +457,7 @@ class ShopAiBatchResponse(StrictBaseModel):
 
 
 async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
-    products_count = await ShopProduct.objects.filter(shop_id=shop.shop_id).count()
+    products_count = await ShopProduct.count_by_shop(shop.shop_id)
     return ShopResponse(
         shop_id=shop.shop_id,
         slug=shop.slug,
@@ -521,22 +522,6 @@ def _category_response(category: ShopCategory) -> ShopCategoryResponse:
     )
 
 
-def _product_response(product: ShopProduct) -> ShopProductResponse:
-    return ShopProductResponse(
-        shop_product_id=product.shop_product_id,
-        shop_id=product.shop_id,
-        category_id=product.category_id,
-        name=product.name,
-        description=product.description,
-        portion=product.portion,
-        badges=list(product.badges),
-        price_minor=product.price_minor,
-        photo_file_id=product.photo_file_id,
-        nutrition=ShopNutrition.model_validate(product.nutrition or {}),
-        is_available=product.is_available,
-        sort=product.sort,
-    )
-
 
 def _shelf_response(shelf: ShopShelf) -> ShopShelfResponse:
     return ShopShelfResponse(
@@ -574,12 +559,15 @@ async def _enqueue_rebuild(
 ) -> None:
     """Инвалидация витрины после мутации: ключ удаляется синхронно
     (suspend/unavailable скрываются немедленно), воркер прогревает кэш.
+    Поисковая проекция `shop_market_items` переписывается здесь же —
+    листинговая мутация видна в поиске сразу, без ожидания событий.
     Каталожные мутации дополнительно публикуют `shop/catalog/changed` —
     по этому событию flows-триггеры реагируют на обновление меню."""
     await di.storefront_service.invalidate_snapshot(shop_id)
-    if catalog_changed:
-        shop = await Shop.get_by_id(shop_id)
-        if shop is not None:
+    shop = await Shop.get_by_id(shop_id)
+    if shop is not None:
+        _ = await di.aggregate_service.sync_shop_items(shop)
+        if catalog_changed:
             await publish_shop_catalog_changed(shop_id, slug, str(shop.company_id))
     _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=slug)
 
@@ -799,7 +787,7 @@ async def op_products_list(
         products = await di.shop_service.list_products(scope.company_id, payload.shop_id)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return ListResponse(items=[_product_response(p) for p in products])
+    return ListResponse(items=products)
 
 
 async def op_products_create(
@@ -811,9 +799,17 @@ async def op_products_create(
         product = await di.shop_service.create_product(scope.company_id, payload.shop_id, payload)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await publish_catalog_product_facet_changed(
+        product.product_id,
+        scope.company_id,
+        facet="shop",
+        instance_id=payload.shop_id,
+    )
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return _product_response(product)
+    return product
 
 
 async def op_products_update(
@@ -821,22 +817,30 @@ async def op_products_update(
 ) -> ShopProductResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
-    before = await ShopProduct.get_by_id(payload.shop_product_id)
     try:
+        before = await di.shop_service.get_listing(
+            scope.company_id, payload.shop_id, payload.product_id
+        )
         product = await di.shop_service.update_product(
-            scope.company_id, payload.shop_id, payload.shop_product_id, payload
+            scope.company_id, payload.shop_id, payload.product_id, payload
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    if before is not None and product.photo_file_id != before.photo_file_id:
+    if product.photo_file_id != before.photo_file_id:
         await _delete_orphaned_file(di, before.photo_file_id)
-    if before is not None and product.is_available and not before.is_available:
+    if product.is_available and not before.is_available:
         _ = await enqueue(
-            SHOP_NOTIFY_BACK_IN_STOCK, product_id=product.shop_product_id
+            SHOP_NOTIFY_BACK_IN_STOCK, product_id=product.product_id
         )
+    await publish_catalog_product_facet_changed(
+        payload.product_id,
+        scope.company_id,
+        facet="shop",
+        instance_id=payload.shop_id,
+    )
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return _product_response(product)
+    return product
 
 
 async def op_products_reorder(
@@ -863,26 +867,42 @@ async def op_products_import(
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
-        created = await di.shop_service.import_products(scope.company_id, payload.shop_id, payload)
+        created_ids = await di.shop_service.import_products(
+            scope.company_id, payload.shop_id, payload
+        )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+    for product_id in created_ids:
+        await publish_catalog_product_facet_changed(
+            product_id,
+            scope.company_id,
+            facet="shop",
+            instance_id=payload.shop_id,
+        )
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
-    return ShopProductsImportResponse(created=created)
+    return ShopProductsImportResponse(created=len(created_ids))
 
 
 async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: Di) -> EmptyPayload:
     scope = await require_company_admin(di.authz_service)
     _ = user
-    before = await ShopProduct.get_by_id(payload.shop_product_id)
     try:
+        before = await di.shop_service.get_listing(
+            scope.company_id, payload.shop_id, payload.product_id
+        )
         await di.shop_service.delete_product(
-            scope.company_id, payload.shop_id, payload.shop_product_id
+            scope.company_id, payload.shop_id, payload.product_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    if before is not None:
-        await _delete_orphaned_file(di, before.photo_file_id)
+    await _delete_orphaned_file(di, before.photo_file_id)
+    await publish_catalog_product_facet_changed(
+        payload.product_id,
+        scope.company_id,
+        facet="shop",
+        instance_id=payload.shop_id,
+    )
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return EmptyPayload()
@@ -1582,8 +1602,8 @@ async def op_ai_describe_batch(
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    products = await ShopProduct.list_by_shop_by_sort_asc(payload.shop_id)
-    pending = sum(1 for p in products if not p.description.strip())
+    listings = await di.shop_service.list_products(scope.company_id, payload.shop_id)
+    pending = sum(1 for p in listings if not p.description.strip())
     _ = await enqueue(
         SHOP_AI_DESCRIBE_BATCH,
         shop_id=payload.shop_id,

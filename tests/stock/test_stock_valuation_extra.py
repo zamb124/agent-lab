@@ -23,6 +23,7 @@
   и полки разъехались.
 """
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -71,7 +72,7 @@ async def _product(
     standard_price: Decimal = Decimal("0"),
     tracking: StockTracking = StockTracking.NONE,
 ):
-    return await env.di.catalog_service.create_product(
+    return await env.di.stock_catalog_service.create_product(
         company_id=env.company_id,
         name=f"P{suffix}",
         sku=f"SKU-{suffix}",
@@ -81,7 +82,6 @@ async def _product(
         tracking=tracking,
         is_storable=True,
         category="general",
-        barcode=None,
     )
 
 
@@ -675,3 +675,215 @@ class TestProductValueScopes:
         )
         assert pv_total.quantity == Decimal("4")
         assert pv_total.value == Decimal("40")
+
+
+class TestJournalFilters:
+    """Фильтры журнала для UI: вид, склад, период, умный поиск, open_only."""
+
+    async def test_entry_kinds_and_open_only(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id, ValuationMethod.FIFO)
+        _ = await _receipt(env, Decimal("4"), Decimal("5"))
+        _ = await _delivery(env, Decimal("1"))
+        inbound_only = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=[ValueEntryKind.INBOUND],
+            date_from=None,
+            date_to=None,
+            open_only=False,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        assert {layer.entry_kind for layer in inbound_only.items} == {
+            ValueEntryKind.INBOUND
+        }
+        open_layers = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=None,
+            date_to=None,
+            open_only=True,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        # Осталось 3 шт прихода — один открытый слой, расхода в нём нет.
+        assert {layer.entry_kind for layer in open_layers.items} == {
+            ValueEntryKind.INBOUND
+        }
+        assert open_layers.items[0].remaining_quantity == Decimal("3")
+
+    async def test_date_range_and_warehouse(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("2"), Decimal("5"))
+        now = datetime.now(UTC)
+        future = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=now + timedelta(hours=1),
+            date_to=None,
+            open_only=False,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        assert future.items == [] and future.total == 0
+        bounded = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=now - timedelta(hours=1),
+            date_to=now + timedelta(hours=1),
+            open_only=False,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        assert bounded.items and bounded.total == len(bounded.items)
+        by_warehouse = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=env.warehouse.warehouse_id,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=None,
+            date_to=None,
+            open_only=False,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        assert {layer.warehouse_id for layer in by_warehouse.items} == {
+            env.warehouse.warehouse_id
+        }
+        assert (
+            by_warehouse.warehouse_names[env.warehouse.warehouse_id]
+            == env.warehouse.name
+        )
+
+    async def test_search_finds_product_and_document(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        transfer_id = await _receipt(env, Decimal("3"), Decimal("10"))
+        by_name = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=None,
+            date_to=None,
+            open_only=False,
+            search=env.product.name,
+            limit=100,
+            offset=0,
+        )
+        assert {layer.product_id for layer in by_name.items} == {
+            env.product.product_id
+        }
+        assert (
+            by_name.product_names[env.product.product_id] == env.product.name
+        )
+        assert by_name.transfer_names[transfer_id] != ""
+        by_doc = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=None,
+            date_to=None,
+            open_only=False,
+            search=by_name.transfer_names[transfer_id],
+            limit=100,
+            offset=0,
+        )
+        assert {layer.transfer_id for layer in by_doc.items} == {transfer_id}
+        nothing = await env.di.valuation_service.list_layers(
+            company_id=env.company_id,
+            product_id=None,
+            warehouse_id=None,
+            transfer_id=None,
+            entry_kinds=None,
+            date_from=None,
+            date_to=None,
+            open_only=False,
+            search=f"нет-такого-{unique_id}",
+            limit=100,
+            offset=0,
+        )
+        assert nothing.items == [] and nothing.total == 0
+
+
+class TestValuationReport:
+    """Отчёт «Стоимость запасов»: остаток каждого товара в деньгах."""
+
+    async def test_report_aggregates_and_filters(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        other = await _product(
+            env, f"rep-{unique_id}", valuation=ValuationMethod.FIFO
+        )
+        _ = await _receipt(env, Decimal("4"), Decimal("5"))
+        _ = await _receipt_for(
+            env, other.product_id, Decimal("2"), Decimal("30")
+        )
+        _ = await _delivery(env, Decimal("1"))
+        report = await env.di.valuation_service.report_by_value_desc(
+            company_id=env.company_id,
+            warehouse_id=None,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        by_id = {row.product_id: row for row in report.items}
+        assert by_id[env.product.product_id].quantity == Decimal("3")
+        assert by_id[env.product.product_id].value == Decimal("15")
+        assert by_id[other.product_id].value == Decimal("60")
+        assert report.total_value == Decimal("75")
+        assert report.products_count == 2
+        # Поиск сужает строки, но total_value — по всему запасу.
+        narrowed = await env.di.valuation_service.report_by_value_desc(
+            company_id=env.company_id,
+            warehouse_id=None,
+            search=other.name,
+            limit=100,
+            offset=0,
+        )
+        assert [row.product_id for row in narrowed.items] == [other.product_id]
+        assert narrowed.products_count == 1
+        assert narrowed.total_value == Decimal("60")
+
+    async def test_report_by_warehouse_uses_quant_qty(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("4"), Decimal("5"))
+        report = await env.di.valuation_service.report_by_value_desc(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            search=None,
+            limit=100,
+            offset=0,
+        )
+        (row,) = report.items
+        assert row.quantity == Decimal("4")
+        assert row.value == Decimal("20")
+        assert row.name == env.product.name

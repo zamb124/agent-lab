@@ -27,7 +27,7 @@ class FileRetentionKind(StrEnum):
     RAG_DOCUMENT = "rag_document"
     OFFICE_DOCUMENT = "office_document"
     WIKI_PAGE = "wiki_page"
-    SHOP_PRODUCT = "shop_product"
+    PRODUCT = "product"
     PLATFORM_DEFAULT = "platform_default"
 
 
@@ -72,7 +72,7 @@ def resolve_retention_ttl_seconds(spec: FileRetentionSpec) -> int:
         FileRetentionKind.MAIL_ATTACHMENT,
         FileRetentionKind.OFFICE_DOCUMENT,
         FileRetentionKind.WIKI_PAGE,
-        FileRetentionKind.SHOP_PRODUCT,
+        FileRetentionKind.PRODUCT,
     }:
         return 0
     if kind == FileRetentionKind.RAG_DOCUMENT:

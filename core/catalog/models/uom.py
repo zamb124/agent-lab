@@ -1,4 +1,4 @@
-"""Единицы измерения и товарные упаковки (stock_uom).
+"""Единицы измерения и товарные упаковки (catalog_uoms).
 
 Одна таблица — два рода строк (SAP-стиль «alternative unit of
 measure»):
@@ -15,12 +15,8 @@ measure»):
   кода. Уникальность — ``(company_id, product_id, name)``: у муки и у
   печенья могут быть свои «короб 24 шт» с разным весом.
 
-Упаковка дополнительно несёт ``container_type_id`` (в какой таре её
-принято хранить — приёмка «по упаковке» создаст контейнер-паллету) и
-``weight``/``volume`` (масса/объём одной упаковки для грузоподъёмности
-и габаритов). Штрихкод упаковки (GTIN-14) привязан в
-``stock_barcodes`` под ``entity_type=packaging`` и указывает прямо на
-строку ``stock_uom``.
+Штрихкод упаковки (GTIN-14) привязан в ``catalog_barcodes`` и
+указывает прямо на строку ``catalog_uoms``.
 """
 
 from __future__ import annotations
@@ -31,20 +27,22 @@ from typing import ClassVar, Self
 from oxyde import Field as DbField
 from oxyde import Index
 
-from apps.stock.models.common import QTY_DB, STOCK_DB, STOCK_ZERO
+from core.catalog.models.product import QTY_DB
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.models.platform_model import PlatformModel
 
+QTY_ZERO = Decimal("0")
 
-class UnitOfMeasure(PlatformModel):
-    """Единица измерения или товарная упаковка. Таблица ``stock_uom``."""
 
-    __database_alias__: ClassVar[str | None] = STOCK_DB
+class CatalogUom(PlatformModel):
+    """Единица измерения или товарная упаковка. Таблица ``catalog_uoms`` (shared)."""
+
+    __database_alias__: ClassVar[str | None] = "shared"
     __global_model__: ClassVar[bool] = True
 
     class Meta:
         is_table: bool = True
-        table_name: str = "stock_uom"
+        table_name: str = "catalog_uoms"
         indexes: list[Index] = [
             Index(
                 ["company_id", "name"],
@@ -65,7 +63,6 @@ class UnitOfMeasure(PlatformModel):
     factor: Decimal = DbField(db_type=QTY_DB)
     is_reference: bool = DbField(default=False)
     product_id: str | None = DbField(default=None, max_length=64)
-    container_type_id: str | None = DbField(default=None, max_length=64)
     weight: Decimal | None = DbField(default=None, db_type=QTY_DB)
     volume: Decimal | None = DbField(default=None, db_type=QTY_DB)
 
@@ -106,6 +103,12 @@ class UnitOfMeasure(PlatformModel):
         return await cls.objects.filter(company_id=company_id, name=name).exists()
 
     @classmethod
+    async def by_name(cls, company_id: str, name: str) -> Self | None:
+        return await cls.objects.filter(
+            company_id=company_id, name=name
+        ).get_or_none()
+
+    @classmethod
     async def create(cls, row: Self) -> Self:
         return await cls.objects.create(instance=row)
 
@@ -137,7 +140,7 @@ class UnitOfMeasure(PlatformModel):
                 "UoM category mismatch",
                 error_code="uom_category_mismatch",
             )
-        if src.factor == STOCK_ZERO or dst.factor == STOCK_ZERO:
+        if src.factor == QTY_ZERO or dst.factor == QTY_ZERO:
             raise PlatformConflictError(
                 "UoM factor is zero", error_code="uom_factor_zero"
             )

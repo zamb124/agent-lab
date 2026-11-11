@@ -553,17 +553,24 @@ export class SyncCallOverlayModal extends PlatformModal {
             }
             .chat-input:focus { border-color: var(--accent); }
             .chat-send {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
                 height: 36px;
-                padding: 0 12px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--accent);
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-full);
                 background: var(--accent);
-                color: var(--sync-call-text);
+                color: var(--text-on-accent);
                 cursor: pointer;
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
+                flex-shrink: 0;
+                box-shadow: 0 2px 8px var(--accent-subtle);
+                transition: transform var(--motion-duration-micro), background var(--motion-duration-micro), box-shadow var(--motion-duration-micro);
             }
-            .chat-send:disabled { opacity: 0.5; cursor: default; }
+            .chat-send:hover { transform: translateY(-1px); background: var(--accent-hover); }
+            .chat-send:active { transform: translateY(0); }
+            .chat-send:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
 
             .controls {
                 flex-shrink: 0;
@@ -2525,8 +2532,12 @@ export class SyncCallOverlayModal extends PlatformModal {
                     ></textarea>
                     <button class="chat-send"
                         ?disabled=${this._chatSending || this._chatInput.trim() === ''}
+                        title=${this.t('call_overlay.send')}
+                        aria-label=${this.t('call_overlay.send')}
                         @click=${() => void this._sendChatMessage()}>
-                        ${this._chatSending ? '…' : this.t('call_overlay.send')}
+                        ${this._chatSending
+                            ? html`<platform-spinner size="18"></platform-spinner>`
+                            : html`<platform-icon name="send" size="18"></platform-icon>`}
                     </button>
                 </div>
             </section>

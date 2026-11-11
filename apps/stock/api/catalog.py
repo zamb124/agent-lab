@@ -3,6 +3,7 @@ quants/valuation/lots/topology(storage/containers/resources/packagings)/uoms/pul
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -13,8 +14,8 @@ from apps.stock.models import (
     StockLocation,
     StockLot,
     StockMove,
+    StockMoveState,
     StockOperationType,
-    StockProduct,
     StockPutawayRule,
     StockQuant,
     StockReorderRule,
@@ -24,7 +25,7 @@ from apps.stock.models import (
     StockStorageType,
     StockValueLayer,
     StockWarehouse,
-    UnitOfMeasure,
+    ValueEntryKind,
 )
 from apps.stock.models.api import (
     StockBarcodeResolvePayload,
@@ -36,24 +37,27 @@ from apps.stock.models.api import (
     StockContainersListPayload,
     StockContainerTypeCreatePayload,
     StockContainerTypesListPayload,
+    StockContainerTypeUpdatePayload,
     StockItemsResponse,
     StockLocationCreatePayload,
     StockLocationIdPayload,
+    StockLocationsCountDuePayload,
     StockLocationsListPayload,
     StockLocationUpdatePayload,
     StockLotCreatePayload,
     StockLotsListPayload,
+    StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
     StockPackagingCreatePayload,
     StockPackagingIdPayload,
     StockPackagingsListPayload,
-    StockPackagingView,
     StockPagePayload,
     StockProductCreatePayload,
     StockProductIdPayload,
     StockProductUpdatePayload,
     StockProductValueResponse,
+    StockProductView,
     StockPutawayRuleCreatePayload,
     StockPutawayRuleDeletePayload,
     StockPutawayRulesListPayload,
@@ -70,6 +74,8 @@ from apps.stock.models.api import (
     StockResourcesListPayload,
     StockResourceTypeCreatePayload,
     StockResourceTypesListPayload,
+    StockResourceTypeUpdatePayload,
+    StockResourceUpdatePayload,
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
@@ -81,9 +87,13 @@ from apps.stock.models.api import (
     StockScanStepResponse,
     StockStorageTypeCreatePayload,
     StockStorageTypesListPayload,
+    StockStorageTypeUpdatePayload,
     StockValuationCorrectionPayload,
+    StockValuationLayersPage,
     StockValuationLayersPayload,
     StockValuationProductValuePayload,
+    StockValuationReportPayload,
+    StockValuationReportResponse,
     StockValuationRevaluePayload,
     StockWarehouseCreatePayload,
     StockWarehouseIdPayload,
@@ -96,16 +106,19 @@ from apps.stock.realtime.operations import (
     op_barcode_resolve,
     op_container_types_create,
     op_container_types_list,
+    op_container_types_update,
     op_containers_create,
     op_containers_item,
     op_containers_list,
     op_containers_move,
+    op_locations_count_due,
     op_locations_create,
     op_locations_item,
     op_locations_list,
     op_locations_update,
     op_lots_create,
     op_lots_list,
+    op_moves_list,
     op_operation_types_list,
     op_operation_types_update,
     op_packagings_create,
@@ -127,10 +140,12 @@ from apps.stock.realtime.operations import (
     op_reorder_rules_update,
     op_resource_types_create,
     op_resource_types_list,
+    op_resource_types_update,
     op_resources_create,
     op_resources_list,
     op_resources_login,
     op_resources_logout,
+    op_resources_update,
     op_routes_create,
     op_routes_get,
     op_routes_list,
@@ -140,10 +155,12 @@ from apps.stock.realtime.operations import (
     op_scan_step,
     op_storage_types_create,
     op_storage_types_list,
+    op_storage_types_update,
     op_uoms_list,
     op_valuation_correction,
     op_valuation_layers_list,
     op_valuation_product_value,
+    op_valuation_report,
     op_valuation_revalue,
     op_warehouse_pulse,
     op_warehouses_create,
@@ -151,8 +168,11 @@ from apps.stock.realtime.operations import (
     op_warehouses_list,
     op_warehouses_update,
 )
+from core.catalog import operations as catalog_ops
+from core.catalog.contracts import CatalogPackagingView
+from core.catalog.models import CatalogProduct, CatalogUom
 from core.context import require_context
-from core.pagination import OffsetPage
+from core.pagination import CursorPage, ListResponse, OffsetPage
 from core.websocket import EmptyPayload, raise_invalid
 
 router = APIRouter(tags=["stock-catalog"])
@@ -165,38 +185,69 @@ def _user():
 # --- Products ---
 
 
-@router.get("/products", response_model=OffsetPage[StockProduct])
+@router.get("/products", response_model=OffsetPage[StockProductView])
 async def list_products(
     di: Di,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[StockProduct]:
+) -> OffsetPage[StockProductView]:
     return await op_products_list(
         StockPagePayload(limit=limit, offset=offset), user=_user(), di=di
     )
 
 
-@router.post("/products", response_model=StockProduct)
+@router.post("/products", response_model=StockProductView)
 async def create_product(
     di: Di, body: StockProductCreatePayload
-) -> StockProduct:
+) -> StockProductView:
     return await op_products_create(body, user=_user(), di=di)
 
 
-@router.get("/products/{product_id}", response_model=StockProduct)
-async def get_product(di: Di, product_id: str) -> StockProduct:
+@router.get("/products/{product_id}", response_model=StockProductView)
+async def get_product(di: Di, product_id: str) -> StockProductView:
     return await op_products_item(
         StockProductIdPayload(product_id=product_id), user=_user(), di=di
     )
 
 
-@router.patch("/products/{product_id}", response_model=StockProduct)
+@router.patch("/products/{product_id}", response_model=StockProductView)
 async def update_product(
     di: Di, product_id: str, body: StockProductUpdatePayload
-) -> StockProduct:
+) -> StockProductView:
     if body.product_id != product_id:
         raise_invalid(ValueError("product_id mismatch"), error_code="path_id_mismatch")
     return await op_products_update(body, user=_user(), di=di)
+
+
+# --- Мастер-карточка каталога (общая база товаров компании) ---
+
+
+@router.get(
+    "/catalog-products/suggest", response_model=ListResponse[CatalogProduct]
+)
+async def suggest_catalog_products(
+    di: Di,
+    name: Annotated[str | None, Query(max_length=300)] = None,
+    sku: Annotated[str | None, Query(max_length=128)] = None,
+    barcode: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=20)] = 8,
+) -> ListResponse[CatalogProduct]:
+    return await catalog_ops.op_products_suggest(
+        catalog_ops.CatalogProductsSuggestPayload(
+            name=name, sku=sku, barcode=barcode, limit=limit
+        ),
+        user=_user(),
+        di=di,
+    )
+
+
+@router.patch("/catalog-products/{product_id}", response_model=CatalogProduct)
+async def update_catalog_product(
+    di: Di, product_id: str, body: catalog_ops.CatalogProductUpdatePayload
+) -> CatalogProduct:
+    if body.product_id != product_id:
+        raise_invalid(ValueError("product_id mismatch"), error_code="path_id_mismatch")
+    return await catalog_ops.op_products_update(body, user=_user(), di=di)
 
 
 # --- Locations ---
@@ -214,6 +265,48 @@ async def list_locations(
 @router.post("/locations", response_model=StockLocation)
 async def create_location(di: Di, body: StockLocationCreatePayload) -> StockLocation:
     return await op_locations_create(body, user=_user(), di=di)
+
+
+@router.get(
+    "/locations/count-due",
+    response_model=StockItemsResponse[StockLocation],
+)
+async def list_count_due_locations(
+    di: Di,
+    warehouse_id: str,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> StockItemsResponse[StockLocation]:
+    return await op_locations_count_due(
+        StockLocationsCountDuePayload(warehouse_id=warehouse_id, limit=limit),
+        user=_user(),
+        di=di,
+    )
+
+
+@router.get("/moves", response_model=CursorPage[StockMove])
+async def list_moves(
+    di: Di,
+    warehouse_id: str | None = None,
+    location_id: str | None = None,
+    subtree: bool = False,
+    product_id: str | None = None,
+    state: StockMoveState | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    cursor: str | None = None,
+) -> CursorPage[StockMove]:
+    return await op_moves_list(
+        StockMovesListPayload(
+            warehouse_id=warehouse_id,
+            location_id=location_id,
+            subtree=subtree,
+            product_id=product_id,
+            state=state,
+            limit=limit,
+            cursor=cursor,
+        ),
+        user=_user(),
+        di=di,
+    )
 
 
 @router.get("/locations/{location_id}", response_model=StockLocation)
@@ -305,6 +398,9 @@ async def list_quants(
     di: Di,
     location_id: str | None = None,
     product_id: str | None = None,
+    owner_entity_id: str | None = None,
+    warehouse_id: str | None = None,
+    subtree_location_id: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[StockQuant]:
@@ -312,6 +408,9 @@ async def list_quants(
         StockQuantsListPayload(
             location_id=location_id,
             product_id=product_id,
+            owner_entity_id=owner_entity_id,
+            warehouse_id=warehouse_id,
+            subtree_location_id=subtree_location_id,
             limit=limit,
             offset=offset,
         ),
@@ -337,18 +436,50 @@ async def inventory_apply(
 # --- Valuation ---
 
 
-@router.get("/valuation/layers", response_model=OffsetPage[StockValueLayer])
+@router.get("/valuation/layers", response_model=StockValuationLayersPage)
 async def list_valuation_layers(
     di: Di,
     product_id: str | None = None,
     warehouse_id: str | None = None,
+    transfer_id: str | None = None,
+    entry_kinds: list[ValueEntryKind] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    open_only: bool = False,
+    search: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[StockValueLayer]:
+) -> StockValuationLayersPage:
     return await op_valuation_layers_list(
         StockValuationLayersPayload(
             product_id=product_id,
             warehouse_id=warehouse_id,
+            transfer_id=transfer_id,
+            entry_kinds=entry_kinds,
+            date_from=date_from,
+            date_to=date_to,
+            open_only=open_only,
+            search=search,
+            limit=limit,
+            offset=offset,
+        ),
+        user=_user(),
+        di=di,
+    )
+
+
+@router.get("/valuation/report", response_model=StockValuationReportResponse)
+async def valuation_report(
+    di: Di,
+    warehouse_id: str | None = None,
+    search: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> StockValuationReportResponse:
+    return await op_valuation_report(
+        StockValuationReportPayload(
+            warehouse_id=warehouse_id,
+            search=search,
             limit=limit,
             offset=offset,
         ),
@@ -418,6 +549,19 @@ async def create_storage_type(
     return await op_storage_types_create(body, user=_user(), di=di)
 
 
+@router.patch(
+    "/storage-types/{storage_type_id}", response_model=StockStorageType
+)
+async def update_storage_type(
+    di: Di, storage_type_id: str, body: StockStorageTypeUpdatePayload
+) -> StockStorageType:
+    if body.storage_type_id != storage_type_id:
+        raise_invalid(
+            ValueError("storage_type_id mismatch"), error_code="path_id_mismatch"
+        )
+    return await op_storage_types_update(body, user=_user(), di=di)
+
+
 # --- Маршруты цепочек ---
 
 
@@ -437,7 +581,7 @@ async def reorder_rules_create(
     return await op_reorder_rules_create(body, user=_user(), di=di)
 
 
-@router.post(
+@router.patch(
     "/reorder-rules/{rule_id}/active", response_model=StockReorderRule
 )
 async def reorder_rules_update(
@@ -464,7 +608,7 @@ async def putaway_rules_create(
     return await op_putaway_rules_create(body, user=_user(), di=di)
 
 
-@router.post(
+@router.patch(
     "/putaway-rules/{rule_id}", response_model=StockPutawayRule
 )
 async def putaway_rules_update(
@@ -523,6 +667,20 @@ async def create_container_type(
     return await op_container_types_create(body, user=_user(), di=di)
 
 
+@router.patch(
+    "/container-types/{container_type_id}", response_model=StockContainerType
+)
+async def update_container_type(
+    di: Di, container_type_id: str, body: StockContainerTypeUpdatePayload
+) -> StockContainerType:
+    if body.container_type_id != container_type_id:
+        raise_invalid(
+            ValueError("container_type_id mismatch"),
+            error_code="path_id_mismatch",
+        )
+    return await op_container_types_update(body, user=_user(), di=di)
+
+
 @router.get("/resource-types", response_model=StockItemsResponse[StockResourceType])
 async def list_resource_types(
     di: Di, warehouse_id: str
@@ -539,6 +697,20 @@ async def create_resource_type(
     return await op_resource_types_create(body, user=_user(), di=di)
 
 
+@router.patch(
+    "/resource-types/{resource_type_id}", response_model=StockResourceType
+)
+async def update_resource_type(
+    di: Di, resource_type_id: str, body: StockResourceTypeUpdatePayload
+) -> StockResourceType:
+    if body.resource_type_id != resource_type_id:
+        raise_invalid(
+            ValueError("resource_type_id mismatch"),
+            error_code="path_id_mismatch",
+        )
+    return await op_resource_types_update(body, user=_user(), di=di)
+
+
 @router.get("/resources", response_model=StockItemsResponse[StockResource])
 async def list_resources(
     di: Di, warehouse_id: str
@@ -553,6 +725,17 @@ async def create_resource(
     di: Di, body: StockResourceCreatePayload
 ) -> StockResource:
     return await op_resources_create(body, user=_user(), di=di)
+
+
+@router.patch("/resources/{resource_id}", response_model=StockResource)
+async def update_resource(
+    di: Di, resource_id: str, body: StockResourceUpdatePayload
+) -> StockResource:
+    if body.resource_id != resource_id:
+        raise_invalid(
+            ValueError("resource_id mismatch"), error_code="path_id_mismatch"
+        )
+    return await op_resources_update(body, user=_user(), di=di)
 
 
 @router.post("/resources/login", response_model=StockResource)
@@ -611,33 +794,33 @@ async def move_container(
     return await op_containers_move(body, user=_user(), di=di)
 
 
-@router.get("/packagings", response_model=StockItemsResponse[StockPackagingView])
+@router.get("/packagings", response_model=StockItemsResponse[CatalogPackagingView])
 async def list_packagings(
     di: Di, product_id: str | None = None
-) -> StockItemsResponse[StockPackagingView]:
+) -> StockItemsResponse[CatalogPackagingView]:
     return await op_packagings_list(
         StockPackagingsListPayload(product_id=product_id), user=_user(), di=di
     )
 
 
-@router.post("/packagings", response_model=StockPackagingView)
+@router.post("/packagings", response_model=CatalogPackagingView)
 async def create_packaging(
     di: Di, body: StockPackagingCreatePayload
-) -> StockPackagingView:
+) -> CatalogPackagingView:
     return await op_packagings_create(body, user=_user(), di=di)
 
 
-@router.delete("/packagings/{packaging_id}", response_model=StockPackagingView)
+@router.delete("/packagings/{packaging_id}", response_model=CatalogPackagingView)
 async def delete_packaging(
     di: Di, packaging_id: str
-) -> StockPackagingView:
+) -> CatalogPackagingView:
     return await op_packagings_delete(
         StockPackagingIdPayload(packaging_id=packaging_id), user=_user(), di=di
     )
 
 
-@router.get("/uoms", response_model=StockItemsResponse[UnitOfMeasure])
-async def list_uoms(di: Di) -> StockItemsResponse[UnitOfMeasure]:
+@router.get("/uoms", response_model=StockItemsResponse[CatalogUom])
+async def list_uoms(di: Di) -> StockItemsResponse[CatalogUom]:
     return await op_uoms_list(EmptyPayload(), user=_user(), di=di)
 
 

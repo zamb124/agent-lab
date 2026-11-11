@@ -49,6 +49,7 @@ from apps.stock.models.storage_rules import (
     check_placement,
 )
 from apps.stock.services.ids import new_id
+from core.catalog.models import CatalogProduct
 from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
 from core.config import get_settings
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
@@ -138,6 +139,8 @@ class PlacementService:
         limit: int,
         owner_entity_id: str | None = None,
         offset: int,
+        warehouse_id: str | None = None,
+        subtree_location_id: str | None = None,
     ) -> OffsetPage[StockQuant]:
         """Остатки по локациям/товару — «ведомость запасов» с фильтром.
 
@@ -145,10 +148,24 @@ class PlacementService:
         владельце): ``quantity`` физически лежит,
         ``reserved_quantity`` обещано накладными,
         ``available = quantity - reserved`` реально можно брать.
+
+        ``subtree_location_id`` расширяет фильтр до всего поддерева
+        локации (отчёт «остатки по зоне/складу»); ``location_id``
+        остаётся фильтром ровно одной ячейки — заданное поддерево
+        имеет приоритет.
         """
+        location_ids: list[str] | None = None
+        if subtree_location_id is not None:
+            location_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
+                company_id, subtree_location_id
+            )
+        elif location_id is not None:
+            location_ids = [location_id]
         rows = await StockQuant.list_by_product_and_location_asc(
             company_id,
-            location_id=location_id,
+            location_id=None,
+            location_ids=location_ids,
+            warehouse_id=warehouse_id,
             product_id=product_id,
             owner_entity_id=owner_entity_id,
             limit=limit,
@@ -156,7 +173,9 @@ class PlacementService:
         )
         total = await StockQuant.count_by_location_product_and_owner(
             company_id,
-            location_id=location_id,
+            location_id=None,
+            location_ids=location_ids,
+            warehouse_id=warehouse_id,
             product_id=product_id,
             owner_entity_id=owner_entity_id,
         )
@@ -269,9 +288,9 @@ class PlacementService:
         for quant in quants:
             quants_by_loc.setdefault(quant.location_id, []).append(quant)
 
-        # Вес/объём содержимого ячеек — через карточки товаров, чтобы
+        # Вес/объём содержимого ячеек — через карточки каталога, чтобы
         # проверка ёмкости видела уже стоящий груз, а не только приход.
-        product_by_id = await StockProduct.found_in_company_by_ids(
+        product_by_id = await CatalogProduct.found_in_company_by_ids(
             company_id,
             sorted(
                 {q.product_id for q in quants} | {move.product_id}

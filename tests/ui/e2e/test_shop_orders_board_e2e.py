@@ -63,7 +63,7 @@ async def _product_ids(client: httpx2.AsyncClient, headers: dict[str, str], shop
     resp = await client.get(f"/shop/api/v1/shops/{shop_id}/products", headers=headers)
     assert resp.status_code == 200, resp.text
     items = resp.json()["items"]
-    return [str(p["shop_product_id"]) for p in items]
+    return [str(p["product_id"]) for p in items]
 
 
 @pytest_asyncio.fixture

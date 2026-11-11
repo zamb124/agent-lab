@@ -28,7 +28,9 @@ from apps.shop.models.api import (
     ShopModifierGroupUpdateRequest,
     ShopModifierOptionCreateRequest,
     ShopModifierOptionUpdateRequest,
+    ShopNutrition,
     ShopProductCreateRequest,
+    ShopProductResponse,
     ShopProductsImportRequest,
     ShopProductUpdateRequest,
     ShopPromoCreateRequest,
@@ -40,6 +42,9 @@ from apps.shop.models.api import (
 from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
 from apps.shop.models.common import DOMAIN_PATTERN, SLUG_PATTERN, new_id
 from apps.shop.models.enums import PromoStacking
+from core.catalog.contracts import CatalogOverlay, CatalogScope, ResolvedProduct
+from core.catalog.models import CatalogProductOverride, CatalogUom
+from core.catalog.service import CatalogService
 from core.errors.boundary import (
     PlatformBoundaryError,
     PlatformConflictError,
@@ -49,11 +54,47 @@ from core.types import JsonValue
 from core.utils.time import utcnow
 
 
+class _Keep:
+    """Sentinel «поле не входило в PATCH» при мерже overlay."""
+
+
+_KEEP = _Keep()
+
+
+def shop_scopes(shop_id: str) -> list[CatalogScope]:
+    """Цепочка наследования витрины: эта витрина → все витрины → база."""
+    return [CatalogScope(facet="shop", instance_id=shop_id), CatalogScope(facet="shop")]
+
+
+def _listing_response(
+    row: ShopProduct, resolved: ResolvedProduct
+) -> ShopProductResponse:
+    """Проводка листинга в wire-форму: фасет + эффективный контент."""
+    return ShopProductResponse(
+        shop_id=row.shop_id,
+        product_id=row.product_id,
+        category_id=row.category_id,
+        name=resolved.name,
+        description=resolved.description,
+        portion=row.portion,
+        badges=list(row.badges),
+        price_minor=row.price_minor,
+        photo_file_id=resolved.image_file_ids[0] if resolved.image_file_ids else None,
+        image_file_ids=list(resolved.image_file_ids),
+        sources=dict(resolved.sources),
+        nutrition=ShopNutrition.model_validate(row.nutrition or {}),
+        is_available=row.is_available,
+        is_archived=resolved.product.is_archived,
+        sort=row.sort,
+    )
+
+
 class ShopService:
     """Владелец магазина и его каталога: сценарии tenant'а ``Company``."""
 
-    def __init__(self, settings: ShopSettings) -> None:
+    def __init__(self, settings: ShopSettings, catalog_service: CatalogService) -> None:
         self._settings: ShopSettings = settings
+        self._catalog: CatalogService = catalog_service
 
     async def list_shops(self, company_id: str) -> list[Shop]:
         return await Shop.list_alive_by_company_by_updated_desc(company_id)
@@ -133,7 +174,7 @@ class ShopService:
     async def _check_badge_references(self, shop: Shop) -> None:
         keys = {b["key"] for b in shop.badges}
         products = await ShopProduct.objects.filter(shop_id=shop.shop_id).all()
-        orphans = [p.name for p in products if any(b not in keys for b in p.badges)]
+        orphans = [p.product_id for p in products if any(b not in keys for b in p.badges)]
         if orphans:
             raise PlatformConflictError(
                 f"Badges still referenced by products: {', '.join(orphans[:3])}",
@@ -342,76 +383,196 @@ class ShopService:
                 _ = await product.save()
         _ = await category.delete()
 
-    async def list_products(self, company_id: str, shop_id: str) -> list[ShopProduct]:
+    async def list_products(
+        self, company_id: str, shop_id: str
+    ) -> list[ShopProductResponse]:
         _ = await self.get_shop(company_id, shop_id)
-        return await ShopProduct.list_by_shop_by_sort_asc(shop_id)
+        return await self._list_listings(company_id, shop_id)
+
+    async def _list_listings(
+        self, company_id: str, shop_id: str
+    ) -> list[ShopProductResponse]:
+        rows = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
+        resolved = await self._resolve_rows(company_id, shop_id, rows)
+        return [_listing_response(row, resolved[row.product_id]) for row in rows]
+
+    async def _resolve_rows(
+        self, company_id: str, shop_id: str, rows: list[ShopProduct]
+    ) -> dict[str, ResolvedProduct]:
+        resolved = await self._catalog.resolve_many(
+            company_id=company_id,
+            product_ids=[row.product_id for row in rows],
+            scopes=shop_scopes(shop_id),
+        )
+        missing = [row.product_id for row in rows if row.product_id not in resolved]
+        if missing:
+            raise PlatformConflictError(
+                f"Listings reference missing catalog products: {missing}",
+                error_code="product_orphan",
+            )
+        return resolved
+
+    async def get_listing(
+        self, company_id: str, shop_id: str, product_id: str
+    ) -> ShopProductResponse:
+        _ = await self.get_shop(company_id, shop_id)
+        row = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if row is None:
+            raise PlatformNotFoundError("Product not found", error_code="product_not_found")
+        resolved = await self._resolve_rows(company_id, shop_id, [row])
+        return _listing_response(row, resolved[row.product_id])
 
     async def create_product(
         self, company_id: str, shop_id: str, payload: ShopProductCreateRequest
-    ) -> ShopProduct:
+    ) -> ShopProductResponse:
+        """«Подключить или создать»: ``product_id`` — аттач карточки
+        каталога, иначе новая мастер-карта. Отличные от базы
+        name/description/photo при аттаче пишутся overlay'ом витрины."""
         shop = await self.get_shop(company_id, shop_id)
         if payload.category_id is not None:
             category = await ShopCategory.get_by_id(payload.category_id)
             if category is None or category.shop_id != shop_id:
                 raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+        photo_ids = [payload.photo_file_id] if payload.photo_file_id else []
+        if payload.product_id is not None:
+            product = await self._catalog.get_product(
+                company_id=company_id, product_id=payload.product_id
+            )
+            if product.is_archived:
+                raise PlatformConflictError(
+                    "Product is archived", error_code="product_archived"
+                )
+            if await ShopProduct.by_shop_and_product(shop_id, product.product_id) is not None:
+                raise PlatformConflictError(
+                    "Product already in this shop", error_code="product_attached"
+                )
+            product_id = product.product_id
+            overlay = CatalogOverlay(
+                name=payload.name if payload.name != product.name else None,
+                description=(
+                    payload.description
+                    if payload.description != product.description
+                    else None
+                ),
+                image_file_ids=(
+                    photo_ids
+                    if photo_ids and photo_ids != product.image_file_ids
+                    else None
+                ),
+            )
+        else:
+            await self._catalog.ensure_company_uoms(company_id=company_id)
+            uom = await CatalogUom.by_name(company_id, "Units")
+            if uom is None:
+                raise PlatformConflictError(
+                    "Reference uoms are missing", error_code="uom_missing"
+                )
+            product = await self._catalog.create_product(
+                company_id=company_id,
+                name=payload.name,
+                description=payload.description,
+                image_file_ids=photo_ids,
+                uom_id=uom.uom_id,
+            )
+            product_id = product.product_id
+            overlay = CatalogOverlay()
+        if not overlay.is_empty:
+            _ = await self._catalog.set_overlay(
+                company_id=company_id,
+                product_id=product_id,
+                scope=CatalogScope(facet="shop", instance_id=shop_id),
+                overlay=overlay,
+                resolve_scopes=shop_scopes(shop_id),
+            )
         now = utcnow()
-        product = ShopProduct(
+        row = ShopProduct(
             shop_product_id=new_id("shopprod"),
             shop_id=shop_id,
+            product_id=product_id,
             category_id=payload.category_id,
-            name=payload.name,
-            description=payload.description,
             portion=payload.portion,
             badges=self._validate_product_badges(shop, payload.badges),
             price_minor=payload.price_minor,
-            photo_file_id=payload.photo_file_id,
             nutrition=payload.nutrition.model_dump(exclude_none=True),
             sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),
             created_at=now,
             updated_at=now,
         )
-        return await ShopProduct.create(product)
+        _ = await ShopProduct.create(row)
+        resolved = await self._resolve_rows(company_id, shop_id, [row])
+        return _listing_response(row, resolved[row.product_id])
 
     async def import_products(
         self, company_id: str, shop_id: str, payload: ShopProductsImportRequest
-    ) -> int:
-        """Пакетное создание товаров одной командой — импорт меню из текста."""
+    ) -> list[str]:
+        """Пакетное создание товаров одной командой — импорт меню из текста.
+
+        Точное совпадение имени в каталоге (case-insensitive) — аттач
+        существующей карточки, иначе новая мастер-карта. Возвращает
+        ``product_id`` созданных листингов (дубли пропускаются).
+        """
         _ = await self.get_shop(company_id, shop_id)
         if payload.category_id is not None:
             category = await ShopCategory.get_by_id(payload.category_id)
             if category is None or category.shop_id != shop_id:
                 raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+        await self._catalog.ensure_company_uoms(company_id=company_id)
+        uom = await CatalogUom.by_name(company_id, "Units")
+        if uom is None:
+            raise PlatformConflictError(
+                "Reference uoms are missing", error_code="uom_missing"
+            )
         now = utcnow()
         base_sort = await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id)
-        products = [
-            ShopProduct(
-                shop_product_id=new_id("shopprod"),
-                shop_id=shop_id,
-                category_id=payload.category_id,
-                name=item.name,
-                description=item.description,
-                portion=item.portion,
-                price_minor=item.price_minor,
-                photo_file_id=None,
-                sort=base_sort + index,
-                created_at=now,
-                updated_at=now,
+        created: list[str] = []
+        for index, item in enumerate(payload.items):
+            candidates = await self._catalog.suggest_duplicates(
+                company_id=company_id, name=item.name
             )
-            for index, item in enumerate(payload.items)
-        ]
-        created = await ShopProduct.objects.bulk_create(products)
-        return len(created)
+            product_id = next(
+                (c.product_id for c in candidates if c.name.lower() == item.name.lower()),
+                None,
+            )
+            if product_id is None:
+                product = await self._catalog.create_product(
+                    company_id=company_id,
+                    name=item.name,
+                    description=item.description,
+                    uom_id=uom.uom_id,
+                )
+                product_id = product.product_id
+            if await ShopProduct.by_shop_and_product(shop_id, product_id) is not None:
+                continue
+            _ = await ShopProduct.create(
+                ShopProduct(
+                    shop_product_id=new_id("shopprod"),
+                    shop_id=shop_id,
+                    product_id=product_id,
+                    category_id=payload.category_id,
+                    portion=item.portion,
+                    price_minor=item.price_minor,
+                    sort=base_sort + index,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            created.append(product_id)
+        return created
 
     async def update_product(
         self, company_id: str, shop_id: str, product_id: str, payload: ShopProductUpdateRequest
-    ) -> ShopProduct:
+    ) -> ShopProductResponse:
         shop = await self.get_shop(company_id, shop_id)
-        product = await ShopProduct.get_by_id(product_id)
-        if product is None or product.shop_id != shop_id:
+        product = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if product is None:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
         _ = patch.pop("shop_product_id", None)
+        _ = patch.pop("product_id", None)
+        content_name = patch.pop("name", None)
+        content_description = patch.pop("description", None)
+        content_photo = patch.pop("photo_file_id", None)
         nutrition = patch.get("nutrition")
         if isinstance(nutrition, dict):
             patch["nutrition"] = {k: v for k, v in nutrition.items() if v is not None}
@@ -432,7 +593,65 @@ class ShopService:
             setattr(product, field, value)
         product.updated_at = utcnow()
         _ = await product.save()
-        return product
+        if (
+            "name" in payload.model_fields_set
+            or "description" in payload.model_fields_set
+            or "photo_file_id" in payload.model_fields_set
+        ):
+            await self.write_shop_overlay(
+                company_id,
+                shop_id,
+                product.product_id,
+                name=content_name if "name" in payload.model_fields_set else _KEEP,
+                description=content_description
+                if "description" in payload.model_fields_set
+                else _KEEP,
+                photo_file_id=content_photo
+                if "photo_file_id" in payload.model_fields_set
+                else _KEEP,
+            )
+        resolved = await self._resolve_rows(company_id, shop_id, [product])
+        return _listing_response(product, resolved[product.product_id])
+
+    async def write_shop_overlay(
+        self,
+        company_id: str,
+        shop_id: str,
+        product_id: str,
+        *,
+        name: JsonValue | _Keep = _KEEP,
+        description: JsonValue | _Keep = _KEEP,
+        photo_file_id: JsonValue | _Keep = _KEEP,
+    ) -> None:
+        """Мерж контентных полей в overlay витрины: ``_KEEP`` — не трогаем,
+        значение — замена, ``None``/пустой photo — сброс в наследование."""
+        row = await CatalogProductOverride.by_scope(
+            company_id, product_id, "shop", shop_id
+        )
+        overlay = CatalogOverlay(
+            name=row.name if row is not None else None,
+            description=row.description if row is not None else None,
+            image_file_ids=row.image_file_ids if row is not None else None,
+        )
+        if not isinstance(name, _Keep):
+            overlay.name = name if isinstance(name, str) and name else None
+        if not isinstance(description, _Keep):
+            overlay.description = (
+                description if isinstance(description, str) and description else None
+            )
+        if not isinstance(photo_file_id, _Keep):
+            overlay.image_file_ids = (
+                [photo_file_id]
+                if isinstance(photo_file_id, str) and photo_file_id
+                else None
+            )
+        _ = await self._catalog.set_overlay(
+            company_id=company_id,
+            product_id=product_id,
+            scope=CatalogScope(facet="shop", instance_id=shop_id),
+            overlay=overlay,
+            resolve_scopes=shop_scopes(shop_id),
+        )
 
     @staticmethod
     def _validate_product_badges(shop: Shop, badges: list[str]) -> list[str]:
@@ -447,7 +666,7 @@ class ShopService:
         sort-значения в новом порядке — позиции вне списка не трогаем."""
         _ = await self.get_shop(company_id, shop_id)
         products = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
-        by_id = {p.shop_product_id: p for p in products}
+        by_id = {p.product_id: p for p in products}
         if any(pid not in by_id for pid in product_ids):
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         ordered = [by_id[pid] for pid in product_ids]
@@ -459,9 +678,10 @@ class ShopService:
                 _ = await product.save()
 
     async def delete_product(self, company_id: str, shop_id: str, product_id: str) -> None:
+        """Снять листинг с витрины; мастер-карта каталога остаётся."""
         _ = await self.get_shop(company_id, shop_id)
-        product = await ShopProduct.get_by_id(product_id)
-        if product is None or product.shop_id != shop_id:
+        product = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if product is None:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         _ = await product.delete()
 
@@ -634,19 +854,24 @@ class ShopService:
         max_selected: int | None,
     ) -> None:
         _ = await self.get_shop(company_id, shop_id)
-        product = await ShopProduct.get_by_id(product_id)
-        if product is None or product.shop_id != shop_id:
+        product = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if product is None:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         _ = await self._get_modifier_group(shop_id, group_id)
-        existing = await ShopProductModifierGroup.get_link(product_id, group_id)
+        existing = await ShopProductModifierGroup.get_link(
+            shop_id, product_id, group_id
+        )
         if existing is not None:
             existing.min_selected = min_selected
             existing.max_selected = max_selected
             _ = await existing.save()
             return
-        links = await ShopProductModifierGroup.list_by_product_by_sort_asc(product_id)
+        links = await ShopProductModifierGroup.list_by_product_by_sort_asc(
+            shop_id, product_id
+        )
         _ = await ShopProductModifierGroup.create(
             ShopProductModifierGroup(
+                shop_id=shop_id,
                 product_id=product_id,
                 group_id=group_id,
                 sort=(max((link.sort for link in links), default=-1) + 1),
@@ -663,7 +888,7 @@ class ShopService:
         group_id: str,
     ) -> None:
         _ = await self.get_shop(company_id, shop_id)
-        link = await ShopProductModifierGroup.get_link(product_id, group_id)
+        link = await ShopProductModifierGroup.get_link(shop_id, product_id, group_id)
         if link is None:
             raise PlatformNotFoundError(
                 "Modifier group is not attached",

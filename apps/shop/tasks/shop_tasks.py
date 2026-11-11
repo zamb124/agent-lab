@@ -19,6 +19,7 @@ from apps.shop.models import (
     ShopProduct,
     order_status_label,
 )
+from apps.shop.services.shop_service import shop_scopes
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_BACK_IN_STOCK,
@@ -36,7 +37,6 @@ from core.logging import get_logger
 from core.models.identity_models import Company
 from core.tasks import enqueue, platform_task
 from core.types import JsonObject
-from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,15 @@ async def shop_rebuild_storefront(
     await _enter_worker_context(trace_id=f"shop:rebuild:{slug}")
     try:
         snapshot = await di.storefront_service.rebuild_snapshot(slug)
-        return JsonObject({"slug": slug, "rebuilt": snapshot is not None})
+        shop = await Shop.get_by_slug(slug)
+        indexed = (
+            await di.aggregate_service.sync_shop_items(shop)
+            if shop is not None
+            else 0
+        )
+        return JsonObject(
+            {"slug": slug, "rebuilt": snapshot is not None, "indexed": indexed}
+        )
     finally:
         clear_context()
 
@@ -130,14 +138,20 @@ async def shop_notify_back_in_stock(
     """
     await _enter_worker_context(trace_id=f"shop:back-in-stock:{product_id}")
     try:
-        product = await ShopProduct.get_by_id(product_id)
+        product = await ShopProduct.by_product_id(product_id)
         if product is None or not product.is_available:
             return JsonObject({"notified": 0})
         shop = await Shop.get_by_id(product.shop_id)
-        shop_name = shop.name if shop is not None else ""
+        if shop is None:
+            return JsonObject({"notified": 0})
+        card = await di.catalog_service.resolve(
+            company_id=shop.company_id,
+            product_id=product_id,
+            scopes=shop_scopes(shop.shop_id),
+        )
         notified = 0
         for sub in await ShopBackInStock.list_pending_by_product(product_id):
-            text = f"«{product.name}» снова в наличии.\n{shop_name}"
+            text = f"«{card.name}» снова в наличии.\n{shop.name}"
             delivered = await di.customer_notify_service.send_text(
                 sub.customer_id,
                 text,
@@ -240,19 +254,29 @@ async def shop_ai_describe_batch(
             c.shop_category_id: c.name
             for c in await ShopCategory.list_by_shop_by_sort_asc(shop_id)
         }
+        listings = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
+        resolved = await di.catalog_service.resolve_many(
+            company_id=company_id,
+            product_ids=[p.product_id for p in listings],
+            scopes=shop_scopes(shop_id),
+        )
         products = [
             p
-            for p in await ShopProduct.list_by_shop_by_sort_asc(shop_id)
-            if not p.description.strip()
+            for p in listings
+            if (card := resolved.get(p.product_id)) is not None
+            and not card.description.strip()
         ]
         updated = 0
         failed = 0
         for product in products:
+            card = resolved[product.product_id]
             try:
                 text = await di.ai_service.describe_product(
-                    name=product.name,
+                    name=card.name,
                     category_name=categories.get(product.category_id or ""),
-                    photo_file_id=product.photo_file_id,
+                    photo_file_id=(
+                        card.image_file_ids[0] if card.image_file_ids else None
+                    ),
                 )
             except Exception as exc:
                 failed += 1
@@ -263,12 +287,16 @@ async def shop_ai_describe_batch(
                     error=str(exc),
                 )
                 continue
-            product.description = text
-            product.updated_at = utcnow()
-            _ = await product.save()
+            await di.shop_service.write_shop_overlay(
+                company_id,
+                shop_id,
+                product.product_id,
+                description=text,
+            )
             updated += 1
         if updated:
             await di.storefront_service.invalidate_snapshot(shop_id)
+            _ = await di.aggregate_service.sync_shop_items(shop)
             await publish_shop_catalog_changed(shop_id, shop.slug, company_id)
             _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=shop.slug)
         return JsonObject(

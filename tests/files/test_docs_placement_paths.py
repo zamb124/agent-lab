@@ -98,9 +98,14 @@ def test_every_source_kind_is_placed_or_exempt() -> None:
             ["Wiki", "knowledge", "page-1"],
         ),
         (
-            FileSourceKind.SHOP_PRODUCT,
+            FileSourceKind.PRODUCT,
             FileSourceRef(shop_id="shop_1"),
             ["Shop", "shop_1"],
+        ),
+        (
+            FileSourceKind.PRODUCT,
+            FileSourceRef(shop_id="shop_1", product_id="prd_1"),
+            ["Products", "prd_1"],
         ),
         (
             FileSourceKind.CODE_AGENT_SOURCE,

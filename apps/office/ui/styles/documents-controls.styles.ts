@@ -25,7 +25,7 @@ export const documentsToolbarControlStyles = css`
     .toolbar .btn-primary {
         background: var(--documents-action-primary);
         border: 1px solid var(--documents-action-primary-border);
-        color: var(--text-primary);
+        color: var(--platform-btn-primary-text);
     }
 
     .toolbar .btn-primary:hover:not(:disabled) {
@@ -161,7 +161,7 @@ export const documentsPanelActionStyles = css`
     .actions .btn-primary {
         background: var(--documents-action-primary);
         border: 1px solid var(--documents-action-primary-border);
-        color: var(--text-primary);
+        color: var(--platform-btn-primary-text);
     }
 
     .actions .btn-primary:hover:not(:disabled) {

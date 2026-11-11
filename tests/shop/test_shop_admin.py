@@ -237,7 +237,7 @@ class TestCatalog:
         assert product["portion"] == "450 г"
         assert product["badges"] == ["hit", "vegan"]
         resp = await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['product_id']}",
             json={
                 "price_minor": 59000,
                 "is_available": False,
@@ -251,7 +251,7 @@ class TestCatalog:
         assert body["badges"] == ["spicy"]
         assert body["is_available"] is False
         bad = await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['product_id']}",
             json={"badges": ["bogus"]},
         )
         assert bad.status_code == 404
@@ -286,7 +286,7 @@ class TestCatalog:
         )
         assert conflict.status_code == 409
         resp = await shop_client.delete(
-            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}"
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['product_id']}"
         )
         assert resp.status_code == 200
 
@@ -304,17 +304,17 @@ class TestCatalog:
         other = await _make_product(shop_client, shop["shop_id"], "Z", 400, category_id=other_cat["shop_category_id"])
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/products/reorder",
-            json={"product_ids": [c["shop_product_id"], a["shop_product_id"], b["shop_product_id"]]},
+            json={"product_ids": [c["product_id"], a["product_id"], b["product_id"]]},
         )
         assert resp.status_code == 200, resp.text
         listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
-        ids = [p["shop_product_id"] for p in listed]
-        assert ids.index(c["shop_product_id"]) < ids.index(a["shop_product_id"]) < ids.index(b["shop_product_id"])
-        sorts = {p["shop_product_id"]: p["sort"] for p in listed}
-        assert sorts[other["shop_product_id"]] == other["sort"]
+        ids = [p["product_id"] for p in listed]
+        assert ids.index(c["product_id"]) < ids.index(a["product_id"]) < ids.index(b["product_id"])
+        sorts = {p["product_id"]: p["sort"] for p in listed}
+        assert sorts[other["product_id"]] == other["sort"]
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/products/reorder",
-            json={"product_ids": [a["shop_product_id"], "nonexistent"]},
+            json={"product_ids": [a["product_id"], "nonexistent"]},
         )
         assert resp.status_code == 404
 
@@ -458,7 +458,7 @@ class TestCatalog:
         assert mid["shop_category_id"] not in by_id
         assert by_id[leaf["shop_category_id"]]["parent_id"] == root["shop_category_id"]
         products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
-        lifted = next(p for p in products if p["shop_product_id"] == product["shop_product_id"])
+        lifted = next(p for p in products if p["product_id"] == product["product_id"])
         assert lifted["category_id"] == root["shop_category_id"]
 
         resp = await shop_client.delete(
@@ -469,7 +469,7 @@ class TestCatalog:
         leaf_row = next(x for x in listed if x["shop_category_id"] == leaf["shop_category_id"])
         assert leaf_row["parent_id"] is None
         products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
-        lifted = next(p for p in products if p["shop_product_id"] == product["shop_product_id"])
+        lifted = next(p for p in products if p["product_id"] == product["product_id"])
         assert lifted["category_id"] is None
 
     async def test_product_move_to_category_appends_sort(
@@ -486,7 +486,7 @@ class TestCatalog:
             shop_client, shop["shop_id"], "Y", 100, category_id=cat_a["shop_category_id"]
         )
         resp = await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{moved['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{moved['product_id']}",
             json={"category_id": cat_b["shop_category_id"]},
         )
         assert resp.status_code == 200, resp.text

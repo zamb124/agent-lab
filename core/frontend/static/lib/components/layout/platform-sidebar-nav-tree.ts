@@ -179,6 +179,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
                 <button
                     type="button"
                     class="nav-item ${active ? 'active' : ''}"
+                    data-route-key=${node.routeKey}
                     @click=${() => this._onLeafClick(node)}
                 >
                     <div class="nav-item-icon">

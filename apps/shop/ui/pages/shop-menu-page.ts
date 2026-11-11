@@ -13,6 +13,8 @@ import type { SelectController } from '@platform/lib/events/select-controller.js
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import type { ProductDraft } from '../modals/shop-product-modal.js';
+import { PlatformCatalogProductPicker } from '@platform/lib/catalog/product-picker.js';
+import type { CatalogProductPick } from '@platform/lib/catalog/product-picker.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
@@ -35,7 +37,7 @@ interface CategoryRow {
 }
 
 interface ProductRow {
-    shop_product_id: string;
+    product_id: string;
     category_id: string | null;
     name: string;
     description: string;
@@ -43,9 +45,11 @@ interface ProductRow {
     photo_file_id: string | null;
     nutrition: { kcal?: number; protein_g?: number; fat_g?: number; carb_g?: number };
     is_available: boolean;
+    is_archived: boolean;
     portion: string;
     badges: string[];
     sort: number;
+    sources: Record<string, string>;
 }
 
 interface ShopBadgeDef {
@@ -142,6 +146,14 @@ export class ShopMenuPage extends PlatformPage {
             }
             .card:hover { border-color: color-mix(in srgb, var(--text-primary) 18%, transparent); }
             .card.off { opacity: 0.55; }
+            .card.archived { opacity: 0.45; border-style: dashed; }
+            .atag {
+                display: inline-flex; align-items: center; gap: 3px; padding: 1px var(--space-2);
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+                color: var(--text-secondary); font-size: 10px; font-weight: var(--font-bold);
+            }
+            .atag platform-icon { color: var(--text-secondary); }
             .thumb {
                 width: 56px; height: 56px; border-radius: var(--radius-md);
                 object-fit: cover; display: block; flex-shrink: 0;
@@ -421,7 +433,7 @@ export class ShopMenuPage extends PlatformPage {
     private async _dropProduct(productId: string, categoryId: string | null) {
         await this._productUpdateOp.run({
             shop_id: this.shopId,
-            shop_product_id: productId,
+            product_id: productId,
             category_id: categoryId,
         });
         await this._reload();
@@ -446,22 +458,49 @@ export class ShopMenuPage extends PlatformPage {
     }
 
     private _openProductModal(product?: ProductRow) {
-        const draft: ProductDraft | null = product === undefined
-            ? null
-            : {
-                shop_product_id: product.shop_product_id,
-                name: product.name,
-                description: product.description,
-                price_minor: product.price_minor,
-                portion: product.portion,
-                badges: [...product.badges],
-                photo_file_id: product.photo_file_id,
-                nutrition: { ...product.nutrition },
-                is_available: product.is_available,
-            };
+        if (product === undefined) {
+            this.openModal(PlatformCatalogProductPicker, {
+                suggestOpName: 'shop/catalog_products_suggest',
+                onPick: (item: CatalogProductPick) => {
+                    this.openModal('shop.product', {
+                        shopId: this.shopId,
+                        categoryId: this._activeCategory,
+                        product: null,
+                        attachProduct: item,
+                        badgeDefs: this._shopBadges(),
+                        nutritionEnabled: this._nutritionEnabled(),
+                        onSaved: () => void this._reload(),
+                    });
+                },
+                onCreateNew: (initialName: string) => {
+                    this.openModal('shop.product', {
+                        shopId: this.shopId,
+                        categoryId: this._activeCategory,
+                        product: null,
+                        initialName,
+                        badgeDefs: this._shopBadges(),
+                        nutritionEnabled: this._nutritionEnabled(),
+                        onSaved: () => void this._reload(),
+                    });
+                },
+            });
+            return;
+        }
+        const draft: ProductDraft = {
+            product_id: product.product_id,
+            name: product.name,
+            description: product.description,
+            price_minor: product.price_minor,
+            portion: product.portion,
+            badges: [...product.badges],
+            photo_file_id: product.photo_file_id,
+            nutrition: { ...product.nutrition },
+            is_available: product.is_available,
+            sources: { ...product.sources },
+        };
         this.openModal('shop.product', {
             shopId: this.shopId,
-            categoryId: product === undefined ? this._activeCategory : product.category_id,
+            categoryId: product.category_id,
             product: draft,
             badgeDefs: this._shopBadges(),
             nutritionEnabled: this._nutritionEnabled(),
@@ -475,14 +514,14 @@ export class ShopMenuPage extends PlatformPage {
         if (!file) return;
         const result = await this._uploadOp.run({
             file,
-            spec: buildShopProductFileCreateSpecJson({ shopId: this.shopId, productId: p.shop_product_id }),
+            spec: buildShopProductFileCreateSpecJson({ shopId: this.shopId, productId: p.product_id }),
         });
         if (result !== null && typeof result === 'object' && 'file_id' in (result as Record<string, unknown>)) {
             const fileId = (result as { file_id?: unknown }).file_id;
             if (typeof fileId === 'string') {
                 await this._productUpdateOp.run({
                     shop_id: this.shopId,
-                    shop_product_id: p.shop_product_id,
+                    product_id: p.product_id,
                     photo_file_id: fileId,
                 });
                 await this._reload();
@@ -499,7 +538,7 @@ export class ShopMenuPage extends PlatformPage {
             if (typeof fileId === 'string') {
                 await this._productUpdateOp.run({
                     shop_id: this.shopId,
-                    shop_product_id: product.shop_product_id,
+                    product_id: product.product_id,
                     photo_file_id: fileId,
                 });
                 await this._reload();
@@ -514,7 +553,7 @@ export class ShopMenuPage extends PlatformPage {
             if (typeof fileId === 'string') {
                 await this._productUpdateOp.run({
                     shop_id: this.shopId,
-                    shop_product_id: product.shop_product_id,
+                    product_id: product.product_id,
                     photo_file_id: fileId,
                 });
                 await this._reload();
@@ -525,7 +564,7 @@ export class ShopMenuPage extends PlatformPage {
     private async _toggleAvailable(product: ProductRow, enabled: boolean) {
         await this._productUpdateOp.run({
             shop_id: this.shopId,
-            shop_product_id: product.shop_product_id,
+            product_id: product.product_id,
             is_available: enabled,
         });
         await this._reload();
@@ -595,7 +634,7 @@ export class ShopMenuPage extends PlatformPage {
     private _openModifiers(product: ProductRow) {
         this.openModal('shop.modifiers', {
             shopId: this.shopId,
-            productId: product.shop_product_id,
+            productId: product.product_id,
             productName: product.name,
             nutritionEnabled: this._nutritionEnabled(),
         });
@@ -605,10 +644,10 @@ export class ShopMenuPage extends PlatformPage {
         const list = this._activeCategory === null
             ? this._products
             : this._products.filter((p) => p.category_id === this._activeCategory);
-        const idx = list.findIndex((p) => p.shop_product_id === product.shop_product_id);
+        const idx = list.findIndex((p) => p.product_id === product.product_id);
         const swap = list[idx + dir];
         if (idx < 0 || swap === undefined) return;
-        const ids = list.map((p) => p.shop_product_id);
+        const ids = list.map((p) => p.product_id);
         const idA = ids[idx];
         const idB = ids[idx + dir];
         if (idA === undefined || idB === undefined) return;
@@ -621,7 +660,7 @@ export class ShopMenuPage extends PlatformPage {
     private async _removeProduct(product: ProductRow) {
         await this._productRemoveOp.run({
             shop_id: this.shopId,
-            shop_product_id: product.shop_product_id,
+            product_id: product.product_id,
         });
         await this._reload();
     }
@@ -629,9 +668,9 @@ export class ShopMenuPage extends PlatformPage {
     private _renderProduct(p: ProductRow, index: number, total: number) {
         const badgeDefs = this._shopBadges();
         return html`
-            <div class="card ${p.is_available ? '' : 'off'}"
+            <div class="card ${p.is_available ? '' : 'off'} ${p.is_archived ? 'archived' : ''}"
                 draggable="true"
-                @dragstart=${(e: DragEvent) => this._onProductDragStart(e, p.shop_product_id)}
+                @dragstart=${(e: DragEvent) => this._onProductDragStart(e, p.product_id)}
                 @dragend=${(e: DragEvent) => this._onProductDragEnd(e)}>
                 ${p.photo_file_id
                     ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}?v=sm!sq" alt="" loading="lazy">`
@@ -639,6 +678,9 @@ export class ShopMenuPage extends PlatformPage {
                 <div class="pinfo">
                     <div class="pname">
                         ${p.name}
+                        ${p.is_archived
+                            ? html`<span class="atag"><platform-icon name="box" size="11"></platform-icon>${this.t('menu.archived')}</span>`
+                            : nothing}
                         ${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : nothing}
                         ${p.badges.map((b) => {
                             const d = badgeDefs.find((x) => x.key === b);
@@ -650,7 +692,8 @@ export class ShopMenuPage extends PlatformPage {
                 <span class="price">${this._money(p.price_minor)}</span>
                 <platform-switch
                     title=${this.t('menu.col_available')}
-                    ?checked=${p.is_available}
+                    ?checked=${p.is_available && !p.is_archived}
+                    ?disabled=${p.is_archived}
                     @change=${(event: CustomEvent<{ value?: unknown }>) => this._toggleAvailable(p, Boolean(event.detail.value))}
                 ></platform-switch>
                 <div class="ops">

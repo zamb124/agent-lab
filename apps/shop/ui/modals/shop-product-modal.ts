@@ -12,10 +12,13 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import type { CatalogProductPick } from '@platform/lib/catalog/product-picker.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/catalog/source-badge.js';
+import '@platform/lib/catalog/product-card.js';
 
 interface ShopBadgeDef {
     key: string;
@@ -32,7 +35,7 @@ interface NutritionValue {
 }
 
 export interface ProductDraft {
-    shop_product_id?: string;
+    product_id?: string;
     name: string;
     description: string;
     price_minor: number;
@@ -41,6 +44,7 @@ export interface ProductDraft {
     photo_file_id: string | null;
     nutrition: NutritionValue;
     is_available: boolean;
+    sources: Record<string, string>;
 }
 
 function _str(e: CustomEvent<{ value?: unknown }>): string {
@@ -55,6 +59,8 @@ export class ShopProductModal extends PlatformModal {
     declare shopId: string;
     declare categoryId: string | null;
     declare product: ProductDraft | null;
+    declare attachProduct: CatalogProductPick | null;
+    declare initialName: string;
     declare badgeDefs: ShopBadgeDef[];
     declare nutritionEnabled: boolean;
     declare onSaved: (() => void) | null;
@@ -78,12 +84,15 @@ export class ShopProductModal extends PlatformModal {
     declare _fat: string;
     declare _carb: string;
     declare _isAvailable: boolean;
+    declare _resetFields: string[];
 
     static override properties = {
         ...PlatformModal.properties,
         shopId: { type: String, attribute: 'shop-id' },
         categoryId: { attribute: false },
         product: { attribute: false },
+        attachProduct: { attribute: false },
+        initialName: { type: String, attribute: 'initial-name' },
         badgeDefs: { attribute: false },
         nutritionEnabled: { type: Boolean, attribute: 'nutrition-enabled' },
         onSaved: { attribute: false },
@@ -99,6 +108,7 @@ export class ShopProductModal extends PlatformModal {
         _fat: { state: true },
         _carb: { state: true },
         _isAvailable: { state: true },
+        _resetFields: { state: true },
     };
 
     static override styles = [
@@ -136,6 +146,9 @@ export class ShopProductModal extends PlatformModal {
             .nutri-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
             .toggle-row { display: flex; align-items: center; gap: var(--space-2); }
             .toggle-row span { font-size: var(--text-sm); color: var(--text-primary); }
+            .ov-field { position: relative; }
+            .ov-field > platform-catalog-source-badge { position: absolute; top: -9px; right: 0; z-index: 1; }
+            .photo-box platform-catalog-source-badge { position: absolute; top: -9px; right: -4px; z-index: 2; }
             @media (max-width: 560px) {
                 .top { grid-template-columns: 1fr; }
                 .photo-box { width: 100%; height: 160px; }
@@ -157,6 +170,7 @@ export class ShopProductModal extends PlatformModal {
         this._fat = '';
         this._carb = '';
         this._isAvailable = true;
+        this._resetFields = [];
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
@@ -171,6 +185,17 @@ export class ShopProductModal extends PlatformModal {
             throw new Error('ShopProductModal: prop "shopId" required');
         }
         const p = this.product;
+        if (this.attachProduct !== null && this.attachProduct !== undefined) {
+            this._name = this.attachProduct.name;
+            this._description = this.attachProduct.description;
+            const photoId = this.attachProduct.image_file_ids[0];
+            if (photoId !== undefined) {
+                this._photoFileId = photoId;
+                this._photoPreview = `/shop/api/v1/files/download/${photoId}?v=md!sq`;
+            }
+        } else if (typeof this.initialName === 'string' && this.initialName !== '') {
+            this._name = this.initialName;
+        }
         if (p !== null && p !== undefined) {
             this._name = p.name;
             this._price = (p.price_minor / 100).toString();
@@ -210,7 +235,31 @@ export class ShopProductModal extends PlatformModal {
     }
 
     private get _editing(): boolean {
-        return this.product !== null && this.product !== undefined && typeof this.product.shop_product_id === 'string';
+        return this.product !== null && this.product !== undefined && typeof this.product.product_id === 'string';
+    }
+
+    private get _attaching(): boolean {
+        return this.attachProduct !== null && this.attachProduct !== undefined;
+    }
+
+    private _sourceOf(field: string): string {
+        const sources = this.product !== null && this.product !== undefined ? this.product.sources : undefined;
+        return typeof sources?.[field] === 'string' ? sources[field] : 'base';
+    }
+
+    private _resetField(field: string): void {
+        if (!this._resetFields.includes(field)) this._resetFields = [...this._resetFields, field];
+    }
+
+    private _badge(field: string) {
+        if (!this._editing || this._sourceOf(field) === 'base') return nothing;
+        return html`<platform-catalog-source-badge
+            .source=${this._sourceOf(field)}
+            service-label=${this.t('menu.source_all_shops')}
+            instance-label=${this.t('menu.source_this_shop')}
+            resettable
+            @catalog-source-reset=${() => this._resetField(field)}
+        ></platform-catalog-source-badge>`;
     }
 
     private _iconSvg(path: string) {
@@ -232,18 +281,21 @@ export class ShopProductModal extends PlatformModal {
         const price = Math.round(parseFloat(this._price.replace(',', '.')) * 100);
         if (name === '' || !Number.isFinite(price) || price < 0 || this._saving) return;
         let ok = true;
-        if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
+        if (this._editing && this.product !== null && this.product.product_id !== undefined) {
             const p = this.product;
             const payload: Record<string, unknown> = {
                 shop_id: this.shopId,
-                shop_product_id: p.shop_product_id,
+                product_id: p.product_id,
             };
-            if (name !== p.name) payload.name = name;
+            if (this._resetFields.includes('name')) payload.name = null;
+            else if (name !== p.name) payload.name = name;
             if (price !== p.price_minor) payload.price_minor = price;
             if (this._portion !== p.portion) payload.portion = this._portion;
             if (JSON.stringify(this._badges) !== JSON.stringify(p.badges)) payload.badges = this._badges;
-            if (this._description !== p.description) payload.description = this._description;
-            if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId === '' ? null : this._photoFileId;
+            if (this._resetFields.includes('description')) payload.description = null;
+            else if (this._description !== p.description) payload.description = this._description;
+            if (this._resetFields.includes('image_file_ids')) payload.photo_file_id = null;
+            else if (this._photoFileId !== (p.photo_file_id ?? '')) payload.photo_file_id = this._photoFileId;
             const nutrition = this._nutrition();
             if (JSON.stringify(nutrition) !== JSON.stringify(p.nutrition)) payload.nutrition = nutrition;
             if (this._isAvailable !== p.is_available) payload.is_available = this._isAvailable;
@@ -252,6 +304,7 @@ export class ShopProductModal extends PlatformModal {
             ok = (await this._createOp.run({
                 shop_id: this.shopId,
                 category_id: this.categoryId,
+                product_id: this._attaching && this.attachProduct !== null ? this.attachProduct.product_id : null,
                 name,
                 description: this._description.trim(),
                 portion: this._portion.trim(),
@@ -271,8 +324,8 @@ export class ShopProductModal extends PlatformModal {
         const file = input.files && input.files[0];
         if (!file) return;
         const params: { shopId: string; productId?: string } = { shopId: this.shopId };
-        if (this._editing && this.product !== null && this.product.shop_product_id !== undefined) {
-            params.productId = this.product.shop_product_id;
+        if (this._editing && this.product !== null && this.product.product_id !== undefined) {
+            params.productId = this.product.product_id;
         }
         const result = await this._uploadOp.run({
             file,
@@ -331,17 +384,28 @@ export class ShopProductModal extends PlatformModal {
         const badges = Array.isArray(this.badgeDefs) ? this.badgeDefs : [];
         return html`
             <div class="body">
+                ${this._attaching && this.attachProduct !== null && this.attachProduct !== undefined ? html`
+                    <platform-catalog-product-card
+                        .name=${this.attachProduct.name}
+                        .sku=${this.attachProduct.sku}
+                    ></platform-catalog-product-card>
+                ` : nothing}
                 <div class="top">
                     <button class="photo-box" title=${this.t('menu.photo_pick')}
+                        style="position:relative"
                         ?disabled=${this._uploadOp.busy}
                         @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#photo-input')?.click()}>
                         ${this._photoPreview === ''
                             ? html`<platform-icon name="image" size="24"></platform-icon><span>${this.t('menu.photo_pick')}</span>`
                             : html`<img src=${this._photoPreview} alt="">`}
+                        ${this._badge('image_file_ids')}
                     </button>
                     <div class="fields">
-                        <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._name}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = _str(e); }}></platform-field>
+                        <div class="ov-field">
+                            <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._name}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = _str(e); }}></platform-field>
+                            ${this._badge('name')}
+                        </div>
                         <div class="row2">
                             <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._price}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._price = _str(e); }}></platform-field>
@@ -363,8 +427,11 @@ export class ShopProductModal extends PlatformModal {
                     </div>
                 </div>
                 <div class="desc-row">
-                    <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
-                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
+                    <div class="ov-field">
+                        <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
+                        ${this._badge('description')}
+                    </div>
                     <platform-button size="sm" variant="accent" class="desc-ai" ?loading=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
                         @click=${() => this._describeWithAi()}>
                         <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}

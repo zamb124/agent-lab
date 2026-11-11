@@ -11,6 +11,215 @@
 export type BackorderPolicy = "always" | "never" | "ask";
 
 /**
+ * Полная форма override'ов контента одного scope (PUT-семантика).
+ */
+export interface CatalogOverlay {
+    "name"?: string | null | undefined;
+    "description"?: string | null | undefined;
+    "image_file_ids"?: string[] | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Упаковка товара в терминах каталога: ``quantity`` базовых ЕИ в одной.
+ */
+export interface CatalogPackagingView {
+    "packaging_id": string;
+    "product_id": string;
+    "name": string;
+    "quantity": number | string;
+    "weight": number | string | null;
+    "volume": number | string | null;
+    [key: string]: unknown;
+}
+
+/**
+ * Единый товар компании. Таблица ``catalog_products`` (shared).
+ */
+export interface CatalogProduct {
+    "product_id": string;
+    "company_id": string;
+    "sku"?: string | null | undefined;
+    "name": string;
+    "description"?: string | undefined;
+    "image_file_ids"?: string[] | undefined;
+    "uom_id": string;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    "is_archived"?: boolean | undefined;
+    "created_at": string;
+    "updated_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Создание товара из мастер-карты: только базовые поля.
+ */
+export interface CatalogProductCreatePayload {
+    "name": string;
+    "uom_id": string;
+    "description"?: string | undefined;
+    "image_file_ids"?: string[] | undefined;
+    "sku"?: string | null | undefined;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    "barcodes"?: string[] | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Полная картина мастер-карты: база + все overlay'ы + коды + упаковки.
+ */
+export interface CatalogProductDetail {
+    "product": CatalogProduct;
+    "overlays": CatalogProductOverride[];
+    "barcodes": string[];
+    "packagings": CatalogPackagingView[];
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product/created|updated`` — карточка после мутации.
+ */
+export interface CatalogProductEventPayload {
+    "product": CatalogProduct;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product_facet/changed`` — мутация сервисного фасета.
+ * 
+ * ``instance_id`` — конкретный экземпляр фасета (витрина ``shop_id``);
+ * ``None`` — сервисный фасет без привязки к экземпляру (``stock``).
+ */
+export interface CatalogProductFacetEventPayload {
+    "product_id": string;
+    "facet": string;
+    "instance_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * CatalogProductIdPayload
+ */
+export interface CatalogProductIdPayload {
+    "product_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product_overlay/changed``.
+ * 
+ * ``overlay=None`` — override снят (полное наследование базы).
+ */
+export interface CatalogProductOverlayEventPayload {
+    "product_id": string;
+    "facet": string;
+    "instance_id"?: string | null | undefined;
+    "overlay"?: CatalogOverlay | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Полевые override'ы карточки в контексте сервиса. Таблица ``catalog_product_overrides``.
+ */
+export interface CatalogProductOverride {
+    "override_id": string;
+    "company_id": string;
+    "product_id": string;
+    "facet": string;
+    "instance_id"?: string | null | undefined;
+    "name"?: string | null | undefined;
+    "description"?: string | null | undefined;
+    "image_file_ids"?: string[] | null | undefined;
+    "created_at": string;
+    "updated_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Правка базовых полей; отсутствующее поле не трогается.
+ * 
+ * ``is_archived=True`` — архив «выключает везде»: витрины прячут
+ * позицию, склад отказывает новым документам, история читается.
+ */
+export interface CatalogProductUpdatePayload {
+    "product_id": string;
+    "name"?: string | null | undefined;
+    "description"?: string | null | undefined;
+    "image_file_ids"?: string[] | null | undefined;
+    "sku"?: string | null | undefined;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    "barcodes"?: string[] | null | undefined;
+    "is_archived"?: boolean | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * CatalogProductsListPayload
+ */
+export interface CatalogProductsListPayload {
+    /**
+     * Подстрока по имени/SKU (pg_trgm).
+     */
+    "query"?: string | null | undefined;
+    "include_archived"?: boolean | undefined;
+    "limit"?: number | undefined;
+    "cursor"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Вход дедупа «подключить или создать»: любые из name/sku/barcode.
+ */
+export interface CatalogProductsSuggestPayload {
+    "name"?: string | null | undefined;
+    "sku"?: string | null | undefined;
+    "barcode"?: string | null | undefined;
+    "limit"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Единица измерения или товарная упаковка. Таблица ``catalog_uoms`` (shared).
+ */
+export interface CatalogUom {
+    "uom_id": string;
+    "company_id": string;
+    "name": string;
+    "category": string;
+    "factor": number | string;
+    "is_reference"?: boolean | undefined;
+    "product_id"?: string | null | undefined;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * CursorPage[CatalogProduct]
+ */
+export interface CursorPage_CatalogProduct_ {
+    "items": CatalogProduct[];
+    "next_cursor"?: string | null | undefined;
+    "prev_cursor"?: string | null | undefined;
+    "has_more": boolean;
+    [key: string]: unknown;
+}
+
+/**
+ * CursorPage[StockMove]
+ */
+export interface CursorPage_StockMove_ {
+    "items": StockMove[];
+    "next_cursor"?: string | null | undefined;
+    "prev_cursor"?: string | null | undefined;
+    "has_more": boolean;
+    [key: string]: unknown;
+}
+
+/**
  * Команда без аргументов: WS `payload: null|{}` и REST без тела/query.
  */
 export type EmptyPayload = {
@@ -18,10 +227,18 @@ export type EmptyPayload = {
 };
 
 /**
- * OffsetPage[StockProduct]
+ * ListResponse[CatalogProduct]
  */
-export interface OffsetPage_StockProduct_ {
-    "items": StockProduct[];
+export interface ListResponse_CatalogProduct_ {
+    "items": CatalogProduct[];
+    [key: string]: unknown;
+}
+
+/**
+ * OffsetPage[StockProductView]
+ */
+export interface OffsetPage_StockProductView_ {
+    "items": StockProductView[];
     "total": number;
     "limit": number;
     "offset": number;
@@ -44,17 +261,6 @@ export interface OffsetPage_StockQuant_ {
  */
 export interface OffsetPage_StockTransfer_ {
     "items": StockTransfer[];
-    "total": number;
-    "limit": number;
-    "offset": number;
-    [key: string]: unknown;
-}
-
-/**
- * OffsetPage[StockValueLayer]
- */
-export interface OffsetPage_StockValueLayer_ {
-    "items": StockValueLayer[];
     "total": number;
     "limit": number;
     "offset": number;
@@ -336,6 +542,24 @@ export interface StockContainerTypeCreatePayload {
 }
 
 /**
+ * StockContainerTypeUpdatePayload
+ */
+export interface StockContainerTypeUpdatePayload {
+    "container_type_id": string;
+    "name"?: string | null | undefined;
+    "kind"?: StockContainerKind | null | undefined;
+    "max_weight"?: number | string | null | undefined;
+    "tare_weight"?: number | string | null | undefined;
+    "max_volume"?: number | string | null | undefined;
+    "length"?: number | string | null | undefined;
+    "width"?: number | string | null | undefined;
+    "height"?: number | string | null | undefined;
+    "is_reusable"?: boolean | null | undefined;
+    "allowed_parent_type_ids"?: string[] | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockContainerTypesListPayload
  */
 export interface StockContainerTypesListPayload {
@@ -385,6 +609,22 @@ export interface StockDecision {
 export type StockDecisionStatus = "suggested" | "applied" | "rejected";
 
 /**
+ * StockItemsResponse[CatalogPackagingView]
+ */
+export interface StockItemsResponse_CatalogPackagingView_ {
+    "items": CatalogPackagingView[];
+    [key: string]: unknown;
+}
+
+/**
+ * StockItemsResponse[CatalogUom]
+ */
+export interface StockItemsResponse_CatalogUom_ {
+    "items": CatalogUom[];
+    [key: string]: unknown;
+}
+
+/**
  * StockItemsResponse[StockContainerType]
  */
 export interface StockItemsResponse_StockContainerType_ {
@@ -421,14 +661,6 @@ export interface StockItemsResponse_StockMoveLine_ {
  */
 export interface StockItemsResponse_StockOperationType_ {
     "items": StockOperationType[];
-    [key: string]: unknown;
-}
-
-/**
- * StockItemsResponse[StockPackagingView]
- */
-export interface StockItemsResponse_StockPackagingView_ {
-    "items": StockPackagingView[];
     [key: string]: unknown;
 }
 
@@ -485,14 +717,6 @@ export interface StockItemsResponse_StockStorageType_ {
  */
 export interface StockItemsResponse_StockWave_ {
     "items": StockWave[];
-    [key: string]: unknown;
-}
-
-/**
- * StockItemsResponse[UnitOfMeasure]
- */
-export interface StockItemsResponse_UnitOfMeasure_ {
-    "items": UnitOfMeasure[];
     [key: string]: unknown;
 }
 
@@ -599,6 +823,16 @@ export interface StockLocationUpdatePayload {
  * инвентаризация и списание.
  */
 export type StockLocationUsage = "view" | "bin" | "container" | "partner" | "transit" | "adjustment";
+
+/**
+ * Ячейки склада, пора пересчитывать — то же окно, что воркер
+ * cycle-count (``last_count_at`` старше интервала или никогда).
+ */
+export interface StockLocationsCountDuePayload {
+    "warehouse_id": string;
+    "limit"?: number | undefined;
+    [key: string]: unknown;
+}
 
 /**
  * StockLocationsListPayload
@@ -962,6 +1196,23 @@ export interface StockMoveSpec {
 export type StockMoveState = "draft" | "confirmed" | "partially_available" | "assigned" | "waiting" | "done" | "cancel";
 
 /**
+ * Журнал движений — keyset-страница ORDER BY created_at DESC.
+ * 
+ * ``location_id`` фильтрует движения, где локация — источник ИЛИ
+ * приёмник; ``subtree`` расширяет её до всего поддерева.
+ */
+export interface StockMovesListPayload {
+    "warehouse_id"?: string | null | undefined;
+    "location_id"?: string | null | undefined;
+    "subtree"?: boolean | undefined;
+    "product_id"?: string | null | undefined;
+    "state"?: StockMoveState | null | undefined;
+    "limit"?: number | undefined;
+    "cursor"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockOperationCode
  */
 export type StockOperationCode = "incoming" | "outgoing" | "internal";
@@ -1039,7 +1290,6 @@ export interface StockPackagingCreatePayload {
     "name": string;
     "quantity": number | string;
     "barcode"?: string | null | undefined;
-    "container_type_id"?: string | null | undefined;
     "weight"?: number | string | null | undefined;
     "volume"?: number | string | null | undefined;
     [key: string]: unknown;
@@ -1050,25 +1300,6 @@ export interface StockPackagingCreatePayload {
  */
 export interface StockPackagingIdPayload {
     "packaging_id": string;
-    [key: string]: unknown;
-}
-
-/**
- * Проекция упаковки товара на API.
- * 
- * Физически упаковка — строка ``stock_uom`` с ``product_id`` (AUoM):
- * ``packaging_id`` — это ``uom_id`` строки, а ``quantity`` — «сколько
- * базовых единиц товара в одной упаковке», вычисленное как
- * ``factor / factor(базовой ЕИ товара)``.
- */
-export interface StockPackagingView {
-    "packaging_id": string;
-    "product_id": string;
-    "name": string;
-    "quantity": number | string;
-    "container_type_id"?: string | null | undefined;
-    "weight"?: number | string | null | undefined;
-    "volume"?: number | string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1095,67 +1326,23 @@ export interface StockPagePayload {
 export type StockPartnerRole = "vendor" | "customer";
 
 /**
- * Карточка товара и конкретный SKU. Таблица ``stock_products``.
+ * Создать складскую позицию: новая карточка каталога + фасет.
  * 
- * Бизнес-поля (читаются бухгалтерией и складом):
- * 
- * * ``name``, ``sku``, ``uom_id`` — «что это» и в чём
- *   измеряется базово (штуки/кг/литры);
- * * ``tracking`` — ``none`` (насыпной товар), ``lot`` (партии со
- *   сроками), ``serial`` (каждая единица — серийный номер, IMEI);
- * * ``valuation_method`` — метод оценки запаса:
- *   ``standard`` — по карточной цене (разница уходит коррекцией),
- *   ``average`` — по скользящей средней, ``fifo`` — послойно
- *   (какой слой пришёл раньше, тот и списывается первым),
- *   ``unvalued`` — не оцениваем (только количество);
- * * ``standard_price`` — карточная цена базовой ЕИ для ``standard``/
- *   ``average`` и стартовая точка оценки;
- * * ``weight``/``volume`` — вес/объём базовой ЕИ: проверки ёмкости
- *   ячеек и грузоподъёмности ресурсов считают по ним;
- * * ``use_expiration`` + ``*_days`` — сроки годности для FEFO-отбора
- *   и просрочки («best_before» — «лучше до», «removal» — «убрать с
- *   полки до»);
- * * ``removal_strategy`` — переопределение порядка отбора именно для
- *   этого товара (над типом хранения и складом).
- */
-export interface StockProduct {
-    "product_id": string;
-    "company_id": string;
-    "name": string;
-    "sku": string;
-    "uom_id": string;
-    "tracking"?: StockTracking | undefined;
-    "is_storable"?: boolean | undefined;
-    "is_active"?: boolean | undefined;
-    "category"?: string | undefined;
-    "valuation_method": ValuationMethod;
-    "standard_price"?: number | string | undefined;
-    "weight"?: number | string | null | undefined;
-    "volume"?: number | string | null | undefined;
-    "use_expiration"?: boolean | undefined;
-    "expiration_days"?: number | null | undefined;
-    "best_before_days"?: number | null | undefined;
-    "removal_days"?: number | null | undefined;
-    "alert_days"?: number | null | undefined;
-    "removal_strategy"?: StockRemovalStrategy | null | undefined;
-    "created_at": string;
-    "updated_at": string;
-    [key: string]: unknown;
-}
-
-/**
- * StockProductCreatePayload
+ * ``product_id`` — подключение существующего товара каталога (выбор
+ * из дедуп-подсказки); тогда ``name``/``uom_id``/``sku``/``weight``/
+ * ``volume``/``barcodes`` игнорируются — база уже создана.
  */
 export interface StockProductCreatePayload {
+    "product_id"?: string | null | undefined;
     "name": string;
-    "sku": string;
+    "sku"?: string | null | undefined;
     "uom_id": string;
     "valuation_method": ValuationMethod;
     "standard_price"?: number | string | undefined;
     "tracking"?: StockTracking | undefined;
     "is_storable"?: boolean | undefined;
     "category"?: string | undefined;
-    "barcode"?: string | null | undefined;
+    "barcodes"?: string[] | undefined;
     "weight"?: number | string | null | undefined;
     "volume"?: number | string | null | undefined;
     "use_expiration"?: boolean | undefined;
@@ -1181,20 +1368,21 @@ export interface StockProductIdPayload {
 export type StockProductMixing = "mixed" | "same_product" | "empty_only";
 
 /**
- * StockProductUpdatePayload
+ * Правка складской политики и overlay'а scope ``stock``.
+ * 
+ * Базовые поля (имя/SKU/габариты) — только через мастер-карту
+ * ``stock/catalog_products/update``; ``overlay`` — PUT-форма
+ * складских переопределений контента.
  */
 export interface StockProductUpdatePayload {
     "product_id": string;
-    "name"?: string | null | undefined;
-    "sku"?: string | null | undefined;
-    "barcode"?: string | null | undefined;
+    "barcodes"?: string[] | null | undefined;
     "is_active"?: boolean | null | undefined;
     "valuation_method"?: ValuationMethod | null | undefined;
     "standard_price"?: number | string | null | undefined;
     "tracking"?: StockTracking | null | undefined;
     "category"?: string | null | undefined;
-    "weight"?: number | string | null | undefined;
-    "volume"?: number | string | null | undefined;
+    "overlay"?: CatalogOverlay | null | undefined;
     "use_expiration"?: boolean | null | undefined;
     "expiration_days"?: number | null | undefined;
     "best_before_days"?: number | null | undefined;
@@ -1213,6 +1401,42 @@ export interface StockProductValueResponse {
     "value": number | string;
     "avg_cost": number | string;
     "warehouse_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Складская карточка товара: эффективные поля каталога + фасет.
+ * 
+ * ``name``/``description``/``image_file_ids`` — резолв цепочки
+ * ``stock`` scope (``sources[поле]`` — ``base`` либо ``stock``);
+ * остальные ``catalog_*``-поля — прямые значения мастер-карты.
+ */
+export interface StockProductView {
+    "product_id": string;
+    "name": string;
+    "description": string;
+    "image_file_ids": string[];
+    "sources": Record<string, string>;
+    "sku": string | null;
+    "uom_id": string;
+    "barcodes": string[];
+    "weight": number | string | null;
+    "volume": number | string | null;
+    "is_archived": boolean;
+    "tracking": StockTracking;
+    "is_storable": boolean;
+    "is_active": boolean;
+    "category": string;
+    "valuation_method": ValuationMethod;
+    "standard_price": number | string;
+    "use_expiration": boolean;
+    "expiration_days": number | null;
+    "best_before_days": number | null;
+    "removal_days": number | null;
+    "alert_days": number | null;
+    "removal_strategy": StockRemovalStrategy | null;
+    "created_at": string;
+    "updated_at": string;
     [key: string]: unknown;
 }
 
@@ -1412,6 +1636,8 @@ export interface StockQuantsListPayload {
     "location_id"?: string | null | undefined;
     "product_id"?: string | null | undefined;
     "owner_entity_id"?: string | null | undefined;
+    "warehouse_id"?: string | null | undefined;
+    "subtree_location_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1578,10 +1804,35 @@ export interface StockResourceTypeCreatePayload {
 }
 
 /**
+ * StockResourceTypeUpdatePayload
+ */
+export interface StockResourceTypeUpdatePayload {
+    "resource_type_id": string;
+    "name"?: string | null | undefined;
+    "allowed_container_type_ids"?: string[] | null | undefined;
+    "handles_loose"?: boolean | null | undefined;
+    "max_level"?: number | null | undefined;
+    "max_load_weight"?: number | string | null | undefined;
+    "storage_type_ids"?: string[] | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockResourceTypesListPayload
  */
 export interface StockResourceTypesListPayload {
     "warehouse_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * StockResourceUpdatePayload
+ */
+export interface StockResourceUpdatePayload {
+    "resource_id": string;
+    "resource_type_id"?: string | null | undefined;
+    "code"?: string | null | undefined;
+    "barcode"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1801,6 +2052,27 @@ export interface StockStorageTypeCreatePayload {
     "max_volume"?: number | string | null | undefined;
     "putaway_strategies"?: StockPutawayStrategy[] | undefined;
     "removal_strategy"?: StockRemovalStrategy | null | undefined;
+    "cycle_count_days"?: number | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * None-поле не пишется; очистки nullable-полей нет (та же
+ * конвенция, что у StockLocationUpdatePayload).
+ */
+export interface StockStorageTypeUpdatePayload {
+    "storage_type_id": string;
+    "name"?: string | null | undefined;
+    "container_policy"?: StockContainerPolicy | null | undefined;
+    "allowed_container_type_ids"?: string[] | null | undefined;
+    "max_containers"?: number | null | undefined;
+    "product_mixing"?: StockProductMixing | null | undefined;
+    "allow_mixed_lots"?: boolean | null | undefined;
+    "max_weight"?: number | string | null | undefined;
+    "max_volume"?: number | string | null | undefined;
+    "putaway_strategies"?: StockPutawayStrategy[] | null | undefined;
+    "removal_strategy"?: StockRemovalStrategy | null | undefined;
+    "cycle_count_days"?: number | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1982,6 +2254,21 @@ export interface StockValuationCorrectionPayload {
 }
 
 /**
+ * Страница журнала оценки + sidecar-карты человеческих имён для строк.
+ */
+export interface StockValuationLayersPage {
+    "items": StockValueLayer[];
+    "total": number;
+    "limit": number;
+    "offset": number;
+    "product_names"?: Record<string, string> | undefined;
+    "product_skus"?: Record<string, string> | undefined;
+    "transfer_names"?: Record<string, string> | undefined;
+    "warehouse_names"?: Record<string, string> | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockValuationLayersPayload
  */
 export interface StockValuationLayersPayload {
@@ -1989,6 +2276,12 @@ export interface StockValuationLayersPayload {
     "offset"?: number | undefined;
     "product_id"?: string | null | undefined;
     "warehouse_id"?: string | null | undefined;
+    "transfer_id"?: string | null | undefined;
+    "entry_kinds"?: ValueEntryKind[] | null | undefined;
+    "date_from"?: string | null | undefined;
+    "date_to"?: string | null | undefined;
+    "open_only"?: boolean | undefined;
+    "search"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1998,6 +2291,40 @@ export interface StockValuationLayersPayload {
 export interface StockValuationProductValuePayload {
     "product_id": string;
     "warehouse_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockValuationReportPayload
+ */
+export interface StockValuationReportPayload {
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    "warehouse_id"?: string | null | undefined;
+    "search"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockValuationReportResponse
+ */
+export interface StockValuationReportResponse {
+    "items": StockValuationReportRow[];
+    "total_value": number | string;
+    "products_count": number;
+    [key: string]: unknown;
+}
+
+/**
+ * Строка отчёта «Стоимость запасов»: остаток товара в деньгах.
+ */
+export interface StockValuationReportRow {
+    "product_id": string;
+    "name": string;
+    "sku": string | null;
+    "quantity": number | string;
+    "avg_cost": number | string;
+    "value": number | string;
     [key: string]: unknown;
 }
 
@@ -2221,23 +2548,6 @@ export interface StockWavesListPayload {
 }
 
 /**
- * Единица измерения или товарная упаковка. Таблица ``stock_uom``.
- */
-export interface UnitOfMeasure {
-    "uom_id": string;
-    "company_id": string;
-    "name": string;
-    "category": string;
-    "factor": number | string;
-    "is_reference"?: boolean | undefined;
-    "product_id"?: string | null | undefined;
-    "container_type_id"?: string | null | undefined;
-    "weight"?: number | string | null | undefined;
-    "volume"?: number | string | null | undefined;
-    [key: string]: unknown;
-}
-
-/**
  * ValuationMethod
  */
 export type ValuationMethod = "standard" | "average" | "fifo" | "unvalued";
@@ -2258,13 +2568,20 @@ export type ValueEntryKind = "inbound" | "outbound" | "internal_out" | "internal
  */
 export interface StockCommandMap {
     "stock/barcode/resolve_requested": { payload: StockBarcodeResolvePayload; result: StockBarcodeResolveResponse },
+    "stock/catalog_products/create_requested": { payload: CatalogProductCreatePayload; result: CatalogProduct },
+    "stock/catalog_products/item_requested": { payload: CatalogProductIdPayload; result: CatalogProductDetail },
+    "stock/catalog_products/list_requested": { payload: CatalogProductsListPayload; result: CursorPage_CatalogProduct_ },
+    "stock/catalog_products/suggest_requested": { payload: CatalogProductsSuggestPayload; result: ListResponse_CatalogProduct_ },
+    "stock/catalog_products/update_requested": { payload: CatalogProductUpdatePayload; result: CatalogProduct },
     "stock/company/init_requested": { payload: StockCompanyInitPayload; result: StockCompanyInitResponse },
     "stock/container_types/create_requested": { payload: StockContainerTypeCreatePayload; result: StockContainerType },
     "stock/container_types/list_requested": { payload: StockContainerTypesListPayload; result: StockItemsResponse_StockContainerType_ },
+    "stock/container_types/update_requested": { payload: StockContainerTypeUpdatePayload; result: StockContainerType },
     "stock/containers/create_requested": { payload: StockContainerCreatePayload; result: StockLocation },
     "stock/containers/item_requested": { payload: StockContainerIdPayload; result: StockContainerContentsResponse },
     "stock/containers/list_requested": { payload: StockContainersListPayload; result: StockItemsResponse_StockLocation_ },
     "stock/containers/move_requested": { payload: StockContainerMovePayload; result: StockLocation },
+    "stock/locations/count_due_requested": { payload: StockLocationsCountDuePayload; result: StockItemsResponse_StockLocation_ },
     "stock/locations/create_requested": { payload: StockLocationCreatePayload; result: StockLocation },
     "stock/locations/item_requested": { payload: StockLocationIdPayload; result: StockLocation },
     "stock/locations/list_requested": { payload: StockLocationsListPayload; result: StockItemsResponse_StockLocation_ },
@@ -2279,15 +2596,16 @@ export interface StockCommandMap {
     "stock/move_lines/release_requested": { payload: StockMoveLinesReleasePayload; result: StockMoveLineClaimResult },
     "stock/move_lines/report_exception_requested": { payload: StockMoveLineExceptionPayload; result: StockMoveLineExceptionResult },
     "stock/move_lines/update_requested": { payload: StockMoveLineUpdatePayload; result: StockMoveLine },
+    "stock/moves/list_requested": { payload: StockMovesListPayload; result: CursorPage_StockMove_ },
     "stock/operation_types/list_requested": { payload: StockOperationTypesListPayload; result: StockItemsResponse_StockOperationType_ },
     "stock/operation_types/update_requested": { payload: StockOperationTypeUpdatePayload; result: StockOperationType },
-    "stock/packagings/create_requested": { payload: StockPackagingCreatePayload; result: StockPackagingView },
-    "stock/packagings/delete_requested": { payload: StockPackagingIdPayload; result: StockPackagingView },
-    "stock/packagings/list_requested": { payload: StockPackagingsListPayload; result: StockItemsResponse_StockPackagingView_ },
-    "stock/products/create_requested": { payload: StockProductCreatePayload; result: StockProduct },
-    "stock/products/item_requested": { payload: StockProductIdPayload; result: StockProduct },
-    "stock/products/list_requested": { payload: StockPagePayload; result: OffsetPage_StockProduct_ },
-    "stock/products/update_requested": { payload: StockProductUpdatePayload; result: StockProduct },
+    "stock/packagings/create_requested": { payload: StockPackagingCreatePayload; result: CatalogPackagingView },
+    "stock/packagings/delete_requested": { payload: StockPackagingIdPayload; result: CatalogPackagingView },
+    "stock/packagings/list_requested": { payload: StockPackagingsListPayload; result: StockItemsResponse_CatalogPackagingView_ },
+    "stock/products/create_requested": { payload: StockProductCreatePayload; result: StockProductView },
+    "stock/products/item_requested": { payload: StockProductIdPayload; result: StockProductView },
+    "stock/products/list_requested": { payload: StockPagePayload; result: OffsetPage_StockProductView_ },
+    "stock/products/update_requested": { payload: StockProductUpdatePayload; result: StockProductView },
     "stock/putaway_rules/create_requested": { payload: StockPutawayRuleCreatePayload; result: StockPutawayRule },
     "stock/putaway_rules/delete_requested": { payload: StockPutawayRuleDeletePayload; result: StockPutawayRule },
     "stock/putaway_rules/list_requested": { payload: StockPutawayRulesListPayload; result: StockItemsResponse_StockPutawayRule_ },
@@ -2300,10 +2618,12 @@ export interface StockCommandMap {
     "stock/reorder_rules/update_requested": { payload: StockReorderRuleUpdatePayload; result: StockReorderRule },
     "stock/resource_types/create_requested": { payload: StockResourceTypeCreatePayload; result: StockResourceType },
     "stock/resource_types/list_requested": { payload: StockResourceTypesListPayload; result: StockItemsResponse_StockResourceType_ },
+    "stock/resource_types/update_requested": { payload: StockResourceTypeUpdatePayload; result: StockResourceType },
     "stock/resources/create_requested": { payload: StockResourceCreatePayload; result: StockResource },
     "stock/resources/list_requested": { payload: StockResourcesListPayload; result: StockItemsResponse_StockResource_ },
     "stock/resources/login_requested": { payload: StockResourceLoginPayload; result: StockResource },
     "stock/resources/logout_requested": { payload: StockResourceLogoutPayload; result: StockResourceLogoutResult },
+    "stock/resources/update_requested": { payload: StockResourceUpdatePayload; result: StockResource },
     "stock/routes/create_requested": { payload: StockRouteCreatePayload; result: StockRoute },
     "stock/routes/get_requested": { payload: StockRouteIdPayload; result: StockRoute },
     "stock/routes/list_requested": { payload: StockRoutesListPayload; result: StockItemsResponse_StockRoute_ },
@@ -2313,6 +2633,7 @@ export interface StockCommandMap {
     "stock/scan/step_requested": { payload: StockScanStepPayload; result: StockScanStepResponse },
     "stock/storage_types/create_requested": { payload: StockStorageTypeCreatePayload; result: StockStorageType },
     "stock/storage_types/list_requested": { payload: StockStorageTypesListPayload; result: StockItemsResponse_StockStorageType_ },
+    "stock/storage_types/update_requested": { payload: StockStorageTypeUpdatePayload; result: StockStorageType },
     "stock/transfers/assign_requested": { payload: StockTransferIdPayload; result: StockTransfer },
     "stock/transfers/cancel_requested": { payload: StockTransferIdPayload; result: StockTransfer },
     "stock/transfers/confirm_requested": { payload: StockTransferIdPayload; result: StockTransfer },
@@ -2321,10 +2642,11 @@ export interface StockCommandMap {
     "stock/transfers/list_requested": { payload: StockTransfersListPayload; result: OffsetPage_StockTransfer_ },
     "stock/transfers/return_requested": { payload: StockTransferReturnPayload; result: StockTransfer },
     "stock/transfers/validate_requested": { payload: StockTransferValidatePayload; result: StockTransfer },
-    "stock/uoms/list_requested": { payload: EmptyPayload; result: StockItemsResponse_UnitOfMeasure_ },
+    "stock/uoms/list_requested": { payload: EmptyPayload; result: StockItemsResponse_CatalogUom_ },
     "stock/valuation/correction_requested": { payload: StockValuationCorrectionPayload; result: StockValueLayer },
-    "stock/valuation/layers_list_requested": { payload: StockValuationLayersPayload; result: OffsetPage_StockValueLayer_ },
+    "stock/valuation/layers_list_requested": { payload: StockValuationLayersPayload; result: StockValuationLayersPage },
     "stock/valuation/product_value_requested": { payload: StockValuationProductValuePayload; result: StockProductValueResponse },
+    "stock/valuation/report_requested": { payload: StockValuationReportPayload; result: StockValuationReportResponse },
     "stock/valuation/revalue_requested": { payload: StockValuationRevaluePayload; result: StockValueLayer },
     "stock/warehouse/pulse_requested": { payload: StockWarehousePulsePayload; result: StockWarehousePulseResponse },
     "stock/warehouses/create_requested": { payload: StockWarehouseCreatePayload; result: StockWarehouse },
@@ -2340,9 +2662,28 @@ export interface StockCommandMap {
  * Карта push-событий сервиса (`register_platform_event`): `type` → payload.
  */
 export interface StockEventMap {
+    "catalog/product/created": CatalogProductEventPayload,
+    "catalog/product/updated": CatalogProductEventPayload,
+    "catalog/product_facet/changed": CatalogProductFacetEventPayload,
+    "catalog/product_overlay/changed": CatalogProductOverlayEventPayload,
     "stock/barcode/resolve_failed": PlatformCommandEventPayload,
     "stock/barcode/resolve_requested": PlatformCommandEventPayload,
     "stock/barcode/resolve_succeeded": PlatformCommandEventPayload,
+    "stock/catalog_products/create_failed": PlatformCommandEventPayload,
+    "stock/catalog_products/create_requested": PlatformCommandEventPayload,
+    "stock/catalog_products/create_succeeded": PlatformCommandEventPayload,
+    "stock/catalog_products/item_failed": PlatformCommandEventPayload,
+    "stock/catalog_products/item_requested": PlatformCommandEventPayload,
+    "stock/catalog_products/item_succeeded": PlatformCommandEventPayload,
+    "stock/catalog_products/list_failed": PlatformCommandEventPayload,
+    "stock/catalog_products/list_requested": PlatformCommandEventPayload,
+    "stock/catalog_products/list_succeeded": PlatformCommandEventPayload,
+    "stock/catalog_products/suggest_failed": PlatformCommandEventPayload,
+    "stock/catalog_products/suggest_requested": PlatformCommandEventPayload,
+    "stock/catalog_products/suggest_succeeded": PlatformCommandEventPayload,
+    "stock/catalog_products/update_failed": PlatformCommandEventPayload,
+    "stock/catalog_products/update_requested": PlatformCommandEventPayload,
+    "stock/catalog_products/update_succeeded": PlatformCommandEventPayload,
     "stock/company/init_failed": PlatformCommandEventPayload,
     "stock/company/init_requested": PlatformCommandEventPayload,
     "stock/company/init_succeeded": PlatformCommandEventPayload,
@@ -2353,6 +2694,9 @@ export interface StockEventMap {
     "stock/container_types/list_failed": PlatformCommandEventPayload,
     "stock/container_types/list_requested": PlatformCommandEventPayload,
     "stock/container_types/list_succeeded": PlatformCommandEventPayload,
+    "stock/container_types/update_failed": PlatformCommandEventPayload,
+    "stock/container_types/update_requested": PlatformCommandEventPayload,
+    "stock/container_types/update_succeeded": PlatformCommandEventPayload,
     "stock/containers/create_failed": PlatformCommandEventPayload,
     "stock/containers/create_requested": PlatformCommandEventPayload,
     "stock/containers/create_succeeded": PlatformCommandEventPayload,
@@ -2365,6 +2709,9 @@ export interface StockEventMap {
     "stock/containers/move_failed": PlatformCommandEventPayload,
     "stock/containers/move_requested": PlatformCommandEventPayload,
     "stock/containers/move_succeeded": PlatformCommandEventPayload,
+    "stock/locations/count_due_failed": PlatformCommandEventPayload,
+    "stock/locations/count_due_requested": PlatformCommandEventPayload,
+    "stock/locations/count_due_succeeded": PlatformCommandEventPayload,
     "stock/locations/create_failed": PlatformCommandEventPayload,
     "stock/locations/create_requested": PlatformCommandEventPayload,
     "stock/locations/create_succeeded": PlatformCommandEventPayload,
@@ -2410,6 +2757,9 @@ export interface StockEventMap {
     "stock/move_lines/update_failed": PlatformCommandEventPayload,
     "stock/move_lines/update_requested": PlatformCommandEventPayload,
     "stock/move_lines/update_succeeded": PlatformCommandEventPayload,
+    "stock/moves/list_failed": PlatformCommandEventPayload,
+    "stock/moves/list_requested": PlatformCommandEventPayload,
+    "stock/moves/list_succeeded": PlatformCommandEventPayload,
     "stock/operation_types/list_failed": PlatformCommandEventPayload,
     "stock/operation_types/list_requested": PlatformCommandEventPayload,
     "stock/operation_types/list_succeeded": PlatformCommandEventPayload,
@@ -2474,6 +2824,9 @@ export interface StockEventMap {
     "stock/resource_types/list_failed": PlatformCommandEventPayload,
     "stock/resource_types/list_requested": PlatformCommandEventPayload,
     "stock/resource_types/list_succeeded": PlatformCommandEventPayload,
+    "stock/resource_types/update_failed": PlatformCommandEventPayload,
+    "stock/resource_types/update_requested": PlatformCommandEventPayload,
+    "stock/resource_types/update_succeeded": PlatformCommandEventPayload,
     "stock/resources/create_failed": PlatformCommandEventPayload,
     "stock/resources/create_requested": PlatformCommandEventPayload,
     "stock/resources/create_succeeded": PlatformCommandEventPayload,
@@ -2486,6 +2839,9 @@ export interface StockEventMap {
     "stock/resources/logout_failed": PlatformCommandEventPayload,
     "stock/resources/logout_requested": PlatformCommandEventPayload,
     "stock/resources/logout_succeeded": PlatformCommandEventPayload,
+    "stock/resources/update_failed": PlatformCommandEventPayload,
+    "stock/resources/update_requested": PlatformCommandEventPayload,
+    "stock/resources/update_succeeded": PlatformCommandEventPayload,
     "stock/routes/create_failed": PlatformCommandEventPayload,
     "stock/routes/create_requested": PlatformCommandEventPayload,
     "stock/routes/create_succeeded": PlatformCommandEventPayload,
@@ -2513,6 +2869,9 @@ export interface StockEventMap {
     "stock/storage_types/list_failed": PlatformCommandEventPayload,
     "stock/storage_types/list_requested": PlatformCommandEventPayload,
     "stock/storage_types/list_succeeded": PlatformCommandEventPayload,
+    "stock/storage_types/update_failed": PlatformCommandEventPayload,
+    "stock/storage_types/update_requested": PlatformCommandEventPayload,
+    "stock/storage_types/update_succeeded": PlatformCommandEventPayload,
     "stock/transfer/done": StockTransferDonePayload,
     "stock/transfers/assign_failed": PlatformCommandEventPayload,
     "stock/transfers/assign_requested": PlatformCommandEventPayload,
@@ -2551,6 +2910,9 @@ export interface StockEventMap {
     "stock/valuation/product_value_failed": PlatformCommandEventPayload,
     "stock/valuation/product_value_requested": PlatformCommandEventPayload,
     "stock/valuation/product_value_succeeded": PlatformCommandEventPayload,
+    "stock/valuation/report_failed": PlatformCommandEventPayload,
+    "stock/valuation/report_requested": PlatformCommandEventPayload,
+    "stock/valuation/report_succeeded": PlatformCommandEventPayload,
     "stock/valuation/revalue_failed": PlatformCommandEventPayload,
     "stock/valuation/revalue_requested": PlatformCommandEventPayload,
     "stock/valuation/revalue_succeeded": PlatformCommandEventPayload,

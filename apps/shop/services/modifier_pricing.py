@@ -38,15 +38,16 @@ class AttachedGroup:
 
 
 async def load_modifier_tree_by_sort_asc(
+    shop_id: str,
     product_ids: list[str],
 ) -> dict[str, list[AttachedGroup]]:
-    """Дерево модификаторов для набора товаров: прямые + nested-группы.
+    """Дерево модификаторов для набора товаров витрины: прямые + nested.
 
     Возвращает ``product_id -> [AttachedGroup]``. Nested-группы попадают
     в специальный ключ ``"__nested__"`` — используются при проверке
     вложенных выборов рекурсивно.
     """
-    links = await ShopProductModifierGroup.list_by_products(product_ids)
+    links = await ShopProductModifierGroup.list_by_products(shop_id, product_ids)
     direct_group_ids = {link.group_id for link in links}
     nested_groups: dict[str, AttachedGroup] = {}
     # Транзитивно подгружаем прямые и nested-группы с лимитом глубины.

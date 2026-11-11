@@ -39,7 +39,7 @@ export interface ShelfDraft {
 }
 
 interface ProductRow {
-    shop_product_id: string;
+    product_id: string;
     name: string;
 }
 
@@ -245,8 +245,8 @@ export class ShopShelfModal extends PlatformModal {
                     <div class="sec-title">${this.t('feed.products_title')}</div>
                     <div class="chips">
                         ${this._products.map((p) => html`
-                            <button class="chip ${this._productIds.includes(p.shop_product_id) ? 'on' : ''}"
-                                @click=${() => this._toggleProduct(p.shop_product_id)}>${p.name}</button>
+                            <button class="chip ${this._productIds.includes(p.product_id) ? 'on' : ''}"
+                                @click=${() => this._toggleProduct(p.product_id)}>${p.name}</button>
                         `)}
                     </div>
                 ` : nothing}

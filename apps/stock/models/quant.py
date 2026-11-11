@@ -280,13 +280,21 @@ class StockQuant(PlatformModel):
         location_id: str | None,
         product_id: str | None,
         owner_entity_id: str | None = None,
+        warehouse_id: str | None = None,
+        location_ids: list[str] | None = None,
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Окно остатков компании, ORDER BY product_id, location_id ASC. location_id, product_id и owner_entity_id равные None не фильтруют."""
+        """Окно остатков компании, ORDER BY product_id, location_id ASC. Фильтры равные None не фильтруют; ``location_ids`` — остатки в любом из наборов локаций (пустой список — пустое окно)."""
+        if location_ids is not None and not location_ids:
+            return []
         query = cls.objects.filter(company_id=company_id)
         if location_id is not None:
             query = query.filter(location_id=location_id)
+        if location_ids is not None:
+            query = query.filter(location_id__in=location_ids)
+        if warehouse_id is not None:
+            query = query.filter(warehouse_id=warehouse_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)
         if owner_entity_id is not None:
@@ -303,11 +311,19 @@ class StockQuant(PlatformModel):
         location_id: str | None,
         product_id: str | None,
         owner_entity_id: str | None = None,
+        warehouse_id: str | None = None,
+        location_ids: list[str] | None = None,
     ) -> int:
-        """Счёт остатков компании. location_id, product_id и owner_entity_id равные None не фильтруют."""
+        """Счёт остатков компании. Фильтры равные None не фильтруют; ``location_ids`` — остатки в любом из наборов локаций (пустой список — 0)."""
+        if location_ids is not None and not location_ids:
+            return 0
         query = cls.objects.filter(company_id=company_id)
         if location_id is not None:
             query = query.filter(location_id=location_id)
+        if location_ids is not None:
+            query = query.filter(location_id__in=location_ids)
+        if warehouse_id is not None:
+            query = query.filter(warehouse_id=warehouse_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)
         if owner_entity_id is not None:

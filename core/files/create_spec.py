@@ -31,7 +31,7 @@ class FileSourceKind(StrEnum):
     CODE_AGENT_SOURCE = "code_agent_source"
     PLATFORM_AUXILIARY = "platform_auxiliary"
     GENERATED_EPHEMERAL = "generated_ephemeral"
-    SHOP_PRODUCT = "shop_product"
+    PRODUCT = "product"
 
 
 # Sentinel flow_id для файлов, которые пишет сам runtime-процесс
@@ -65,7 +65,7 @@ class FileSourceRef(StrictBaseModel):
     node_id: str | None = None
     relative_dir: str | None = None
     shop_id: str | None = None
-    shop_product_id: str | None = None
+    product_id: str | None = None
 
 
 class FilePostCreate(StrictBaseModel):
@@ -143,7 +143,9 @@ class FileCreateSpec(StrictBaseModel):
                 raise ValueError("source_ref.node_id required for code_agent_source")
             if ref.relative_dir is not None and ref.relative_dir.strip():
                 _ = validate_relative_dir(ref.relative_dir)
-        if kind == FileSourceKind.SHOP_PRODUCT:
-            if not ref.shop_id or not ref.shop_id.strip():
-                raise ValueError("source_ref.shop_id required for shop_product")
+        if kind == FileSourceKind.PRODUCT:
+            if not (ref.product_id or ref.shop_id):
+                raise ValueError(
+                    "source_ref.product_id or shop_id required for product"
+                )
         return self

@@ -47,9 +47,9 @@ from apps.stock.models.operation_type import StockOperationType
 from apps.stock.models.putaway_rule import StockPutawayRule
 from apps.stock.models.quant import StockQuant
 from apps.stock.models.resource_type import StockResourceType
-from apps.stock.models.unit_of_measure import UnitOfMeasure
 from apps.stock.models.warehouse import StockWarehouse
 from apps.stock.services.task_service import line_fits_resource
+from core.catalog.models import CatalogUom
 from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
@@ -357,7 +357,7 @@ class TestContainerGuards:
         проверка видит смесь → container_mixed_contents: «лишнее»
         не уедет за границу запаса мимо леджера."""
         env = await _env(stock_di, unique_id)
-        env.product = await env.di.catalog_service.create_product(
+        env.product = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"LC {unique_id}",
             sku=f"LC-{unique_id}",
@@ -367,7 +367,6 @@ class TestContainerGuards:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=None,
             removal_strategy=StockRemovalStrategy.LEAST_CONTAINERS,
         )
         pallet = await _pallet(env, unique_id)
@@ -402,7 +401,7 @@ class TestContainerGuards:
         assert any(ln.kind == StockMoveLineKind.CONTAINER for ln in lines)
         # Между резервом и проводкой на паллету доложили другой товар
         # (физический факт: рабочий поставил чужой короб на паллету).
-        other = await env.di.catalog_service.create_product(
+        other = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name=f"OT {unique_id}",
             sku=f"OT-{unique_id}",
@@ -412,7 +411,6 @@ class TestContainerGuards:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=None,
             removal_strategy=None,
         )
         _ = await StockQuant.objects.create(
@@ -603,10 +601,10 @@ class TestBrokenConfiguration:
         """ЕИ с factor=0 в спецификации строки → uom_factor_zero:
         конвертация «в ноль» запрещена, иначе количество обнулится."""
         env = await _env(stock_di, unique_id)
-        base = await UnitOfMeasure.by_id(env.company_id, env.uom_id)
+        base = await CatalogUom.by_id(env.company_id, env.uom_id)
         assert base is not None
-        _ = await UnitOfMeasure.create(
-            UnitOfMeasure(
+        _ = await CatalogUom.create(
+            CatalogUom(
                 uom_id=new_id("uom"),
                 company_id=env.company_id,
                 name=f"ZERO-{unique_id}",
@@ -614,7 +612,7 @@ class TestBrokenConfiguration:
                 factor=Decimal("0"),
             )
         )
-        rows = await UnitOfMeasure.objects.filter(
+        rows = await CatalogUom.objects.filter(
             company_id=env.company_id, name=f"ZERO-{unique_id}"
         ).all()
         assert len(rows) == 1

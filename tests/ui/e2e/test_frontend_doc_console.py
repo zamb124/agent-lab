@@ -1,6 +1,7 @@
 """Сценарии документации консоли компании (сервис frontend) и инструментов
 оболочки (сервис platform): приглашения, профиль, почта, календарь, поиск,
-переменные, оплата, API-ключи, расписания и встраиваемые виджеты.
+переменные, оплата, API-ключи, расписания, встраиваемые виджеты, доступы,
+голосовые провайдеры и произношение, выбор компании и вход в платформу.
 
 Каждый сценарий — реальный маршрут: навигация по консоли, открытие модалки или
 страницы и действие, которое сделал бы обычный пользователь. Показанные данные
@@ -1204,5 +1205,456 @@ async def test_frontend_embed_widget(
             "chat appears in the page corner.\n\n"
             "**Summary.** Site visitors talk to your agent; the "
             "widget can be edited or deleted right in this list."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    doc_slug="access-explorer",
+    title="Проверить, кто и почему имеет доступ",
+    title_en="Check who has access and why",
+    description=(
+        "**Для чего:** страница «Доступы» отвечает на вопрос «у кого "
+        "какие права в компании» — без технических деталей: человеческим "
+        "языком, по каждому сотруднику.\n\n"
+        "**Какие проблемы решает:** коллега не видит проект или, "
+        "наоборот, видит лишнее — здесь видно все его права и причину "
+        "каждого.\n\n"
+        "**Результат:** выбран сотрудник, показан список его прав и "
+        "понятное объяснение, откуда каждое право взялось."
+    ),
+    description_en=(
+        "**Purpose:** the «Access» page answers «who can do what in "
+        "the company» in plain language, employee by employee.\n\n"
+        "**Problems solved:** a colleague cannot see a project — or "
+        "sees too much; here you see all their grants and the reason "
+        "for each one.\n\n"
+        "**Result:** an employee selected, their grant list shown "
+        "with a clear explanation of where each grant comes from."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_access_explorer(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+    ui_user_system,
+    frontend_di,
+    unique_id: str,
+) -> None:
+    # Реальное право в OpenFGA: сотруднику дан доступ «просмотр» к пространству.
+    from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
+    from core.authz.types import AuthzRelation
+    from tests.ui.e2e_worker import ui_e2e_company_id
+
+    user_id = ui_user_system.user_id
+    if not user_id:
+        raise AssertionError("ui_user_system.user_id required")
+    namespace = f"sales_team_{unique_id[:8]}"
+    await frontend_di.authz_service.write(
+        [
+            AuthzTuple(
+                subject=AuthzSubject.user(user_id),
+                relation=AuthzRelation.VIEWER,
+                obj=AuthzObject.platform_namespace(ui_e2e_company_id(), namespace),
+            )
+        ]
+    )
+
+    page = ui_page_system
+    await page.set_viewport_size(_DESKTOP)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+
+    _ = await page.goto(f"{frontend_ui.origin}/access", wait_until="domcontentloaded")
+    access_page = page.locator("frontend-access-page")
+    await expect(access_page).to_be_visible(timeout=30_000)
+    member_row = access_page.locator(".picker-item").filter(
+        has=page.locator(f"platform-user-chip[user-id='{user_id}']")
+    )
+    await expect(member_row).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте «Доступы» и выберите сотрудника",
+        page,
+        screenshot_name="access-members",
+        label_en="Open «Access» and pick an employee",
+        details=(
+            "Слева — список сотрудников компании. Нажмите на человека, "
+            "чьи права хотите проверить: справа появятся все его "
+            "доступы — к проектам, документам и другим частям "
+            "платформы."
+        ),
+        details_en=(
+            "The employee list is on the left. Click the person whose "
+            "permissions you want to check: all their grants appear on "
+            "the right — projects, documents and other platform areas."
+        ),
+    )
+
+    await member_row.click()
+    grant_row = access_page.locator(".grant-row").filter(has_text=namespace)
+    await expect(grant_row).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Посмотрите список прав сотрудника",
+        page,
+        screenshot_name="access-grants",
+        label_en="Review the employee grants",
+        details=(
+            "Каждая строка — одно право: к чему оно относится и какую "
+            "роль даёт (просмотр, редактирование и т.д.). Названия "
+            "написаны обычными словами, без технических кодов."
+        ),
+        details_en=(
+            "Each row is one grant: what it applies to and which role "
+            "it gives (view, edit, etc.). Names are written in plain "
+            "words, without technical codes."
+        ),
+    )
+
+    await grant_row.click()
+    why = access_page.locator(".why-drawer")
+    await expect(why).to_be_visible(timeout=15_000)
+    await expect(why).to_contain_text(
+        re.compile(r"Выдан напрямую|Granted directly")
+    )
+    await scenario.step(
+        "Узнайте, откуда взялось право",
+        page,
+        screenshot_name="access-why",
+        label_en="See where the grant comes from",
+        details=(
+            "**Демонстрация результата.** Нажатие на строку открывает "
+            "панель «Почему»: она объясняет, как человек получил это "
+            "право — например «Выдан напрямую» — и кем.\n\n"
+            "**Итог.** Если права лишние или их не хватает — это "
+            "настраивается в разделах «Команда» и в самих проектах; "
+            "здесь вы только проверяете."
+        ),
+        details_en=(
+            "**Result demonstration.** Clicking a row opens the «Why» "
+            "panel: it explains how the person got this grant — e.g. "
+            "«Granted directly» — and by whom.\n\n"
+            "**Summary.** If a grant is excessive or missing, it is "
+            "managed in «Team» and inside the projects themselves; "
+            "this page is for checking."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    doc_slug="voice-providers",
+    title="Настроить голос и произношение",
+    title_en="Set up voice providers and pronunciation",
+    description=(
+        "**Для чего:** страница «Провайдеры речи» выбирает, какими "
+        "сервисами компания распознаёт и озвучивает речь, а вкладка "
+        "«Произношение» учит агента правильно говорить ваши слова — "
+        "аббревиатуры, названия, термины.\n\n"
+        "**Какие проблемы решает:** агент неправильно читает «МФЦ» или "
+        "название компании; для региона нужен другой голосовой сервис.\n\n"
+        "**Результат:** добавлено правило произношения и проверено на "
+        "реальном тексте — видно, как фраза прозвучит."
+    ),
+    description_en=(
+        "**Purpose:** the «Voice providers» page picks which services "
+        "the company uses for speech recognition and synthesis, and "
+        "the «Pronunciation» tab teaches the agent how to say your "
+        "words — abbreviations, names, terms.\n\n"
+        "**Problems solved:** the agent misreads «LLC» or your company "
+        "name; a region needs a different voice service.\n\n"
+        "**Result:** a pronunciation rule added and tested on real "
+        "text — you can see how the phrase will sound."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_voice_providers(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_DESKTOP)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+
+    _ = await page.goto(f"{frontend_ui.origin}/company-voice-providers", wait_until="domcontentloaded")
+    voice_page = page.locator("frontend-company-voice-providers-page")
+    await expect(voice_page).to_be_visible(timeout=30_000)
+    await expect(voice_page.locator(".card").first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте «Провайдеры речи»",
+        page,
+        screenshot_name="voice-providers-cards",
+        label_en="Open «Voice providers»",
+        details=(
+            "Три карточки: «Распознавание речи» (слышит клиента), "
+            "«Синтез речи» (голос агента) и «Детектор речи» (понимает, "
+            "когда человек говорит). По умолчанию работают настройки "
+            "платформы — менять нужно, только если компании требуется "
+            "свой сервис."
+        ),
+        details_en=(
+            "Three cards: «Speech recognition» (hears the customer), "
+            "«Speech synthesis» (the agent's voice) and «Voice "
+            "activity detector» (knows when a person is speaking). "
+            "Platform defaults work out of the box — change them only "
+            "if your company needs its own service."
+        ),
+    )
+
+    pron_tab = voice_page.locator(".tab-btn").filter(
+        has_text=re.compile(r"Произношение|Pronunciation", re.I)
+    )
+    await pron_tab.click()
+    form_card = voice_page.locator(".pron-card").first
+    await expect(form_card).to_be_visible(timeout=30_000)
+    pattern_field = form_card.locator("platform-field[type='string']").nth(0)
+    replacement_field = form_card.locator("platform-field[type='string']").nth(1)
+    language_field = form_card.locator("platform-field[type='string']").nth(2)
+    await ui_set_platform_field(pattern_field, "МФЦ")
+    await ui_set_platform_field(replacement_field, "эм-эф-цэ")
+    await ui_set_platform_field(language_field, "ru")
+    await scenario.step(
+        "Добавьте правило произношения",
+        page,
+        screenshot_name="voice-pronunciation-form",
+        label_en="Add a pronunciation rule",
+        details=(
+            "На вкладке «Произношение» напишите, какое слово подменять "
+            "и на что: например «МФЦ» → «эм-эф-цэ», чтобы агент "
+            "читал аббревиатуру по буквам. Поле «Язык» ограничивает "
+            "правило одним языком (ru, en) — оставьте пустым для всех."
+        ),
+        details_en=(
+            "On the «Pronunciation» tab write which word to replace "
+            "and with what: e.g. «LLC» → «ell-ell-cee» so the agent "
+            "spells the abbreviation. The «Language» field limits the "
+            "rule to one language (ru, en) — leave empty for all."
+        ),
+    )
+
+    await (
+        form_card.locator("glass-button")
+        .filter(has_text=re.compile(r"Добавить|Add", re.I))
+        .first.click()
+    )
+    rule_item = voice_page.locator(".rule-item").filter(has_text="МФЦ")
+    await expect(rule_item).to_be_visible(timeout=30_000)
+
+    test_card = voice_page.locator(".pron-card").nth(2)
+    await ui_set_platform_field(
+        test_card.locator("platform-field[type='text']").first,
+        "Ваше заявление принято в МФЦ",
+    )
+    await (
+        test_card.locator("glass-button")
+        .filter(has_text=re.compile(r"Проверить|Test|Check", re.I))
+        .first.click()
+    )
+    result = test_card.locator(".test-result")
+    await expect(result).to_be_visible(timeout=30_000)
+    await expect(result).to_contain_text("эм-эф-цэ")
+    await scenario.step(
+        "Проверьте правило на тексте",
+        page,
+        screenshot_name="voice-pronunciation-test",
+        label_en="Test the rule on real text",
+        details=(
+            "**Демонстрация результата.** Правило появилось в списке, "
+            "а блок «Проверка правил» показывает до и после: «Ваше "
+            "заявление принято в МФЦ» → «…в эм-эф-цэ». Именно так "
+            "фраза прозвучит для клиента.\n\n"
+            "**Итог.** Словарь применяется ко всем голосовым ответам "
+            "компании; правило можно изменить или удалить в списке."
+        ),
+        details_en=(
+            "**Result demonstration.** The rule is now listed, and "
+            "the «Rule check» block shows before and after: «Ваше "
+            "заявление принято в МФЦ» → «…в эм-эф-цэ». That is exactly "
+            "how the phrase will sound to the customer.\n\n"
+            "**Summary.** The dictionary applies to all company voice "
+            "replies; a rule can be edited or removed in the list."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    doc_slug="select-company",
+    title="Выбрать компанию для работы",
+    title_en="Choose which company to work in",
+    description=(
+        "**Для чего:** один аккаунт может состоять в нескольких "
+        "компаниях — например, ваша фирма и компания клиента. Страница "
+        "«Выберите компанию» переключает, от чьего имени вы работаете.\n\n"
+        "**Какие проблемы решает:** вы вошли, но видите чужие данные — "
+        "значит активна не та компания; здесь она меняется одним "
+        "нажатием.\n\n"
+        "**Результат:** выбрана нужная компания — консоль показывает "
+        "именно её проекты, команду и настройки."
+    ),
+    description_en=(
+        "**Purpose:** one account can belong to several companies — "
+        "e.g. your firm and a client's company. The «Choose company» "
+        "page switches who you are working on behalf of.\n\n"
+        "**Problems solved:** you signed in but see someone else's "
+        "data — the wrong company is active; switch it in one click "
+        "here.\n\n"
+        "**Result:** the right company selected — the console shows "
+        "its projects, team and settings."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_select_company(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_DESKTOP)
+    await frontend_ui.open(page)
+    _ = await page.goto(f"{frontend_ui.origin}/dashboard", wait_until="domcontentloaded")
+    await expect(page.locator("platform-user button.user-button")).to_be_visible(timeout=30_000)
+
+    _ = await page.goto(f"{frontend_ui.origin}/select-company", wait_until="domcontentloaded")
+    select_page = page.locator("select-company-page")
+    await expect(select_page).to_be_visible(timeout=30_000)
+    await expect(select_page.locator(".company-card").first).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте страницу выбора компании",
+        page,
+        screenshot_name="select-company-cards",
+        label_en="Open the company picker",
+        details=(
+            "Каждая карточка — компания, где вы состоите. Активная "
+            "подсвечена рамкой: именно её данные вы сейчас видите в "
+            "консоли. Если компаний несколько — просто нажмите на "
+            "нужную карточку."
+        ),
+        details_en=(
+            "Each card is a company you belong to. The active one is "
+            "highlighted: its data is what you currently see in the "
+            "console. With several companies just click the card "
+            "you need."
+        ),
+    )
+    await scenario.step(
+        "Нажмите карточку или создайте компанию",
+        page,
+        screenshot_name="select-company-active",
+        label_en="Click a card or create a company",
+        details=(
+            "**Демонстрация результата.** Активная компания отмечена "
+            "цветной рамкой — нажатие на другую карточку переключит "
+            "консоль на неё. Кнопка «Создать компанию» заводит новую "
+            "организацию: для отдельного бизнеса или клиента.\n\n"
+            "**Итог.** Переключение занимает секунду; вернуться можно "
+            "так же — через эту страницу или меню пользователя."
+        ),
+        details_en=(
+            "**Result demonstration.** The active company is marked "
+            "with a colored border — clicking another card switches "
+            "the console to it. «Create company» registers a new "
+            "organisation: for a separate business or a client.\n\n"
+            "**Summary.** Switching takes a second; switch back the "
+            "same way — via this page or the user menu."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="general",
+    doc_slug="sign-in",
+    title="Войти в платформу",
+    title_en="Sign in to the platform",
+    description=(
+        "**Для чего:** вход в консоль компании — страница предлагает "
+        "войти через привычный сервис, без отдельного пароля платформы.\n\n"
+        "**Какие проблемы решает:** не нужно запоминать ещё один "
+        "пароль; вход через Яндекс, Google или GitHub занимает пару "
+        "нажатий.\n\n"
+        "**Результат:** вы внутри консоли компании — видны проекты, "
+        "команда и все разделы."
+    ),
+    description_en=(
+        "**Purpose:** signing in to the company console — the page "
+        "offers a familiar service, no separate platform password "
+        "needed.\n\n"
+        "**Problems solved:** no extra password to remember; signing "
+        "in via Yandex, Google or GitHub takes a couple of clicks.\n\n"
+        "**Result:** you are inside the company console — projects, "
+        "team and all sections are visible."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_frontend_sign_in(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_anonymous: Page,
+) -> None:
+    page = ui_page_anonymous
+    await page.set_viewport_size(_DESKTOP)
+    _ = await page.goto(f"{frontend_ui.origin}/login", wait_until="domcontentloaded")
+    auth_modal = page.locator("auth-modal")
+    await expect(auth_modal).to_be_visible(timeout=30_000)
+    await expect(
+        auth_modal.locator(".provider-button:not(.provider-button--skeleton)").first
+    ).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте страницу входа",
+        page,
+        screenshot_name="sign-in-modal",
+        label_en="Open the sign-in page",
+        details=(
+            "Страница входа предлагает способы авторизации: выберите "
+            "сервис, которым пользуетесь — Яндекс, Google или GitHub — "
+            "и подтвердите вход на его стороне. Отдельный пароль "
+            "платформы не нужен."
+        ),
+        details_en=(
+            "The sign-in page offers authorization methods: pick the "
+            "service you already use — Yandex, Google or GitHub — and "
+            "confirm on its side. No separate platform password is "
+            "needed."
+        ),
+    )
+    await scenario.step(
+        "Выберите способ входа",
+        page,
+        screenshot_name="sign-in-providers",
+        label_en="Pick a sign-in method",
+        details=(
+            "**Демонстрация результата.** После подтверждения у "
+            "выбранного сервиса вы сразу попадаете в консоль компании. "
+            "Приглашение от коллеги приведёт на эту же страницу — "
+            "достаточно войти, и компания появится сама.\n\n"
+            "**Итог.** Если вход не удался — проверьте, что в выбранном "
+            "сервисе вошли под нужной учётной записью, или напишите в "
+            "поддержку (значок вопроса вверху окна)."
+        ),
+        details_en=(
+            "**Result demonstration.** After confirming with the "
+            "chosen service you land right in the company console. A "
+            "colleague's invite leads to this same page — just sign "
+            "in and the company appears by itself.\n\n"
+            "**Summary.** If sign-in fails, make sure you authorized "
+            "with the right account in the chosen service, or contact "
+            "support (the question icon at the top of the window)."
         ),
     )

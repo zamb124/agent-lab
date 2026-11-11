@@ -111,7 +111,7 @@ class TestFeedback:
             json={
                 "customer_name": "Тест Отзывов",
                 "delivery_type": "pickup",
-                "items": [{"product_id": _id(product, "shop_product_id"), "qty": 1}],
+                "items": [{"product_id": _id(product, "product_id"), "qty": 1}],
             },
         )
         assert resp.status_code == 200, resp.text
@@ -133,7 +133,7 @@ class TestFeedback:
 
         _ = await auth_customer(shop_public_client, slug)
         code, order_id = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
 
         # Ре-авторизация тем же клиентом — новый покупатель (новый телефон):
@@ -155,7 +155,7 @@ class TestFeedback:
         product = await _product(shop_client, shop_id, "Латте")
         customer = await auth_customer(shop_public_client, slug)
         code, order_id = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
 
         resp = await shop_public_client.post(
@@ -208,7 +208,7 @@ class TestFeedback:
         product = await _product(shop_client, shop_id, "Латте")
         _ = await auth_customer(shop_public_client, slug)
         code, _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         for bad in ({"rating": 0}, {"rating": 6}, {"rating": 5, "chips": ["junk"]}):
             resp = await shop_public_client.post(_feedback_url(slug, code), json=bad)
@@ -232,7 +232,7 @@ class TestFeedback:
 
         _ = await auth_customer(shop_public_client, slug)
         code, _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         detail = await shop_public_client.get(f"{PUBLIC_PREFIX}/my/orders/{code}")
         assert detail.json()["can_review"] is False
@@ -251,7 +251,7 @@ class TestFeedback:
         product = await _product(shop_client, shop_id, "Латте")
         _ = await auth_customer(shop_public_client, slug)
         code, _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         resp = await shop_public_client.post(
             _feedback_url(slug, code),
@@ -291,7 +291,7 @@ class TestFeedback:
             json={
                 "customer_name": str(customer["phone_e164"]),
                 "delivery_type": "pickup",
-                "items": [{"product_id": _id(product, "shop_product_id"), "qty": 1}],
+                "items": [{"product_id": _id(product, "product_id"), "qty": 1}],
             },
         )
         assert resp.status_code == 200, resp.text

@@ -1123,7 +1123,7 @@
     },
     "company_voice_providers_page": {
         "title": "Провайдеры речи компании",
-        "subtitle": "Per-company override провайдеров STT/TTS/VAD. Override применяется поверх deployment-default. Меняют owner/admin компании.",
+        "subtitle": "Голосовые сервисы компании: распознавание речи, синтез голоса и детектор речи. Без изменений работают настройки платформы; менять могут владелец и администратор.",
         "title_stt": "Распознавание речи (STT)",
         "title_tts": "Синтез речи (TTS)",
         "title_vad": "Детектор речи (VAD)",

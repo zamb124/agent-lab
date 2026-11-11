@@ -51,15 +51,25 @@ async def shop_e2e_add_category(page: Page, name: str) -> Locator:
 
 
 async def shop_e2e_add_product(page: Page, name: str, price: str) -> Locator:
-    """Открывает модалку товара, заполняет название и цену, сохраняет."""
+    """Открывает модалку товара, заполняет название и цену, сохраняет.
+
+    «Add» открывает picker каталога («подключить или создать») — новый
+    товар идёт через кнопку «Create a new product» внутри него.
+    """
     add_btn = page.locator(
         "shop-menu-page .head-actions platform-button[variant='primary']"
     ).first
     await expect(add_btn).to_be_visible(timeout=15_000)
     await add_btn.click()
+    picker = page.locator("platform-catalog-product-picker").first
+    await expect(picker).to_be_visible(timeout=15_000)
+    create_row = picker.locator("[data-create-new]")
+    await expect(create_row).to_be_visible(timeout=10_000)
+    await create_row.click()
+    await expect(picker).to_be_hidden(timeout=10_000)
     modal = page.locator("shop-product-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
-    name_field = modal.locator(".fields > platform-field[type='string']").first
+    name_field = modal.locator(".fields platform-field[type='string']").first
     await ui_set_platform_field(name_field, name)
     price_field = modal.locator(".row2 platform-field[type='number']").first
     await ui_set_platform_field(price_field, price)

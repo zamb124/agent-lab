@@ -1027,6 +1027,12 @@
     "storage_capacity_exceeded": "Превышена вместимость ячейки",
     "storage_container_required": "Тип хранения принимает только тару",
     "storage_container_type_denied": "Тип тары не разрешён в этом типе хранения",
+    "container_type_conflict": "Тип тары с таким именем уже существует",
+    "container_type_not_found": "Тип тары не найден",
+    "resource_conflict": "Ресурс с таким кодом уже существует",
+    "resource_type_conflict": "Тип ресурса с таким именем уже существует",
+    "storage_type_conflict": "Тип хранения с таким именем уже существует",
+    "storage_type_not_found": "Тип хранения не найден",
     "storage_loose_only": "Тип хранения принимает только россыпь",
     "storage_lot_mixed": "Тип хранения запрещает смешивание партий",
     "storage_max_containers": "Превышен лимит количества тары",
@@ -1125,5 +1131,15 @@
     "show_image": "Показать как картинку",
     "hide_image": "Скрыть картинку",
     "image_alt": "Картинка {{path}}"
+  },
+  "catalog": {
+    "picker_title": "Товар каталога",
+    "picker_search": "Название, SKU или штрихкод…",
+    "picker_create": "Создать новый товар",
+    "picker_empty": "Ничего не найдено — можно создать новый товар",
+    "archived": "в архиве",
+    "source_base": "Общее",
+    "source_hint": "Источник значения поля",
+    "source_reset": "Наследовать общее значение"
   }
 }

@@ -70,6 +70,7 @@
     "col_description": "Описание",
     "col_price": "Цена",
     "col_available": "В наличии",
+    "archived": "В архиве каталога",
     "ai_describe": "AI-описание",
     "photo_pick": "Фото",
     "ai_enhance": "Улучшить фото AI",
@@ -113,7 +114,9 @@
     "nutri_protein": "Белки",
     "nutri_fat": "Жиры",
     "nutri_carb": "Углеводы",
-    "field_available": "В наличии"
+    "field_available": "В наличии",
+    "source_all_shops": "Все витрины",
+    "source_this_shop": "Эта витрина"
   },
   "builder": {
     "title": "Внешний вид витрины",

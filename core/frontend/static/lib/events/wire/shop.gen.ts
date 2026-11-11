@@ -6,6 +6,80 @@
 
 
 /**
+ * Полная форма override'ов контента одного scope (PUT-семантика).
+ */
+export interface CatalogOverlay {
+    "name"?: string | null | undefined;
+    "description"?: string | null | undefined;
+    "image_file_ids"?: string[] | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Единый товар компании. Таблица ``catalog_products`` (shared).
+ */
+export interface CatalogProduct {
+    "product_id": string;
+    "company_id": string;
+    "sku"?: string | null | undefined;
+    "name": string;
+    "description"?: string | undefined;
+    "image_file_ids"?: string[] | undefined;
+    "uom_id": string;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    "is_archived"?: boolean | undefined;
+    "created_at": string;
+    "updated_at": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product/created|updated`` — карточка после мутации.
+ */
+export interface CatalogProductEventPayload {
+    "product": CatalogProduct;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product_facet/changed`` — мутация сервисного фасета.
+ * 
+ * ``instance_id`` — конкретный экземпляр фасета (витрина ``shop_id``);
+ * ``None`` — сервисный фасет без привязки к экземпляру (``stock``).
+ */
+export interface CatalogProductFacetEventPayload {
+    "product_id": string;
+    "facet": string;
+    "instance_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload ``catalog/product_overlay/changed``.
+ * 
+ * ``overlay=None`` — override снят (полное наследование базы).
+ */
+export interface CatalogProductOverlayEventPayload {
+    "product_id": string;
+    "facet": string;
+    "instance_id"?: string | null | undefined;
+    "overlay"?: CatalogOverlay | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Вход дедупа «подключить или создать»: любые из name/sku/barcode.
+ */
+export interface CatalogProductsSuggestPayload {
+    "name"?: string | null | undefined;
+    "sku"?: string | null | undefined;
+    "barcode"?: string | null | undefined;
+    "limit"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Команда без аргументов: WS `payload: null|{}` и REST без тела/query.
  */
 export type EmptyPayload = {
@@ -13,6 +87,14 @@ export type EmptyPayload = {
 };
 
 export type JsonValue = unknown;
+
+/**
+ * ListResponse[CatalogProduct]
+ */
+export interface ListResponse_CatalogProduct_ {
+    "items": CatalogProduct[];
+    [key: string]: unknown;
+}
 
 /**
  * ListResponse[ShopBannerResponse]
@@ -530,27 +612,6 @@ export interface ShopFeatures {
 }
 
 /**
- * Быстрый тег отзыва на заказ — единый словарь всех витрин.
- * 
- * Подпись зависит от полярности оценки: у 4–5 звёзд теги позитивные,
- * у 1–3 — негативные; ключ тега в ответе один и тот же, текст даёт
- * ``feedback_chip_label`` — локальные словари в коде и JS запрещены.
- */
-export type ShopFeedbackChip = "quality" | "service" | "speed" | "packaging" | "accuracy" | "price";
-
-/**
- * Оценка покупателем выполненного заказа — slug + публичный код.
- */
-export interface ShopFeedbackSetPayload {
-    "slug": string;
-    "public_code": string;
-    "rating": number;
-    "chips"?: ShopFeedbackChip[] | undefined;
-    "comment"?: string | undefined;
-    [key: string]: unknown;
-}
-
-/**
  * ShopIdPayload
  */
 export interface ShopIdPayload {
@@ -900,6 +961,7 @@ export interface ShopOrderCreatedResponse {
     "status_label": string;
     "delivery_type"?: ShopDeliveryType | undefined;
     "table_label"?: string | undefined;
+    "loyalty_reward_minor"?: number | undefined;
     "total_minor": number;
     "currency": string;
     [key: string]: unknown;
@@ -1135,6 +1197,7 @@ export interface ShopPersonalUsualItem {
  * ShopProductCreatePayload
  */
 export interface ShopProductCreatePayload {
+    "product_id"?: string | null | undefined;
     "category_id"?: string | null | undefined;
     "name": string;
     "description"?: string | undefined;
@@ -1152,7 +1215,7 @@ export interface ShopProductCreatePayload {
  */
 export interface ShopProductIdPayload {
     "shop_id": string;
-    "shop_product_id": string;
+    "product_id": string;
     [key: string]: unknown;
 }
 
@@ -1190,11 +1253,16 @@ export interface ShopProductModifierDetachPayload {
 }
 
 /**
- * ShopProductResponse
+ * Листинг витрины: фасет + эффективный контент каталога.
+ * 
+ * ``product_id`` — канонический id ``catalog_products``; имя/описание/
+ * галерея уже resolved по цепочке ``shop:<shop_id> → shop → base``,
+ * ``sources[field]`` — кто дал значение (``base`` | ``shop`` |
+ * ``shop:<id>``) для chain-toggle UI.
  */
 export interface ShopProductResponse {
-    "shop_product_id": string;
     "shop_id": string;
+    "product_id": string;
     "category_id": string | null;
     "name": string;
     "description": string;
@@ -1202,8 +1270,11 @@ export interface ShopProductResponse {
     "badges": string[];
     "price_minor": number;
     "photo_file_id": string | null;
+    "image_file_ids": string[];
+    "sources": Record<string, string>;
     "nutrition": ShopNutrition;
     "is_available": boolean;
+    "is_archived": boolean;
     "sort": number;
     [key: string]: unknown;
 }
@@ -1223,7 +1294,7 @@ export interface ShopProductUpdatePayload {
     "is_available"?: boolean | null | undefined;
     "sort"?: number | null | undefined;
     "shop_id": string;
-    "shop_product_id": string;
+    "product_id": string;
     [key: string]: unknown;
 }
 
@@ -1376,39 +1447,6 @@ export interface ShopResponse {
     "storefront_url": string;
     "plan": string;
     "products_count"?: number | undefined;
-    [key: string]: unknown;
-}
-
-/**
- * Публичный отзыв на витрине — имя снапшотом из заказа, без PII.
- */
-export interface ShopReviewItemResponse {
-    "rating": number;
-    "chips": string[];
-    "chip_labels"?: Record<string, string> | undefined;
-    "comment"?: string | undefined;
-    "customer_name"?: string | undefined;
-    "created_at": string;
-    [key: string]: unknown;
-}
-
-/**
- * Публичная лента отзывов витрины — анонимное чтение.
- */
-export interface ShopReviewsListPayload {
-    "slug": string;
-    "limit"?: number | undefined;
-    "offset"?: number | undefined;
-    [key: string]: unknown;
-}
-
-/**
- * `GET /storefront/{slug}/reviews` — агрегат рейтинга + лента.
- */
-export interface ShopReviewsResponse {
-    "avg_rating"?: number | null | undefined;
-    "count"?: number | undefined;
-    "items"?: ShopReviewItemResponse[] | undefined;
     [key: string]: unknown;
 }
 
@@ -1576,10 +1614,11 @@ export interface ShopTelegramConnectPayload {
  * Визуальная тема витрины: акцентный цвет, пресет раскладки и режим.
  * 
  * ``hero_style`` — подача шапки: ``card`` — карточка поверх обложки,
- * ``cover`` — иммерсивный full-bleed с градиентом, ``minimal`` —
+ * ``cover`` — иммерсивный full-bleed с затемнением, ``minimal`` —
  * компактный заголовок без обложки. ``backdrop`` — фон страницы:
- * ``solid`` — цвет темы, ``blur`` — размытая обложка под контентом,
- * ``gradient`` — мягкий акцентный градиент.
+ * ``solid`` — нейтральный цвет темы, ``blur`` — размытая обложка под
+ * контентом. Градиентных фонов нет — контентный интерфейс не должен
+ * нагружать внимание фоном.
  */
 export interface ShopTheme {
     "accent_color"?: string | undefined;
@@ -1664,6 +1703,7 @@ export interface ShopCommandMap {
     "shop/banners/remove_requested": { payload: ShopBannerIdPayload; result: EmptyPayload },
     "shop/banners/reorder_requested": { payload: ShopBannersReorderPayload; result: EmptyPayload },
     "shop/banners/update_requested": { payload: ShopBannerUpdatePayload; result: ShopBannerResponse },
+    "shop/catalog_products/suggest_requested": { payload: CatalogProductsSuggestPayload; result: ListResponse_CatalogProduct_ },
     "shop/categories/create_requested": { payload: ShopCategoryCreatePayload; result: ShopCategoryResponse },
     "shop/categories/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopCategoryResponse_ },
     "shop/categories/remove_requested": { payload: ShopCategoryIdPayload; result: EmptyPayload },
@@ -1700,7 +1740,6 @@ export interface ShopCommandMap {
     "shop/promos/update_requested": { payload: ShopPromoUpdatePayload; result: ShopPromoResponse },
     "shop/public/cart_price_requested": { payload: ShopCartPricePayload; result: ShopCartPriceResponse },
     "shop/public/favorite_set_requested": { payload: ShopFavoriteSetPayload; result: ShopFavoriteResponse },
-    "shop/public/feedback_set_requested": { payload: ShopFeedbackSetPayload; result: ShopOrderFeedbackResponse },
     "shop/public/my_order_cancel_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_order_get_requested": { payload: ShopMyOrderCodePayload; result: ShopMyOrderDetailResponse },
     "shop/public/my_orders_list_requested": { payload: ShopMyOrdersListPayload; result: OffsetPage_ShopMyOrderListItemResponse_ },
@@ -1708,7 +1747,6 @@ export interface ShopCommandMap {
     "shop/public/order_create_requested": { payload: ShopOrderCreatePayload; result: ShopOrderCreatedResponse },
     "shop/public/order_status_requested": { payload: ShopPublicOrderStatusPayload; result: ShopOrderStatusResponse },
     "shop/public/personal_requested": { payload: ShopPersonalPayload; result: ShopPersonalResponse },
-    "shop/public/reviews_list_requested": { payload: ShopReviewsListPayload; result: ShopReviewsResponse },
     "shop/public/storefront_geo_requested": { payload: ShopStorefrontGeoPayload; result: ShopStorefrontGeoResponse },
     "shop/shelves/create_requested": { payload: ShopShelfCreatePayload; result: ShopShelfResponse },
     "shop/shelves/list_requested": { payload: ShopIdPayload; result: ListResponse_ShopShelfResponse_ },
@@ -1734,6 +1772,10 @@ export interface ShopCommandMap {
  * Карта push-событий сервиса (`register_platform_event`): `type` → payload.
  */
 export interface ShopEventMap {
+    "catalog/product/created": CatalogProductEventPayload,
+    "catalog/product/updated": CatalogProductEventPayload,
+    "catalog/product_facet/changed": CatalogProductFacetEventPayload,
+    "catalog/product_overlay/changed": CatalogProductOverlayEventPayload,
     "shop/ai/autofill_failed": PlatformCommandEventPayload,
     "shop/ai/autofill_requested": PlatformCommandEventPayload,
     "shop/ai/autofill_succeeded": PlatformCommandEventPayload,
@@ -1783,6 +1825,9 @@ export interface ShopEventMap {
     "shop/banners/update_requested": PlatformCommandEventPayload,
     "shop/banners/update_succeeded": PlatformCommandEventPayload,
     "shop/catalog/changed": ShopCatalogChangedEventPayload,
+    "shop/catalog_products/suggest_failed": PlatformCommandEventPayload,
+    "shop/catalog_products/suggest_requested": PlatformCommandEventPayload,
+    "shop/catalog_products/suggest_succeeded": PlatformCommandEventPayload,
     "shop/categories/create_failed": PlatformCommandEventPayload,
     "shop/categories/create_requested": PlatformCommandEventPayload,
     "shop/categories/create_succeeded": PlatformCommandEventPayload,
@@ -1893,9 +1938,6 @@ export interface ShopEventMap {
     "shop/public/favorite_set_failed": PlatformCommandEventPayload,
     "shop/public/favorite_set_requested": PlatformCommandEventPayload,
     "shop/public/favorite_set_succeeded": PlatformCommandEventPayload,
-    "shop/public/feedback_set_failed": PlatformCommandEventPayload,
-    "shop/public/feedback_set_requested": PlatformCommandEventPayload,
-    "shop/public/feedback_set_succeeded": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_failed": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_requested": PlatformCommandEventPayload,
     "shop/public/my_order_cancel_succeeded": PlatformCommandEventPayload,
@@ -1917,9 +1959,6 @@ export interface ShopEventMap {
     "shop/public/personal_failed": PlatformCommandEventPayload,
     "shop/public/personal_requested": PlatformCommandEventPayload,
     "shop/public/personal_succeeded": PlatformCommandEventPayload,
-    "shop/public/reviews_list_failed": PlatformCommandEventPayload,
-    "shop/public/reviews_list_requested": PlatformCommandEventPayload,
-    "shop/public/reviews_list_succeeded": PlatformCommandEventPayload,
     "shop/public/storefront_geo_failed": PlatformCommandEventPayload,
     "shop/public/storefront_geo_requested": PlatformCommandEventPayload,
     "shop/public/storefront_geo_succeeded": PlatformCommandEventPayload,

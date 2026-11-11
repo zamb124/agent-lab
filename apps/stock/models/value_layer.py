@@ -42,7 +42,8 @@ from decimal import Decimal
 from typing import ClassVar, Self
 
 from oxyde import Field as DbField
-from oxyde import Index
+from oxyde import Index, Q, execute_raw
+from oxyde.queries.select import Query
 
 from apps.stock.models.common import (
     MONEY_DB,
@@ -69,6 +70,7 @@ from apps.stock.models.value_layer_consumption import StockValueLayerConsumption
 from core.errors.boundary import PlatformNotFoundError
 from core.lanes import LaneCursor, LaneOutcome, LaneRun, LaneScope, run_in_lanes
 from core.models.platform_model import PlatformModel
+from core.types import require_json_object
 from core.utils.time import utcnow
 
 
@@ -162,6 +164,56 @@ class StockValueLayer(PlatformModel):
         ).order_by("entry_no").limit(limit).offset(offset).all()
 
     @classmethod
+    def _journal_query(
+        cls,
+        company_id: str,
+        *,
+        product_id: str | None = None,
+        warehouse_id: str | None = None,
+        transfer_id: str | None = None,
+        entry_kinds: list[ValueEntryKind] | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        open_only: bool = False,
+        search_text: str | None = None,
+        search_product_ids: list[str] | None = None,
+        search_transfer_ids: list[str] | None = None,
+    ) -> Query[Self]:
+        """Запрос журнала с фильтрами UI. ``None``-аргумент не фильтрует.
+
+        ``search_text`` — умный поиск: совпадение описания или
+        ``origin_document_id`` самой записи, либо принадлежность товару
+        (``search_product_ids``) или накладной (``search_transfer_ids``),
+        чьи имена совпали с текстом — резолв id делается до запроса.
+        ``open_only`` — только приходные слои с остатком FIFO.
+        """
+        query = cls.objects.filter(company_id=company_id)
+        if product_id is not None:
+            query = query.filter(product_id=product_id)
+        if warehouse_id is not None:
+            query = query.filter(warehouse_id=warehouse_id)
+        if transfer_id is not None:
+            query = query.filter(transfer_id=transfer_id)
+        if entry_kinds:
+            query = query.filter(entry_kind__in=list(entry_kinds))
+        if date_from is not None:
+            query = query.filter(created_at__gte=date_from)
+        if date_to is not None:
+            query = query.filter(created_at__lte=date_to)
+        if open_only:
+            query = query.filter(remaining_quantity__gt=STOCK_ZERO)
+        if search_text is not None:
+            branches = Q(description__icontains=search_text) | Q(
+                origin_document_id__icontains=search_text
+            )
+            if search_product_ids:
+                branches |= Q(product_id__in=search_product_ids)
+            if search_transfer_ids:
+                branches |= Q(transfer_id__in=search_transfer_ids)
+            query = query.filter(branches)
+        return query
+
+    @classmethod
     async def list_by_entry_no_asc(
         cls,
         company_id: str,
@@ -170,26 +222,86 @@ class StockValueLayer(PlatformModel):
         warehouse_id: str | None,
         limit: int,
         offset: int,
+        transfer_id: str | None = None,
+        entry_kinds: list[ValueEntryKind] | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        open_only: bool = False,
+        search_text: str | None = None,
+        search_product_ids: list[str] | None = None,
+        search_transfer_ids: list[str] | None = None,
     ) -> list[Self]:
-        """Окно слоёв компании, ORDER BY entry_no ASC, limit и offset. product_id и warehouse_id равные None не фильтруют."""
-        query = cls.objects.filter(company_id=company_id)
-        if product_id is not None:
-            query = query.filter(product_id=product_id)
-        if warehouse_id is not None:
-            query = query.filter(warehouse_id=warehouse_id)
+        """Окно слоёв компании, ORDER BY entry_no ASC, limit и offset. Фильтры равные None не фильтруют."""
+        query = cls._journal_query(
+            company_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transfer_id=transfer_id,
+            entry_kinds=entry_kinds,
+            date_from=date_from,
+            date_to=date_to,
+            open_only=open_only,
+            search_text=search_text,
+            search_product_ids=search_product_ids,
+            search_transfer_ids=search_transfer_ids,
+        )
         return await query.order_by("entry_no").limit(limit).offset(offset).all()
 
     @classmethod
-    async def count_by_product_and_warehouse(
-        cls, company_id: str, *, product_id: str | None, warehouse_id: str | None
+    async def count_filtered(
+        cls,
+        company_id: str,
+        *,
+        product_id: str | None = None,
+        warehouse_id: str | None = None,
+        transfer_id: str | None = None,
+        entry_kinds: list[ValueEntryKind] | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        open_only: bool = False,
+        search_text: str | None = None,
+        search_product_ids: list[str] | None = None,
+        search_transfer_ids: list[str] | None = None,
     ) -> int:
-        """Счёт слоёв компании. product_id и warehouse_id равные None не фильтруют."""
-        query = cls.objects.filter(company_id=company_id)
-        if product_id is not None:
-            query = query.filter(product_id=product_id)
-        if warehouse_id is not None:
-            query = query.filter(warehouse_id=warehouse_id)
-        return await query.count()
+        """Счёт слоёв компании по тем же фильтрам, что ``list_by_entry_no_asc``."""
+        return await cls._journal_query(
+            company_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transfer_id=transfer_id,
+            entry_kinds=entry_kinds,
+            date_from=date_from,
+            date_to=date_to,
+            open_only=open_only,
+            search_text=search_text,
+            search_product_ids=search_product_ids,
+            search_transfer_ids=search_transfer_ids,
+        ).count()
+
+    @classmethod
+    async def latest_per_product_by_entry_no_desc(cls, company_id: str) -> list[Self]:
+        """Последний слой каждого товара компании (баланс запаса по товару).
+
+        ``DISTINCT ON (product_id)`` по ``entry_no DESC``: одна строка на
+        товар — её ``qty_after``/``value_after`` и есть текущая стоимость.
+        """
+        rows = await execute_raw(
+            "SELECT DISTINCT ON (product_id) layer_id FROM stock_value_layers "
+            + "WHERE company_id = $1 ORDER BY product_id, entry_no DESC",
+            [company_id],
+            using=STOCK_DB,
+        )
+        layer_ids: list[str] = []
+        for row in rows:
+            layer_id = require_json_object(row, "stock_value_layer")["layer_id"]
+            if not isinstance(layer_id, str):
+                raise TypeError("stock_value_layer.layer_id must be str")
+            layer_ids.append(layer_id)
+        if not layer_ids:
+            return []
+        return await cls.objects.filter(
+            company_id=company_id, layer_id__in=layer_ids
+        ).all()
 
     @classmethod
     async def last_for_product_by_entry_no_desc(

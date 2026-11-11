@@ -11,12 +11,12 @@ from core.documents.viewer.models import DocumentViewerHandlerId, OfficeViewerSc
 
 
 def office_content_disposition(original_name: str, *, disposition: str = "inline") -> str:
-    """RFC 6266 Content-Disposition: ASCII fallback + UTF-8 filename* (кириллица и т.п.)."""
+    """RFC 6266 Content-Disposition: ASCII-имя + UTF-8 filename* (кириллица и т.п.)."""
     name = (original_name or "document").replace("\r", "").replace("\n", "")[:800]
-    ascii_fallback = name.encode("ascii", "ignore").decode("ascii").strip() or "document"
-    ascii_fallback = ascii_fallback.replace("\\", "_").replace('"', "'")[:200]
+    ascii_name = name.encode("ascii", "ignore").decode("ascii").strip() or "document"
+    ascii_name = ascii_name.replace("\\", "_").replace('"', "'")[:200]
     encoded = quote(name, safe="")
-    return f"{disposition}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+    return f"{disposition}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
 def office_signed_download_url(

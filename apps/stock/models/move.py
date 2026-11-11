@@ -94,11 +94,18 @@ from apps.stock.models.storage_rules import (
 )
 from apps.stock.models.storage_type import StockStorageType
 from apps.stock.models.value_layer import StockValueLayer
+from core.catalog.models import CatalogProduct
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.events.contract import PlatformEvent
 from core.lanes import LaneOutcome, LaneRun, LaneScope, run_in_lanes
 from core.models.platform_model import PlatformModel
-from core.types import require_json_object
+from core.pagination import CursorPage, decode_cursor, encode_cursor
+from core.types import (
+    JsonValue,
+    SqlParameterValue,
+    parse_json_object,
+    require_json_object,
+)
 from core.utils.time import utcnow
 
 _REMOVABLE_STATES = {StockMoveState.DRAFT, StockMoveState.CONFIRMED, StockMoveState.WAITING}
@@ -347,6 +354,72 @@ class StockMove(PlatformModel):
                 StockMoveState.ASSIGNED,
             ],
         ).all()
+
+    @classmethod
+    async def list_page_by_created_at_desc(
+        cls,
+        company_id: str,
+        *,
+        warehouse_id: str | None = None,
+        location_ids: list[str] | None = None,
+        product_id: str | None = None,
+        state: StockMoveState | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> CursorPage[StockMove]:
+        """Страница движений компании, ORDER BY created_at DESC, move_id DESC.
+
+        Keyset-курсор по ``(created_at, move_id)`` — повторяемая страница
+        без сдвига при вставках сверху ленты. ``location_ids`` — движение
+        с любым концом в этом наборе (источник ИЛИ приёмник); пустой
+        список — пустая страница. ``warehouse_id``, ``product_id`` и
+        ``state`` равные ``None`` не фильтруют. Невалидный ``cursor`` —
+        ValueError.
+        """
+        if location_ids is not None and not location_ids:
+            return CursorPage[StockMove](items=[], next_cursor=None, has_more=False)
+        params: list[SqlParameterValue] = [company_id]
+        where = ["company_id = $1"]
+
+        def add(value: SqlParameterValue) -> str:
+            params.append(value)
+            return f"${len(params)}"
+
+        if warehouse_id is not None:
+            where.append(f"warehouse_id = {add(warehouse_id)}")
+        if product_id is not None:
+            where.append(f"product_id = {add(product_id)}")
+        if state is not None:
+            state_param = add(StockMoveState(state).value)
+            where.append(f"state = {state_param}::stock_move_state_enum")
+        if location_ids is not None:
+            ids_params = ", ".join(add(location_id) for location_id in location_ids)
+            where.append(
+                f"(location_id IN ({ids_params}) OR location_dest_id IN ({ids_params}))"
+            )
+        if cursor is not None:
+            cursor_ts, cursor_id = decode_cursor(cursor)
+            ts_param = add(cursor_ts)
+            id_param = add(cursor_id)
+            where.append(f"(created_at, move_id) < ({ts_param}::timestamptz, {id_param})")
+        limit_param = add(limit + 1)
+        fetched = await execute_raw(
+            "SELECT row_to_json(stock_moves) AS item FROM stock_moves WHERE "
+            + " AND ".join(where)
+            + f" ORDER BY created_at DESC, move_id DESC LIMIT {limit_param}",
+            params,
+            using=STOCK_DB,
+        )
+        parsed = [_stock_move_from_row(row) for row in fetched]
+        has_more = len(parsed) > limit
+        page = parsed[:limit]
+        next_cursor: str | None = None
+        if has_more and len(page) > 0:
+            last = page[-1]
+            next_cursor = encode_cursor(last.created_at, last.move_id)
+        return CursorPage[StockMove](
+            items=page, next_cursor=next_cursor, has_more=has_more
+        )
 
     # --- Шаги движка внутри lane-транзакции (свой atomic не открывают) ---
 
@@ -2323,7 +2396,7 @@ class StockMove(PlatformModel):
                     "Virtual inventory location missing; run stock/company/init",
                     error_code="location_not_found",
                 )
-            product = await StockProduct.by_id(company_id, quant.product_id)
+            product = await CatalogProduct.by_id(company_id, quant.product_id)
             if product is None:
                 raise PlatformNotFoundError(
                     "Product not found", error_code="product_not_found"
@@ -2405,3 +2478,14 @@ class StockMove(PlatformModel):
             result_type=StockMove,
             body=body,
         )
+
+
+def _stock_move_from_row(row: JsonValue) -> StockMove:
+    """Строка ``row_to_json(stock_moves)`` → StockMove."""
+    parsed = require_json_object(row, "stock_move")
+    raw_item = parsed["item"]
+    if isinstance(raw_item, str):
+        payload = parse_json_object(raw_item, "stock_move")
+    else:
+        payload = require_json_object(raw_item, "stock_move")
+    return StockMove.model_validate(payload)

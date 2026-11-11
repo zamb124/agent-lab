@@ -7,6 +7,8 @@ UI склада — первый срез: данные создают опер�
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
 
@@ -62,11 +64,9 @@ async def test_stock_incoming_receipt(
     await stock_e2e_open(page, stock_ui)
 
     # --- Подготовка данных тем же op-каналом, что использует SPA ---
-    warehouses = await stock_e2e_op(page, "stock/warehouses", "stock/warehouses/list_requested")
-    existing_codes = [w["code"] for w in warehouses["items"]]
-    # Код строго меньше минимального существующего: пульс главной всегда
-    # показывает первый по коду склад — наш гарантированно первый.
-    warehouse_code = ("0" + min(existing_codes)) if existing_codes else "MAIN"
+    # Код с префиксом «0-»: сортируется раньше любого «0…»/«MAIN» — наш
+    # склад гарантированно первый в списках, и код уникален по unique_id.
+    warehouse_code = f"0-{unique_id[:8].upper()}"
     warehouse = await stock_e2e_op(
         page,
         "stock/warehouse_create", "stock/warehouse_create/requested",
@@ -120,7 +120,7 @@ async def test_stock_incoming_receipt(
     assert transfer["state"] == "draft"
 
     # --- Пользовательский маршрут по UI ---
-    await stock_e2e_nav(page, 1, page_selector="stock-transfers-page")
+    await stock_e2e_nav(page, 'stock_transfers', page_selector="stock-transfers-page")
     await scenario.step(
         "Откройте раздел «Переводы»",
         page,
@@ -194,12 +194,19 @@ async def test_stock_incoming_receipt(
         ),
     )
 
-    await stock_e2e_nav(page, 4, page_selector="stock-valuation-page")
-    layer_row = page.locator(
-        "stock-valuation-page table tbody tr", has_text=product_name
+    await stock_e2e_nav(page, 'stock_valuation', page_selector="stock-valuation-page")
+    report_row = page.locator(
+        "stock-valuation-page tr.row", has_text=product_name
     ).first
-    await expect(layer_row).to_be_visible(timeout=30_000)
-    await expect(layer_row).to_contain_text("inbound")
+    await expect(report_row).to_be_visible(timeout=30_000)
+    await report_row.click()
+    await expect(
+        page.locator("stock-valuation-journal-page")
+    ).to_be_visible(timeout=15_000)
+    layer_row = page.locator(
+        "stock-valuation-journal-page table tbody tr", has_text=product_name
+    ).first
+    await expect(layer_row).to_contain_text(re.compile(r"inbound", re.IGNORECASE))
     await scenario.step(
         "Проверьте запись в оценке запасов",
         page,

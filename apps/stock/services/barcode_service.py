@@ -1,4 +1,11 @@
-"""Штрихкоды склада: единая точка уникальности `StockBarcodeIndex` + GS1."""
+"""Штрихкоды склада: логистический индекс `StockBarcodeIndex` + GS1.
+
+Логистические метки (ячейки, контейнеры, партии, накладные, ресурсы)
+живут в ``stock_barcodes`` и биндятся внутри lane-транзакций. Торговые
+коды (GTIN товара, коды упаковок) — в ``catalog_barcodes`` (shared):
+resolve смотрит сначала свой индекс, затем каталог — внутренняя метка
+имеет приоритет над торговым кодом.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +15,7 @@ from apps.stock.models import (
     StockLot,
 )
 from apps.stock.models.gs1 import Gs1Barcode, parse_gs1
+from core.catalog.models import CatalogBarcode
 from core.errors.boundary import PlatformNotFoundError
 
 
@@ -28,11 +36,13 @@ class StockBarcodeResolveResult:
 class BarcodeService:
     """Регистрация и resolve штрихкодов. `unique (company_id, barcode)` — атомарность.
 
-    ``stock_barcodes`` — единственный источник истины для сканируемых
-    кодов: доменные сущности своих barcode-полей не хранят. Resolve:
-    сырая строка в индексе → GS1-семантика (GTIN → товар/упаковка,
-    SSCC → контейнер/локация, serial/lot → партия внутри товара) →
-    извлечённые AI как отдельные записи индекса.
+    ``stock_barcodes`` — индекс складских носителей: логистические
+    сущности своих barcode-полей не хранят. Торговый код регистрируется
+    через ``CatalogService.bind_barcode`` и попадает в
+    ``catalog_barcodes``. Resolve: сырая строка в складском индексе →
+    сырая строка в каталоге → GS1-семантика (GTIN → товар/упаковка
+    каталога, SSCC → контейнер/локация, serial/lot → партия внутри
+    товара) → извлечённые AI как отдельные записи обоих индексов.
     """
 
     async def register(
@@ -43,12 +53,12 @@ class BarcodeService:
         entity_type: StockBarcodeEntityType,
         entity_id: str,
     ) -> StockBarcodeIndex:
-        """Привязать штрихкод к сущности в индексе.
+        """Привязать логистический код к сущности в индексе.
 
-        ``unique (company_id, barcode)`` — один код = один носитель:
-        один и тот же штрихкод не может быть и товаром, и ячейкой.
+        ``unique (company_id, barcode)`` — один код = один носитель.
         Повторная регистрация того же кода на ту же сущность — no-op;
-        на другую — ``barcode_conflict``.
+        на другую — ``barcode_conflict``. Торговые коды (товар и
+        упаковки) сюда не идут — только через каталог.
         """
         return await StockBarcodeIndex.bind(
             company_id=company_id,
@@ -83,11 +93,13 @@ class BarcodeService:
         Оператор сканирует наклейку — система отвечает «это паллета
         PLT-012» или «это партия LOT-55 товара мука». Порядок важен:
 
-        1. Сырая строка в индексе — если код зарегистрирован
-           напрямую (например, код ячейки), берём его;
-        2. GS1-семантика — GTIN + lot/serial резолвится в партию,
+        1. Сырая строка в складском индексе — внутренняя метка
+           (например, код ячейки) сильнее торгового кода;
+        2. Сырая строка в ``catalog_barcodes`` — торговый код товара
+           или упаковки;
+        3. GS1-семантика — GTIN + lot/serial резолвится в партию,
            потому что «код с серийником» конкретнее, чем просто товар;
-        3. Извлечённые AI в индексе — когда SSCC/GTIN хранится
+        4. Извлечённые AI в обоих индексах — когда SSCC/GTIN хранится
            отдельной записью.
 
         Не найдено → ``barcode_not_found``.
@@ -99,6 +111,11 @@ class BarcodeService:
             return StockBarcodeResolveResult(
                 entry.entity_type, entry.entity_id, parsed
             )
+        catalog_hit = _catalog_result(
+            await CatalogBarcode.resolve(company_id, code), parsed
+        )
+        if catalog_hit is not None:
+            return catalog_hit
         if parsed.is_gs1:
             result = await self._resolve_gs1(company_id, parsed)
             if result is not None:
@@ -113,8 +130,7 @@ class BarcodeService:
     async def _resolve_extracted(
         self, company_id: str, parsed: Gs1Barcode
     ) -> StockBarcodeResolveResult | None:
-        """Индекс по извлечённым AI (sscc/gtin/serial/lot) — когда штрихкод
-        зарегистрирован на сущности отдельной записью, а не полем barcode."""
+        """Индексы по извлечённым AI (sscc/gtin/serial/lot): складской, затем каталог."""
         keys: list[str] = []
         for key in (
             parsed.sscc,
@@ -130,32 +146,38 @@ class BarcodeService:
                 return StockBarcodeResolveResult(
                     entry.entity_type, entry.entity_id, parsed
                 )
+            catalog_hit = _catalog_result(
+                await CatalogBarcode.resolve(company_id, key), parsed
+            )
+            if catalog_hit is not None:
+                return catalog_hit
         return None
 
     async def _resolve_gs1(
         self, company_id: str, parsed: Gs1Barcode
     ) -> StockBarcodeResolveResult | None:
-        """Семантика AI: GTIN → товар/упаковка, SSCC → контейнер-локация,
+        """Семантика AI: GTIN → товар/упаковка каталога, SSCC → контейнер-локация,
         `lot_name`/`serial` → партия (по имени в рамках GTIN-товара).
 
-        Все ключи смотрятся в одном индексе ``stock_barcodes``: GTIN
-        записан на product или packaging, SSCC — на контейнер-локацию.
-        Партия по имени ищется в рамках разрешённого GTIN-товара —
-        «номер партии поставщика» уникален только внутри товара.
+        GTIN ищется в ``catalog_barcodes``: ``uom_id`` задан — код
+        упаковки, иначе код самого товара. SSCC — только складская
+        метка, в ``stock_barcodes``. Партия по имени ищется в рамках
+        разрешённого GTIN-товара — «номер партии поставщика» уникален
+        только внутри товара.
         """
         product_id: str | None = None
         if parsed.gtin:
-            entry = await StockBarcodeIndex.resolve(company_id, parsed.gtin)
-            if entry is not None and entry.entity_type == StockBarcodeEntityType.PRODUCT:
-                product_id = entry.entity_id
+            entry = await CatalogBarcode.resolve(company_id, parsed.gtin)
+            if entry is not None and entry.uom_id is None:
+                product_id = entry.product_id
                 if not parsed.lot_name and not parsed.serial:
                     return StockBarcodeResolveResult(
                         StockBarcodeEntityType.PRODUCT, product_id, parsed
                     )
-            elif entry is not None and entry.entity_type == StockBarcodeEntityType.PACKAGING:
+            elif entry is not None:
                 return StockBarcodeResolveResult(
                     StockBarcodeEntityType.PACKAGING,
-                    entry.entity_id,
+                    entry.uom_id or "",
                     parsed,
                 )
         if parsed.sscc:
@@ -175,3 +197,18 @@ class BarcodeService:
                         StockBarcodeEntityType.LOT, lot.lot_id, parsed
                     )
         return None
+
+
+def _catalog_result(
+    entry: CatalogBarcode | None, parsed: Gs1Barcode
+) -> StockBarcodeResolveResult | None:
+    """Хит торгового кода → результат скана: товар или упаковка."""
+    if entry is None:
+        return None
+    if entry.uom_id is not None:
+        return StockBarcodeResolveResult(
+            StockBarcodeEntityType.PACKAGING, entry.uom_id, parsed
+        )
+    return StockBarcodeResolveResult(
+        StockBarcodeEntityType.PRODUCT, entry.product_id, parsed
+    )

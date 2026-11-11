@@ -97,7 +97,7 @@ class TestStorefrontSnapshot:
         )
         product = resp.json()
         await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['product_id']}",
             json={"is_available": False},
         )
         snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
@@ -398,7 +398,7 @@ class TestStorefrontPage:
         )
         assert resp.status_code == 200, resp.text
         resp = await shop_client.post(
-            f"{_SHOPS}/{shop_id}/products/{product['shop_product_id']}/modifier-groups/{gid}",
+            f"{_SHOPS}/{shop_id}/products/{product['product_id']}/modifier-groups/{gid}",
             json={},
         )
         assert resp.status_code == 200, resp.text

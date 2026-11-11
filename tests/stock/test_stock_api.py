@@ -231,7 +231,7 @@ class TestErrorEnvelope:
         self, stock_client: AsyncClient, stock_init, unique_id: str
     ) -> None:
         ghost = f"rule_ghost_{unique_id}"
-        resp = await stock_client.post(
+        resp = await stock_client.patch(
             f"{API_PREFIX}/putaway-rules/{ghost}",
             json={"rule_id": ghost, "is_active": False},
         )
@@ -242,9 +242,355 @@ class TestErrorEnvelope:
         self, stock_client: AsyncClient, stock_init, unique_id: str
     ) -> None:
         ghost = f"rule_ghost_{unique_id}"
-        resp = await stock_client.post(
+        resp = await stock_client.patch(
             f"{API_PREFIX}/reorder-rules/{ghost}/active",
             json={"rule_id": ghost, "is_active": False},
         )
         assert resp.status_code == 404
         assert resp.json()["error_code"] == "reorder_rule_not_found"
+
+
+async def _done_inbound(
+    client: AsyncClient, warehouse: dict[str, Any], product: dict[str, Any]
+) -> dict[str, Any]:
+    """Проводит приход единицы товара до состояния done."""
+    op_in = await _op_type_id(client, warehouse["warehouse_id"], "incoming")
+    uoms = (await client.get(_UOMS)).json()["items"]
+    uom_id = next(u["uom_id"] for u in uoms if u["name"] == "Units")
+    resp = await client.post(
+        _TRANSFERS,
+        json={
+            "warehouse_id": warehouse["warehouse_id"],
+            "operation_type_id": op_in,
+            "moves": [
+                {
+                    "product_id": product["product_id"],
+                    "product_qty": "1",
+                    "uom_id": uom_id,
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    tid = resp.json()["transfer_id"]
+    for step in ("confirm", "assign", "validate"):
+        resp = await client.post(
+            f"{_TRANSFERS}/{tid}/{step}",
+            json={"transfer_id": tid} if step == "validate" else None,
+        )
+        assert resp.status_code == 200, f"{step}: {resp.text}"
+    return resp.json()
+
+
+class TestMovesJournalApi:
+    """`GET /moves` — журнал движений с keyset-пагинацией."""
+
+    async def test_moves_list_filters_and_cursor(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"MJ{unique_id[:5]}")
+        wid = warehouse["warehouse_id"]
+        product = await _make_product(stock_client, f"MJ-{unique_id[:8]}")
+        await _done_inbound(stock_client, warehouse, product)
+        await _done_inbound(stock_client, warehouse, product)
+
+        # Все done-движения склада — обе приходные проводки.
+        moves = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={"warehouse_id": wid, "state": "done"},
+            )
+        ).json()
+        mine = [
+            m for m in moves["items"] if m["product_id"] == product["product_id"]
+        ]
+        assert len(mine) >= 2
+        assert all(m["state"] == "done" for m in mine)
+
+        # Фильтр по продукту и по ячейке-приёмнику.
+        dest = mine[0]["location_dest_id"]
+        by_product = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={"warehouse_id": wid, "product_id": product["product_id"]},
+            )
+        ).json()
+        assert all(
+            m["product_id"] == product["product_id"] for m in by_product["items"]
+        )
+        by_location = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={"warehouse_id": wid, "location_id": dest},
+            )
+        ).json()
+        assert any(
+            m["move_id"] == mine[0]["move_id"] for m in by_location["items"]
+        )
+
+        # Keyset: вторая страница не повторяет первую.
+        page1 = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={"warehouse_id": wid, "limit": 1},
+            )
+        ).json()
+        assert page1["has_more"] is True
+        page2 = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={
+                    "warehouse_id": wid,
+                    "limit": 1,
+                    "cursor": page1["next_cursor"],
+                },
+            )
+        ).json()
+        assert page1["items"][0]["move_id"] != page2["items"][0]["move_id"]
+
+        # Несуществующий state — не done, журнал их не видит.
+        none_done = (
+            await stock_client.get(
+                f"{API_PREFIX}/moves",
+                params={"warehouse_id": wid, "state": "cancel"},
+            )
+        ).json()
+        assert all(
+            m["product_id"] != product["product_id"] for m in none_done["items"]
+        )
+
+
+class TestQuantsFiltersApi:
+    """`GET /quants` — фильтры warehouse_id и subtree_location_id."""
+
+    async def test_quants_warehouse_and_subtree(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"QF{unique_id[:5]}")
+        wid = warehouse["warehouse_id"]
+        product = await _make_product(stock_client, f"QF-{unique_id[:8]}")
+        await _done_inbound(stock_client, warehouse, product)
+
+        quant = (
+            await stock_client.get(
+                _QUANTS, params={"product_id": product["product_id"]}
+            )
+        ).json()["items"][0]
+        assert quant["warehouse_id"] == wid
+
+        by_wh = (
+            await stock_client.get(
+                _QUANTS,
+                params={"warehouse_id": wid, "product_id": product["product_id"]},
+            )
+        ).json()
+        assert any(q["quant_id"] == quant["quant_id"] for q in by_wh["items"])
+
+        # Поддерево корня склада содержит остаток; чужая зона — нет.
+        root = warehouse["view_location_id"]
+        by_root = (
+            await stock_client.get(
+                _QUANTS,
+                params={
+                    "warehouse_id": wid,
+                    "subtree_location_id": root,
+                    "product_id": product["product_id"],
+                },
+            )
+        ).json()
+        assert any(q["quant_id"] == quant["quant_id"] for q in by_root["items"])
+
+        zone = (
+            await stock_client.post(
+                _LOCATIONS,
+                json={
+                    "warehouse_id": wid,
+                    "parent_id": root,
+                    "name": "Empty Zone",
+                    "usage": "view",
+                },
+            )
+        ).json()
+        by_empty = (
+            await stock_client.get(
+                _QUANTS,
+                params={
+                    "warehouse_id": wid,
+                    "subtree_location_id": zone["location_id"],
+                },
+            )
+        ).json()
+        assert by_empty["items"] == []
+        assert by_empty["total"] == 0
+
+
+class TestCountDueApi:
+    """`GET /locations/count-due` — ячейки с просроченным пересчётом."""
+
+    async def test_new_bin_is_due(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"CD{unique_id[:5]}")
+        wid = warehouse["warehouse_id"]
+        zone = (
+            await stock_client.post(
+                _LOCATIONS,
+                json={
+                    "warehouse_id": wid,
+                    "parent_id": warehouse["view_location_id"],
+                    "name": "Zone CD",
+                    "usage": "view",
+                },
+            )
+        ).json()
+        bin_loc = (
+            await stock_client.post(
+                _LOCATIONS,
+                json={
+                    "warehouse_id": wid,
+                    "parent_id": zone["location_id"],
+                    "name": "Bin CD-1",
+                    "usage": "bin",
+                },
+            )
+        ).json()
+        due = (
+            await stock_client.get(
+                f"{API_PREFIX}/locations/count-due",
+                params={"warehouse_id": wid},
+            )
+        ).json()
+        assert any(
+            loc["location_id"] == bin_loc["location_id"]
+            for loc in due["items"]
+        )
+        # Зона (usage=view) — не ячейка, в список не входит.
+        assert all(
+            loc["location_id"] != zone["location_id"] for loc in due["items"]
+        )
+
+
+class TestTopologyUpdateApi:
+    """PATCH-зеркала update-ops справочников топологии."""
+
+    async def test_storage_type_update(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"ST{unique_id[:5]}")
+        created = (
+            await stock_client.post(
+                f"{API_PREFIX}/storage-types",
+                json={"warehouse_id": warehouse["warehouse_id"], "name": "Rack"},
+            )
+        ).json()
+        sid = created["storage_type_id"]
+        resp = await stock_client.patch(
+            f"{API_PREFIX}/storage-types/{sid}",
+            json={
+                "storage_type_id": sid,
+                "name": "Rack heavy",
+                "cycle_count_days": 7,
+                "allow_mixed_lots": False,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        updated = resp.json()
+        assert updated["name"] == "Rack heavy"
+        assert updated["cycle_count_days"] == 7
+        assert updated["allow_mixed_lots"] is False
+        # Не переданные поля не обнулились.
+        assert updated["putaway_strategies"] == created["putaway_strategies"]
+
+    async def test_storage_type_update_not_found(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        ghost = f"sst_ghost_{unique_id}"
+        resp = await stock_client.patch(
+            f"{API_PREFIX}/storage-types/{ghost}",
+            json={"storage_type_id": ghost, "name": "X"},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error_code"] == "storage_type_not_found"
+
+    async def test_container_type_update(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"CT{unique_id[:5]}")
+        created = (
+            await stock_client.post(
+                f"{API_PREFIX}/container-types",
+                json={
+                    "warehouse_id": warehouse["warehouse_id"],
+                    "name": "Pallet",
+                    "kind": "pallet",
+                },
+            )
+        ).json()
+        cid = created["container_type_id"]
+        resp = await stock_client.patch(
+            f"{API_PREFIX}/container-types/{cid}",
+            json={
+                "container_type_id": cid,
+                "name": "Euro pallet",
+                "is_reusable": True,
+                "max_weight": "1500",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        updated = resp.json()
+        assert updated["name"] == "Euro pallet"
+        assert updated["is_reusable"] is True
+        assert Decimal(updated["max_weight"]) == 1500
+        assert updated["kind"] == "pallet"
+
+    async def test_resource_type_and_resource_update(
+        self, stock_client: AsyncClient, stock_init, unique_id: str
+    ) -> None:
+        _ = stock_init
+        warehouse = await _make_warehouse(stock_client, f"RT{unique_id[:5]}")
+        wid = warehouse["warehouse_id"]
+        rtype = (
+            await stock_client.post(
+                f"{API_PREFIX}/resource-types",
+                json={"warehouse_id": wid, "name": "Forklift"},
+            )
+        ).json()
+        rtid = rtype["resource_type_id"]
+        resp = await stock_client.patch(
+            f"{API_PREFIX}/resource-types/{rtid}",
+            json={
+                "resource_type_id": rtid,
+                "name": "Reach truck",
+                "max_level": 5,
+                "handles_loose": False,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["name"] == "Reach truck"
+        assert resp.json()["max_level"] == 5
+        assert resp.json()["handles_loose"] is False
+
+        resource = (
+            await stock_client.post(
+                f"{API_PREFIX}/resources",
+                json={
+                    "warehouse_id": wid,
+                    "resource_type_id": rtid,
+                    "code": "FL-1",
+                },
+            )
+        ).json()
+        rid = resource["resource_id"]
+        resp = await stock_client.patch(
+            f"{API_PREFIX}/resources/{rid}",
+            json={"resource_id": rid, "code": "FL-01"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["code"] == "FL-01"
+        assert resp.json()["resource_type_id"] == rtid

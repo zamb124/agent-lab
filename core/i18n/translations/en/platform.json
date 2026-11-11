@@ -1027,6 +1027,12 @@
     "storage_capacity_exceeded": "Storage capacity exceeded",
     "storage_container_required": "Storage type accepts containers only",
     "storage_container_type_denied": "Container type is not allowed in this storage type",
+    "container_type_conflict": "Container type name already exists",
+    "container_type_not_found": "Container type not found",
+    "resource_conflict": "Resource code already exists",
+    "resource_type_conflict": "Resource type name already exists",
+    "storage_type_conflict": "Storage type name already exists",
+    "storage_type_not_found": "Storage type not found",
     "storage_loose_only": "Storage type accepts loose goods only",
     "storage_lot_mixed": "Storage type forbids mixing lots",
     "storage_max_containers": "Container count limit reached",
@@ -1125,5 +1131,15 @@
     "show_image": "Show as image",
     "hide_image": "Hide image",
     "image_alt": "Image at {{path}}"
+  },
+  "catalog": {
+    "picker_title": "Catalog product",
+    "picker_search": "Name, SKU or barcode…",
+    "picker_create": "Create a new product",
+    "picker_empty": "Nothing found — you can create a new product",
+    "archived": "archived",
+    "source_base": "Shared",
+    "source_hint": "Field value source",
+    "source_reset": "Inherit the shared value"
   }
 }

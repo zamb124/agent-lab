@@ -20,20 +20,19 @@ from apps.stock.models import (
     StockOperationCode,
     StockOperationType,
     StockPartnerRole,
-    StockProduct,
     StockQuant,
     StockRemovalStrategy,
     StockTracking,
     StockTransferState,
     StockValueLayer,
     StockWarehouse,
-    UnitOfMeasure,
     ValuationMethod,
     ValueEntryKind,
 )
-from apps.stock.models.api import StockMoveSpec
+from apps.stock.models.api import StockMoveSpec, StockProductView
 from apps.stock.services.company_init_service import virtual_location_id
 from apps.stock.services.warehouse_service import WarehouseService
+from core.catalog.models import CatalogUom
 from core.errors.boundary import PlatformConflictError
 
 _COMPANY = "system"
@@ -47,7 +46,7 @@ class StockEnv:
     company_id: str
     warehouse: StockWarehouse
     op_types: dict[StockOperationCode, StockOperationType]
-    product: StockProduct
+    product: StockProductView
     uom_id: str
 
 
@@ -65,11 +64,11 @@ async def _make_env(
 
         removal_strategy=StockRemovalStrategy.FIFO,
     )
-    uom = await UnitOfMeasure.objects.filter(
+    uom = await CatalogUom.objects.filter(
         company_id=company_id, name="Units"
     ).first()
     assert uom is not None
-    product = await di.catalog_service.create_product(
+    product = await di.stock_catalog_service.create_product(
         company_id=company_id,
         name=f"Widget {unique}",
         sku=f"SKU-{unique}",
@@ -79,7 +78,6 @@ async def _make_env(
         tracking=StockTracking.NONE,
         is_storable=True,
         category="general",
-        barcode=None,
     )
     op_types = {
         op.code: op
@@ -198,7 +196,7 @@ class TestCompanyInit:
         roles = {loc.partner_role for loc in created}
         assert StockPartnerRole.VENDOR in roles
         assert StockPartnerRole.CUSTOMER in roles
-        uoms = await UnitOfMeasure.objects.filter(company_id=company).all()
+        uoms = await CatalogUom.objects.filter(company_id=company).all()
         assert {u.name for u in uoms} >= {"Units", "kg", "g", "m", "l"}
 
     async def test_init_is_idempotent(

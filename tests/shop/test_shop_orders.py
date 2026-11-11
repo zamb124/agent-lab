@@ -60,7 +60,7 @@ class TestOrderCreate:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 delivery_type="delivery",
                 address="ул. Ленина, 1",
             ),
@@ -77,7 +77,7 @@ class TestOrderCreate:
     ) -> None:
         slug = f"idem-{unique_id[:8]}"
         _, product = await _shop_with_product(shop_client, slug)
-        body = _order_body(product["shop_product_id"], idempotency_key=f"k-{unique_id}")
+        body = _order_body(product["product_id"], idempotency_key=f"k-{unique_id}")
         first = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders", json=body
@@ -102,7 +102,7 @@ class TestOrderCreate:
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"]),
+                json=_order_body(product["product_id"]),
             )
         ).json()
         status = await shop_public_client.get(
@@ -139,7 +139,7 @@ class TestOrderCreate:
         _, product = await _shop_with_product(shop_client, slug)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="delivery"),
+            json=_order_body(product["product_id"], delivery_type="delivery"),
         )
         assert resp.status_code == 409
 
@@ -164,14 +164,14 @@ class TestOrderCreate:
                 resp = await limited.post(
                     f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
                     json=_order_body(
-                        product["shop_product_id"], idempotency_key=f"rl-{i}-{unique_id}"
+                        product["product_id"], idempotency_key=f"rl-{i}-{unique_id}"
                     ),
                 )
                 assert resp.status_code == 200, resp.text
             resp = await limited.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
                 json=_order_body(
-                    product["shop_product_id"], idempotency_key=f"rl-x-{unique_id}"
+                    product["product_id"], idempotency_key=f"rl-x-{unique_id}"
                 ),
             )
             assert resp.status_code == 429
@@ -183,12 +183,12 @@ class TestOrderCreate:
         slug = f"unav-{unique_id[:8]}"
         shop, product = await _shop_with_product(shop_client, slug)
         await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['product_id']}",
             json={"is_available": False},
         )
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(product["product_id"]),
         )
         assert resp.status_code == 409
 
@@ -205,7 +205,7 @@ class TestOrderStatusFlow:
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
                 json=_order_body(
-                    product["shop_product_id"],
+                    product["product_id"],
                     delivery_type="delivery",
                     address="ул. Ленина, 1",
                 ),
@@ -230,7 +230,7 @@ class TestOrderStatusFlow:
         shop, product = await _shop_with_product(shop_client, slug)
         await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(product["product_id"]),
         )
         orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
         order_id = orders["items"][0]["shop_order_id"]
@@ -248,7 +248,7 @@ class TestOrderStatusFlow:
         shop, product = await _shop_with_product(shop_client, slug)
         await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(product["product_id"]),
         )
         orders = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")).json()
         order_id = orders["items"][0]["shop_order_id"]
@@ -270,7 +270,7 @@ class TestOrderStatusFlow:
         shop, product = await _shop_with_product(shop_client, slug)
         await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"]),
+            json=_order_body(product["product_id"]),
         )
         resp = await shop_client_company2.get(f"{_SHOPS}/{shop['shop_id']}/orders")
         assert resp.status_code == 404
@@ -284,7 +284,7 @@ class TestOrderStatusFlow:
         created = (
             await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"], source="embed"),
+                json=_order_body(product["product_id"], source="embed"),
             )
         )
         assert created.status_code == 200, created.text

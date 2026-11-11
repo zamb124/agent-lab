@@ -83,7 +83,7 @@ async def test_products_catalog(
     )
     assert product["product_id"]
 
-    await stock_e2e_nav(page, 2, page_selector="stock-products-page")
+    await stock_e2e_nav(page, 'stock_products', page_selector="stock-products-page")
     row = page.locator(
         "stock-products-page table tbody tr", has_text=product_name
     )

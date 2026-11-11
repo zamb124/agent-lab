@@ -1,10 +1,12 @@
-"""Каталог товаров: SKU, единицы измерения, фасовки, партии.
+"""Складской фасет каталога: учётная политика товаров + партии.
 
-Агрегат «что храним»: карточка товара с методом оценки и политикой
-учёта, базовая ЕИ и товарные упаковки (AUoM — строки ``stock_uom`` с
-``product_id``), партии/серийники (``stock_lots``). Это справочные
-записи: они не двигают количество и не пишут слоёв оценки — любое
-изменение физического запаса идёт только через lane-методы моделей.
+``stock_products`` — фасет: базовые атрибуты (имя/SKU/ЕИ/габариты)
+живут в едином каталоге ``core/catalog``; здесь только складская
+политика (tracking, метод оценки, сроки, стратегия отбора) и
+складские партии/серийники (``stock_lots``). ``StockCatalogService``
+оркестрирует обе стороны: создание позиции = карточка в каталоге +
+строка фасета, чтение = фасет + резолв эффективных полей в scope
+``stock``.
 """
 
 from __future__ import annotations
@@ -16,21 +18,30 @@ from oxyde.exceptions import UniqueViolationError
 
 from apps.stock.models import (
     StockBarcodeEntityType,
-    StockBarcodeIndex,
-    StockContainerType,
     StockLot,
     StockProduct,
     StockRemovalStrategy,
     StockTracking,
-    UnitOfMeasure,
     ValuationMethod,
 )
-from apps.stock.models.api import StockPackagingView
+from apps.stock.models.api import StockProductView
 from apps.stock.services.barcode_service import BarcodeService
 from apps.stock.services.ids import new_id
+from core.catalog.contracts import (
+    CatalogOverlay,
+    CatalogScope,
+    ResolvedProduct,
+)
+from core.catalog.events import publish_catalog_product_facet_changed
+from core.catalog.models import CatalogBarcode
+from core.catalog.service import CatalogService
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.pagination import OffsetPage
 from core.utils.time import utcnow
+
+STOCK_FACET = "stock"
+STOCK_SCOPES: list[CatalogScope] = [CatalogScope(facet=STOCK_FACET)]
+"""Цепочка резолва склада: у сервиса нет экземпляров — один уровень."""
 
 
 def _not_found(message: str, error_code: str) -> PlatformNotFoundError:
@@ -41,22 +52,18 @@ def _conflict(message: str, error_code: str) -> PlatformConflictError:
     return PlatformConflictError(message, error_code=error_code)
 
 
-class CatalogService:
-    """Сценарии каталога: продукты, ЕИ/фасовки, партии.
+class StockCatalogService:
+    """Сценарии складского каталога: фасет товара + партии.
 
-    Создание и правка «карточек товара»: SKU с методом оценки и
-    tracking-политикой, упаковки («короб по 24») как товарные UoM,
-    партии и серийные номера. Методы не трогают остатки — только
-    справочник, по которому потом идут движения.
+    Базовые поля товара, ЕИ/упаковки и торговые штрихкоды живут в
+    ``CatalogService`` (shared); этот сервис добавляет складскую
+    политику и собирает ``StockProductView`` — плоскую форму
+    «карточка + политика», которую видит складской UI.
     """
 
-    def __init__(self, barcode: BarcodeService) -> None:
+    def __init__(self, catalog: CatalogService, barcode: BarcodeService) -> None:
+        self._catalog: CatalogService = catalog
         self._barcode: BarcodeService = barcode
-
-    # --- UoM ---
-
-    async def list_uoms(self, *, company_id: str) -> list[UnitOfMeasure]:
-        return await UnitOfMeasure.list_by_category_and_name_asc(company_id)
 
     # --- Products ---
 
@@ -65,14 +72,15 @@ class CatalogService:
         *,
         company_id: str,
         name: str,
-        sku: str,
+        sku: str | None,
         uom_id: str,
         valuation_method: ValuationMethod,
         standard_price: Decimal,
         tracking: StockTracking,
         is_storable: bool,
         category: str,
-        barcode: str | None,
+        barcodes: list[str] | None = None,
+        product_id: str | None = None,
         weight: Decimal | None = None,
         volume: Decimal | None = None,
         use_expiration: bool = False,
@@ -81,40 +89,40 @@ class CatalogService:
         removal_days: int | None = None,
         alert_days: int | None = None,
         removal_strategy: StockRemovalStrategy | None = None,
-    ) -> StockProduct:
-        """Завести товар: одна запись ``stock_products`` + штрихкод.
+    ) -> StockProductView:
+        """Завести товар на складе: карточка каталога + складской фасет.
 
-        Карточка хранит бизнес-правила в одной строке с SKU:
-
-        * ``tracking`` — по штукам / по партиям / по серийникам;
-        * ``valuation_method`` — ``standard`` / ``average`` / ``fifo`` /
-          ``unvalued``: как бухгалтерия считает стоимость этого товара;
-        * ``weight``/``volume`` — габариты базовой ЕИ для проверок
-          ёмкости ячеек и грузоподъёмности ресурсов;
-        * ``use_expiration`` + ``*_days`` — сроки годности для FEFO;
-        * ``removal_strategy`` — переопределение порядка отбора
-          именно для этого товара.
-
-        ``sku`` уникален на компанию: дубль → ``sku_conflict``.
-        ``barcode`` регистрируется в ``stock_barcodes`` (индекс сканов).
+        ``product_id`` — подключить существующий товар каталога
+        («такой уже есть» из дедуп-подсказки); иначе создаётся новая
+        мастер-карта. Фасет держит только учётную политику.
+        Дубль фасета → ``product_facet_conflict``; дубль SKU — из
+        каталога (``sku_conflict``).
         """
-        if await UnitOfMeasure.by_id(company_id, uom_id) is None:
-            raise _not_found("Unit of measure not found", "uom_not_found")
+        if product_id is None:
+            product = await self._catalog.create_product(
+                company_id=company_id,
+                name=name,
+                uom_id=uom_id,
+                sku=sku,
+                weight=weight,
+                volume=volume,
+                barcodes=barcodes,
+            )
+            product_id = product.product_id
+        else:
+            product = await self._catalog.get_product(
+                company_id=company_id, product_id=product_id
+            )
         now = utcnow()
         try:
-            product = await StockProduct.create(StockProduct(
-                    product_id=new_id("spr"),
+            _ = await StockProduct.create(StockProduct(
+                    product_id=product_id,
                     company_id=company_id,
-                    name=name,
-                    sku=sku,
-                    uom_id=uom_id,
                     tracking=tracking,
                     is_storable=is_storable,
                     category=category,
                     valuation_method=valuation_method,
                     standard_price=standard_price,
-                    weight=weight,
-                    volume=volume,
                     use_expiration=use_expiration,
                     expiration_days=expiration_days,
                     best_before_days=best_before_days,
@@ -126,115 +134,152 @@ class CatalogService:
                 )
             )
         except UniqueViolationError as exc:
-            raise _conflict("SKU already exists", "sku_conflict") from exc
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.PRODUCT,
-                entity_id=product.product_id,
-            )
-        return product
+            raise _conflict(
+                "Product is already managed by stock",
+                "product_facet_conflict",
+            ) from exc
+        await publish_catalog_product_facet_changed(
+            product_id, company_id, facet=STOCK_FACET
+        )
+        return await self.get_product(company_id=company_id, product_id=product_id)
 
     async def update_product(
         self,
         *,
         company_id: str,
         product_id: str,
-        name: str | None,
-        sku: str | None,
-        barcode: str | None,
-        is_active: bool | None,
-        valuation_method: ValuationMethod | None,
-        standard_price: Decimal | None,
-        tracking: StockTracking | None,
+        barcodes: list[str] | None = None,
+        is_active: bool | None = None,
+        valuation_method: ValuationMethod | None = None,
+        standard_price: Decimal | None = None,
+        tracking: StockTracking | None = None,
         category: str | None = None,
-        weight: Decimal | None = None,
-        volume: Decimal | None = None,
+        overlay: CatalogOverlay | None = None,
         use_expiration: bool | None = None,
         expiration_days: int | None = None,
         best_before_days: int | None = None,
         removal_days: int | None = None,
         alert_days: int | None = None,
         removal_strategy: StockRemovalStrategy | None = None,
-    ) -> StockProduct:
-        """Править карточку товара.
+    ) -> StockProductView:
+        """Править складскую политику товара и его overlay scope ``stock``.
 
         Смена ``valuation_method`` проходит через
         ``StockProduct.update_valuation_method`` — там проверка,
-        что по товару ещё нет слоёв оценки: менять способ оценки
-        «задним числом» нельзя, история слоёв уже посчитана в одном
-        методе и переоценивать её другим методом — ошибка учёта.
-
-        Остальные поля правятся в той же строке ``stock_products``:
-        карточка и SKU — одна запись.
+        что по товару ещё нет слоёв оценки. ``overlay`` — PUT-форма
+        складских переопределений контента (имя/описание/галерея в
+        складских документах); базовые поля правятся только через
+        мастер-карту (``catalog_products/*``).
         """
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
+        facet = await StockProduct.by_id(company_id, product_id)
+        if facet is None:
             raise _not_found("Product not found", "product_not_found")
+        facet_changed = False
         if valuation_method is not None or standard_price is not None:
-            product = await StockProduct.update_valuation_method(
+            facet = await StockProduct.update_valuation_method(
                 company_id=company_id,
                 product_id=product_id,
-                valuation_method=valuation_method or product.valuation_method,
+                valuation_method=valuation_method or facet.valuation_method,
                 standard_price=standard_price,
             )
-        if name is not None:
-            product.name = name
+            facet_changed = True
+        changed = False
         if tracking is not None:
-            product.tracking = tracking
+            facet.tracking = tracking
+            changed = True
         if category is not None:
-            product.category = category
-        if weight is not None:
-            product.weight = weight
-        if volume is not None:
-            product.volume = volume
+            facet.category = category
+            changed = True
         if use_expiration is not None:
-            product.use_expiration = use_expiration
+            facet.use_expiration = use_expiration
+            changed = True
         if expiration_days is not None:
-            product.expiration_days = expiration_days
+            facet.expiration_days = expiration_days
+            changed = True
         if best_before_days is not None:
-            product.best_before_days = best_before_days
+            facet.best_before_days = best_before_days
+            changed = True
         if removal_days is not None:
-            product.removal_days = removal_days
+            facet.removal_days = removal_days
+            changed = True
         if alert_days is not None:
-            product.alert_days = alert_days
+            facet.alert_days = alert_days
+            changed = True
         if removal_strategy is not None:
-            product.removal_strategy = removal_strategy
-        if sku is not None:
-            product.sku = sku
+            facet.removal_strategy = removal_strategy
+            changed = True
         if is_active is not None:
-            product.is_active = is_active
-        if barcode is not None:
-            _ = await self._barcode.replace(
+            facet.is_active = is_active
+            changed = True
+        if changed:
+            facet.updated_at = utcnow()
+            _ = await facet.save()
+            facet_changed = True
+        if overlay is not None:
+            _ = await self._catalog.set_overlay(
                 company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.PRODUCT,
-                entity_id=product.product_id,
+                product_id=product_id,
+                scope=STOCK_SCOPES[0],
+                overlay=overlay,
+                resolve_scopes=STOCK_SCOPES,
             )
-        product.updated_at = utcnow()
-        try:
-            _ = await product.save()
-        except UniqueViolationError as exc:
-            raise _conflict("SKU already exists", "sku_conflict") from exc
-        return product
+        if barcodes is not None:
+            await self._catalog.replace_product_barcodes(
+                company_id=company_id, product_id=product_id, barcodes=barcodes
+            )
+        if facet_changed:
+            await publish_catalog_product_facet_changed(
+                product_id, company_id, facet=STOCK_FACET
+            )
+        return await self.get_product(company_id=company_id, product_id=product_id)
 
     async def get_product(
         self, *, company_id: str, product_id: str
-    ) -> StockProduct:
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
+    ) -> StockProductView:
+        facet = await StockProduct.by_id(company_id, product_id)
+        if facet is None:
             raise _not_found("Product not found", "product_not_found")
-        return product
+        resolved = await self._catalog.resolve(
+            company_id=company_id, product_id=product_id, scopes=STOCK_SCOPES
+        )
+        codes = await CatalogBarcode.list_by_products_by_barcode_asc(
+            company_id, [product_id]
+        )
+        return _to_view(facet, resolved, _product_codes(codes))
 
     async def list_products(
         self, *, company_id: str, limit: int, offset: int
-    ) -> OffsetPage[StockProduct]:
-        rows = await StockProduct.list_by_sku_asc(
+    ) -> OffsetPage[StockProductView]:
+        facets = await StockProduct.list_page_by_created_desc(
             company_id, limit=limit, offset=offset
         )
         total = await StockProduct.count_for_company(company_id)
-        return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
+        product_ids = [row.product_id for row in facets]
+        resolved = await self._catalog.resolve_many(
+            company_id=company_id,
+            product_ids=product_ids,
+            scopes=STOCK_SCOPES,
+        )
+        codes = await CatalogBarcode.list_by_products_by_barcode_asc(
+            company_id, product_ids
+        )
+        codes_by_product: dict[str, list[CatalogBarcode]] = {}
+        for code in codes:
+            codes_by_product.setdefault(code.product_id, []).append(code)
+        return OffsetPage(
+            items=[
+                _to_view(
+                    row,
+                    resolved[row.product_id],
+                    _product_codes(codes_by_product.get(row.product_id, [])),
+                )
+                for row in facets
+                if row.product_id in resolved
+            ],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     # --- Lots ---
 
@@ -251,7 +296,7 @@ class CatalogService:
 
         ``name`` — номер партии поставщика («2024-08-15, смена 2») или
         серийный номер для ``tracking=serial``; ``expiration_at`` —
-        срок годности. Из него по дневным смещениям карточки выводятся
+        срок годности. Из него по дневным смещениям фасета выводятся
         производные даты (как в Odoo): ``removal_at`` — не позже этой
         даты отбирать (``expiration − removal_days``, FEFO смотрит
         именно сюда), ``best_before_at`` — «лучше до»
@@ -260,21 +305,21 @@ class CatalogService:
         производные равны самому ``expiration_at``.
         Дубль ``name`` на пару (продукт, компания) → ``lot_conflict``.
         """
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
+        facet = await StockProduct.by_id(company_id, product_id)
+        if facet is None:
             raise _not_found("Product not found", "product_not_found")
         removal_at = best_before_at = alert_at = None
         if expiration_at is not None:
-            # Смещения карточки сдвигают даты РАНЬШЕ срока годности:
+            # Смещения фасета сдвигают даты РАНЬШЕ срока годности:
             # отгружать и предупреждать надо до того, как партия испортится.
             removal_at = expiration_at - timedelta(
-                days=product.removal_days or 0
+                days=facet.removal_days or 0
             )
             best_before_at = expiration_at - timedelta(
-                days=product.best_before_days or 0
+                days=facet.best_before_days or 0
             )
             alert_at = expiration_at - timedelta(
-                days=product.alert_days or 0
+                days=facet.alert_days or 0
             )
         try:
             lot = await StockLot.create(StockLot(
@@ -305,155 +350,43 @@ class CatalogService:
     ) -> list[StockLot]:
         return await StockLot.list_by_name_asc(company_id, product_id=product_id)
 
-    # --- Упаковки товаров (AUoM) ---
 
-    @staticmethod
-    async def _packaging_view(
-        company_id: str, uom: UnitOfMeasure
-    ) -> StockPackagingView:
-        """Проекция строки ``stock_uom`` в «упаковку» — количество
-        базовых единиц товара в одной упаковке (``factor / factor
-        базовой ЕИ``)."""
-        if uom.product_id is None:
-            raise _conflict(
-                "UoM row is not a product packaging",
-                "packaging_not_product_uom",
-            )
-        product = await StockProduct.by_id(company_id, uom.product_id)
-        if product is None:
-            raise _not_found("Product not found", "product_not_found")
-        base = await UnitOfMeasure.by_id(company_id, product.uom_id)
-        if base is None:
-            raise _not_found(
-                "Product base uom not found", "uom_not_found"
-            )
-        return StockPackagingView(
-            packaging_id=uom.uom_id,
-            product_id=uom.product_id,
-            name=uom.name,
-            quantity=uom.factor / base.factor,
-            container_type_id=uom.container_type_id,
-            weight=uom.weight,
-            volume=uom.volume,
-        )
+def _product_codes(codes: list[CatalogBarcode]) -> list[str]:
+    """Штрихкоды самого товара (без кодов упаковок), ASC."""
+    return [c.barcode for c in codes if c.uom_id is None]
 
-    async def list_packagings(
-        self, *, company_id: str, product_id: str | None
-    ) -> list[StockPackagingView]:
-        uoms = await UnitOfMeasure.list_packagings_by_product_id_and_factor_asc(company_id, product_id)
-        if not uoms:
-            return []
-        products = await StockProduct.get_many(
-            [uom.product_id or "" for uom in uoms]
-        )
-        bases = await UnitOfMeasure.get_many(
-            [p.uom_id for p in products.values()]
-        )
-        views: list[StockPackagingView] = []
-        for uom in uoms:
-            product = (
-                products.get(uom.product_id) if uom.product_id else None
-            )
-            base = (
-                bases.get(product.uom_id) if product is not None else None
-            )
-            if product is None or base is None:
-                raise _conflict(
-                    "Packaging references missing product or uom",
-                    "packaging_orphan",
-                )
-            views.append(
-                StockPackagingView(
-                    packaging_id=uom.uom_id,
-                    product_id=uom.product_id or "",
-                    name=uom.name,
-                    quantity=uom.factor / base.factor,
-                    container_type_id=uom.container_type_id,
-                    weight=uom.weight,
-                    volume=uom.volume,
-                )
-            )
-        return views
 
-    async def create_packaging(
-        self,
-        *,
-        company_id: str,
-        product_id: str,
-        name: str,
-        quantity: Decimal,
-        barcode: str | None,
-        container_type_id: str | None,
-        weight: Decimal | None,
-        volume: Decimal | None,
-    ) -> StockPackagingView:
-        """Завести фасовку товара — «короб по 24 шт».
-
-        Упаковка — это AUoM: строка ``stock_uom`` с ``product_id`` и
-        ``factor = quantity × factor(базовой ЕИ товара)``, живущая в
-        категории базовой ЕИ. Благодаря этому ``UnitOfMeasure.convert``
-        сам переводит «3 коробки» в базовые единицы при проводке
-        документа, а скан GTIN-14 короба даёт и товар, и количество.
-        ``container_type_id`` связывает фасовку с принятой тарой —
-        приёмка «по упаковке» создаст контейнер этого типа.
-        """
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
-            raise _not_found("Product not found", "product_not_found")
-        base = await UnitOfMeasure.by_id(company_id, product.uom_id)
-        if base is None:
-            raise _not_found(
-                "Product base uom not found", "uom_not_found"
-            )
-        if container_type_id is not None and (
-            await StockContainerType.by_id(company_id, container_type_id) is None
-        ):
-            raise _not_found(
-                "Container type not found", "container_type_not_found"
-            )
-        try:
-            uom = await UnitOfMeasure.create(
-                UnitOfMeasure(
-                    uom_id=new_id("uom"),
-                    company_id=company_id,
-                    name=name,
-                    category=base.category,
-                    factor=quantity * base.factor,
-                    product_id=product_id,
-                    container_type_id=container_type_id,
-                    weight=weight,
-                    volume=volume,
-                )
-            )
-        except UniqueViolationError as exc:
-            raise _conflict(
-                "Packaging name already exists", "packaging_conflict"
-            ) from exc
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.PACKAGING,
-                entity_id=uom.uom_id,
-            )
-        return StockPackagingView(
-            packaging_id=uom.uom_id,
-            product_id=product_id,
-            name=name,
-            quantity=quantity,
-            container_type_id=container_type_id,
-            weight=weight,
-            volume=volume,
-        )
-
-    async def delete_packaging(
-        self, *, company_id: str, packaging_id: str
-    ) -> StockPackagingView:
-        """Удалить фасовку из справочника (штрихкод перестанет резолвиться)."""
-        uom = await UnitOfMeasure.by_id(company_id, packaging_id)
-        if uom is None or uom.product_id is None:
-            raise _not_found("Packaging not found", "packaging_not_found")
-        view = await self._packaging_view(company_id, uom)
-        await StockBarcodeIndex.release_entity(company_id, packaging_id)
-        await UnitOfMeasure.delete_uom(company_id, packaging_id)
-        return view
+def _to_view(
+    facet: StockProduct,
+    resolved: ResolvedProduct,
+    barcodes: list[str],
+) -> StockProductView:
+    """Фасет + резолв каталога → плоская карточка складского API."""
+    product = resolved.product
+    return StockProductView(
+        product_id=facet.product_id,
+        name=resolved.name,
+        description=resolved.description,
+        image_file_ids=resolved.image_file_ids,
+        sources=resolved.sources,
+        sku=product.sku,
+        uom_id=product.uom_id,
+        barcodes=barcodes,
+        weight=product.weight,
+        volume=product.volume,
+        is_archived=product.is_archived,
+        tracking=facet.tracking,
+        is_storable=facet.is_storable,
+        is_active=facet.is_active,
+        category=facet.category,
+        valuation_method=facet.valuation_method,
+        standard_price=facet.standard_price,
+        use_expiration=facet.use_expiration,
+        expiration_days=facet.expiration_days,
+        best_before_days=facet.best_before_days,
+        removal_days=facet.removal_days,
+        alert_days=facet.alert_days,
+        removal_strategy=facet.removal_strategy,
+        created_at=facet.created_at,
+        updated_at=facet.updated_at,
+    )

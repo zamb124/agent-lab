@@ -88,7 +88,7 @@ async def agent_plan_write(
         agent_plan_id=previous.agent_plan_id if previous is not None else None,
     )
     state.agent_plan = plan
-    render_conversation(state, [_plan_block(plan)])
+    _ = render_conversation(state, [_plan_block(plan)])
     return _plan_payload(plan)
 
 

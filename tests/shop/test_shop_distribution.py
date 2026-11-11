@@ -202,7 +202,7 @@ class TestSnapshotInvalidation:
         assert "Маргарита" in snapshot.text
         products = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
         resp = await shop_client.patch(
-            f"{_SHOPS}/{shop['shop_id']}/products/{products[0]['shop_product_id']}",
+            f"{_SHOPS}/{shop['shop_id']}/products/{products[0]['product_id']}",
             json={"name": "Наполеон"},
         )
         assert resp.status_code == 200

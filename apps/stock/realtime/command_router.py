@@ -11,8 +11,10 @@ from apps.stock.models.api import (
     StockContainersListPayload,
     StockContainerTypeCreatePayload,
     StockContainerTypesListPayload,
+    StockContainerTypeUpdatePayload,
     StockLocationCreatePayload,
     StockLocationIdPayload,
+    StockLocationsCountDuePayload,
     StockLocationsListPayload,
     StockLocationUpdatePayload,
     StockLotCreatePayload,
@@ -25,6 +27,7 @@ from apps.stock.models.api import (
     StockMoveLinesQueuePayload,
     StockMoveLinesReleasePayload,
     StockMoveLineUpdatePayload,
+    StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
     StockPackagingCreatePayload,
@@ -50,6 +53,8 @@ from apps.stock.models.api import (
     StockResourcesListPayload,
     StockResourceTypeCreatePayload,
     StockResourceTypesListPayload,
+    StockResourceTypeUpdatePayload,
+    StockResourceUpdatePayload,
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
@@ -59,6 +64,7 @@ from apps.stock.models.api import (
     StockScanStepPayload,
     StockStorageTypeCreatePayload,
     StockStorageTypesListPayload,
+    StockStorageTypeUpdatePayload,
     StockTransferCreatePayload,
     StockTransferIdPayload,
     StockTransferReturnPayload,
@@ -67,6 +73,7 @@ from apps.stock.models.api import (
     StockValuationCorrectionPayload,
     StockValuationLayersPayload,
     StockValuationProductValuePayload,
+    StockValuationReportPayload,
     StockValuationRevaluePayload,
     StockWarehouseCreatePayload,
     StockWarehouseIdPayload,
@@ -81,10 +88,12 @@ from apps.stock.realtime.operations import (
     op_barcode_resolve,
     op_container_types_create,
     op_container_types_list,
+    op_container_types_update,
     op_containers_create,
     op_containers_item,
     op_containers_list,
     op_containers_move,
+    op_locations_count_due,
     op_locations_create,
     op_locations_item,
     op_locations_list,
@@ -99,6 +108,7 @@ from apps.stock.realtime.operations import (
     op_move_lines_release,
     op_move_lines_report_exception,
     op_move_lines_update,
+    op_moves_list,
     op_operation_types_list,
     op_operation_types_update,
     op_packagings_create,
@@ -120,10 +130,12 @@ from apps.stock.realtime.operations import (
     op_reorder_rules_update,
     op_resource_types_create,
     op_resource_types_list,
+    op_resource_types_update,
     op_resources_create,
     op_resources_list,
     op_resources_login,
     op_resources_logout,
+    op_resources_update,
     op_routes_create,
     op_routes_get,
     op_routes_list,
@@ -134,6 +146,7 @@ from apps.stock.realtime.operations import (
     op_stock_company_init,
     op_storage_types_create,
     op_storage_types_list,
+    op_storage_types_update,
     op_transfers_assign,
     op_transfers_cancel,
     op_transfers_confirm,
@@ -146,6 +159,7 @@ from apps.stock.realtime.operations import (
     op_valuation_correction,
     op_valuation_layers_list,
     op_valuation_product_value,
+    op_valuation_report,
     op_valuation_revalue,
     op_warehouse_pulse,
     op_warehouses_create,
@@ -156,6 +170,7 @@ from apps.stock.realtime.operations import (
     op_waves_list,
     op_waves_release,
 )
+from core.catalog import operations as catalog_ops
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
 STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
@@ -171,6 +186,26 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/products/update_requested": Operation(
         payload_model=StockProductUpdatePayload, fn=op_products_update
     ),
+    "stock/catalog_products/list_requested": Operation(
+        payload_model=catalog_ops.CatalogProductsListPayload,
+        fn=catalog_ops.op_products_list,
+    ),
+    "stock/catalog_products/item_requested": Operation(
+        payload_model=catalog_ops.CatalogProductIdPayload,
+        fn=catalog_ops.op_products_item,
+    ),
+    "stock/catalog_products/suggest_requested": Operation(
+        payload_model=catalog_ops.CatalogProductsSuggestPayload,
+        fn=catalog_ops.op_products_suggest,
+    ),
+    "stock/catalog_products/create_requested": Operation(
+        payload_model=catalog_ops.CatalogProductCreatePayload,
+        fn=catalog_ops.op_products_create,
+    ),
+    "stock/catalog_products/update_requested": Operation(
+        payload_model=catalog_ops.CatalogProductUpdatePayload,
+        fn=catalog_ops.op_products_update,
+    ),
     "stock/locations/list_requested": Operation(
         payload_model=StockLocationsListPayload, fn=op_locations_list
     ),
@@ -182,6 +217,12 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/locations/update_requested": Operation(
         payload_model=StockLocationUpdatePayload, fn=op_locations_update
+    ),
+    "stock/locations/count_due_requested": Operation(
+        payload_model=StockLocationsCountDuePayload, fn=op_locations_count_due
+    ),
+    "stock/moves/list_requested": Operation(
+        payload_model=StockMovesListPayload, fn=op_moves_list
     ),
     "stock/warehouses/list_requested": Operation(
         payload_model=StockPagePayload, fn=op_warehouses_list
@@ -274,6 +315,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/valuation/product_value_requested": Operation(
         payload_model=StockValuationProductValuePayload, fn=op_valuation_product_value
     ),
+    "stock/valuation/report_requested": Operation(
+        payload_model=StockValuationReportPayload, fn=op_valuation_report
+    ),
     "stock/valuation/revalue_requested": Operation(
         payload_model=StockValuationRevaluePayload, fn=op_valuation_revalue
     ),
@@ -291,6 +335,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/storage_types/create_requested": Operation(
         payload_model=StockStorageTypeCreatePayload, fn=op_storage_types_create
+    ),
+    "stock/storage_types/update_requested": Operation(
+        payload_model=StockStorageTypeUpdatePayload, fn=op_storage_types_update
     ),
     "stock/reorder_rules/list_requested": Operation(
         payload_model=StockReorderRulesListPayload, fn=op_reorder_rules_list
@@ -328,17 +375,28 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/container_types/create_requested": Operation(
         payload_model=StockContainerTypeCreatePayload, fn=op_container_types_create
     ),
+    "stock/container_types/update_requested": Operation(
+        payload_model=StockContainerTypeUpdatePayload,
+        fn=op_container_types_update,
+    ),
     "stock/resource_types/list_requested": Operation(
         payload_model=StockResourceTypesListPayload, fn=op_resource_types_list
     ),
     "stock/resource_types/create_requested": Operation(
         payload_model=StockResourceTypeCreatePayload, fn=op_resource_types_create
     ),
+    "stock/resource_types/update_requested": Operation(
+        payload_model=StockResourceTypeUpdatePayload,
+        fn=op_resource_types_update,
+    ),
     "stock/resources/list_requested": Operation(
         payload_model=StockResourcesListPayload, fn=op_resources_list
     ),
     "stock/resources/create_requested": Operation(
         payload_model=StockResourceCreatePayload, fn=op_resources_create
+    ),
+    "stock/resources/update_requested": Operation(
+        payload_model=StockResourceUpdatePayload, fn=op_resources_update
     ),
     "stock/resources/login_requested": Operation(
         payload_model=StockResourceLoginPayload, fn=op_resources_login

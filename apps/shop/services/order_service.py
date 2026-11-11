@@ -57,7 +57,9 @@ from apps.shop.services.modifier_pricing import (
     validate_and_price,
 )
 from apps.shop.services.promo_engine import CartLine, PricedCart, evaluate
+from apps.shop.services.shop_service import shop_scopes
 from apps.shop.tasks.task_names import SHOP_NOTIFY_CUSTOMER, SHOP_NOTIFY_ORDER
+from core.catalog.service import CatalogService
 from core.clients.geo_client import GeoClient
 from core.clients.geocoding.base import Geocoder
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -79,6 +81,7 @@ class _PricedItem:
     """Строка корзины с авторитетной ценой за единицу и снапшотом опций."""
 
     product: ShopProduct
+    name_snapshot: str
     qty: int
     unit_minor: int
     modifiers_snapshot: list[dict[str, object]]
@@ -125,11 +128,13 @@ class ShopOrderService:
         geocoder: Geocoder,
         service_client: ServiceClient,
         loyalty_service: LoyaltyService,
+        catalog_service: CatalogService,
     ) -> None:
         self._settings: ShopSettings = settings
         self._geocoder: Geocoder = geocoder
         self._service_client: ServiceClient = service_client
         self._loyalty: LoyaltyService = loyalty_service
+        self._catalog: CatalogService = catalog_service
 
     def _geo(self, shop: Shop) -> GeoClient:
         """GeoClient от имени компании витрины — для анонимных вызовов покупателя."""
@@ -466,8 +471,8 @@ class ShopOrderService:
             ShopOrderItem(
                 shop_order_item_id=new_id("shoporderitem"),
                 order_id=order_id,
-                product_id=p.product.shop_product_id,
-                name_snapshot=p.product.name,
+                product_id=p.product.product_id,
+                name_snapshot=p.name_snapshot,
                 price_minor=p.unit_minor,
                 qty=p.qty,
                 modifiers=p.modifiers_snapshot,
@@ -553,29 +558,41 @@ class ShopOrderService:
         """Авторитетная цена позиций: каталог + модификаторы, клиентские
         цены не участвуют. Общий шаг для preview и создания заказа."""
         product_ids = [item.product_id for item in items]
-        products = await ShopProduct.list_many_by_ids(product_ids)
-        by_id = {p.shop_product_id: p for p in products}
-        modifier_tree = await load_modifier_tree_by_sort_asc(product_ids)
+        products = await ShopProduct.list_by_shop_and_product_ids(
+            shop.shop_id, product_ids
+        )
+        by_id = {p.product_id: p for p in products}
+        resolved = await self._catalog.resolve_many(
+            company_id=shop.company_id,
+            product_ids=product_ids,
+            scopes=shop_scopes(shop.shop_id),
+        )
+        modifier_tree = await load_modifier_tree_by_sort_asc(shop.shop_id, product_ids)
         nested = nested_lookup(modifier_tree.get("__nested__", []))
         priced: list[_PricedItem] = []
         for item in items:
             product = by_id.get(item.product_id)
-            if product is None or product.shop_id != shop.shop_id:
+            card = resolved.get(item.product_id)
+            if product is None or card is None or card.product.is_archived:
                 raise PlatformNotFoundError(
                     "Item not found in catalog", error_code="product_not_found"
                 )
             if not product.is_available:
                 raise PlatformConflictError(
-                    f"Item {product.name} is unavailable",
+                    f"Item {card.name} is unavailable",
                     error_code="product_unavailable",
                 )
             unit_minor, modifiers_snapshot = validate_and_price(
                 product,
                 item.selections,
-                modifier_tree.get(product.shop_product_id, []),
+                modifier_tree.get(product.product_id, []),
                 nested,
             )
-            priced.append(_PricedItem(product, item.qty, unit_minor, modifiers_snapshot))
+            priced.append(
+                _PricedItem(
+                    product, card.name, item.qty, unit_minor, modifiers_snapshot
+                )
+            )
         return priced
 
     async def _evaluate_promos(
@@ -591,7 +608,7 @@ class ShopOrderService:
             return PricedCart(line_discounts=[0] * len(priced))
         delivery_fee = shop.delivery_fee_minor if delivery_type == ShopDeliveryType.DELIVERY else 0
         lines = [
-            CartLine(p.product.shop_product_id, p.product.category_id, p.qty, p.unit_minor)
+            CartLine(p.product.product_id, p.product.category_id, p.qty, p.unit_minor)
             for p in priced
         ]
         try:
@@ -626,7 +643,7 @@ class ShopOrderService:
         return ShopCartPriceResponse(
             lines=[
                 ShopCartPriceLineResponse(
-                    product_id=p.product.shop_product_id,
+                    product_id=p.product.product_id,
                     qty=p.qty,
                     unit_minor=p.unit_minor,
                     discount_minor=priced_cart.line_discounts[idx],
@@ -772,7 +789,8 @@ class ShopOrderService:
 
     async def order_response(self, order: ShopOrder) -> ShopOrderResponse:
         items = await ShopOrderItem.list_by_order(order.shop_order_id)
-        photos = await self._item_photos(items)
+        shop = await Shop.get_by_id(order.shop_id)
+        photos = await self._item_photos(shop, items)
         return ShopOrderResponse(
             shop_order_id=order.shop_order_id,
             shop_id=order.shop_id,
@@ -819,12 +837,31 @@ class ShopOrderService:
             ],
         )
 
-    @staticmethod
-    async def _item_photos(items: list[ShopOrderItem]) -> dict[str, str]:
-        """Фото позиций заказа — join по текущему товару (дисплейные данные)."""
+    async def _item_photos(
+        self, shop: Shop | None, items: list[ShopOrderItem]
+    ) -> dict[str, str]:
+        """Фото позиций заказа — resolved-галерея каталога (дисплейные данные).
+
+        Удалённая витрина не может дать scope компании — позиции
+        уходят без фото.
+        """
+        if shop is None:
+            return {}
         ids = [i.product_id for i in items if i.product_id]
-        products = await ShopProduct.list_many_by_ids(ids) if ids else []
-        return {p.shop_product_id: p.photo_file_id for p in products if p.photo_file_id}
+        resolved = (
+            await self._catalog.resolve_many(
+                company_id=shop.company_id,
+                product_ids=ids,
+                scopes=shop_scopes(shop.shop_id),
+            )
+            if ids
+            else {}
+        )
+        return {
+            pid: card.image_file_ids[0]
+            for pid, card in resolved.items()
+            if card.image_file_ids
+        }
 
     async def _allocate_public_code(self) -> str:
         for _ in range(5):
@@ -925,7 +962,7 @@ class ShopOrderService:
         feedback: ShopOrderFeedbackResponse | None = None,
     ) -> ShopMyOrderDetailResponse:
         """Полная карточка заказа кабинета: позиции, таймлайн, гео доставки."""
-        photos = await self._item_photos(items)
+        photos = await self._item_photos(shop, items)
         base = self.my_order_list_item(
             order,
             shop,

@@ -103,7 +103,7 @@ class TestClosedShopOrderRejection:
         for dtype in ("pickup", "delivery"):
             resp = await shop_public_client.post(
                 f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-                json=_order_body(product["shop_product_id"], delivery_type=dtype),
+                json=_order_body(product["product_id"], delivery_type=dtype),
             )
             assert resp.status_code == 409, (dtype, resp.text)
             assert resp.json()["error_code"] == "shop_closed"
@@ -122,7 +122,7 @@ class TestClosedShopOrderRejection:
         await auth_customer(shop_public_client, slug)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="pickup"),
+            json=_order_body(product["product_id"], delivery_type="pickup"),
         )
         assert resp.status_code == 200, resp.text
 
@@ -137,7 +137,7 @@ class TestClosedShopOrderRejection:
         await auth_customer(shop_public_client, slug)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="pickup"),
+            json=_order_body(product["product_id"], delivery_type="pickup"),
         )
         assert resp.status_code == 409
         assert "next_open" in resp.json().get("error_params", {})

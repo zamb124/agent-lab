@@ -13,6 +13,7 @@ from core.authz.factory import build_authz_service
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
 from core.calendar.service import CalendarService
+from core.catalog.service import CatalogService
 from core.clients.geocoding.base import Geocoder
 from core.clients.geocoding.nominatim import NominatimGeocoder
 from core.clients.rag_client import RagClient
@@ -202,6 +203,7 @@ class PlatformDi(
     authz_service: AuthzService
     billing_service: BillingService
     calendar_service: CalendarService
+    catalog_service: CatalogService
     chunked_upload_service: ChunkedUploadService
     company_integration_credential_service: CompanyIntegrationCredentialService
     customer_address_service: CustomerAddressService

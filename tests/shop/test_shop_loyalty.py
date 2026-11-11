@@ -146,7 +146,7 @@ class TestLoyalty:
         _ = await auth_customer(shop_public_client, slug)
 
         _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         loyalty = await _loyalty_of(shop_public_client, slug)
         assert loyalty is not None
@@ -155,7 +155,7 @@ class TestLoyalty:
         assert loyalty["orders_goal"] == 2
 
         _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         loyalty = await _loyalty_of(shop_public_client, slug)
         assert loyalty is not None
@@ -174,7 +174,7 @@ class TestLoyalty:
         _ = await auth_customer(shop_public_client, slug)
 
         _ = await _order_done(
-            shop_client, shop_public_client, slug, shop_id, _id(product, "shop_product_id")
+            shop_client, shop_public_client, slug, shop_id, _id(product, "product_id")
         )
         loyalty = await _loyalty_of(shop_public_client, slug)
         assert loyalty is not None
@@ -191,7 +191,7 @@ class TestLoyalty:
         await _enable_loyalty(shop_client, shop_id, goal=1, value=10000)
         product = await _product(shop_client, shop_id, "Латте")
         _ = await auth_customer(shop_public_client, slug)
-        pid = _id(product, "shop_product_id")
+        pid = _id(product, "product_id")
         _ = await _order_done(shop_client, shop_public_client, slug, shop_id, pid)
 
         # Предпросмотр корзины — скидка видна до заказа, награда не списана.
@@ -236,7 +236,7 @@ class TestLoyalty:
             json={
                 "customer_name": "Тест",
                 "delivery_type": "pickup",
-                "items": [{"product_id": _id(product, "shop_product_id"), "qty": 1}],
+                "items": [{"product_id": _id(product, "product_id"), "qty": 1}],
                 "use_loyalty_reward": True,
             },
         )
@@ -253,7 +253,7 @@ class TestLoyalty:
         await _enable_loyalty(shop_client, shop_id, goal=1)
         product = await _product(shop_client, shop_id, "Латте")
         _ = await auth_customer(shop_public_client, slug)
-        pid = _id(product, "shop_product_id")
+        pid = _id(product, "product_id")
         _ = await _order_done(shop_client, shop_public_client, slug, shop_id, pid)
 
         code, _ = await _order(shop_public_client, slug, pid, reward=True)
@@ -286,7 +286,7 @@ class TestLoyalty:
             json={
                 "customer_name": "Тест",
                 "delivery_type": "pickup",
-                "items": [{"product_id": _id(product, "shop_product_id"), "qty": 1}],
+                "items": [{"product_id": _id(product, "product_id"), "qty": 1}],
                 "use_loyalty_reward": True,
             },
         )
@@ -296,7 +296,7 @@ class TestLoyalty:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/cart/price",
             json={
-                "items": [{"product_id": _id(product, "shop_product_id"), "qty": 1}],
+                "items": [{"product_id": _id(product, "product_id"), "qty": 1}],
                 "delivery_type": "pickup",
                 "use_loyalty_reward": True,
             },
@@ -340,7 +340,7 @@ class TestLoyalty:
         )
         product = await _product(shop_client, shop_id, "Латте")
         _ = await auth_customer(shop_public_client, slug)
-        pid = _id(product, "shop_product_id")
+        pid = _id(product, "product_id")
         _ = await _order_done(shop_client, shop_public_client, slug, shop_id, pid)
 
         resp = await shop_public_client.post(

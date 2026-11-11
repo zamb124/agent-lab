@@ -144,6 +144,7 @@ from apps.shop.realtime.operations import (
     op_telegram_connect,
     op_telegram_disconnect,
 )
+from core.catalog import operations as catalog_ops
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
 SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
@@ -185,6 +186,10 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/tables/remove_requested": Operation(
         payload_model=ShopTableIdPayload, fn=op_tables_remove
+    ),
+    "shop/catalog_products/suggest_requested": Operation(
+        payload_model=catalog_ops.CatalogProductsSuggestPayload,
+        fn=catalog_ops.op_products_suggest,
     ),
     "shop/products/list_requested": Operation(payload_model=ShopIdPayload, fn=op_products_list),
     "shop/products/create_requested": Operation(

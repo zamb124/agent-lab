@@ -7,16 +7,13 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from apps.stock.models import (
     STOCK_VIRTUAL_LOCATION_KINDS,
     StockLocation,
     StockLocationUsage,
     StockPartnerRole,
-    UnitOfMeasure,
 )
-from apps.stock.services.ids import new_id
+from core.catalog.service import CatalogService
 from core.utils.time import utcnow
 
 
@@ -33,6 +30,9 @@ def virtual_location_id(
 
 class StockCompanyInitService:
     """`init_company_stock`: виртуальные локации + reference-ЕИ компании."""
+
+    def __init__(self, catalog: CatalogService) -> None:
+        self._catalog: CatalogService = catalog
 
     async def init_company_stock(self, *, company_id: str) -> list[StockLocation]:
         """Развернуть «виртуальный контур» компании — обязателен до первого склада.
@@ -83,27 +83,5 @@ class StockCompanyInitService:
                 )
             )
             created.append(row)
-        await self._ensure_base_uoms(company_id)
+        await self._catalog.ensure_company_uoms(company_id=company_id)
         return created
-
-    async def _ensure_base_uoms(self, company_id: str) -> None:
-        """Reference-ЕИ `Units` (категория unit): нужна для create_product."""
-        for name, category, factor, is_reference in (
-            ("Units", "unit", Decimal("1"), True),
-            ("kg", "weight", Decimal("1"), True),
-            ("g", "weight", Decimal("0.001"), False),
-            ("m", "length", Decimal("1"), True),
-            ("l", "volume", Decimal("1"), True),
-        ):
-            if await UnitOfMeasure.exists_by_name(company_id, name):
-                continue
-            _ = await UnitOfMeasure.create(
-                UnitOfMeasure(
-                    uom_id=new_id("uom"),
-                    company_id=company_id,
-                    name=name,
-                    category=category,
-                    factor=factor,
-                    is_reference=is_reference,
-                )
-            )

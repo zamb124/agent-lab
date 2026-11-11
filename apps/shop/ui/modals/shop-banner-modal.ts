@@ -1,7 +1,7 @@
 /**
  * ShopBannerModal — редактор сторис-баннера верха витринной ленты.
  *
- * Картинка загружается в файлы (spec shop_product — ассеты витрины),
+ * Картинка загружается в файлы (spec product — ассеты витрины),
  * deeplink собирается конструктором: раздел / товар / полка / внешняя
  * ссылка; необязательное окно показа по времени суток.
  */
@@ -181,11 +181,11 @@ export class ShopBannerModal extends PlatformModal {
             this._categoriesOp.run({ shop_id: this.shopId }),
             this._shelvesOp.run({ shop_id: this.shopId }),
         ]);
-        const pItems = (products as { items?: { shop_product_id?: string; name?: string }[] } | null)?.items;
+        const pItems = (products as { items?: { product_id?: string; name?: string }[] } | null)?.items;
         this._products = Array.isArray(pItems)
             ? pItems
-                .filter((p): p is { shop_product_id: string; name: string } => typeof p.shop_product_id === 'string' && typeof p.name === 'string')
-                .map((p) => ({ id: p.shop_product_id, name: p.name }))
+                .filter((p): p is { product_id: string; name: string } => typeof p.product_id === 'string' && typeof p.name === 'string')
+                .map((p) => ({ id: p.product_id, name: p.name }))
             : [];
         const cItems = (categories as { items?: { shop_category_id?: string; name?: string }[] } | null)?.items;
         this._categories = Array.isArray(cItems)

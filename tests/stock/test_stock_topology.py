@@ -314,7 +314,6 @@ class TestPackagings:
             name="Box of 12",
             quantity=Decimal("12"),
             barcode="PK-12",
-            container_type_id=None,
             weight=Decimal("3.5"),
             volume=None,
         )
@@ -346,7 +345,7 @@ class TestGs1Resolve:
         env = await _env(stock_di, unique_id)
         # У продукта barcode=GTIN — resolve по AI 01.
         gtin = "04607025392165"
-        product = await env.di.catalog_service.create_product(
+        product = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name="GTIN product",
             sku=f"G-{unique_id}",
@@ -356,7 +355,7 @@ class TestGs1Resolve:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=gtin,
+            barcodes=[gtin],
         )
         resolved = await env.di.barcode_service.resolve(
             company_id=env.company_id, barcode=f"01{gtin}"
@@ -370,7 +369,7 @@ class TestGs1Resolve:
     ) -> None:
         env = await _env(stock_di, unique_id)
         gtin = "04607025392166"
-        product = await env.di.catalog_service.create_product(
+        product = await env.di.stock_catalog_service.create_product(
             company_id=env.company_id,
             name="Lot product",
             sku=f"L-{unique_id}",
@@ -380,7 +379,7 @@ class TestGs1Resolve:
             tracking=StockTracking.NONE,
             is_storable=True,
             category="general",
-            barcode=gtin,
+            barcodes=[gtin],
         )
         from apps.stock.models import StockLot
         from apps.stock.services.ids import new_id

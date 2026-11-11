@@ -1,8 +1,8 @@
 """Документационный сценарий Stock: структура склада в «Локациях».
 
 Локации заводят операции (tools/интеграции) — интерфейс показывает
-дерево плоской таблицей: зоны (view), ячейки (bin), тара (container)
-и служебные виртуальные локации компании.
+структуру дерева «склад → зоны → ячейки → тара» слева и карточку
+выбранной локации справа: тип, блокировки, KPI и содержимое.
 """
 
 from __future__ import annotations
@@ -28,25 +28,24 @@ _DESKTOP = ViewportSize(width=1440, height=900)
     title="Структура склада: зоны и ячейки",
     title_en="Warehouse structure: zones and bins",
     description=(
-        "**Для чего:** «Локации» — это карта склада: зоны, ячейки и "
+        "**Для чего:** «Карта склада» — это дерево склада: зоны, ячейки и "
         "тара, где реально лежит товар, плюс служебные локации "
         "приёмки и отгрузки.\n\n"
         "**Какие проблемы решает:** вы увидите, как склад разбит на "
-        "адреса хранения и что означают типы локаций — куда кладёт "
-        "товар приёмка и откуда собирает отгрузка.\n\n"
-        "**Результат:** структура «зона → ячейка» видна в списке "
-        "локаций рядом со служебными локациями склада."
+        "адреса хранения, что означают типы локаций и что лежит в "
+        "каждой ячейке.\n\n"
+        "**Результат:** структура «склад → зона → ячейка» раскрывается "
+        "в дереве, а карточка локации показывает её тип и остатки."
     ),
     description_en=(
-        "**Purpose:** Locations are the warehouse map: zones, bins "
+        "**Purpose:** the warehouse map is a tree of zones, bins "
         "and containers where goods actually sit, plus the system's "
         "receiving and shipping locations.\n\n"
         "**Problems solved:** you will see how the warehouse is "
-        "split into storage addresses and what the location types "
-        "mean — where put-away places goods and where picking takes "
-        "them from.\n\n"
-        "**Result:** the zone → bin structure is listed among the "
-        "warehouse's service locations."
+        "split into storage addresses, what the location types "
+        "mean and what each bin holds.\n\n"
+        "**Result:** the warehouse → zone → bin structure expands "
+        "in the tree and the location card shows its type and stock."
     ),
 )
 @pytest.mark.asyncio
@@ -62,11 +61,7 @@ async def test_locations_tree(
     await page.set_viewport_size(_DESKTOP)
     await stock_e2e_open(page, stock_ui)
 
-    warehouses = await stock_e2e_op(
-        page, "stock/warehouses", "stock/warehouses/list_requested"
-    )
-    existing_codes = [w["code"] for w in warehouses["items"]]
-    warehouse_code = ("0" + min(existing_codes)) if existing_codes else "MAIN"
+    warehouse_code = f"0-{unique_id[:8].upper()}"
     warehouse = await stock_e2e_op(
         page,
         "stock/warehouse_create",
@@ -87,7 +82,7 @@ async def test_locations_tree(
         },
     )
     bin_name = f"A-01-{unique_id[:2].upper()}"
-    await stock_e2e_op(
+    bin_loc = await stock_e2e_op(
         page,
         "stock/location_create",
         "stock/location_create/requested",
@@ -100,58 +95,89 @@ async def test_locations_tree(
         },
     )
 
-    await stock_e2e_nav(page, 3, page_selector="stock-locations-page")
-    zone_row = page.locator(
-        "stock-locations-page table tbody tr", has_text=zone_name
+    await stock_e2e_nav(page, "stock_locations", page_selector="stock-locations-page")
+
+    wh_node = page.locator(
+        f"stock-locations-page platform-tree [data-node-id='wh:{warehouse_id}']"
     )
-    await expect(zone_row).to_be_visible(timeout=30_000)
-    bin_row = page.locator(
-        "stock-locations-page table tbody tr", has_text=bin_name
-    )
-    await expect(bin_row).to_be_visible(timeout=15_000)
+    await expect(wh_node).to_be_visible(timeout=30_000)
     await scenario.step(
-        "Откройте «Локации»",
+        "Откройте «Карту склада»",
         page,
-        screenshot_name="locations-list",
-        label_en="Open Locations",
+        screenshot_name="locations-tree",
+        label_en="Open the warehouse map",
         details=(
-            "В меню слева выберите «Локации» — здесь вся структура "
-            "склада. Зона «Зона хранения» и ячейка внутри неё видны "
-            "рядом: у ячейки в колонке «Родитель» — код зоны."
+            "В меню слева выберите «Локации → Карта склада» — слева "
+            "дерево «склад → зоны → ячейки → тара», справа карточка "
+            "выбранной локации. Склады раскрываются кликом по стрелке "
+            "рядом с именем."
         ),
         details_en=(
-            "Choose «Locations» in the left menu — the whole "
-            "warehouse structure lives here. The Storage zone and "
-            "the bin inside it are listed together: the bin's Parent "
-            "column points at the zone."
+            "Choose «Locations → Warehouse map» in the left menu — the "
+            "left pane is the warehouse → zones → bins → containers "
+            "tree, the right pane is the selected location card. "
+            "Warehouses expand by clicking the arrow next to the name."
         ),
     )
 
+    await page.locator(
+        f"stock-locations-page platform-tree [data-twisty='wh:{warehouse_id}']"
+    ).click()
+    zone_parent = zone.get("parent_id")
+    if zone_parent:
+        await page.locator(
+            f"stock-locations-page platform-tree [data-twisty='{zone_parent}']"
+        ).click()
+    zone_node = page.locator(
+        f"stock-locations-page platform-tree [data-node-id='{zone['location_id']}']"
+    )
+    await expect(zone_node).to_be_visible(timeout=15_000)
+    await expect(zone_node).to_contain_text(zone_name)
+    await page.locator(
+        f"stock-locations-page platform-tree [data-twisty='{zone['location_id']}']"
+    ).click()
+    bin_node = page.locator(
+        f"stock-locations-page platform-tree [data-node-id='{bin_loc['location_id']}']"
+    )
+    await expect(bin_node).to_be_visible(timeout=15_000)
+    await expect(bin_node).to_contain_text(bin_name)
+
+    await bin_node.click()
+    await expect(
+        page.locator("stock-locations-page .loc-header")
+    ).to_contain_text(bin_name, timeout=15_000)
+
     await scenario.step(
-        "Что означают типы локаций",
+        "Выберите ячейку в дереве",
         page,
-        screenshot_name="locations-usage-types",
-        label_en="What the location types mean",
+        screenshot_name="locations-detail",
+        label_en="Pick a bin in the tree",
         details=(
-            "**Демонстрация результата.** Тип показывает роль "
-            "локации: «зона» группирует ячейки (сама товар не "
-            "хранит), «ячейка» — реальный адрес запаса с порядком "
-            "обхода при сборке, «тара» — короб внутри паллеты. "
-            "Служебные «поставщик», «покупатель» и «перераспределение» "
-            "система создаёт сама — через них проходят приход, "
-            "отгрузка и корректировки.\n\n"
+            "**Демонстрация результата.** Клик по ячейке открывает её "
+            "карточку справа: полный путь от склада, бейдж типа "
+            "«ячейка», блокировки и KPI — позиции, количество, резерв "
+            "и число SKU. Тип показывает роль локации: «зона» "
+            "группирует ячейки (сама товар не хранит), «ячейка» — "
+            "реальный адрес запаса с порядком обхода при сборке, "
+            "«тара» — короб внутри паллеты. Служебные «поставщик», "
+            "«покупатель» и «перераспределение» система создаёт сама "
+            "и показывает отдельной веткой.\n\n"
             "**Итог.** Теперь вы видите, из каких адресов состоит "
-            "склад и куда попадёт принятый товар."
+            "склад, куда попадёт принятый товар и что лежит в каждой "
+            "ячейке."
         ),
         details_en=(
-            "**Result demonstration.** The type shows the location's "
-            "role: a view groups bins (it holds no stock itself), a "
-            "bin is the real stock address with a picking order, a "
-            "container is a box inside a pallet. The service "
+            "**Result demonstration.** Clicking a bin opens its card "
+            "on the right: the full path from the warehouse, the «bin» "
+            "type badge, blocking flags and KPIs — positions, "
+            "quantity, reserved and SKU count. The type shows the "
+            "location's role: a view groups bins (it holds no stock "
+            "itself), a bin is the real stock address with a picking "
+            "order, a container is a box inside a pallet. The service "
             "supplier, customer and adjustment locations are created "
-            "by the system — receipts, deliveries and corrections "
-            "flow through them.\n\n"
+            "by the system and shown in their own branch.\n\n"
             "**Summary.** You can now see which addresses the "
-            "warehouse consists of and where received goods land."
+            "warehouse consists of, where received goods land and "
+            "what each bin holds."
         ),
     )

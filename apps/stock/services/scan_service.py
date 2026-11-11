@@ -29,10 +29,8 @@ from apps.stock.models import (
     StockLot,
     StockMove,
     StockMoveState,
-    StockProduct,
     StockQuant,
     StockTransfer,
-    UnitOfMeasure,
 )
 from apps.stock.models.common import STOCK_DB, new_id, stock_command_lane
 from apps.stock.models.scan import (
@@ -47,6 +45,7 @@ from apps.stock.models.scan import (
 )
 from apps.stock.services.barcode_service import BarcodeService
 from apps.stock.services.move_engine import StockMoveEngine
+from core.catalog.models import CatalogProduct, CatalogUom
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import (
     LaneOutcome,
@@ -118,16 +117,16 @@ class ScanService:
                     lot_id=lot.lot_id,
                 )
         elif kind == ScanEntityKind.PACKAGING:
-            # Упаковка — AUoM: строка stock_uom с product_id; количество
+            # Упаковка — AUoM: строка catalog_uoms с product_id; количество
             # базовых единиц = factor / factor(базовой ЕИ товара).
-            uom = await UnitOfMeasure.by_id(company_id, result.entity_id)
+            uom = await CatalogUom.by_id(company_id, result.entity_id)
             product = (
-                await StockProduct.by_id(company_id, uom.product_id)
+                await CatalogProduct.by_id(company_id, uom.product_id)
                 if uom is not None and uom.product_id is not None
                 else None
             )
             base = (
-                await UnitOfMeasure.by_id(company_id, product.uom_id)
+                await CatalogUom.by_id(company_id, product.uom_id)
                 if product is not None
                 else None
             )

@@ -164,8 +164,10 @@ class FeedService:
         """Источник полки обязан существовать: товары — у manual/upsell,
         категория — у category. Вычисляемые полки источника не требуют."""
         if kind in (ShopShelfKind.MANUAL, ShopShelfKind.UPSELL):
-            products = await ShopProduct.list_many_by_ids(product_ids)
-            existing = {p.shop_product_id for p in products if p.shop_id == shop_id}
+            products = await ShopProduct.list_by_shop_and_product_ids(
+                shop_id, product_ids
+            )
+            existing = {p.product_id for p in products}
             missing = [pid for pid in product_ids if pid not in existing]
             if missing:
                 raise PlatformNotFoundError(
@@ -196,17 +198,17 @@ class FeedService:
             products = await ShopProduct.list_by_category_by_sort_asc(
                 shop_id, shelf.category_id
             )
-            return [p.shop_product_id for p in products][: shelf.limit]
+            return [p.product_id for p in products][: shelf.limit]
         if shelf.kind == ShopShelfKind.NEW:
             products = await ShopProduct.list_available_by_shop_by_sort_asc(shop_id)
             fresh = sorted(products, key=lambda p: p.created_at, reverse=True)
-            return [p.shop_product_id for p in fresh[: shelf.limit]]
+            return [p.product_id for p in fresh[: shelf.limit]]
         if shelf.kind == ShopShelfKind.HITS:
             return await self._hits_product_ids(shop_id, shelf.limit)
         if shelf.kind == ShopShelfKind.COMEBACK:
             products = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
             back = [p for p in products if not p.is_available]
-            return [p.shop_product_id for p in back[: shelf.limit]]
+            return [p.product_id for p in back[: shelf.limit]]
         if shelf.kind == ShopShelfKind.USUAL or shelf.kind == ShopShelfKind.FAVORITES:
             return []
         return []
@@ -331,8 +333,8 @@ class FeedService:
         Товар ищется по ``shop_id`` опубликованной витрины: чужой и
         доступный к заказу товар подписки не принимает.
         """
-        product = await ShopProduct.get_by_id(product_id)
-        if product is None or product.shop_id != shop_id:
+        product = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if product is None:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         if product.is_available:
             return False
@@ -364,8 +366,8 @@ class FeedService:
         Товар ищется по ``shop_id`` опубликованной витрины: чужой товар
         избранное не принимает.
         """
-        product = await ShopProduct.get_by_id(product_id)
-        if product is None or product.shop_id != shop_id:
+        product = await ShopProduct.by_shop_and_product(shop_id, product_id)
+        if product is None:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         existing = await ShopFavorite.find_by_product_and_customer(
             product_id, customer_id
@@ -427,8 +429,10 @@ class FeedService:
             counts.items(),
             key=lambda kv: (-kv[1], order_index[latest[kv[0]].order_id]),
         )[:limit]
-        products = await ShopProduct.list_many_by_ids([pid for pid, _ in top])
-        existing = {p.shop_product_id for p in products if p.shop_id == shop_id}
+        products = await ShopProduct.list_by_shop_and_product_ids(
+            shop_id, [pid for pid, _ in top]
+        )
+        existing = {p.product_id for p in products}
         usual: list[ShopPersonalUsualItem] = []
         for pid, count in top:
             if pid not in existing:
@@ -448,10 +452,10 @@ class FeedService:
             )
         subs = await ShopBackInStock.list_by_customer(customer_id)
         sub_product_ids = [s.product_id for s in subs]
-        sub_products = (
-            await ShopProduct.list_many_by_ids(sub_product_ids) if sub_product_ids else []
+        sub_products = await ShopProduct.list_by_shop_and_product_ids(
+            shop_id, sub_product_ids
         )
-        own = {p.shop_product_id for p in sub_products if p.shop_id == shop_id}
+        own = {p.product_id for p in sub_products}
         favorites = await ShopFavorite.list_by_shop_customer_by_created_desc(
             shop_id, customer_id
         )

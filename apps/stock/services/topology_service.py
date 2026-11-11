@@ -6,7 +6,7 @@
 Контейнер — `StockLocation` с `usage=container` (не отдельная таблица):
 содержимое — его quant'ы и дочерние контейнеры, перемещение — rebind
 поддерева (`StockMove.move_container_in_lane`, полосы обоих складов).
-Упаковки товаров — ``CatalogService`` (AUoM в ``stock_uom``).
+Упаковки товаров — ``CatalogService`` (AUoM в ``catalog_uoms``).
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from apps.stock.models.common import STOCK_DB
 from apps.stock.models.resource import StockResourceLogoutResult
 from apps.stock.services.barcode_service import BarcodeService
 from apps.stock.services.ids import new_id
+from apps.stock.services.maintenance_service import DEFAULT_CYCLE_COUNT_INTERVAL
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import publish_lane_run
 from core.request_scope import command_idempotency_key
@@ -276,6 +277,7 @@ class TopologyService:
         max_weight: Decimal | None = None,
         max_volume: Decimal | None = None,
         removal_strategy: StockRemovalStrategy | None = None,
+        cycle_count_days: int | None = None,
     ) -> StockStorageType:
         """Завести тип хранения — «класс ячеек с одинаковыми правилами».
 
@@ -307,6 +309,7 @@ class TopologyService:
                     max_volume=max_volume,
                     putaway_strategies=putaway_strategies,
                     removal_strategy=removal_strategy,
+                    cycle_count_days=cycle_count_days,
                     created_at=now,
                     updated_at=now,
                 )
@@ -466,6 +469,200 @@ class TopologyService:
                 entity_id=resource.resource_id,
             )
         return resource
+
+    # --- Цикл пересчёта ---
+
+    async def list_due_bins(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        limit: int,
+    ) -> list[StockLocation]:
+        """Ячейки склада, для которых пора пересчёт — то же окно,
+        что воркер cycle-count планирует (``due_before`` = now −
+        ``DEFAULT_CYCLE_COUNT_INTERVAL``, per-type ``cycle_count_days``
+        учитывает сама модель). UI «Инвентаризация» читает этот список,
+        не дублируя логику воркера."""
+        _ = await self._require_warehouse(company_id, warehouse_id)
+        return await StockLocation.list_due_bins_by_last_count_at_asc(
+            company_id,
+            warehouse_id,
+            due_before=utcnow() - DEFAULT_CYCLE_COUNT_INTERVAL,
+            limit=limit,
+        )
+
+    # --- Справочные update ---
+
+    async def update_storage_type(
+        self,
+        *,
+        company_id: str,
+        storage_type_id: str,
+        name: str | None = None,
+        container_policy: StockContainerPolicy | None = None,
+        allowed_container_type_ids: list[str] | None = None,
+        max_containers: int | None = None,
+        product_mixing: StockProductMixing | None = None,
+        allow_mixed_lots: bool | None = None,
+        max_weight: Decimal | None = None,
+        max_volume: Decimal | None = None,
+        putaway_strategies: list[StockPutawayStrategy] | None = None,
+        removal_strategy: StockRemovalStrategy | None = None,
+        cycle_count_days: int | None = None,
+    ) -> StockStorageType:
+        """Править политику типа хранения; None-поле не пишется."""
+        row = await StockStorageType.by_id(company_id, storage_type_id)
+        if row is None:
+            raise _not_found("Storage type not found", "storage_type_not_found")
+        if name is not None:
+            row.name = name
+        if container_policy is not None:
+            row.container_policy = container_policy
+        if allowed_container_type_ids is not None:
+            row.allowed_container_type_ids = allowed_container_type_ids
+        if max_containers is not None:
+            row.max_containers = max_containers
+        if product_mixing is not None:
+            row.product_mixing = product_mixing
+        if allow_mixed_lots is not None:
+            row.allow_mixed_lots = allow_mixed_lots
+        if max_weight is not None:
+            row.max_weight = max_weight
+        if max_volume is not None:
+            row.max_volume = max_volume
+        if putaway_strategies is not None:
+            row.putaway_strategies = putaway_strategies
+        if removal_strategy is not None:
+            row.removal_strategy = removal_strategy
+        if cycle_count_days is not None:
+            row.cycle_count_days = cycle_count_days
+        row.updated_at = utcnow()
+        try:
+            return await row.save()
+        except UniqueViolationError as exc:
+            raise _conflict(
+                "Storage type name already exists", "storage_type_conflict"
+            ) from exc
+
+    async def update_container_type(
+        self,
+        *,
+        company_id: str,
+        container_type_id: str,
+        name: str | None = None,
+        kind: StockContainerKind | None = None,
+        max_weight: Decimal | None = None,
+        tare_weight: Decimal | None = None,
+        max_volume: Decimal | None = None,
+        length: Decimal | None = None,
+        width: Decimal | None = None,
+        height: Decimal | None = None,
+        is_reusable: bool | None = None,
+        allowed_parent_type_ids: list[str] | None = None,
+    ) -> StockContainerType:
+        """Править шаблон тары; None-поле не пишется."""
+        row = await StockContainerType.by_id(company_id, container_type_id)
+        if row is None:
+            raise _not_found("Container type not found", "container_type_not_found")
+        if name is not None:
+            row.name = name
+        if kind is not None:
+            row.kind = kind
+        if max_weight is not None:
+            row.max_weight = max_weight
+        if tare_weight is not None:
+            row.tare_weight = tare_weight
+        if max_volume is not None:
+            row.max_volume = max_volume
+        if length is not None:
+            row.length = length
+        if width is not None:
+            row.width = width
+        if height is not None:
+            row.height = height
+        if is_reusable is not None:
+            row.is_reusable = is_reusable
+        if allowed_parent_type_ids is not None:
+            row.allowed_parent_type_ids = allowed_parent_type_ids
+        row.updated_at = utcnow()
+        try:
+            return await row.save()
+        except UniqueViolationError as exc:
+            raise _conflict(
+                "Container type name already exists", "container_type_conflict"
+            ) from exc
+
+    async def update_resource_type(
+        self,
+        *,
+        company_id: str,
+        resource_type_id: str,
+        name: str | None = None,
+        allowed_container_type_ids: list[str] | None = None,
+        handles_loose: bool | None = None,
+        max_level: int | None = None,
+        max_load_weight: Decimal | None = None,
+        storage_type_ids: list[str] | None = None,
+    ) -> StockResourceType:
+        """Править класс техники; None-поле не пишется."""
+        row = await StockResourceType.by_id(company_id, resource_type_id)
+        if row is None:
+            raise _not_found("Resource type not found", "resource_type_not_found")
+        if name is not None:
+            row.name = name
+        if allowed_container_type_ids is not None:
+            row.allowed_container_type_ids = allowed_container_type_ids
+        if handles_loose is not None:
+            row.handles_loose = handles_loose
+        if max_level is not None:
+            row.max_level = max_level
+        if max_load_weight is not None:
+            row.max_load_weight = max_load_weight
+        if storage_type_ids is not None:
+            row.storage_type_ids = storage_type_ids
+        row.updated_at = utcnow()
+        try:
+            return await row.save()
+        except UniqueViolationError as exc:
+            raise _conflict(
+                "Resource type name already exists", "resource_type_conflict"
+            ) from exc
+
+    async def update_resource(
+        self,
+        *,
+        company_id: str,
+        resource_id: str,
+        resource_type_id: str | None = None,
+        code: str | None = None,
+        barcode: str | None = None,
+    ) -> StockResource:
+        """Править единицу техники; смена ``barcode`` — replace
+        в баркод-реестре (как у локаций)."""
+        row = await StockResource.by_id(company_id, resource_id)
+        if row is None:
+            raise _not_found("Resource not found", "resource_not_found")
+        if resource_type_id is not None:
+            if await StockResourceType.by_id(company_id, resource_type_id) is None:
+                raise _not_found(
+                    "Resource type not found", "resource_type_not_found"
+                )
+            row.resource_type_id = resource_type_id
+        if code is not None:
+            row.code = code
+        if barcode is not None:
+            _ = await self._barcode.replace(
+                company_id=company_id,
+                barcode=barcode,
+                entity_type=StockBarcodeEntityType.RESOURCE,
+                entity_id=row.resource_id,
+            )
+        row.updated_at = utcnow()
+        try:
+            return await row.save()
+        except UniqueViolationError as exc:
+            raise _conflict("Resource code already exists", "resource_conflict") from exc
 
     async def resource_login(
         self,

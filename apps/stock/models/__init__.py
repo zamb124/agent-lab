@@ -49,7 +49,6 @@ from apps.stock.models.resource_type import StockResourceType
 from apps.stock.models.route import StockRoute, StockRouteStepSpec
 from apps.stock.models.storage_type import StockStorageType
 from apps.stock.models.transfer import StockTransfer
-from apps.stock.models.unit_of_measure import UnitOfMeasure
 from apps.stock.models.value_layer import StockValueLayer
 from apps.stock.models.value_layer_consumption import StockValueLayerConsumption
 from apps.stock.models.warehouse import StockWarehouse
@@ -104,7 +103,6 @@ __all__ = [
     "StockWarehouse",
     "StockWave",
     "StockWaveState",
-    "UnitOfMeasure",
     "ValuationMethod",
     "ValuationPriceSource",
     "ValueEntryKind",

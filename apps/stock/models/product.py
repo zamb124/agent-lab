@@ -1,15 +1,13 @@
-"""Товары каталога (stock_products) — карточка складской позиции.
+"""Складской фасет товара (stock_products) — учётная политика позиции.
 
-«Продукт» — конкретная складская позиция и одновременно её
-бизнес-карточка: SKU и штрихкод, как отслеживается (``tracking`` —
-по штукам/по партиям/по серийникам), как оценивается
-(``valuation_method`` — стандартная цена / средняя / FIFO), габариты
-базовой единицы и сроки годности. Все остатки, движения и записи
-оценки ссылаются на ``product_id``.
-
-Шаблонов и вариантов нет: одна позиция = одна строка. Если бизнесу
-понадобится «красная/синяя футболка одной модели» — это две позиции
-с разными SKU, а не варианты общего шаблона.
+``stock_products.product_id`` = ``catalog_products.product_id``: имя,
+SKU, базовая ЕИ и габариты живут в едином каталоге (``core/catalog``,
+shared). Здесь только складская политика: ``tracking`` (штуки/партии/
+серийники), ``valuation_method`` + ``standard_price`` (как бухгалтерия
+оценивает запас), сроки годности для FEFO и ``removal_strategy`` —
+переопределение порядка отбора именно для этого товара. Все остатки,
+движения и слои оценки ссылаются на ``product_id`` — фасет без
+каталожной карточки не существует.
 """
 
 from __future__ import annotations
@@ -24,7 +22,6 @@ from oxyde import Index, atomic
 from apps.stock.models.common import (
     MONEY_DB,
     STOCK_DB,
-    STOCK_ZERO,
     stock_ledger_cursor,
 )
 from apps.stock.models.enums import (
@@ -40,28 +37,20 @@ from core.utils.time import utcnow
 
 
 class StockProduct(PlatformModel):
-    """Карточка товара и конкретный SKU. Таблица ``stock_products``.
+    """Учётная политика товара на складе. Таблица ``stock_products``.
 
-    Бизнес-поля (читаются бухгалтерией и складом):
-
-    * ``name``, ``sku``, ``uom_id`` — «что это» и в чём
-      измеряется базово (штуки/кг/литры);
     * ``tracking`` — ``none`` (насыпной товар), ``lot`` (партии со
       сроками), ``serial`` (каждая единица — серийный номер, IMEI);
     * ``valuation_method`` — метод оценки запаса:
       ``standard`` — по карточной цене (разница уходит коррекцией),
-      ``average`` — по скользящей средней, ``fifo`` — послойно
-      (какой слой пришёл раньше, тот и списывается первым),
+      ``average`` — по скользящей средней, ``fifo`` — послойно,
       ``unvalued`` — не оцениваем (только количество);
-    * ``standard_price`` — карточная цена базовой ЕИ для ``standard``/
-      ``average`` и стартовая точка оценки;
-    * ``weight``/``volume`` — вес/объём базовой ЕИ: проверки ёмкости
-      ячеек и грузоподъёмности ресурсов считают по ним;
-    * ``use_expiration`` + ``*_days`` — сроки годности для FEFO-отбора
-      и просрочки («best_before» — «лучше до», «removal» — «убрать с
-      полки до»);
-    * ``removal_strategy`` — переопределение порядка отбора именно для
-      этого товара (над типом хранения и складом).
+    * ``standard_price`` — карточная цена базовой ЕИ;
+    * ``use_expiration`` + ``*_days`` — сроки годности для FEFO-отбора;
+    * ``removal_strategy`` — переопределение порядка отбора над
+      типом хранения и складом;
+    * ``category`` — фильтр putaway-правил (складская категория,
+      не каталог).
     """
 
     __database_alias__: ClassVar[str | None] = STOCK_DB
@@ -71,31 +60,24 @@ class StockProduct(PlatformModel):
         is_table: bool = True
         table_name: str = "stock_products"
         indexes: list[Index] = [
-            Index(["company_id", "sku"], unique=True),
+            Index(["company_id", "product_id"]),
         ]
 
     product_id: str = DbField(db_pk=True, max_length=64)
+    """``catalog_products.product_id`` — единый идентификатор товара."""
     company_id: str = DbField(max_length=100)
-    name: str = DbField(max_length=255)
-    sku: str = DbField(max_length=128)
-    uom_id: str = DbField(max_length=64)
     tracking: StockTracking = DbField(default=StockTracking.NONE)
     is_storable: bool = DbField(default=True)
     is_active: bool = DbField(default=True)
     category: str = DbField(default="", max_length=128)
     valuation_method: ValuationMethod = DbField()
-    standard_price: Decimal = DbField(default=STOCK_ZERO, db_type=MONEY_DB)
-    weight: Decimal | None = DbField(default=None, db_type=MONEY_DB)
-    """Вес базовой ЕИ (кг) — для проверок ёмкости и грузоподъёмности."""
-    volume: Decimal | None = DbField(default=None, db_type=MONEY_DB)
-    """Объём базовой ЕИ — по конвенции каталога."""
+    standard_price: Decimal = DbField(default=Decimal("0"), db_type=MONEY_DB)
     use_expiration: bool = DbField(default=False)
     expiration_days: int | None = DbField(default=None)
     best_before_days: int | None = DbField(default=None)
     removal_days: int | None = DbField(default=None)
     alert_days: int | None = DbField(default=None)
     removal_strategy: StockRemovalStrategy | None = DbField(default=None)
-    """Переопределение стратегии отбора над типом хранения и складом."""
     created_at: datetime = DbField()
     updated_at: datetime = DbField()
 
@@ -109,10 +91,9 @@ class StockProduct(PlatformModel):
             company_id=company_id, product_id=product_id
         ).get_or_none()
 
-
     @classmethod
     async def found_in_company_by_ids(cls, company_id: str, product_ids: list[str]) -> dict[str, Self]:
-        """Найденные товары компании по id. Пустой список — {}. Отсутствующие id не входят. Порядка нет."""
+        """Найденные фасеты компании по id. Пустой список — {}. Отсутствующие id не входят."""
         if not product_ids:
             return {}
         rows = await cls.objects.filter(
@@ -121,13 +102,13 @@ class StockProduct(PlatformModel):
         return {row.product_id: row for row in rows}
 
     @classmethod
-    async def list_by_sku_asc(
+    async def list_page_by_created_desc(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:
-        """Окно товаров компании, ORDER BY sku ASC, limit и offset."""
-        return await cls.objects.filter(company_id=company_id).order_by("sku").limit(
-            limit
-        ).offset(offset).all()
+        """Окно фасетов компании, ORDER BY created_at DESC, product_id ASC, limit и offset."""
+        return await cls.objects.filter(company_id=company_id).order_by(
+            "-created_at", "product_id"
+        ).limit(limit).offset(offset).all()
 
     @classmethod
     async def count_for_company(cls, company_id: str) -> int:
@@ -144,12 +125,10 @@ class StockProduct(PlatformModel):
     ) -> Self:
         """Смена метода оценки товара. Запрещена при наличии слоёв.
 
-        Пример: карточка муки была ``standard`` 40 ₽, бухгалтерия
-        переводит её на ``average``. Если по муке уже прошли проводки
-        (в ``stock_value_layers`` есть строки по этому ``product_id``),
-        метод заперт — история слоёв посчитана в одном методе и
-        переоценивать её задним числом другим методом нельзя:
-        ``valuation_method_locked``.
+        Если по товару уже прошли проводки (в ``stock_value_layers``
+        есть строки по этому ``product_id``), метод заперт — история
+        слоёв посчитана в одном методе и переоценивать её задним
+        числом другим методом нельзя: ``valuation_method_locked``.
 
         ``LaneCursor.lock`` по курсору журнала ждёт незакоммиченных
         писателей слоёв: проверка ``exists_for_products`` видит только

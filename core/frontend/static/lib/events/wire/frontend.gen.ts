@@ -1270,7 +1270,7 @@ export interface LeadRequestRecord {
     "comment"?: string | null | undefined;
     "job_title"?: string | null | undefined;
     "headcount_range": "1_49" | "50_199" | "200_499" | "500_plus";
-    "interested_products": ("agents" | "rag" | "crm" | "sync" | "documents")[];
+    "interested_products": ProductKey[];
     "lead_request_id": string;
     "created_at": string;
     [key: string]: unknown;
@@ -1282,14 +1282,6 @@ export interface LeadRequestRecord {
 export interface LeadRequestsListPayload {
     "cursor"?: string | null | undefined;
     "limit"?: number | undefined;
-    [key: string]: unknown;
-}
-
-/**
- * ListResponse[TeamMemberResponse]
- */
-export interface ListResponse_TeamMemberResponse_ {
-    "items": TeamMemberResponse[];
     [key: string]: unknown;
 }
 
@@ -1460,6 +1452,17 @@ export interface OffsetPage_EmbedConfig_ {
  */
 export interface OffsetPage_Namespace_ {
     "items": Namespace[];
+    "total": number;
+    "limit": number;
+    "offset": number;
+    [key: string]: unknown;
+}
+
+/**
+ * OffsetPage[TeamMemberResponse]
+ */
+export interface OffsetPage_TeamMemberResponse_ {
+    "items": TeamMemberResponse[];
     "total": number;
     "limit": number;
     "offset": number;
@@ -1732,6 +1735,11 @@ export interface PlatformTracingSpanItem {
 }
 
 /**
+ * Ключи публичных продуктов платформы — pydantic-контракт и OpenAPI-enum.
+ */
+export type ProductKey = "agents" | "rag" | "crm" | "sync" | "documents" | "geo" | "wiki" | "shop";
+
+/**
  * Как применять несколько совпавших правил после учёта exclusive_group.
  */
 export type SettlementApplicationMode = "all_matching" | "first_win";
@@ -1998,6 +2006,15 @@ export interface TeamMemberRolesUpdatePayload {
 }
 
 /**
+ * TeamMembersListPayload
+ */
+export interface TeamMembersListPayload {
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * OpenTelemetry event внутри сохраненного span.
  */
 export interface TraceSpanEvent {
@@ -2164,7 +2181,7 @@ export interface FrontendCommandMap {
     "frontend/platform_tracing/facet_users_requested": { payload: TracingFacetPayload; result: PlatformTracingFacetItemsResponse },
     "frontend/platform_tracing/spans_requested": { payload: TracingSpansPayload; result: CursorPage_PlatformTracingSpanItem_ },
     "frontend/platform_tracing/trace_tree_requested": { payload: TracingTraceIdPayload; result: TracingTraceTree },
-    "frontend/team/list_requested": { payload: EmptyPayload; result: ListResponse_TeamMemberResponse_ },
+    "frontend/team/list_requested": { payload: TeamMembersListPayload; result: OffsetPage_TeamMemberResponse_ },
     "frontend/team/remove_requested": { payload: TeamMemberIdPayload; result: TeamMemberRemoveResponse },
     "frontend/team/update_requested": { payload: TeamMemberRolesUpdatePayload; result: TeamMemberRoleUpdateResponse }
 }

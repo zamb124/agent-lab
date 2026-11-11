@@ -179,15 +179,27 @@ export const shopProductsListOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/products' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
-            return false;
+        if (isPlatformEventType(event, 'shop/catalog/changed')) {
+            const pushedShopId = event.payload.shop_id;
+            return rerunLastRequest(ctx, shopProductsListOp, {
+                when: (payload) =>
+                    isPlainRecord(payload)
+                    && payload.shop_id === pushedShopId,
+            });
         }
-        const pushedShopId = event.payload.shop_id;
-        return rerunLastRequest(ctx, shopProductsListOp, {
-            when: (payload) =>
-                isPlainRecord(payload)
-                && payload.shop_id === pushedShopId,
-        });
+        if (isPlatformEventType(event, 'catalog/product/updated')) {
+            return rerunLastRequest(ctx, shopProductsListOp);
+        }
+        if (isPlatformEventType(event, 'catalog/product_overlay/changed')) {
+            const overlay = event.payload;
+            if (overlay.facet !== 'shop') return false;
+            return rerunLastRequest(ctx, shopProductsListOp, {
+                when: (payload) =>
+                    isPlainRecord(payload)
+                    && (overlay.instance_id == null || overlay.instance_id === payload.shop_id),
+            });
+        }
+        return false;
     },
 });
 
@@ -201,6 +213,15 @@ export const shopProductCreateOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products' },
 });
 
+export const shopCatalogProductsSuggestOp = createAsyncOp({
+    name: 'shop/catalog_products_suggest',
+    silent: true,
+    commandType: 'shop/catalog_products/suggest_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/catalog-products/suggest' },
+});
+
 export const shopProductUpdateOp = createAsyncOp({
     name: 'shop/product_update',
     successToastKey: 'shop:toast.product_updated',
@@ -208,7 +229,7 @@ export const shopProductUpdateOp = createAsyncOp({
     commandType: 'shop/products/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}' },
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/products/{product_id}' },
 });
 
 export const shopProductsImportOp = createAsyncOp({
@@ -238,7 +259,7 @@ export const shopProductRemoveOp = createAsyncOp({
     commandType: 'shop/products/remove_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}' },
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/products/{product_id}' },
 });
 
 export const shopOrdersListOp: AsyncOpFactory = createAsyncOp({
@@ -764,6 +785,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/categories_reorder': typeof shopCategoriesReorderOp;
         'shop/products_list': typeof shopProductsListOp;
         'shop/product_create': typeof shopProductCreateOp;
+        'shop/catalog_products_suggest': typeof shopCatalogProductsSuggestOp;
         'shop/product_update': typeof shopProductUpdateOp;
         'shop/product_remove': typeof shopProductRemoveOp;
         'shop/products_reorder': typeof shopProductsReorderOp;

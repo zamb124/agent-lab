@@ -17,7 +17,7 @@
             "items": {
               "type": "object",
               "properties": {
-                "shop_product_id": {
+                "product_id": {
                   "type": [
                     "string",
                     "null"
@@ -148,7 +148,7 @@
                 }
               },
               "required": [
-                "shop_product_id",
+                "product_id",
                 "name",
                 "description",
                 "price_minor",

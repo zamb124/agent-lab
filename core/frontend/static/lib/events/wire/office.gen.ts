@@ -425,14 +425,6 @@ export interface ListResponse_OfficeDocumentShareItem_ {
 }
 
 /**
- * ListResponse[TeamMemberResponse]
- */
-export interface ListResponse_TeamMemberResponse_ {
-    "items": TeamMemberResponse[];
-    [key: string]: unknown;
-}
-
-/**
  * MediaOpenPayload
  */
 export interface MediaOpenPayload {
@@ -1405,6 +1397,17 @@ export interface OffsetPage_OfficeNamespaceTemplateItem_ {
 }
 
 /**
+ * OffsetPage[TeamMemberResponse]
+ */
+export interface OffsetPage_TeamMemberResponse_ {
+    "items": TeamMemberResponse[];
+    "total": number;
+    "limit": number;
+    "offset": number;
+    [key: string]: unknown;
+}
+
+/**
  * OnlyOfficeOpenPayload
  */
 export interface OnlyOfficeOpenPayload {
@@ -1510,6 +1513,15 @@ export interface TeamMemberResponse {
 }
 
 /**
+ * TeamMembersListPayload
+ */
+export interface TeamMembersListPayload {
+    "limit"?: number | undefined;
+    "offset"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * TextOpenPayload
  */
 export interface TextOpenPayload {
@@ -1561,7 +1573,7 @@ export interface OfficeCommandMap {
     "office/catalogs/rag_status_requested": { payload: OfficeCatalogIdPayload; result: OfficeCatalogRagIndexStatusResponse },
     "office/catalogs/remove_requested": { payload: OfficeCatalogIdPayload; result: unknown },
     "office/catalogs/update_requested": { payload: OfficeCatalogUpdatePayload; result: OfficeCatalogDetailResponse },
-    "office/company_members/list_requested": { payload: EmptyPayload; result: ListResponse_TeamMemberResponse_ },
+    "office/company_members/list_requested": { payload: TeamMembersListPayload; result: OffsetPage_TeamMemberResponse_ },
     "office/data_tables/column_add_requested": { payload: OfficeDataTableAddColumnPayload; result: DataTableSchemaSnapshot },
     "office/data_tables/create_requested": { payload: DataTableCreateRequest; result: FileRecord },
     "office/data_tables/export_requested": { payload: OfficeDataTableExportPayload; result: FileRecord },

@@ -10,20 +10,27 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from apps.stock.models import (
     StockProduct,
     StockQuant,
+    StockTransfer,
     StockValueLayer,
     StockWarehouse,
     ValueEntryKind,
 )
+from apps.stock.models.api import (
+    StockValuationLayersPage,
+    StockValuationReportResponse,
+    StockValuationReportRow,
+)
 from apps.stock.models.common import STOCK_DB
 from apps.stock.models.valuation import quantize
+from core.catalog.models import CatalogProduct
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.lanes import publish_lane_run
-from core.pagination import OffsetPage
 from core.request_scope import command_idempotency_key
 
 
@@ -68,27 +75,168 @@ class ValuationService:
         company_id: str,
         product_id: str | None,
         warehouse_id: str | None,
+        transfer_id: str | None,
+        entry_kinds: list[ValueEntryKind] | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+        open_only: bool,
+        search: str | None,
         limit: int,
         offset: int,
-    ) -> OffsetPage[StockValueLayer]:
+    ) -> StockValuationLayersPage:
         """Лента проводок журнала стоимости — «карточка счёта товара».
 
         Каждая строка — одна хозоперация с количеством, ценой и балансом
         «после»: история, по которой видно, откуда взялась текущая
         оценка (приходы по счетам, списания по себестоимости, ручные
         переоценки).
+
+        ``search`` — умный поиск UI: текст совпадает с именем/SKU
+        товара, номером накладной (``WH/IN/00001``), описанием или
+        ``origin_document_id`` записи. В ответе — sidecar-карты имён
+        товаров, накладных и складов для строк страницы.
         """
+        search_text = search.strip() if search is not None else ""
+        search_product_ids: list[str] | None = None
+        search_transfer_ids: list[str] | None = None
+        if search_text:
+            search_product_ids = await CatalogProduct.list_ids_by_text_icontains(
+                company_id, search_text
+            )
+            search_transfer_ids = await StockTransfer.list_ids_by_name_icontains(
+                company_id, search_text
+            )
         rows = await StockValueLayer.list_by_entry_no_asc(
             company_id,
             product_id=product_id,
             warehouse_id=warehouse_id,
+            transfer_id=transfer_id,
+            entry_kinds=entry_kinds,
+            date_from=date_from,
+            date_to=date_to,
+            open_only=open_only,
+            search_text=search_text if search_text else None,
+            search_product_ids=search_product_ids,
+            search_transfer_ids=search_transfer_ids,
             limit=limit,
             offset=offset,
         )
-        total = await StockValueLayer.count_by_product_and_warehouse(
-            company_id, product_id=product_id, warehouse_id=warehouse_id
+        total = await StockValueLayer.count_filtered(
+            company_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transfer_id=transfer_id,
+            entry_kinds=entry_kinds,
+            date_from=date_from,
+            date_to=date_to,
+            open_only=open_only,
+            search_text=search_text if search_text else None,
+            search_product_ids=search_product_ids,
+            search_transfer_ids=search_transfer_ids,
         )
-        return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
+        product_ids = list({row.product_id for row in rows})
+        transfer_ids = list(
+            {row.transfer_id for row in rows if row.transfer_id is not None}
+        )
+        warehouse_ids = list(
+            {row.warehouse_id for row in rows if row.warehouse_id is not None}
+        )
+        products = await CatalogProduct.found_in_company_by_ids(company_id, product_ids)
+        transfers = await StockTransfer.found_in_company_by_ids(company_id, transfer_ids)
+        warehouses = await StockWarehouse.found_in_company_by_ids(company_id, warehouse_ids)
+        return StockValuationLayersPage(
+            items=rows,
+            total=total,
+            limit=limit,
+            offset=offset,
+            product_names={pid: p.name for pid, p in products.items()},
+            product_skus={
+                pid: p.sku for pid, p in products.items() if p.sku is not None
+            },
+            transfer_names={tid: t.name for tid, t in transfers.items()},
+            warehouse_names={wid: w.name for wid, w in warehouses.items()},
+        )
+
+    async def report_by_value_desc(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str | None,
+        search: str | None,
+        limit: int,
+        offset: int,
+    ) -> StockValuationReportResponse:
+        """Отчёт «Стоимость запасов»: остаток каждого товара в деньгах.
+
+        По компании — баланс из последнего слоя журнала товара (как
+        ``product_value`` без склада). По складу — количество из
+        quant'ов склада по средней себестоимости компании (как
+        ``product_value`` со складом). ``search`` сужает товары по
+        имени/SKU. Строки — только товары с ненулевым остатком,
+        ``ORDER BY value DESC``.
+        """
+        search_text = search.strip() if search is not None else ""
+        if warehouse_id is not None:
+            warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
+            if warehouse is None:
+                raise PlatformNotFoundError(
+                    "Warehouse not found", error_code="warehouse_not_found"
+                )
+        latest = await StockValueLayer.latest_per_product_by_entry_no_desc(company_id)
+        if search_text:
+            allowed_ids = set(
+                await CatalogProduct.list_ids_by_text_icontains(
+                    company_id, search_text
+                )
+            )
+            latest = [layer for layer in latest if layer.product_id in allowed_ids]
+        products = await CatalogProduct.found_in_company_by_ids(
+            company_id, [layer.product_id for layer in latest]
+        )
+        warehouse_qty: dict[str, Decimal] = {}
+        if warehouse_id is not None:
+            quants = await StockQuant.list_unordered_for_warehouse(
+                company_id, warehouse_id
+            )
+            for quant in quants:
+                warehouse_qty[quant.product_id] = (
+                    warehouse_qty.get(quant.product_id, Decimal("0"))
+                    + quant.quantity
+                )
+        rows: list[StockValuationReportRow] = []
+        for layer in latest:
+            product = products.get(layer.product_id)
+            if product is None:
+                continue
+            if warehouse_id is not None:
+                qty = warehouse_qty.get(layer.product_id, Decimal("0"))
+            else:
+                qty = layer.qty_after
+            if qty <= Decimal("0"):
+                continue
+            avg = (
+                quantize(layer.value_after / layer.qty_after)
+                if layer.qty_after > Decimal("0")
+                else Decimal("0")
+            )
+            value = layer.value_after if warehouse_id is None else quantize(avg * qty)
+            rows.append(
+                StockValuationReportRow(
+                    product_id=layer.product_id,
+                    name=product.name,
+                    sku=product.sku,
+                    quantity=qty,
+                    avg_cost=avg,
+                    value=value,
+                )
+            )
+        rows.sort(key=lambda row: row.value, reverse=True)
+        total_value = sum((row.value for row in rows), Decimal("0"))
+        return StockValuationReportResponse(
+            items=rows[offset : offset + limit],
+            total_value=total_value,
+            products_count=len(rows),
+        )
 
     async def product_value(
         self,

@@ -112,7 +112,7 @@ async def _create_storefront(
             )
             products_total += 1
             if index == 0 and item == 0:
-                plain_product_id = str(product["shop_product_id"])
+                plain_product_id = str(product["product_id"])
                 plain_product_name = str(product["name"])
     if len(categories) > 1:
         group = await _post(
@@ -145,7 +145,7 @@ async def _create_storefront(
         _ = await _post(
             client,
             headers,
-            f"/shops/{shop_id}/products/{modal['shop_product_id']}/modifier-groups/{group['shop_modifier_group_id']}",
+            f"/shops/{shop_id}/products/{modal['product_id']}/modifier-groups/{group['shop_modifier_group_id']}",
             {},
         )
         products_total += 1

@@ -20,7 +20,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     code_agent_source: 'flow_asset',
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
-    shop_product: 'shop_product',
+    product: 'product',
 });
 
 function defaultRetentionKind(sourceKind: string): string | undefined {
@@ -59,8 +59,8 @@ function defaultRetentionKind(sourceKind: string): string | undefined {
             return DEFAULT_RETENTION_BY_SOURCE.platform_auxiliary;
         case 'generated_ephemeral':
             return DEFAULT_RETENTION_BY_SOURCE.generated_ephemeral;
-        case 'shop_product':
-            return DEFAULT_RETENTION_BY_SOURCE.shop_product;
+        case 'product':
+            return DEFAULT_RETENTION_BY_SOURCE.product;
         default:
             return undefined;
     }
@@ -317,10 +317,10 @@ export function buildShopProductFileCreateSpecJson({ shopId, productId }: { shop
     }
     const sourceRef: Record<string, string> = { shop_id: shopId };
     if (typeof productId === 'string' && productId.length > 0) {
-        sourceRef.shop_product_id = productId;
+        sourceRef.product_id = productId;
     }
     return buildFileCreateSpecJson({
-        sourceKind: 'shop_product',
+        sourceKind: 'product',
         sourceRef,
         postCreate: { is_public: true },
     });

@@ -348,9 +348,9 @@ class MaintenanceService:
         return created
 
     async def _product_uom(self, company_id: str, product_id: str) -> str:
-        from apps.stock.models.product import StockProduct
+        from core.catalog.models import CatalogProduct
 
-        product = await StockProduct.by_id(company_id, product_id)
+        product = await CatalogProduct.by_id(company_id, product_id)
         if product is None:
             raise PlatformNotFoundError(
                 "Product not found", error_code="product_not_found"

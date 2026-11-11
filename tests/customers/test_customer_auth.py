@@ -42,7 +42,7 @@ async def _shop_with_product(client: AsyncClient, slug: str) -> JsonObject:
     )
     assert resp.status_code == 200, resp.text
     shop["product_id"] = _id(
-        parse_json_object(resp.text, "product"), "shop_product_id"
+        parse_json_object(resp.text, "product"), "product_id"
     )
     return shop
 

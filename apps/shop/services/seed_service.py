@@ -48,6 +48,8 @@ from apps.shop.seed.spec import (
     DemoProductSpec,
     DemoShopSpec,
 )
+from core.catalog.models import CatalogProduct, CatalogUom
+from core.catalog.service import CatalogService
 from core.files.create_spec import (
     FileCreateSpec,
     FilePostCreate,
@@ -109,9 +111,15 @@ def _as_str(value: JsonValue) -> str:
 class ShopSeedService:
     """Разворачивает ``DemoShopSpec`` в строки каталога магазина."""
 
-    def __init__(self, settings: ShopSettings, files_service: FilesService) -> None:
+    def __init__(
+        self,
+        settings: ShopSettings,
+        files_service: FilesService,
+        catalog_service: CatalogService,
+    ) -> None:
         self._settings: ShopSettings = settings
         self._files_service: FilesService = files_service
+        self._catalog: CatalogService = catalog_service
 
     async def seed_company(self, *, company: Company, owner_user_id: str) -> JsonObject:
         """Сеет все ``DEMO_TEMPLATES`` компании; возвращает статистику по шаблонам."""
@@ -181,7 +189,7 @@ class ShopSeedService:
 
         cat_ids = await self._seed_categories(shop_id, tpl.key, h16, tpl.categories)
         group_ids, option_ids = await self._seed_modifiers(shop_id, h16, tpl)
-        prod_ids = await self._seed_products(shop_id, h16, tpl, cat_ids)
+        prod_ids = await self._seed_products(company, shop_id, h16, tpl, cat_ids)
         await self._attach_modifiers(shop_id, tpl, prod_ids, group_ids)
         await self._seed_promos(shop_id, h16, tpl, prod_ids, cat_ids)
         table_ids = await self._seed_tables(shop_id, h16, tpl)
@@ -219,9 +227,9 @@ class ShopSeedService:
         path = _ASSETS_DIR / tpl_key / photo
         data = path.read_bytes()  # FileNotFoundError — спека и ассеты рассинхронны
         spec = FileCreateSpec(
-            source_kind=FileSourceKind.SHOP_PRODUCT,
-            source_ref=FileSourceRef(shop_id=shop_id, shop_product_id=product_id),
-            retention=FileRetentionSpec(kind=FileRetentionKind.SHOP_PRODUCT),
+            source_kind=FileSourceKind.PRODUCT,
+            source_ref=FileSourceRef(shop_id=shop_id, product_id=product_id),
+            retention=FileRetentionSpec(kind=FileRetentionKind.PRODUCT),
             post_create=FilePostCreate(is_public=True),
             metadata={"seed_template": tpl_key, "seed_photo": photo},
         )
@@ -328,14 +336,26 @@ class ShopSeedService:
         return group_ids, option_ids
 
     async def _seed_products(
-        self, shop_id: str, h16: str, tpl: DemoShopSpec, cat_ids: dict[str, str]
+        self,
+        company: Company,
+        shop_id: str,
+        h16: str,
+        tpl: DemoShopSpec,
+        cat_ids: dict[str, str],
     ) -> dict[str, str]:
+        """Листинги шаблона: детерминированные мастер-карты каталога +
+        витринный фасет. Повторный прогон — insert-only."""
+        company_id = company.company_id
+        await self._catalog.ensure_company_uoms(company_id=company_id)
+        uom = await CatalogUom.by_name(company_id, "Units")
+        if uom is None:
+            raise ValueError("seed: reference uom Units is missing")
         prod_ids: dict[str, str] = {}
         now = utcnow()
         for sort, spec in enumerate(tpl.products):
             product_id = _child_id(tpl.key, h16, "pr", spec.key)
             prod_ids[spec.key] = product_id
-            existing = await ShopProduct.get_by_id(product_id)
+            existing = await ShopProduct.by_shop_and_product(shop_id, product_id)
             if existing is not None:
                 continue
             photo_file_id = await self._upload_photo(
@@ -344,17 +364,24 @@ class ShopSeedService:
                 tpl_key=tpl.key,
                 photo=spec.photo,
             )
-            _ = await ShopProduct.create(
-                ShopProduct(
-                    shop_product_id=product_id,
-                    shop_id=shop_id,
-                    category_id=cat_ids[spec.category_key],
+            if await CatalogProduct.by_id(company_id, product_id) is None:
+                _ = await self._catalog.create_product(
+                    company_id=company_id,
+                    product_id=product_id,
                     name=spec.name,
                     description=spec.description,
+                    image_file_ids=[photo_file_id],
+                    uom_id=uom.uom_id,
+                )
+            _ = await ShopProduct.create(
+                ShopProduct(
+                    shop_product_id=_child_id(tpl.key, h16, "spr", spec.key),
+                    shop_id=shop_id,
+                    product_id=product_id,
+                    category_id=cat_ids[spec.category_key],
                     portion=spec.portion,
                     badges=list(spec.badges),
                     price_minor=spec.price_minor,
-                    photo_file_id=photo_file_id,
                     nutrition=dict(spec.nutrition),
                     is_available=spec.is_available,
                     sort=sort,
@@ -371,15 +398,15 @@ class ShopSeedService:
         prod_ids: dict[str, str],
         group_ids: dict[str, str],
     ) -> None:
-        _ = shop_id
         for spec in tpl.products:
             product_id = prod_ids[spec.key]
             for sort, group_key in enumerate(spec.modifier_group_keys):
                 group_id = group_ids[group_key]
-                if await ShopProductModifierGroup.get_link(product_id, group_id):
+                if await ShopProductModifierGroup.get_link(shop_id, product_id, group_id):
                     continue
                 _ = await ShopProductModifierGroup.create(
                     ShopProductModifierGroup(
+                        shop_id=shop_id,
                         product_id=product_id,
                         group_id=group_id,
                         sort=sort,

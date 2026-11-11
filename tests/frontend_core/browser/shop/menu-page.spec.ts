@@ -75,10 +75,10 @@ const CATS = {
 const PRODUCTS = {
     result: {
         items: [
-            { shop_product_id: 'p_root', category_id: 'cat_a', name: 'Маргарита', description: '', price_minor: 100, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
-            { shop_product_id: 'p_kid', category_id: 'cat_a1', name: 'Капричоза', description: '', price_minor: 200, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
-            { shop_product_id: 'p_b', category_id: 'cat_b', name: 'Филадельфия', description: '', price_minor: 300, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
-            { shop_product_id: 'p_none', category_id: null, name: 'Соевый соус', description: '', price_minor: 50, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { product_id: 'p_root', category_id: 'cat_a', name: 'Маргарита', description: '', price_minor: 100, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { product_id: 'p_kid', category_id: 'cat_a1', name: 'Капричоза', description: '', price_minor: 200, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { product_id: 'p_b', category_id: 'cat_b', name: 'Филадельфия', description: '', price_minor: 300, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
+            { product_id: 'p_none', category_id: null, name: 'Соевый соус', description: '', price_minor: 50, photo_file_id: null, is_available: true, portion: '', badges: [], sort: 0 },
         ],
     },
 };
@@ -169,7 +169,7 @@ describe('shop-menu-page: дерево категорий → команды', (
         `);
         await elementUpdated(el);
         emitOnTree(categoryTree(el), 'product-drop', { productId: 'p_root', categoryId: 'cat_b' });
-        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', shop_product_id: 'p_root', category_id: 'cat_b' }]);
+        expect(payloads).to.deep.equal([{ shop_id: 'shop_test', product_id: 'p_root', category_id: 'cat_b' }]);
     });
 });
 

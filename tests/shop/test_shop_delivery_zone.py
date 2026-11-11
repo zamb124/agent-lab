@@ -108,7 +108,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], customer_address_id=row.customer_address_id
+                product["product_id"], customer_address_id=row.customer_address_id
             ),
         )
         assert resp.status_code == 200, resp.text
@@ -128,7 +128,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], customer_address_id=row.customer_address_id
+                product["product_id"], customer_address_id=row.customer_address_id
             ),
         )
         assert resp.status_code == 409
@@ -145,7 +145,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], customer_address_id=row.customer_address_id
+                product["product_id"], customer_address_id=row.customer_address_id
             ),
         )
         assert resp.status_code == 409
@@ -163,7 +163,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], address=f"Нет такого {unique_id}"
+                product["product_id"], address=f"Нет такого {unique_id}"
             ),
         )
         assert resp.status_code == 409
@@ -181,7 +181,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], address="Москва, Тверская 1"
+                product["product_id"], address="Москва, Тверская 1"
             ),
         )
         assert resp.status_code == 200, resp.text
@@ -198,7 +198,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 address="Точка с карты",
                 delivery_lat=_INSIDE[0],
                 delivery_lng=_INSIDE[1],
@@ -235,7 +235,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 address="Точка с карты",
                 delivery_lat=_OUTSIDE[0],
                 delivery_lng=_OUTSIDE[1],
@@ -254,7 +254,7 @@ class TestDeliveryZoneEnforcement:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"],
+                product["product_id"],
                 address="Москва",
                 delivery_lat=_INSIDE[0],
             ),
@@ -404,7 +404,7 @@ class TestCustomerScopeInvariant:
         await auth_customer(shop_public_client, company_id="system")
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="pickup"),
+            json=_order_body(product["product_id"], delivery_type="pickup"),
         )
         assert resp.status_code == 403
         assert resp.json()["error_code"] == "forbidden_scope"
@@ -419,7 +419,7 @@ class TestCustomerScopeInvariant:
         customer = await auth_customer(shop_public_client, slug, phone=phone)
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
-            json=_order_body(product["shop_product_id"], delivery_type="pickup"),
+            json=_order_body(product["product_id"], delivery_type="pickup"),
         )
         assert resp.status_code == 200, resp.text
         orders = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")
@@ -533,6 +533,7 @@ class TestDeliveryCheckServiceChain:
             _emu_geocoder(shop_di),
             shop_di.service_client,
             shop_di.loyalty_service,
+            shop_di.catalog_service,
         )
         result = await service.check_delivery(shop, "55.75,37.62")
         assert result["ok"] is True
@@ -558,6 +559,7 @@ class TestDeliveryCheckServiceChain:
             _emu_geocoder(shop_di),
             shop_di.service_client,
             shop_di.loyalty_service,
+            shop_di.catalog_service,
         )
         result = await service.check_delivery(shop, "55.50,37.20")
         assert result["ok"] is False
@@ -583,6 +585,7 @@ class TestDeliveryCheckServiceChain:
             _emu_geocoder(shop_di),
             shop_di.service_client,
             shop_di.loyalty_service,
+            shop_di.catalog_service,
         )
         result = await service.check_delivery(shop, f"Нет такого {unique_id}")
         assert result["ok"] is False
@@ -604,7 +607,7 @@ class TestDeliveryCheckServiceChain:
         resp = await shop_public_client.post(
             f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
             json=_order_body(
-                product["shop_product_id"], customer_address_id=row.customer_address_id
+                product["product_id"], customer_address_id=row.customer_address_id
             ),
         )
         assert resp.status_code == 200, resp.text
@@ -945,6 +948,7 @@ class TestCourierEta:
                 geocoder=_emu_geocoder(shop_di),
                 service_client=ServiceClient(),
                 loyalty_service=shop_di.loyalty_service,
+                catalog_service=shop_di.catalog_service,
             )
             shop = Shop(
                 shop_id=f"eta-{unique_id[:8]}",
@@ -996,6 +1000,7 @@ class TestCourierEta:
                 geocoder=_emu_geocoder(shop_di),
                 service_client=ServiceClient(),
                 loyalty_service=shop_di.loyalty_service,
+                catalog_service=shop_di.catalog_service,
             )
             shop = Shop(
                 shop_id=f"etad-{unique_id[:8]}",

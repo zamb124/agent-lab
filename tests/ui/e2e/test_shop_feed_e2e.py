@@ -114,7 +114,7 @@ async def feed_storefront(
             "nutrition": {"kcal": 120.0, "protein_g": 4.0, "fat_g": 5.0, "carb_g": 14.0},
         },
     )
-    product_id = str(product["shop_product_id"])
+    product_id = str(product["product_id"])
     extra = await _post(
         shop_client_http,
         headers,
@@ -127,7 +127,7 @@ async def feed_storefront(
         f"/shops/{shop_id}/products",
         {"name": "Тирамису", "price_minor": 35000},
     )
-    unavailable_id = str(unavailable["shop_product_id"])
+    unavailable_id = str(unavailable["product_id"])
     group = await _post(
         shop_client_http,
         headers,
@@ -170,7 +170,7 @@ async def feed_storefront(
         {
             "kind": "upsell",
             "placement": "cart",
-            "product_ids": [str(extra["shop_product_id"])],
+            "product_ids": [str(extra["product_id"])],
         },
     )
     _ = await _post(
@@ -199,7 +199,7 @@ async def feed_storefront(
         product_id=product_id,
         product_name="Капучино",
         unavailable_id=unavailable_id,
-        extra_id=str(extra["shop_product_id"]),
+        extra_id=str(extra["product_id"]),
     )
 
 

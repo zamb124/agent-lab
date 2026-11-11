@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from apps.stock.services.barcode_service import BarcodeService
-from apps.stock.services.catalog_service import CatalogService
+from apps.stock.services.catalog_service import StockCatalogService
 from apps.stock.services.company_init_service import StockCompanyInitService
 from apps.stock.services.maintenance_service import MaintenanceService
 from apps.stock.services.move_engine import StockMoveEngine
@@ -26,7 +26,7 @@ class StockDi(PlatformDi):
     scan_service: ScanService
     move_engine: StockMoveEngine
     warehouse_service: WarehouseService
-    catalog_service: CatalogService
+    stock_catalog_service: StockCatalogService
     placement_service: PlacementService
     rule_service: RuleService
     valuation_service: ValuationService
