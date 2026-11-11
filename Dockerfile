@@ -39,6 +39,11 @@ COPY conf/ ./conf/
 COPY tests/ui/design-system/catalog.yaml ./tests/ui/design-system/catalog.yaml
 COPY tests/ui/design-system/components ./tests/ui/design-system/components
 
+# silero-vad нужен voice-поду in-process (стейтфул streaming VAD для диктовки);
+# dep-группа `voice` добавлена в pyproject позже последней сборки agent-lab-base —
+# ставим явно, пока база не пересобрана с новым lockfile.
+RUN uv pip install --python /opt/venv/bin/python "silero-vad==6.2.3"
+
 # UI-бандлы: tsc (strict) и esbuild per-app → apps/<svc>/ui-dist/. В образ уходит
 # только скомпилированный вывод — браузер грузит index.js + hashed chunks,
 # mount отдаёт ui-dist (core/app/spa.py).
