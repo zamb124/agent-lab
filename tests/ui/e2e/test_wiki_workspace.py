@@ -13,7 +13,7 @@ from tests.ui.e2e.wiki_e2e_helpers import (
     wiki_e2e_title_input,
     wiki_e2e_tree_row,
 )
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
 
@@ -81,6 +81,124 @@ async def test_wiki_create_and_edit_page(
         label_en="Content persisted after reload",
         screenshot_name="content-after-reload",
     )
+
+
+@pytest.mark.scenario(
+    service="wiki",
+    tag="pages",
+    doc_slug="page-move-and-reorder",
+    title="Wiki: перемещение страницы в другой раздел",
+    title_en="Wiki: move a page to another section",
+    description=(
+        "Через меню страницы в дереве её можно перенести в другой раздел "
+        "или в корень пространства."
+    ),
+    description_en=(
+        "The page tree menu lets you move a page into another section or "
+        "to the space root."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_wiki_move_page_to_other_parent(
+    scenario: ScenarioRecorder,
+    wiki_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str, frontend_di,
+) -> None:
+    page = ui_page_system
+    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="move", di=frontend_di)
+    parent_id = await wiki_api_create_page(
+        wiki_ui.origin, auth_token_system, namespace=namespace, title=f"Раздел А {unique_id}",
+    )
+    other_id = await wiki_api_create_page(
+        wiki_ui.origin, auth_token_system, namespace=namespace, title=f"Раздел Б {unique_id}",
+    )
+    child_id = await wiki_api_create_page(
+        wiki_ui.origin, auth_token_system, namespace=namespace,
+        title=f"Страница {unique_id}", parent_page_id=parent_id,
+    )
+
+    _ = await page.reload(wait_until="domcontentloaded")
+    parent_row = wiki_e2e_tree_row(page, parent_id)
+    await expect(parent_row).to_be_visible(timeout=30_000)
+    await parent_row.locator(f'[data-twisty="{parent_id}"]').click()
+    child_row = wiki_e2e_tree_row(page, child_id)
+    await expect(child_row).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Страница лежит в разделе А",
+        page,
+        label_en="The page sits in section A",
+        screenshot_name="page-in-section-a",
+        details=(
+            "В дереве слева страница вложена в «Раздел А». Чтобы перенести её, "
+            "нажмите правой кнопкой по строке страницы и выберите «Переместить»."
+        ),
+        details_en=(
+            "In the left tree the page is nested under Section A. To move it, "
+            "right-click the page row and choose Move."
+        ),
+    )
+
+    await child_row.click(button="right")
+    menu = page.locator("platform-menu")
+    await expect(menu).to_be_visible(timeout=15_000)
+    await menu.get_by_text("Переместить", exact=False).first.click()
+    modal = page.locator("wiki-move-page-modal")
+    await expect(modal).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Выберите новый раздел в диалоге",
+        page,
+        label_en="Pick the new section in the dialog",
+        screenshot_name="move-dialog",
+        details=(
+            "В диалоге «Переместить страницу» выберите пространство и новую "
+            "родительскую страницу — или «В корень», чтобы страница оказалась "
+            "на верхнем уровне."
+        ),
+        details_en=(
+            "In the Move page dialog pick the space and the new parent page — "
+            "or To root to put the page at the top level."
+        ),
+    )
+
+    parent_field = modal.locator("platform-field").nth(1)
+    await ui_set_platform_field(parent_field, other_id)
+    await modal.locator("[data-wiki-move-submit]").click()
+    await expect(modal).not_to_be_visible(timeout=30_000)
+
+    await other_row_locator_expand(page, other_id, child_id)
+    await scenario.step(
+        "Страница перенесена в раздел Б",
+        page,
+        label_en="The page moved to section B",
+        screenshot_name="page-in-section-b",
+        details=(
+            "**Демонстрация результата.** В дереве страница теперь вложена "
+            "в «Раздел Б» — вся структура ссылок и вложенных страниц "
+            "сохранилась.\n\n"
+            "**Итог.** Разделы базы знаний перестраиваются без копипаста."
+        ),
+        details_en=(
+            "**Result demonstration.** In the tree the page is now nested "
+            "under Section B — the whole link structure and nested pages "
+            "are preserved.\n\n"
+            "**Summary.** Knowledge base sections can be restructured without "
+            "copy-paste."
+        ),
+    )
+
+
+async def other_row_locator_expand(page: Page, other_id: str, child_id: str) -> None:
+    """Раздел Б раскрыт, внутри видна перенесённая страница."""
+    other_row = wiki_e2e_tree_row(page, other_id)
+    await expect(other_row).to_be_visible(timeout=30_000)
+    twisty = other_row.locator(f'[data-twisty="{other_id}"]')
+    if await twisty.count() > 0:
+        await twisty.click()
+    await expect(wiki_e2e_tree_row(page, child_id)).to_be_visible(timeout=15_000)
 
 
 @pytest.mark.scenario(

@@ -25,7 +25,7 @@ Helpers: `wiki_e2e_helpers.py` (namespace через API, open_page, title_input
 | 1 | `navigate-tree` | Навигация по дереву | `test_wiki_workspace.py` | ✅ |
 | 1 | `wiki-complete-guide` | Полный маршрут: дерево → страница → блоки → публикация (featured) | `test_wiki_doc_complete_guide.py` | ✅ |
 | 2 | `editor-blocks` | Блочный редактор: заголовки, списки, вставки | `test_wiki_doc_editor.py` | ✅ |
-| 2 | `page-move-and-reorder` | Перемещение и порядок в дереве | новый | 📝 |
+| 2 | `page-move-and-reorder` | Перемещение и порядок в дереве | `test_wiki_workspace.py` | ✅ |
 
 ### search — Поиск
 
