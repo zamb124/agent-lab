@@ -61,6 +61,7 @@ export interface BuildSendMessageOptions {
     streaming?: boolean;
     branchId?: string;
     variables?: Record<string, unknown> | null;
+    breakpoints?: Record<string, boolean> | null;
 }
 
 export interface BuildListTasksOptions {
@@ -196,7 +197,7 @@ export function buildUserMessage({ contextId = null, taskId = null, text = '', f
     return message;
 }
 
-export function buildSendMessageBody(message: A2aUserMessage, { streaming = true, branchId = 'default', variables = null }: BuildSendMessageOptions = {}): A2aRpcBody {
+export function buildSendMessageBody(message: A2aUserMessage, { streaming = true, branchId = 'default', variables = null, breakpoints = null }: BuildSendMessageOptions = {}): A2aRpcBody {
     const params: { message: A2aUserMessage; metadata?: Record<string, unknown> } = { message };
     const metadata: Record<string, unknown> = {};
     const branch = normalizeFlowUIBranchId(branchId);
@@ -206,6 +207,17 @@ export function buildSendMessageBody(message: A2aUserMessage, { streaming = true
             throw new Error('flow-ui: metadata.variables must be a plain object');
         }
         if (Object.keys(variables).length > 0) metadata.variables = variables;
+    }
+    if (breakpoints !== null && breakpoints !== undefined) {
+        if (typeof breakpoints !== 'object' || Array.isArray(breakpoints)) {
+            throw new Error('flow-ui: metadata.breakpoints must be a plain object');
+        }
+        for (const value of Object.values(breakpoints)) {
+            if (typeof value !== 'boolean') {
+                throw new Error('flow-ui: metadata.breakpoints values must be bool');
+            }
+        }
+        if (Object.keys(breakpoints).length > 0) metadata.breakpoints = breakpoints;
     }
     if (Object.keys(metadata).length > 0) params.metadata = metadata;
     return rpc(streaming ? 'SendStreamingMessage' : 'SendMessage', params);

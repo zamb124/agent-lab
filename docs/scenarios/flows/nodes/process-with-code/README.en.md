@@ -23,11 +23,3 @@ On the Code tab define run: it reads input and writes the result to state['respo
 Reopen the code node and confirm the echo logic is still there. This verifies the draft before saving to the published version.
 
 ![Review the code before publishing](process-with-code--03-code-source-reviewed.png)
-
-## Step 4. Publish the graph with code
-
-**Result demonstration.** After publishing the code is saved on the node — reopening shows the same echo logic.
-
-**Summary.** You can add a code node and write data processing inside the Green Garden agent.
-
-![Publish the graph with code](process-with-code--04-code-node-published.png)

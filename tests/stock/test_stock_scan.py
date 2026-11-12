@@ -13,6 +13,7 @@ import pytest
 
 from apps.stock.models import (
     StockLayoutPreset,
+    StockLocationUsage,
     StockMove,
     StockMoveLine,
     StockMoveLineKind,
@@ -21,10 +22,10 @@ from apps.stock.models import (
     StockQuant,
     StockRemovalStrategy,
     StockTracking,
+    StockTransferState,
     ValuationMethod,
 )
 from apps.stock.models.common import STOCK_DB, StockMoveSpec
-from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from apps.stock.models.scan import (
     ScanContext,
     ScanEntityKind,
@@ -37,6 +38,7 @@ from apps.stock.models.scan import (
     scan_quantity,
     scan_step,
 )
+from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from tests.stock.test_stock_domain import _make_env, _receipt
 
 _COMPANY = "system"
@@ -184,6 +186,66 @@ class TestScanMachine:
         assert r.context.product_id == "prod-1"
         assert r.context.packaging_id == "pack-1"
         assert r.context.quantity == Decimal("24")
+
+    def test_label_quantity_skips_qty_step(self) -> None:
+        # Количество приехало с меткой (GS1 AI 37): шаг ввода числа
+        # пропускается — «подтвердить 5» не требуется.
+        ctx = ScanContext(flow=ScanFlow.RECEIVE)
+        r = scan_step(
+            ctx,
+            _res(ScanEntityKind.PRODUCT, "prod-1", quantity=Decimal("5")),
+        )
+        assert r.context.step == ScanStep.DEST
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-1"))
+        assert r.error is None and r.context.step == ScanStep.REVIEW
+        assert len(r.context.lines) == 1
+        assert r.context.lines[0].quantity == Decimal("5")
+
+    def test_prefilled_product_skips_product_step(self) -> None:
+        # Действие карточки сущности («переместить этот товар») входит
+        # в поток с уже заполненным товаром: шаг PRODUCT пропускается.
+        ctx = ScanContext(
+            flow=ScanFlow.COUNT,
+            step=ScanStep.LOCATION,
+            product_id="prod-1",
+        )
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        assert r.error is None and r.context.step == ScanStep.QUANTITY
+        r = scan_quantity(r.context, Decimal("7"))
+        assert r.error is None and r.context.step == ScanStep.REVIEW
+        assert r.context.lines[0].product_id == "prod-1"
+        assert r.context.lines[0].location_id == "bin-a"
+
+    def test_serial_scan_skips_qty_not_dest(self) -> None:
+        # Серийник несёт количество 1: шаг числа пропускается, а
+        # приёмник подтверждается повторным сканом ячейки — направление
+        # всегда явное (та же ячейка — тот же маршрут, другая — новый).
+        ctx = ScanContext(
+            flow=ScanFlow.RECEIVE,
+            step=ScanStep.DEST,
+            product_id="prod-1",
+        )
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-1"))
+        assert r.context.step == ScanStep.QUANTITY
+        r = scan_quantity(r.context, Decimal("1"))
+        assert r.context.step == ScanStep.REVIEW
+        # Второй серийник с REVIEW: товар → ячейка → строка без нампада.
+        r = scan_step(
+            r.context,
+            _res(
+                ScanEntityKind.PRODUCT,
+                "prod-1",
+                lot_id="sn-2",
+                serial="SN-2",
+                quantity=Decimal("1"),
+            ),
+        )
+        assert r.error is None and r.context.step == ScanStep.DEST
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-1"))
+        assert r.error is None and r.context.step == ScanStep.REVIEW
+        assert len(r.context.lines) == 2
+        assert r.context.lines[1].serial == "SN-2"
+        assert r.context.lines[1].location_dest_id == "bin-1"
 
     def test_review_accepts_next_product(self) -> None:
         # Многострочная приёмка: после строки поток ждёт следующий товар.
@@ -564,6 +626,7 @@ class TestScanOpenSession:
             warehouse_id=env.warehouse.warehouse_id,
             move_id=None,
             transfer_id=transfer_id,
+            user_id="op",
         )
         assert context.flow == ScanFlow.RECEIVE
         moves = await StockMove.list_for_transfer_by_created_at_asc(
@@ -585,6 +648,7 @@ class TestScanOpenSession:
             warehouse_id=env.warehouse.warehouse_id,
             move_id=None,
             transfer_id=transfer_id,
+            user_id="op",
         )
         assert context.flow == ScanFlow.PICK
 
@@ -602,8 +666,59 @@ class TestScanOpenSession:
             warehouse_id=env.warehouse.warehouse_id,
             move_id=None,
             transfer_id=transfer_id,
+            user_id="op",
         )
         assert context.flow == ScanFlow.MOVE
+
+    @pytest.mark.asyncio
+    async def test_document_barcode_resolves_and_opens(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Скан накладной: индекс → DOCUMENT → open по transfer_id."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        op = env.op_types[StockOperationCode.INCOMING]
+        barcode = f"DOC-{unique_id}"
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=op.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=barcode,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("5"),
+                    uom_id=env.uom_id,
+                    unit_price=None,
+                )
+            ],
+        )
+        _ = await env.di.move_engine.confirm_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        _ = await env.di.move_engine.assign_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        resolution = await env.di.scan_service.resolve(
+            company_id=env.company_id, barcode=barcode
+        )
+        assert resolution.entity_kind == ScanEntityKind.DOCUMENT
+        assert resolution.entity_id == transfer.transfer_id
+        move, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=resolution.entity_id,
+            user_id="op",
+        )
+        assert context.flow == ScanFlow.RECEIVE
+        assert move.transfer_id == transfer.transfer_id
 
     @pytest.mark.asyncio
     async def test_open_by_move_id(self, stock_di, unique_id: str) -> None:
@@ -621,6 +736,7 @@ class TestScanOpenSession:
             warehouse_id=env.warehouse.warehouse_id,
             move_id=moves[0].move_id,
             transfer_id=None,
+            user_id="op",
         )
         assert move.move_id == moves[0].move_id
         assert context.flow == ScanFlow.RECEIVE
@@ -636,6 +752,7 @@ class TestScanOpenSession:
                 warehouse_id=env.warehouse.warehouse_id,
                 move_id=None,
                 transfer_id=None,
+                user_id="op",
             )
         assert exc.value.error_code == "scan_open_input_invalid"
 
@@ -647,12 +764,13 @@ class TestScanOpenSession:
             stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
         )
         transfer_id = await _receipt(env, Decimal("5"), Decimal("2"))
-        with pytest.raises(PlatformConflictError) as exc:
+        with pytest.raises(PlatformNotFoundError) as exc:
             _ = await env.di.scan_service.open_session(
                 company_id=env.company_id,
                 warehouse_id=env.warehouse.warehouse_id,
                 move_id=None,
                 transfer_id=transfer_id,
+                user_id="op",
             )
         assert exc.value.error_code == "document_no_work"
 
@@ -683,6 +801,7 @@ class TestScanOpenSession:
                 warehouse_id=other.warehouse_id,
                 move_id=moves[0].move_id,
                 transfer_id=None,
+                user_id="op",
             )
         assert exc.value.error_code == "move_not_found"
 
@@ -753,6 +872,7 @@ class TestScanOpenSession:
             warehouse_id=env.warehouse.warehouse_id,
             move_id=None,
             transfer_id=transfer.transfer_id,
+            user_id="op",
         )
         assert move.move_id == moves[1].move_id
         assert context.flow == ScanFlow.RECEIVE
@@ -789,3 +909,347 @@ class TestScanOpenSession:
             )
             == ScanFlow.RECEIVE
         )
+
+
+class TestAdhocCommit:
+    """Ad-hoc коммит без документа — сессия пишет накладную сама."""
+
+    @pytest.mark.asyncio
+    async def test_adhoc_receive_creates_done_transfer(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """«Принять без наряда»: контекст → INCOMING накладная → quant."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        wh = env.warehouse.warehouse_id
+        ctx = ScanContext(
+            flow=ScanFlow.RECEIVE,
+            lines=(
+                ScanLineDraft(
+                    location_id=None,
+                    location_dest_id=env.warehouse.stock_location_id,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("5"),
+                ),
+            ),
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            actor_user_id="test_user",
+        )
+        assert transfer.state == StockTransferState.DONE
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        assert len(moves) == 1
+        assert moves[0].state == StockMoveState.DONE
+        quant = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=env.warehouse.stock_location_id,
+        ).first()
+        assert quant is not None
+        assert quant.quantity == Decimal("5")
+
+    @pytest.mark.asyncio
+    async def test_adhoc_internal_move_between_bins(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """«Переместить»: остаток уезжает из стока в ячейку приёмника."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        wh = env.warehouse.warehouse_id
+        _ = await _receipt(env, Decimal("10"), Decimal("2"))
+        bin_b = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            parent_id=env.warehouse.view_location_id,
+            name=f"BIN-ADH-{unique_id}",
+            usage=StockLocationUsage.BIN,
+            barcode=None,
+        )
+        ctx = ScanContext(
+            flow=ScanFlow.MOVE,
+            lines=(
+                ScanLineDraft(
+                    location_id=env.warehouse.stock_location_id,
+                    location_dest_id=bin_b.location_id,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("4"),
+                ),
+            ),
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_code=StockOperationCode.INTERNAL,
+            context=ctx,
+            actor_user_id="test_user",
+        )
+        assert transfer.state == StockTransferState.DONE
+        src = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=env.warehouse.stock_location_id,
+        ).first()
+        dst = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=bin_b.location_id,
+        ).first()
+        assert src is not None and src.quantity == Decimal("6")
+        assert dst is not None and dst.quantity == Decimal("4")
+
+    @pytest.mark.asyncio
+    async def test_adhoc_multi_product_one_transfer(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Несколько товаров в одном коммите — один документ, move на товар."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        wh = env.warehouse.warehouse_id
+        second = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"Widget B {unique_id}",
+            sku=f"SKUB-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+        )
+        op = env.op_types[StockOperationCode.INCOMING]
+        receipt = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_type_id=op.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("10"),
+                    uom_id=env.uom_id,
+                    unit_price=Decimal("2"),
+                ),
+                StockMoveSpec(
+                    product_id=second.product_id,
+                    product_qty=Decimal("8"),
+                    uom_id=env.uom_id,
+                    unit_price=Decimal("3"),
+                ),
+            ],
+        )
+        for verb in ("confirm", "assign", "validate"):
+            _ = await getattr(env.di.move_engine, f"{verb}_transfer")(
+                company_id=env.company_id, transfer_id=receipt.transfer_id
+            )
+        bin_b = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            parent_id=env.warehouse.view_location_id,
+            name=f"BIN-MULTI-{unique_id}",
+            usage=StockLocationUsage.BIN,
+            barcode=None,
+        )
+        ctx = ScanContext(
+            flow=ScanFlow.MOVE,
+            lines=(
+                ScanLineDraft(
+                    location_id=env.warehouse.stock_location_id,
+                    location_dest_id=bin_b.location_id,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("3"),
+                ),
+                ScanLineDraft(
+                    location_id=env.warehouse.stock_location_id,
+                    location_dest_id=bin_b.location_id,
+                    product_id=second.product_id,
+                    quantity=Decimal("7"),
+                ),
+            ),
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_code=StockOperationCode.INTERNAL,
+            context=ctx,
+            actor_user_id="test_user",
+        )
+        assert transfer.state == StockTransferState.DONE
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        assert len(moves) == 2
+        assert {move.state for move in moves} == {StockMoveState.DONE}
+        for product_id, expected in (
+            (env.product.product_id, Decimal("3")),
+            (second.product_id, Decimal("7")),
+        ):
+            quant = await StockQuant.objects.filter(
+                company_id=env.company_id,
+                product_id=product_id,
+                location_id=bin_b.location_id,
+            ).first()
+            assert quant is not None
+            assert quant.quantity == expected
+
+    @pytest.mark.asyncio
+    async def test_adhoc_empty_context_conflicts(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        with pytest.raises(PlatformConflictError):
+            _ = await env.di.scan_service.commit_adhoc(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                operation_code=StockOperationCode.INTERNAL,
+                context=ScanContext(flow=ScanFlow.MOVE),
+                actor_user_id="test_user",
+            )
+
+    @pytest.mark.asyncio
+    async def test_adhoc_ship_context_conflicts(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """``ship``/``container_move`` без строк — doc-driven потоки:
+        adhoc из них не собирает документ (был бы пустой ghost-док)."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        contexts = (
+            ScanContext(flow=ScanFlow.SHIP),
+            ScanContext(
+                flow=ScanFlow.CONTAINER_MOVE,
+                container_id="ctr_1",
+                dest_id="loc_1",
+            ),
+        )
+        for ctx in contexts:
+            with pytest.raises(PlatformConflictError):
+                _ = await env.di.scan_service.commit_adhoc(
+                    company_id=env.company_id,
+                    warehouse_id=env.warehouse.warehouse_id,
+                    operation_code=StockOperationCode.OUTGOING,
+                    context=ctx,
+                    actor_user_id="test_user",
+                )
+
+    @pytest.mark.asyncio
+    async def test_adhoc_unknown_warehouse_not_found(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Склад не существует → типа операции нет → not found, ничего
+        не проведено."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        ctx = ScanContext(
+            flow=ScanFlow.MOVE,
+            lines=(
+                ScanLineDraft(
+                    location_id="bin-a",
+                    location_dest_id="bin-b",
+                    product_id=env.product.product_id,
+                    quantity=Decimal("1"),
+                ),
+            ),
+        )
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.scan_service.commit_adhoc(
+                company_id=env.company_id,
+                warehouse_id=f"wh-missing-{unique_id}",
+                operation_code=StockOperationCode.INTERNAL,
+                context=ctx,
+                actor_user_id="test_user",
+            )
+        assert exc.value.error_code == "operation_type_not_found"
+
+    @pytest.mark.asyncio
+    async def test_adhoc_idempotent_retry(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Повтор команды с тем же ключом — тот же документ, без
+        второй проводки."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        wh = env.warehouse.warehouse_id
+        ctx = ScanContext(
+            flow=ScanFlow.RECEIVE,
+            lines=(
+                ScanLineDraft(
+                    location_id=None,
+                    location_dest_id=env.warehouse.stock_location_id,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("5"),
+                ),
+            ),
+        )
+        key = f"adhoc-{unique_id}"
+        first = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            idempotency_key=key,
+            actor_user_id="test_user",
+        )
+        second = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=wh,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            idempotency_key=key,
+            actor_user_id="test_user",
+        )
+        assert second.transfer_id == first.transfer_id
+        quant = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=env.warehouse.stock_location_id,
+        ).first()
+        assert quant is not None
+        assert quant.quantity == Decimal("5")
+
+    @pytest.mark.asyncio
+    async def test_adhoc_wrong_entity_kind_rejected(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Контекст не в review-готовности (нет строк) отклоняется до
+        создания документа — мусорных накладных не рождается."""
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
+        )
+        ctx = ScanContext(
+            flow=ScanFlow.INQUIRY,
+            lines=(
+                ScanLineDraft(
+                    location_id=None,
+                    location_dest_id=None,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("1"),
+                ),
+            ),
+        )
+        with pytest.raises(PlatformConflictError):
+            _ = await env.di.scan_service.commit_adhoc(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                operation_code=StockOperationCode.INTERNAL,
+                context=ctx,
+                actor_user_id="test_user",
+            )

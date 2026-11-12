@@ -50,7 +50,6 @@ class ScanStep(StrEnum):
     START = "start"
     LOCATION = "location"
     PRODUCT = "product"
-    LOT = "lot"
     QUANTITY = "quantity"
     DEST = "dest"
     CONTAINER = "container"
@@ -64,7 +63,6 @@ class ScanEntityKind(StrEnum):
     PRODUCT = "product"
     PACKAGING = "packaging"
     LOT = "lot"
-    SERIAL = "serial"
     LOCATION = "location"
     CONTAINER = "container"
     DOCUMENT = "document"
@@ -117,8 +115,8 @@ class ScanError(StrEnum):
     UNEXPECTED_STEP = "scan_unexpected_step"
     ENTITY_MISMATCH = "scan_entity_mismatch"
     LOCATION_REQUIRED = "scan_location_required"
+    LOCATION_INVALID = "scan_location_invalid"
     QUANTITY_REQUIRED = "scan_quantity_required"
-    SERIAL_REQUIRED = "scan_serial_required"
     NOTHING_TO_COMMIT = "scan_nothing_to_commit"
     NOT_FOUND = "scan_barcode_not_found"
 
@@ -199,15 +197,28 @@ _STEP_ENTITIES: dict[ScanStep, frozenset[ScanEntityKind]] = {
     ),
     ScanStep.PRODUCT: frozenset(
         {ScanEntityKind.PRODUCT, ScanEntityKind.PACKAGING,
-         ScanEntityKind.LOT, ScanEntityKind.SERIAL}
+         ScanEntityKind.LOT}
     ),
     ScanStep.DEST: frozenset(
         {ScanEntityKind.LOCATION, ScanEntityKind.CONTAINER}
     ),
     ScanStep.CONTAINER: frozenset({ScanEntityKind.CONTAINER}),
-    ScanStep.LOT: frozenset({ScanEntityKind.LOT, ScanEntityKind.SERIAL}),
 }
 """Какие типы сущностей принимает каждый шаг ввода."""
+
+_SKIP_SLOT: dict[ScanStep, str] = {
+    ScanStep.PRODUCT: "product_id",
+    ScanStep.QUANTITY: "quantity",
+}
+"""Слоты строки исполнения, пропускаемые при заполнении.
+
+Только слоты, которые ``_emit_line`` сбрасывает: их значение всегда
+свежее — приехало со сканом этой строки (GS1/фасовка/серийник) или
+из действия карточки сущности. Ячейки (LOCATION/DEST/CONTAINER)
+между строками удерживаются и всегда подтверждаются явным сканом —
+перескан той же ячейки повторяет направление, скан другой меняет
+его; молчаливый пропуск заморозил бы направление навсегда.
+"""
 
 
 def _advance(step: ScanStep, seq: tuple[ScanStep, ...]) -> ScanStep:
@@ -221,6 +232,24 @@ def _advance(step: ScanStep, seq: tuple[ScanStep, ...]) -> ScanStep:
     return seq[min(idx + 1, len(seq) - 1)]
 
 
+def _skip_filled(ctx: ScanContext, seq: tuple[ScanStep, ...]) -> ScanContext:
+    """Шаг, чей слот строки уже заполнен, считается пройденным.
+
+    Слот заполняется до визита шага, когда значение приехало раньше
+    самого шага: количество — с GS1/фасовкой/серийником, товар —
+    из действия карточки сущности. Ждать второй подачи того же
+    значения — лишний жест оператора.
+    """
+    step = ctx.step
+    while True:
+        slot = _SKIP_SLOT.get(step)
+        nxt = _advance(step, seq)
+        if slot is None or getattr(ctx, slot) is None or nxt == step:
+            break
+        step = nxt
+    return replace(ctx, step=step) if step != ctx.step else ctx
+
+
 def _apply_resolution(
     ctx: ScanContext, res: ScanResolution
 ) -> ScanContext:
@@ -230,7 +259,7 @@ def _apply_resolution(
             return replace(ctx, source_id=res.entity_id)
         case ScanStep.PRODUCT:
             # Партия/серия из GS1 доезжают вместе с товаром; скан
-            # партии/серии отдельным кодом тоже наполняет слоты.
+            # партии отдельным кодом тоже наполняет слоты.
             product_id = res.product_id or (
                 res.entity_id
                 if res.entity_kind == ScanEntityKind.PRODUCT
@@ -241,11 +270,7 @@ def _apply_resolution(
                 if res.entity_kind == ScanEntityKind.LOT
                 else None
             )
-            serial = res.serial or (
-                res.entity_id
-                if res.entity_kind == ScanEntityKind.SERIAL
-                else None
-            )
+            serial = res.serial
             return replace(
                 ctx,
                 product_id=product_id,
@@ -266,12 +291,6 @@ def _apply_resolution(
             return replace(ctx, dest_id=res.entity_id)
         case ScanStep.CONTAINER:
             return replace(ctx, container_id=res.entity_id)
-        case ScanStep.LOT:
-            return replace(
-                ctx,
-                lot_id=res.lot_id or res.entity_id,
-                serial=res.serial or ctx.serial,
-            )
         case _:
             return ctx
 
@@ -280,9 +299,10 @@ def _emit_line(ctx: ScanContext) -> ScanContext:
     """Снять набранные слоты в строку исполнения и очистить их.
 
     Многостроковые потоки: после ``REVIEW`` оператор может сканировать
-    следующий товар — слоты продукта/количества сбрасываются, источник и
-    приёмник остаются (переборка внутри одной зоны не переспрашивает
-    ячейки).
+    следующий товар — слоты продукта/количества сбрасываются, источник,
+    приёмник и тара остаются: их шаги подтверждаются повторным сканом
+    (переборка внутри одной зоны не переспрашивает ячейки), а удержанное
+    значение показывает оператору текущее направление.
     """
     # Контейнер — это локация: для pack приёмником строки становится
     # сама тара (товар уезжает «внутрь короба»). Поле container_id в
@@ -363,14 +383,25 @@ def scan_step(ctx: ScanContext, res: ScanResolution) -> ScanStepResult:
         ctx = replace(ctx, step=seq[0])
     if ctx.step == ScanStep.REVIEW:
         # В review принимаем скан следующего товара (новая строка)
-        # либо явный commit снаружи (не через scan_step).
-        if res.entity_kind in _STEP_ENTITIES[ScanStep.PRODUCT]:
+        # либо явный commit снаружи (не через scan_step). Потоки без
+        # шага PRODUCT (ship, container_move) товар в review не ждут —
+        # иначе машина ушла бы в шаг, из которого нет выхода.
+        if (
+            ScanStep.PRODUCT in seq
+            and res.entity_kind in _STEP_ENTITIES[ScanStep.PRODUCT]
+        ):
             ctx2 = _apply_resolution(
                 replace(ctx, step=ScanStep.PRODUCT), res
             )
-            return ScanStepResult(
-                replace(ctx2, step=_advance(ScanStep.PRODUCT, seq))
+            ctx2 = _skip_filled(
+                replace(ctx2, step=_advance(ScanStep.PRODUCT, seq)), seq
             )
+            if ctx2.step == ScanStep.REVIEW:
+                err = _validate_ready(ctx2)
+                if err is not None:
+                    return ScanStepResult(ctx2, err)
+                ctx2 = _emit_line(ctx2)
+            return ScanStepResult(ctx2)
         return ScanStepResult(ctx, ScanError.UNEXPECTED_STEP, "expect_commit")
     allowed = _STEP_ENTITIES.get(ctx.step)
     if allowed is not None and res.entity_kind not in allowed:
@@ -380,7 +411,7 @@ def scan_step(ctx: ScanContext, res: ScanResolution) -> ScanStepResult:
         # в QUANTITY не принимает сущности.
         return ScanStepResult(ctx, ScanError.UNEXPECTED_STEP, "quantity")
     ctx2 = _apply_resolution(ctx, res)
-    ctx2 = replace(ctx2, step=_advance(ctx.step, seq))
+    ctx2 = _skip_filled(replace(ctx2, step=_advance(ctx.step, seq)), seq)
     if ctx2.step == ScanStep.REVIEW:
         err = _validate_ready(ctx2)
         if err is not None:

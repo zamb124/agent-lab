@@ -19,7 +19,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_open_node_editor,
 )
 from tests.ui.e2e.office_e2e_helpers import office_e2e_set_locale_ru
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field
 
 os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 
@@ -28,7 +28,7 @@ _DOCUMENTS = re.compile(r"Документы namespace|Namespace documents")
 _TEST_SECTION = re.compile(r"Проверка поиска|Search test")
 _READY = re.compile(r"Готово|Ready")
 _QUERY_REQUIRED = re.compile(r"Введите запрос для проверки поиска|Enter a query to test search")
-_QUERY_PLACEHOLDER = re.compile(r"Что искать в базе\?|What to search in the base\?")
+_QUERY_LABEL = re.compile(r"Запрос|Query")
 
 
 async def _rag_json(page: Page, origin: str, method: str, path: str, body: dict | None = None) -> dict:
@@ -125,9 +125,9 @@ async def test_flows_rag_node_documents_and_search(
     await play.click()
     await expect(page.locator("glass-toast").filter(has_text=_QUERY_REQUIRED)).to_be_visible(timeout=8_000)
 
-    query = editor.get_by_placeholder(_QUERY_PLACEHOLDER)
-    await expect(query).to_be_visible()
-    await query.fill(f"Правила возврата: {marker}. Срок 14 дней.")
+    query_field = editor.locator("platform-field").filter(has_text=_QUERY_LABEL).first
+    await expect(query_field).to_be_visible()
+    await ui_set_platform_field(query_field, f"Правила возврата: {marker}. Срок 14 дней.")
     await play.click()
 
     hit = editor.locator(".result-card").filter(has_text="returns.md")

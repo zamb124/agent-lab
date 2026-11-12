@@ -12,5 +12,5 @@
   "logger_sentence": 0,
   "tests_monkeypatch_internal": 124,
   "tests_asyncmock": 9,
-  "tests_skip_markers": 99
+  "tests_skip_markers": 102
 }

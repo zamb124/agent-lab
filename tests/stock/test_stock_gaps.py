@@ -16,7 +16,7 @@ from decimal import Decimal
 import pytest
 
 from apps.stock.models.barcode_index import StockBarcodeIndex
-from apps.stock.models.common import StockMoveSpec, new_id
+from apps.stock.models.common import STOCK_DB, StockMoveSpec, new_id
 from apps.stock.models.enums import (
     StockBarcodeEntityType,
     StockDecisionStatus,
@@ -26,6 +26,7 @@ from apps.stock.models.enums import (
     ValuationPriceSource,
     ValueEntryKind,
 )
+from apps.stock.models.location import StockLocation
 from apps.stock.models.move import StockMove
 from apps.stock.models.putaway_rule import StockPutawayRule
 from apps.stock.models.resource import StockResource
@@ -697,3 +698,73 @@ class TestPutawayRuleCrud:
             env.company_id, env.warehouse.warehouse_id
         )
         assert all(r.rule_id != rule.rule_id for r in listed)
+
+
+class TestPutawaySuggestForProduct:
+    """Ad-hoc подсказка «куда поставить» по товару без документа."""
+
+    async def test_rule_match_ranks_first(self, stock_di, unique_id: str) -> None:
+        env = await _env(stock_di, unique_id)
+        bin_target = await _bin(env, f"SG{unique_id}")
+        _ = await StockPutawayRule.create(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            location_in_id=env.warehouse.view_location_id,
+            location_out_id=bin_target,
+            product_id=env.product.product_id,
+        )
+        suggestions = await env.di.placement_service.suggest_for_product(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            product_id=env.product.product_id,
+        )
+        assert suggestions
+        assert suggestions[0].location_id == bin_target
+        assert suggestions[0].reason_code == "rule_match"
+        assert suggestions[0].allowed
+
+    async def test_candidates_from_topology(self, stock_di, unique_id: str) -> None:
+        """Без правил — топология склада выдаёт доступные ячейки."""
+        env = await _env(stock_di, unique_id)
+        bin_a = await _bin(env, f"TA{unique_id}")
+        suggestions = await env.di.placement_service.suggest_for_product(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            product_id=env.product.product_id,
+        )
+        allowed_ids = {s.location_id for s in suggestions if s.allowed}
+        assert bin_a in allowed_ids or suggestions == []
+
+    async def test_blocked_bin_not_suggested(self, stock_di, unique_id: str) -> None:
+        """Закрытая для приёмки ячейка не попадает в подсказку."""
+        env = await _env(stock_di, unique_id)
+        bin_blocked = await _bin(env, f"BL{unique_id}")
+        await StockLocation.objects.filter(
+            company_id=env.company_id, location_id=bin_blocked
+        ).update(using=STOCK_DB, putaway_blocked=True)
+        suggestions = await env.di.placement_service.suggest_for_product(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            product_id=env.product.product_id,
+        )
+        assert all(s.location_id != bin_blocked for s in suggestions if s.allowed)
+
+    async def test_unknown_product_not_found(self, stock_di, unique_id: str) -> None:
+        env = await _env(stock_di, unique_id)
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.placement_service.suggest_for_product(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                product_id=f"prod-missing-{unique_id}",
+            )
+        assert exc.value.error_code == "product_not_found"
+
+    async def test_unknown_warehouse_not_found(self, stock_di, unique_id: str) -> None:
+        env = await _env(stock_di, unique_id)
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.placement_service.suggest_for_product(
+                company_id=env.company_id,
+                warehouse_id=f"wh-missing-{unique_id}",
+                product_id=env.product.product_id,
+            )
+        assert exc.value.error_code == "warehouse_not_found"

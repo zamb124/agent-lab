@@ -73,6 +73,7 @@ from core.logging.attributes import (
     LOG_REQUEST_ID,
     LOG_SESSION_AGENT,
     LOG_TASK_ID,
+    LOG_TEST_SCOPE,
     LOG_TRACE_ID,
 )
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
@@ -850,7 +851,7 @@ class GuestFarmService:
                 if isinstance(push_config, dict)
                 else None
             )
-            _ = asyncio.create_task(
+            _ = run_with_log_context(
                 self._invoke_and_notify(
                     lease,
                     slot,
@@ -866,7 +867,10 @@ class GuestFarmService:
                     push_token=(
                         push.get("token") if isinstance(push, dict) else None
                     ),
-                )
+                ),
+                name="farm_a2a_invoke",
+                background_kind="a2a_invoke",
+                extra={LOG_TEST_SCOPE: resolve_test_scope()},
             )
             return {
                 "jsonrpc": "2.0",

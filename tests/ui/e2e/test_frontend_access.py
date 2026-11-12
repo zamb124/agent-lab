@@ -91,7 +91,7 @@ async def test_console_access_member_sees_forbidden(
     )
     page_root = ui_page_system_member.locator("frontend-access-page")
     await expect(page_root).to_be_visible(timeout=30_000)
-    await expect(page_root.locator(".forbidden .empty-title")).to_contain_text(
+    await expect(page_root.locator("platform-empty-state .title")).to_contain_text(
         re.compile(r"Недостаточно прав|Not enough permissions")
     )
     await expect(page_root.locator(".picker-item")).to_have_count(0)

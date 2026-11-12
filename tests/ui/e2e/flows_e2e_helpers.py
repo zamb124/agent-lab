@@ -4465,7 +4465,9 @@ async def flows_e2e_expect_reflection_chip(
     chip = host.locator(".fu-reflection").filter(
         has_text=re.compile(re.escape(exit_label), re.I)
     ).first
-    if await chip.count() == 0:
+    try:
+        await expect(chip).to_be_visible(timeout=120_000)
+    except AssertionError:
         group = host.get_by_role(
             "group",
             name=re.compile(
@@ -4473,9 +4475,9 @@ async def flows_e2e_expect_reflection_chip(
                 re.I,
             ),
         ).first
-        await expect(group).to_be_visible(timeout=120_000)
+        await expect(group).to_be_visible(timeout=15_000)
         chip = group.locator("button.reflection-chip").first
-    await expect(chip).to_be_visible(timeout=120_000)
+        await expect(chip).to_be_visible(timeout=15_000)
     return chip
 
 

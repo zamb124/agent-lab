@@ -253,6 +253,26 @@ function toggleCell(page: StockSettingsPageBase, row: PlainRow, idField: string,
     `;
 }
 
+function scanFlowCell(page: StockSettingsPageBase, row: PlainRow, op: OpController | null): TemplateResult {
+    const value = typeof row.scan_flow === 'string' && row.scan_flow !== '' ? row.scan_flow : 'default';
+    return html`
+        <platform-field type="enum" mode="edit"
+            .value=${value}
+            .config=${{ values: [
+                { value: 'default', label: page.t('settings.scan_flow_default') },
+                { value: 'pack', label: page.t('settings.scan_flow_pack') },
+                { value: 'ship', label: page.t('settings.scan_flow_ship') },
+            ] }}
+            @click=${(e: Event) => e.stopPropagation()}
+            @change=${(e: CustomEvent) => {
+                e.stopPropagation();
+                if (op === null || typeof e.detail.value !== 'string') return;
+                op.run({ operation_type_id: row.operation_type_id, scan_flow: e.detail.value });
+            }}
+        ></platform-field>
+    `;
+}
+
 /* --- Склады и операции ------------------------------------------------ */
 
 export class StockWarehousesPage extends StockSettingsPageBase {
@@ -341,6 +361,10 @@ export class StockWarehousesPage extends StockSettingsPageBase {
                 {
                     key: 'auto_validate', labelKey: 'settings.auto_validate',
                     render: (row) => toggleCell(this, row, 'operation_type_id', this._opTypeUpdate, 'auto_validate'),
+                },
+                {
+                    key: 'scan_flow', labelKey: 'settings.scan_flow',
+                    render: (row) => scanFlowCell(this, row, this._opTypeUpdate),
                 },
             ], items)}
         `;

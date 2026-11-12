@@ -455,6 +455,16 @@ export class FlowsExecutionPanel extends PlatformElement {
         return runTrace;
     }
 
+    _editorBreakpoints = (): Record<string, boolean> | null => {
+        const ids = this._editor.state.breakpointNodeIds;
+        if (!Array.isArray(ids) || ids.length === 0) return null;
+        const breakpoints: Record<string, boolean> = {};
+        for (const id of ids) {
+            if (typeof id === 'string' && id.length > 0) breakpoints[id] = true;
+        }
+        return Object.keys(breakpoints).length > 0 ? breakpoints : null;
+    };
+
     override updated(changedProperties: PropertyValues): void {
         const isOpen = this._editor.state.executionPanelOpen === true;
         if (isOpen) {
@@ -1213,6 +1223,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                             base-url="/flows"
                             theme="auto"
                             locale=${locale}
+                            .getBreakpoints=${this._editorBreakpoints}
                             @flow-ui-submit-start=${this._onFlowUiSubmitStart}
                             @flow-ui-a2a-frame=${this._onFlowUiA2aFrame}
                             @flow-ui-submit-end=${this._onFlowUiSubmitEnd}

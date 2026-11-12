@@ -44,6 +44,7 @@ from core.a2a.submit import (
 )
 from core.context import clear_context, set_context
 from core.context.job_context import build_job_context, pick_company_billing_user
+from core.errors.boundary import PlatformBoundaryError
 from core.identity.system_bootstrap import build_system_admin_job_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
@@ -385,7 +386,6 @@ async def shop_ai_call(
     except A2ACallPending:
         return JsonObject({"status": "parked", "call_id": call_id})
     except Exception as exc:
-        exc_code = getattr(exc, "error_code", None)
         await publish_shop_ai_call_finished(
             company_id=company_id,
             call_id=call_id,
@@ -393,7 +393,7 @@ async def shop_ai_call(
             verb=verb,
             status="failed",
             error=str(exc),
-            error_code=exc_code if isinstance(exc_code, str) else None,
+            error_code=exc.error_code if isinstance(exc, PlatformBoundaryError) else None,
         )
         return JsonObject({"status": "failed", "call_id": call_id})
     finally:

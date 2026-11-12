@@ -136,7 +136,12 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
     reflection(block, ctx) {
         const value = text(ctx, block.text);
         if (value === null || value === '') return nothing;
-        return html`<div class="fu-reflection">${value}</div>`;
+        const tone = block.tone === 'warning' || block.tone === 'error' ? block.tone : 'success';
+        const detail = typeof block.detail === 'string' ? text(ctx, block.detail) : null;
+        return html`<div class="fu-reflection" data-tone=${tone}>
+            <div class="fu-reflection-verdict">${value}</div>
+            ${detail !== null && detail !== '' ? html`<div class="reflection-detail">${detail}</div>` : nothing}
+        </div>`;
     },
 
     agent_plan(block) {

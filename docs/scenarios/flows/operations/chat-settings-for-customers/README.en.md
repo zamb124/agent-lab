@@ -23,11 +23,3 @@ Save the card and publish the draft so the chat setting applies to the live vers
 Ask about a return — a Skill activation chip appears in the feed so the customer sees which procedure ran.
 
 ![Check chat with visible chips](chat-settings-for-customers--03-chat-with-skill-chips.png)
-
-## Step 4. Disable chips and publish again
-
-**Result demonstration.** Turn off Skill activation chips and publish — customer chat hides procedure chips.
-
-**Summary.** You can toggle Skill activation visibility in chat settings.
-
-![Disable chips and publish again](chat-settings-for-customers--04-skill-loads-disabled.png)

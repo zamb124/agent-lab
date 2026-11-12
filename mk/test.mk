@@ -124,7 +124,8 @@ test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e, -n$(UI_E2E_WORKERS) --dist=loadfile, default 15s/test)..."
 	@rm -rf artifacts/ui-perf
 	trap 'uv run python -m scripts.testing.stack down' EXIT; \
-	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15 \
+		--max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) --reruns $(PYTEST_RERUNS) --reruns-delay $(PYTEST_RERUNS_DELAY)
 	@echo "UI perf SUMMARY: artifacts/ui-perf/SUMMARY.md"
 
 # Быстрый прогон chat-related UI E2E (flows chat-page, embed autoload, landing drawer)
@@ -132,7 +133,8 @@ test-ui-chat: test-up
 	@echo "Запуск chat UI E2E (pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py)..."
 	@rm -rf artifacts/ui-perf
 	trap 'uv run python -m scripts.testing.stack down' EXIT; \
-	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15 \
+		--max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) --reruns $(PYTEST_RERUNS) --reruns-delay $(PYTEST_RERUNS_DELAY)
 	@echo "UI perf SUMMARY: artifacts/ui-perf/SUMMARY.md"
 
 # E2E UI + статическая документация (README в docs/scenarios из scenario_doc)

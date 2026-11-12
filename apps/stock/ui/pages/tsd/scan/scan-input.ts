@@ -11,6 +11,14 @@
 export const TSD_SCAN_MIN_LENGTH = 3;
 const DEFAULT_BURST_MS = 40;
 
+/**
+ * Native-мост: оболочка Capacitor (Android DataWedge intent, нативный
+ * скан-плагин) инжектит код CustomEvent `stock/tsd:native_scan` на window
+ * с `detail.code` — тот же контракт, что `submit()`, без эвристики пачки.
+ * Спецификация и код инжекции — `mobile/docs/TSD_DATAWEDGE.md`.
+ */
+export const TSD_NATIVE_SCAN_EVENT = 'stock/tsd:native_scan';
+
 export class TsdScanInput {
     private _buffer = '';
     private _lastKeyAt = 0;
@@ -20,6 +28,7 @@ export class TsdScanInput {
     private readonly _onScan: (code: string) => void;
     private readonly _target: Window;
     private readonly _keyHandler: (event: KeyboardEvent) => void;
+    private readonly _nativeHandler: (event: Event) => void;
     private _attached = false;
 
     constructor(onScan: (code: string) => void, opts: { burstMs?: number; target?: Window } = {}) {
@@ -27,17 +36,25 @@ export class TsdScanInput {
         this._burstMs = opts.burstMs ?? DEFAULT_BURST_MS;
         this._target = opts.target ?? window;
         this._keyHandler = (event) => this._onKey(event);
+        this._nativeHandler = (event) => {
+            const detail = (event as CustomEvent<{ code?: unknown }>).detail;
+            if (detail !== null && typeof detail === 'object' && typeof detail.code === 'string') {
+                this.submit(detail.code);
+            }
+        };
     }
 
     attach(): void {
         if (this._attached) return;
         this._target.addEventListener('keydown', this._keyHandler as EventListener, true);
+        this._target.addEventListener(TSD_NATIVE_SCAN_EVENT, this._nativeHandler);
         this._attached = true;
     }
 
     detach(): void {
         if (!this._attached) return;
         this._target.removeEventListener('keydown', this._keyHandler as EventListener, true);
+        this._target.removeEventListener(TSD_NATIVE_SCAN_EVENT, this._nativeHandler);
         this._attached = false;
         this._reset();
     }

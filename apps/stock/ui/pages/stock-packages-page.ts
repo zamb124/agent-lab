@@ -102,6 +102,17 @@ export class StockPackagesPage extends PlatformPage {
         if (id !== '') this._item.run({ container_id: id });
     }
 
+    private async _submitMove() {
+        await this._moveOp.run({
+            container_id: this._selectedId,
+            dest_location_id: this._moveDest,
+        });
+        this._moveOpen = false;
+        this._moveDest = '';
+        this._containers.run({});
+        this._item.run({ container_id: this._selectedId });
+    }
+
     private _contents(): { quants: StockQuant[]; nested: StockLocation[] } {
         const result = this._item.lastResult;
         if (!isPlainRecord(result)) return { quants: [], nested: [] };
@@ -161,7 +172,7 @@ export class StockPackagesPage extends PlatformPage {
                         @change=${(e: CustomEvent) => { this._moveDest = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-searchable-combobox>
                     <platform-button variant="primary" ?disabled=${this._moveDest === ''} ?loading=${this._moveOp.busy}
-                        @click=${() => { this._moveOp.run({ container_id: this._selectedId, dest_location_id: this._moveDest }); this._moveOpen = false; }}>
+                        @click=${() => this._submitMove()}>
                         <platform-icon name="truck" size="14"></platform-icon> ${this.t('packages.move')}
                     </platform-button>
                 </div>

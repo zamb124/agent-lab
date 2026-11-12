@@ -19,6 +19,10 @@ export const tsdTokens = css`
         --tsd-text-title: var(--text-2xl);
         --tsd-text-hero: var(--text-3xl);
 
+        /* Поверхности ТСД непрозрачные: оператор работает одной рукой
+           на ходу — сквозь лист не должна мерцать подложка экрана. */
+        --glass-solid-strong: var(--bg-surface);
+
         /* Состояния шага: скан ok / предупреждение / ошибка / инфо-подсказка. */
         --tsd-ok: var(--color-success, #16a34a);
         --tsd-ok-subtle: var(--bg-success-subtle, #dcfce7);

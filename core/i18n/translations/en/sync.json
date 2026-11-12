@@ -595,7 +595,9 @@
         "action_create": "Create",
         "action_save": "Save",
         "action_delete": "Delete",
-        "action_cancel": "Cancel"
+        "action_cancel": "Cancel",
+        "err_save": "Failed to save the meeting",
+        "err_no_mailbox": "Set up a mailbox in the Mail section to schedule meetings"
     },
     "calls_scheduled": {
         "title": "Scheduled meetings",

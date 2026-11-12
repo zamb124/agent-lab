@@ -51,6 +51,19 @@ def _conflict(message: str, code: str) -> PlatformConflictError:
     return PlatformConflictError(message, error_code=code)
 
 
+def _location_entity_type(usage: StockLocationUsage) -> StockBarcodeEntityType:
+    """Тип сущности barcode-индекса для локации.
+
+    Тара-локация индексируется как ``CONTAINER``: скан её кода должен
+    резолвиться в тару (перевоз целиком, карточка содержимого), а не
+    в обычную ячейку."""
+    return (
+        StockBarcodeEntityType.CONTAINER
+        if usage == StockLocationUsage.CONTAINER
+        else StockBarcodeEntityType.LOCATION
+    )
+
+
 class StockContainerContents:
     """Что лежит в таре: кванты товара + вложенные контейнеры.
 
@@ -187,7 +200,7 @@ class TopologyService:
             _ = await self._barcode.register(
                 company_id=company_id,
                 barcode=barcode,
-                entity_type=StockBarcodeEntityType.LOCATION,
+                entity_type=_location_entity_type(location.usage),
                 entity_id=location.location_id,
             )
         return location
@@ -233,18 +246,27 @@ class TopologyService:
             _ = await self._barcode.replace(
                 company_id=company_id,
                 barcode=barcode,
-                entity_type=StockBarcodeEntityType.LOCATION,
+                entity_type=_location_entity_type(location.usage),
                 entity_id=location.location_id,
             )
         _ = await location.save()
         return location
 
     async def list_locations(
-        self, *, company_id: str, warehouse_id: str | None
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str | None,
+        include_virtual: bool = False,
     ) -> list[StockLocation]:
         rows = await StockLocation.list_by_usage_and_name_asc(company_id)
         if warehouse_id is not None:
-            rows = [r for r in rows if r.warehouse_id == warehouse_id]
+            rows = [
+                r
+                for r in rows
+                if r.warehouse_id == warehouse_id
+                or (include_virtual and r.warehouse_id is None)
+            ]
         return rows
 
     async def get_location(

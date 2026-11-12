@@ -8,7 +8,7 @@
 /**
  * Capability is the functional AI role, not the transport provider.
  */
-export type AICapability = "llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "voice_stt" | "voice_tts" | "voice_vad";
+export type AICapability = "llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "image_edit" | "voice_stt" | "voice_tts" | "voice_vad";
 
 /**
  * AIProviderErrorClass
@@ -781,7 +781,7 @@ export interface CustomProviderCreate {
     "extra_request_headers"?: Record<string, string> | null | undefined;
     "extra_request_body"?: Record<string, JsonValue> | null | undefined;
     "rerank_path"?: string | null | undefined;
-    "capabilities"?: ("llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "voice_stt" | "voice_tts" | "voice_vad")[] | undefined;
+    "capabilities"?: ("llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "image_edit" | "voice_stt" | "voice_tts" | "voice_vad")[] | undefined;
     "model_by_capability"?: Record<string, string> | undefined;
     [key: string]: unknown;
 }
@@ -813,7 +813,7 @@ export interface CustomProviderUpdatePayload {
     "extra_request_headers"?: Record<string, string> | null | undefined;
     "extra_request_body"?: Record<string, JsonValue> | null | undefined;
     "rerank_path"?: string | null | undefined;
-    "capabilities"?: ("llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "voice_stt" | "voice_tts" | "voice_vad")[] | null | undefined;
+    "capabilities"?: ("llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "embedding" | "rerank" | "image_gen" | "image_edit" | "voice_stt" | "voice_tts" | "voice_vad")[] | null | undefined;
     "model_by_capability"?: Record<string, string> | null | undefined;
     "provider_id": string;
     [key: string]: unknown;

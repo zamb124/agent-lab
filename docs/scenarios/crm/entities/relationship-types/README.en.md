@@ -20,7 +20,7 @@ Add type unfolds a form: identifier (latin, e.g. `supplier`), a friendly name, a
 
 ## Step 3. Type created
 
-Поставщик 58bc89 now sits in the catalogue next to built-in types — ready to pick when adding a link on a record card.
+Поставщик c22444 now sits in the catalogue next to built-in types — ready to pick when adding a link on a record card.
 
 **Summary.** Custom link types make the card index sharper: every link reads in your business's own words.
 

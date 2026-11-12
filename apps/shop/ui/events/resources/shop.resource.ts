@@ -6,13 +6,104 @@
  * коллекции.
  */
 
-import { createAsyncOp, createResourceCollection, rerunLastRequest } from '@platform/lib/events/index.js';
-import type { AsyncOpFactory } from '@platform/lib/events/factories/async-op.js';
+import {
+    createAsyncOp,
+    createResourceCollection,
+    getPlatformBus,
+    platformWs,
+    rerunLastRequest,
+    WsTransportError,
+} from '@platform/lib/events/index.js';
+import type { AsyncOpFactory, AsyncOpRequest } from '@platform/lib/events/factories/async-op.js';
 import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
 import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
-import type { ShopResponse, ShopShopEventPayload, ShopStatus } from '@platform/lib/events/wire/shop.gen.js';
+import type {
+    JsonValue,
+    ShopCommandMap,
+    ShopResponse,
+    ShopShopEventPayload,
+    ShopStatus,
+} from '@platform/lib/events/wire/shop.gen.js';
 
 const SHOP_STATUSES: readonly ShopStatus[] = ['draft', 'published', 'suspended'];
+
+/**
+ * AI-команды shop — асинхронные: `*_requested` отвечает мгновенно `{call_id}`,
+ * терминальный результат приходит push-событием `shop/ai_call/finished`.
+ * Op резолвит `run()` терминальным `result` (или WsTransportError по
+ * `error`/`error_code`) — для страниц контракт не меняется: busy держится
+ * всю работу, тосты показывают реальный исход.
+ */
+const _AI_ACK_TIMEOUT_MS = 15_000;
+const _AI_FINISHED_EVENT = 'shop/ai_call/finished';
+const _REQUESTED_SUFFIX = '_requested';
+
+type AiCallResult = Record<string, JsonValue> | null;
+
+type _AiCallCommand = {
+    [K in keyof ShopCommandMap]: K extends `shop/ai/${string}` ? K : never;
+}[keyof ShopCommandMap];
+
+function _aiCallRequest(commandType: _AiCallCommand, timeoutMs: number): AsyncOpRequest<AiCallResult> {
+    if (!commandType.endsWith(_REQUESTED_SUFFIX)) {
+        throw new Error(`_aiCallRequest: commandType "${commandType}" must end with "_requested"`);
+    }
+    const replyBase = commandType.slice(0, -_REQUESTED_SUFFIX.length);
+    return async ({ payload }) => {
+        const bus = getPlatformBus();
+        let callId: string | null = null;
+        let resolveFinished: (value: AiCallResult) => void = () => undefined;
+        let rejectFinished: (reason: unknown) => void = () => undefined;
+        const finished = new Promise<AiCallResult>((resolve, reject) => {
+            resolveFinished = resolve;
+            rejectFinished = reject;
+        });
+        // Подписка ставится до отправки команды: быстрый терминал не теряется
+        // в окне между ack и subscribe — handler матчится по call_id после ack.
+        const unsubscribe = bus.subscribeType(_AI_FINISHED_EVENT, (event) => {
+            if (!isPlatformEventType(event, _AI_FINISHED_EVENT)) {
+                return;
+            }
+            const eventPayload = event.payload;
+            if (callId === null || eventPayload.call_id !== callId) {
+                return;
+            }
+            if (eventPayload.status === 'completed') {
+                resolveFinished(isPlainRecord(eventPayload.result) ? eventPayload.result : null);
+                return;
+            }
+            const error = typeof eventPayload.error === 'string' && eventPayload.error.length > 0
+                ? eventPayload.error
+                : 'shop ai call failed';
+            const code = typeof eventPayload.error_code === 'string' && eventPayload.error_code.length > 0
+                ? eventPayload.error_code
+                : 'ai_call_failed';
+            rejectFinished(new WsTransportError(error, code));
+        });
+        const timeout = new Promise<never>((_resolve, reject) => {
+            setTimeout(
+                () => reject(new WsTransportError(`${commandType}: ai call timed out after ${timeoutMs}ms`, 'ws_timeout')),
+                timeoutMs,
+            );
+        });
+        try {
+            const ack = await platformWs.request({
+                type: commandType,
+                payload,
+                timeoutMs: _AI_ACK_TIMEOUT_MS,
+                expectedSucceeded: `${replyBase}_succeeded`,
+                expectedFailed: `${replyBase}_failed`,
+            });
+            if (!isPlainRecord(ack) || typeof ack.call_id !== 'string' || ack.call_id.length === 0) {
+                throw new WsTransportError(`${commandType}: ai call ack missing call_id`, 'protocol_error');
+            }
+            callId = ack.call_id;
+            return await Promise.race([finished, timeout]);
+        } finally {
+            unsubscribe();
+        }
+    };
+}
 
 export const SHOP_SHOP_EVENTS = [
     'shop/shop/created',
@@ -316,80 +407,80 @@ export const shopAiDescribeOp = createAsyncOp({
     name: 'shop/ai_describe',
     successToastKey: 'shop:toast.ai_describe_done',
     errorToastKey: 'shop:toast.ai_describe_failed',
-    commandType: 'shop/ai/describe_requested',
     transport: 'ws',
     wsTimeoutMs: 60_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe' },
+    request: _aiCallRequest('shop/ai/describe_requested', 60_000),
 });
 
 export const shopAiEnhancePhotoOp = createAsyncOp({
     name: 'shop/ai_enhance_photo',
     successToastKey: 'shop:toast.ai_photo_enhanced',
     errorToastKey: 'shop:toast.ai_enhance_failed',
-    commandType: 'shop/ai/enhance_photo_requested',
     transport: 'ws',
     wsTimeoutMs: 120_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/enhance-photo' },
+    request: _aiCallRequest('shop/ai/enhance_photo_requested', 120_000),
 });
 
 export const shopAiGeneratePhotoOp = createAsyncOp({
     name: 'shop/ai_generate_photo',
     successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
-    commandType: 'shop/ai/generate_photo_requested',
     transport: 'ws',
     wsTimeoutMs: 120_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-photo' },
+    request: _aiCallRequest('shop/ai/generate_photo_requested', 120_000),
 });
 
 export const shopAiDescribeShopOp = createAsyncOp({
     name: 'shop/ai_describe_shop',
     successToastKey: 'shop:toast.ai_describe_done',
     errorToastKey: 'shop:toast.ai_describe_failed',
-    commandType: 'shop/ai/describe_shop_requested',
     transport: 'ws',
     wsTimeoutMs: 60_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe-shop' },
+    request: _aiCallRequest('shop/ai/describe_shop_requested', 60_000),
 });
 
 export const shopAiGenerateCoverOp = createAsyncOp({
     name: 'shop/ai_generate_cover',
     successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
-    commandType: 'shop/ai/generate_cover_requested',
     transport: 'ws',
     wsTimeoutMs: 120_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-cover' },
+    request: _aiCallRequest('shop/ai/generate_cover_requested', 120_000),
 });
 
 export const shopAiGenerateLogoOp = createAsyncOp({
     name: 'shop/ai_generate_logo',
     successToastKey: 'shop:toast.ai_photo_generated',
     errorToastKey: 'shop:toast.ai_generate_failed',
-    commandType: 'shop/ai/generate_logo_requested',
     transport: 'ws',
     wsTimeoutMs: 120_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-logo' },
+    request: _aiCallRequest('shop/ai/generate_logo_requested', 120_000),
 });
 
 export const shopAiAutofillOp = createAsyncOp({
     name: 'shop/ai_autofill',
     successToastKey: 'shop:toast.ai_autofill_done',
     errorToastKey: 'shop:toast.ai_generate_failed',
-    commandType: 'shop/ai/autofill_requested',
     transport: 'ws',
     wsTimeoutMs: 180_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/autofill' },
+    request: _aiCallRequest('shop/ai/autofill_requested', 180_000),
 });
 
 export const shopAiParseMenuOp = createAsyncOp({
     name: 'shop/ai_parse_menu',
     successToastKey: 'shop:toast.ai_parse_done',
     errorToastKey: 'shop:toast.ai_parse_failed',
-    commandType: 'shop/ai/parse_menu_requested',
     transport: 'ws',
     wsTimeoutMs: 120_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/parse-menu' },
+    request: _aiCallRequest('shop/ai/parse_menu_requested', 120_000),
 });
 
 export const shopAiDescribeBatchOp = createAsyncOp({
@@ -506,10 +597,10 @@ export const shopAiSuggestOptionsOp = createAsyncOp({
     name: 'shop/ai_suggest_options',
     successToastKey: 'shop:toast.ai_suggest_done',
     errorToastKey: 'shop:toast.ai_suggest_failed',
-    commandType: 'shop/ai/suggest_options_requested',
     transport: 'ws',
     wsTimeoutMs: 60_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/suggest-options' },
+    request: _aiCallRequest('shop/ai/suggest_options_requested', 60_000),
 });
 
 export const shopPromosListOp: AsyncOpFactory = createAsyncOp({

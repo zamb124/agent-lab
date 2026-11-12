@@ -16,6 +16,7 @@ import threading
 from array import array
 from bisect import bisect_right
 from pathlib import Path
+from typing import final
 
 from core.config.models import GeoIpConfig
 from core.logging import get_logger
@@ -23,6 +24,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+@final
 class _RangeTable:
     """Сортированные диапазоны одного адресного семейства.
 
@@ -38,6 +40,7 @@ class _RangeTable:
         self.cc_index = array("H")
 
 
+@final
 class GeoIpResolver:
     """Лениво загружаемый резолвер IP→ISO-3166 alpha-2 (``""`` — нет данных)."""
 
@@ -77,8 +80,8 @@ class GeoIpResolver:
                 return
             if not self._db_path.is_file():
                 raise FileNotFoundError(
-                    f"GeoIP: база не найдена: {self._db_path} "
-                    "(в образе кладётся Dockerfile ARG GEOIP_DB_VERSION)"
+                    f"GeoIP: database not found: {self._db_path}"
+                    + " (baked into image via Dockerfile ARG GEOIP_DB_VERSION)"
                 )
             cc_ids: dict[str, int] = {"ZZ": 0}
             tables = {4: _RangeTable(ipv4=True), 6: _RangeTable(ipv4=False)}

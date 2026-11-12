@@ -43,7 +43,7 @@ from apps.stock.models import (
     StockTransfer,
     StockWarehouse,
 )
-from apps.stock.models.common import STOCK_DB
+from apps.stock.models.common import STOCK_DB, STOCK_ONE
 from apps.stock.models.storage_rules import (
     BinContent,
     PlacementItem,
@@ -414,6 +414,54 @@ class PlacementService:
         ranked.sort(key=lambda row: (row[0], row[1], row[2], row[3]))
         return [row[4] for row in ranked[:limit]]
 
+    async def suggest_for_product(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        product_id: str,
+        product_qty: Decimal = STOCK_ONE,
+        location_dest_id: str | None = None,
+        limit: int = 5,
+    ) -> list[PutawaySuggestion]:
+        """Подсказка размещения по одному товару — ad-hoc putaway на ТСД.
+
+        Оператор отсканировал товар без документа: экрану нужны top-N
+        ячеек «куда поставить» с причинами. Движения нет — собираем
+        транзиентный ``StockMove`` в памяти (он не пишется: suggest —
+        чистое чтение топологии и остатков) и прогоняем тот же
+        ранкинг правил/стратегий, что у рефлекса ``resolve_putaway``.
+        """
+        warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
+        if warehouse is None:
+            raise PlatformNotFoundError(
+                "Warehouse not found", error_code="warehouse_not_found"
+            )
+        product = await CatalogProduct.by_id(company_id, product_id)
+        if product is None:
+            raise PlatformNotFoundError(
+                "Product not found", error_code="product_not_found"
+            )
+        move = StockMove(
+            move_id="putaway_suggest",
+            company_id=company_id,
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            product_qty=product_qty,
+            product_uom_qty=product_qty,
+            uom_id=product.uom_id or "",
+            location_id=warehouse.view_location_id,
+            location_dest_id=location_dest_id or warehouse.view_location_id,
+            date=utcnow(),
+            created_at=utcnow(),
+        )
+        return await self.suggest_by_allowed_group_rank_and_pick_sequence_asc(
+            company_id=company_id,
+            warehouse=warehouse,
+            move=move,
+            limit=limit,
+        )
+
     async def resolve_putaway(
         self,
         *,
@@ -526,7 +574,7 @@ class PlacementService:
                 error_code="putaway_flow_context",
             )
         dedup_key = f"stock:putaway:{move.move_id}:{nonce}"
-        row = await PlatformA2APendingCall.by_dedup_key("stock", dedup_key)
+        row = await PlatformA2APendingCall.latest_by_dedup_key_created_at_desc("stock", dedup_key)
         if row is not None:
             if row.result_payload is not None:
                 return self._extract_choice_from_stored_payload(row.result_payload)
@@ -587,7 +635,7 @@ class PlacementService:
                 error_code="putaway_flow_context",
             )
         dedup_key = f"stock:putaway:{move.move_id}:{nonce}"
-        if await PlatformA2APendingCall.by_dedup_key("stock", dedup_key) is not None:
+        if await PlatformA2APendingCall.latest_by_dedup_key_created_at_desc("stock", dedup_key) is not None:
             return
         flows_base = get_settings().server.get_flows_service_url().rstrip("/")
         variables: JsonObject = {
@@ -678,7 +726,7 @@ class PlacementService:
             created_at=utcnow(),
             applied_at=None,
         )
-        return await StockDecision.objects.create(instance=decision)
+        return await StockDecision.create(decision)
 
     @staticmethod
     def _extract_choice_from_stored_payload(payload: JsonObject) -> str | None:

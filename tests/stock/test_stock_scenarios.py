@@ -363,6 +363,7 @@ class TestAutoValidate:
             putaway_mode=None,
             putaway_flow_id=None,
             auto_validate=True,
+            scan_flow=None,
         )
         # Запас на продажу.
         incoming = env.op_types[StockOperationCode.INCOMING]
@@ -526,6 +527,7 @@ class TestPutawayStrategies:
             putaway_mode=ReflexMode.SHADOW,
             putaway_flow_id=None,
             auto_validate=None,
+            scan_flow=None,
         )
         receipt = await env.di.move_engine.create_transfer(
             company_id=env.company_id,
@@ -632,6 +634,7 @@ class TestWalkSequence:
             putaway_mode=ReflexMode.SHADOW,
             putaway_flow_id=None,
             auto_validate=None,
+            scan_flow=None,
         )
         transfer = await env.di.move_engine.create_transfer(
             company_id=env.company_id,

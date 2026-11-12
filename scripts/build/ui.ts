@@ -45,6 +45,15 @@ const APPS_FILTER: Set<string> | null = appsArg ? new Set(appsArg.slice('--apps=
 
 const SOURCE_EXTS = new Set(['.ts', '.js', '.mjs', '.cjs', '.tsx', '.jsx']);
 
+/**
+ * Бюджеты entry-бандлов в байтах (минифицированный прод-выход).
+ * Превышение роняет сборку: ТСД работает на слабом железе и плохой сети —
+ * каждый килобайт это задержка до первого скана смены.
+ */
+const ENTRY_BUDGET_BYTES: Readonly<Record<string, number>> = {
+    'stock/tsd.js': 160 * 1024,
+};
+
 /** Embed-точки входа: self-contained бандлы, отдаваемые по стабильным URL. */
 const LIB_DIR = path.join(CORE_STATIC, 'lib');
 const EMBED_DIST = path.join(ROOT, 'core', 'frontend', 'embed-dist');
@@ -183,6 +192,16 @@ async function buildApp(app: UiApp): Promise<esbuild.BuildResult> {
         .filter((p) => p.endsWith('.js'));
     const bytes = Object.values(result.metafile.outputs).reduce((sum, o) => sum + o.bytes, 0);
     console.log(`[build-ui] ${svc}: ${outputs.length} js files, ${(bytes / 1024).toFixed(0)} KiB, ${copied} assets copied`);
+    for (const [outRel, output] of Object.entries(result.metafile.outputs)) {
+        if (output.entryPoint === undefined) continue;
+        const file = path.relative(outDir, path.resolve(ROOT, outRel));
+        const budget = ENTRY_BUDGET_BYTES[`${svc}/${file}`];
+        if (budget !== undefined && output.bytes > budget) {
+            throw new Error(
+                `[build-ui] ${svc}/${file}: ${(output.bytes / 1024).toFixed(0)} KiB > бюджет ${(budget / 1024).toFixed(0)} KiB`,
+            );
+        }
+    }
     return result;
 }
 

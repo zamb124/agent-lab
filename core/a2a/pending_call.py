@@ -180,7 +180,7 @@ class PlatformA2APendingCall(PlatformModel):
         return relinked
 
     @classmethod
-    async def by_dedup_key(cls, service: str, dedup_key: str) -> Self | None:
+    async def latest_by_dedup_key_created_at_desc(cls, service: str, dedup_key: str) -> Self | None:
         """Активная/resolved строка по dedup-ключу вызова (повторный прогон задачи)."""
         return await (
             cls.objects.filter(service=service, dedup_key=dedup_key)
@@ -216,7 +216,7 @@ class PlatformA2APendingCall(PlatformModel):
         cls, service: str, dedup_key: str
     ) -> JsonObject | None:
         """resolved → consumed, возвращает payload. Повторный прогон забирает результат."""
-        row = await cls.by_dedup_key(service, dedup_key)
+        row = await cls.latest_by_dedup_key_created_at_desc(service, dedup_key)
         if row is None or row.status is not PendingCallStatus.resolved:
             return None
         now = datetime.now(timezone.utc)

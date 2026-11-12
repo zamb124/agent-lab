@@ -30,6 +30,7 @@ from apps.stock.models.api import (
     StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
+    StockOperatorPulsePayload,
     StockPackagingCreatePayload,
     StockPackagingIdPayload,
     StockPackagingsListPayload,
@@ -41,6 +42,7 @@ from apps.stock.models.api import (
     StockPutawayRuleDeletePayload,
     StockPutawayRulesListPayload,
     StockPutawayRuleUpdatePayload,
+    StockPutawaySuggestPayload,
     StockQuantInventoryApplyPayload,
     StockQuantInventorySetPayload,
     StockQuantsListPayload,
@@ -58,6 +60,7 @@ from apps.stock.models.api import (
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
+    StockScanAdhocCommitPayload,
     StockScanCommitPayload,
     StockScanCountCommitPayload,
     StockScanOpenPayload,
@@ -112,6 +115,7 @@ from apps.stock.realtime.operations import (
     op_moves_list,
     op_operation_types_list,
     op_operation_types_update,
+    op_operator_pulse,
     op_packagings_create,
     op_packagings_delete,
     op_packagings_list,
@@ -123,6 +127,7 @@ from apps.stock.realtime.operations import (
     op_putaway_rules_delete,
     op_putaway_rules_list,
     op_putaway_rules_update,
+    op_putaway_suggest,
     op_quants_inventory_apply,
     op_quants_inventory_set,
     op_quants_list,
@@ -140,6 +145,7 @@ from apps.stock.realtime.operations import (
     op_routes_create,
     op_routes_get,
     op_routes_list,
+    op_scan_adhoc_commit,
     op_scan_commit,
     op_scan_count_commit,
     op_scan_open,
@@ -362,6 +368,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/putaway_rules/delete_requested": Operation(
         payload_model=StockPutawayRuleDeletePayload, fn=op_putaway_rules_delete
     ),
+    "stock/putaway/suggest_requested": Operation(
+        payload_model=StockPutawaySuggestPayload, fn=op_putaway_suggest
+    ),
     "stock/routes/list_requested": Operation(
         payload_model=StockRoutesListPayload, fn=op_routes_list
     ),
@@ -433,6 +442,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/warehouse/pulse_requested": Operation(
         payload_model=StockWarehousePulsePayload, fn=op_warehouse_pulse
     ),
+    "stock/operator/pulse_requested": Operation(
+        payload_model=StockOperatorPulsePayload, fn=op_operator_pulse
+    ),
     "stock/barcode/resolve_requested": Operation(
         payload_model=StockBarcodeResolvePayload, fn=op_barcode_resolve
     ),
@@ -450,6 +462,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/scan/count_commit_requested": Operation(
         payload_model=StockScanCountCommitPayload, fn=op_scan_count_commit
+    ),
+    "stock/scan/adhoc_commit_requested": Operation(
+        payload_model=StockScanAdhocCommitPayload, fn=op_scan_adhoc_commit
     ),
     "stock/company/init_requested": Operation(
         payload_model=StockCompanyInitPayload, fn=op_stock_company_init

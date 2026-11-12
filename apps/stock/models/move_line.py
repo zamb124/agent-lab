@@ -149,6 +149,15 @@ class StockMoveLine(PlatformModel):
         ).order_by("created_at").all()
 
     @classmethod
+    async def list_open_for_move_by_sequence_created_at_asc(cls, company_id: str, move_id: str) -> list[Self]:
+        """Открытые строки движения, ORDER BY sequence, created_at, move_line_id ASC. Предела нет. Пустые поля не проверяются."""
+        return await cls.objects.filter(
+            company_id=company_id,
+            move_id=move_id,
+            state=StockMoveLineState.OPEN,
+        ).order_by("sequence", "created_at", "move_line_id").all()
+
+    @classmethod
     async def list_for_move_by_created_at_asc(cls, company_id: str, move_id: str) -> list[Self]:
         """Все строки движения, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
@@ -171,6 +180,23 @@ class StockMoveLine(PlatformModel):
         return await cls.objects.filter(
             company_id=company_id, move_line_id=move_line_id
         ).get_or_none()
+
+    @classmethod
+    async def list_done_by_user_by_done_at_asc(
+        cls,
+        company_id: str,
+        warehouse_id: str,
+        user_id: str,
+        since: datetime,
+    ) -> list[Self]:
+        """Исполненные оператором строки склада за окно, ORDER BY done_at ASC."""
+        return await cls.objects.filter(
+            company_id=company_id,
+            warehouse_id=warehouse_id,
+            state=StockMoveLineState.DONE,
+            done_by_user_id=user_id,
+            done_at__gte=since,
+        ).order_by("done_at").all()
 
     @classmethod
     async def mark_done(
@@ -203,9 +229,10 @@ class StockMoveLine(PlatformModel):
         *,
         assigned_user_id: str | None = None,
         zone_location_id: str | None = None,
+        wave_id: str | None = None,
         limit: int = 100,
     ) -> list[Self]:
-        """Открытая очередь склада, ORDER BY priority DESC, stop_order, sequence, created_at. assigned_user_id is None и zone_location_id is None не фильтруют. Пустое поддерево зоны — []. limit по умолчанию 100 и в теле не проверяется. Сначала срочное, затем остановка рейса, затем обход ячеек."""
+        """Открытая очередь склада, ORDER BY priority DESC, stop_order, sequence, created_at. assigned_user_id, zone_location_id и wave_id равные None не фильтруют. Пустое поддерево зоны — []. limit по умолчанию 100 и в теле не проверяется. Сначала срочное, затем остановка рейса, затем обход ячеек."""
         q = cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -213,6 +240,8 @@ class StockMoveLine(PlatformModel):
         )
         if assigned_user_id is not None:
             q = q.filter(assigned_user_id=assigned_user_id)
+        if wave_id is not None:
+            q = q.filter(wave_id=wave_id)
         if zone_location_id is not None:
             zone_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
                 company_id, zone_location_id
@@ -236,6 +265,19 @@ class StockMoveLine(PlatformModel):
             move_id__in=move_ids,
             state=StockMoveLineState.OPEN,
         ).order_by("created_at").all()
+
+    @classmethod
+    async def list_open_for_moves_by_sequence_created_at_asc(
+        cls, company_id: str, move_ids: list[str]
+    ) -> list[Self]:
+        """Открытые строки этих движений, ORDER BY sequence, created_at, move_line_id ASC — порядок обхода из очереди. Пустой move_ids — []. Пустые поля не проверяются."""
+        if not move_ids:
+            return []
+        return await cls.objects.filter(
+            company_id=company_id,
+            move_id__in=move_ids,
+            state=StockMoveLineState.OPEN,
+        ).order_by("sequence", "created_at", "move_line_id").all()
 
     @classmethod
     async def list_unordered_locked_by_ids(
@@ -546,6 +588,7 @@ class StockMoveLine(PlatformModel):
         move_line_id: str,
         shortage: Decimal,
         reason: str,
+        file_ids: list[str],
         idempotency_key: str,
         actor_user_id: str,
         command_type: str,
@@ -654,6 +697,7 @@ class StockMoveLine(PlatformModel):
                     location_id=line.location_id,
                     shortage=shortage,
                     reason=reason,
+                    file_ids=file_ids,
                     count_line_id=count_line.move_line_id,
                     reported_by=actor_user_id,
                 ),

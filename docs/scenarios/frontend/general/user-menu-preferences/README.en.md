@@ -20,8 +20,8 @@ The Dark theme item re-skins the whole console — easier on the eyes in the eve
 
 ## Step 3. Switch the interface language
 
-The en|ru buttons in the Language row translate the menu and the interface. The choice is remembered — the console opens in it next time.
+The en|ru buttons in the Language row translate the menu and the interface — the shot shows the menu in Russian. The choice is remembered: the console opens in it next time.
 
 **Summary.** Theme and language are personal: they do not affect your colleagues.
 
-![Switch the interface language](user-menu-preferences--03-language-en.png)
+![Switch the interface language](user-menu-preferences--03-language-switch.png)

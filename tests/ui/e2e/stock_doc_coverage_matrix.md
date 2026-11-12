@@ -18,6 +18,10 @@
 | `stock-transfer-page` | Оформление перемещения |
 | `stock-transfers-page` | Журнал перемещений |
 | `stock-valuation-page` | Денежная оценка запасов |
+| `stock-moves-page` | Лента всех строк движений товара с фильтрами |
+| `stock-packages-page` | Тара/упаковки: содержимое и перемещение целиком |
+| `stock-inventory-page` | Инвентаризация: due-ячейки, факт vs учёт |
+| `stock-*-settings` | Справочники: склады, типы хранения/тары, ресурсы, правила |
 
 ## Блоки и инструкции
 
@@ -33,6 +37,9 @@
 |---|---|---|---|---|
 | 2 | `locations-tree` | Создать склад и зоны хранения | `test_stock_doc_locations.py` | ✅ |
 | 2 | `stock-by-location` | Остатки по локациям: где что лежит | `test_stock_doc_stock_report.py` | 🚧 |
+| 3 | `moves-journal` | Журнал движений строками товара | `test_stock_doc_operations.py` | 🚧 |
+| 3 | `packages-containers` | Тара: содержимое и перемещение | `test_stock_doc_operations.py` | 🚧 |
+| 3 | `inventory-count` | Инвентаризация: факт vs учёт | `test_stock_doc_operations.py` | 🚧 |
 
 ### products — Товары
 
@@ -54,6 +61,18 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 3 | `valuation-report` | Стоимость запасов по складам | `test_stock_doc_valuation.py` | ✅ |
+
+### settings — Настройки склада
+
+| Уровень | doc_slug | Инструкция | Тест | Статус |
+|---|---|---|---|---|
+| 2 | `settings-warehouse` | Склады, типы хранения, тара | `test_stock_doc_operations.py` | 🚧 |
+
+### tsd — ТСД-сканер
+
+| Уровень | doc_slug | Инструкция | Тест | Статус |
+|---|---|---|---|---|
+| 1 | `tsd-scanner` | Мобильный сканер: логин, очередь, скан | — | 📝 |
 
 ## Долг и заметки
 

@@ -93,6 +93,7 @@ const FLOW_UI_TEXT = Object.freeze({
         node_complete: 'готово',
         node_error: 'ошибка',
         edge_executed: 'переход',
+        breakpoint_continue: 'Продолжить',
     }),
     en: Object.freeze({
         composer_send: 'Send',
@@ -182,6 +183,7 @@ const FLOW_UI_TEXT = Object.freeze({
         node_complete: 'done',
         node_error: 'error',
         edge_executed: 'edge',
+        breakpoint_continue: 'Continue',
     }),
 });
 

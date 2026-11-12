@@ -3563,15 +3563,22 @@ class ReflectionNode(BaseNode):
             if exit_item.exit_id == result.exit_id:
                 exit_label = exit_item.label
                 break
-        lines = [f"**{exit_label}** — {result.critique.decision}", result.critique.summary]
+        detail_lines = [result.critique.summary]
         for issue in result.critique.issues[:5]:
-            lines.append(f"- {issue.severity}: {issue.finding}")
+            detail_lines.append(f"- {issue.severity}: {issue.finding}")
         for reason in result.blocked_reasons:
-            lines.append(f"- {reason}")
+            detail_lines.append(f"- {reason}")
+        tone: Literal["success", "warning", "error"] = "success"
+        if not result.approved:
+            tone = "error"
+        elif result.critique.issues:
+            tone = "warning"
         _ = show_reflection(
             state,
             card_id=card_block_id("reflection", f"{self.node_id}-{result.exit_id}"),
-            text="\n".join(line for line in lines if line.strip() != ""),
+            text=f"**{exit_label}** — {result.critique.decision}",
+            tone=tone,
+            detail="\n".join(line for line in detail_lines if line.strip() != ""),
         )
 
     def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:

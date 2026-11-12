@@ -1016,14 +1016,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         TASK_PROCESS_FLOW,
     )
     from apps.idle.tasks.task_names import (
-        TASK_PUSH_CONFIG_DELETE,
-        TASK_PUSH_CONFIG_GET,
-        TASK_PUSH_CONFIG_LIST,
-        TASK_PUSH_CONFIG_SET,
         TASK_PUSH_NOTIFICATION_SEND,
-        TASK_SEND_TASK_COMPLETED,
-        TASK_SEND_TASK_FAILED,
-        TASK_SEND_TASK_INPUT_REQUIRED,
         TASK_SEND_TASK_UPDATE,
     )
     from apps.rag.tasks.task_names import RAG_INDEX_DOCUMENT_S3
@@ -1156,14 +1149,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         TASK_INVOKE_LLM: llm_tasks.invoke_llm,
         TASK_INIT_COMPANY_RESOURCES: company_init_tasks.init_company_resources,
         TASK_SEND_TASK_UPDATE: sync_send_task_update_kiq,
-        TASK_SEND_TASK_COMPLETED: push_notification_tasks.send_task_completed,
-        TASK_SEND_TASK_FAILED: push_notification_tasks.send_task_failed,
-        TASK_SEND_TASK_INPUT_REQUIRED: push_notification_tasks.send_task_input_required,
         TASK_PUSH_NOTIFICATION_SEND: sync_send_webhook_kiq,
-        TASK_PUSH_CONFIG_SET: push_notification_tasks.set_config,
-        TASK_PUSH_CONFIG_GET: push_notification_tasks.get_config,
-        TASK_PUSH_CONFIG_LIST: push_notification_tasks.list_configs,
-        TASK_PUSH_CONFIG_DELETE: push_notification_tasks.delete_config,
         CRM_PROCESS_NOTE: crm_analysis_tasks.process_note_task,
         CRM_REPAIR_NOTE_ANALYSIS_DRAFT: crm_draft_repair_tasks.repair_note_analysis_draft_task,
         CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN: crm_note_markdown_tasks.format_note_description_markdown_task,

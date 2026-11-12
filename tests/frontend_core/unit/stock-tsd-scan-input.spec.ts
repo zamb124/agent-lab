@@ -3,22 +3,31 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TsdScanInput, TSD_SCAN_MIN_LENGTH } from '../../../apps/stock/ui/pages/tsd/scan/scan-input.js';
+import {
+    TsdScanInput,
+    TSD_SCAN_MIN_LENGTH,
+    TSD_NATIVE_SCAN_EVENT,
+} from '../../../apps/stock/ui/pages/tsd/scan/scan-input.js';
 
 class FakeKeyboardTarget {
-    handler: ((event: KeyboardEvent) => void) | null = null;
+    handlers = new Map<string, EventListener>();
 
-    addEventListener(_type: string, handler: EventListener, _capture?: boolean): void {
-        this.handler = handler as (event: KeyboardEvent) => void;
+    addEventListener(type: string, handler: EventListener, _capture?: boolean): void {
+        this.handlers.set(type, handler);
     }
 
-    removeEventListener(): void {
-        this.handler = null;
+    removeEventListener(type: string): void {
+        this.handlers.delete(type);
+    }
+
+    private _handler(type: string): EventListener {
+        const handler = this.handlers.get(type);
+        if (handler === undefined) throw new Error(`handler not attached: ${type}`);
+        return handler;
     }
 
     key(key: string, mods: Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>> = {}): void {
-        if (this.handler === null) throw new Error('handler not attached');
-        this.handler({
+        (this._handler('keydown') as (event: KeyboardEvent) => void)({
             key,
             ctrlKey: mods.ctrlKey ?? false,
             metaKey: mods.metaKey ?? false,
@@ -26,6 +35,10 @@ class FakeKeyboardTarget {
             preventDefault: () => undefined,
             stopPropagation: () => undefined,
         } as KeyboardEvent);
+    }
+
+    nativeScan(detail: unknown): void {
+        this._handler(TSD_NATIVE_SCAN_EVENT)({ detail } as unknown as Event);
     }
 
     typeKeys(chars: string, gapMs: number): void {
@@ -133,6 +146,23 @@ describe('TsdScanInput', () => {
 
     it('ручной submit из пробелов отбрасывается', () => {
         input.submit('   ');
+        expect(scans).toEqual([]);
+    });
+
+    it('native-мост: CustomEvent с кодом эмитит скан без пачки', () => {
+        target.nativeScan({ code: '  DW-123456  ' });
+        expect(scans).toEqual(['DW-123456']);
+    });
+
+    it('native-мост: код короче минимума отбрасывается', () => {
+        target.nativeScan({ code: 'ab' });
+        expect(scans).toEqual([]);
+    });
+
+    it('native-мост: событие без detail.code игнорируется', () => {
+        target.nativeScan(null);
+        target.nativeScan({ other: 'x' });
+        target.nativeScan({ code: 42 });
         expect(scans).toEqual([]);
     });
 });

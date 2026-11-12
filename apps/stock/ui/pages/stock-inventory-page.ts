@@ -6,6 +6,7 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -76,8 +77,21 @@ export class StockInventoryPage extends PlatformPage {
         this._reloadDue();
     }
 
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (this._warehouseId === '') {
+            const first = this._warehouses.items.find(isPlainRecord);
+            if (first && typeof first.warehouse_id === 'string') {
+                this._warehouseId = first.warehouse_id;
+                this._reloadDue();
+            }
+        }
+    }
+
     private _reloadDue() {
-        this._due.run(this._warehouseId !== '' ? { warehouse_id: this._warehouseId } : { warehouse_id: this._firstWarehouseId() });
+        const warehouseId = this._warehouseId !== '' ? this._warehouseId : this._firstWarehouseId();
+        if (warehouseId === '') return;
+        this._due.run({ warehouse_id: warehouseId });
     }
 
     private _firstWarehouseId(): string {

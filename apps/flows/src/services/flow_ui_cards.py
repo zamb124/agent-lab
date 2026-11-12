@@ -144,8 +144,18 @@ def show_skill_activity(
     )
 
 
-def show_reflection(state: ExecutionState, *, card_id: str, text: str) -> FlowUIRender:
-    return render_conversation(state, [FlowUIReflection(block_id=card_id, text=text)])
+def show_reflection(
+    state: ExecutionState,
+    *,
+    card_id: str,
+    text: str,
+    tone: Literal["success", "warning", "error"] = "success",
+    detail: str = "",
+) -> FlowUIRender:
+    return render_conversation(
+        state,
+        [FlowUIReflection(block_id=card_id, text=text, tone=tone, detail=detail)],
+    )
 
 
 def show_files(state: ExecutionState, files: list[FileRef]) -> FlowUIRender:

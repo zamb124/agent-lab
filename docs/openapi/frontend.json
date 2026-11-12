@@ -295,6 +295,7 @@
           "embedding",
           "rerank",
           "image_gen",
+          "image_edit",
           "voice_stt",
           "voice_tts",
           "voice_vad"
@@ -1406,6 +1407,77 @@
           "company_visible"
         ],
         "title": "AuthzWhyReason"
+      },
+      "BadgeBindPayload": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "code"
+        ],
+        "title": "BadgeBindPayload"
+      },
+      "BadgeLoginRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "BadgeLoginRequest",
+        "description": "Скан бейджа сотрудника — код с физического носителя."
+      },
+      "BadgeResponse": {
+        "properties": {
+          "badge_id": {
+            "type": "string",
+            "title": "Badge Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "user_name": {
+            "type": "string",
+            "title": "User Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "badge_id",
+          "code",
+          "user_id",
+          "user_name",
+          "created_at"
+        ],
+        "title": "BadgeResponse"
       },
       "BillingPlanChangeResponse": {
         "properties": {
@@ -3830,6 +3902,7 @@
                 "embedding",
                 "rerank",
                 "image_gen",
+                "image_edit",
                 "voice_stt",
                 "voice_tts",
                 "voice_vad"
@@ -3965,6 +4038,7 @@
                     "embedding",
                     "rerank",
                     "image_gen",
+                    "image_edit",
                     "voice_stt",
                     "voice_tts",
                     "voice_vad"
@@ -5266,7 +5340,8 @@
           "code_agent_source",
           "platform_auxiliary",
           "generated_ephemeral",
-          "product"
+          "product",
+          "stock_entity"
         ],
         "title": "FileSourceKind"
       },
@@ -9906,6 +9981,37 @@
           "offset"
         ],
         "title": "OffsetPage[ApiKeyRecord]"
+      },
+      "OffsetPage_BadgeResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BadgeResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[BadgeResponse]"
       },
       "OffsetPage_EmbedConfig_": {
         "properties": {

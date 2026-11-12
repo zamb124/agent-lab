@@ -132,6 +132,7 @@ class StockMoveLineExceptionPayload(BaseModel):
     location_id: str
     shortage: Decimal
     reason: str
+    file_ids: list[str] = Field(default_factory=list)
     count_line_id: str | None = None
     reported_by: str | None = None
 

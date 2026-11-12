@@ -22,6 +22,7 @@ from apps.stock.models.enums import (
     ReservationPolicy,
     StockOperationCode,
 )
+from apps.stock.models.scan import ScanFlow
 from core.models.platform_model import PlatformModel
 
 
@@ -44,7 +45,9 @@ class StockOperationType(PlatformModel):
     * ``create_lots``/``use_existing_lots`` — разрешены ли новые/
       обязательны существующие партии;
     * ``return_operation_type_id`` — какой тип использовать для
-      оформления возврата от этого типа.
+      оформления возврата от этого типа;
+    * ``scan_flow`` — явный поток ТСД для плеч маршрута (``pack``/
+      ``ship``), которые из ``code`` не выводятся.
     """
 
     __database_alias__: ClassVar[str | None] = STOCK_DB
@@ -78,6 +81,10 @@ class StockOperationType(PlatformModel):
     """Партии должны существовать заранее (False — только из create_lots)."""
     return_operation_type_id: str | None = DbField(default=None, max_length=64)
     """Тип операции для возвратов; пусто — обратный тому же типу."""
+    scan_flow: ScanFlow | None = DbField(default=None, max_length=32)
+    """Явный поток исполнения на ТСД для quantity-строк (``pack``/``ship``
+    — плечи маршрута, не выводимые из ``code``); ``None`` — выводить
+    из ``code`` и ``kind`` строк."""
     created_at: datetime = DbField()
     updated_at: datetime = DbField()
 

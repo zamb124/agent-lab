@@ -442,3 +442,31 @@ class TestSubtreeListing:
         assert zone.location_id in ids
         assert cell.location_id in ids
         assert env.warehouse.stock_location_id not in ids
+
+    async def test_list_locations_include_virtual(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Виртуальные концы (partner/transit/adjustment) попадают в
+        список локаций только с ``include_virtual``: они вне складов,
+        но ТСД резолвит их имена в маршрутах документов («→ customer»)."""
+        env = await _env(stock_di, unique_id)
+        plain = await env.di.topology_service.list_locations(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+        )
+        assert all(row.warehouse_id is not None for row in plain)
+        with_virtual = await env.di.topology_service.list_locations(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            include_virtual=True,
+        )
+        virtual = [row for row in with_virtual if row.warehouse_id is None]
+        usages = {row.usage for row in virtual}
+        assert StockLocationUsage.PARTNER in usages
+        assert StockLocationUsage.TRANSIT in usages
+        assert StockLocationUsage.ADJUSTMENT in usages
+        # Физические локации склада на месте — флаг добавляет, а не заменяет.
+        assert any(
+            row.location_id == env.warehouse.stock_location_id
+            for row in with_virtual
+        )

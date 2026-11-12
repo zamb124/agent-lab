@@ -20,7 +20,7 @@ A template is a ready-made set of record types. B2B sales already includes Leads
 
 ## Step 3. Space created
 
-The space sales_dept_cabf52 appeared in the list — it already has record types from the template. Click Open to enter it.
+The space sales_dept_130785 appeared in the list — it already has record types from the template. Click Open to enter it.
 
 ![Space created](crm-first-entity--03-namespace-created.png)
 
@@ -44,6 +44,6 @@ Enter a name — that is enough for the first record. Other fields can be filled
 
 ## Step 7. First record is ready
 
-The record ООО «Ромашка» cabf is created and open. You can add notes, links to other records and tasks here — the whole customer history in one place.
+The record ООО «Ромашка» 1307 is created and open. You can add notes, links to other records and tasks here — the whole customer history in one place.
 
 ![First record is ready](crm-first-entity--07-entity-detail.png)

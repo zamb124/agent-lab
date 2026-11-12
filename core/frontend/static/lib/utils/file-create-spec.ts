@@ -21,6 +21,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
     product: 'product',
+    stock_entity: 'platform_default',
 });
 
 function defaultRetentionKind(sourceKind: string): string | undefined {
@@ -61,6 +62,8 @@ function defaultRetentionKind(sourceKind: string): string | undefined {
             return DEFAULT_RETENTION_BY_SOURCE.generated_ephemeral;
         case 'product':
             return DEFAULT_RETENTION_BY_SOURCE.product;
+        case 'stock_entity':
+            return DEFAULT_RETENTION_BY_SOURCE.stock_entity;
         default:
             return undefined;
     }

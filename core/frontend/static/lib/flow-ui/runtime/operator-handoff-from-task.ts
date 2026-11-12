@@ -47,11 +47,15 @@ export function taskInterrupt(task: FlowUiRecord | null | undefined): FlowUiTask
     const status = objectOrEmpty(task.status);
     if (!isInterruptedTaskState(status.state)) return null;
     const message = objectOrEmpty(status.message);
+    const breakpoint = objectOrEmpty(task.metadata).breakpoint === true
+        || objectOrEmpty(message.metadata).breakpoint === true;
     const packed = objectOrEmpty(message.metadata).platform_interrupt
         ?? objectOrEmpty(task?.metadata).platform_interrupt;
     const interrupt = objectOrEmpty(packed);
     const body = objectOrEmpty(interrupt.body);
-    const kind = typeof body.kind === 'string' && body.kind !== '' ? body.kind : 'user_message';
+    const kind = breakpoint
+        ? 'breakpoint'
+        : (typeof body.kind === 'string' && body.kind !== '' ? body.kind : 'user_message');
     const question = typeof interrupt.question === 'string' && interrupt.question !== ''
         ? interrupt.question
         : textFromParts(message.parts);

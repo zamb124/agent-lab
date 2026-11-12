@@ -20,7 +20,7 @@ AI analysis shows what it understood from the text: a note summary, suggested re
 
 ## Step 3. Records in the card index
 
-Антон Верников e44050 is already in the card index — with the company and a link to the note. AI did the rough work, you only reviewed it.
+Антон Верников cf9304 is already in the card index — with the company and a link to the note. AI did the rough work, you only reviewed it.
 
 **Summary.** Write notes the way you like — the card index fills itself in.
 

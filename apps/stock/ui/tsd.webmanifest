@@ -1,0 +1,35 @@
+{
+  "name": "Linnex ТСД — склад",
+  "short_name": "ТСД",
+  "description": "Терминал сбора данных: приёмка, размещение, отбор, упаковка, отгрузка, инвентаризация",
+  "start_url": "/stock/tsd",
+  "scope": "/stock/tsd",
+  "id": "/stock/tsd",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F6F8",
+  "theme_color": "#F5F6F8",
+  "categories": ["business", "productivity"],
+  "lang": "ru",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/static/core/pwa/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/core/pwa/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/core/pwa/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

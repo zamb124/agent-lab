@@ -29,23 +29,3 @@ The section tree is on the left. Click the add row, type a section name — for 
 Click «+ Item» in the page header. In the window fill in the name and price — the rest can stay empty. Save: the item card appears in the list on the right.
 
 ![Add the first item](shop-first-store--04-menu-product-added.png)
-
-## Step 5. Mark the store point on the map
-
-Open the store «Settings». Click the map where the store is — a pin with the point's coordinates appears, then save. Publishing requires the point: customers could not find the store otherwise.
-
-![Mark the store point on the map](shop-first-store--05-settings-point-on-map.png)
-
-## Step 6. Publish the storefront
-
-Return to the Shop home page. A ready store shows a publish button — click it. After publishing, the card shows a storefront link.
-
-![Publish the storefront](shop-first-store--06-shop-published.png)
-
-## Step 7. Open the storefront and find the item
-
-**Result demonstration.** Follow the storefront link — this is what a customer sees. Find your item in the catalog: it is available for ordering.
-
-**Summary.** Now you can create a store, fill the menu, and publish the storefront, checking it through a customer's eyes.
-
-![Open the storefront and find the item](shop-first-store--07-storefront-product-visible.png)

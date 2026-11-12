@@ -329,7 +329,7 @@ export interface ScanContext {
 /**
  * Какая сущность распознана в штрихкоде.
  */
-export type ScanEntityKind = "product" | "packaging" | "lot" | "serial" | "location" | "container" | "document" | "resource" | "unknown";
+export type ScanEntityKind = "product" | "packaging" | "lot" | "location" | "container" | "document" | "resource" | "unknown";
 
 /**
  * ScanFlow
@@ -376,7 +376,7 @@ export interface ScanResolution {
 /**
  * Ожидаемый ввод на текущем шаге — «что сканировать дальше».
  */
-export type ScanStep = "start" | "location" | "product" | "lot" | "quantity" | "dest" | "container" | "review" | "done";
+export type ScanStep = "start" | "location" | "product" | "quantity" | "dest" | "container" | "review" | "done";
 
 /**
  * StockBarcodeEntityType
@@ -839,6 +839,7 @@ export interface StockLocationsCountDuePayload {
  */
 export interface StockLocationsListPayload {
     "warehouse_id"?: string | null | undefined;
+    "include_virtual"?: boolean | undefined;
     [key: string]: unknown;
 }
 
@@ -1071,6 +1072,7 @@ export interface StockMoveLineExceptionPayload {
     "move_line_id": string;
     "shortage": number | string;
     "reason"?: string | undefined;
+    "file_ids"?: string[] | undefined;
     "idempotency_key"?: string | null | undefined;
     [key: string]: unknown;
 }
@@ -1097,6 +1099,7 @@ export interface StockMoveLineNextPayload {
     "warehouse_id": string;
     "resource_id"?: string | null | undefined;
     "zone_location_id"?: string | null | undefined;
+    "wave_id"?: string | null | undefined;
     "claim"?: boolean | undefined;
     [key: string]: unknown;
 }
@@ -1157,6 +1160,7 @@ export interface StockMoveLinesQueuePayload {
     "warehouse_id": string;
     "assigned_user_id"?: string | null | undefined;
     "zone_location_id"?: string | null | undefined;
+    "wave_id"?: string | null | undefined;
     "limit"?: number | undefined;
     [key: string]: unknown;
 }
@@ -1236,7 +1240,9 @@ export type StockOperationCode = "incoming" | "outgoing" | "internal";
  * * ``create_lots``/``use_existing_lots`` — разрешены ли новые/
  *   обязательны существующие партии;
  * * ``return_operation_type_id`` — какой тип использовать для
- *   оформления возврата от этого типа.
+ *   оформления возврата от этого типа;
+ * * ``scan_flow`` — явный поток ТСД для плеч маршрута (``pack``/
+ *   ``ship``), которые из ``code`` не выводятся.
  */
 export interface StockOperationType {
     "operation_type_id": string;
@@ -1255,6 +1261,7 @@ export interface StockOperationType {
     "create_lots"?: boolean | undefined;
     "use_existing_lots"?: boolean | undefined;
     "return_operation_type_id"?: string | null | undefined;
+    "scan_flow"?: ScanFlow | null | undefined;
     "created_at": string;
     "updated_at": string;
     [key: string]: unknown;
@@ -1271,6 +1278,7 @@ export interface StockOperationTypeUpdatePayload {
     "putaway_mode"?: ReflexMode | null | undefined;
     "putaway_flow_id"?: string | null | undefined;
     "auto_validate"?: boolean | null | undefined;
+    "scan_flow"?: "pack" | "ship" | "default" | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1279,6 +1287,31 @@ export interface StockOperationTypeUpdatePayload {
  */
 export interface StockOperationTypesListPayload {
     "warehouse_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Показатели самого оператора за скользящее окно смены.
+ */
+export interface StockOperatorPulsePayload {
+    "warehouse_id": string;
+    "window_hours"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockOperatorPulseResponse
+ */
+export interface StockOperatorPulseResponse {
+    "warehouse_id": string;
+    "window_hours": number;
+    "lines_done": number;
+    "units_done": number | string;
+    "count_lines_done": number;
+    "container_lines_done": number;
+    "lines_per_hour": number | string;
+    "first_done_at"?: string | null | undefined;
+    "last_done_at"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -1544,6 +1577,37 @@ export interface StockPutawayRulesListPayload {
  * явно объявлена (тип хранения всегда знает свою стратегию).
  */
 export type StockPutawayStrategy = "existing_stock" | "empty_bin" | "nearest" | "manual";
+
+/**
+ * Top-N ячеек «куда поставить» по одному товару — ad-hoc подсказка ТСД.
+ */
+export interface StockPutawaySuggestPayload {
+    "warehouse_id": string;
+    "product_id": string;
+    "product_qty"?: number | string | undefined;
+    "location_dest_id"?: string | null | undefined;
+    "limit"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockPutawaySuggestResponse
+ */
+export interface StockPutawaySuggestResponse {
+    "items": StockPutawaySuggestionItem[];
+    [key: string]: unknown;
+}
+
+/**
+ * StockPutawaySuggestionItem
+ */
+export interface StockPutawaySuggestionItem {
+    "location_id": string;
+    "name": string;
+    "reason_code": string;
+    "allowed": boolean;
+    [key: string]: unknown;
+}
 
 /**
  * Строка остатка «товар × ячейка × партия × владелец». Таблица ``stock_quants``.
@@ -1915,6 +1979,17 @@ export interface StockRoutesListPayload {
 }
 
 /**
+ * Ad-hoc коммит без документа: набранные строки → новая накладная.
+ */
+export interface StockScanAdhocCommitPayload {
+    "warehouse_id": string;
+    "operation_code": StockOperationCode;
+    "context": ScanContext;
+    "idempotency_key"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Коммит набранного: строки контекста → проводка move одной транзакцией.
  */
 export interface StockScanCommitPayload {
@@ -1951,6 +2026,7 @@ export interface StockScanCountCommitResponse {
  * только по ``context.step``.
  */
 export interface StockScanExpected {
+    "move_line_id"?: string | null | undefined;
     "location_id"?: string | null | undefined;
     "product_id"?: string | null | undefined;
     "quantity"?: number | string | null | undefined;
@@ -2619,6 +2695,7 @@ export interface StockCommandMap {
     "stock/moves/list_requested": { payload: StockMovesListPayload; result: CursorPage_StockMove_ },
     "stock/operation_types/list_requested": { payload: StockOperationTypesListPayload; result: StockItemsResponse_StockOperationType_ },
     "stock/operation_types/update_requested": { payload: StockOperationTypeUpdatePayload; result: StockOperationType },
+    "stock/operator/pulse_requested": { payload: StockOperatorPulsePayload; result: StockOperatorPulseResponse },
     "stock/packagings/create_requested": { payload: StockPackagingCreatePayload; result: CatalogPackagingView },
     "stock/packagings/delete_requested": { payload: StockPackagingIdPayload; result: CatalogPackagingView },
     "stock/packagings/list_requested": { payload: StockPackagingsListPayload; result: StockItemsResponse_CatalogPackagingView_ },
@@ -2626,6 +2703,7 @@ export interface StockCommandMap {
     "stock/products/item_requested": { payload: StockProductIdPayload; result: StockProductView },
     "stock/products/list_requested": { payload: StockPagePayload; result: OffsetPage_StockProductView_ },
     "stock/products/update_requested": { payload: StockProductUpdatePayload; result: StockProductView },
+    "stock/putaway/suggest_requested": { payload: StockPutawaySuggestPayload; result: StockPutawaySuggestResponse },
     "stock/putaway_rules/create_requested": { payload: StockPutawayRuleCreatePayload; result: StockPutawayRule },
     "stock/putaway_rules/delete_requested": { payload: StockPutawayRuleDeletePayload; result: StockPutawayRule },
     "stock/putaway_rules/list_requested": { payload: StockPutawayRulesListPayload; result: StockItemsResponse_StockPutawayRule_ },
@@ -2647,6 +2725,7 @@ export interface StockCommandMap {
     "stock/routes/create_requested": { payload: StockRouteCreatePayload; result: StockRoute },
     "stock/routes/get_requested": { payload: StockRouteIdPayload; result: StockRoute },
     "stock/routes/list_requested": { payload: StockRoutesListPayload; result: StockItemsResponse_StockRoute_ },
+    "stock/scan/adhoc_commit_requested": { payload: StockScanAdhocCommitPayload; result: StockTransfer },
     "stock/scan/commit_requested": { payload: StockScanCommitPayload; result: StockMove },
     "stock/scan/count_commit_requested": { payload: StockScanCountCommitPayload; result: StockScanCountCommitResponse },
     "stock/scan/open_requested": { payload: StockScanOpenPayload; result: StockScanOpenResponse },
@@ -2787,6 +2866,9 @@ export interface StockEventMap {
     "stock/operation_types/update_failed": PlatformCommandEventPayload,
     "stock/operation_types/update_requested": PlatformCommandEventPayload,
     "stock/operation_types/update_succeeded": PlatformCommandEventPayload,
+    "stock/operator/pulse_failed": PlatformCommandEventPayload,
+    "stock/operator/pulse_requested": PlatformCommandEventPayload,
+    "stock/operator/pulse_succeeded": PlatformCommandEventPayload,
     "stock/packagings/create_failed": PlatformCommandEventPayload,
     "stock/packagings/create_requested": PlatformCommandEventPayload,
     "stock/packagings/create_succeeded": PlatformCommandEventPayload,
@@ -2808,6 +2890,9 @@ export interface StockEventMap {
     "stock/products/update_failed": PlatformCommandEventPayload,
     "stock/products/update_requested": PlatformCommandEventPayload,
     "stock/products/update_succeeded": PlatformCommandEventPayload,
+    "stock/putaway/suggest_failed": PlatformCommandEventPayload,
+    "stock/putaway/suggest_requested": PlatformCommandEventPayload,
+    "stock/putaway/suggest_succeeded": PlatformCommandEventPayload,
     "stock/putaway_rules/create_failed": PlatformCommandEventPayload,
     "stock/putaway_rules/create_requested": PlatformCommandEventPayload,
     "stock/putaway_rules/create_succeeded": PlatformCommandEventPayload,
@@ -2872,6 +2957,9 @@ export interface StockEventMap {
     "stock/routes/list_failed": PlatformCommandEventPayload,
     "stock/routes/list_requested": PlatformCommandEventPayload,
     "stock/routes/list_succeeded": PlatformCommandEventPayload,
+    "stock/scan/adhoc_commit_failed": PlatformCommandEventPayload,
+    "stock/scan/adhoc_commit_requested": PlatformCommandEventPayload,
+    "stock/scan/adhoc_commit_succeeded": PlatformCommandEventPayload,
     "stock/scan/commit_failed": PlatformCommandEventPayload,
     "stock/scan/commit_requested": PlatformCommandEventPayload,
     "stock/scan/commit_succeeded": PlatformCommandEventPayload,

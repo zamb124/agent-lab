@@ -90,7 +90,7 @@ class ShopAiService:
             ).encode("utf-8")
         ).hexdigest()[:16]
         dedup_key = f"shop:ai:{fragment}:{nonce}"
-        row = await PlatformA2APendingCall.by_dedup_key("shop", dedup_key)
+        row = await PlatformA2APendingCall.latest_by_dedup_key_created_at_desc("shop", dedup_key)
         if row is not None:
             if row.result_payload is not None:
                 return self._result_from_stored_payload(row.result_payload)

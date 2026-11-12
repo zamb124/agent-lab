@@ -5,8 +5,8 @@
  *   `platform:<scope>:<key>`
  *
  * `<scope>` — `frontend`, `crm`, `sync`, `office`, `rag`, `flows`, `voice`,
- * `litserve`, `worktracker`, `wiki` или `core`. Для общеплатформенных вещей
- * (тема, локаль) — `core`.
+ * `litserve`, `worktracker`, `wiki`, `stock` или `core`. Для общеплатформенных
+ * вещей (тема, локаль) — `core`.
  *
  * Запрещены свободные префиксы вроде `linnex.sync.*`, `crm:*`,
  * `sync.chat.*` — это устаревший канон и должен быть удалён.
@@ -23,7 +23,8 @@ export type PlatformStorageScope =
     | 'voice'
     | 'litserve'
     | 'worktracker'
-    | 'wiki';
+    | 'wiki'
+    | 'stock';
 
 const _ALLOWED_SCOPES: ReadonlySet<string> = new Set<PlatformStorageScope>([
     'core',
@@ -37,6 +38,7 @@ const _ALLOWED_SCOPES: ReadonlySet<string> = new Set<PlatformStorageScope>([
     'litserve',
     'worktracker',
     'wiki',
+    'stock',
 ]);
 
 const _KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;

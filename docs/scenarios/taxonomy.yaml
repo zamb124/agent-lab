@@ -634,6 +634,18 @@ services:
         label_ru: Отчёты по остаткам
         label_en: Stock reports
         order: 6
+      settings:
+        label_ru: Настройки склада
+        label_en: Warehouse settings
+        order: 7
+      tsd:
+        label_ru: ТСД-сканер
+        label_en: Scanner (TSD)
+        order: 8
+      tsd-receive:
+        label_ru: "ТСД: приёмка"
+        label_en: "Scanner (TSD): receiving"
+        order: 9
 
   geo:
     label_ru: Geo

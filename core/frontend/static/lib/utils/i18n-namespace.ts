@@ -41,6 +41,8 @@ export function getDefaultI18nNamespace(): string | null {
 /**
  * @param {string} baseUrl
  * @returns {string} имя бандла без расширения, либо '' если landing/корень.
+ * Namespace — первый ingress-сегмент: у второго приложения сервиса
+ * (`/stock/tsd`) он общий с основным SPA (`/stock` → `stock`).
  */
 export function i18nDefaultNamespaceForBaseUrl(baseUrl: string): string {
     if (typeof baseUrl !== 'string') {
@@ -54,10 +56,6 @@ export function i18nDefaultNamespaceForBaseUrl(baseUrl: string): string {
     if (!path.startsWith('/')) {
         throw new Error(`i18nDefaultNamespaceForBaseUrl: expected leading /, got: ${baseUrl}`);
     }
-    const seg = path.slice(1);
-    if (seg === '') return '';
-    if (seg.includes('/')) {
-        throw new Error(`i18nDefaultNamespaceForBaseUrl: single segment expected, got: ${baseUrl}`);
-    }
-    return seg;
+    const seg = path.slice(1).split('/')[0];
+    return seg === undefined ? '' : seg;
 }

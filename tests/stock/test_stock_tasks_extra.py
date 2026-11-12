@@ -17,6 +17,7 @@
   лист проверяет склад каждой остановки, release только из draft.
 """
 
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -42,6 +43,8 @@ from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
 )
+from core.files.models import FileRecord
+from core.lanes import LaneCommit
 
 from .test_stock_domain import StockEnv, _make_env, _receipt
 
@@ -515,6 +518,68 @@ class TestReportException:
         assert fresh.quantity == Decimal("1")
         assert fresh.done_quantity == Decimal("1")
 
+    async def test_exception_attachments_ride_event_payload(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Фото доказательства уезжают в push исключения — эскалация
+        в flows показывает менеджеру бой без второго запроса."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("6"), Decimal("2"))
+        line = await _reserved_delivery_line(env, Decimal("3"))
+        photo = await FileRecord.objects.create(
+            instance=FileRecord(
+                file_id=f"file_{unique_id}_exc",
+                original_name="damage.jpg",
+                s3_key=f"stock/{unique_id}/damage.jpg",
+                storage_id="platform",
+                content_type="image/jpeg",
+                file_size=1024,
+                company_id=env.company_id,
+            )
+        )
+        key = uuid.uuid7().hex
+        _ = await env.di.task_service.report_exception(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_id=line.move_line_id,
+            shortage=Decimal("2"),
+            reason="damaged",
+            actor_user_id="op-1",
+            file_ids=[photo.file_id],
+            idempotency_key=key,
+        )
+        commit = await LaneCommit.by_idempotency_key(
+            env.company_id, key, using=STOCK_DB
+        )
+        assert commit is not None
+        events = {
+            event.type: event for event in commit.platform_events()
+        }
+        payload = events["stock/move_line/exception"].payload
+        assert payload["file_ids"] == [photo.file_id]
+
+    async def test_exception_attachment_ghost_file_rejected(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Ссылка на несуществующий файл не проходит — исключение
+        не создаётся с битым доказательством."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("6"), Decimal("2"))
+        line = await _reserved_delivery_line(env, Decimal("3"))
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.task_service.report_exception(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_line_id=line.move_line_id,
+                shortage=Decimal("1"),
+                reason="damaged",
+                actor_user_id="op-1",
+                file_ids=["file_ghost"],
+            )
+        assert exc.value.error_code == "file_not_found"
+        fresh = await StockMoveLine.by_id(env.company_id, line.move_line_id)
+        assert fresh.quantity == Decimal("3")
+
 
 class TestUpdateMoveLine:
     async def test_negative_done_rejected(
@@ -910,3 +975,85 @@ class TestWavesExtra:
         fresh = await StockMoveLine.by_id(env.company_id, line.move_line_id)
         assert fresh.wave_id == wave.wave_id
         assert wave.line_count == 1
+
+    async def test_wave_filter_scopes_queue_and_next(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Оператор выбрал волну → очередь и «дать работу» живут внутри неё."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("9"), Decimal("2"))
+        in_wave = await _reserved_delivery_line(env, Decimal("3"))
+        outside = await _reserved_delivery_line(env, Decimal("2"))
+        wave = await env.di.wave_service.create(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            name="W-SCOPE",
+            move_line_ids=[in_wave.move_line_id],
+            move_ids=[],
+        )
+        _ = await env.di.wave_service.release(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            wave_id=wave.wave_id,
+        )
+
+        queue = await env.di.task_service.queue(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            wave_id=wave.wave_id,
+        )
+        assert [line.move_line_id for line in queue] == [in_wave.move_line_id]
+
+        chosen = await env.di.task_service.next_line(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            user_id="op-1",
+            wave_id=wave.wave_id,
+        )
+        assert chosen is not None
+        assert chosen.move_line_id == in_wave.move_line_id
+        fresh = await StockMoveLine.by_id(env.company_id, outside.move_line_id)
+        assert fresh.assigned_user_id is None
+
+    async def test_wave_filter_empty_wave_yields_nothing(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Фильтр по несуществующей/чужой волне — пустая выдача, а не вся очередь."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("6"), Decimal("2"))
+        _ = await _reserved_delivery_line(env, Decimal("3"))
+        queue = await env.di.task_service.queue(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            wave_id="wav_missing",
+        )
+        assert queue == []
+        chosen = await env.di.task_service.next_line(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            user_id="op-1",
+            wave_id="wav_missing",
+        )
+        assert chosen is None
+
+    async def test_no_wave_filter_returns_all_open_lines(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Без фильтра оператор видит и волновые, и неволновые строки."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("9"), Decimal("2"))
+        in_wave = await _reserved_delivery_line(env, Decimal("3"))
+        outside = await _reserved_delivery_line(env, Decimal("2"))
+        _ = await env.di.wave_service.create(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            name="W-OPEN",
+            move_line_ids=[in_wave.move_line_id],
+            move_ids=[],
+        )
+        queue = await env.di.task_service.queue(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+        )
+        ids = {line.move_line_id for line in queue}
+        assert {in_wave.move_line_id, outside.move_line_id} <= ids

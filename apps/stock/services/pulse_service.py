@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, timedelta
 from decimal import Decimal
 
 from apps.stock.models import (
     StockMove,
+    StockMoveLine,
     StockOperationType,
     StockProduct,
     StockQuant,
@@ -15,10 +16,12 @@ from apps.stock.models import (
     StockWarehouse,
 )
 from apps.stock.models.api import (
+    StockOperatorPulseResponse,
     StockPulseQuantRow,
     StockPulseTransferRow,
     StockWarehousePulseResponse,
 )
+from apps.stock.models.enums import StockMoveLineKind
 from apps.stock.models.valuation import quantize
 from core.errors.boundary import PlatformNotFoundError
 from core.utils.time import utcnow
@@ -87,6 +90,55 @@ class PulseService:
             warehouse_id=warehouse_id,
             transfers=transfer_rows,
             quants=quant_rows,
+        )
+
+    async def operator_pulse(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        user_id: str,
+        window_hours: int,
+    ) -> StockOperatorPulseResponse:
+        """«Мои показатели»: строки и единицы оператора за окно смены.
+
+        Агрегирует факт исполнения (`done_by_user_id`/`done_at`), а не
+        очередь — скорость оператора видна без лишних кликов по ТСД.
+        """
+        warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
+        if warehouse is None:
+            raise PlatformNotFoundError(
+                "Warehouse not found", error_code="warehouse_not_found"
+            )
+        since = utcnow() - timedelta(hours=window_hours)
+        lines = await StockMoveLine.list_done_by_user_by_done_at_asc(
+            company_id, warehouse_id, user_id, since
+        )
+        units = sum(
+            (line.done_quantity for line in lines), start=Decimal("0")
+        )
+        pace = (
+            Decimal(len(lines)) / Decimal(window_hours)
+            if lines
+            else Decimal("0")
+        )
+        done_ats = [
+            line.done_at for line in lines if line.done_at is not None
+        ]
+        return StockOperatorPulseResponse(
+            warehouse_id=warehouse_id,
+            window_hours=window_hours,
+            lines_done=len(lines),
+            units_done=units,
+            count_lines_done=sum(
+                1 for line in lines if line.kind == StockMoveLineKind.COUNT
+            ),
+            container_lines_done=sum(
+                1 for line in lines if line.kind == StockMoveLineKind.CONTAINER
+            ),
+            lines_per_hour=quantize(pace),
+            first_done_at=done_ats[0].isoformat() if done_ats else None,
+            last_done_at=done_ats[-1].isoformat() if done_ats else None,
         )
 
     async def _avg_costs(

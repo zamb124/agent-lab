@@ -416,7 +416,7 @@ class TestCallFinishedContinuation:
 
 
 class TestDedupResume:
-    async def test_by_dedup_key_and_take_result(
+    async def test_latest_by_dedup_key_created_at_desc_and_take_result(
         self, unique_id: str
     ) -> None:
         """Повторный прогон вызывающего кода забирает payload по dedup_key."""
@@ -425,7 +425,7 @@ class TestDedupResume:
         _ = await PlatformA2APendingCall.store_result(
             row.a2a_task_id, {"status": "completed", "response": "ok"}
         )
-        found = await PlatformA2APendingCall.by_dedup_key("flows", dedup_key)
+        found = await PlatformA2APendingCall.latest_by_dedup_key_created_at_desc("flows", dedup_key)
         assert found is not None
         taken = await PlatformA2APendingCall.take_result("flows", dedup_key)
         assert taken is not None

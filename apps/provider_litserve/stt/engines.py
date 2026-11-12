@@ -427,7 +427,7 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
         )
         if weights_path is None:
             raise RuntimeError(
-                f"provider_litserve STT: {hf_model_id}@{revision}: pytorch_model.bin не найден в репозитории"
+                f"provider_litserve STT: {hf_model_id}@{revision}: pytorch_model.bin missing in repository"
             )
         state_dict: Mapping[str, torch.Tensor] = torch.load(  # pyright: ignore[reportAny] — torch.load возвращает Any
             weights_path, map_location="cpu", weights_only=True

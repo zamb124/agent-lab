@@ -29,11 +29,3 @@ In the same settings window change the name and description. These fields appear
 From the editor menu, open Sessions. Here you can find past conversations and return to problematic requests.
 
 ![Open the sessions list](publish-and-operate--04-sessions-modal-opened.png)
-
-## Step 5. Export the JSON configuration
-
-**Result demonstration.** The agent is published, the card is updated, sessions are available, and the JSON config can be saved as a backup.
-
-**Summary.** You can now release an agent, manage its card, and use the editor's operational tools.
-
-![Export the JSON configuration](publish-and-operate--05-raw-json-export.png)

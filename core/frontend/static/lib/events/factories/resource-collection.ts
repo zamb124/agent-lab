@@ -184,7 +184,7 @@ interface _OpSpec {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     url?: string;
     httpBody?: unknown;
-    httpQuery?: Record<string, string | number | boolean | null | undefined>;
+    httpQuery?: Record<string, unknown>;
     op: string;
     headersPayload?: unknown;
 }
@@ -660,7 +660,7 @@ export function createResourceCollection<
             method: opSpec.method,
             url,
             body: opSpec.httpBody,
-            query: opSpec.httpQuery,
+            query: opSpec.httpQuery === undefined ? undefined : httpQueryFields(opSpec.httpQuery, `createResourceCollection(${name})`),
             headers,
         });
     }
@@ -693,10 +693,7 @@ export function createResourceCollection<
                         const mergedItems: ResourceItem[] = [];
                         let total = 0;
                         for (;;) {
-                            const pageQuery = httpQueryFields(
-                                { ...baseQuery, ...payload, limit: pageLimit, offset: off },
-                                `createResourceCollection(${name})`,
-                            );
+                            const pageQuery = { ...baseQuery, ...payload, limit: pageLimit, offset: off };
                             const pageData = await _doRequest({
                                 commandType: events.LIST_REQUESTED,
                                 succeeded: events.LIST_LOADED,
@@ -733,7 +730,7 @@ export function createResourceCollection<
                         wsPayload: { ...singleQuery, ...payload },
                         method: 'GET',
                         url: baseUrl,
-                        httpQuery: httpQueryFields(singleQuery, `createResourceCollection(${name})`),
+                        httpQuery: singleQuery,
                         op: 'list',
                         headersPayload: payload,
                     }, event, ctx);

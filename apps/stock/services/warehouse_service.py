@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from oxyde.exceptions import UniqueViolationError
 
 from apps.stock.models import (
@@ -29,6 +31,7 @@ from apps.stock.models import (
     StockTransferState,
     StockWarehouse,
 )
+from apps.stock.models.scan import ScanFlow
 from apps.stock.services.ids import new_id
 from apps.stock.services.stock_access_service import StockAccessService
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
@@ -295,6 +298,7 @@ class WarehouseService:
         putaway_mode: ReflexMode | None,
         putaway_flow_id: str | None,
         auto_validate: bool | None,
+        scan_flow: ScanFlow | Literal["default"] | None,
     ) -> StockOperationType:
         """Настроить политику вида накладной.
 
@@ -325,6 +329,10 @@ class WarehouseService:
         if putaway_flow_id is not None or putaway_mode == ReflexMode.RULE:
             op.putaway_flow_id = putaway_flow_id
         op.auto_validate = auto_validate if auto_validate is not None else op.auto_validate
+        if scan_flow == "default":
+            op.scan_flow = None
+        elif scan_flow is not None:
+            op.scan_flow = scan_flow
         if op.putaway_mode == ReflexMode.INLINE and op.putaway_flow_id is None:
             raise _conflict(
                 "Inline putaway requires putaway_flow_id", "putaway_flow_missing"

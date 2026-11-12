@@ -20,7 +20,7 @@ Click Edit, then Add relationship — the form opens: pick a link type (for exam
 
 ## Step 3. Record linked
 
-Мария Смирнова 38fffe now shows in the linked objects list with its link type and direction. Clicking a row opens the neighbour card — a handy way to walk the customer chain.
+Мария Смирнова b07449 now shows in the linked objects list with its link type and direction. Clicking a row opens the neighbour card — a handy way to walk the customer chain.
 
 **Summary.** The record card is the centre of the card index: fields, links and a quick hop to neighbours.
 

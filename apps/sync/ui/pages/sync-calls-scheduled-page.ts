@@ -65,13 +65,14 @@ export class SyncCallsScheduledPage extends PlatformPage {
         super();
         this._linksOp = this.useOp('sync/call_links_scheduled');
         this.useEvent('sync/call_links_scheduled/succeeded', () => this.requestUpdate());
-        this.useEvent('sync/call_link_create/succeeded', () => this.requestUpdate());
-        this.useEvent('sync/call_link_update/succeeded', () => this.requestUpdate());
-        this.useEvent('sync/call_links_scheduled/item_removed', () => this.requestUpdate());
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
+        this._reload();
+    }
+
+    private _reload() {
         this._linksOp.run(this._defaultRangePayload());
     }
 

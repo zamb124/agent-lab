@@ -6,7 +6,7 @@
  * Внешний контракт: атрибуты ``flow-id``/``branch-id``/``embed-id``/``context-id``/``base-url``/``display``/
  * ``profile``/``theme``/``locale``/``readonly``/``credentials``/``work-item-id``/``company-id``/``voice-base-url``/
  * ``platform-ui-origin``/``assistant-title``; свойства ``initialDocument``, ``interactionPolicy``,
- * ``getRequestHeaders``, ``getExtraMetadataVariables``; методы ``startNewContext``, ``cancelActiveTask``,
+ * ``getRequestHeaders``, ``getExtraMetadataVariables``, ``getBreakpoints``; методы ``startNewContext``, ``cancelActiveTask``,
  * ``navigate``, ``applyA2AFrame``, ``createShare``, ``revokeShare``, ``stopVoice``, ``toggleVoiceSession``;
  * события ``flow-ui-ready``/``flow-ui-error``/``flow-ui-a2a-frame``/``flow-ui-submit-start``/``flow-ui-submit-end``/
  * ``flow-ui-state-changed``/``flow-ui-navigation``/``flow-ui-file-progress``/``flow-ui-share-created``/
@@ -92,6 +92,7 @@ export class PlatformFlowUI extends LitElement {
     declare platformUiOrigin: string;
     declare getRequestHeaders: (() => Promise<Record<string, string>> | Record<string, string>) | null;
     declare getExtraMetadataVariables: (() => Record<string, unknown> | null) | null;
+    declare getBreakpoints: (() => Record<string, boolean> | null) | null;
     declare assistantTitle: string;
     declare editing: boolean;
     declare selectedBlockId: string;
@@ -133,6 +134,7 @@ export class PlatformFlowUI extends LitElement {
         platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         getRequestHeaders: { attribute: false },
         getExtraMetadataVariables: { attribute: false },
+        getBreakpoints: { attribute: false },
         assistantTitle: { type: String, attribute: 'assistant-title' },
         editing: { type: Boolean, reflect: true },
         selectedBlockId: { type: String, attribute: 'selected-block-id' },
@@ -305,6 +307,7 @@ export class PlatformFlowUI extends LitElement {
                 credentials: this.credentials === 'omit' ? 'omit' : 'include',
                 getHeaders: () => (typeof this.getRequestHeaders === 'function' ? this.getRequestHeaders() : {}),
                 getVariables: () => (typeof this.getExtraMetadataVariables === 'function' ? this.getExtraMetadataVariables() : null),
+                getBreakpoints: () => (typeof this.getBreakpoints === 'function' ? this.getBreakpoints() : null),
                 store: this.store,
             });
             client.on('frame', (frame) => this._emit('flow-ui-a2a-frame', { contextId: client.contextId, frame }));

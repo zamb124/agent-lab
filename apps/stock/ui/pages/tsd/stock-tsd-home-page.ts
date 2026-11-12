@@ -9,23 +9,37 @@
 import { html, css } from 'lit';
 import type { TemplateResult } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { formatPlatformError } from '@platform/lib/utils/platform-error-message.js';
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { NetworkState } from '@platform/lib/events/reducers/network.js';
 import type { ScanResolution, StockMoveLine, StockWarehouse } from '@platform/lib/events/wire/stock.gen.js';
 import type {
     StockTsdContextState,
+    StockTsdOutboxState,
     StockTsdSessionState,
+    TsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
 import { TsdScanInput } from './scan/scan-input.js';
+import { tsdFormatQty, tsdVirtualLocationKey } from './tsd-format.js';
 import { tsdScanFeedback } from './scan/scan-feedback.js';
 import { tsdCameraScanSupported } from './scan/scan-camera.js';
 import './scan/scan-camera.js';
 import './stock-tsd-run.js';
 import './tsd-entity-sheet.js';
+import './tsd-exception-sheet.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-empty-state.js';
+
+const OUTBOX_OP_LABEL: Record<string, string> = {
+    'stock/scan_commit': 'commit',
+    'stock/scan_count_commit': 'count_commit',
+    'stock/scan_adhoc_commit': 'adhoc_commit',
+    'stock/move_lines_exception': 'exception',
+    'stock/container_move': 'container_move',
+};
 
 export class StockTsdHomePage extends PlatformPage {
     static i18nNamespace = 'stock_tsd';
@@ -39,17 +53,32 @@ export class StockTsdHomePage extends PlatformPage {
     private _queue: ControllerFor<'stock/queue'>;
     private _next: ControllerFor<'stock/move_lines_next'>;
     private _release: ControllerFor<'stock/move_lines_release'>;
+    private _countDue: ControllerFor<'stock/locations_count_due'>;
+    private _waves: ControllerFor<'stock/waves'>;
     private _products: ControllerFor<'stock/products'>;
     private _locations: ControllerFor<'stock/locations'>;
     private _session: ControllerFor<'stock/tsd_session'>;
     private _sessionSel: SelectController<StockTsdSessionState>;
     private _authSel: SelectController<AuthUser | null>;
+    private _outbox: ControllerFor<'stock/tsd_outbox'>;
+    private _outboxSel: SelectController<StockTsdOutboxState>;
+    private _networkSel: SelectController<NetworkState>;
+    private _scanCommit: ControllerFor<'stock/scan_commit'>;
+    private _scanCountCommit: ControllerFor<'stock/scan_count_commit'>;
+    private _scanAdhocCommit: ControllerFor<'stock/scan_adhoc_commit'>;
+    private _moveLinesException: ControllerFor<'stock/move_lines_exception'>;
+    private _containerMove: ControllerFor<'stock/container_move'>;
+    private _pulse: ControllerFor<'stock/operator_pulse'>;
     private _scanInput: TsdScanInput | null = null;
     private _flash: '' | 'ok' | 'error' = '';
     private _flashTimer: ReturnType<typeof setTimeout> | null = null;
     private _cameraOpen = false;
-    private _pending: '' | 'zone' | 'resource' = '';
+    private _pending: '' | 'zone' | 'resource' | 'wave' = '';
     private _loadedFor = '';
+    private _hadSession = false;
+    private _draining = false;
+    private _drainCooldownUntil = 0;
+    private _outboxOpen = false;
     private readonly _cameraSupported = tsdCameraScanSupported();
 
     static override styles = [
@@ -217,6 +246,147 @@ export class StockTsdHomePage extends PlatformPage {
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
+            .wave-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .wave-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                min-height: var(--tsd-touch-md);
+                padding: var(--space-3) var(--space-4);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-xl);
+                background: var(--bg-surface);
+                color: var(--text-primary);
+                font-size: var(--tsd-text-body);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .wave-item.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            .wave-name { flex: 1; text-align: start; }
+            .wave-empty {
+                padding: var(--space-4);
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                text-align: center;
+            }
+            .outbox-banner {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                min-height: var(--tsd-touch-md);
+                padding: var(--space-3) var(--space-4);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-2xl);
+                background: var(--bg-surface);
+                color: var(--text-secondary);
+                font: inherit;
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .outbox-banner.offline {
+                border-color: var(--tsd-warning, #b45309);
+                background: var(--tsd-warning-subtle, rgba(245, 158, 11, 0.12));
+                color: var(--tsd-warning, #b45309);
+            }
+            .outbox-banner.syncing {
+                border-color: var(--tsd-info);
+                background: var(--tsd-info-subtle);
+                color: var(--tsd-info);
+            }
+            .outbox-text { flex: 1; text-align: start; }
+            .outbox-count {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 26px;
+                height: 26px;
+                padding: 0 var(--space-2);
+                border-radius: var(--radius-full);
+                background: currentColor;
+                color: var(--bg-surface);
+                font-size: var(--text-xs);
+                font-weight: var(--font-bold);
+            }
+            .outbox-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .outbox-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-xl);
+                background: var(--bg-surface);
+            }
+            .outbox-item-body {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                flex: 1;
+                min-width: 0;
+            }
+            .outbox-item-op {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .outbox-item-time {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .outbox-drop {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                border: 1px solid var(--border-default);
+                border-radius: 50%;
+                background: var(--bg-surface);
+                color: var(--text-tertiary);
+                cursor: pointer;
+            }
+            .outbox-drop:active { background: var(--tsd-error-subtle); color: var(--tsd-error); }
+            .pulse {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: var(--space-3);
+            }
+            .pulse-stat {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 2px;
+                padding: var(--space-3);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-2xl);
+                background: var(--bg-surface);
+            }
+            .pulse-value {
+                font-size: var(--text-2xl);
+                font-weight: var(--font-bold);
+                color: var(--text-primary);
+                font-variant-numeric: tabular-nums;
+            }
+            .pulse-label {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                text-align: center;
+            }
             .pending-cancel {
                 display: flex;
                 align-items: center;
@@ -299,6 +469,14 @@ export class StockTsdHomePage extends PlatformPage {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
+            .task-wave {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--tsd-info);
+            }
             .task-side {
                 display: flex;
                 flex-direction: column;
@@ -325,6 +503,23 @@ export class StockTsdHomePage extends PlatformPage {
                 cursor: pointer;
             }
             .task-release:active { background: var(--tsd-error-subtle); color: var(--tsd-error); }
+            .count-due {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .count-due-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .count-due-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+            }
             .ready {
                 display: flex;
                 flex-direction: column;
@@ -446,16 +641,27 @@ export class StockTsdHomePage extends PlatformPage {
         this._queue = this.useResource('stock/queue');
         this._next = this.useOp('stock/move_lines_next');
         this._release = this.useOp('stock/move_lines_release');
+        this._countDue = this.useOp('stock/locations_count_due');
+        this._waves = this.useResource('stock/waves');
         this._products = this.useResource('stock/products');
         this._locations = this.useResource('stock/locations');
         this._session = this.useSlice('stock/tsd_session');
         this._sessionSel = this.select((s) => s.stockTsdSession as StockTsdSessionState);
         this._authSel = this.select((s) => s.auth.user);
+        this._outbox = this.useSlice('stock/tsd_outbox');
+        this._outboxSel = this.select((s) => s.stockTsdOutbox as StockTsdOutboxState);
+        this._networkSel = this.select((s) => s.network as NetworkState);
+        this._scanCommit = this.useOp('stock/scan_commit');
+        this._scanCountCommit = this.useOp('stock/scan_count_commit');
+        this._scanAdhocCommit = this.useOp('stock/scan_adhoc_commit');
+        this._moveLinesException = this.useOp('stock/move_lines_exception');
+        this._containerMove = this.useOp('stock/container_move');
+        this._pulse = this.useOp('stock/operator_pulse');
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
-        this._scanInput = new TsdScanInput((code) => void this._onScan(code));
+        this._scanInput = new TsdScanInput((code) => this._onScan(code));
         this._scanInput.attach();
     }
 
@@ -475,6 +681,80 @@ export class StockTsdHomePage extends PlatformPage {
         if (context.warehouse_id === '' && this._loadedFor !== '') {
             this._loadedFor = '';
         }
+        // Сессия закрылась (коммит, исключение, выход) — задание ушло
+        // в леджер: очередь и показатели оператора обновляем сразу.
+        const running = this._sessionSel.value.context !== null;
+        if (this._hadSession && !running) {
+            this._hadSession = false;
+            this._refreshQueue();
+        } else if (running) {
+            this._hadSession = true;
+        }
+        if (this._deliverable() && this._outboxSel.value.items.length > 0 && !this._draining
+            && Date.now() >= this._drainCooldownUntil) {
+            void this._drainOutbox();
+        }
+    }
+
+    /** Очередь + пульс оператора — единая точка обновления после изменения работы. */
+    private _refreshQueue(): void {
+        this._queue.load(this._queueQuery());
+        const warehouseId = this._contextSel.value.warehouse_id;
+        if (warehouseId !== '') {
+            void this._pulse.run({ warehouse_id: warehouseId, window_hours: 8 });
+        }
+    }
+
+    /** Доставляемо: браузер онлайн и командный WS-транспорт открыт. */
+    private _deliverable(): boolean {
+        const net = this._networkSel.value;
+        return net.online && net.ws.status === 'open';
+    }
+
+    private _outboxTargets(): Record<string, { run(p?: unknown): Promise<unknown> }> {
+        return {
+            'stock/scan_commit': this._scanCommit,
+            'stock/scan_count_commit': this._scanCountCommit,
+            'stock/scan_adhoc_commit': this._scanAdhocCommit,
+            'stock/move_lines_exception': this._moveLinesException,
+            'stock/container_move': this._containerMove,
+        };
+    }
+
+    /** Дрейн outbox FIFO: успех снимает элемент, отказ останавливает
+     *  очередь — конфликт мог каскадить на следующие команды. */
+    private async _drainOutbox(): Promise<void> {
+        if (this._draining) return;
+        this._draining = true;
+        try {
+            for (;;) {
+                const item = this._outboxSel.value.items[0];
+                if (item === undefined || !this._deliverable()) break;
+                const target = this._outboxTargets()[item.op];
+                if (target === undefined) {
+                    this._outbox.dropped(item.outbox_id);
+                    continue;
+                }
+                const result = await target.run(item.payload);
+                if (result !== null) {
+                    this._outbox.delivered(item.outbox_id);
+                    this._refreshQueue();
+                    continue;
+                }
+                this._outbox.attemptFailed({ outbox_id: item.outbox_id, error: 'delivery_failed' });
+                this._drainCooldownUntil = Date.now() + 30_000;
+                break;
+            }
+        } finally {
+            this._draining = false;
+        }
+    }
+
+    private _outboxWhen(item: TsdOutboxItem): string {
+        const at = new Date(item.enqueued_at);
+        return Number.isNaN(at.getTime())
+            ? item.enqueued_at
+            : at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     }
 
     private _queueQuery(): Record<string, unknown> {
@@ -484,6 +764,7 @@ export class StockTsdHomePage extends PlatformPage {
             warehouse_id: context.warehouse_id,
             assigned_user_id: user === null ? undefined : user.user_id,
             zone_location_id: context.zone_location_id === '' ? undefined : context.zone_location_id,
+            wave_id: context.wave_id === '' ? undefined : context.wave_id,
             limit: 50,
         };
     }
@@ -492,7 +773,21 @@ export class StockTsdHomePage extends PlatformPage {
         const context = this._contextSel.value;
         this._queue.load(this._queueQuery());
         this._products.load({ limit: 500 });
-        this._locations.load({ warehouse_id: context.warehouse_id });
+        this._locations.load({ warehouse_id: context.warehouse_id, include_virtual: true });
+        this._waves.load({ warehouse_id: context.warehouse_id, state: 'released' });
+        void this._countDue.run({ warehouse_id: context.warehouse_id, limit: 20 });
+        void this._pulse.run({ warehouse_id: context.warehouse_id, window_hours: 8 });
+    }
+
+    private _startCount(locationId: string): void {
+        this._session.stepApplied({
+            context: { flow: 'count', step: 'product', source_id: locationId },
+            resolution: null,
+            barcode: '',
+            error: null,
+            hint: '',
+            expected: null,
+        });
     }
 
     private async _giveWork(): Promise<void> {
@@ -502,6 +797,7 @@ export class StockTsdHomePage extends PlatformPage {
                 warehouse_id: context.warehouse_id,
                 resource_id: context.resource_id === '' ? undefined : context.resource_id,
                 zone_location_id: context.zone_location_id === '' ? undefined : context.zone_location_id,
+                wave_id: context.wave_id === '' ? undefined : context.wave_id,
                 claim: true,
             });
             if (response === null) {
@@ -511,7 +807,7 @@ export class StockTsdHomePage extends PlatformPage {
                 this.toast('home.no_work', { type: 'info' });
                 return;
             }
-            this._queue.load(this._queueQuery());
+            this._refreshQueue();
             this._applyOutcome('ok', '', '');
             await this._openLine(response.line);
         } catch {
@@ -548,7 +844,7 @@ export class StockTsdHomePage extends PlatformPage {
                 move_line_ids: [line.move_line_id],
                 idempotency_key: null,
             });
-            this._queue.load(this._queueQuery());
+            this._refreshQueue();
         } catch {
             this.toast('home.release_failed', { type: 'error' });
         }
@@ -561,10 +857,42 @@ export class StockTsdHomePage extends PlatformPage {
 
     private _locationName(locationId: string): string {
         const location = this._locations.items.find((row) => row.location_id === locationId);
-        return location === undefined ? locationId : (location.complete_name ?? location.name);
+        if (location === undefined) return locationId;
+        const virtual = tsdVirtualLocationKey(location.usage, location.partner_role);
+        return virtual !== null ? this.t(virtual) : (location.complete_name ?? location.name);
     }
 
-    private async _onScan(code: string): Promise<void> {
+    private _waveName(waveId: string): string {
+        const wave = this._waves.items.find((row) => row.wave_id === waveId);
+        return wave === undefined ? waveId : wave.name;
+    }
+
+    // Сканы сериализуются: hardware-сканер шлёт коды подряд быстрее
+    // ответа scan_step — без очереди второй скан уходил бы со старым
+    // контекстом и применялся к чужому шагу.
+    private _scanQueue: string[] = [];
+    private _scanBusy = false;
+
+    private _onScan(code: string): void {
+        this._scanQueue.push(code);
+        void this._drainScans();
+    }
+
+    private async _drainScans(): Promise<void> {
+        if (this._scanBusy) return;
+        this._scanBusy = true;
+        try {
+            let code = this._scanQueue.shift();
+            while (code !== undefined) {
+                await this._handleScan(code);
+                code = this._scanQueue.shift();
+            }
+        } finally {
+            this._scanBusy = false;
+        }
+    }
+
+    private async _handleScan(code: string): Promise<void> {
         const warehouseId = this._contextSel.value.warehouse_id;
         if (warehouseId === '') {
             this._applyOutcome('error', code, '');
@@ -623,11 +951,13 @@ export class StockTsdHomePage extends PlatformPage {
         if (entityId === null || entityId === undefined || entityId === '') {
             return;
         }
-        this.openBottomSheet('stock/tsd_entity', {
+        this.openBottomSheet('stock.tsd_entity', {
             barcode: code,
             entity_kind: resolution.entity_kind,
             entity_id: entityId,
             product_id: resolution.product_id ?? '',
+            serial: resolution.serial ?? '',
+            quantity: resolution.quantity ?? null,
             warehouse_id: this._contextSel.value.warehouse_id,
         });
     }
@@ -732,7 +1062,9 @@ export class StockTsdHomePage extends PlatformPage {
             <div class="scan-card ${session.outcome}">
                 <div class="scan-kind">${kindLabel}</div>
                 <div class="scan-barcode">${session.last_barcode}</div>
-                ${session.hint !== '' ? html`<div class="scan-hint">${session.hint}</div>` : ''}
+                ${session.error !== null && session.error !== undefined
+                    ? html`<div class="scan-hint">${formatPlatformError(session.error)}</div>`
+                    : session.hint !== '' ? html`<div class="scan-hint">${session.hint}</div>` : ''}
             </div>
         `;
     }
@@ -740,6 +1072,7 @@ export class StockTsdHomePage extends PlatformPage {
     private _renderContextChips(context: StockTsdContextState): TemplateResult {
         const zoneSet = context.zone_location_id !== '';
         const resourceSet = context.resource_id !== '';
+        const waveSet = context.wave_id !== '';
         return html`
             <div class="context-chips">
                 <button class="chip ${this._pending === 'zone' ? 'armed' : zoneSet ? 'filled' : ''}"
@@ -752,6 +1085,109 @@ export class StockTsdHomePage extends PlatformPage {
                     <platform-icon name="truck" size="16"></platform-icon>
                     ${resourceSet ? context.resource_code : this.t('home.chip_resource')}
                 </button>
+                <button class="chip ${this._pending === 'wave' ? 'armed' : waveSet ? 'filled' : ''}"
+                    @click=${() => { this._pending = this._pending === 'wave' ? '' : 'wave'; }}>
+                    <platform-icon name="layers" size="16"></platform-icon>
+                    ${waveSet ? context.wave_name : this.t('home.chip_wave')}
+                </button>
+            </div>
+        `;
+    }
+
+    private _renderOutbox(): TemplateResult | string {
+        const net = this._networkSel.value;
+        const items = this._outboxSel.value.items;
+        const offline = !net.online;
+        if (!offline && items.length === 0) return '';
+        const syncing = items.length > 0 && this._deliverable();
+        return html`
+            <button class="outbox-banner ${offline ? 'offline' : syncing ? 'syncing' : 'pending'}"
+                @click=${() => { this._outboxOpen = !this._outboxOpen; }}>
+                <platform-icon name=${offline ? 'wifi-off' : syncing ? 'refresh-cw' : 'cloud-upload'} size="20"></platform-icon>
+                <span class="outbox-text">${this.t(offline ? 'outbox.offline' : syncing ? 'outbox.syncing' : 'outbox.pending')}</span>
+                ${items.length > 0 ? html`<span class="outbox-count">${items.length}</span>` : ''}
+            </button>
+            ${this._outboxOpen && items.length > 0 ? html`
+                <div class="outbox-list">
+                    ${items.map((item) => html`
+                        <div class="outbox-item">
+                            <div class="outbox-item-body">
+                                <span class="outbox-item-op">${this.t(`outbox.op_${OUTBOX_OP_LABEL[item.op] ?? 'op'}`)}</span>
+                                <span class="outbox-item-time">${this._outboxWhen(item)}${item.attempts > 0 ? ` · ${this.t('outbox.retries', { count: String(item.attempts) })}` : ''}</span>
+                            </div>
+                            <button class="outbox-drop" @click=${(e: Event) => { e.stopPropagation(); this._outbox.dropped(item.outbox_id); }}
+                                aria-label=${this.t('outbox.drop')}>
+                                <platform-icon name="trash-2" size="16"></platform-icon>
+                            </button>
+                        </div>
+                    `)}
+                </div>
+            ` : ''}
+        `;
+    }
+
+    private _renderPulse(): TemplateResult | string {
+        const pulse = this._pulse.lastResult;
+        if (pulse === null || pulse === undefined || pulse.lines_done === 0) return '';
+        return html`
+            <div class="pulse">
+                <div class="pulse-stat">
+                    <span class="pulse-value">${pulse.lines_done}</span>
+                    <span class="pulse-label">${this.t('pulse.lines')}</span>
+                </div>
+                <div class="pulse-stat">
+                    <span class="pulse-value">${tsdFormatQty(pulse.units_done)}</span>
+                    <span class="pulse-label">${this.t('pulse.units')}</span>
+                </div>
+                <div class="pulse-stat">
+                    <span class="pulse-value">${tsdFormatQty(pulse.lines_per_hour)}</span>
+                    <span class="pulse-label">${this.t('pulse.per_hour')}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    private _pickWave(waveId: string, waveName: string): void {
+        this._context.setWave({ wave_id: waveId, wave_name: waveName });
+        this._pending = '';
+        this._refreshQueue();
+    }
+
+    private _renderWavePicker(): TemplateResult {
+        const context = this._contextSel.value;
+        const waves = this._waves.items;
+        return html`
+            <div class="pending-banner">
+                <span class="pending-banner-icon"><platform-icon name="layers" size="22"></platform-icon></span>
+                <span class="pending-banner-text">${this.t('home.pending_wave')}</span>
+                <button class="pending-cancel" @click=${() => { this._pending = ''; }}>
+                    <platform-icon name="x" size="20"></platform-icon>
+                </button>
+            </div>
+            <div class="wave-list">
+                ${context.wave_id !== ''
+                    ? html`
+                        <button class="wave-item" @click=${() => this._pickWave('', '')}>
+                            <platform-icon name="inbox" size="20"></platform-icon>
+                            <span class="wave-name">${this.t('home.wave_all')}</span>
+                        </button>
+                    `
+                    : ''}
+                ${waves.map(
+                    (wave) => html`
+                        <button class="wave-item ${wave.wave_id === context.wave_id ? 'active' : ''}"
+                            @click=${() => this._pickWave(wave.wave_id, wave.name)}>
+                            <platform-icon name="layers" size="20"></platform-icon>
+                            <span class="wave-name">${wave.name}</span>
+                            ${wave.wave_id === context.wave_id
+                                ? html`<platform-icon name="check" size="18"></platform-icon>`
+                                : ''}
+                        </button>
+                    `,
+                )}
+                ${waves.length === 0
+                    ? html`<div class="wave-empty">${this.t('home.wave_empty')}</div>`
+                    : ''}
             </div>
         `;
     }
@@ -759,6 +1195,9 @@ export class StockTsdHomePage extends PlatformPage {
     private _renderPending(): TemplateResult {
         if (this._pending === '') {
             return html``;
+        }
+        if (this._pending === 'wave') {
+            return this._renderWavePicker();
         }
         const key = this._pending === 'zone' ? 'home.pending_zone' : 'home.pending_resource';
         const icon = this._pending === 'zone' ? 'map-pin' : 'truck';
@@ -789,13 +1228,33 @@ export class StockTsdHomePage extends PlatformPage {
                         ${lines.map((line) => this._renderLine(line))}
                     </div>
                 `}
+            ${this._renderCountDue()}
+        `;
+    }
+
+    private _renderCountDue(): TemplateResult {
+        const due = this._countDue.lastResult;
+        const items = due === null || due === undefined ? [] : due.items;
+        if (items.length === 0) return html``;
+        return html`
+            <div class="count-due">
+                <div class="count-due-title">${this.t('home.count_due_title')}</div>
+                <div class="count-due-list">
+                    ${items.map((location) => html`
+                        <button class="chip" @click=${() => this._startCount(location.location_id)}>
+                            <platform-icon name="checklist" size="16"></platform-icon>
+                            ${location.complete_name ?? location.name}
+                        </button>
+                    `)}
+                </div>
+            </div>
         `;
     }
 
     private _renderLine(line: StockMoveLine): TemplateResult {
         const qty = line.done_quantity !== undefined && line.done_quantity !== null
-            ? `${line.done_quantity}/${line.quantity ?? ''}`
-            : `${line.quantity ?? ''}`;
+            ? `${tsdFormatQty(line.done_quantity)}/${tsdFormatQty(line.quantity ?? '')}`
+            : `${tsdFormatQty(line.quantity ?? '')}`;
         return html`
             <div class="task-card" @click=${() => void this._openLine(line)}>
                 <div class="task-icon"><platform-icon name=${line.kind === 'container' ? 'box' : 'package'} size="22"></platform-icon></div>
@@ -807,6 +1266,9 @@ export class StockTsdHomePage extends PlatformPage {
                         <platform-icon name="arrow-right" size="14"></platform-icon>
                         ${this._locationName(line.location_dest_id)}
                     </div>
+                    ${line.wave_id !== null && line.wave_id !== undefined && line.wave_id !== ''
+                        ? html`<div class="task-wave"><platform-icon name="layers" size="12"></platform-icon> ${this._waveName(line.wave_id)}</div>`
+                        : ''}
                 </div>
                 <div class="task-side">
                     <div class="task-qty">${qty}</div>
@@ -831,6 +1293,8 @@ export class StockTsdHomePage extends PlatformPage {
                 </div>
             </div>
             ${this._renderContextChips(context)}
+            ${this._renderOutbox()}
+            ${this._renderPulse()}
             ${this._renderPending()}
             ${running ? html`<stock-tsd-run></stock-tsd-run>` : html`
                 ${this._renderWork()}

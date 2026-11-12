@@ -7,20 +7,11 @@
 
 from core.tasks import declare_task
 
-TASK_PUSH_CONFIG_SET = declare_task("push_config_set", queue="idle")
-TASK_PUSH_CONFIG_GET = declare_task("push_config_get", queue="idle")
-TASK_PUSH_CONFIG_LIST = declare_task("push_config_list", queue="idle")
-TASK_PUSH_CONFIG_DELETE = declare_task("push_config_delete", queue="idle")
 TASK_PUSH_NOTIFICATION_SEND = declare_task(
     "push_notification_send", queue="a2a_push", retry=True, max_retries=5
 )
 TASK_SEND_TASK_UPDATE = declare_task(
     "send_task_update", queue="a2a_push", retry=True, max_retries=3
-)
-TASK_SEND_TASK_COMPLETED = declare_task("send_task_completed", queue="a2a_push")
-TASK_SEND_TASK_FAILED = declare_task("send_task_failed", queue="a2a_push")
-TASK_SEND_TASK_INPUT_REQUIRED = declare_task(
-    "send_task_input_required", queue="a2a_push"
 )
 
 TASK_INIT_NEW_COMPANY = declare_task(
@@ -79,16 +70,9 @@ __all__ = [
     "TASK_NAMESPACE_PERSONAL_BACKFILL",
     "TASK_PAYMENT_SYNC_TICK",
     "TASK_PLATFORM_SCHEDULES_GC_TICK",
-    "TASK_PUSH_CONFIG_DELETE",
-    "TASK_PUSH_CONFIG_GET",
-    "TASK_PUSH_CONFIG_LIST",
-    "TASK_PUSH_CONFIG_SET",
     "TASK_PUSH_NOTIFICATION_SEND",
     "TASK_REALTIME_PRESENCE_TICK",
     "TASK_REDIS_INVENTORY_TICK",
-    "TASK_SEND_TASK_COMPLETED",
-    "TASK_SEND_TASK_FAILED",
-    "TASK_SEND_TASK_INPUT_REQUIRED",
     "TASK_SEND_TASK_UPDATE",
     "TASK_SPAN_BILLING_SETTLEMENT_TICK",
     "TASK_STORAGE_MIGRATION_TICK",

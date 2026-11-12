@@ -1032,6 +1032,7 @@ class StockMove(PlatformModel):
         move_id: str,
         warehouse_id: str | None,
         drafts: list[ScanLineDraft],
+        ship_all: bool,
         container_move: tuple[str, str] | None,
         owner_entity_id: str | None,
         operation_code: str | None,
@@ -1062,6 +1063,10 @@ class StockMove(PlatformModel):
         ``container_move=(container_id, dest_id)`` — ветка «перевезти
         паллету»: одна строка ``kind=container``, масса = содержимое
         на момент проводки.
+
+        ``ship_all`` — плечо «отгрузка»: открытые строки проводятся
+        целиком через ``post_step`` (пломбированная тара на доке —
+        оператор подтверждает факт, а не пересканирует позиции).
         """
 
         async def body(_scope: LaneScope) -> LaneOutcome[StockMove]:
@@ -1077,6 +1082,44 @@ class StockMove(PlatformModel):
                 "Move cannot take scan commit from its state",
                 error_code="move_state_conflict",
             )
+            if ship_all:
+                posted = await cls.post_step(
+                    company_id=company_id,
+                    move=move,
+                    warehouse_id=warehouse_id,
+                    owner_entity_id=owner_entity_id,
+                    actor_user_id=actor_user_id,
+                )
+                ship_events: list[PlatformEvent] = quant_changed_events(
+                    posted.quants,
+                    company_id=company_id,
+                    move_id=move.move_id,
+                    actor_user_id=actor_user_id,
+                    causation_id=causation_id,
+                )
+                if posted.done_now:
+                    ship_events.append(
+                        move_done_event(
+                            posted,
+                            company_id=company_id,
+                            warehouse_id=warehouse_id,
+                            operation_code=operation_code,
+                            actor_user_id=actor_user_id,
+                            causation_id=causation_id,
+                        )
+                    )
+                    if move.transfer_id is not None and on_move_done is not None:
+                        transfer_done = await on_move_done(
+                            company_id=company_id,
+                            move=move,
+                            operation_code=operation_code,
+                            actor_user_id=actor_user_id,
+                            causation_id=causation_id,
+                            done_at=posted.move.done_at,
+                        )
+                        if transfer_done is not None:
+                            ship_events.append(transfer_done)
+                return LaneOutcome(result=posted.move, events=ship_events)
             src = await StockLocation.by_id(company_id, move.location_id)
             dst = await StockLocation.by_id(company_id, move.location_dest_id)
             if src is None or dst is None:
@@ -1189,25 +1232,50 @@ class StockMove(PlatformModel):
                     )
                     continue
                 remaining = draft.quantity
-                # Сплит открытых резервных строк по месту/партии.
+                # Сплит открытых резервных строк по источнику и партии.
+                # Приёмник обещания не фильтрует: открытые строки move
+                # делят один ``move.location_dest_id``, а реальная точка
+                # приёмки записывается в исполненную строку из ``dst_id``
+                # (скан — факт: «положил в короб», а не «просил разрешения»).
                 for cand in open_lines:
                     if remaining <= STOCK_ZERO:
                         break
                     if (
                         cand.kind != StockMoveLineKind.QUANTITY
                         or cand.location_id != src_id
-                        or cand.location_dest_id != dst_id
                         or cand.quantity <= STOCK_ZERO
                     ):
                         continue
                     if draft.lot_id is not None and cand.lot_id != draft.lot_id:
                         continue
+                    if (
+                        cand.assigned_user_id is not None
+                        and cand.assigned_user_id != actor_user_id
+                    ):
+                        # Строка захвачена другим оператором — чужую
+                        # работу исполнять нельзя, иначе двое поедут
+                        # за одной паллетой (claim-контракт очереди).
+                        raise PlatformConflictError(
+                            "Move line is claimed by another operator",
+                            error_code="move_line_claimed",
+                        )
                     take = min(cand.quantity, remaining)
+                    # done урезается вместе с требованием — как в
+                    # report_exception: строка не может исполниться
+                    # больше, чем осталось забрать, иначе ship_all
+                    # провёл бы уже отсканированные единицы второй раз.
+                    new_quantity = cand.quantity - take
+                    new_done = min(cand.done_quantity, new_quantity)
                     _ = await StockMoveLine.objects.filter(
                         company_id=company_id,
                         move_line_id=cand.move_line_id,
-                    ).update(using=STOCK_DB, quantity=cand.quantity - take)
-                    cand.quantity -= take
+                    ).update(
+                        using=STOCK_DB,
+                        quantity=new_quantity,
+                        done_quantity=new_done,
+                    )
+                    cand.quantity = new_quantity
+                    cand.done_quantity = new_done
                     if cand.quantity <= STOCK_ZERO:
                         # Резерв строки отобран целиком в исполненную —
                         # пустая оболочка закрывается, иначе move не

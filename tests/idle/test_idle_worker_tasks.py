@@ -101,7 +101,11 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
     unique_id: str,
 ) -> None:
     """Backfill обновляет FileRecord без retention, заполняя его по source_kind."""
+<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     _ = frontend_di
+=======
+    repository: FileRepository = frontend_container.file_repository
+>>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
     retention = default_retention_for_source(FileSourceKind.FLOW_SESSION)
 
     company_id = f"co_backfill_{unique_id}"
@@ -141,10 +145,17 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
         assert refreshed is not None
         assert refreshed.retention_kind == retention.kind
     finally:
+<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
         _ = await FileRecord.delete_by_id(file_id)
 
 
 # --- platform_schedules_gc + redis_inventory ---------------------------------
+=======
+        await repository.delete(file_id)
+
+
+# --- platform_schedules_gc + redis_inventory (без container injection) -------
+>>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
 
 
 @pytest.mark.asyncio
@@ -152,7 +163,11 @@ async def test_platform_schedules_gc_tick_runs_against_real_redis(
     unique_id: str,
 ) -> None:
     """GC orphan keys тик на реальном TaskIQ broker Redis возвращает структуру."""
+<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     from apps.idle.tasks.platform_schedules_gc_tasks import (
+=======
+    from apps.idle_worker.tasks.platform_schedules_gc_tasks import (
+>>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
         platform_schedules_gc_tick,
     )
 
@@ -173,7 +188,11 @@ async def test_platform_schedules_gc_tick_runs_against_real_redis(
 @pytest.mark.asyncio
 async def test_redis_inventory_tick_reports_db_sizes(unique_id: str) -> None:
     """Redis inventory тик возвращает dbsize/no_ttl метрики для domain и broker Redis."""
+<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     from apps.idle.tasks.redis_inventory_tasks import redis_inventory_tick
+=======
+    from apps.idle_worker.tasks.redis_inventory_tasks import redis_inventory_tick
+>>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
 
     result = await redis_inventory_tick(
         schedule_task_id=f"inv_{unique_id}",

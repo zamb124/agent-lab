@@ -5454,7 +5454,7 @@ export interface LLMCallConfig {
     [key: string]: unknown;
 }
 
-export type LLMCapability = "llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "image_gen";
+export type LLMCapability = "llm_chat" | "llm_summarize" | "llm_format_markdown" | "llm_codegen" | "llm_vision" | "image_gen" | "image_edit";
 
 /**
  * Частичное наложение token budget.

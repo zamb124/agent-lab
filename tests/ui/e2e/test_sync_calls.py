@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from playwright.async_api import Page, expect
@@ -12,7 +13,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
 )
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
 
@@ -274,4 +275,138 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
         "После переключения каналов сообщения ad-hoc канала сохранены",
         ui_page_system,
         label_en="After switching channels, ad-hoc channel messages are preserved",
+    )
+
+
+@pytest.mark.scenario(
+    service="sync",
+    tag="calls",
+    doc_slug="scheduled-call-link",
+    title="Sync: встреча по расписанию с гостевой ссылкой",
+    title_en="Sync: scheduled meeting with a guest link",
+    description=(
+        "**Для чего:** эта инструкция покажет, как запланировать встречу заранее "
+        "и получить ссылку, по которой подключатся участники.\n\n"
+        "**Какие проблемы решает:** без ссылки гости не знают, куда заходить, "
+        "а список встреч помогает не потерять запланированный звонок.\n\n"
+        "**Результат:** встреча создана и видна в списке «Запланированные "
+        "встречи», её можно открыть и изменить."
+    ),
+    description_en=(
+        "**What for:** this guide shows how to schedule a meeting in advance "
+        "and get a link your guests will use to join.\n\n"
+        "**Problems it solves:** without a link guests don't know where to go, "
+        "and the meetings list keeps your scheduled calls in one place.\n\n"
+        "**Result:** the meeting is created, visible in Scheduled meetings, "
+        "and can be opened for editing."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_scheduled_call_link_create_and_edit(
+    scenario: ScenarioRecorder,
+    sync_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+    frontend_di,
+) -> None:
+    page = ui_page_system
+    await sync_e2e_open_with_namespace(sync_ui, page, unique_id, suffix="sched")
+
+    # Scheduled meeting = platform calendar event kind="meeting", для которого
+    # обязателен mailbox_binding_id: сидим user-mailbox владельца компании.
+    from tests.ui.e2e.flows_e2e_helpers import flows_seed_ui_mail_mailbox
+
+    await flows_seed_ui_mail_mailbox(frontend_di, unique_id=unique_id)
+
+    await page.goto(f"{sync_ui.origin}/sync/calls/scheduled", wait_until="domcontentloaded")
+    scheduled = page.locator("sync-calls-scheduled-page")
+    await expect(scheduled).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте «Запланированные встречи»",
+        page,
+        screenshot_name="scheduled-empty",
+        label_en="Open Scheduled meetings",
+        details=(
+            "В мобильной нижней навигации или по адресу «Звонки → "
+            "Запланированные» откройте список встреч. Пока встреч нет — "
+            "список пуст."
+        ),
+        details_en=(
+            "Open the meetings list from the mobile bottom navigation or via "
+            "Calls → Scheduled. The list is empty until you create a meeting."
+        ),
+    )
+
+    create_btn = scheduled.locator(".actions-row platform-button").first
+    await expect(create_btn).to_be_visible(timeout=15_000)
+    await create_btn.locator("button").click()
+    create_modal = page.locator("sync-call-link-create-modal")
+    await expect(create_modal).to_be_visible(timeout=15_000)
+
+    meeting_title = f"Планёрка {unique_id[:6]}"
+    fields = create_modal.locator("platform-field")
+    await ui_set_platform_field(fields.nth(0), meeting_title)
+    when = (datetime.now(timezone.utc) + timedelta(days=1)).replace(second=0, microsecond=0)
+    await ui_set_platform_field(fields.nth(1), when.strftime("%Y-%m-%dT%H:%M"))
+    await fields.nth(2).evaluate(
+        """el => {
+            el.value = 45;
+            if (typeof el.requestUpdate === 'function') el.requestUpdate();
+            el.dispatchEvent(new CustomEvent('change', {
+                detail: { value: 45 }, bubbles: true, composed: true,
+            }));
+        }"""
+    )
+    await scenario.step(
+        "Заполните название, дату и длительность",
+        page,
+        screenshot_name="create-modal-filled",
+        label_en="Fill in title, date and duration",
+        details=(
+            "Нажмите «Создать встречу», введите название, выберите дату и "
+            "время и при необходимости измените длительность в минутах."
+        ),
+        details_en=(
+            "Click Create meeting, enter a title, pick the date and time, "
+            "and adjust the duration in minutes if needed."
+        ),
+    )
+
+    submit = create_modal.locator("platform-button[variant='primary']")
+    await submit.locator("button").click()
+    item = scheduled.locator("li.item").filter(has_text=meeting_title)
+    await expect(item).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Встреча появилась в списке",
+        page,
+        screenshot_name="meeting-in-list",
+        label_en="Meeting appears in the list",
+        details=(
+            "После создания встреча сразу видна в списке с датой проведения. "
+            "Ссылку можно отправить гостям — они подключатся без аккаунта."
+        ),
+        details_en=(
+            "Once created, the meeting appears in the list with its date. "
+            "Share the link with guests — they can join without an account."
+        ),
+    )
+
+    await item.click()
+    edit_modal = page.locator("sync-call-link-edit-modal")
+    await expect(edit_modal).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Откройте встречу для редактирования",
+        page,
+        screenshot_name="edit-modal",
+        label_en="Open the meeting for editing",
+        details=(
+            "Нажмите на встречу в списке — откроются её настройки: можно "
+            "переименовать, перенести время или удалить ссылку."
+        ),
+        details_en=(
+            "Click a meeting in the list to open its settings: rename it, "
+            "move the time, or delete the link."
+        ),
     )

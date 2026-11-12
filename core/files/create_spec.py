@@ -32,6 +32,7 @@ class FileSourceKind(StrEnum):
     PLATFORM_AUXILIARY = "platform_auxiliary"
     GENERATED_EPHEMERAL = "generated_ephemeral"
     PRODUCT = "product"
+    STOCK_ENTITY = "stock_entity"
 
 
 # Sentinel flow_id для файлов, которые пишет сам runtime-процесс
@@ -88,6 +89,9 @@ class FileCreateSpec(StrictBaseModel):
         ref = self.source_ref
         kind = self.source_kind
         if kind is FileSourceKind.CRM_ENTITY:
+            if not ref.entity_id:
+                raise ValueError(f"source_ref.entity_id required for {kind}")
+        if kind is FileSourceKind.STOCK_ENTITY:
             if not ref.entity_id:
                 raise ValueError(f"source_ref.entity_id required for {kind}")
         if kind is FileSourceKind.OFFICE_DOCUMENT and self.placement is None:

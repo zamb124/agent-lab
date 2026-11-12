@@ -81,7 +81,7 @@ async def test_office_catalog_rag_and_semantic_search(
     enable_switch = rag_modal.locator("platform-switch").first
     await enable_switch.click()
     await expect(rag_modal.get_by_text("Готово")).to_be_visible(timeout=120_000)
-    await rag_modal.get_by_role("button", name="Закрыть").click()
+    await rag_modal.locator(".footer-actions .btn-secondary").click()
     await expect(rag_modal).to_be_hidden(timeout=30_000)
     await ui_page_system.reload(wait_until="domcontentloaded")
     await office_e2e_select_catalog(ui_page_system, catalog_title)

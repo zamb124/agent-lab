@@ -577,6 +577,8 @@ class FlowUIReflection(FlowUIBlockBase):
 
     type: Literal["reflection"] = "reflection"
     text: FlowUIText
+    tone: Literal["success", "warning", "error"] = "success"
+    detail: FlowUIText = ""
 
 
 class FlowUIActivity(FlowUIBlockBase):

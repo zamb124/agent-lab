@@ -9,11 +9,3 @@
 ## Шаг 2. Редактор региона: имя, тип, bbox, экстракты
 
 ![Редактор региона: имя, тип, bbox, экстракты](admin-sources-hub--02-region-editor-name-kind-bbox-extracts.png)
-
-## Шаг 3. Регион создан и виден в таблице регионов
-
-![Регион создан и виден в таблице регионов](admin-sources-hub--03-region-created-and-listed.png)
-
-## Шаг 4. Регион отредактирован и удалён — список актуален
-
-![Регион отредактирован и удалён — список актуален](admin-sources-hub--04-region-edited-and-removed-list-is-up-to-date.png)

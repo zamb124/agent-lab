@@ -303,6 +303,15 @@ export class FlowUIConversation extends LitElement {
     private _interrupt(turn: ConversationTurn) {
         const interrupt = turn.interrupt;
         if (!interrupt || interrupt.kind === 'user_message') return nothing;
+        if (interrupt.kind === 'breakpoint') {
+            return html`<div class="interrupt-card">
+                ${interrupt.question !== '' ? html`<div>${interrupt.question}</div>` : ''}
+                <div class="breakpoint-actions">
+                    <button type="button" class="fu-button" data-variant="primary"
+                        @click=${() => { void this.host?.sendText('', []); }}>${flowUIText(this._locale, 'breakpoint_continue')}</button>
+                </div>
+            </div>`;
+        }
         if (interrupt.kind === 'oauth_required') {
             return html`<div class="interrupt-card">
                 ${interrupt.question !== '' ? html`<div>${interrupt.question}</div>` : ''}
@@ -321,7 +330,9 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _observabilityButtons(turn: ConversationTurn) {
-        if (this.settings.show_trace_actions !== true) return nothing;
+        const viewer = isPlainRecord(this.host?.interface) ? this.host?.interface?.viewer : null;
+        const canEditFlow = isPlainRecord(viewer) && viewer.can_edit_flow === true;
+        if (this.settings.show_trace_actions !== true && !canEditFlow) return nothing;
         const open = (kind: string) => this.host?.dispatchEvent(new CustomEvent('flow-ui-open-observability', {
             bubbles: true, composed: true, detail: { kind, taskId: turn.taskId, contextId: this.host === null ? null : this.host.contextId },
         }));

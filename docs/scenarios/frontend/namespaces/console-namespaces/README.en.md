@@ -32,7 +32,7 @@ Click Create workspace. A dialog opens with name and description fields — with
 
 ## Step 5. Confirm the new workspace in the list
 
-**Result demonstration.** The list shows a card named uiws_b8d28ff0. A CRM settings link next to it means the space is registered as a company workspace.
+**Result demonstration.** The list shows a card named uiws_528d64b4. A CRM settings link next to it means the space is registered as a company workspace.
 
 **Summary.** You can open the namespaces registry, filter personal catalogs, and create a lightweight workspace without a CRM template.
 

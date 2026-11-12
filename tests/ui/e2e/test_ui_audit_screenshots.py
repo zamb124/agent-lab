@@ -4,7 +4,7 @@
     uv run pytest tests/ui/e2e/test_ui_audit_screenshots.py -q -n 0
 
 Пишет PNG в /tmp/ui_audit_shots/<svc>/<route>_<viewport>.png.
-Авторизованные SPA живут на company subdomain: ui-gw0.localhost (worker gw0).
+Авторизованные SPA живут на company subdomain воркера: ui-gwN.lvh.me.
 """
 
 from __future__ import annotations
@@ -15,9 +15,13 @@ from pathlib import Path
 import pytest
 from playwright.async_api import Page
 
+from tests.ui.e2e_worker import ui_e2e_subdomain
+from tests.ui.harness import ui_e2e_use_lvh_me
+
 OUT = Path("/tmp/ui_audit_shots")
-APEX = "http://localhost:9004"
-CO = "http://ui-gw0.localhost"
+_HOST = "lvh.me" if ui_e2e_use_lvh_me() else "localhost"
+APEX = f"http://{_HOST}:9004"
+CO = f"http://{ui_e2e_subdomain()}.{_HOST}"
 
 # (svc, url, shell_selector) — авторизованные маршруты worker-компании gw0.
 ROUTES: list[tuple[str, str, str]] = [
@@ -95,41 +99,62 @@ async def _shot(page: Page, svc: str, url: str, shell: str, tag: str) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(3600)
-async def test_ui_audit_desktop(ui_page_system: Page) -> None:
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "route", ROUTES, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in ROUTES]
+)
+async def test_ui_audit_desktop(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+    svc, url, shell = route
     page = ui_page_system
     await page.set_viewport_size(VIEWPORTS["desktop"])
-    for svc, url, shell in ROUTES:
-        await _shot(page, svc, url, shell, "desktop")
+    await _shot(page, svc, url, shell, "desktop")
 
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(3600)
-async def test_ui_audit_mobile(ui_page_system: Page) -> None:
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "route", ROUTES, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in ROUTES]
+)
+async def test_ui_audit_mobile(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+    svc, url, shell = route
     page = ui_page_system
     await page.set_viewport_size(VIEWPORTS["mobile"])
-    for svc, url, shell in ROUTES:
-        await _shot(page, svc, url, shell, "mobile")
+    await _shot(page, svc, url, shell, "mobile")
 
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
-@pytest.mark.timeout(300)
-async def test_ui_audit_public(ui_page_system: Page) -> None:
-    """Публичные маршруты apex (landing/login/products) + spot-check dark theme."""
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "route", PUBLIC_ROUTES, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in PUBLIC_ROUTES]
+)
+async def test_ui_audit_public(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+    """Публичные маршруты apex (landing/login/products)."""
+    svc, url, shell = route
     page = ui_page_system
     await page.set_viewport_size(VIEWPORTS["desktop"])
-    for svc, url, shell in PUBLIC_ROUTES:
-        await _shot(page, svc, url, shell, "desktop")
+    await _shot(page, svc, url, shell, "desktop")
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "route", DARK_SPOT_CHECK, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in DARK_SPOT_CHECK]
+)
+async def test_ui_audit_dark(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+    """Spot-check dark theme на авторизованных маршрутах."""
+    svc, url, shell = route
+    page = ui_page_system
+    await page.set_viewport_size(VIEWPORTS["desktop"])
     await page.add_init_script(
         "() => { try { window.localStorage.setItem('platform_theme', 'dark'); } catch (_) {} }"
     )
-    for svc, url, shell in DARK_SPOT_CHECK:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await page.evaluate(
-            "() => { document.documentElement.setAttribute('data-theme', 'dark');"
-            " document.documentElement.removeAttribute('data-platform-theme-lock'); }"
-        )
-        await page.wait_for_timeout(2_500)
-        await _shot(page, svc, url, shell, "dark")
+    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+    await page.evaluate(
+        "() => { document.documentElement.setAttribute('data-theme', 'dark');"
+        " document.documentElement.removeAttribute('data-platform-theme-lock'); }"
+    )
+    await page.wait_for_timeout(2_500)
+    await _shot(page, svc, url, shell, "dark")

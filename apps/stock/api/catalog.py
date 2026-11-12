@@ -23,6 +23,7 @@ from apps.stock.models import (
     StockResourceType,
     StockRoute,
     StockStorageType,
+    StockTransfer,
     StockValueLayer,
     StockWarehouse,
     ValueEntryKind,
@@ -49,6 +50,8 @@ from apps.stock.models.api import (
     StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
+    StockOperatorPulsePayload,
+    StockOperatorPulseResponse,
     StockPackagingCreatePayload,
     StockPackagingIdPayload,
     StockPackagingsListPayload,
@@ -62,6 +65,8 @@ from apps.stock.models.api import (
     StockPutawayRuleDeletePayload,
     StockPutawayRulesListPayload,
     StockPutawayRuleUpdatePayload,
+    StockPutawaySuggestPayload,
+    StockPutawaySuggestResponse,
     StockQuantInventoryApplyPayload,
     StockQuantInventorySetPayload,
     StockQuantsListPayload,
@@ -79,6 +84,7 @@ from apps.stock.models.api import (
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
+    StockScanAdhocCommitPayload,
     StockScanCommitPayload,
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
@@ -123,6 +129,7 @@ from apps.stock.realtime.operations import (
     op_moves_list,
     op_operation_types_list,
     op_operation_types_update,
+    op_operator_pulse,
     op_packagings_create,
     op_packagings_delete,
     op_packagings_list,
@@ -134,6 +141,7 @@ from apps.stock.realtime.operations import (
     op_putaway_rules_delete,
     op_putaway_rules_list,
     op_putaway_rules_update,
+    op_putaway_suggest,
     op_quants_inventory_apply,
     op_quants_inventory_set,
     op_quants_list,
@@ -151,6 +159,7 @@ from apps.stock.realtime.operations import (
     op_routes_create,
     op_routes_get,
     op_routes_list,
+    op_scan_adhoc_commit,
     op_scan_commit,
     op_scan_count_commit,
     op_scan_open,
@@ -258,10 +267,14 @@ async def update_catalog_product(
 
 @router.get("/locations", response_model=StockItemsResponse[StockLocation])
 async def list_locations(
-    di: Di, warehouse_id: str | None = None
+    di: Di, warehouse_id: str | None = None, include_virtual: bool = False
 ) -> StockItemsResponse[StockLocation]:
     return await op_locations_list(
-        StockLocationsListPayload(warehouse_id=warehouse_id), user=_user(), di=di
+        StockLocationsListPayload(
+            warehouse_id=warehouse_id, include_virtual=include_virtual
+        ),
+        user=_user(),
+        di=di,
     )
 
 
@@ -369,6 +382,24 @@ async def update_warehouse(
 async def warehouse_pulse(di: Di, warehouse_id: str) -> StockWarehousePulseResponse:
     return await op_warehouse_pulse(
         StockWarehousePulsePayload(warehouse_id=warehouse_id), user=_user(), di=di
+    )
+
+
+@router.get(
+    "/warehouses/{warehouse_id}/operator-pulse",
+    response_model=StockOperatorPulseResponse,
+)
+async def operator_pulse(
+    di: Di,
+    warehouse_id: str,
+    window_hours: Annotated[int, Query(ge=1, le=24)] = 8,
+) -> StockOperatorPulseResponse:
+    return await op_operator_pulse(
+        StockOperatorPulsePayload(
+            warehouse_id=warehouse_id, window_hours=window_hours
+        ),
+        user=_user(),
+        di=di,
     )
 
 
@@ -633,6 +664,13 @@ async def putaway_rules_delete(
     return await op_putaway_rules_delete(body, user=_user(), di=di)
 
 
+@router.post("/putaway/suggest", response_model=StockPutawaySuggestResponse)
+async def putaway_suggest(
+    di: Di, body: StockPutawaySuggestPayload
+) -> StockPutawaySuggestResponse:
+    return await op_putaway_suggest(body, user=_user(), di=di)
+
+
 @router.post("/routes/list", response_model=StockItemsResponse[StockRoute])
 async def routes_list(
     di: Di, body: StockRoutesListPayload
@@ -864,3 +902,10 @@ async def scan_count_commit(
     di: Di, body: StockScanCountCommitPayload
 ) -> StockScanCountCommitResponse:
     return await op_scan_count_commit(body, user=_user(), di=di)
+
+
+@router.post("/scan/adhoc-commit", response_model=StockTransfer)
+async def scan_adhoc_commit(
+    di: Di, body: StockScanAdhocCommitPayload
+) -> StockTransfer:
+    return await op_scan_adhoc_commit(body, user=_user(), di=di)

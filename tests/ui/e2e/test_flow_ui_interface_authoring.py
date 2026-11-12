@@ -155,7 +155,9 @@ async def test_flow_ui_interface_agent_card_properties_expose_image_url(
         )
         await expect(image_field.locator("input[type='file'][accept='image/*']")).to_have_count(1)
         await expect(
-            image_field.get_by_role("button", name=re.compile(r"Upload image|Загрузить"))
+            image_field.locator("platform-button").filter(
+                has_text=re.compile(r"Upload image|Загрузить")
+            )
         ).to_be_visible()
         await expect(image_field.locator("platform-field")).to_have_count(0)
     finally:

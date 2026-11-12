@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import Field
 
@@ -23,6 +23,7 @@ from apps.stock.models.enums import (
     StockLayoutPreset,
     StockLocationUsage,
     StockMoveState,
+    StockOperationCode,
     StockProductMixing,
     StockPutawayStrategy,
     StockRemovalStrategy,
@@ -37,7 +38,7 @@ from apps.stock.models.move import StockMove
 from apps.stock.models.move_line import StockMoveLine
 from apps.stock.models.quant import StockQuant
 from apps.stock.models.route import StockRouteStepSpec
-from apps.stock.models.scan import ScanContext, ScanResolution
+from apps.stock.models.scan import ScanContext, ScanFlow, ScanResolution
 from apps.stock.models.transfer import StockTransfer
 from apps.stock.models.value_layer import StockValueLayer
 from core.catalog.contracts import CatalogOverlay
@@ -185,6 +186,10 @@ class StockLocationIdPayload(StrictBaseModel):
 
 class StockLocationsListPayload(StrictBaseModel):
     warehouse_id: str | None = None
+    include_virtual: bool = False
+    """Добавить виртуальные концы компании (partner/transit/adjustment)
+    к физическим локациям склада — ТСД показывает их в маршрутах
+    документов («→ customer»), хотя остатков на них нет."""
 
 
 class StockLocationsCountDuePayload(StrictBaseModel):
@@ -233,6 +238,10 @@ class StockOperationTypeUpdatePayload(StrictBaseModel):
     putaway_mode: ReflexMode | None = None
     putaway_flow_id: str | None = None
     auto_validate: bool | None = None
+    scan_flow: Literal[ScanFlow.PACK, ScanFlow.SHIP, "default"] | None = None
+    """Поток ТСД для плеча маршрута: ``pack``/``ship`` — явная семантика;
+    ``"default"`` — вернуть вывод из ``code`` (поле → NULL); ``None`` —
+    не трогать."""
 
 
 # --- Transfers / moves ---
@@ -639,6 +648,25 @@ class StockWarehousePulseResponse(StrictBaseModel):
     quants: list[StockPulseQuantRow]
 
 
+class StockOperatorPulsePayload(StrictBaseModel):
+    """Показатели самого оператора за скользящее окно смены."""
+
+    warehouse_id: str
+    window_hours: int = Field(default=8, ge=1, le=24)
+
+
+class StockOperatorPulseResponse(StrictBaseModel):
+    warehouse_id: str
+    window_hours: int
+    lines_done: int
+    units_done: Decimal
+    count_lines_done: int
+    container_lines_done: int
+    lines_per_hour: Decimal
+    first_done_at: str | None = None
+    last_done_at: str | None = None
+
+
 class StockBarcodeResolvePayload(StrictBaseModel):
     barcode: str = Field(min_length=1, max_length=128)
 
@@ -690,6 +718,7 @@ class StockScanExpected(StrictBaseModel):
     только по ``context.step``.
     """
 
+    move_line_id: str | None = None
     location_id: str | None = None
     product_id: str | None = None
     quantity: Decimal | None = None
@@ -702,6 +731,15 @@ class StockScanStepResponse(StrictBaseModel):
     error: str | None = None
     hint: str = ""
     expected: StockScanExpected | None = None
+
+
+class StockScanAdhocCommitPayload(StrictBaseModel):
+    """Ad-hoc коммит без документа: набранные строки → новая накладная."""
+
+    warehouse_id: str
+    operation_code: StockOperationCode
+    context: ScanContext
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockScanOpenPayload(StrictBaseModel):
@@ -744,6 +782,8 @@ class StockMoveLinesQueuePayload(StrictBaseModel):
     assigned_user_id: str | None = None
     zone_location_id: str | None = None
     """Зона склада — очередь только её поддерева ячеек-источников."""
+    wave_id: str | None = None
+    """Очередь внутри волны сборки, если оператор её выбрал."""
     limit: int = Field(default=100, ge=1, le=500)
 
 
@@ -751,6 +791,7 @@ class StockMoveLineNextPayload(StrictBaseModel):
     warehouse_id: str
     resource_id: str | None = None
     zone_location_id: str | None = None
+    wave_id: str | None = None
     claim: bool = True
 
 
@@ -782,6 +823,8 @@ class StockMoveLineExceptionPayload(StrictBaseModel):
     move_line_id: str
     shortage: Decimal = Field(gt=Decimal("0"))
     reason: str = Field(default="", max_length=512)
+    file_ids: list[str] = Field(default_factory=list, max_length=8)
+    """Фото доказательства (бой, пустая ячейка) — общие файлы платформы."""
     idempotency_key: str | None = None
 
 
@@ -893,3 +936,24 @@ class StockPutawayRuleUpdatePayload(StrictBaseModel):
 class StockPutawayRuleDeletePayload(StrictBaseModel):
     rule_id: str
     idempotency_key: str | None = None
+
+
+class StockPutawaySuggestPayload(StrictBaseModel):
+    """Top-N ячеек «куда поставить» по одному товару — ad-hoc подсказка ТСД."""
+
+    warehouse_id: str
+    product_id: str
+    product_qty: Decimal = Field(default=Decimal("1"), gt=0)
+    location_dest_id: str | None = None
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class StockPutawaySuggestionItem(StrictBaseModel):
+    location_id: str
+    name: str
+    reason_code: str
+    allowed: bool
+
+
+class StockPutawaySuggestResponse(StrictBaseModel):
+    items: list[StockPutawaySuggestionItem]

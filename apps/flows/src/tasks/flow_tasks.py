@@ -66,7 +66,7 @@ async def process_flow_task(
         raise ValueError("Context is required. Context must be created in middleware.")
 
     if trace_context:
-        set_current_trace_context(trace_context)
+        _ = set_current_trace_context(trace_context)
 
     context = Context.from_dict(context_data)
     context.session_id = session_id

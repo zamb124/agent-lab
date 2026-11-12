@@ -4311,7 +4311,7 @@ class EntityService:
         """
         nonce = a2a_resume_nonce() or "run"
         dedup_key = f"crm:{call_id}:{nonce}"
-        row = await PlatformA2APendingCall.by_dedup_key("crm", dedup_key)
+        row = await PlatformA2APendingCall.latest_by_dedup_key_created_at_desc("crm", dedup_key)
         if row is not None:
             if row.result_payload is not None:
                 return self._a2a_result_data_from_payload(row.result_payload)

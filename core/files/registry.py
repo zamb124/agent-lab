@@ -14,6 +14,7 @@ DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS: frozenset[FileSourceKind] = frozenset(
         FileSourceKind.OFFICE_DOCUMENT,
         FileSourceKind.GENERATED_EPHEMERAL,
         FileSourceKind.PLATFORM_AUXILIARY,
+        FileSourceKind.STOCK_ENTITY,
     }
 )
 
@@ -59,6 +60,9 @@ FILE_SOURCE_DEFAULTS: dict[FileSourceKind, FileSourceDefaults] = {
     ),
     FileSourceKind.PRODUCT: FileSourceDefaults(
         retention_kind=FileRetentionKind.PRODUCT
+    ),
+    FileSourceKind.STOCK_ENTITY: FileSourceDefaults(
+        retention_kind=FileRetentionKind.PLATFORM_DEFAULT
     ),
     FileSourceKind.PLATFORM_AUXILIARY: FileSourceDefaults(
         retention_kind=FileRetentionKind.PLATFORM_DEFAULT

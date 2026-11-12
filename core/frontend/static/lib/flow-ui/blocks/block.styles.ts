@@ -221,6 +221,10 @@ export const blockStyles = css`
     .fu-prompts button:disabled { opacity: .55; cursor: default; }
     .fu-preview img { width: 100%; border-radius: var(--flow-ui-radius-md); border: 1px solid var(--flow-ui-border); }
     .fu-reflection { padding: 10px 14px; border-left: 3px solid var(--flow-ui-accent); background: var(--flow-ui-accent-muted); border-radius: 0 var(--flow-ui-radius-md) var(--flow-ui-radius-md) 0; color: var(--flow-ui-text); font-size: var(--flow-ui-font-size-sm); line-height: 1.5; }
+    .fu-reflection[data-tone="success"] { border-left-color: var(--flow-ui-success); }
+    .fu-reflection[data-tone="warning"] { border-left-color: var(--flow-ui-warning); }
+    .fu-reflection[data-tone="error"] { border-left-color: var(--flow-ui-danger); }
+    .fu-reflection .reflection-detail { margin-top: 6px; color: var(--flow-ui-muted); white-space: pre-wrap; }
     .fu-html { display: block; width: 100%; border: 0; border-radius: var(--flow-ui-radius-md); background: transparent; }
     .fu-html-error, .fu-block-error { margin-top: 6px; padding: 8px 12px; border-radius: var(--flow-ui-radius-sm); background: color-mix(in srgb, var(--flow-ui-danger) 12%, transparent); color: var(--flow-ui-danger); font-size: var(--flow-ui-font-size-xs); line-height: 1.5; white-space: pre-wrap; }
     .fu-block-error { margin-top: 0; font-family: var(--font-mono); }

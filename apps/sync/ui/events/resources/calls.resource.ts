@@ -216,6 +216,83 @@ export const callLinksScheduledOp = createAsyncOp({
             return state;
         }
 
+        // Calendar push → scheduled meeting links. Синхронная meeting-нода
+        // несёт metadata.sync_link_token/sync_channel_id и join_url в
+        // deep_link — мержим строку здесь, reload по push запрещён
+        // (ui_factories.mdc).
+        if (
+            event.type === 'calendar/event/created'
+            || event.type === 'calendar/event/updated'
+            || event.type === 'calendar/event/deleted'
+        ) {
+            const rec = callRecord(event.payload);
+            if (rec === null) {
+                return state;
+            }
+            const removeByEventId = (eventId: string | null) => {
+                if (eventId === null) {
+                    return state;
+                }
+                const nextItems = items.filter(
+                    (row) => !isPlainRecord(row) || row.calendar_event_id !== eventId,
+                );
+                if (nextItems.length === items.length) {
+                    return state;
+                }
+                if (Array.isArray(page)) {
+                    return { ...state, lastResult: nextItems };
+                }
+                if (!isPlainRecord(page)) {
+                    return state;
+                }
+                return { ...state, lastResult: { ...page, items: nextItems } };
+            };
+            if (event.type === 'calendar/event/deleted') {
+                return removeByEventId(
+                    typeof rec.event_id === 'string' ? rec.event_id : null,
+                );
+            }
+            const ev = isPlainRecord(rec.event) ? rec.event : null;
+            if (ev === null) {
+                return state;
+            }
+            const md = isPlainRecord(ev.metadata) ? ev.metadata : {};
+            const linkToken = typeof md.sync_link_token === 'string' && md.sync_link_token !== ''
+                ? md.sync_link_token
+                : null;
+            const eventId = typeof ev.event_id === 'string' ? ev.event_id : null;
+            if (linkToken === null) {
+                // meeting убрали/тип сменили — reconcile удалил ссылку.
+                return removeByEventId(eventId);
+            }
+            const row: Record<string, unknown> = {
+                link_token: linkToken,
+                calendar_event_id: eventId,
+                title: typeof ev.title === 'string' ? ev.title : null,
+                scheduled_start_at: typeof ev.start_at === 'string' ? ev.start_at : null,
+                scheduled_end_at: typeof ev.end_at === 'string' ? ev.end_at : null,
+                join_url: typeof ev.deep_link === 'string' ? ev.deep_link : null,
+            };
+            if (typeof md.sync_channel_id === 'string' && md.sync_channel_id !== '') {
+                row.channel_id = md.sync_channel_id;
+            }
+            const idx = items.findIndex(
+                (existing) => isPlainRecord(existing) && existing.link_token === linkToken,
+            );
+            const nextItems = idx === -1
+                ? [row, ...items]
+                : items.map((existing, i) => (
+                    i === idx ? mergeCall(isPlainRecord(existing) ? existing : null, row) : existing
+                ));
+            if (Array.isArray(page)) {
+                return { ...state, lastResult: nextItems };
+            }
+            if (!isPlainRecord(page)) {
+                return state;
+            }
+            return { ...state, lastResult: { ...page, items: nextItems } };
+        }
+
         if (event.type === events.ITEM_REMOVED) {
             const removed = callRecord(event.payload);
             const linkToken = removed !== null && typeof removed.link_token === 'string'

@@ -16,6 +16,7 @@ STOCK_DB = "stock"
 QTY_DB = "NUMERIC(20,6)"
 MONEY_DB = "NUMERIC(24,6)"
 STOCK_ZERO = Decimal("0")
+STOCK_ONE = Decimal("1")
 
 
 def new_id(prefix: str) -> str:

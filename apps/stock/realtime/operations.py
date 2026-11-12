@@ -63,6 +63,8 @@ from apps.stock.models.api import (
     StockMovesListPayload,
     StockOperationTypesListPayload,
     StockOperationTypeUpdatePayload,
+    StockOperatorPulsePayload,
+    StockOperatorPulseResponse,
     StockPackagingCreatePayload,
     StockPackagingIdPayload,
     StockPackagingsListPayload,
@@ -76,6 +78,9 @@ from apps.stock.models.api import (
     StockPutawayRuleDeletePayload,
     StockPutawayRulesListPayload,
     StockPutawayRuleUpdatePayload,
+    StockPutawaySuggestionItem,
+    StockPutawaySuggestPayload,
+    StockPutawaySuggestResponse,
     StockQuantInventoryApplyPayload,
     StockQuantInventorySetPayload,
     StockQuantsListPayload,
@@ -93,6 +98,7 @@ from apps.stock.models.api import (
     StockRouteCreatePayload,
     StockRouteIdPayload,
     StockRoutesListPayload,
+    StockScanAdhocCommitPayload,
     StockScanCommitPayload,
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
@@ -271,7 +277,9 @@ async def op_locations_list(
     scope = await require_company_viewer(di.authz_service)
     return StockItemsResponse(
         items=await di.topology_service.list_locations(
-            company_id=scope.company_id, warehouse_id=payload.warehouse_id
+            company_id=scope.company_id,
+            warehouse_id=payload.warehouse_id,
+            include_virtual=payload.include_virtual,
         )
     )
 
@@ -440,6 +448,7 @@ async def op_operation_types_update(
         putaway_mode=payload.putaway_mode,
         putaway_flow_id=payload.putaway_flow_id,
         auto_validate=payload.auto_validate,
+        scan_flow=payload.scan_flow,
     )
 
 
@@ -646,6 +655,7 @@ async def op_move_lines_queue(
         warehouse_id=payload.warehouse_id,
         assigned_user_id=payload.assigned_user_id,
         zone_location_id=payload.zone_location_id,
+        wave_id=payload.wave_id,
         limit=payload.limit,
     )
     return StockItemsResponse(items=items)
@@ -663,6 +673,7 @@ async def op_move_lines_next(
         user_id=scope.user_id,
         resource_id=payload.resource_id,
         zone_location_id=payload.zone_location_id,
+        wave_id=payload.wave_id,
         claim=payload.claim,
     )
     return StockMoveLineNextResponse(line=line)
@@ -729,6 +740,7 @@ async def op_move_lines_report_exception(
         move_line_id=payload.move_line_id,
         shortage=payload.shortage,
         reason=payload.reason,
+        file_ids=payload.file_ids,
         actor_user_id=scope.user_id,
         idempotency_key=command_idempotency_key(payload.idempotency_key),
     )
@@ -1174,6 +1186,39 @@ async def op_putaway_rules_list(
     return StockItemsResponse[StockPutawayRule](items=rules)
 
 
+async def op_putaway_suggest(
+    payload: StockPutawaySuggestPayload, *, user: User, di: Di
+) -> StockPutawaySuggestResponse:
+    """Top-N подсказок «куда поставить» по товару — ad-hoc putaway ТСД.
+
+    Чистое чтение: ранкинг тех же правил и стратегий типов хранения,
+    что рефлекс `resolve_putaway` применяет на документах. Ничего не
+    резервирует и не пишет — выбор оператора приедет сканом ячейки.
+    """
+    _ = user
+    scope = require_company()
+    await _warehouse_viewer(di, scope, payload.warehouse_id)
+    suggestions = await di.placement_service.suggest_for_product(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        product_id=payload.product_id,
+        product_qty=payload.product_qty,
+        location_dest_id=payload.location_dest_id,
+        limit=payload.limit,
+    )
+    return StockPutawaySuggestResponse(
+        items=[
+            StockPutawaySuggestionItem(
+                location_id=s.location_id,
+                name=s.name,
+                reason_code=s.reason_code,
+                allowed=s.allowed,
+            )
+            for s in suggestions
+        ]
+    )
+
+
 async def op_putaway_rules_create(
     payload: StockPutawayRuleCreatePayload, *, user: User, di: Di
 ) -> StockPutawayRule:
@@ -1617,6 +1662,20 @@ async def op_warehouse_pulse(
     )
 
 
+async def op_operator_pulse(
+    payload: StockOperatorPulsePayload, *, user: User, di: Di
+) -> StockOperatorPulseResponse:
+    _ = user
+    scope = require_company()
+    await _warehouse_viewer(di, scope, payload.warehouse_id)
+    return await di.pulse_service.operator_pulse(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        user_id=scope.user_id,
+        window_hours=payload.window_hours,
+    )
+
+
 async def op_barcode_resolve(
     payload: StockBarcodeResolvePayload, *, user: User, di: Di
 ) -> StockBarcodeResolveResponse:
@@ -1657,9 +1716,17 @@ async def _warehouse_of_move(scope: CompanyScope, move_id: str) -> str:
 
 
 async def _scan_expected(
-    company_id: str, warehouse_id: str, move_id: str | None
+    di: Di,
+    company_id: str,
+    warehouse_id: str,
+    move_id: str | None,
+    user_id: str,
 ) -> StockScanExpected | None:
-    """Подсказка экрану из первой открытой строки документа."""
+    """Подсказка экрану из первой исполнимой строки документа.
+
+    Чужой claim не подсказываем: оператор всё равно не проведёт
+    строку, захваченную другим (``move_line_claimed`` на коммите).
+    """
     if move_id is None:
         return None
     move = await StockMove.by_id(company_id, move_id)
@@ -1667,14 +1734,20 @@ async def _scan_expected(
         raise PlatformNotFoundError(
             "Move not found", error_code="move_not_found"
         )
-    lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move_id)
-    if not lines:
+    first = await di.scan_service.first_executable_line(
+        company_id=company_id, move_id=move_id, user_id=user_id
+    )
+    if first is None:
         return None
-    first = lines[0]
     return StockScanExpected(
+        move_line_id=first.move_line_id,
         location_id=first.location_id,
         product_id=first.product_id,
-        quantity=first.quantity - first.done_quantity,
+        quantity=(
+            first.done_quantity
+            if first.done_quantity > 0
+            else None
+        ),
         location_dest_id=first.location_dest_id,
     )
 
@@ -1694,8 +1767,11 @@ async def op_scan_step(
     resolution = await di.scan_service.resolve(
         company_id=scope.company_id, barcode=payload.barcode
     )
-    result = di.scan_service.step(
-        context=payload.context, resolution=resolution
+    result = await di.scan_service.step(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        context=payload.context,
+        resolution=resolution,
     )
     return StockScanStepResponse(
         context=result.context,
@@ -1703,7 +1779,7 @@ async def op_scan_step(
         error=result.error.value if result.error is not None else None,
         hint=result.hint,
         expected=await _scan_expected(
-            scope.company_id, payload.warehouse_id, payload.move_id
+            di, scope.company_id, payload.warehouse_id, payload.move_id, scope.user_id
         ),
     )
 
@@ -1720,12 +1796,13 @@ async def op_scan_open(
         warehouse_id=payload.warehouse_id,
         move_id=payload.move_id,
         transfer_id=payload.transfer_id,
+        user_id=scope.user_id,
     )
     return StockScanOpenResponse(
         context=context,
         move_id=move.move_id,
         expected=await _scan_expected(
-            scope.company_id, payload.warehouse_id, move.move_id
+            di, scope.company_id, payload.warehouse_id, move.move_id, scope.user_id
         ),
     )
 
@@ -1745,7 +1822,7 @@ async def op_scan_quantity(
         error=result.error.value if result.error is not None else None,
         hint=result.hint,
         expected=await _scan_expected(
-            scope.company_id, payload.warehouse_id, payload.move_id
+            di, scope.company_id, payload.warehouse_id, payload.move_id, scope.user_id
         ),
     )
 
@@ -1789,6 +1866,30 @@ async def op_scan_count_commit(
         command_type="stock/scan/count_commit_requested",
     )
     return StockScanCountCommitResponse(quant_ids=quant_ids)
+
+
+async def op_scan_adhoc_commit(
+    payload: StockScanAdhocCommitPayload, *, user: User, di: Di
+) -> StockTransfer:
+    """Ad-hoc коммит без планового документа — сессия пишет накладную.
+
+    Оператор набрал строки «свободным» потоком (переместил/принял без
+    наряда): backend создаёт накладную по operation_code и проводит её
+    тем же lane-коммитом, что и doc-driven — один леджер, один факт.
+    """
+    _ = user
+    scope = require_company()
+    await _warehouse_editor(di, scope, payload.warehouse_id)
+    return await di.scan_service.commit_adhoc(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        operation_code=payload.operation_code,
+        context=payload.context,
+        idempotency_key=command_idempotency_key(payload.idempotency_key),
+        actor_user_id=scope.user_id,
+        command_type="stock/scan/adhoc_commit_requested",
+        causation_id=current_command_event_id(),
+    )
 
 
 # --- Internal company init ---

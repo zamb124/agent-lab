@@ -24,12 +24,13 @@ import type {
     StockTransferDetail,
 } from '@platform/lib/events/wire/stock.gen.js';
 import type { StockTsdContextState } from '../../events/resources/stock-tsd.resource.js';
+import { tsdFormatQty, tsdVirtualLocationKey } from './tsd-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
 
 export class StockTsdEntitySheet extends PlatformBottomSheet {
     static i18nNamespace = 'stock_tsd';
-    static bottomSheetKind = 'stock/tsd_entity';
+    static bottomSheetKind = 'stock.tsd_entity';
 
     static override properties: PropertyDeclarations = {
         ...PlatformBottomSheet.properties,
@@ -37,6 +38,8 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         entity_kind: { type: String },
         entity_id: { type: String },
         product_id: { type: String },
+        serial: { type: String },
+        quantity: { attribute: false },
         warehouse_id: { type: String },
         _product: { state: true },
         _location: { state: true },
@@ -50,6 +53,8 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     declare entity_kind: string;
     declare entity_id: string;
     declare product_id: string;
+    declare serial: string;
+    declare quantity: number | string | null;
     declare warehouse_id: string;
     declare private _product: StockProductView | null;
     declare private _location: StockLocation | null;
@@ -61,6 +66,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     private _contextSel: SelectController<StockTsdContextState>;
     private _quants: ControllerFor<'stock/quants'>;
     private _products: ControllerFor<'stock/products'>;
+    private _locations: ControllerFor<'stock/locations'>;
     private _productItem: ControllerFor<'stock/product_item'>;
     private _locationItem: ControllerFor<'stock/location_item'>;
     private _containerItem: ControllerFor<'stock/container_item'>;
@@ -73,6 +79,9 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     static override styles = [
         PlatformBottomSheet.styles,
         css`
+            /* Терминалу нужна глухая панель: подложка рабочего стола не
+               должна мерцать сквозь лист на ходу одной рукой. */
+            .panel { background: var(--bg-surface); }
             .entity {
                 display: flex;
                 flex-direction: column;
@@ -173,6 +182,16 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 background-size: 200% 100%;
                 animation: tsd-shimmer 1.4s ease-in-out infinite;
             }
+            .name-shimmer {
+                display: inline-block;
+                width: 140px;
+                height: 14px;
+                border-radius: var(--radius-md);
+                background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-surface) 50%, var(--bg-secondary) 75%);
+                background-size: 200% 100%;
+                animation: tsd-shimmer 1.4s ease-in-out infinite;
+                vertical-align: middle;
+            }
             @keyframes tsd-shimmer {
                 from { background-position: 200% 0; }
                 to { background-position: -200% 0; }
@@ -217,6 +236,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._contextSel = this.select((s) => s.stockTsdContext as StockTsdContextState);
         this._quants = this.useResource('stock/quants');
         this._products = this.useResource('stock/products');
+        this._locations = this.useResource('stock/locations');
         this._productItem = this.useOp('stock/product_item');
         this._locationItem = this.useOp('stock/location_item');
         this._containerItem = this.useOp('stock/container_item');
@@ -253,13 +273,17 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 const product = await this._productItem.run({ product_id: productId });
                 this._product = product;
                 this._loadQuants({ product_id: productId });
+                const warehouseId = this._contextSel.value.warehouse_id;
+                if (warehouseId !== '') this._locations.load({ warehouse_id: warehouseId, include_virtual: true });
             } else if (kind === 'location') {
                 this._location = await this._locationItem.run({ location_id: this.entity_id });
                 this._loadQuants({ location_id: this.entity_id });
+                this._products.load({ limit: 500 });
             } else if (kind === 'container') {
                 const contents = await this._containerItem.run({ container_id: this.entity_id });
                 this._location = contents === null ? null : contents.container;
                 this._containerQuants = contents === null ? [] : contents.quants;
+                this._products.load({ limit: 500 });
             } else if (kind === 'document') {
                 this._transfer = await this._transferItem.run({ transfer_id: this.entity_id });
             }
@@ -272,33 +296,40 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._quants.load(query);
     }
 
-    private _locationName(locationId: string): string {
+    private _locationName(locationId: string): string | null {
         if (this._location !== null && this._location.location_id === locationId) {
             return this._location.complete_name ?? this._location.name;
         }
-        return locationId;
+        const row = this._locations.items.find((item) => item.location_id === locationId);
+        if (row !== undefined) {
+            const virtual = tsdVirtualLocationKey(row.usage, row.partner_role);
+            return virtual !== null ? this.t(virtual) : (row.complete_name ?? row.name);
+        }
+        return this._locations.loading ? null : locationId;
     }
 
-    private _productName(productId: string): string {
+    private _productName(productId: string): string | null {
         if (this._product !== null && this._product.product_id === productId) {
             return this._product.name;
         }
         const row = this._products.items.find((item) => item.product_id === productId);
-        return row === undefined ? productId : row.name;
+        if (row !== undefined) return row.name;
+        return this._products.loading ? null : productId;
     }
 
     private _renderQuantRow(quant: StockQuant): TemplateResult {
         const qty = quant.quantity ?? 0;
         const reserved = quant.reserved_quantity ?? 0;
+        const name = this.entity_kind === 'product' || this.entity_kind === 'packaging' || this.entity_kind === 'lot'
+            ? this._locationName(quant.location_id)
+            : this._productName(quant.product_id);
         return html`
             <div class="quant-row">
                 <span class="quant-loc">
-                    ${this.entity_kind === 'product' || this.entity_kind === 'packaging' || this.entity_kind === 'lot'
-                        ? this._locationName(quant.location_id)
-                        : this._productName(quant.product_id)}
+                    ${name !== null ? name : html`<span class="name-shimmer"></span>`}
                 </span>
-                <span class="quant-res">${Number(reserved) > 0 ? this.t('entity.reserved', { qty: String(reserved) }) : ''}</span>
-                <span class="quant-qty">${qty}</span>
+                <span class="quant-res">${Number(reserved) > 0 ? this.t('entity.reserved', { qty: tsdFormatQty(reserved) }) : ''}</span>
+                <span class="quant-qty">${tsdFormatQty(qty)}</span>
             </div>
         `;
     }
@@ -329,17 +360,60 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         `;
     }
 
-    private async _startCount(): Promise<void> {
-        const locationId = this.entity_kind === 'location' || this.entity_kind === 'container' ? this.entity_id : '';
+    private _startFlow(context: Record<string, unknown>): void {
         this._session.stepApplied({
-            context: { flow: 'count', step: 'start', source_id: locationId === '' ? null : locationId },
+            context,
             resolution: null,
             barcode: '',
             error: null,
             hint: '',
             expected: null,
         });
-        this.requestPlatformClose();
+        this._requestClose();
+    }
+
+    private _scannedProduct(): Record<string, unknown> {
+        // Слоты уже отсканированной сущности: машина пропускает
+        // шаги с заполненными слотами — товар, партию и серийник
+        // повторно сканировать не нужно.
+        const productId = this.product_id !== '' ? this.product_id : this.entity_id;
+        return {
+            product_id: productId,
+            lot_id: this.entity_kind === 'lot' ? this.entity_id : null,
+            serial: this.serial !== '' ? this.serial : null,
+            quantity: this.quantity,
+        };
+    }
+
+    private _startCount(): void {
+        const hasSource = this.entity_kind === 'location' || this.entity_kind === 'container';
+        this._startFlow(hasSource
+            ? { flow: 'count', step: 'product', source_id: this.entity_id }
+            : { flow: 'count', step: 'location', ...this._scannedProduct() });
+    }
+
+    private _startMove(): void {
+        if (this.entity_kind === 'location' || this.entity_kind === 'container') {
+            this._startFlow({ flow: 'move', step: 'product', source_id: this.entity_id });
+            return;
+        }
+        this._startFlow({ flow: 'move', step: 'location', ...this._scannedProduct() });
+    }
+
+    private _startPutaway(): void {
+        if (this.entity_kind === 'location') {
+            this._startFlow({ flow: 'putaway', step: 'product', source_id: this.entity_id });
+            return;
+        }
+        this._startFlow({ flow: 'putaway', step: 'location', ...this._scannedProduct() });
+    }
+
+    private _startContainerMove(): void {
+        this._startFlow({ flow: 'container_move', step: 'dest', container_id: this.entity_id });
+    }
+
+    private _startReceive(): void {
+        this._startFlow({ flow: 'receive', step: 'dest', ...this._scannedProduct() });
     }
 
     private async _openDocument(): Promise<void> {
@@ -355,7 +429,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
             move_id: opened.move_id,
             expected: opened.expected ?? null,
         });
-        this.requestPlatformClose();
+        this._requestClose();
     }
 
     private async _bindResource(): Promise<void> {
@@ -370,7 +444,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._resource = resource;
         this._context.setResource({ resource_id: resource.resource_id, resource_code: resource.code });
         this.toast('entity.resource_bound', { type: 'success', vars: { code: resource.code } });
-        this.requestPlatformClose();
+        this._requestClose();
     }
 
     private _renderActions(): TemplateResult | string {
@@ -395,11 +469,55 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 </div>
             `;
         }
-        if (['product', 'packaging', 'lot', 'location', 'container'].includes(kind)) {
+        if (['product', 'packaging', 'lot'].includes(kind)) {
             return html`
                 <div class="actions">
-                    <button class="action" @click=${() => void this._startCount()}>
-                        <platform-icon name="clipboard-list" size="20"></platform-icon>
+                    <button class="action" data-action="move" @click=${() => this._startMove()}>
+                        <platform-icon name="arrow-right" size="20"></platform-icon>
+                        ${this.t('entity.action_move')}
+                    </button>
+                    <button class="action secondary" data-action="receive" @click=${() => this._startReceive()}>
+                        <platform-icon name="download" size="20"></platform-icon>
+                        ${this.t('entity.action_receive')}
+                    </button>
+                    <button class="action secondary" data-action="putaway" @click=${() => this._startPutaway()}>
+                        <platform-icon name="box" size="20"></platform-icon>
+                        ${this.t('entity.action_putaway')}
+                    </button>
+                    <button class="action secondary" data-action="count" @click=${() => this._startCount()}>
+                        <platform-icon name="checklist" size="20"></platform-icon>
+                        ${this.t('entity.action_count')}
+                    </button>
+                </div>
+            `;
+        }
+        if (kind === 'location') {
+            return html`
+                <div class="actions">
+                    <button class="action" data-action="move" @click=${() => this._startMove()}>
+                        <platform-icon name="arrow-right" size="20"></platform-icon>
+                        ${this.t('entity.action_move')}
+                    </button>
+                    <button class="action secondary" data-action="putaway" @click=${() => this._startPutaway()}>
+                        <platform-icon name="box" size="20"></platform-icon>
+                        ${this.t('entity.action_putaway')}
+                    </button>
+                    <button class="action secondary" data-action="count" @click=${() => this._startCount()}>
+                        <platform-icon name="checklist" size="20"></platform-icon>
+                        ${this.t('entity.action_count')}
+                    </button>
+                </div>
+            `;
+        }
+        if (kind === 'container') {
+            return html`
+                <div class="actions">
+                    <button class="action" data-action="container_move" @click=${() => this._startContainerMove()}>
+                        <platform-icon name="arrow-right" size="20"></platform-icon>
+                        ${this.t('entity.action_move')}
+                    </button>
+                    <button class="action secondary" data-action="count" @click=${() => this._startCount()}>
+                        <platform-icon name="checklist" size="20"></platform-icon>
                         ${this.t('entity.action_count')}
                     </button>
                 </div>
@@ -450,7 +568,6 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
             case 'product': return 'package';
             case 'packaging': return 'boxes';
             case 'lot': return 'layers';
-            case 'serial': return 'hash';
             case 'location': return 'map-pin';
             case 'container': return 'box';
             case 'document': return 'file-text';

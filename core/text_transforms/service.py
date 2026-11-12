@@ -25,6 +25,7 @@ from core.ai.runtime import (
 from core.billing.service import BillingService
 from core.clients.llm.client import LLMClient
 from core.clients.llm.messages import build_a2a_message
+from core.clients.llm.mock import MockLLM
 from core.config import get_settings
 from core.logging import get_logger
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -84,7 +85,7 @@ _summarize_retry = retry(
 )
 
 
-def _summarize_first_token_bound(llm: object) -> None:
+def _summarize_first_token_bound(llm: LLMClient | MockLLM) -> None:
     if isinstance(llm, LLMClient):
         llm.first_token_timeout = _SUMMARIZE_FIRST_TOKEN_TIMEOUT_SECONDS
 

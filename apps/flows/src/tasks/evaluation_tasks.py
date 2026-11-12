@@ -76,7 +76,7 @@ async def execute_evaluation_run(
     if context_data is None:
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
-        set_current_trace_context(trace_context)
+        _ = set_current_trace_context(trace_context)
     _ = set_context(Context.from_dict(context_data))
     evaluation_run_id = require_task_message_string_label(
         taskiq_context.message,
@@ -163,7 +163,7 @@ async def run_evaluation_gate_policy(
     if context_data is None:
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
-        set_current_trace_context(trace_context)
+        _ = set_current_trace_context(trace_context)
     _ = set_context(Context.from_dict(context_data))
     created = await di.evaluation_lab_service.create_gate_policy_run(
         gate_policy_id,
@@ -198,7 +198,7 @@ async def run_evaluation_monitor_cycle(
     if context_data is None:
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
-        set_current_trace_context(trace_context)
+        _ = set_current_trace_context(trace_context)
     _ = set_context(Context.from_dict(context_data))
     cycle = await di.evaluation_lab_service.run_monitor_cycle(
         monitor_id,

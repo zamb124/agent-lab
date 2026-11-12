@@ -22,7 +22,6 @@ from decimal import Decimal
 
 import pytest
 
-from apps.stock.di import StockDi
 from apps.stock.models.common import STOCK_DB, StockMoveSpec, new_id
 from apps.stock.models.decision import StockDecision
 from apps.stock.models.enums import (
@@ -316,6 +315,7 @@ class TestContainerGuards:
                 move_id=move_id,
                 warehouse_id=env.warehouse.warehouse_id,
                 drafts=[],
+                ship_all=False,
                 container_move=(pallet_b.location_id, dest.location_id),
                 owner_entity_id=None,
                 operation_code=StockOperationCode.INTERNAL.value,
@@ -836,6 +836,7 @@ class TestBackorderLifecycle:
             putaway_mode=None,
             putaway_flow_id=None,
             auto_validate=None,
+            scan_flow=None,
         )
         _ = await _receipt(env, Decimal("10"), Decimal("4"))
         delivery = await self._partial_delivery(env, Decimal("10"), Decimal("4"))
@@ -989,6 +990,7 @@ class TestAtConfirmReserve:
             putaway_mode=None,
             putaway_flow_id=None,
             auto_validate=None,
+            scan_flow=None,
         )
         bin_a = await _bin(env, f"AC{unique_id}")
         _ = await StockPutawayRule.create(
@@ -1034,7 +1036,7 @@ class TestAtConfirmReserve:
 class TestShadowPutaway:
     """SHADOW-режим: рефлекс советует, но решение остаётся suggest."""
 
-    async def test_shadow_decision_is_suggested(self, stock_di: StockDi, unique_id: str) -> None:
+    async def test_shadow_decision_is_suggested(self, stock_di, unique_id: str) -> None:
         """SHADOW: команда не ждёт flow — решение пишет continuation по webhook."""
         env = await _env(stock_di, unique_id)
         op = env.op_types[StockOperationCode.INCOMING]
@@ -1126,7 +1128,7 @@ class TestShadowPutaway:
         assert decision.chosen_location_id == location.location_id
 
     async def test_shadow_failed_terminal_writes_rejected(
-        self, stock_di: StockDi, unique_id: str
+        self, stock_di, unique_id: str
     ) -> None:
         """Терминальный сбой тени — REJECTED без подстановки полки."""
         env = await _env(stock_di, unique_id)

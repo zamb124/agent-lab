@@ -43,6 +43,7 @@ export interface FlowUIClientOptions {
     credentials?: RequestCredentials;
     getHeaders?: () => Promise<Record<string, string>> | Record<string, string>;
     getVariables?: () => Record<string, unknown> | null;
+    getBreakpoints?: () => Record<string, boolean> | null;
     store?: FlowUIStore;
 }
 
@@ -111,6 +112,7 @@ export class FlowUIClient {
      *   credentials?: RequestCredentials,
      *   getHeaders?: () => Promise<Record<string, string>> | Record<string, string>,
      *   getVariables?: () => Record<string, unknown> | null,
+     *   getBreakpoints?: () => Record<string, boolean> | null,
      *   store?: FlowUIStore,
      * }} options
      */
@@ -119,6 +121,7 @@ export class FlowUIClient {
     credentials: RequestCredentials;
     private _getHeaders: () => Promise<Record<string, string>> | Record<string, string>;
     private _getVariables: () => Record<string, unknown> | null;
+    private _getBreakpoints: () => Record<string, boolean> | null;
     store: FlowUIStore;
     private _listeners: Map<string, Set<FlowUiClientHandler>>;
     private _streamAbort: AbortController | null;
@@ -138,6 +141,7 @@ export class FlowUIClient {
         this.credentials = options.credentials === 'omit' ? 'omit' : 'include';
         this._getHeaders = typeof options.getHeaders === 'function' ? options.getHeaders : () => ({});
         this._getVariables = typeof options.getVariables === 'function' ? options.getVariables : () => null;
+        this._getBreakpoints = typeof options.getBreakpoints === 'function' ? options.getBreakpoints : () => null;
         this.store = options.store instanceof FlowUIStore ? options.store : new FlowUIStore();
         this._listeners = new Map();
         this._streamAbort = null;
@@ -280,6 +284,7 @@ export class FlowUIClient {
             streaming: true,
             branchId: this.target.branchId,
             variables: this._getVariables(),
+            breakpoints: this._getBreakpoints(),
         });
         const abort = new AbortController();
         this._streamAbort = abort;

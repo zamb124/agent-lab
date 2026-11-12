@@ -10,33 +10,43 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
 import {
     stockContainerItemOp,
+    stockContainerMoveOp,
+    stockLocationCountDueOp,
     stockLocationsResource,
     stockProductsResource,
     stockQuantsResource,
     stockQueueResource,
     stockTransferItemOp,
     stockWarehousesResource,
+    stockWavesResource,
 } from '../events/resources/stock.resource.js';
 import {
     stockLocationItemOp,
     stockMoveLinesAssignOp,
     stockMoveLinesClaimOp,
+    stockMoveLinesExceptionOp,
     stockMoveLinesNextOp,
     stockMoveLinesReleaseOp,
     stockOperatorLoginOp,
+    stockOperatorPulseOp,
     stockProductItemOp,
+    stockPutawaySuggestOp,
     stockResourceLoginOp,
+    stockScanAdhocCommitOp,
     stockScanCommitOp,
     stockScanCountCommitOp,
     stockScanOpenOp,
     stockScanQuantityOp,
     stockScanStepOp,
     stockTsdContextSlice,
+    stockTsdOutboxSlice,
     stockTsdSessionSlice,
 } from '../events/resources/stock-tsd.resource.js';
+import { createTsdPersistEffect } from '../events/tsd-persist.effect.js';
 
 import '../pages/tsd/stock-tsd-home-page.js';
 import '../pages/tsd/stock-tsd-login-page.js';
@@ -67,10 +77,15 @@ export class StockTsdApp extends PlatformApp {
         stockLocationsResource,
         stockQuantsResource,
         stockContainerItemOp,
+        stockContainerMoveOp,
+        stockLocationCountDueOp,
+        stockWavesResource,
         stockTransferItemOp,
         stockTsdContextSlice,
+        stockTsdOutboxSlice,
         stockTsdSessionSlice,
         stockOperatorLoginOp,
+        stockOperatorPulseOp,
         stockResourceLoginOp,
         stockScanOpenOp,
         stockProductItemOp,
@@ -79,10 +94,14 @@ export class StockTsdApp extends PlatformApp {
         stockMoveLinesClaimOp,
         stockMoveLinesReleaseOp,
         stockMoveLinesAssignOp,
+        stockMoveLinesExceptionOp,
+        platformFileCreateOp,
         stockScanStepOp,
         stockScanQuantityOp,
+        stockScanAdhocCommitOp,
         stockScanCommitOp,
         stockScanCountCommitOp,
+        stockPutawaySuggestOp,
     ];
 
     static override styles = [
@@ -107,15 +126,20 @@ export class StockTsdApp extends PlatformApp {
         `,
     ];
 
-    override getBaseUrl() { return '/stock/tsd'; }
-
-    /** Files API живёт на ingress-сегменте сервиса stock. */
-    override getFilesRouteSegment() { return 'stock'; }
+    /**
+     * Ingress-сегмент сервиса, а не маунт приложения: платформенные эффекты
+     * строят API-URL как `${baseUrl}/api/...` → `/stock/api/...`. Путь
+     * приложения `/stock/tsd` знает только router-эффект в getServiceEffects.
+     */
+    override getBaseUrl() { return '/stock'; }
 
     override getRoutes() { return []; }
 
     override getServiceEffects() {
-        return [createRouterEffect({ baseUrl: '/stock/tsd', routes: TSD_ROUTES })];
+        return [
+            createRouterEffect({ baseUrl: '/stock/tsd', routes: TSD_ROUTES }),
+            createTsdPersistEffect(),
+        ];
     }
 
     override shouldRenderPlatformAssistant() { return false; }

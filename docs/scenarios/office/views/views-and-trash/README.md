@@ -17,11 +17,3 @@ Nav-rail Recent/Starred/Deleted, восстановление и окончат�
 ## Шаг 4. Раздел «Удалённые»
 
 ![Раздел «Удалённые»](views-and-trash--04-deleted-view.png)
-
-## Шаг 5. Документ восстановлен
-
-![Документ восстановлен](views-and-trash--05-document-restored.png)
-
-## Шаг 6. Документ удалён навсегда
-
-![Документ удалён навсегда](views-and-trash--06-document-permanently-deleted.png)
