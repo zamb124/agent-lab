@@ -23,3 +23,11 @@ Click New rubric, fill name, threshold and criteria prompt, then Create rubric. 
 Click Create. The case appears in the list: the check stores judge_node_id and rubric_version_id, while the judge body lives in the flow.
 
 ![Save the case and confirm only ids are stored](eval-llm-judge-score--03-eval-judge-case-saved-ids.png)
+
+## Step 4. Run the case and inspect the score
+
+**Result demonstration.** After Run the results matrix shows a score and the transcript shows judge feedback.
+
+**Summary.** You can create a rubric with a judge node and run an LLM judge until the score is visible.
+
+![Run the case and inspect the score](eval-llm-judge-score--04-eval-judge-score-visible.png)

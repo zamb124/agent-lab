@@ -356,6 +356,52 @@ class StockMove(PlatformModel):
         ).all()
 
     @classmethod
+    async def mark_done_when_no_open_lines(
+        cls, company_id: str, move_ids: list[str], *, done_at: datetime
+    ) -> list[Self]:
+        """Движения без открытых строк → done (задания пересчёта).
+
+        Ветка «все строки исполнены» из ``post_step`` покрывает
+        проведённые движения; count-only документы (приказ пересчёта)
+        проводки не имеют — их закрывает факт подсчёта. Возвращает
+        закрытые движения. Пустой move_ids — []. Пустые поля не
+        проверяются.
+        """
+        if not move_ids:
+            return []
+        open_move_ids = {
+            line.move_id
+            for line in await StockMoveLine.list_open_for_moves_by_created_at_asc(
+                company_id, move_ids
+            )
+        }
+        candidates = await cls.objects.filter(
+            company_id=company_id,
+            move_id__in=[
+                move_id for move_id in move_ids if move_id not in open_move_ids
+            ],
+            state__in=[
+                StockMoveState.CONFIRMED,
+                StockMoveState.PARTIALLY_AVAILABLE,
+                StockMoveState.ASSIGNED,
+            ],
+        ).all()
+        if not candidates:
+            return []
+        _ = await cls.objects.filter(
+            company_id=company_id,
+            move_id__in=[move.move_id for move in candidates],
+        ).update(
+            using=STOCK_DB,
+            state=StockMoveState.DONE,
+            done_at=done_at,
+        )
+        for move in candidates:
+            move.state = StockMoveState.DONE
+            move.done_at = done_at
+        return candidates
+
+    @classmethod
     async def list_page_by_created_at_desc(
         cls,
         company_id: str,

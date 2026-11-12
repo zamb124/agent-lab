@@ -1647,3 +1647,42 @@ async def test_stock_tsd_document_exception(
             "shortage → report."
         ),
     )
+
+    # --- «Дайте работу» выдаёт задание пересчёта (оно приоритетнее) ---
+    await page.locator(".give-work").click()
+    await expect(run).to_be_visible(timeout=15_000)
+    # Пересчёт физически: дошёл до ячейки → скан ячейки → скан товара → факт.
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await _tsd_wait_step(page, "product")
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
+    await _tsd_qty(page, "8")
+    await _tsd_wait_step(page, "review")
+    await scenario.step(
+        "Пересчёт по заданию — факт на месте",
+        page,
+        screenshot_name="tsd-exception-recount",
+        label_en="Recount task — counted fact",
+        details=(
+            "«Дайте работу» выдало задание пересчёта подозрительной "
+            "ячейки — оно приоритетнее добора. Оператор дошёл до "
+            "места, отсканировал ячейку и товар, ввёл факт 8: "
+            "нашлось больше книжного — дельта уйдёт на утверждение "
+            "инвентаризации."
+        ),
+        details_en=(
+            "«Give me work» issued the suspect-bin recount task — it "
+            "outranks the remaining pick. The operator walked to the "
+            "spot, scanned the bin and the product, entered the "
+            "counted 8: more than book — the delta goes to inventory "
+            "approval."
+        ),
+    )
+    await _tsd_commit(page)
+    await expect(run).to_have_count(0, timeout=15_000)
+
+    # --- Задание пересчёта закрыто фактом — не висит в очереди вечно ---
+    detail = await _stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
+    count_lines = [ln for ln in detail["lines"] if ln.get("kind") == "count"]
+    assert len(count_lines) == 1, detail["lines"]
+    assert count_lines[0]["state"] == "done", count_lines[0]

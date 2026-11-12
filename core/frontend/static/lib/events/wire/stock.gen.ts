@@ -2041,6 +2041,8 @@ export interface StockScanOpenPayload {
     "warehouse_id": string;
     "move_id"?: string | null | undefined;
     "transfer_id"?: string | null | undefined;
+    "move_line_id"?: string | null | undefined;
+    "idempotency_key"?: string | null | undefined;
     [key: string]: unknown;
 }
 

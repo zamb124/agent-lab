@@ -822,6 +822,7 @@ export class StockTsdHomePage extends PlatformPage {
                 warehouse_id: context.warehouse_id,
                 move_id: line.move_id,
                 transfer_id: null,
+                move_line_id: line.move_line_id,
             });
             if (opened === null) {
                 throw new Error('stock/scan_open: empty response');
@@ -898,12 +899,18 @@ export class StockTsdHomePage extends PlatformPage {
             this._applyOutcome('error', code, '');
             return;
         }
+        const session = this._sessionSel.value;
+        // Открытая сессия владеет сканами — «взведённый» чип зоны,
+        // ресурса или волны гасим, иначе первый шаг потока ушёл бы
+        // на биндинг контекста, а не на работу.
+        if (session.context !== null) {
+            this._pending = '';
+        }
         if (this._pending === 'resource') {
             this._pending = '';
             await this._bindResource(code, warehouseId);
             return;
         }
-        const session = this._sessionSel.value;
         const context = session.context ?? { flow: 'inquiry' };
         try {
             const response = await this._scanStep.run({
@@ -1252,19 +1259,27 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private _renderLine(line: StockMoveLine): TemplateResult {
-        const qty = line.done_quantity !== undefined && line.done_quantity !== null
-            ? `${tsdFormatQty(line.done_quantity)}/${tsdFormatQty(line.quantity ?? '')}`
-            : `${tsdFormatQty(line.quantity ?? '')}`;
+        // У задания пересчёта «сколько взять» не существует — факт и
+        // есть содержимое ячейки: 0/0 на карточке только путает.
+        const qty = line.kind === 'count'
+            ? ''
+            : line.done_quantity !== undefined && line.done_quantity !== null
+              ? `${tsdFormatQty(line.done_quantity)}/${tsdFormatQty(line.quantity ?? '')}`
+              : `${tsdFormatQty(line.quantity ?? '')}`;
         return html`
             <div class="task-card" @click=${() => void this._openLine(line)}>
-                <div class="task-icon"><platform-icon name=${line.kind === 'container' ? 'box' : 'package'} size="22"></platform-icon></div>
+                <div class="task-icon"><platform-icon name=${line.kind === 'container' ? 'box' : line.kind === 'count' ? 'checklist' : 'package'} size="22"></platform-icon></div>
                 <div class="task-body">
                     <div class="task-name">${this._lineName(line)}</div>
                     <div class="task-route">
                         <platform-icon name="map-pin" size="14"></platform-icon>
                         ${this._locationName(line.location_id)}
-                        <platform-icon name="arrow-right" size="14"></platform-icon>
-                        ${this._locationName(line.location_dest_id)}
+                        ${line.location_dest_id !== line.location_id
+                            ? html`
+                                <platform-icon name="arrow-right" size="14"></platform-icon>
+                                ${this._locationName(line.location_dest_id)}
+                            `
+                            : ''}
                     </div>
                     ${line.wave_id !== null && line.wave_id !== undefined && line.wave_id !== ''
                         ? html`<div class="task-wave"><platform-icon name="layers" size="12"></platform-icon> ${this._waveName(line.wave_id)}</div>`

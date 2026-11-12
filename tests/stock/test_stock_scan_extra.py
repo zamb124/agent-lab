@@ -1270,3 +1270,140 @@ class TestExpectedHint:
         )
         # Отгружено ровно 5 (2 сканом + 3 доком), на источнике 3.
         assert quant is not None and quant.quantity == Decimal("3")
+
+
+class TestScanOpenByLine:
+    """Открытие сессии по конкретному заданию — kind строки диктует поток.
+
+    Движение со смешанными строками (отбор + задание пересчёта той же
+    ячейки после исключения) обязано открыть поток именно той работы,
+    за которую взялся оператор: тап по «пересчитать» — count-экран,
+    тап по «собрать» — pick-экран, а не поток первой попавшейся строки.
+    """
+
+    async def test_open_session_by_count_line_opens_count_flow(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        move = await _reserved_move(env, Decimal("3"))
+        line = (
+            await StockMoveLine.list_open_for_move_by_created_at_asc(
+                env.company_id, move.move_id
+            )
+        )[0]
+        exc = await env.di.task_service.report_exception(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_id=line.move_line_id,
+            shortage=Decimal("1"),
+            reason="not_on_shelf",
+            actor_user_id="op",
+        )
+        # Тап по заданию пересчёта → count-сессия, хотя на том же
+        # движении висит и отборочная строка.
+        _, ctx = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=None,
+            user_id="op",
+            move_line_id=exc.count_line_id,
+        )
+        assert ctx.flow == ScanFlow.COUNT
+
+    async def test_open_session_by_quantity_line_stays_pick(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        move = await _reserved_move(env, Decimal("3"))
+        line = (
+            await StockMoveLine.list_open_for_move_by_created_at_asc(
+                env.company_id, move.move_id
+            )
+        )[0]
+        _ = await env.di.task_service.report_exception(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_id=line.move_line_id,
+            shortage=Decimal("1"),
+            reason="not_on_shelf",
+            actor_user_id="op",
+        )
+        _, ctx = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=move.move_id,
+            transfer_id=None,
+            user_id="op",
+            move_line_id=line.move_line_id,
+        )
+        assert ctx.flow == ScanFlow.PICK
+
+    async def test_open_session_by_other_claimed_line_denied(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        move = await _reserved_move(env, Decimal("3"))
+        line = (
+            await StockMoveLine.list_open_for_move_by_created_at_asc(
+                env.company_id, move.move_id
+            )
+        )[0]
+        _ = await env.di.task_service.claim(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_ids=[line.move_line_id],
+            user_id="op-A",
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.open_session(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_id=move.move_id,
+                transfer_id=None,
+                user_id="op-B",
+                move_line_id=line.move_line_id,
+            )
+        assert exc.value.error_code == "move_line_claimed"
+
+    async def test_first_executable_line_scoped_by_kind(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Подсказка count-сессии показывает count-строку, а не отбор."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        move = await _reserved_move(env, Decimal("3"))
+        line = (
+            await StockMoveLine.list_open_for_move_by_created_at_asc(
+                env.company_id, move.move_id
+            )
+        )[0]
+        exc = await env.di.task_service.report_exception(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_id=line.move_line_id,
+            shortage=Decimal("1"),
+            reason="not_on_shelf",
+            actor_user_id="op",
+        )
+        count_kind = env.di.scan_service.kinds_of_flow(ScanFlow.COUNT)
+        first = await env.di.scan_service.first_executable_line(
+            company_id=env.company_id,
+            move_id=move.move_id,
+            user_id="op",
+            kinds=count_kind,
+        )
+        assert first is not None
+        assert first.move_line_id == exc.count_line_id
+        qty_kind = env.di.scan_service.kinds_of_flow(ScanFlow.PICK)
+        first = await env.di.scan_service.first_executable_line(
+            company_id=env.company_id,
+            move_id=move.move_id,
+            user_id="op",
+            kinds=qty_kind,
+        )
+        assert first is not None
+        assert first.move_line_id == line.move_line_id

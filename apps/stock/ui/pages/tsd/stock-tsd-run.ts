@@ -442,7 +442,11 @@ export class StockTsdRun extends PlatformElement {
         if (expected.product_id !== null && expected.product_id !== undefined) {
             parts.push(html`<span>${this._productName(expected.product_id)}</span>`);
         }
-        const dest = expected.location_dest_id !== null && expected.location_dest_id !== undefined
+        // Задание пересчёта имеет приёмником ту же ячейку — «BIN → BIN»
+        // в подсказке не несёт смысла, показываем точку один раз.
+        const dest = expected.location_dest_id !== null
+            && expected.location_dest_id !== undefined
+            && expected.location_dest_id !== expected.location_id
             ? this._locationName(expected.location_dest_id) : '';
         if (parts.length === 0 && dest === '') return '';
         return html`
@@ -770,7 +774,7 @@ export class StockTsdRun extends PlatformElement {
                         <h2 class="run-title">${this.t(`run.flow_${flow}`)}</h2>
                         <p class="run-sub">${this.t(`run.step_${step}`)}</p>
                     </div>
-                    ${session.expected !== null && session.expected.move_line_id !== null && session.expected.move_line_id !== undefined
+                    ${session.expected !== null && session.expected.move_line_id !== null && session.expected.move_line_id !== undefined && flow !== 'count'
                         ? html`
                             <button class="run-close" data-action="report-problem"
                                 @click=${() => this._reportProblem(session)}

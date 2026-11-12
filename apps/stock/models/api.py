@@ -748,6 +748,11 @@ class StockScanOpenPayload(StrictBaseModel):
     warehouse_id: str
     move_id: str | None = None
     transfer_id: str | None = None
+    move_line_id: str | None = None
+    """Задание, за которое открывается сессия: движение со смешанными
+    строками (отбор + пересчёт) выбирает поток по kind этой строки, а не
+    по первой попавшейся. Пустое — поток по первой исполнимой строке."""
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockScanOpenResponse(StrictBaseModel):

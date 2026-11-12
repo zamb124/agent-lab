@@ -4493,6 +4493,8 @@ export interface FlowUIReflection {
     "valign"?: "start" | "center" | "end" | undefined;
     "type"?: "reflection" | undefined;
     "text": string;
+    "tone"?: "success" | "warning" | "error" | undefined;
+    "detail"?: string | undefined;
     [key: string]: unknown;
 }
 

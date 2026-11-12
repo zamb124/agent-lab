@@ -31,6 +31,7 @@ from apps.stock.models import (
     StockMove,
     StockMoveLine,
     StockMoveLineKind,
+    StockMoveLineState,
     StockMoveState,
     StockOperationCode,
     StockOperationType,
@@ -47,6 +48,7 @@ from apps.stock.models.common import (
     new_id,
     stock_command_lane,
 )
+from apps.stock.models.move import PostedMove, move_done_event
 from apps.stock.models.scan import (
     ScanContext,
     ScanEntityKind,
@@ -63,6 +65,7 @@ from apps.stock.services.barcode_service import BarcodeService
 from apps.stock.services.move_engine import StockMoveEngine
 from core.catalog.models import CatalogProduct, CatalogUom
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
+from core.events.contract import PlatformEvent
 from core.lanes import (
     LaneOutcome,
     LaneScope,
@@ -196,6 +199,7 @@ class ScanService:
         company_id: str,
         move_id: str,
         user_id: str,
+        kinds: frozenset[StockMoveLineKind] | None = None,
     ) -> StockMoveLine | None:
         """Первая исполнимая строка документа — подсказка экрану.
 
@@ -203,12 +207,17 @@ class ScanService:
         (подсказка кладовщику), ``quantity`` — сколько резерва она ещё
         держит: после частичного скан-коммита обе уменьшаются вместе,
         поэтому остаток работы читается из ``done_quantity``.
-        ``None`` — работы нет или всё захвачено чужими claim'ами.
+        ``kinds`` сужает подсказку до работы открытой сессии: на
+        смешанном движении (отбор + пересчёт) экран пересчёта не
+        подсказывает отборочную строку. ``None`` — работы нет или всё
+        захвачено чужими claim'ами.
         """
         lines = await StockMoveLine.list_open_for_move_by_sequence_created_at_asc(
             company_id, move_id
         )
         executable = self._executable_lines(lines, user_id)
+        if kinds is not None:
+            executable = [line for line in executable if line.kind in kinds]
         return executable[0] if executable else None
 
     async def open_session(
@@ -219,15 +228,44 @@ class ScanService:
         move_id: str | None,
         transfer_id: str | None,
         user_id: str,
+        move_line_id: str | None = None,
     ) -> tuple[StockMove, ScanContext]:
-        """Старт doc-driven сессии: backend выбирает поток по документу.
+        """Старт doc-driven сессии: backend выбирает поток по заданию.
 
-        Документ диктует экран: ``kind=container`` линий → перевозка тары,
-        ``kind=count`` → пересчёт, иначе код типа операции (приёмка →
-        ``receive``, отгрузка → ``pick``, внутренняя → ``move``). За
-        ``transfer_id`` берётся первый move со строками, которые оператор
-        исполнит: целиком захваченный другим документ — не его работа.
+        Задание диктует экран: ``kind=container`` строки → перевозка
+        тары, ``kind=count`` → пересчёт, иначе код типа операции (приёмка
+        → ``receive``, отгрузка → ``pick``, внутренняя → ``move``).
+        ``move_line_id`` — конкретное задание из очереди: движение со
+        смешанными строками (отбор + пересчёт одной ячейки) обязано
+        открыть поток именно той работы, которую взял оператор, а не
+        первой попавшейся строки. За ``transfer_id`` берётся первая
+        исполнимая строка в порядке обхода очереди: целиком захваченный
+        другим документ — не его работа.
         """
+        serving: StockMoveLine | None = None
+        if move_line_id is not None:
+            serving = await StockMoveLine.by_id(company_id, move_line_id)
+            if serving is None:
+                raise PlatformNotFoundError(
+                    "Move line not found", error_code="move_line_not_found"
+                )
+            if serving.state != StockMoveLineState.OPEN:
+                raise PlatformConflictError(
+                    "Move line is not open", error_code="move_line_not_open"
+                )
+            if serving.assigned_user_id not in {None, user_id}:
+                # Чужой захват не открываем — два ТСД не исполняют
+                # одно задание (claim-контракт очереди).
+                raise PlatformConflictError(
+                    "Move line is claimed by another operator",
+                    error_code="move_line_claimed",
+                )
+            if move_id is not None and move_id != serving.move_id:
+                raise PlatformConflictError(
+                    "Move line belongs to another move",
+                    error_code="scan_open_input_invalid",
+                )
+            move_id = serving.move_id
         if move_id is not None:
             move = await StockMove.by_id(company_id, move_id)
             if move is None or move.warehouse_id != warehouse_id:
@@ -252,8 +290,9 @@ class ScanService:
             )
             executable = self._executable_lines(open_lines, user_id)
             if executable:
+                serving = executable[0]
                 move = next(
-                    m for m in moves if m.move_id == executable[0].move_id
+                    m for m in moves if m.move_id == serving.move_id
                 )
             if move is None:
                 raise PlatformNotFoundError(
@@ -273,8 +312,24 @@ class ScanService:
             raise PlatformNotFoundError(
                 "Document has no open work", error_code="document_no_work"
             )
-        flow = await self._session_flow(company_id, move, lines[0].kind)
+        flow = await self._session_flow(
+            company_id, move, (serving or lines[0]).kind
+        )
         return move, ScanContext(flow=flow)
+
+    @staticmethod
+    def kinds_of_flow(flow: ScanFlow) -> frozenset[StockMoveLineKind]:
+        """Работа сессии: какие строки документа исполняет этот поток.
+
+        На смешанном движении (отбор + пересчёт одной ячейки) экран
+        пересчёта подсказывает count-строки, отборочный экран —
+        quantity; перевозка тары — container-строки.
+        """
+        if flow == ScanFlow.COUNT:
+            return frozenset({StockMoveLineKind.COUNT})
+        if flow == ScanFlow.CONTAINER_MOVE:
+            return frozenset({StockMoveLineKind.CONTAINER})
+        return frozenset({StockMoveLineKind.QUANTITY})
 
     @staticmethod
     async def _session_flow(
@@ -657,14 +712,61 @@ class ScanService:
                 company_id, warehouse_id
             )
             resolved = [
-                line.move_line_id
+                line
                 for line in open_counts
                 if (line.product_id, line.location_id, line.lot_id) in counted
             ]
+            now = utcnow()
             await StockMoveLine.mark_done(
-                company_id, resolved, done_at=utcnow(), done_by_user_id=actor_user_id
+                company_id,
+                [line.move_line_id for line in resolved],
+                done_at=now,
+                done_by_user_id=actor_user_id,
             )
-            return LaneOutcome(result=_QuantIds(ids=quant_ids), events=[])
+            # Приказ пересчёта без открытых строк закрывается тем же
+            # фактом — count-only документ проводок не имеет.
+            closed_moves = await StockMove.mark_done_when_no_open_lines(
+                company_id,
+                sorted({line.move_id for line in resolved}),
+                done_at=now,
+            )
+            events: list[PlatformEvent] = []
+            if closed_moves:
+                locs = await StockLocation.found_in_company_by_ids(
+                    company_id,
+                    sorted(
+                        {
+                            loc_id
+                            for move in closed_moves
+                            for loc_id in (move.location_id, move.location_dest_id)
+                        }
+                    ),
+                )
+                for move in closed_moves:
+                    src = locs.get(move.location_id)
+                    dst = locs.get(move.location_dest_id)
+                    if src is None or dst is None:
+                        continue
+                    events.append(
+                        move_done_event(
+                            PostedMove(
+                                move=move,
+                                done_now=True,
+                                done_qty=STOCK_ZERO,
+                                lines=[],
+                                layers=[],
+                                quants=[],
+                                src_usage=src.usage,
+                                dst_usage=dst.usage,
+                            ),
+                            company_id=company_id,
+                            warehouse_id=warehouse_id,
+                            operation_code=None,
+                            actor_user_id=actor_user_id,
+                            causation_id=None,
+                        )
+                    )
+            return LaneOutcome(result=_QuantIds(ids=quant_ids), events=events)
 
         async with traced_operation(
             "stock.scan.count_commit",

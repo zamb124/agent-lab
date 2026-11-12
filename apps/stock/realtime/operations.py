@@ -134,6 +134,7 @@ from apps.stock.models.api import (
     StockWavesListPayload,
 )
 from apps.stock.models.resource import StockResourceLogoutResult
+from apps.stock.models.scan import ScanFlow
 from core.a2a.submit import A2ACallPending
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
@@ -1721,11 +1722,14 @@ async def _scan_expected(
     warehouse_id: str,
     move_id: str | None,
     user_id: str,
+    flow: ScanFlow | None = None,
 ) -> StockScanExpected | None:
     """Подсказка экрану из первой исполнимой строки документа.
 
     Чужой claim не подсказываем: оператор всё равно не проведёт
     строку, захваченную другим (``move_line_claimed`` на коммите).
+    ``flow`` сужает подсказку до работы открытой сессии — на смешанном
+    движении экран пересчёта не показывает отборочную строку.
     """
     if move_id is None:
         return None
@@ -1735,7 +1739,12 @@ async def _scan_expected(
             "Move not found", error_code="move_not_found"
         )
     first = await di.scan_service.first_executable_line(
-        company_id=company_id, move_id=move_id, user_id=user_id
+        company_id=company_id,
+        move_id=move_id,
+        user_id=user_id,
+        kinds=(
+            None if flow is None else di.scan_service.kinds_of_flow(flow)
+        ),
     )
     if first is None:
         return None
@@ -1779,7 +1788,8 @@ async def op_scan_step(
         error=result.error.value if result.error is not None else None,
         hint=result.hint,
         expected=await _scan_expected(
-            di, scope.company_id, payload.warehouse_id, payload.move_id, scope.user_id
+            di, scope.company_id, payload.warehouse_id, payload.move_id,
+            scope.user_id, result.context.flow,
         ),
     )
 
@@ -1791,18 +1801,31 @@ async def op_scan_open(
     _ = user
     scope = require_company()
     await _warehouse_editor(di, scope, payload.warehouse_id)
+    if payload.move_line_id is not None:
+        # Тап по заданию в очереди = «я беру это»: захватываем строку
+        # атомарно до открытия сессии, иначе два ТСД открыли бы одну
+        # работу. Свой захват идемпотентен — повторный тап не падает.
+        _ = await di.task_service.claim(
+            company_id=scope.company_id,
+            warehouse_id=payload.warehouse_id,
+            move_line_ids=[payload.move_line_id],
+            user_id=scope.user_id,
+            idempotency_key=command_idempotency_key(payload.idempotency_key),
+        )
     move, context = await di.scan_service.open_session(
         company_id=scope.company_id,
         warehouse_id=payload.warehouse_id,
         move_id=payload.move_id,
         transfer_id=payload.transfer_id,
         user_id=scope.user_id,
+        move_line_id=payload.move_line_id,
     )
     return StockScanOpenResponse(
         context=context,
         move_id=move.move_id,
         expected=await _scan_expected(
-            di, scope.company_id, payload.warehouse_id, move.move_id, scope.user_id
+            di, scope.company_id, payload.warehouse_id, move.move_id,
+            scope.user_id, context.flow,
         ),
     )
 
@@ -1822,7 +1845,8 @@ async def op_scan_quantity(
         error=result.error.value if result.error is not None else None,
         hint=result.hint,
         expected=await _scan_expected(
-            di, scope.company_id, payload.warehouse_id, payload.move_id, scope.user_id
+            di, scope.company_id, payload.warehouse_id, payload.move_id,
+            scope.user_id, result.context.flow,
         ),
     )
 
