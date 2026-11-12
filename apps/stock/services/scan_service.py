@@ -645,6 +645,25 @@ class ScanService:
                 [ln.location_id for ln in context.lines if ln.location_id],
                 at=utcnow(),
             )
+            # Задание пересчёта исполнено фактом подсчёта: закрываем
+            # открытые count-строки по совпавшему ключу остатка, иначе
+            # задача навсегда висела бы в очереди после commit.
+            counted = {
+                (ln.product_id, ln.location_id, ln.lot_id)
+                for ln in context.lines
+                if ln.location_id is not None
+            }
+            open_counts = await StockMoveLine.list_unordered_open_count_for_warehouse(
+                company_id, warehouse_id
+            )
+            resolved = [
+                line.move_line_id
+                for line in open_counts
+                if (line.product_id, line.location_id, line.lot_id) in counted
+            ]
+            await StockMoveLine.mark_done(
+                company_id, resolved, done_at=utcnow(), done_by_user_id=actor_user_id
+            )
             return LaneOutcome(result=_QuantIds(ids=quant_ids), events=[])
 
         async with traced_operation(

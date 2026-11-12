@@ -317,6 +317,18 @@ class StockMoveLine(PlatformModel):
         ).all()
 
     @classmethod
+    async def list_unordered_open_count_for_warehouse(
+        cls, company_id: str, warehouse_id: str
+    ) -> list[Self]:
+        """Открытые задания пересчёта (``kind=count``) склада. Порядка и limit нет."""
+        return await cls.objects.filter(
+            company_id=company_id,
+            warehouse_id=warehouse_id,
+            state=StockMoveLineState.OPEN,
+            kind=StockMoveLineKind.COUNT,
+        ).all()
+
+    @classmethod
     async def clear_claim_fields(
         cls, company_id: str, move_line_id: str
     ) -> None:

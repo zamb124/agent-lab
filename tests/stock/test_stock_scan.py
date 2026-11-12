@@ -441,6 +441,7 @@ class TestWavesAndExceptions:
         from apps.stock.models import (
             StockMoveLine,
             StockMoveLineKind,
+            StockMoveLineState,
             StockWaveState,
         )
         from core.errors.boundary import PlatformConflictError
@@ -577,6 +578,30 @@ class TestWavesAndExceptions:
         assert quant is not None
         assert quant.reserved_quantity == Decimal("4")
         assert quant.quantity == Decimal("10")
+
+        # Задание пересчёта закрывается фактом подсчёта той же ячейки
+        # и товара — иначе задача навсегда висела бы в очереди.
+        ctx = ScanContext(
+            flow=ScanFlow.COUNT,
+            lines=(
+                ScanLineDraft(
+                    location_id=line.location_id,
+                    location_dest_id=None,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("8"),
+                ),
+            ),
+        )
+        _ = await env.di.scan_service.inventory_count_commit(
+            company_id=company,
+            warehouse_id=wh,
+            context=ctx,
+            actor_user_id="op-1",
+        )
+        count_line = await StockMoveLine.by_id(company, exc.count_line_id)
+        assert count_line is not None
+        assert count_line.state == StockMoveLineState.DONE
+        assert count_line.done_by_user_id == "op-1"
 
 
 async def _open_transfer(env, code: StockOperationCode, qty: Decimal) -> str:
