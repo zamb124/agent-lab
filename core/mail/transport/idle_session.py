@@ -17,26 +17,18 @@ logger = get_logger(__name__)
 
 ImapIdlePush = list[bytes] | bytes | bytearray | str
 
+# DONE/LOGOUT на полуживом соединении не должны висеть дольше этого окна.
+_IDLE_FINISH_TIMEOUT_S = 5.0
+
 
 class _ImapIdleOps(Protocol):
-    def idle_start(self, timeout: float = ...) -> Awaitable[None]: ...
+    def idle_start(self, timeout: float = ...) -> Awaitable[asyncio.Future[aioimaplib.Response]]: ...
 
     def wait_server_push(self) -> Awaitable[ImapIdlePush]: ...
 
     def idle_done(self) -> None: ...
 
-    def logout(self) -> Awaitable[None]: ...
-
-
-def _finish_idle_after_wait_error(client: _ImapIdleOps, *, mailbox: str) -> None:
-    try:
-        _ = client.idle_done()
-    except Exception as exc:
-        logger.info(
-            "mail_idle_done_after_wait_failed",
-            mailbox=mailbox,
-            error=str(exc),
-        )
+    def logout(self) -> Awaitable[aioimaplib.Response]: ...
 
 
 def classify_idle_push(raw: str) -> MailIdleWakeKind:
@@ -54,11 +46,18 @@ def classify_idle_push(raw: str) -> MailIdleWakeKind:
 
 @final
 class MailIdleSession:
-    """Долгая IMAP SELECT + IDLE. Caller владеет lifecycle (aclose)."""
+    """Долгая IMAP SELECT + IDLE. Caller владеет lifecycle (aclose).
+
+    ``idle_start`` возвращает future pending IDLE-команды: она завершается
+    только после DONE и ответа сервера. LOGOUT при живой IDLE-команде —
+    protocol abort с пустым текстом, поэтому каждый выход из IDLE ждёт
+    завершения команды, а ``aclose`` завершает незакрытый IDLE до logout.
+    """
 
     def __init__(self, client: aioimaplib.IMAP4_SSL, *, mailbox: str) -> None:
         self._client: Final[_ImapIdleOps] = typed_view(client, aioimaplib.IMAP4_SSL, _ImapIdleOps)
         self._mailbox: Final[str] = mailbox
+        self._idle_future: asyncio.Future[aioimaplib.Response] | None = None
         self._closed: bool = False
 
     @property
@@ -71,7 +70,7 @@ class MailIdleSession:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be > 0")
         try:
-            _ = await self._client.idle_start(timeout=timeout_seconds)
+            self._idle_future = await self._client.idle_start(timeout=timeout_seconds)
         except Exception as exc:
             raise MailTransportError(f"IMAP IDLE start failed: {exc}") from exc
         try:
@@ -81,15 +80,15 @@ class MailIdleSession:
             )
         except TimeoutError:
             try:
-                _ = self._client.idle_done()
+                await self._finish_idle()
             except Exception as exc:
                 raise MailTransportError(f"IMAP IDLE done after timeout failed: {exc}") from exc
             return MailIdleWake(kind=MailIdleWakeKind.TIMEOUT, raw="")
         except Exception as exc:
-            _finish_idle_after_wait_error(self._client, mailbox=self._mailbox)
+            await self._finish_idle_after_wait_error()
             raise MailTransportError(f"IMAP IDLE wait failed: {exc}") from exc
         try:
-            _ = self._client.idle_done()
+            await self._finish_idle()
         except Exception as exc:
             raise MailTransportError(f"IMAP IDLE done failed: {exc}") from exc
         if isinstance(push, list):
@@ -105,6 +104,35 @@ class MailIdleSession:
             return
         self._closed = True
         try:
-            _ = await self._client.logout()
+            await self._finish_idle()
         except Exception as exc:
-            raise MailTransportError(f"IMAP IDLE logout failed: {exc}") from exc
+            logger.warning(
+                "mail_idle_done_on_close_failed",
+                mailbox=self._mailbox,
+                error=str(exc),
+            )
+        try:
+            _ = await asyncio.wait_for(self._client.logout(), timeout=_IDLE_FINISH_TIMEOUT_S)
+        except Exception as exc:
+            raise MailTransportError(
+                f"IMAP IDLE logout failed: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    async def _finish_idle(self) -> None:
+        """DONE + дождаться завершения pending IDLE-команды (bounded)."""
+        idle_future = self._idle_future
+        if idle_future is None:
+            return
+        self._idle_future = None
+        self._client.idle_done()
+        _ = await asyncio.wait_for(idle_future, timeout=_IDLE_FINISH_TIMEOUT_S)
+
+    async def _finish_idle_after_wait_error(self) -> None:
+        try:
+            await self._finish_idle()
+        except Exception as exc:
+            logger.info(
+                "mail_idle_done_after_wait_failed",
+                mailbox=self._mailbox,
+                error=str(exc),
+            )
