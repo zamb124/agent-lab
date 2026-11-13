@@ -25,6 +25,8 @@ class ProviderEmulatorStore:
     telegram_messages: list[JsonObject] = field(default_factory=list)
     telegram_updates: list[JsonObject] = field(default_factory=list)
     telegram_webhook_deleted: int = 0
+    # Остаток принудительных отказов getUpdates (конверт ok:false — Telegram 5xx)
+    telegram_get_updates_fail: int = 0
     # MAX: (query params, body) POST /messages; Authorization header последних вызовов
     max_messages: list[tuple[dict[str, str], JsonObject]] = field(default_factory=list)
     max_authorization: list[str] = field(default_factory=list)

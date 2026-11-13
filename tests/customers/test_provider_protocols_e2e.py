@@ -653,6 +653,74 @@ class TestTelegramContact:
         )
         assert resp.json()["status"] == "confirmed"
 
+    async def test_polling_skips_rejected_update(
+        self,
+        emu_client: AsyncClient,
+        shop_di,
+        phone_verification_emulator: PhoneVerificationEmulatorHandle,
+        unique_id: str,
+    ) -> None:
+        """Отклонённый доменом update потребляется и не останавливает поллинг.
+
+        Чужой контакт (contact.user_id != from.id) — терминальный reject:
+        offset фиксируется, соседние валидные updates обрабатываются.
+        """
+        start, phone, token = await self._begin(emu_client, unique_id)
+        store = phone_verification_emulator.store
+        base_id = int(time.time() * 1000)
+        store.telegram_updates.extend(
+            [
+                _tg_update_start(token, update_id=base_id),
+                _tg_update_contact(phone, contact_user_id=999999, update_id=base_id + 1),
+                _tg_update_contact(phone, update_id=base_id + 2),
+            ]
+        )
+        processed = await shop_di.customer_auth_service.poll_telegram_updates(
+            budget_seconds=0.5
+        )
+        assert processed == 3
+        resp = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert resp.json()["status"] == "confirmed"
+
+    async def test_polling_brand_transient_failure_recovers(
+        self,
+        emu_client: AsyncClient,
+        shop_di,
+        phone_verification_emulator: PhoneVerificationEmulatorHandle,
+        unique_id: str,
+    ) -> None:
+        """Транзиент getUpdates (ok:false) изолируется брендом, цепочка жива.
+
+        Первый тик: бренд падает с retryable ProviderError → processed=0 без
+        исключения. Следующий тик: бренд восстановлен и updates обработаны.
+        """
+        start, phone, token = await self._begin(emu_client, unique_id)
+        store = phone_verification_emulator.store
+        base_id = int(time.time() * 1000)
+        store.telegram_updates.extend(
+            [
+                _tg_update_start(token, update_id=base_id),
+                _tg_update_contact(phone, update_id=base_id + 1),
+            ]
+        )
+        store.telegram_get_updates_fail = 1
+        processed = await shop_di.customer_auth_service.poll_telegram_updates(
+            budget_seconds=0.5
+        )
+        assert processed == 0
+        processed = await shop_di.customer_auth_service.poll_telegram_updates(
+            budget_seconds=0.5
+        )
+        assert processed == 2
+        resp = await emu_client.get(
+            f"{_AUTH}/status",
+            params={"challenge_id": start["challenge_id"], "company_id": _COMPANY},
+        )
+        assert resp.json()["status"] == "confirmed"
+
     async def test_contact_without_start_ignored(
         self, emu_client: AsyncClient
     ) -> None:

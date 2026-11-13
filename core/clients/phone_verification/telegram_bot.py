@@ -148,14 +148,25 @@ class TelegramContactProvider:
         assert self._cfg is not None
         if not self._cfg.bot_token:
             raise ProviderError(PhoneVerificationErrorCode.PROVIDER_NOT_CONFIGURED)
-        resp = await request_with_strategy(
-            "POST",
-            f"{self._cfg.api_base_url}/bot{self._cfg.bot_token}/{method}",
-            strategy=ProxyStrategy.DIRECT_FIRST,
-            json=body,
-            timeout=timeout,
-        )
-        return parse_telegram_result(resp.text, f"telegram.{method}")
+        try:
+            resp = await request_with_strategy(
+                "POST",
+                f"{self._cfg.api_base_url}/bot{self._cfg.bot_token}/{method}",
+                strategy=ProxyStrategy.DIRECT_FIRST,
+                json=body,
+                timeout=timeout,
+            )
+            return parse_telegram_result(resp.text, f"telegram.{method}")
+        except ProviderError:
+            raise
+        except Exception as exc:
+            # Транспортный сбой и не-JSON/не-envelope ответ — одна семантика:
+            # провайдер недоступен, исход retryable.
+            raise ProviderError(
+                PhoneVerificationErrorCode.PROVIDER_UNAVAILABLE,
+                f"telegram {method}: {exc}",
+                retryable=True,
+            ) from exc
 
     async def get_updates(self, offset: int, timeout: int) -> list[JsonObject]:
         """Long-poll `getUpdates` — транспорт для хостов, куда Telegram не достучится."""

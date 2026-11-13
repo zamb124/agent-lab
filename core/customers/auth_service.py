@@ -603,13 +603,37 @@ class CustomerAuthService:
             return None
         try:
             # getUpdates при активном webhook отвечает 409 Conflict — снимаем его.
-            for provider in providers.values():
-                await provider.delete_webhook()
+            # Бренд, чей deleteWebhook упал, исключаем из тика: его getUpdates
+            # всё равно вернёт 409.
+            for apex, provider in list(providers.items()):
+                try:
+                    await provider.delete_webhook()
+                except ProviderError as exc:
+                    del providers[apex]
+                    logger.warning(
+                        "customers.tg_poll.brand_failed",
+                        apex=apex,
+                        step="delete_webhook",
+                        code=exc.code.value,
+                        error=exc.detail,
+                    )
             processed = 0
             deadline = time.monotonic() + budget_seconds
-            while time.monotonic() < deadline:
-                for apex, provider in providers.items():
-                    processed += await self._poll_telegram_brand(apex, provider)
+            while providers and time.monotonic() < deadline:
+                for apex, provider in list(providers.items()):
+                    try:
+                        processed += await self._poll_telegram_brand(apex, provider)
+                    except ProviderError as exc:
+                        # Транзиент провайдера изолируем брендом до конца тика:
+                        # следующий тик перезапросит его, цепочка поллинга цела.
+                        del providers[apex]
+                        logger.warning(
+                            "customers.tg_poll.brand_failed",
+                            apex=apex,
+                            step="get_updates",
+                            code=exc.code.value,
+                            error=exc.detail,
+                        )
             return processed
         finally:
             _ = await self._redis.delete(_TG_POLL_LOCK)
@@ -630,7 +654,33 @@ class CustomerAuthService:
             update_id = int(raw_id) if isinstance(raw_id, (int, str)) else 0
             if update_id >= next_offset:
                 next_offset = update_id + 1
-            await self.handle_contact_update(provider=provider, payload=update)
+            try:
+                await self.handle_contact_update(provider=provider, payload=update)
+            except ProviderError as exc:
+                if exc.retryable:
+                    # Транзиент (sendMessage и т.п.): offset не фиксируем —
+                    # update переобработает следующий тик; бренд снимется в
+                    # except ProviderError цикла poll_telegram_updates.
+                    raise
+                # Нетранзиентный ProviderError — доменный reject update (чужой
+                # контакт, невалидный номер): повтор даст тот же исход.
+                logger.warning(
+                    "customers.tg_poll.update_rejected",
+                    apex=apex,
+                    update_id=update_id,
+                    code=exc.code.value,
+                    error=exc.detail,
+                )
+            except CustomerAuthError as exc:
+                # Терминальный доменный исход (expired challenge и т.п.) —
+                # update потреблён, иначе poison-update остановит поллинг бренда.
+                logger.warning(
+                    "customers.tg_poll.update_rejected",
+                    apex=apex,
+                    update_id=update_id,
+                    code=exc.code.value,
+                    error=exc.detail,
+                )
             # offset инкрементально: падение update не переобрабатывает предыдущие.
             _ = await self._redis.set(
                 offset_key, str(next_offset), ttl=_TG_POLL_OFFSET_TTL_S

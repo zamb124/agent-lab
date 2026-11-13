@@ -63,6 +63,11 @@ def create_phone_verification_emulator_app(store: ProviderEmulatorStore) -> Fast
     async def tg_get_updates(token: str, request: Request) -> JSONResponse:
         _ = token
         body = parse_json_object(await request.body(), "tg.getUpdates")
+        if store.telegram_get_updates_fail > 0:
+            store.telegram_get_updates_fail -= 1
+            return JSONResponse(
+                {"ok": False, "error_code": 502, "description": "Bad Gateway"}
+            )
         offset = int(str(body.get("offset") or 0))
         updates = [
             u
