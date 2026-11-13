@@ -22,6 +22,10 @@ from apps.browser.models.types import (
 from apps.browser.services.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.services.interaction_profiles import get_interaction_profile
 from apps.browser.services.page_evaluate import evaluate_json_value
+from apps.browser.services.page_html_capture import (
+    PageNavigatingError,
+    capture_settled_value,
+)
 from core.authz.models import AuthzObject
 from core.clients.browser.control_types import BrowserCapabilityError
 from core.clients.browser.crawl_fetch_types import (
@@ -166,6 +170,12 @@ async def crawl_fetch(
                             error_code="unavailable",
                             error_params=exc.to_dict(),
                         ) from exc
+                    except PageNavigatingError as exc:
+                        raise WsCommandError(
+                            "upstream",
+                            f"browser page kept navigating for {body.url}",
+                            error_code="upstream",
+                        ) from exc
                     except PlaywrightTimeoutError as exc:
                         raise WsCommandError(
                             "gateway_timeout",
@@ -185,21 +195,42 @@ async def crawl_fetch(
                                 f"wait_selector timeout for {body.url}: {body.wait_selector}",
                                 error_code="upstream",
                             ) from exc
-                    if body.html_capture == "dsd":
-                        captured = await evaluate_json_value(
-                            page,
-                            "() => document.documentElement.getHTML({serializableShadowRoots: true})",
-                            "crawl_fetch.dsd_html",
-                        )
-                        if not isinstance(captured, str):
-                            raise WsCommandError(
-                                "upstream",
-                                "browser dsd capture returned non-string html",
-                                error_code="upstream",
+                    try:
+                        if body.html_capture == "dsd":
+                            captured = await capture_settled_value(
+                                page,
+                                capture=lambda: evaluate_json_value(
+                                    page,
+                                    "() => document.documentElement.getHTML({serializableShadowRoots: true})",
+                                    "crawl_fetch.dsd_html",
+                                ),
+                                navigation_timeout_ms=body.navigation_timeout_ms,
                             )
-                        html = "<!DOCTYPE html>\n" + captured
-                    else:
-                        html = await page.content()
+                            if not isinstance(captured, str):
+                                raise WsCommandError(
+                                    "upstream",
+                                    "browser dsd capture returned non-string html",
+                                    error_code="upstream",
+                                )
+                            html = "<!DOCTYPE html>\n" + captured
+                        else:
+                            html = await capture_settled_value(
+                                page,
+                                capture=page.content,
+                                navigation_timeout_ms=body.navigation_timeout_ms,
+                            )
+                    except PageNavigatingError as exc:
+                        raise WsCommandError(
+                            "upstream",
+                            f"browser page kept navigating during capture for {body.url}",
+                            error_code="upstream",
+                        ) from exc
+                    except PlaywrightTimeoutError as exc:
+                        raise WsCommandError(
+                            "gateway_timeout",
+                            f"browser page settle timeout for {body.url}",
+                            error_code="upstream",
+                        ) from exc
                 if not html.strip():
                     raise WsCommandError(
                         "upstream",

@@ -17,6 +17,7 @@ from apps.browser.models.types import (
     ContextSignature,
 )
 from apps.browser.services.cdp_pool import CDPConnectionPool
+from apps.browser.services.page_html_capture import capture_settled_value
 from apps.browser.services.page_lease_manager import PageLeaseManager
 from apps.browser.services.session_store import SessionStateStore, origin_from_url
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
@@ -178,7 +179,11 @@ class PlaywrightBrowserInteractor:
             status_code = response.status
             response_headers = dict(response.headers)
 
-        html = await page.content()
+        html = await capture_settled_value(
+            page,
+            capture=page.content,
+            navigation_timeout_ms=timeout,
+        )
 
         shot_ref: str | None = None
         pdf_ref: str | None = None
