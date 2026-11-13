@@ -16,8 +16,7 @@ from decimal import Decimal
 from typing import ClassVar, Self
 
 from oxyde import Field as DbField
-from oxyde import Index
-from oxyde import Q
+from oxyde import Index, Q
 
 from apps.stock.models.common import (
     QTY_DB,
