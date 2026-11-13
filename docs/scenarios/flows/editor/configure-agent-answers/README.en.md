@@ -35,11 +35,3 @@ Click Publish. The draft becomes the live version, so the agent answers using th
 Extend the instruction (for example, always clarify delivery) and publish again. This is how you refine behavior over time.
 
 ![Change the instruction and publish again](configure-agent-answers--05-published-second.png)
-
-## Step 6. Reopen the agent and verify settings
-
-**Result demonstration.** Reopen the node — the updated instruction and model settings are still there, so the configuration was saved.
-
-**Summary.** You can set the agent prompt and model and publish changes.
-
-![Reopen the agent and verify settings](configure-agent-answers--06-reopened-prompt-persisted.png)

@@ -12,7 +12,6 @@ import type {
     ScanContext,
     ScanResolution,
     StockLocation,
-    StockMove,
     StockMoveLineClaimResult,
     StockMoveLineExceptionResult,
     StockMoveLineNextResponse,
@@ -20,6 +19,8 @@ import type {
     StockProductView,
     StockPutawaySuggestResponse,
     StockResource,
+    StockResourceLogoutResult,
+    StockScanCommitResponse,
     StockScanCountCommitResponse,
     StockScanExpected,
     StockScanOpenResponse,
@@ -62,7 +63,7 @@ export const stockScanQuantityOp = createAsyncOp<StockScanStepResponse>({
     restMirror: { method: 'POST', path: '/stock/api/v1/scan/quantity' },
 });
 
-export const stockScanCommitOp = createAsyncOp<StockMove>({
+export const stockScanCommitOp = createAsyncOp<StockScanCommitResponse>({
     name: 'stock/scan_commit',
     silent: true,
     transport: 'ws',
@@ -107,15 +108,6 @@ export const stockMoveLinesNextOp = createAsyncOp<StockMoveLineNextResponse>({
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/next' },
 });
 
-export const stockMoveLinesClaimOp = createAsyncOp<StockMoveLineClaimResult>({
-    name: 'stock/move_lines_claim',
-    silent: true,
-    transport: 'ws',
-    wsTimeoutMs: 10_000,
-    commandType: 'stock/move_lines/claim_requested',
-    restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/claim' },
-});
-
 export const stockMoveLinesReleaseOp = createAsyncOp<StockMoveLineClaimResult>({
     name: 'stock/move_lines_release',
     silent: true,
@@ -123,15 +115,6 @@ export const stockMoveLinesReleaseOp = createAsyncOp<StockMoveLineClaimResult>({
     wsTimeoutMs: 10_000,
     commandType: 'stock/move_lines/release_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/release' },
-});
-
-export const stockMoveLinesAssignOp = createAsyncOp<StockMoveLineClaimResult>({
-    name: 'stock/move_lines_assign',
-    silent: true,
-    transport: 'ws',
-    wsTimeoutMs: 10_000,
-    commandType: 'stock/move_lines/assign_requested',
-    restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/assign' },
 });
 
 export const stockScanOpenOp = createAsyncOp<StockScanOpenResponse>({
@@ -188,6 +171,7 @@ export interface StockTsdSessionState extends Record<string, unknown> {
     error: string | null;
     move_id: string;
     expected: StockScanExpected | null;
+    commit_key: string;
 }
 
 function _requireScanContext(payload: Record<string, unknown>, action: string): ScanContext {
@@ -205,6 +189,7 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
     lineRemoved: string;
     sessionCleared: string;
     sessionHydrated: string;
+    commitKeyEnsured: string;
 }>({
     name: 'stock/tsd_session',
     extraInitial: {
@@ -216,6 +201,7 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
         error: null,
         move_id: '',
         expected: null,
+        commit_key: '',
     },
     extraEvents: {
         STEP_APPLIED: 'step_applied',
@@ -224,6 +210,7 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
         LINE_REMOVED: 'line_removed',
         SESSION_CLEARED: 'session_cleared',
         SESSION_HYDRATED: 'session_hydrated',
+        COMMIT_KEY_ENSURED: 'commit_key_ensured',
     },
     actions: {
         stepApplied: 'step_applied',
@@ -232,6 +219,7 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
         lineRemoved: 'line_removed',
         sessionCleared: 'session_cleared',
         sessionHydrated: 'session_hydrated',
+        commitKeyEnsured: 'commit_key_ensured',
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.STEP_APPLIED) {
@@ -286,7 +274,23 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
                 error: null,
                 move_id: moveId,
                 expected,
+                // Новая строка работы — новый коммит-ключ: повтор
+                // коммита по той же строке идемпотентен, а следующая
+                // строка — другой факт леджера.
+                commit_key: '',
             };
+        }
+        if (event.type === events.COMMIT_KEY_ENSURED) {
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || typeof payload.key !== 'string' || payload.key === '') {
+                throw new Error('stock/tsd_session.commitKeyEnsured: key required');
+            }
+            // Первый ключ сессии остаётся до конца строки — именно он
+            // и нужен персисту: перезагрузка после потерянного ответа
+            // переотправит коммит тем же ключом, и полоса вернёт
+            // исходный результат вместо двойной проводки.
+            if (state.commit_key !== '') return null;
+            return { ...state, commit_key: payload.key };
         }
         if (event.type === events.LINE_REMOVED) {
             // Удаление набранной строки на review — контекст живёт
@@ -309,21 +313,23 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
         }
         if (event.type === events.SESSION_HYDRATED) {
             // Восстановление после перезагрузки терминала: контекст
-            // stateless — набранные строки возвращаются как есть,
-            // expected пересчитает следующий scan_step.
+            // и подсказка expected возвращаются как есть — следующий
+            // scan_step всё равно пересчитает их из backend-состояния.
             const payload = event.payload;
             if (!isPlainRecord(payload)) {
                 throw new Error('stock/tsd_session.sessionHydrated: payload required');
             }
             const context = isPlainRecord(payload.context) ? (payload.context as unknown as ScanContext) : null;
             if (context === null) {
-                return { ...state, context: null, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: '', expected: null };
+                return { ...state, context: null, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: '', expected: null, commit_key: '' };
             }
             const moveId = typeof payload.move_id === 'string' ? payload.move_id : '';
-            return { ...state, context, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: moveId, expected: null };
+            const commitKey = typeof payload.commit_key === 'string' ? payload.commit_key : '';
+            const expected = isPlainRecord(payload.expected) ? (payload.expected as unknown as StockScanExpected) : null;
+            return { ...state, context, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: moveId, expected, commit_key: commitKey };
         }
         if (event.type === events.SESSION_CLEARED) {
-            return { ...state, context: null, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: '', expected: null };
+            return { ...state, context: null, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: '', expected: null, commit_key: '' };
         }
         return null;
     },
@@ -336,6 +342,15 @@ export const stockResourceLoginOp = createAsyncOp<StockResource>({
     wsTimeoutMs: 8_000,
     commandType: 'stock/resources/login_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/resources/login' },
+});
+
+export const stockResourcesLogoutOp = createAsyncOp<StockResourceLogoutResult>({
+    name: 'stock/resources_logout',
+    silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'stock/resources/logout_requested',
+    restMirror: { method: 'POST', path: '/stock/api/v1/resources/logout' },
 });
 
 export interface StockTsdContextState extends Record<string, unknown> {
@@ -362,6 +377,7 @@ export const stockTsdContextSlice = createSlice<StockTsdContextState, {
     setZone: string;
     setResource: string;
     setWave: string;
+    clearBinding: string;
     resetContext: string;
     contextHydrated: string;
 }>({
@@ -381,6 +397,7 @@ export const stockTsdContextSlice = createSlice<StockTsdContextState, {
         ZONE_SET: 'zone_set',
         RESOURCE_SET: 'resource_set',
         WAVE_SET: 'wave_set',
+        BINDING_CLEARED: 'binding_cleared',
         CONTEXT_RESET: 'context_reset',
         CONTEXT_HYDRATED: 'context_hydrated',
     },
@@ -389,6 +406,7 @@ export const stockTsdContextSlice = createSlice<StockTsdContextState, {
         setZone: 'zone_set',
         setResource: 'resource_set',
         setWave: 'wave_set',
+        clearBinding: 'binding_cleared',
         resetContext: 'context_reset',
         contextHydrated: 'context_hydrated',
     },
@@ -464,6 +482,26 @@ export const stockTsdContextSlice = createSlice<StockTsdContextState, {
                 wave_id: read('wave_id'),
                 wave_name: read('wave_name'),
             };
+        }
+        if (event.type === events.BINDING_CLEARED) {
+            // Тап по активному чипу отцепляет привязку: зона снова
+            // показывает весь склад, волна — все задания, техника
+            // отпускается для других операторов.
+            const payload = event.payload;
+            if (!isPlainRecord(payload)) {
+                throw new Error('stock/tsd_context.clearBinding: payload required');
+            }
+            const kind = payload['kind'];
+            if (kind === 'zone') {
+                return { ...state, zone_location_id: '', zone_code: '' };
+            }
+            if (kind === 'resource') {
+                return { ...state, resource_id: '', resource_code: '' };
+            }
+            if (kind === 'wave') {
+                return { ...state, wave_id: '', wave_name: '' };
+            }
+            throw new Error('stock/tsd_context.clearBinding: kind must be zone|resource|wave');
         }
         if (event.type === events.CONTEXT_RESET) {
             return {
@@ -640,10 +678,9 @@ declare module '@platform/lib/events/factory-registry.js' {
         'stock/tsd_outbox': typeof stockTsdOutboxSlice;
         'stock/operator_login': typeof stockOperatorLoginOp;
         'stock/resource_login': typeof stockResourceLoginOp;
+        'stock/resources_logout': typeof stockResourcesLogoutOp;
         'stock/move_lines_next': typeof stockMoveLinesNextOp;
-        'stock/move_lines_claim': typeof stockMoveLinesClaimOp;
         'stock/move_lines_release': typeof stockMoveLinesReleaseOp;
-        'stock/move_lines_assign': typeof stockMoveLinesAssignOp;
         'stock/move_lines_exception': typeof stockMoveLinesExceptionOp;
         'stock/operator_pulse': typeof stockOperatorPulseOp;
         'stock/scan_open': typeof stockScanOpenOp;

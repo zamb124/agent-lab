@@ -47,6 +47,7 @@ export class CRMGraphSearchPill extends PlatformElement {
             :host {
                 display: flex;
                 align-items: center;
+                flex-wrap: wrap;
                 gap: 8px;
                 pointer-events: none;
             }
@@ -216,8 +217,7 @@ export class CRMGraphSearchPill extends PlatformElement {
             }
 
             @media (max-width: 767px) {
-                :host { flex-wrap: wrap; }
-                .pill input { width: 100px; }
+                .pill input { width: 112px; }
                 .mode-pills { gap: 3px; }
                 .mode-pill { font-size: 11px; padding: 4px 8px; }
             }

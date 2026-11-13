@@ -22,7 +22,7 @@ export const mobileStickyHeaderPageHeaderShellStyles = css`
 
         .header {
             align-items: center;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             min-height: var(--platform-mobile-sticky-header-row-min-height);
             gap: var(--space-1);
         }

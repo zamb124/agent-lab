@@ -74,6 +74,7 @@
   "dependencies": {
     "@lit-labs/ssr-client": "^1.1.8",
     "@protomaps/basemaps": "^5.7.2",
+    "@zxing/browser": "^0.2.1",
     "lenis": "^1.3.27",
     "maplibre-gl": "^6.15.0",
     "pmtiles": "^4.4.1",

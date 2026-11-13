@@ -68,6 +68,7 @@ export class CosmicScope extends PlatformElement {
                 --marketing-page-bg: transparent;
                 --marketing-hero-bg: transparent;
                 --marketing-header-bg: rgba(3, 5, 8, 0.55);
+                --marketing-logo-filter: none;
                 --marketing-benefits-band-bg: transparent;
                 --marketing-benefits-band-border: var(--marketing-cosmic-line);
                 --marketing-hero-title-gradient: linear-gradient(

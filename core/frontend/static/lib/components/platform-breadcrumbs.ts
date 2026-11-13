@@ -56,12 +56,17 @@ export class PlatformBreadcrumbs extends PlatformElement {
                 margin-bottom: var(--space-2);
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
+                white-space: nowrap;
+                overflow: hidden;
+                max-width: 100%;
             }
 
             .breadcrumb-item {
                 display: flex;
                 align-items: center;
                 gap: var(--space-1);
+                flex: 0 1 auto;
+                min-width: 0;
                 cursor: pointer;
                 transition: color var(--motion-duration-micro);
                 background: transparent;
@@ -71,12 +76,22 @@ export class PlatformBreadcrumbs extends PlatformElement {
                 font: inherit;
             }
 
+            .breadcrumb-label {
+                display: block;
+                flex: 0 1 auto;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
             .breadcrumb-item:hover {
                 color: var(--text-primary);
             }
 
             .breadcrumb-separator {
                 color: var(--text-tertiary);
+                flex-shrink: 0;
             }
 
             .breadcrumb-current {
@@ -91,26 +106,6 @@ export class PlatformBreadcrumbs extends PlatformElement {
 
             :host([compact]) .breadcrumbs {
                 margin-bottom: 0;
-            }
-
-            @media (max-width: 767px) {
-                .breadcrumbs {
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 100%;
-                }
-
-                .breadcrumb-item {
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 200px;
-                }
-
-                .breadcrumb-current {
-                    max-width: 250px;
-                }
             }
         `,
     ];
@@ -251,7 +246,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
                         ${isLast
                             ? html`
                                 <span class="breadcrumb-item breadcrumb-current" aria-current="page">
-                                    ${segment.label}
+                                    <span class="breadcrumb-label">${segment.label}</span>
                                 </span>
                             `
                             : html`
@@ -265,7 +260,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
                                         this._onClick(segment.routeKey, segment.params);
                                     }}
                                 >
-                                    ${segment.label}
+                                    <span class="breadcrumb-label">${segment.label}</span>
                                 </button>
                             `}
                         ${isLast

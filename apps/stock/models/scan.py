@@ -107,6 +107,7 @@ class ScanLineDraft:
     serial: str | None = None
     container_id: str | None = None
     packaging_id: str | None = None
+    owner_entity_id: str | None = None
 
 
 class ScanError(StrEnum):
@@ -151,6 +152,7 @@ class ScanContext:
     dest_id: str | None = None
     container_id: str | None = None
     lines: tuple[ScanLineDraft, ...] = ()
+    owner_entity_id: str | None = None
 
     def expected(self) -> ScanStep:
         return self.step
@@ -271,17 +273,26 @@ def _apply_resolution(
                 else None
             )
             serial = res.serial
+            # В пересчёте количество с этикетки не подставляем: GS1 (37)
+            # — то, что написали на коробе, а не то, что оператор
+            # физически насчитал. Исключение — серийник: его скан и
+            # есть физический факт «одна штука».
+            label_qty = (
+                res.quantity
+                if res.quantity is not None
+                else res.packaging_qty
+            )
             return replace(
                 ctx,
                 product_id=product_id,
                 lot_id=lot_id or ctx.lot_id,
                 serial=serial or ctx.serial,
                 quantity=(
-                    res.quantity
-                    if res.quantity is not None
+                    ctx.quantity
+                    if ctx.flow == ScanFlow.COUNT and serial is None
                     else (
-                        res.packaging_qty
-                        if res.packaging_qty is not None
+                        label_qty
+                        if label_qty is not None
                         else ctx.quantity
                     )
                 ),
@@ -323,6 +334,7 @@ def _emit_line(ctx: ScanContext) -> ScanContext:
         serial=ctx.serial,
         container_id=None,
         packaging_id=ctx.packaging_id,
+        owner_entity_id=ctx.owner_entity_id,
     )
     return replace(
         ctx,
@@ -358,8 +370,15 @@ def _validate_ready(ctx: ScanContext) -> ScanError | None:
     if ctx.flow in {
         ScanFlow.RECEIVE, ScanFlow.MOVE, ScanFlow.PUTAWAY,
         ScanFlow.PICK, ScanFlow.PACK, ScanFlow.COUNT,
-    } and (ctx.quantity is None or ctx.quantity <= 0):
-        return ScanError.QUANTITY_REQUIRED
+    }:
+        # «Посчитал — пусто» для пересчёта это валидный физический
+        # ответ: нулевой факт и есть найденная недостача. Движению
+        # ноль бессмысленен — отклоняем.
+        zero_ok = ctx.flow == ScanFlow.COUNT
+        if ctx.quantity is None or (
+            ctx.quantity < 0 if zero_ok else ctx.quantity <= 0
+        ):
+            return ScanError.QUANTITY_REQUIRED
     return None
 
 
@@ -386,6 +405,24 @@ def scan_step(ctx: ScanContext, res: ScanResolution) -> ScanStepResult:
         # либо явный commit снаружи (не через scan_step). Потоки без
         # шага PRODUCT (ship, container_move) товар в review не ждут —
         # иначе машина ушла бы в шаг, из которого нет выхода.
+        if (
+            ScanStep.PRODUCT in seq
+            and seq[0] == ScanStep.LOCATION
+            and res.entity_kind in _STEP_ENTITIES[ScanStep.LOCATION]
+        ):
+            # Обход многоячеечного задания: оператор дошёл до
+            # следующей ячейки и сканирует её до commit — сессия
+            # переоткрывает источник и ждёт товар той ячейки,
+            # направление (dest) удерживается как подтверждённое.
+            ctx2 = _apply_resolution(
+                replace(ctx, step=ScanStep.LOCATION), res
+            )
+            return ScanStepResult(
+                _skip_filled(
+                    replace(ctx2, step=_advance(ScanStep.LOCATION, seq)),
+                    seq,
+                )
+            )
         if (
             ScanStep.PRODUCT in seq
             and res.entity_kind in _STEP_ENTITIES[ScanStep.PRODUCT]
@@ -424,12 +461,16 @@ def scan_step(ctx: ScanContext, res: ScanResolution) -> ScanStepResult:
 
 
 def scan_quantity(ctx: ScanContext, quantity: Decimal) -> ScanStepResult:
-    """Числовой ввод количества (клавиатура ТСД или вес с GS1)."""
+    """Числовой ввод количества (клавиатура ТСД или вес с GS1).
+
+    Пересчёт принимает ``0``: «в ячейке пусто» — это и есть находка
+    инвентаризации, записываемая в ``inventory_quantity`` как факт.
+    """
     if ctx.step == ScanStep.START:
         ctx = replace(ctx, step=_FLOW_SEQUENCE[ctx.flow][0])
     if ctx.step != ScanStep.QUANTITY:
         return ScanStepResult(ctx, ScanError.UNEXPECTED_STEP, ctx.step.value)
-    if quantity <= 0:
+    if quantity < 0 or (quantity == 0 and ctx.flow != ScanFlow.COUNT):
         return ScanStepResult(ctx, ScanError.QUANTITY_REQUIRED)
     seq = _FLOW_SEQUENCE[ctx.flow]
     ctx2 = replace(ctx, quantity=quantity, step=_advance(ctx.step, seq))

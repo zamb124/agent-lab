@@ -77,10 +77,14 @@ async def _tsd_qty(page: Page, digits: str) -> None:
     await ok.click()
 
 
-async def _tsd_commit(page: Page) -> None:
+async def _tsd_commit_click(page: Page) -> None:
     btn = page.locator("stock-tsd-run .commit-btn")
     await expect(btn).to_be_enabled(timeout=10_000)
     await btn.click()
+
+
+async def _tsd_commit(page: Page) -> None:
+    await _tsd_commit_click(page)
     # Успешный коммит закрывает сессию — run-экран уходит, возвращается рабочий стол.
     await expect(page.locator("stock-tsd-run")).to_have_count(0, timeout=30_000)
 
@@ -920,7 +924,7 @@ async def test_stock_tsd_document_pick(
             "moves": [
                 {
                     "product_id": product_1["product_id"],
-                    "product_qty": "4",
+                    "product_qty": "5",
                     "uom_id": uom_id,
                     "location_id": bin_a["location_id"],
                 },
@@ -937,6 +941,31 @@ async def test_stock_tsd_document_pick(
     await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
 
     await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Рабочий стол: обе строки накладной видны как свободные задания ---
+    await expect(page.locator(".task-card").first).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Очередь — свободные задания можно взять руками",
+        page,
+        screenshot_name="tsd-document-queue",
+        label_en="Queue — free tasks can be picked manually",
+        details=(
+            "Рабочий стол: «дайте работу» выдаёт лучшее задание "
+            "автоматически, а очередь ниже показывает все исполнимые "
+            "строки — оператор физически ближе к другой ячейке и "
+            "может тапнуть её сам. Кнопка «отпустить» есть только у "
+            "закреплённых за ним строк — у свободных отпускать "
+            "нечего."
+        ),
+        details_en=(
+            "The work desk: «give me work» issues the best task "
+            "automatically, while the queue below lists every "
+            "executable line — the operator may be physically "
+            "closer to another bin and can tap it themselves. The "
+            "release button appears only on lines claimed by them — "
+            "free lines have nothing to release."
+        ),
+    )
 
     # --- Скан накладной: карточка документа и вход в исполнение ---
     await _tsd_scan(page, f"DOC-{unique_id[:6]}")
@@ -990,11 +1019,66 @@ async def test_stock_tsd_document_pick(
             "scans it — no need to rescan the document."
         ),
     )
+    # --- Перезагрузка терминала внутри сессии: поток и подсказка
+    # восстанавливаются из persisted-снапшота — оператор не теряет
+    # прогон при обновлении страницы/свапе WebView ---
+    _ = await page.reload(wait_until="domcontentloaded")
+    await expect(run).to_be_visible(timeout=30_000)
+    await expect(expected).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "Перезагрузка терминала — сессия и подсказка на месте",
+        page,
+        screenshot_name="tsd-document-reload",
+        label_en="Terminal reload — session and hint restored",
+        details=(
+            "Терминал перезагрузили посреди исполнения — сессия "
+            "восстановилась из хранилища: экран прогона и жёлтая "
+            "подсказка backend'а на месте, набранное не потеряно. "
+            "Оператор просто продолжает сканировать."
+        ),
+        details_en=(
+            "The terminal was reloaded mid-execution — the session "
+            "restored from storage: the run screen and the amber "
+            "backend hint are in place, nothing collected is lost. "
+            "The operator simply keeps scanning."
+        ),
+    )
+
     await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await _tsd_wait_step(page, "product")
     await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
     await _tsd_wait_step(page, "quantity")
     await _tsd_qty(page, "4")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await _tsd_commit_click(page)
+
+    # --- Позиция не выбрана целиком: backend продолжает документ —
+    # экран остаётся в сессии и подсказывает остаток той же строки ---
+    await expect(expected).to_contain_text("×1", timeout=15_000)
+    await scenario.step(
+        "Коммит части позиции — терминал предлагает добрать остаток",
+        page,
+        screenshot_name="tsd-document-continuation",
+        label_en="Partial commit — the terminal suggests the remainder",
+        details=(
+            "По документу 5 шт, оператор унёс 4: после проводки "
+            "сессия НЕ закрывается — backend подсказывает следующую "
+            "исполнимую строку (остаток ×1 той же позиции). Оператор "
+            "не возвращается в очередь между ходками к одной ячейке."
+        ),
+        details_en=(
+            "The document wants 5, the operator carried 4: after "
+            "the commit the session does NOT close — the backend "
+            "suggests the next executable line (the ×1 remainder "
+            "of the same position). No queue round-trip between "
+            "trips to the same bin."
+        ),
+    )
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await _tsd_wait_step(page, "product")
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await _tsd_wait_step(page, "quantity")
+    await _tsd_qty(page, "1")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await _tsd_commit(page)
 
@@ -1015,7 +1099,7 @@ async def test_stock_tsd_document_pick(
     await _tsd_commit(page)
 
     # --- Обе позиции проведены: остаток ячейки уменьшен по леджеру ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("1")
+    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("0")
     assert await _quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("2")
     moves = await _stock_rest(
         page, "GET", f"/transfers/{transfer['transfer_id']}"
@@ -1029,7 +1113,7 @@ async def test_stock_tsd_document_pick(
         label_en="Order closed — stock matches the document",
         details=(
             "**Демонстрация результата.** Обе позиции накладной "
-            "проведены леджером: кофе 5 → 1, чай 8 → 2 — ровно по "
+            "проведены леджером: кофе 5 → 0, чай 8 → 2 — ровно по "
             "спецификациям документа.\n\n"
             "**Итог.** Работа по документу: скан накладной → "
             "«Начать» → подсказка позиции → ячейка → товар → "
@@ -1037,10 +1121,34 @@ async def test_stock_tsd_document_pick(
         ),
         details_en=(
             "**Result demonstration.** Both order lines were posted "
-            "to the ledger: coffee 5 → 1, tea 8 → 2 — exactly per "
+            "to the ledger: coffee 5 → 0, tea 8 → 2 — exactly per "
             "the document specs.\n\n"
             "**Summary.** Document work: scan the order → «Start» → "
             "line hint → bin → product → qty → commit."
+        ),
+    )
+
+    # --- Тот же PWA на широком экране: ноутбук в приёмке/на ПК ---
+    await page.set_viewport_size(ViewportSize(width=1440, height=900))
+    await expect(page.locator("stock-tsd-home-page")).to_be_visible(timeout=15_000)
+    await page.locator("stock-tsd-home-page").evaluate(
+        "(el) => el.scrollTo(0, 0)"
+    )
+    await scenario.step(
+        "Тот же терминал на ноутбуке",
+        page,
+        screenshot_name="tsd-document-desktop",
+        label_en="The same terminal on a laptop",
+        details=(
+            "PWA — один бандл на все экраны: на десктопе рабочий стол "
+            "центрирован и не растягивается — очередь, статистика смены "
+            "и скан-поле остаются в той же компоновке, что на терминале."
+        ),
+        details_en=(
+            "The PWA is one bundle for all screens: on desktop the "
+            "work screen is centered and does not stretch — the queue, "
+            "shift stats and scan field keep the same layout as on "
+            "the handheld."
         ),
     )
 
@@ -1686,3 +1794,260 @@ async def test_stock_tsd_document_exception(
     count_lines = [ln for ln in detail["lines"] if ln.get("kind") == "count"]
     assert len(count_lines) == 1, detail["lines"]
     assert count_lines[0]["state"] == "done", count_lines[0]
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-context-chips",
+    doc_slug="stock-tsd-context-chips",
+    title="Контекст смены: зона, волна и техника сужают работу",
+    title_en="Shift context: zone, wave and equipment narrow the work",
+    description=(
+        "**Для чего:** оператор физически стоит в своей зоне со "
+        "своей тележкой — показывать ему задания с другого конца "
+        "склада бессмысленно. Чипы контекста переводят терминал "
+        "в режим «моя зона / моя волна / моя техника».\n\n"
+        "**Какие проблемы решает:** привязка — один тап и один "
+        "скан: чип зоны взводится и баркод зоны сужает очередь до "
+        "поддерева ячеек; волна выбирается из списка отпущенных "
+        "диспетчером; тележка привязывается её баркодом и участвует "
+        "в выдаче работы (ресурс фильтрует задания по возможностям).\n\n"
+        "**Результат:** «дайте работу» выдаёт именно то задание, "
+        "которое оператор способен и должен сделать первым."
+    ),
+    description_en=(
+        "**Purpose:** the operator physically stands in their zone "
+        "with their cart — showing tasks from the far end of the "
+        "warehouse is pointless. Context chips switch the terminal "
+        "to «my zone / my wave / my equipment» mode.\n\n"
+        "**Problems solved:** binding is one tap and one scan: the "
+        "zone chip arms and a zone barcode narrows the queue to "
+        "that bin subtree; the wave is picked from the dispatcher-"
+        "released list; the cart binds via its barcode and takes "
+        "part in work assignment (the resource filters tasks by "
+        "capability).\n\n"
+        "**Result:** «give me work» issues exactly the task the "
+        "operator can and should do first."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_context_chips(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+
+    # --- Топология: зона А с двумя ячейками + зона Б с ячейкой вне её ---
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    zone = seed["zone"]
+    bin_a = seed["bin_a"]
+    product_1 = seed["product_1"]
+    product_2 = seed["product_2"]
+    uom_id = seed["uom_id"]
+    # Зона получает баркод — её скан привязывает оператора к поддереву.
+    await _stock_rest(
+        page, "PATCH", f"/locations/{zone['location_id']}",
+        {"location_id": zone["location_id"], "barcode": f"ZONE-1-{unique_id[:6]}"},
+    )
+    zone_b = await _stock_rest(
+        page, "POST", "/locations",
+        {"warehouse_id": warehouse_id, "name": f"Зона Б{unique_id[:3]}", "usage": "view"},
+    )
+    bin_c = await _stock_rest(
+        page, "POST", "/locations",
+        {
+            "warehouse_id": warehouse_id,
+            "parent_id": zone_b["location_id"],
+            "name": f"Ячейка В{unique_id[:3]}",
+            "usage": "bin",
+            "barcode": f"BIN-C-{unique_id[:6]}",
+        },
+    )
+    await _tsd_seed_stock(
+        page,
+        warehouse_id,
+        [
+            {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
+            {"location_dest_id": bin_c["location_id"], "product_id": product_2["product_id"], "quantity": "4"},
+        ],
+    )
+
+    # --- Две накладные: отбор из зоны А (уйдёт в волну) и из зоны Б ---
+    doc_1 = await _tsd_seed_document(
+        page, warehouse_id, unique_id,
+        [
+            {
+                "product_id": product_1["product_id"],
+                "product_qty": "3",
+                "uom_id": uom_id,
+                "location_id": bin_a["location_id"],
+            },
+        ],
+    )
+    _ = await _tsd_seed_document(
+        page, warehouse_id, f"z{unique_id}",
+        [
+            {
+                "product_id": product_2["product_id"],
+                "product_qty": "2",
+                "uom_id": uom_id,
+                "location_id": bin_c["location_id"],
+            },
+        ],
+    )
+    detail = await _stock_rest(page, "GET", f"/transfers/{doc_1['transfer_id']}")
+    move_1_id = detail["moves"][0]["move_id"]
+    wave = await _stock_rest(
+        page, "POST", "/waves",
+        {
+            "warehouse_id": warehouse_id,
+            "name": f"Волна {unique_id[:4]}",
+            "move_ids": [move_1_id],
+        },
+    )
+    await _stock_rest(
+        page, "POST", f"/waves/{wave['wave_id']}/release",
+        {"wave_id": wave["wave_id"]},
+    )
+
+    # --- Техника с баркодом: скан привязывает тележку к оператору ---
+    rtype = await _stock_rest(
+        page, "POST", "/resource-types",
+        {"warehouse_id": warehouse_id, "name": f"Тележка {unique_id[:4]}"},
+    )
+    await _stock_rest(
+        page, "POST", "/resources",
+        {
+            "warehouse_id": warehouse_id,
+            "resource_type_id": rtype["resource_type_id"],
+            "code": f"T-{unique_id[:4]}",
+            "barcode": f"RES-{unique_id[:6]}",
+        },
+    )
+
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Очередь без контекста: оба задания видны ---
+    chips = page.locator("stock-tsd-home-page .context-chips .chip")
+    cards = page.locator("stock-tsd-home-page .task-card")
+    await expect(cards).to_have_count(2, timeout=15_000)
+
+    # --- Чип зоны: тап → баннер «сканируйте зону» → скан сужает очередь ---
+    await chips.nth(0).click()
+    await expect(page.locator(".pending-banner")).to_be_visible(timeout=10_000)
+    await _tsd_scan(page, f"ZONE-1-{unique_id[:6]}")
+    await expect(chips.nth(0)).to_contain_text(f"ZONE-1-{unique_id[:6]}", timeout=15_000)
+    # Ячейка В вне поддерева зоны А — её задание ушло из списка.
+    await expect(cards).to_have_count(1, timeout=15_000)
+    await scenario.step(
+        "Скан зоны — очередь сужена до моего поддерева",
+        page,
+        screenshot_name="tsd-context-zone",
+        label_en="Zone scan — the queue narrows to my subtree",
+        details=(
+            "Оператор вошёл в зону А: тап по чипу и один скан "
+            "баркова зоны — чип подсвечен привязкой, а в очереди "
+            "осталась только работа из ячеек этой зоны. Задание "
+            "с ячейки В (другая зона) терминал больше не предлагает."
+        ),
+        details_en=(
+            "The operator entered zone A: one tap on the chip and "
+            "one scan of the zone barcode — the chip is lit as "
+            "bound, and the queue keeps only work from that zone's "
+            "bins. The task from bin C (other zone) is no longer "
+            "offered."
+        ),
+    )
+
+    # --- Чип волны: тап → список отпущенных волн → выбор сужает ещё раз ---
+    await chips.nth(2).click()
+    wave_item = page.locator(".wave-item", has_text=f"Волна {unique_id[:4]}")
+    await expect(wave_item).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Отпущенные волны — диспетчер нарезал маршрут",
+        page,
+        screenshot_name="tsd-context-wave-list",
+        label_en="Released waves — the dispatcher sliced the route",
+        details=(
+            "Волна — нарезанный диспетчером маршрут отбора: "
+            "терминал показывает только отпущенные волны склада. "
+            "Выбор волны — тапом: у партии нет физического баркода."
+        ),
+        details_en=(
+            "A wave is the dispatcher-sliced pick route: the "
+            "terminal lists only waves released for this warehouse. "
+            "The wave is picked by tap — a batch has no physical "
+            "barcode."
+        ),
+    )
+    await wave_item.click()
+    await expect(chips.nth(2)).to_contain_text(f"Волна {unique_id[:4]}", timeout=15_000)
+    await expect(cards).to_have_count(1, timeout=15_000)
+    # Карточка задания несёт бейдж волны — оператор видит привязку.
+    await expect(cards.first.locator(".task-wave")).to_contain_text(
+        f"Волна {unique_id[:4]}", timeout=15_000
+    )
+
+    # --- Чип техники: тап → скан баркода тележки — привязка на сервере ---
+    await chips.nth(1).click()
+    await expect(page.locator(".pending-banner")).to_be_visible(timeout=10_000)
+    await _tsd_scan(page, f"RES-{unique_id[:6]}")
+    await expect(chips.nth(1)).to_contain_text(f"T-{unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "Контекст собран: зона + волна + тележка",
+        page,
+        screenshot_name="tsd-context-bound",
+        label_en="Context assembled: zone + wave + cart",
+        details=(
+            "Три чипа привязаны двумя сканами и одним тапом: "
+            "терминал теперь отвечает на вопрос «что делать» с "
+            "учётом физики — где я стою, какой маршрут отпущен и "
+            "на чём я еду. Тележка числится занятой за оператором "
+            "на сервере — второй терминал её не уведёт."
+        ),
+        details_en=(
+            "Three chips bound with two scans and one tap: the "
+            "terminal now answers «what to do» with physics in "
+            "mind — where I stand, which route is released, and "
+            "what I'm driving. The cart is server-bound to the "
+            "operator — a second terminal can't steal it."
+        ),
+    )
+
+    # --- «Дайте работу» выдаёт задание из связанного контекста ---
+    await page.locator(".give-work").click()
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=15_000)
+    await expect(run.locator(".expected")).to_contain_text(
+        f"Кофе зерновой {unique_id[:4]}", timeout=15_000
+    )
+    await scenario.step(
+        "«Дайте работу» — первая строка связанного контекста",
+        page,
+        screenshot_name="tsd-context-give-work",
+        label_en="«Give me work» — first line of the bound context",
+        details=(
+            "**Демонстрация результата.** Выдача прошла через "
+            "тройной фильтр зоны + волны + ресурса: исполнение "
+            "открылось на строке кофе из зоны А — задании волны. "
+            "Строка захвачена за оператором в той же транзакции.\n\n"
+            "**Итог.** Контекст: чип зоны → скан → чип волны → тап "
+            "→ чип техники → скан → «дайте работу»."
+        ),
+        details_en=(
+            "**Result demonstration.** Issue passed the triple "
+            "zone + wave + resource filter: execution opened on "
+            "the coffee line from zone A — the wave's task. The "
+            "line was claimed for the operator in the same "
+            "transaction.\n\n"
+            "**Summary.** Context: zone chip → scan → wave chip → "
+            "tap → equipment chip → scan → «give me work»."
+        ),
+    )

@@ -26,12 +26,14 @@ class FakeKeyboardTarget {
         return handler;
     }
 
-    key(key: string, mods: Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>> = {}): void {
+    key(key: string, mods: Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey' | 'repeat'>> = {}, eventTarget: EventTarget | null = null): void {
         (this._handler('keydown') as (event: KeyboardEvent) => void)({
             key,
             ctrlKey: mods.ctrlKey ?? false,
             metaKey: mods.metaKey ?? false,
             altKey: mods.altKey ?? false,
+            repeat: mods.repeat ?? false,
+            target: eventTarget,
             preventDefault: () => undefined,
             stopPropagation: () => undefined,
         } as KeyboardEvent);
@@ -113,11 +115,82 @@ describe('TsdScanInput', () => {
         expect(scans).toEqual([]);
     });
 
-    it('долгая пауза обнуляет недопечатанный буфер', () => {
+    it('сканер без суффикса: конец пачки коммитится таймаутом', () => {
+        target.typeKeys('NOSUFFIX1', 5);
+        vi.advanceTimersByTime(200);
+        expect(scans).toEqual(['NOSUFFIX1']);
+    });
+
+    it('пачка без терминатора короче минимума не эмитится таймаутом', () => {
+        target.typeKeys('AB', 5);
+        vi.advanceTimersByTime(500);
+        expect(scans).toEqual([]);
+    });
+
+    it('Enter после таймаут-коммита не дублирует скан', () => {
         target.typeKeys('STALE', 5);
+        vi.advanceTimersByTime(500);
+        expect(scans).toEqual(['STALE']);
+        target.key('Enter');
+        expect(scans).toEqual(['STALE']);
+    });
+
+    it('Tab-терминатор коммитит код как Enter (Zebra/Honeywell)', () => {
+        target.typeKeys('TABCODE9', 5);
+        target.key('Tab');
+        expect(scans).toEqual(['TABCODE9']);
+    });
+
+    it('управляющие обёртки STX/ETX не попадают в код', () => {
+        target.key('\x02');
+        target.typeKeys('WRAPPED3', 5);
+        target.key('\x03');
+        target.key('Enter');
+        expect(scans).toEqual(['WRAPPED3']);
+    });
+
+    it('GS (\\x1d, FNC1) сохраняется в коде — разделитель AI GS1', () => {
+        target.typeKeys('01046012345', 4);
+        target.key('\x1d');
+        target.typeKeys('10LOT77', 4);
+        target.key('Enter');
+        expect(scans).toEqual(['01046012345\x1d10LOT77']);
+    });
+
+    it('печать внутри input не уходит сканом', () => {
+        const field = { tagName: 'INPUT' } as unknown as EventTarget;
+        for (const ch of 'QTYFIELD') {
+            target.key(ch, {}, field);
+        }
+        target.key('Enter', {}, field);
+        expect(scans).toEqual([]);
+    });
+
+    it('печать внутри contenteditable не уходит сканом', () => {
+        const field = { tagName: 'DIV', isContentEditable: true } as unknown as EventTarget;
+        target.key('A', {}, field);
+        target.key('B', {}, field);
+        target.key('C', {}, field);
+        target.key('Enter', {}, field);
+        expect(scans).toEqual([]);
+    });
+
+    it('зажатая клавиша (auto-repeat) не эмитит фантомный скан', () => {
+        target.key('a');
+        for (let i = 0; i < 12; i += 1) {
+            target.key('a', { repeat: true });
+            vi.advanceTimersByTime(30);
+        }
         vi.advanceTimersByTime(500);
         target.key('Enter');
         expect(scans).toEqual([]);
+    });
+
+    it('auto-repeat не ломает идущий рядом настоящий скан', () => {
+        target.typeKeys('GOOD77', 5);
+        target.key('x', { repeat: true });
+        target.key('Enter');
+        expect(scans).toEqual(['GOOD77']);
     });
 
     it('два скана подряд эмитятся независимо', () => {

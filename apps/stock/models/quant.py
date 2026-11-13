@@ -340,6 +340,23 @@ class StockQuant(PlatformModel):
         ).all()
 
     @classmethod
+    async def list_unordered_by_product_location_lot(
+        cls,
+        company_id: str,
+        *,
+        product_id: str,
+        location_id: str,
+        lot_id: str | None,
+    ) -> list[Self]:
+        """Остатки одного физического ключа по всем владельцам: ad-hoc пересчёт без наряда выводит владельца из единственного кандидата."""
+        return await cls.objects.filter(
+            company_id=company_id,
+            product_id=product_id,
+            location_id=location_id,
+            lot_id=lot_id,
+        ).all()
+
+    @classmethod
     async def list_unordered_for_locations(
         cls, company_id: str, location_ids: list[str], *, for_update: bool = False
     ) -> list[Self]:

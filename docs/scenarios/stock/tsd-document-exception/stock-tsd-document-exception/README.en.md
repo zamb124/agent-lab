@@ -19,3 +19,9 @@ The operator physically cannot fulfil the line — the goods are missing. The sh
 **Summary.** Problem: execution → button → reason + shortage → report.
 
 ![Shortage recorded — line and reserve reconciled](stock-tsd-document-exception--02-tsd-exception-done.png)
+
+## Step 3. Recount task — counted fact
+
+«Give me work» issued the suspect-bin recount task — it outranks the remaining pick. The operator walked to the spot, scanned the bin and the product, entered the counted 8: more than book — the delta goes to inventory approval.
+
+![Recount task — counted fact](stock-tsd-document-exception--03-tsd-exception-recount.png)

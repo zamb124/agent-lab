@@ -323,6 +323,7 @@ export interface ScanContext {
     "dest_id"?: string | null | undefined;
     "container_id"?: string | null | undefined;
     "lines"?: ScanLineDraft[] | undefined;
+    "owner_entity_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -350,6 +351,7 @@ export interface ScanLineDraft {
     "serial"?: string | null | undefined;
     "container_id"?: string | null | undefined;
     "packaging_id"?: string | null | undefined;
+    "owner_entity_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -2000,11 +2002,26 @@ export interface StockScanCommitPayload {
 }
 
 /**
+ * Проведённое движение + подсказка «что дальше по этому документу».
+ * 
+ * ``expected`` — первая исполнимая строка того же потока после
+ * коммита: оператор продолжает документ без возврата в очередь.
+ * Документ закрыт или остаток у других операторов — ``None``,
+ * сессия завершается.
+ */
+export interface StockScanCommitResponse {
+    "move": StockMove;
+    "expected"?: StockScanExpected | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockScanCountCommitPayload
  */
 export interface StockScanCountCommitPayload {
     "warehouse_id": string;
     "context": ScanContext;
+    "move_id"?: string | null | undefined;
     "idempotency_key"?: string | null | undefined;
     [key: string]: unknown;
 }
@@ -2014,6 +2031,7 @@ export interface StockScanCountCommitPayload {
  */
 export interface StockScanCountCommitResponse {
     "quant_ids": string[];
+    "expected"?: StockScanExpected | null | undefined;
     [key: string]: unknown;
 }
 
@@ -2690,7 +2708,6 @@ export interface StockCommandMap {
     "stock/move_lines/assign_requested": { payload: StockMoveLinesAssignPayload; result: StockMoveLineClaimResult },
     "stock/move_lines/claim_requested": { payload: StockMoveLinesClaimPayload; result: StockMoveLineClaimResult },
     "stock/move_lines/next_requested": { payload: StockMoveLineNextPayload; result: StockMoveLineNextResponse },
-    "stock/move_lines/queue_requested": { payload: StockMoveLinesQueuePayload; result: StockItemsResponse_StockMoveLine_ },
     "stock/move_lines/release_requested": { payload: StockMoveLinesReleasePayload; result: StockMoveLineClaimResult },
     "stock/move_lines/report_exception_requested": { payload: StockMoveLineExceptionPayload; result: StockMoveLineExceptionResult },
     "stock/move_lines/update_requested": { payload: StockMoveLineUpdatePayload; result: StockMoveLine },
@@ -2713,6 +2730,7 @@ export interface StockCommandMap {
     "stock/quants/inventory_apply_requested": { payload: StockQuantInventoryApplyPayload; result: StockMove },
     "stock/quants/inventory_set_requested": { payload: StockQuantInventorySetPayload; result: StockQuant },
     "stock/quants/list_requested": { payload: StockQuantsListPayload; result: OffsetPage_StockQuant_ },
+    "stock/queue/list_requested": { payload: StockMoveLinesQueuePayload; result: StockItemsResponse_StockMoveLine_ },
     "stock/reorder_rules/create_requested": { payload: StockReorderRuleCreatePayload; result: StockReorderRule },
     "stock/reorder_rules/list_requested": { payload: StockReorderRulesListPayload; result: StockItemsResponse_StockReorderRule_ },
     "stock/reorder_rules/update_requested": { payload: StockReorderRuleUpdatePayload; result: StockReorderRule },
@@ -2728,7 +2746,7 @@ export interface StockCommandMap {
     "stock/routes/get_requested": { payload: StockRouteIdPayload; result: StockRoute },
     "stock/routes/list_requested": { payload: StockRoutesListPayload; result: StockItemsResponse_StockRoute_ },
     "stock/scan/adhoc_commit_requested": { payload: StockScanAdhocCommitPayload; result: StockTransfer },
-    "stock/scan/commit_requested": { payload: StockScanCommitPayload; result: StockMove },
+    "stock/scan/commit_requested": { payload: StockScanCommitPayload; result: StockScanCommitResponse },
     "stock/scan/count_commit_requested": { payload: StockScanCountCommitPayload; result: StockScanCountCommitResponse },
     "stock/scan/open_requested": { payload: StockScanOpenPayload; result: StockScanOpenResponse },
     "stock/scan/quantity_requested": { payload: StockScanQuantityPayload; result: StockScanStepResponse },
@@ -2847,9 +2865,6 @@ export interface StockEventMap {
     "stock/move_lines/next_failed": PlatformCommandEventPayload,
     "stock/move_lines/next_requested": PlatformCommandEventPayload,
     "stock/move_lines/next_succeeded": PlatformCommandEventPayload,
-    "stock/move_lines/queue_failed": PlatformCommandEventPayload,
-    "stock/move_lines/queue_requested": PlatformCommandEventPayload,
-    "stock/move_lines/queue_succeeded": PlatformCommandEventPayload,
     "stock/move_lines/release_failed": PlatformCommandEventPayload,
     "stock/move_lines/release_requested": PlatformCommandEventPayload,
     "stock/move_lines/release_succeeded": PlatformCommandEventPayload,
@@ -2917,6 +2932,9 @@ export interface StockEventMap {
     "stock/quants/list_failed": PlatformCommandEventPayload,
     "stock/quants/list_requested": PlatformCommandEventPayload,
     "stock/quants/list_succeeded": PlatformCommandEventPayload,
+    "stock/queue/list_failed": PlatformCommandEventPayload,
+    "stock/queue/list_requested": PlatformCommandEventPayload,
+    "stock/queue/list_succeeded": PlatformCommandEventPayload,
     "stock/reorder_rules/create_failed": PlatformCommandEventPayload,
     "stock/reorder_rules/create_requested": PlatformCommandEventPayload,
     "stock/reorder_rules/create_succeeded": PlatformCommandEventPayload,

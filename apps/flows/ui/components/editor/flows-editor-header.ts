@@ -452,7 +452,13 @@ export class FlowsEditorHeader extends PlatformElement {
                     display: none;
                 }
 
+                .row-left {
+                    flex: 1 1 auto;
+                    max-width: none;
+                }
+
                 .flow-name-field {
+                    min-width: 0;
                     max-width: min(180px, 42vw);
                 }
 

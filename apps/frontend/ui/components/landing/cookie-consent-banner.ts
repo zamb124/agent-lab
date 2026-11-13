@@ -142,6 +142,7 @@ export class CookieConsentBanner extends PlatformElement {
                     flex-direction: column;
                 }
                 .actions .cosmic-btn {
+                    flex: 0 0 auto;
                     width: 100%;
                 }
             }

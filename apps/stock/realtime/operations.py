@@ -100,6 +100,7 @@ from apps.stock.models.api import (
     StockRoutesListPayload,
     StockScanAdhocCommitPayload,
     StockScanCommitPayload,
+    StockScanCommitResponse,
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
     StockScanExpected,
@@ -1812,14 +1813,29 @@ async def op_scan_open(
             user_id=scope.user_id,
             idempotency_key=command_idempotency_key(payload.idempotency_key),
         )
-    move, context = await di.scan_service.open_session(
-        company_id=scope.company_id,
-        warehouse_id=payload.warehouse_id,
-        move_id=payload.move_id,
-        transfer_id=payload.transfer_id,
-        user_id=scope.user_id,
-        move_line_id=payload.move_line_id,
-    )
+    try:
+        move, context = await di.scan_service.open_session(
+            company_id=scope.company_id,
+            warehouse_id=payload.warehouse_id,
+            move_id=payload.move_id,
+            transfer_id=payload.transfer_id,
+            user_id=scope.user_id,
+            move_line_id=payload.move_line_id,
+            idempotency_key=command_idempotency_key(payload.idempotency_key),
+        )
+    except Exception:
+        if payload.move_line_id is not None:
+            # Открытие отказало — захват возвращаем в очередь, иначе
+            # строка висела бы на операторе до claims-GC, хотя он
+            # её даже не увидел.
+            _ = await di.task_service.release(
+                company_id=scope.company_id,
+                warehouse_id=payload.warehouse_id,
+                move_line_ids=[payload.move_line_id],
+                user_id=scope.user_id,
+                actor_user_id=scope.user_id,
+            )
+        raise
     return StockScanOpenResponse(
         context=context,
         move_id=move.move_id,
@@ -1853,17 +1869,19 @@ async def op_scan_quantity(
 
 async def op_scan_commit(
     payload: StockScanCommitPayload, *, user: User, di: Di
-) -> StockMove:
+) -> StockScanCommitResponse:
     """Атомарная проводка набранного: строки контекста → леджер.
 
     Одна транзакция полосы склада: сплит резервных строк, движение
     остатков, слои оценки, `move → done` при закрытии — всё или ничего.
+    В ответе — ``expected``: следующая исполнимая строка документа,
+    чтобы ТСД продолжил маршрут без возврата в общую очередь.
     """
     _ = user
     scope = require_company()
     warehouse_id = await _warehouse_of_move(scope, payload.move_id)
     await _warehouse_editor(di, scope, warehouse_id)
-    return await di.scan_service.commit(
+    posted = await di.scan_service.commit(
         company_id=scope.company_id,
         move_id=payload.move_id,
         context=payload.context,
@@ -1871,6 +1889,13 @@ async def op_scan_commit(
         actor_user_id=scope.user_id,
         command_type="stock/scan/commit_requested",
         causation_id=current_command_event_id(),
+    )
+    return StockScanCommitResponse(
+        move=posted,
+        expected=await _scan_expected(
+            di, scope.company_id, warehouse_id, payload.move_id,
+            scope.user_id, payload.context.flow,
+        ),
     )
 
 
@@ -1889,7 +1914,17 @@ async def op_scan_count_commit(
         actor_user_id=scope.user_id,
         command_type="stock/scan/count_commit_requested",
     )
-    return StockScanCountCommitResponse(quant_ids=quant_ids)
+    return StockScanCountCommitResponse(
+        quant_ids=quant_ids,
+        expected=(
+            None
+            if payload.move_id is None
+            else await _scan_expected(
+                di, scope.company_id, payload.warehouse_id,
+                payload.move_id, scope.user_id, ScanFlow.COUNT,
+            )
+        ),
+    )
 
 
 async def op_scan_adhoc_commit(

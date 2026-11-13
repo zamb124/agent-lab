@@ -45,6 +45,7 @@ export class OfficeFileToolbar extends PlatformElement {
             :host {
                 display: block;
                 min-height: var(--documents-explorer-toolbar-height);
+                container-type: inline-size;
             }
             .toolbar {
                 display: flex;
@@ -65,6 +66,8 @@ export class OfficeFileToolbar extends PlatformElement {
                 margin: 0 0 var(--space-1);
             }
             .crumb {
+                flex: 0 1 auto;
+                min-width: 0;
                 border: none;
                 background: transparent;
                 color: var(--text-secondary);
@@ -72,6 +75,9 @@ export class OfficeFileToolbar extends PlatformElement {
                 font-weight: 500;
                 cursor: pointer;
                 padding: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .crumb.current {
                 color: var(--text-primary);
@@ -81,6 +87,7 @@ export class OfficeFileToolbar extends PlatformElement {
             .crumb-sep {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
+                flex-shrink: 0;
             }
             .page-title {
                 margin: 0;
@@ -139,7 +146,9 @@ export class OfficeFileToolbar extends PlatformElement {
             .overflow-item:hover {
                 background: var(--glass-solid-medium);
             }
-            @media (max-width: 767px) {
+            /* Тулбар уже мобильного брейкпоинта (планшет + сайдбар, узкая панель):
+               переходим на многострочную раскладку по собственной ширине. */
+            @container (max-width: 767px) {
                 .toolbar {
                     flex-wrap: wrap;
                 }
@@ -155,6 +164,8 @@ export class OfficeFileToolbar extends PlatformElement {
                     width: 100%;
                     margin-left: 0;
                     justify-content: flex-end;
+                    flex-wrap: wrap;
+                    row-gap: var(--space-1);
                 }
             }
         `,

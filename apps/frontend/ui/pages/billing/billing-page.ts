@@ -112,6 +112,9 @@ export class FrontendBillingPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; }
+            @media (max-width: 767px) {
+                :host { padding-bottom: var(--app-content-bottom-padding-mobile); }
+            }
             .grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

@@ -370,6 +370,11 @@ class StockMoveEngine:
                 # Плечо маршрута: приёмник задан шагом маршрута —
                 # рукопожатие цепочки нельзя перебивать putaway-рефлексом.
                 continue
+            if move.location_dest_id != operation_type.default_dest_location_id:
+                # Приёмник выбран явно (оператор в накладной, задание
+                # ТСД) — размещение уже решено; рефлекс перебирает
+                # кандидатов только для груза на дефолтном приёмнике.
+                continue
             dst = await StockLocation.by_id(company_id, move.location_dest_id)
             src = await StockLocation.by_id(company_id, move.location_id)
             if (

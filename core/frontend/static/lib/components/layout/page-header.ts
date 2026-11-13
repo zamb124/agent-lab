@@ -40,6 +40,9 @@ export class PageHeader extends PlatformElement {
          * для постепенной миграции pages/modals. Используйте `platform-top-bar`.
          */
         hideMobileMenu: { type: Boolean, attribute: 'hide-mobile-menu' },
+        /** Компактный двухрядный режим, когда сам хедер уже мобильного брейкпоинта
+            (планшет с сайдбаром, узкая панель), независимо от вьюпорта. */
+        narrow: { type: Boolean, reflect: true },
         _isMobile: { state: true },
     };
     declare title: string;
@@ -48,6 +51,7 @@ export class PageHeader extends PlatformElement {
     declare mobileToolbarMode: string;
     declare actionsOverflow: string;
     declare hideMobileMenu: boolean;
+    declare narrow: boolean;
     declare _isMobile: boolean;
 
     private _resizeObserver: ResizeObserver | null = null;
@@ -143,6 +147,51 @@ export class PageHeader extends PlatformElement {
                 flex-shrink: 0;
             }
 
+            /* Хедер уже мобильного брейкпоинта (планшет + сайдбар, узкая панель):
+               та же двухрядная раскладка, что и на mobile-вьюпорте. */
+            :host([narrow]) .header,
+            :host([narrow]) .header-left {
+                align-items: center;
+            }
+
+            :host([narrow]) .header {
+                flex-wrap: wrap;
+                gap: var(--space-1);
+            }
+
+            :host([narrow]) .header-left {
+                flex-basis: auto;
+            }
+
+            :host([narrow]) ::slotted(.page-header-leading-btn) {
+                margin-top: 0;
+            }
+
+            :host([narrow]) .title {
+                font-size: var(--text-xl);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            :host([narrow]) .actions {
+                gap: var(--space-1);
+                overflow-x: auto;
+                flex: 1 1 100%;
+                min-width: 0;
+                justify-content: flex-end;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+
+            :host([narrow]) .actions[data-overflow='visible'] {
+                overflow: visible;
+            }
+
+            :host([narrow]) .actions::-webkit-scrollbar {
+                display: none;
+            }
+
             @media (max-width: 767px) {
                 :host {
                     margin-bottom: var(--space-2);
@@ -151,6 +200,10 @@ export class PageHeader extends PlatformElement {
                 .header,
                 .header-left {
                     align-items: center;
+                }
+
+                .header-left {
+                    flex-basis: auto;
                 }
 
                 ::slotted(.page-header-leading-btn) {
@@ -167,7 +220,9 @@ export class PageHeader extends PlatformElement {
                 .actions {
                     gap: var(--space-1);
                     overflow-x: auto;
-                    flex-shrink: 0;
+                    flex: 1 1 100%;
+                    min-width: 0;
+                    justify-content: flex-end;
                     -webkit-overflow-scrolling: touch;
                     scrollbar-width: none;
                 }
@@ -214,6 +269,7 @@ export class PageHeader extends PlatformElement {
         this.mobileToolbarMode = 'title';
         this.actionsOverflow = 'auto';
         this.hideMobileMenu = false;
+        this.narrow = false;
         this._isMobile = false;
     }
 
@@ -221,7 +277,7 @@ export class PageHeader extends PlatformElement {
         super.connectedCallback();
         this._checkMobile();
         this._resizeObserver = new ResizeObserver(() => this._checkMobile());
-        this._resizeObserver.observe(document.body);
+        this._resizeObserver.observe(this);
     }
 
     override disconnectedCallback(): void {
@@ -234,6 +290,8 @@ export class PageHeader extends PlatformElement {
 
     _checkMobile() {
         this._isMobile = window.innerWidth <= 767;
+        const hostWidth = this.offsetWidth;
+        this.narrow = hostWidth > 0 && hostWidth <= 767;
     }
 
     _renderTitleBlock() {

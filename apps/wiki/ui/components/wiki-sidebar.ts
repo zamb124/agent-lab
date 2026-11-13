@@ -237,6 +237,17 @@ export class WikiSidebar extends PlatformElement {
                 text-align: left;
                 cursor: pointer;
                 overflow: hidden;
+                white-space: nowrap;
+            }
+
+            .recent-item platform-icon {
+                flex-shrink: 0;
+            }
+
+            .recent-item span {
+                flex: 0 1 auto;
+                min-width: 0;
+                overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }

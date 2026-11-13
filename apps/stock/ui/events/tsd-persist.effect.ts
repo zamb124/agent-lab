@@ -35,6 +35,7 @@ const SESSION_MUTATED = new Set([
     'stock/tsd_session/line_removed',
     'stock/tsd_session/session_cleared',
     'stock/tsd_session/session_hydrated',
+    'stock/tsd_session/commit_key_ensured',
 ]);
 
 const CONTEXT_MUTATED = new Set([
@@ -58,7 +59,9 @@ function _sessionSnapshot(getState: () => unknown): Record<string, unknown> {
     const slice = isPlainRecord(state) ? state.stockTsdSession : null;
     const context = isPlainRecord(slice) ? slice.context : null;
     const moveId = isPlainRecord(slice) && typeof slice.move_id === 'string' ? slice.move_id : '';
-    return { at: new Date().toISOString(), context, move_id: moveId };
+    const commitKey = isPlainRecord(slice) && typeof slice.commit_key === 'string' ? slice.commit_key : '';
+    const expected = isPlainRecord(slice) ? slice.expected : null;
+    return { at: new Date().toISOString(), context, move_id: moveId, commit_key: commitKey, expected };
 }
 
 function _contextSnapshot(getState: () => unknown): Record<string, unknown> {
@@ -140,9 +143,15 @@ export function createTsdPersistEffect() {
                 ? raw.context
                 : null;
             const moveId = isPlainRecord(raw) && typeof raw.move_id === 'string' ? raw.move_id : '';
+            const commitKey = isPlainRecord(raw) && typeof raw.commit_key === 'string' ? raw.commit_key : '';
             ctx.dispatch(
                 'stock/tsd_session/session_hydrated',
-                { context, move_id: context !== null ? moveId : '' },
+                {
+                    context,
+                    move_id: context !== null ? moveId : '',
+                    commit_key: context !== null ? commitKey : '',
+                    expected: context !== null && isPlainRecord(raw) && isPlainRecord(raw.expected) ? raw.expected : null,
+                },
                 { source: 'storage' },
             );
             return;

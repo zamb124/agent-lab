@@ -29,7 +29,6 @@ import './app/sync-app.js';
 import './pages/sync-shell-page.js';
 import './pages/sync-channel-page.js';
 import './pages/sync-calls-scheduled-page.js';
-import './pages/sync-settings-page.js';
 import './pages/sync-call-join-page.js';
 
 import './components/sync-sidebar.js';

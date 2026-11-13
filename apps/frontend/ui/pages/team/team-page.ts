@@ -183,12 +183,6 @@ export class FrontendTeamPage extends PlatformPage {
             }
             .member-card-top platform-user-chip { min-width: 0; }
             .member-card-actions { flex: 0 0 auto; }
-            .member-card-email {
-                margin-top: var(--space-2);
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                word-break: break-all;
-            }
             .member-card-roles {
                 margin-top: var(--space-2);
                 display: flex;
@@ -410,7 +404,6 @@ export class FrontendTeamPage extends PlatformPage {
                         `}
                     </div>
                 </div>
-                <div class="member-card-email">${typeof m.email === 'string' ? m.email : ''}</div>
                 <div class="member-card-roles">
                     ${m.is_flow_employee === true
                         ? html`<span class="role-tag">${this.t('team_page.flow_employee_badge')}</span>`

@@ -147,7 +147,7 @@ class TestNextLine:
         assert first is not None
         assert first.move_line_id == line.move_line_id
         fresh = await StockMoveLine.by_id(env.company_id, line.move_line_id)
-        assert fresh.assigned_user_id == "op-1"
+        assert fresh is not None and fresh.assigned_user_id == "op-1"
 
         # Чужой оператор не видит занятую строку.
         other = await env.di.task_service.next_line(
@@ -164,6 +164,30 @@ class TestNextLine:
         )
         assert mine is not None and mine.move_line_id == line.move_line_id
 
+    async def test_queue_for_user_shows_free_and_mine_not_foreign(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """«Моя очередь» — свободные плюс захваченные мной; чужие строки скрыты."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        foreign = await _reserved_delivery_line(env, Decimal("3"))
+        free = await _reserved_delivery_line(env, Decimal("2"))
+        _ = await env.di.task_service.claim(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_ids=[foreign.move_line_id],
+            user_id="op-2",
+        )
+
+        queue = await env.di.task_service.queue(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            assigned_user_id="op-1",
+        )
+        ids = {line.move_line_id for line in queue}
+        assert free.move_line_id in ids
+        assert foreign.move_line_id not in ids
+
     async def test_next_without_claim_leaves_line_free(
         self, stock_di, unique_id: str
     ) -> None:
@@ -179,7 +203,7 @@ class TestNextLine:
         )
         assert peek is not None
         fresh = await StockMoveLine.by_id(env.company_id, line.move_line_id)
-        assert fresh.assigned_user_id is None
+        assert fresh is not None and fresh.assigned_user_id is None
 
     async def test_next_unknown_resource_not_found(
         self, stock_di, unique_id: str

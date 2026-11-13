@@ -769,14 +769,30 @@ class StockScanCommitPayload(StrictBaseModel):
     idempotency_key: str | None = None
 
 
+class StockScanCommitResponse(StrictBaseModel):
+    """Проведённое движение + подсказка «что дальше по этому документу».
+
+    ``expected`` — первая исполнимая строка того же потока после
+    коммита: оператор продолжает документ без возврата в очередь.
+    Документ закрыт или остаток у других операторов — ``None``,
+    сессия завершается.
+    """
+
+    move: StockMove
+    expected: StockScanExpected | None = None
+
+
 class StockScanCountCommitPayload(StrictBaseModel):
     warehouse_id: str
     context: ScanContext
+    move_id: str | None = None
+    """Пересчёт по документу — ответ принесёт `expected` подсказку."""
     idempotency_key: str | None = None
 
 
 class StockScanCountCommitResponse(StrictBaseModel):
     quant_ids: list[str]
+    expected: StockScanExpected | None = None
 
 
 # --- Очередь заданий (ТСД) ---

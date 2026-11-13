@@ -2,14 +2,17 @@
  * Скан через камеру ТСД (`<stock-tsd-camera-scanner>`).
  *
  * Progressive enhancement: элемент рендерит оверлей только когда открыт;
- * доступность решает страница — кнопка показывается лишь при наличии
- * `BarcodeDetector` в рантайме (Android Chrome, Safari 17+). Поток
- * `environment`-камеры гоняется через rAF-цикл `detect`, первый код
- * диспатчит `tsd-scan` и закрывает оверлей.
+ * кнопка показывается при наличии `getUserMedia` в рантайме. Быстрый
+ * путь — нативный `BarcodeDetector` (Android Chrome); где его нет
+ * (iOS Safari, старые WebView) лениво подгружается ZXing-декодер —
+ * чанк `@zxing/browser` доезжает только в таких браузерах. Поток
+ * `environment`-камеры один на оба пути, первый код диспатчит
+ * `tsd-scan` и закрывает оверлей.
  */
 
 import { html, css } from 'lit';
 import type { PropertyDeclarations } from 'lit';
+import type { IScannerControls } from '@zxing/browser';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -28,7 +31,7 @@ declare global {
 }
 
 export function tsdCameraScanSupported(): boolean {
-    return typeof window !== 'undefined' && window.BarcodeDetector !== undefined && typeof navigator.mediaDevices?.getUserMedia === 'function';
+    return typeof window !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function';
 }
 
 export class StockTsdCameraScanner extends PlatformElement {
@@ -43,6 +46,8 @@ export class StockTsdCameraScanner extends PlatformElement {
     private _stream: MediaStream | null = null;
     private _raf = 0;
     private _video: HTMLVideoElement | null = null;
+    private _zxing: IScannerControls | null = null;
+    private _generation = 0;
 
     static override styles = [
         PlatformElement.styles,
@@ -118,17 +123,22 @@ export class StockTsdCameraScanner extends PlatformElement {
 
     private async _start(): Promise<void> {
         this._error = false;
-        const ctor = window.BarcodeDetector;
-        if (ctor === undefined) {
-            this._error = true;
-            return;
-        }
+        // Быстрый open→close→open запускает второй getUserMedia до
+        // завершения первого — без поколения первый поток теряется
+        // и камера горит вечно в WebView.
+        const generation = ++this._generation;
+        let stream: MediaStream;
         try {
-            this._stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         } catch {
-            this._error = true;
+            if (generation === this._generation) this._error = true;
             return;
         }
+        if (generation !== this._generation) {
+            for (const track of stream.getTracks()) track.stop();
+            return;
+        }
+        this._stream = stream;
         await this.updateComplete;
         const video = this.renderRoot.querySelector('video');
         if (!(video instanceof HTMLVideoElement)) {
@@ -137,7 +147,19 @@ export class StockTsdCameraScanner extends PlatformElement {
         }
         this._video = video;
         video.srcObject = this._stream;
-        await video.play();
+        try {
+            await video.play();
+        } catch {
+            // autoplay-политика WebView: без кадров detect-цикл молчал бы вечно
+            this._stop();
+            this._error = true;
+            return;
+        }
+        const ctor = window.BarcodeDetector;
+        if (ctor === undefined) {
+            await this._startZxing(video, generation);
+            return;
+        }
         const detector = new ctor();
         const tick = async (): Promise<void> => {
             if (this._video === null || !this.active) return;
@@ -157,8 +179,44 @@ export class StockTsdCameraScanner extends PlatformElement {
         this._raf = requestAnimationFrame(() => void tick());
     }
 
+    /** Декодер на ZXing для браузеров без BarcodeDetector (iOS Safari):
+     *  чанк `@zxing/browser` тянется лениво и только в таком рантайме.
+     *  Поток уже наш — `decodeFromStream` его не открывает заново. */
+    private async _startZxing(video: HTMLVideoElement, generation: number): Promise<void> {
+        const stream = this._stream;
+        if (stream === null) return;
+        try {
+            const { BrowserMultiFormatReader } = await import('@zxing/browser');
+            if (generation !== this._generation) return;
+            const reader = new BrowserMultiFormatReader();
+            const controls = await reader.decodeFromStream(stream, video, (result) => {
+                if (!this.active) return;
+                const code = result?.getText() ?? '';
+                if (code !== '') {
+                    this.emit('tsd-scan', { code });
+                    this.active = false;
+                }
+            });
+            // Оверлей закрыли, пока декодер поднимался — поток уже
+            // остановлен _stop, контролы тушим здесь же.
+            if (generation !== this._generation) {
+                controls.stop();
+                return;
+            }
+            this._zxing = controls;
+        } catch {
+            if (generation === this._generation) {
+                this._stop();
+                this._error = true;
+            }
+        }
+    }
+
     private _stop(): void {
+        this._generation += 1;
         cancelAnimationFrame(this._raf);
+        this._zxing?.stop();
+        this._zxing = null;
         if (this._video !== null) {
             this._video.srcObject = null;
             this._video = null;

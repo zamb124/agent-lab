@@ -29,6 +29,10 @@ _COLLECTED_NODEIDS_GLOB = "platform_test_collected_nodeids_*.json"
 _SETUP_TEARDOWN_FLOOR_SECONDS = 60.0
 _SLACK_SECONDS = 15.0
 _MONITOR_PERIOD_SECONDS = 2.0
+# Grace на выход процесса, когда ни один живой воркер не выполняет тест:
+# прогон кончился, idle/session_finish процесс с живым playwright-драйвером
+# — это зависший teardown, который heartbeat-фазы больше не фиксируют.
+_GRACEFUL_SHUTDOWN_SECONDS = 120.0
 
 _stop_event = threading.Event()
 _monitor_thread: threading.Thread | None = None
@@ -46,9 +50,16 @@ class WorkerHeartbeat(TypedDict):
     time: float
 
 
-def hung_worker_deadline_seconds(*, phase: str, timeout_sec: float) -> float:
+def hung_worker_deadline_seconds(
+    *, phase: str, timeout_sec: float, global_active: bool
+) -> float:
     """Секунды с последнего heartbeat, после которых воркер считается зависшим."""
-    if phase == "idle" or phase.startswith("session"):
+    if phase in {"idle", "session_finish"}:
+        # Пока кто-то исполняет тест, idle-воркер легально ждёт следующую
+        # пачку (loadfile-хвост может держать соседей по 10+ минут).
+        # Активных нет — все результаты уже у мастера, процесс должен умереть.
+        return float("inf") if global_active else _GRACEFUL_SHUTDOWN_SECONDS
+    if phase.startswith("session"):
         return float("inf")
     if timeout_sec <= 0:
         return float("inf")
@@ -57,11 +68,14 @@ def hung_worker_deadline_seconds(*, phase: str, timeout_sec: float) -> float:
     return timeout_sec + _SLACK_SECONDS
 
 
-def heartbeat_is_hung(heartbeat: WorkerHeartbeat, *, now_monotonic: float) -> bool:
+def heartbeat_is_hung(
+    heartbeat: WorkerHeartbeat, *, now_monotonic: float, global_active: bool
+) -> bool:
     age = now_monotonic - heartbeat["monotonic"]
     deadline = hung_worker_deadline_seconds(
         phase=heartbeat["phase"],
         timeout_sec=heartbeat["timeout_sec"],
+        global_active=global_active,
     )
     return age > deadline
 
@@ -257,11 +271,26 @@ def _is_collect_only(session: pytest.Session) -> bool:
 def _monitor_loop() -> None:
     while not _stop_event.wait(timeout=_MONITOR_PERIOD_SECONDS):
         now = time.monotonic()
+        heartbeats: list[WorkerHeartbeat] = []
         for path in sorted(_HEARTBEAT_DIR.glob("platform_test_hang_guard_*.json")):
             heartbeat = _read_heartbeat(path)
             if heartbeat is None:
                 continue
-            if not heartbeat_is_hung(heartbeat, now_monotonic=now):
+            # Мёртвый pid и heartbeat из прошлого прогона не участвуют ни
+            # в kill-решении, ни в картине «кто-то ещё работает».
+            if heartbeat["time"] < _monitor_started_wall - 1.0:
+                continue
+            if not _pid_alive(heartbeat["pid"]):
+                continue
+            heartbeats.append(heartbeat)
+        global_active = any(
+            heartbeat["phase"] in {"setup", "call", "teardown"}
+            for heartbeat in heartbeats
+        )
+        for heartbeat in heartbeats:
+            if not heartbeat_is_hung(
+                heartbeat, now_monotonic=now, global_active=global_active
+            ):
                 continue
             age = now - heartbeat["monotonic"]
             _kill_hung_worker(heartbeat, age=age)

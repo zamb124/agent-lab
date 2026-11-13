@@ -2,36 +2,34 @@
 
 Tick-функции в ``apps/idle/tasks/*`` запускаются worker-процессом через
 ``make test-up`` и не инструментируются coverage. Эти тесты вызывают tick-функции
-напрямую и передают ``di`` с ``FilePurgeService``.
+напрямую и передают ``di`` процесса idle_worker (``idle_worker_di``).
 
-Покрытие: ``file_retention_purge_tick``, ``file_retention_backfill_tick``.
+Покрытие: ``file_retention_purge_tick``, ``file_retention_backfill_tick``,
+``platform_schedules_gc_tick``, ``redis_inventory_tick``.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
+from apps.frontend.di import FrontendDi
+from apps.idle.di import IdleDi
 from apps.idle.tasks import file_retention_tasks
 from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
 from core.files.object_storage import PLATFORM_STORAGE_ID
-from core.files.purge import FilePurgeService
 from core.files.registry import default_retention_for_source
-
-
-def _purge_di() -> SimpleNamespace:
-    return SimpleNamespace(file_purge_service=FilePurgeService())
 
 
 @pytest.mark.asyncio
 async def test_file_retention_purge_tick_returns_zero_when_disabled(
-    frontend_di,
+    frontend_di: FrontendDi,
+    idle_worker_di: IdleDi,
 ) -> None:
     """Purge выключен через ``files.retention.purge_enabled=false`` → no-op."""
     from core.config import get_settings
 
+    _ = frontend_di
     settings = get_settings()
     original = settings.files.retention.purge_enabled
     settings.files.retention.purge_enabled = False
@@ -39,7 +37,7 @@ async def test_file_retention_purge_tick_returns_zero_when_disabled(
         result = await file_retention_tasks.file_retention_purge_tick(
             schedule_task_id="test-schedule-id",
             company_id=None,
-            di=_purge_di(),
+            di=idle_worker_di,
         )
     finally:
         settings.files.retention.purge_enabled = original
@@ -49,12 +47,14 @@ async def test_file_retention_purge_tick_returns_zero_when_disabled(
 
 @pytest.mark.asyncio
 async def test_file_retention_purge_tick_runs_batch_without_failures(
-    frontend_di,
+    frontend_di: FrontendDi,
+    idle_worker_di: IdleDi,
     unique_id: str,
 ) -> None:
     """Purge тик исполняет ``purge_expired_batch`` на пустой shared БД без ошибок."""
     from core.config import get_settings
 
+    _ = frontend_di
     settings = get_settings()
     original = settings.files.retention.purge_enabled
     settings.files.retention.purge_enabled = True
@@ -62,7 +62,7 @@ async def test_file_retention_purge_tick_runs_batch_without_failures(
         result = await file_retention_tasks.file_retention_purge_tick(
             schedule_task_id=f"purge_{unique_id}",
             company_id=None,
-            di=_purge_di(),
+            di=idle_worker_di,
         )
     finally:
         settings.files.retention.purge_enabled = original
@@ -80,10 +80,11 @@ async def test_file_retention_purge_tick_runs_batch_without_failures(
 
 @pytest.mark.asyncio
 async def test_file_retention_backfill_tick_skips_empty_repository(
-    frontend_di,
+    frontend_di: FrontendDi,
     unique_id: str,
 ) -> None:
     """Backfill тик исполняется на shared БД и возвращает корректную структуру."""
+    _ = frontend_di
     result = await file_retention_tasks.file_retention_backfill_tick(
         schedule_task_id=f"backfill_{unique_id}",
         company_id=None,
@@ -97,22 +98,18 @@ async def test_file_retention_backfill_tick_skips_empty_repository(
 
 @pytest.mark.asyncio
 async def test_file_retention_backfill_tick_updates_record_missing_retention(
-    frontend_di,
+    frontend_di: FrontendDi,
     unique_id: str,
 ) -> None:
     """Backfill обновляет FileRecord без retention, заполняя его по source_kind."""
-<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     _ = frontend_di
-=======
-    repository: FileRepository = frontend_container.file_repository
->>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
     retention = default_retention_for_source(FileSourceKind.FLOW_SESSION)
 
     company_id = f"co_backfill_{unique_id}"
     file_id = f"file_backfill_{unique_id}"
     record = FileRecord(
         file_id=file_id,
-                original_name=f"backfill_{unique_id}.txt",
+        original_name=f"backfill_{unique_id}.txt",
         s3_key=f"test-bucket/backfill_{unique_id}",
         storage_id=PLATFORM_STORAGE_ID,
         content_type="text/plain",
@@ -145,17 +142,10 @@ async def test_file_retention_backfill_tick_updates_record_missing_retention(
         assert refreshed is not None
         assert refreshed.retention_kind == retention.kind
     finally:
-<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
         _ = await FileRecord.delete_by_id(file_id)
 
 
 # --- platform_schedules_gc + redis_inventory ---------------------------------
-=======
-        await repository.delete(file_id)
-
-
-# --- platform_schedules_gc + redis_inventory (без container injection) -------
->>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
 
 
 @pytest.mark.asyncio
@@ -163,11 +153,7 @@ async def test_platform_schedules_gc_tick_runs_against_real_redis(
     unique_id: str,
 ) -> None:
     """GC orphan keys тик на реальном TaskIQ broker Redis возвращает структуру."""
-<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     from apps.idle.tasks.platform_schedules_gc_tasks import (
-=======
-    from apps.idle_worker.tasks.platform_schedules_gc_tasks import (
->>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
         platform_schedules_gc_tick,
     )
 
@@ -188,11 +174,7 @@ async def test_platform_schedules_gc_tick_runs_against_real_redis(
 @pytest.mark.asyncio
 async def test_redis_inventory_tick_reports_db_sizes(unique_id: str) -> None:
     """Redis inventory тик возвращает dbsize/no_ttl метрики для domain и broker Redis."""
-<<<<<<< Updated upstream:tests/idle/test_idle_worker_tasks.py
     from apps.idle.tasks.redis_inventory_tasks import redis_inventory_tick
-=======
-    from apps.idle_worker.tasks.redis_inventory_tasks import redis_inventory_tick
->>>>>>> Stashed changes:tests/idle_worker/test_idle_worker_tasks.py
 
     result = await redis_inventory_tick(
         schedule_task_id=f"inv_{unique_id}",

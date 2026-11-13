@@ -229,6 +229,8 @@ class ScanService:
         transfer_id: str | None,
         user_id: str,
         move_line_id: str | None = None,
+        idempotency_key: str | None = None,
+        command_type: str = "stock/scan/open_requested",
     ) -> tuple[StockMove, ScanContext]:
         """Старт doc-driven сессии: backend выбирает поток по заданию.
 
@@ -241,6 +243,10 @@ class ScanService:
         первой попавшейся строки. За ``transfer_id`` берётся первая
         исполнимая строка в порядке обхода очереди: целиком захваченный
         другим документ — не его работа.
+
+        Открытие — это «я взял эту работу»: исполняемая строка
+        захватывается за оператором, иначе два ТСД поехали бы за одной
+        позицией, а очередь продолжала бы раздавать её коллегам.
         """
         serving: StockMoveLine | None = None
         if move_line_id is not None:
@@ -312,10 +318,34 @@ class ScanService:
             raise PlatformNotFoundError(
                 "Document has no open work", error_code="document_no_work"
             )
+        serving = serving or lines[0]
         flow = await self._session_flow(
-            company_id, move, (serving or lines[0]).kind
+            company_id, move, serving.kind
         )
-        return move, ScanContext(flow=flow)
+        if serving.assigned_user_id != user_id:
+            # Свой захват идемпотентен: повторное открытие той же
+            # работы не плодит lane-запуск и событие assigned. Захват
+            # последним шагом: отказ выше (поток не настроен) не
+            # должен оставлять строку на операторе до claims-GC.
+            run = await StockMoveLine.claim_in_lane(
+                company_id=company_id,
+                warehouse_id=warehouse_id,
+                move_line_ids=[serving.move_line_id],
+                user_id=user_id,
+                resource_id=None,
+                claimed=True,
+                idempotency_key=command_idempotency_key(idempotency_key),
+                actor_user_id=user_id,
+                command_type=command_type,
+            )
+            await publish_lane_run(run, using=STOCK_DB)
+        # Владелец остатка — от задания, не от скана: штрихкод не
+        # несёт консигнацию, а count-коммит обязан писать факт на
+        # quant именно того владельца, по которому выдано задание.
+        return move, ScanContext(
+            flow=flow,
+            owner_entity_id=serving.owner_entity_id,
+        )
 
     @staticmethod
     def kinds_of_flow(flow: ScanFlow) -> frozenset[StockMoveLineKind]:
@@ -654,6 +684,7 @@ class ScanService:
 
         async def body(_scope: LaneScope) -> LaneOutcome[_QuantIds]:
             quant_ids: list[str] = []
+            counted: set[tuple[str, str, str | None, str | None]] = set()
             count_location_ids = sorted(
                 {ln.location_id for ln in context.lines if ln.location_id}
             )
@@ -677,12 +708,32 @@ class ScanService:
                         "Count is allowed only on quant locations",
                         error_code="location_usage_invalid",
                     )
+                owner_id = line.owner_entity_id
+                if owner_id is None:
+                    # Ad-hoc пересчёт без наряда: владельца со скана не
+                    # возьмёшь — физический остаток в ячейке знает его сам.
+                    # Единственный владелец ключа однозначен; несколько —
+                    # честный отказ, считать надо по наряду.
+                    candidates = await StockQuant.list_unordered_by_product_location_lot(
+                        company_id,
+                        product_id=line.product_id,
+                        location_id=line.location_id,
+                        lot_id=line.lot_id,
+                    )
+                    owners = {q.owner_entity_id for q in candidates}
+                    if len(owners) > 1:
+                        raise PlatformConflictError(
+                            "Counted stock has multiple owners",
+                            error_code="scan_owner_required",
+                        )
+                    if owners:
+                        owner_id = owners.pop()
                 quant = await StockQuant.ensure_locked(
                     company_id=company_id,
                     product_id=line.product_id,
                     location_id=line.location_id,
                     lot_id=line.lot_id,
-                    owner_entity_id=None,
+                    owner_entity_id=owner_id,
                     warehouse_id=warehouse_id,
                     quant_id=new_id("qnt"),
                 )
@@ -693,6 +744,9 @@ class ScanService:
                     user_id=actor_user_id,
                 )
                 quant_ids.append(quant.quant_id)
+                counted.add(
+                    (line.product_id, line.location_id, line.lot_id, owner_id)
+                )
             # Ячейка «посчитана» — cycle-count тик считает просрочку
             # от этой отметки (``last_count_at`` на локации).
             await StockLocation.touch_counted(
@@ -703,18 +757,18 @@ class ScanService:
             # Задание пересчёта исполнено фактом подсчёта: закрываем
             # открытые count-строки по совпавшему ключу остатка, иначе
             # задача навсегда висела бы в очереди после commit.
-            counted = {
-                (ln.product_id, ln.location_id, ln.lot_id)
-                for ln in context.lines
-                if ln.location_id is not None
-            }
             open_counts = await StockMoveLine.list_unordered_open_count_for_warehouse(
                 company_id, warehouse_id
             )
             resolved = [
                 line
                 for line in open_counts
-                if (line.product_id, line.location_id, line.lot_id) in counted
+                if (
+                    line.product_id,
+                    line.location_id,
+                    line.lot_id,
+                    line.owner_entity_id,
+                ) in counted
             ]
             now = utcnow()
             await StockMoveLine.mark_done(

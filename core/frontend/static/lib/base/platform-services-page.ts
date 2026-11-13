@@ -25,6 +25,17 @@ export class PlatformServicesPage extends PlatformPage {
                 padding: var(--space-4);
                 min-width: 0;
             }
+            @media (max-width: 767px) {
+                .breadcrumbs-wrap {
+                    padding: 0
+                        var(--platform-mobile-sticky-header-padding-right)
+                        0
+                        var(--platform-mobile-sticky-header-padding-left);
+                }
+                .wrap {
+                    padding-bottom: var(--app-content-bottom-padding-mobile);
+                }
+            }
         `,
     ];
 
@@ -34,7 +45,7 @@ export class PlatformServicesPage extends PlatformPage {
                 title=${this.t('services_page.title')}
                 subtitle=${this.t('services_page.subtitle')}
             ></page-header>
-            <platform-breadcrumbs></platform-breadcrumbs>
+            <div class="breadcrumbs-wrap"><platform-breadcrumbs></platform-breadcrumbs></div>
             <div class="wrap">
                 <platform-services-launcher layout="page"></platform-services-launcher>
             </div>

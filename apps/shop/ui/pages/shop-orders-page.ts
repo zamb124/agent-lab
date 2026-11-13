@@ -177,6 +177,8 @@ export class ShopOrdersPage extends PlatformPage {
                 flex: 0 0 auto;
             }
             .items div { display: flex; justify-content: space-between; gap: var(--space-2); }
+            .items div span:first-child { min-width: 0; }
+            .items div span:last-child { flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
             .totals { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--glass-border-subtle); padding-top: var(--space-2); }
             .fee { font-size: var(--text-2xs, 10px); color: var(--text-tertiary); display: flex; justify-content: space-between; }
             .total { font-weight: var(--font-semibold); color: var(--text-primary); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }

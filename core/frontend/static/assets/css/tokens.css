@@ -317,6 +317,7 @@
     --marketing-shot-border: var(--glass-border-medium);
     --marketing-hero-image-filter: drop-shadow(0 0 3.75rem var(--accent-subtle));
     --marketing-header-bg: var(--glass-bg-strong);
+    --marketing-logo-filter: none;
     --marketing-footer-bg: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
     --marketing-download-icon-windows: #0078d4;
     --marketing-download-icon-windows-bg: color-mix(in srgb, #0078d4 16%, transparent);
@@ -1160,6 +1161,7 @@
     --marketing-hero-image-filter: drop-shadow(0 1.5rem 3.75rem var(--accent-subtle));
     --marketing-header-bg: var(--glass-bg-strong);
     --marketing-footer-bg: linear-gradient(180deg, #f7f8fc 0%, #eceff8 100%);
+    --marketing-logo-filter: invert(1) hue-rotate(180deg);
     --marketing-benefits-band-bg: var(--accent-subtle);
     
     /* Семантические токены Sync (светлая тема) */

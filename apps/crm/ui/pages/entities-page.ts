@@ -97,7 +97,15 @@ function _sortedEntityTypesForChips(items: unknown): Record<string, unknown>[] {
     }
     const sorted = [...list];
     sorted.sort(_compareEntityTypesByLabel);
-    return sorted;
+    const seen = new Set<string>();
+    return sorted.filter((row) => {
+        const listType = row.list_entity_type;
+        const listSubtype = row.list_entity_subtype;
+        const key = `${typeof listType === 'string' ? listType : requireTypeId(row)}${typeof listSubtype === 'string' ? listSubtype : ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 function _entityTypeChipGroups(items: unknown): { root: Record<string, unknown>; members: Record<string, unknown>[] }[] {
@@ -1044,7 +1052,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 text-overflow: ellipsis;
                 background: var(--crm-surface-tint);
                 color: var(--text-secondary);
-                flex: 1 1 auto;
+                flex: 0 1 auto;
             }
             .card-meta { color: var(--text-tertiary); font-size: 11px; }
             .card-delete-btn {

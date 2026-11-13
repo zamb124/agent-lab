@@ -80,6 +80,11 @@ export class CRMTasksPage extends CRMNamespacePage {
                 gap: var(--space-2);
                 flex-wrap: wrap;
             }
+            @media (max-width: 767px) {
+                .toolbar {
+                    flex-wrap: nowrap;
+                }
+            }
             .list {
                 display: flex;
                 flex-direction: column;

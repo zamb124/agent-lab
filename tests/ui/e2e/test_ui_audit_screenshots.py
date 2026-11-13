@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from playwright.async_api import Page
+from playwright.async_api import Page, ViewportSize
 
 from tests.ui.e2e_worker import ui_e2e_subdomain
 from tests.ui.harness import ui_e2e_use_lvh_me
@@ -47,7 +47,6 @@ ROUTES: list[tuple[str, str, str]] = [
     ("rag", f"{CO}:9002/rag/namespaces/default", "rag-app"),
     ("sync", f"{CO}:9005/sync/", "sync-app"),
     ("sync", f"{CO}:9005/sync/calls/scheduled", "sync-app"),
-    ("sync", f"{CO}:9005/sync/settings", "sync-app"),
     ("office", f"{CO}:9008/documents/recent", "office-app"),
     ("office", f"{CO}:9008/documents/catalogs", "office-app"),
     ("worktracker", f"{CO}:9021/worktracker/my", "worktracker-app"),
@@ -75,8 +74,9 @@ DARK_SPOT_CHECK = [
     ("sync", f"{CO}:9005/sync/", "sync-app"),
 ]
 
-VIEWPORTS = {
+VIEWPORTS: dict[str, ViewportSize] = {
     "desktop": {"width": 1440, "height": 1024},
+    "tablet": {"width": 820, "height": 1024},
     "mobile": {"width": 390, "height": 844},
 }
 
@@ -86,15 +86,22 @@ def _slug(url: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", path.lower()).strip("_")
 
 
-async def _shot(page: Page, svc: str, url: str, shell: str, tag: str) -> None:
+async def _shot(page: Page, svc: str, url: str, shell: str, tag: str, theme: str | None = None) -> None:
     (OUT / svc).mkdir(parents=True, exist_ok=True)
-    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+    _ = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
     try:
-        await page.wait_for_selector(shell, state="attached", timeout=8_000)
+        _ = await page.wait_for_selector(shell, state="attached", timeout=8_000)
     except Exception:
         pass
+    # Контекстный init-script принудительно ставит light при каждой навигации,
+    # поэтому тёмную тему включаем после bootstrap приложения.
+    if theme == "dark":
+        await page.evaluate(
+            "() => { document.documentElement.setAttribute('data-theme', 'dark'); "
+            + "document.documentElement.removeAttribute('data-platform-theme-lock'); }"
+        )
     await page.wait_for_timeout(1_800)
-    await page.screenshot(path=str(OUT / svc / f"{_slug(url)}_{tag}.png"), full_page=False)
+    _ = await page.screenshot(path=str(OUT / svc / f"{_slug(url)}_{tag}.png"), full_page=False)
 
 
 @pytest.mark.asyncio
@@ -127,14 +134,30 @@ async def test_ui_audit_mobile(ui_page_system: Page, route: tuple[str, str, str]
 @pytest.mark.e2e
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize(
+    "route", ROUTES, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in ROUTES]
+)
+async def test_ui_audit_tablet(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+    svc, url, shell = route
+    page = ui_page_system
+    await page.set_viewport_size(VIEWPORTS["tablet"])
+    await _shot(page, svc, url, shell, "tablet")
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("viewport", VIEWPORTS)
+@pytest.mark.parametrize(
     "route", PUBLIC_ROUTES, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in PUBLIC_ROUTES]
 )
-async def test_ui_audit_public(ui_page_system: Page, route: tuple[str, str, str]) -> None:
+async def test_ui_audit_public(
+    ui_page_system: Page, route: tuple[str, str, str], viewport: str
+) -> None:
     """Публичные маршруты apex (landing/login/products)."""
     svc, url, shell = route
     page = ui_page_system
-    await page.set_viewport_size(VIEWPORTS["desktop"])
-    await _shot(page, svc, url, shell, "desktop")
+    await page.set_viewport_size(VIEWPORTS[viewport])
+    await _shot(page, svc, url, shell, viewport)
 
 
 @pytest.mark.asyncio
@@ -148,13 +171,4 @@ async def test_ui_audit_dark(ui_page_system: Page, route: tuple[str, str, str]) 
     svc, url, shell = route
     page = ui_page_system
     await page.set_viewport_size(VIEWPORTS["desktop"])
-    await page.add_init_script(
-        "() => { try { window.localStorage.setItem('platform_theme', 'dark'); } catch (_) {} }"
-    )
-    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    await page.evaluate(
-        "() => { document.documentElement.setAttribute('data-theme', 'dark');"
-        " document.documentElement.removeAttribute('data-platform-theme-lock'); }"
-    )
-    await page.wait_for_timeout(2_500)
-    await _shot(page, svc, url, shell, "dark")
+    await _shot(page, svc, url, shell, "dark", theme="dark")

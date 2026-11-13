@@ -30,6 +30,8 @@ from apps.stock.models.enums import (
     StockLayoutPreset,
     StockLocationUsage,
     StockMoveLineKind,
+    StockMoveLineState,
+    StockMoveState,
     StockOperationCode,
     StockPartnerRole,
     StockRemovalStrategy,
@@ -40,6 +42,7 @@ from apps.stock.models.location import StockLocation
 from apps.stock.models.move import StockMove
 from apps.stock.models.move_line import StockMoveLine
 from apps.stock.models.quant import StockQuant
+from apps.stock.models.scan import ScanContext, ScanFlow
 from apps.stock.services.company_init_service import virtual_location_id
 from core.errors.boundary import PlatformConflictError
 
@@ -434,6 +437,225 @@ class TestLeastContainers:
         )
         # Всё содержимое уехало к клиенту вместе с тарой.
         assert quant is None or quant.quantity == Decimal("0")
+
+    async def test_scan_commit_closes_container_task(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Задание «перевезти паллету» закрывается сканом: коммит
+        проводит САМУ строку задачи (а не рождает дубль), приёмник
+        перезаписывается фактическим сканом."""
+        env = await _env(stock_di, unique_id)
+        env.product = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"LC2 {unique_id}",
+            sku=f"LC2-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+            removal_strategy=StockRemovalStrategy.LEAST_CONTAINERS,
+        )
+        ctype = await _container_type(env, f"lc2-{unique_id}")
+        pallet = await _container(
+            env, ctype.container_type_id,
+            env.warehouse.stock_location_id, f"PLT9-{unique_id}",
+        )
+        _ = await _receipt_to(
+            env, Decimal("4"), Decimal("4"), pallet.location_id
+        )
+        bin_a = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            parent_id=env.warehouse.view_location_id,
+            name=f"BIN-LC2A-{unique_id}",
+            usage=StockLocationUsage.BIN,
+            barcode=None,
+        )
+        bin_b = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            parent_id=env.warehouse.view_location_id,
+            name=f"BIN-LC2B-{unique_id}",
+            usage=StockLocationUsage.BIN,
+            barcode=None,
+        )
+        internal = env.op_types[StockOperationCode.INTERNAL]
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=internal.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("4"),
+                    uom_id=env.uom_id,
+                    location_id=env.warehouse.stock_location_id,
+                    location_dest_id=bin_a.location_id,
+                )
+            ],
+        )
+        for step in ("confirm", "assign"):
+            _ = await getattr(env.di.move_engine, f"{step}_transfer")(
+                company_id=env.company_id,
+                transfer_id=transfer.transfer_id,
+            )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        move = moves[0]
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
+            env.company_id, move.move_id
+        )
+        task = next(
+            ln for ln in lines if ln.kind == StockMoveLineKind.CONTAINER
+        )
+        assert task.container_id == pallet.location_id
+        assert task.location_dest_id == bin_a.location_id
+        ctx = ScanContext(
+            flow=ScanFlow.CONTAINER_MOVE,
+            container_id=pallet.location_id,
+            # Физически поставил в BIN-B, а не в плановую BIN-A:
+            # скан — факт, приёмник строки перезаписывается реальным.
+            dest_id=bin_b.location_id,
+        )
+        posted = await env.di.scan_service.commit(
+            company_id=env.company_id,
+            move_id=move.move_id,
+            context=ctx,
+            idempotency_key=f"cmv-{unique_id}",
+            actor_user_id="test_user",
+        )
+        assert posted.state == StockMoveState.DONE
+        lines_after = await StockMoveLine.list_for_move_by_created_at_asc(
+            env.company_id, move.move_id
+        )
+        container_lines = [
+            ln for ln in lines_after if ln.kind == StockMoveLineKind.CONTAINER
+        ]
+        # Дубль не родился: проведена и закрыта сама строка задачи.
+        assert len(container_lines) == 1
+        assert container_lines[0].move_line_id == task.move_line_id
+        assert container_lines[0].state == StockMoveLineState.DONE
+        assert container_lines[0].location_dest_id == bin_b.location_id
+        pallet_after = await StockLocation.by_id(
+            env.company_id, pallet.location_id
+        )
+        assert pallet_after.parent_id == bin_b.location_id
+        replayed = await env.di.scan_service.commit(
+            company_id=env.company_id,
+            move_id=move.move_id,
+            context=ctx,
+            idempotency_key=f"cmv-{unique_id}",
+            actor_user_id="test_user",
+        )
+        pallet_replay = await StockLocation.by_id(
+            env.company_id, pallet.location_id
+        )
+        assert replayed.state == StockMoveState.DONE
+        assert pallet_replay.parent_id == bin_b.location_id
+
+    async def test_scan_commit_container_task_claimed_by_other(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Чужой захват задания на паллету: скан-коммит другого
+        оператора по той же таре отклоняется, задание не гаснет."""
+        env = await _env(stock_di, unique_id)
+        env.product = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"LC3 {unique_id}",
+            sku=f"LC3-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+            removal_strategy=StockRemovalStrategy.LEAST_CONTAINERS,
+        )
+        ctype = await _container_type(env, f"lc3-{unique_id}")
+        pallet = await _container(
+            env, ctype.container_type_id,
+            env.warehouse.stock_location_id, f"PLT10-{unique_id}",
+        )
+        _ = await _receipt_to(
+            env, Decimal("4"), Decimal("4"), pallet.location_id
+        )
+        bin_a = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            parent_id=env.warehouse.view_location_id,
+            name=f"BIN-LC3-{unique_id}",
+            usage=StockLocationUsage.BIN,
+            barcode=None,
+        )
+        internal = env.op_types[StockOperationCode.INTERNAL]
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=internal.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("4"),
+                    uom_id=env.uom_id,
+                    location_id=env.warehouse.stock_location_id,
+                    location_dest_id=bin_a.location_id,
+                )
+            ],
+        )
+        for step in ("confirm", "assign"):
+            _ = await getattr(env.di.move_engine, f"{step}_transfer")(
+                company_id=env.company_id,
+                transfer_id=transfer.transfer_id,
+            )
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        move = moves[0]
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
+            env.company_id, move.move_id
+        )
+        task = next(
+            ln for ln in lines if ln.kind == StockMoveLineKind.CONTAINER
+        )
+        _ = await env.di.task_service.claim(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_line_ids=[task.move_line_id],
+            user_id="worker_a",
+        )
+        ctx = ScanContext(
+            flow=ScanFlow.CONTAINER_MOVE,
+            container_id=pallet.location_id,
+            dest_id=bin_a.location_id,
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.commit(
+                company_id=env.company_id,
+                move_id=move.move_id,
+                context=ctx,
+                actor_user_id="worker_b",
+            )
+        assert exc.value.error_code == "move_line_claimed"
+        task_after = await StockMoveLine.objects.filter(
+            company_id=env.company_id,
+            move_line_id=task.move_line_id,
+        ).get()
+        assert task_after.state == StockMoveLineState.OPEN
 
 
 class TestContainerIdempotency:

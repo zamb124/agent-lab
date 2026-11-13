@@ -91,14 +91,24 @@ describe('stock/tsd_session reducer', () => {
         }))).toThrow(/move_id required/);
     });
 
-    it('sessionHydrated восстанавливает контекст и move_id', () => {
+    it('sessionHydrated восстанавливает контекст, move_id и expected', () => {
+        const expected = { entity: 'product', code: 'BC-1', hint: 'pick_product' };
         const state = reduce(initial(), ev(stockTsdSessionSlice.events.SESSION_HYDRATED, {
             context: context({ lines: [{ product_id: 'p1', quantity: '2' }] }),
             move_id: 'mv-9',
+            expected,
         }));
         expect(state.context?.step).toBe('product');
         expect(state.move_id).toBe('mv-9');
         expect(state.outcome).toBe('');
+        expect(state.expected).toEqual(expected);
+    });
+
+    it('sessionHydrated без expected даёт null-подсказку', () => {
+        const state = reduce(initial(), ev(stockTsdSessionSlice.events.SESSION_HYDRATED, {
+            context: context(),
+            move_id: 'mv-9',
+        }));
         expect(state.expected).toBeNull();
     });
 

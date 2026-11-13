@@ -18,6 +18,7 @@ import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import {
     tsdOffline,
+    tsdOutboxId,
     tsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
 import type { StockTsdContextState } from '../../events/resources/stock-tsd.resource.js';
@@ -246,7 +247,12 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
         this._reason = REASONS[0];
         this._qty = '1';
         this._photos = [];
+        this._reportKey = tsdOutboxId();
     }
+
+    /** Стабильный ключ репорта: повтор после потерянного ответа не
+     *  даст двойной недостачи — леджер-команды идемпотентны по ключу. */
+    private _reportKey: string;
 
     private _max(): number {
         const max = Number(this.max_qty);
@@ -325,7 +331,9 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
                 shortage: this._qty,
                 reason: this._reason,
                 file_ids: fileIds,
+                idempotency_key: this._reportKey,
             }));
+
             for (const photo of this._photos) URL.revokeObjectURL(photo.preview);
             this._session.sessionCleared(null);
             this.toast('exc.queued', { type: 'info' });
@@ -338,7 +346,7 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
             shortage: this._qty,
             reason: this._reason,
             file_ids: fileIds,
-            idempotency_key: null,
+            idempotency_key: this._reportKey,
         });
         if (result === null) return;
         for (const photo of this._photos) URL.revokeObjectURL(photo.preview);
@@ -381,7 +389,7 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
                                     : ''}
                                 ${photo.failed
                                     ? html`<button class="photo-state" @click=${() => this._retryPhoto(photo)} aria-label="retry">
-                                        <platform-icon name="refresh-cw" size="22"></platform-icon>
+                                        <platform-icon name="refresh" size="22"></platform-icon>
                                     </button>`
                                     : html`<button class="photo-remove" @click=${() => this._removePhoto(photo)} aria-label="remove">
                                         <platform-icon name="x" size="14"></platform-icon>
@@ -392,7 +400,7 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
                     ${this._photos.length < MAX_PHOTOS
                         ? html`
                             <button class="photo-add" @click=${() => this._photoInput.value?.click()}>
-                                <platform-icon name="camera" size="24"></platform-icon>
+                                <platform-icon name="image" size="24"></platform-icon>
                                 ${this.t('exc.photo_add')}
                             </button>
                         `

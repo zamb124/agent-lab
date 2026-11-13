@@ -94,7 +94,11 @@
     "header_subtitle": "Канонические слои: регионы, дорожный граф, адреса",
     "generation": "Поколение",
     "status": "Статус",
-    "rows": "Строк данных"
+    "rows": "Строк данных",
+    "status_idle": "Ожидание",
+    "status_downloading": "Загрузка источника",
+    "status_importing": "Импорт данных",
+    "status_failed": "Ошибка импорта"
   },
   "sources": {
     "header_title": "Покрытие и источники",

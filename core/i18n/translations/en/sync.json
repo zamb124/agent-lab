@@ -4,7 +4,6 @@
         "platform_services": "Services",
         "channel": "Channel",
         "calls_scheduled": "Calls",
-        "settings": "Settings",
         "call_join": "Join link"
     },
     "bottom_nav": {
@@ -603,9 +602,6 @@
         "title": "Scheduled meetings",
         "action_create": "New meeting",
         "empty": "No scheduled meetings"
-    },
-    "settings": {
-        "title": "Sync settings"
     },
     "call_overlay_modal": {
         "toast_disconnect_failed": "Failed to disconnect from call: {error}"

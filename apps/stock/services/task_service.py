@@ -144,18 +144,15 @@ class TaskService:
         той же полосе, чтобы два ТСД не забрали одно поручение.
         ``zone_location_id`` сужает выбор до поддерева зоны оператора.
         """
-        lines = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
-            company_id, warehouse_id, zone_location_id=zone_location_id,
+        # Модельный фильтр уже «очередь оператора»: свободные строки
+        # или закреплённые за ним — чужие клеймы не съедают limit.
+        candidates = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
+            company_id, warehouse_id,
+            assigned_user_id=user_id,
+            zone_location_id=zone_location_id,
             wave_id=wave_id,
             limit=200,
         )
-        # Свободные или уже закреплённые за этим оператором — его
-        # очередь; чужие задания не показываем.
-        candidates = [
-            line
-            for line in lines
-            if line.assigned_user_id in {None, user_id}
-        ]
         if not candidates:
             return None
         resource_type: StockResourceType | None = None

@@ -71,7 +71,7 @@ export class SearchPage extends PlatformPage {
             .search-form { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-6); }
             .form-row { display: flex; gap: var(--space-3); align-items: flex-start; }
             .form-row platform-field { flex: 1; min-width: 0; }
-            .form-row .limit-field { max-width: 150px; flex: 0 1 150px; }
+            .form-row .limit-field { max-width: 200px; flex: 0 1 200px; }
             .query-row {
                 display: flex;
                 flex-direction: row;

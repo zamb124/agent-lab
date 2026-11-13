@@ -267,11 +267,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             }
 
             .mindmap-overlay-title {
-                position: absolute;
-                z-index: 12;
-                top: 80px;
-                left: 20px;
-                max-width: min(420px, calc(100% - 120px));
+                max-width: min(420px, 100%);
                 padding: 12px 14px;
                 border-radius: 14px;
                 background: var(--glass-solid-subtle);
@@ -366,11 +362,23 @@ export class CRMGraphWorkspace extends PlatformElement {
                 display: none !important;
             }
 
-            crm-graph-search-pill {
+            .top-cluster {
                 position: absolute;
                 z-index: 12;
                 top: 20px;
                 left: 20px;
+                /* Правая кромка очищает вертикальный рельс crm-graph-toolbar (right:16 + ~44px). */
+                right: 70px;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+                /* Кластер прозрачен для жестов canvas в промежутках между детьми. */
+                pointer-events: none;
+            }
+
+            crm-graph-search-pill {
+                max-width: 100%;
             }
 
             crm-graph-timeline {
@@ -403,14 +411,15 @@ export class CRMGraphWorkspace extends PlatformElement {
                 z-index: 20;
             }
 
+            /* В потоке top-cluster: строка статистики всегда ниже пилюлей поиска,
+               при любой их высоте; правая кромка совпадает с прежними right:70. */
             .overlay-meta {
-                position: absolute;
-                top: 64px;
-                right: 70px;
-                z-index: 12;
+                align-self: flex-end;
                 display: flex;
                 align-items: center;
                 gap: 6px;
+                flex-wrap: wrap;
+                justify-content: flex-end;
                 padding: 6px 10px;
                 font-size: 11px;
                 background: var(--glass-solid-subtle);
@@ -508,7 +517,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             @media (max-width: 767px) {
                 :host { border: none; border-radius: 0; }
                 .canvas-stage { min-height: 0; }
-                crm-graph-search-pill { top: 8px; left: 8px; }
+                .top-cluster { top: 8px; left: 8px; right: 8px; }
                 crm-graph-timeline {
                     top: 50%;
                     left: 8px;
@@ -520,13 +529,15 @@ export class CRMGraphWorkspace extends PlatformElement {
                     right: 8px;
                     --graph-toolbar-max-height-slop: 24px;
                 }
-                crm-graph-legend { left: 8px; bottom: 8px; }
-                .overlay-meta { display: none; }
-                .mindmap-overlay-title {
-                    top: 104px;
+                crm-graph-legend {
                     left: 8px;
-                    max-width: min(420px, calc(100% - 24px));
+                    bottom: calc(var(--app-content-bottom-padding-mobile, 96px) + var(--space-2));
                 }
+                .graph-empty-import-cta {
+                    bottom: calc(var(--app-content-bottom-padding-mobile, 96px) + var(--space-2));
+                }
+                .overlay-meta { display: none; }
+                .mindmap-overlay-title { max-width: 100%; }
             }
         `,
     ];
@@ -1339,6 +1350,17 @@ export class CRMGraphWorkspace extends PlatformElement {
         return colors;
     }
 
+    _getEntityTypeNames(): Map<string, string> {
+        const names = new Map<string, string>();
+        this._entityTypes.items.forEach((item) => {
+            const typeId = typeof item.type_id === 'string' ? item.type_id.trim() : '';
+            if (!typeId) return;
+            const name = typeof item.name === 'string' ? item.name.trim() : '';
+            if (name) names.set(typeId, name);
+        });
+        return names;
+    }
+
     _getRelationshipTypeColors(): Map<string, string> {
         const colors = new Map<string, string>();
         this._relationshipTypes.items.forEach((item) => {
@@ -1896,51 +1918,63 @@ export class CRMGraphWorkspace extends PlatformElement {
                       `
                     : nothing}
 
-                ${this._canvasView === 'mindmap' || this._canvasView === '3d'
-                    ? html`
-                          <div class="mindmap-overlay-title">
-                              <div class="mindmap-overlay-title-row">
-                                  ${this._mindmapRootStack.length > 0
-                                      ? html`
-                                            <button
-                                                type="button"
-                                                class="mindmap-back-btn"
-                                                title=${this.t('mindmap.back')}
-                                                aria-label=${this.t('mindmap.back_aria')}
-                                                @click=${this._onGraphRootBackClick}
-                                            >
-                                                <platform-icon name="chevron-left" size="20"></platform-icon>
-                                            </button>
-                                        `
-                                      : nothing}
-                                  <div class="mindmap-overlay-title-text">
-                                      <h2>
-                                          ${this._canvasView === 'mindmap'
-                                              ? this.t('mindmap.overlay_title')
-                                              : this.t('graph.view_mode_3d')}
-                                      </h2>
-                                      <div class="root-line">${this._rootLabelMindmap}</div>
+                <div class="top-cluster">
+                    <crm-graph-search-pill
+                        class=${this._graphUiValue.panels.search ? '' : 'panel-hidden'}
+                        .query=${this._entitySearchQuery}
+                        .viewMode=${this._graphDataMode}
+                        .modes=${VIEW_MODES}
+                        .searchMode=${this._searchMode}
+                        .minScore=${this._minScore}
+                        @search-input=${this._onSearchInput}
+                        @search-clear=${this._onSearchClear}
+                        @search-submit=${this._onSearchSubmit}
+                        @search-mode-change=${this._onSearchModeChange}
+                        @min-score-change=${this._onMinScoreChange}
+                        @mode-change=${this._onModeChange}
+                        @refresh=${this._onSearchRefresh}
+                    ></crm-graph-search-pill>
+
+                    ${this._canvasView === 'mindmap' || this._canvasView === '3d'
+                        ? html`
+                              <div class="mindmap-overlay-title">
+                                  <div class="mindmap-overlay-title-row">
+                                      ${this._mindmapRootStack.length > 0
+                                          ? html`
+                                                <button
+                                                    type="button"
+                                                    class="mindmap-back-btn"
+                                                    title=${this.t('mindmap.back')}
+                                                    aria-label=${this.t('mindmap.back_aria')}
+                                                    @click=${this._onGraphRootBackClick}
+                                                >
+                                                    <platform-icon name="chevron-left" size="20"></platform-icon>
+                                                </button>
+                                            `
+                                          : nothing}
+                                      <div class="mindmap-overlay-title-text">
+                                          <h2>
+                                              ${this._canvasView === 'mindmap'
+                                                  ? this.t('mindmap.overlay_title')
+                                                  : this.t('graph.view_mode_3d')}
+                                          </h2>
+                                          <div class="root-line">${this._rootLabelMindmap}</div>
+                                      </div>
                                   </div>
                               </div>
-                          </div>
-                      `
-                    : nothing}
+                          `
+                        : nothing}
 
-                <crm-graph-search-pill
-                    class=${this._graphUiValue.panels.search ? '' : 'panel-hidden'}
-                    .query=${this._entitySearchQuery}
-                    .viewMode=${this._graphDataMode}
-                    .modes=${VIEW_MODES}
-                    .searchMode=${this._searchMode}
-                    .minScore=${this._minScore}
-                    @search-input=${this._onSearchInput}
-                    @search-clear=${this._onSearchClear}
-                    @search-submit=${this._onSearchSubmit}
-                    @search-mode-change=${this._onSearchModeChange}
-                    @min-score-change=${this._onMinScoreChange}
-                    @mode-change=${this._onModeChange}
-                    @refresh=${this._onSearchRefresh}
-                ></crm-graph-search-pill>
+                    ${this._graphUiValue.panels.meta ? html`
+                        <div class="overlay-meta">
+                            <span class="meta-pill">${this.t('graph_page.meta_canvas')} ${this.t(`graph.view_mode_${this._canvasView}`)}</span>
+                            <span class="meta-pill">${this.t('graph_page.meta_mode')} ${this.t(`graph.view_mode_${this._graphDataMode}`)}</span>
+                            <span class="meta-pill">${this.t('graph_page.meta_depth')} ${this._maxDepth}</span>
+                            <span class="meta-pill">${this.t('graph_page.meta_nodes')} ${this._graphNodes.length}</span>
+                            <span class="meta-pill">${this.t('graph_page.meta_edges')} ${this._graphEdges.length}</span>
+                        </div>
+                    ` : nothing}
+                </div>
 
                 ${this._graphUiValue.panels.timeline ? html`
                     <crm-graph-timeline
@@ -1950,16 +1984,6 @@ export class CRMGraphWorkspace extends PlatformElement {
                         .endPercent=${this._timelineEndPercent}
                         @timeline-change=${this._onTimelineChange}
                     ></crm-graph-timeline>
-                ` : nothing}
-
-                ${this._graphUiValue.panels.meta ? html`
-                    <div class="overlay-meta">
-                        <span class="meta-pill">${this.t('graph_page.meta_canvas')} ${this.t(`graph.view_mode_${this._canvasView}`)}</span>
-                        <span class="meta-pill">${this.t('graph_page.meta_mode')} ${this.t(`graph.view_mode_${this._graphDataMode}`)}</span>
-                        <span class="meta-pill">${this.t('graph_page.meta_depth')} ${this._maxDepth}</span>
-                        <span class="meta-pill">${this.t('graph_page.meta_nodes')} ${this._graphNodes.length}</span>
-                        <span class="meta-pill">${this.t('graph_page.meta_edges')} ${this._graphEdges.length}</span>
-                    </div>
                 ` : nothing}
 
                 <crm-graph-toolbar
@@ -1976,6 +2000,7 @@ export class CRMGraphWorkspace extends PlatformElement {
                     <crm-graph-legend
                         .nodes=${this._graphNodes}
                         .entityTypeColors=${entityTypeColors}
+                        .entityTypeNames=${this._getEntityTypeNames()}
                         .canvasHint=${this._canvasView === 'mindmap' ? this.t('mindmap.overlay_title') : (this._canvasPathHint ? this.t(this._canvasPathHint) : '')}
                         .selectedNodeId=${this._selectedNodeId}
                         .selectedEdgeId=${this._selectedEdgeId}

@@ -29,12 +29,14 @@ export class ChatPage extends PlatformPage {
         sessionId: { type: String, attribute: 'session-id' },
         _contextId: { state: true },
         _openingNewContext: { state: true },
+        _isMobile: { state: true },
     }
     declare flowId: string;
     declare branchId: string;
     declare sessionId: string;
     declare _contextId: string;
     declare _openingNewContext: boolean;
+    declare _isMobile: boolean;
 ;
 
     static override styles: CSSResultGroup = [PlatformPage.styles, css`
@@ -54,9 +56,18 @@ export class ChatPage extends PlatformPage {
         platform-flow-ui { flex: 1 1 0; min-height: 0; }
         @media (max-width: 767px) {
             .chat-topbar { padding: var(--space-1) var(--space-2); min-height: 40px; }
+            .chat-topbar .actions {
+                flex-shrink: 1;
+                min-width: 0;
+                gap: var(--space-1);
+                overflow-x: auto;
+                scrollbar-width: none;
+            }
+            .chat-topbar .actions::-webkit-scrollbar { display: none; }
         }
     `];
     private _flows: ResourceController;
+    private _resizeObserver: ResizeObserver | null = null;
 
     constructor() {
         super();
@@ -65,7 +76,25 @@ export class ChatPage extends PlatformPage {
         this.sessionId = '';
         this._contextId = '';
         this._openingNewContext = false;
+        this._isMobile = false;
         this._flows = this.useResource('flows/flows');
+    }
+
+    override connectedCallback(): void {
+        super.connectedCallback();
+        this._checkMobile();
+        this._resizeObserver = new ResizeObserver(() => this._checkMobile());
+        this._resizeObserver.observe(this);
+    }
+
+    override disconnectedCallback(): void {
+        this._resizeObserver?.disconnect();
+        this._resizeObserver = null;
+        super.disconnectedCallback();
+    }
+
+    private _checkMobile(): void {
+        this._isMobile = window.innerWidth <= 767 || (this.offsetWidth > 0 && this.offsetWidth <= 767);
     }
 
     override willUpdate(changed: PropertyValues<this>): void {
@@ -266,11 +295,15 @@ export class ChatPage extends PlatformPage {
                     >
                         <platform-icon name="trace-timeline" size="15"></platform-icon>
                     </platform-button>
-                    <platform-button variant="ghost" density="compact" @click=${() => this._newContext()}>
-                        <platform-icon name="plus" size="15"></platform-icon> ${this.t('chat_page.new_screen')}
+                    <platform-button variant="ghost" density="compact" ?icon-only=${this._isMobile}
+                        aria-label=${this.t('chat_page.new_screen')} title=${this.t('chat_page.new_screen')}
+                        @click=${() => this._newContext()}>
+                        <platform-icon name="plus" size="15"></platform-icon>${this._isMobile ? nothing : ` ${this.t('chat_page.new_screen')}`}
                     </platform-button>
-                    <platform-button variant="secondary" density="compact" @click=${() => this._editor()}>
-                        <platform-icon name="edit" size="15"></platform-icon> ${this.t('chat_page.interface_editor')}
+                    <platform-button variant="secondary" density="compact" ?icon-only=${this._isMobile}
+                        aria-label=${this.t('chat_page.interface_editor')} title=${this.t('chat_page.interface_editor')}
+                        @click=${() => this._editor()}>
+                        <platform-icon name="edit" size="15"></platform-icon>${this._isMobile ? nothing : ` ${this.t('chat_page.interface_editor')}`}
                     </platform-button>
                 </div>
             </div>

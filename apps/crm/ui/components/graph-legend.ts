@@ -19,12 +19,14 @@ export class CRMGraphLegend extends PlatformElement {
     static override properties: PropertyDeclarations = {
         nodes: { type: Array },
         entityTypeColors: { type: Object, attribute: 'entity-type-colors' },
+        entityTypeNames: { type: Object, attribute: 'entity-type-names' },
         canvasHint: { type: String, attribute: 'canvas-hint' },
         selectedNodeId: { type: String, attribute: 'selected-node-id' },
         selectedEdgeId: { type: String, attribute: 'selected-edge-id' },
     };
     declare nodes: Record<string, unknown>[];
     declare entityTypeColors: Record<string, string> | Map<string, string>;
+    declare entityTypeNames: Record<string, string> | Map<string, string>;
     declare canvasHint: string;
     declare selectedNodeId: string;
     declare selectedEdgeId: string;
@@ -95,6 +97,7 @@ export class CRMGraphLegend extends PlatformElement {
         super();
         this.nodes = [];
         this.entityTypeColors = {};
+        this.entityTypeNames = {};
         this.canvasHint = '';
         this.selectedNodeId = '';
         this.selectedEdgeId = '';
@@ -111,7 +114,11 @@ export class CRMGraphLegend extends PlatformElement {
             const typeId = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
             if (!typeId || typeId === 'hidden' || seen.has(typeId)) continue;
             seen.add(typeId);
-            result.push({ typeId, color: palette.get(typeId) || 'var(--text-tertiary)' });
+            const names = this.entityTypeNames instanceof Map
+                ? this.entityTypeNames.get(typeId)
+                : this.entityTypeNames[typeId];
+            const label = typeof names === 'string' && names.trim().length > 0 ? names.trim() : typeId;
+            result.push({ typeId: label, color: palette.get(typeId) || 'var(--text-tertiary)' });
         }
         return result;
     }

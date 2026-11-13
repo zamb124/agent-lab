@@ -65,6 +65,7 @@ export const documentsExplorerStyles = css`
     .files-area platform-file-table {
         flex: 1;
         min-height: 0;
+        min-width: 55rem;
     }
     .files-area.dropzone-empty {
         display: flex;

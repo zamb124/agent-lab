@@ -22,6 +22,14 @@ export class FrontendNamespacesPage extends PlatformPage {
         frontendIslandPageBodyStyles,
         css`
             :host { display: block; }
+            @media (max-width: 767px) {
+                .breadcrumbs-wrap {
+                    padding: 0
+                        var(--platform-mobile-sticky-header-padding-right)
+                        0
+                        var(--platform-mobile-sticky-header-padding-left);
+                }
+            }
             .toolbar {
                 display: flex;
                 flex-wrap: wrap;
@@ -127,7 +135,7 @@ export class FrontendNamespacesPage extends PlatformPage {
         const items = this._items();
 
         return html`
-            <platform-breadcrumbs></platform-breadcrumbs>
+            <div class="breadcrumbs-wrap"><platform-breadcrumbs></platform-breadcrumbs></div>
             <page-header
                 title=${t('namespaces_page.title')}
                 subtitle=${t('namespaces_page.subtitle')}
@@ -142,7 +150,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                     ${t('namespaces_page.create')}
                 </button>
             </page-header>
-
+            <div class="page-body">
             <div class="filters">
                 ${['all', 'company_workspace', 'personal'].map((kind) => html`
                     <button
@@ -180,6 +188,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                         </div>
                     </div>
                 `)}
+            </div>
             </div>
         `;
     }

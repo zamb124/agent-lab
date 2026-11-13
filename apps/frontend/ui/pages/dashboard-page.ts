@@ -31,7 +31,10 @@ export class DashboardPage extends PlatformPage {
                 .section--quick { order: 4; }
             }
             @media (max-width: 767px) {
-                :host { padding: var(--space-3); }
+                :host {
+                    padding: var(--space-3);
+                    padding-bottom: var(--app-content-bottom-padding-mobile);
+                }
                 section { margin-bottom: var(--space-6); }
                 .section--services { order: 1; }
                 .section--hero { order: 2; }

@@ -17,6 +17,7 @@ from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index
+from oxyde import Q
 
 from apps.stock.models.common import (
     QTY_DB,
@@ -34,6 +35,7 @@ from apps.stock.models.events import (
     company_event,
 )
 from apps.stock.models.location import StockLocation
+from apps.stock.models.quant import StockQuant
 from apps.stock.models.resource import StockResource
 from apps.stock.models.resource_type import StockResourceType
 from apps.stock.models.storage_rules import resource_allows
@@ -232,14 +234,23 @@ class StockMoveLine(PlatformModel):
         wave_id: str | None = None,
         limit: int = 100,
     ) -> list[Self]:
-        """Открытая очередь склада, ORDER BY priority DESC, stop_order, sequence, created_at. assigned_user_id, zone_location_id и wave_id равные None не фильтруют. Пустое поддерево зоны — []. limit по умолчанию 100 и в теле не проверяется. Сначала срочное, затем остановка рейса, затем обход ячеек."""
+        """Открытая очередь склада, ORDER BY priority DESC, stop_order, sequence, created_at. assigned_user_id, zone_location_id и wave_id равные None не фильтруют. Пустое поддерево зоны — []. limit по умолчанию 100 и в теле не проверяется. Сначала срочное, затем остановка рейса, затем обход ячеек.
+
+        ``assigned_user_id`` — «очередь, видимая оператору»: свободные
+        строки ИЛИ закреплённые за ним, как в ``next_line``. Строгое
+        «assigned = …» показывало бы пустой список до первого клейма —
+        оператор не мог бы выбрать задание руками из списка.
+        """
         q = cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
             state=StockMoveLineState.OPEN,
         )
         if assigned_user_id is not None:
-            q = q.filter(assigned_user_id=assigned_user_id)
+            q = q.filter(
+                Q(assigned_user_id__isnull=True)
+                | Q(assigned_user_id=assigned_user_id)
+            )
         if wave_id is not None:
             q = q.filter(wave_id=wave_id)
         if zone_location_id is not None:
@@ -625,7 +636,6 @@ class StockMoveLine(PlatformModel):
         Физическое ``quantity`` quant'а здесь не трогаем — книжные
         цифры исправляет только пересчёт, а не факт «не нашли».
         """
-        from apps.stock.models.quant import StockQuant
 
         async def body(
             _scope: LaneScope,

@@ -272,8 +272,14 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 const productId = this.product_id !== '' ? this.product_id : this.entity_id;
                 const product = await this._productItem.run({ product_id: productId });
                 this._product = product;
-                this._loadQuants({ product_id: productId });
                 const warehouseId = this._contextSel.value.warehouse_id;
+                // Остатки только этого склада: оператору с терминала
+                // чужие склады — шум и лишние строки на экране.
+                this._loadQuants(
+                    warehouseId === ''
+                        ? { product_id: productId }
+                        : { product_id: productId, warehouse_id: warehouseId },
+                );
                 if (warehouseId !== '') this._locations.load({ warehouse_id: warehouseId, include_virtual: true });
             } else if (kind === 'location') {
                 this._location = await this._locationItem.run({ location_id: this.entity_id });
@@ -387,9 +393,15 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
 
     private _startCount(): void {
         const hasSource = this.entity_kind === 'location' || this.entity_kind === 'container';
+        // Пересчёт всегда спрашивает факт у оператора: количество с
+        // этикетки («на коробе написано 24») пропустило бы шаг ввода
+        // и записало бы надпись как физический остаток. Серийник —
+        // исключение: сам скан SN и есть «единица на месте».
+        const scanned = { ...this._scannedProduct() };
+        if (this.serial === '') scanned['quantity'] = null;
         this._startFlow(hasSource
             ? { flow: 'count', step: 'product', source_id: this.entity_id }
-            : { flow: 'count', step: 'location', ...this._scannedProduct() });
+            : { flow: 'count', step: 'location', ...scanned });
     }
 
     private _startMove(): void {
@@ -566,9 +578,9 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     private _kindIcon(kind: string): string {
         switch (kind) {
             case 'product': return 'package';
-            case 'packaging': return 'boxes';
+            case 'packaging': return 'box';
             case 'lot': return 'layers';
-            case 'location': return 'map-pin';
+            case 'location': return 'pin';
             case 'container': return 'box';
             case 'document': return 'file-text';
             case 'resource': return 'truck';

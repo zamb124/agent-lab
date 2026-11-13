@@ -82,6 +82,10 @@ spec:
     metadata:
       labels:
         app: alloy
+      annotations:
+        # ConfigMap alloy-config сам по себе под не перезапускает —
+        # checksum форсирует rollout при правке files/alloy.config.
+        checksum/alloy-config: {{ .Files.Get "files/alloy.config" | sha256sum }}
     spec:
       serviceAccountName: alloy
       tolerations:

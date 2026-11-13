@@ -23,15 +23,17 @@ import pytest
 from apps.stock.models import (
     StockLocation,
     StockMove,
+    StockMoveLineState,
     StockMoveState,
     StockOperationCode,
     StockQuant,
     ValuationMethod,
 )
-from apps.stock.models.common import StockMoveSpec
+from apps.stock.models.common import STOCK_ZERO, StockMoveSpec, new_id
 from apps.stock.models.enums import (
     StockLayoutPreset,
     StockLocationUsage,
+    StockMoveLineKind,
     StockPartnerRole,
     StockRemovalStrategy,
     StockTracking,
@@ -54,6 +56,7 @@ from core.errors.boundary import (
     PlatformConflictError,
     PlatformNotFoundError,
 )
+from core.utils.time import utcnow
 
 from .test_stock_domain import StockEnv, _make_env, _receipt
 
@@ -83,6 +86,40 @@ async def _env(stock_di, unique_id: str) -> StockEnv:
     return await _make_env(
         stock_di, f"co-{unique_id}", unique_id, ValuationMethod.FIFO
     )
+
+
+async def _receipt_owned(env: StockEnv, qty: Decimal, owner: str) -> str:
+    """Консигнационная приёмка: остаток ложится на quant владельца."""
+    op = env.op_types[StockOperationCode.INCOMING]
+    transfer = await env.di.move_engine.create_transfer(
+        company_id=env.company_id,
+        warehouse_id=env.warehouse.warehouse_id,
+        operation_type_id=op.operation_type_id,
+        partner_entity_id=None,
+        owner_entity_id=owner,
+        scheduled_at=None,
+        origin_document_type=None,
+        origin_document_id=None,
+        barcode=None,
+        moves=[
+            StockMoveSpec(
+                product_id=env.product.product_id,
+                product_qty=qty,
+                uom_id=env.uom_id,
+                unit_price=None,
+            )
+        ],
+    )
+    _ = await env.di.move_engine.confirm_transfer(
+        company_id=env.company_id, transfer_id=transfer.transfer_id
+    )
+    _ = await env.di.move_engine.assign_transfer(
+        company_id=env.company_id, transfer_id=transfer.transfer_id
+    )
+    _ = await env.di.move_engine.validate_transfer(
+        company_id=env.company_id, transfer_id=transfer.transfer_id
+    )
+    return transfer.transfer_id
 
 
 async def _reserved_move(env: StockEnv, qty: Decimal) -> StockMove:
@@ -205,8 +242,131 @@ class TestScanMachineEdges:
         r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
         r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p1"))
         r = scan_quantity(r.context, Decimal("0"))
-        # Ноль — «не посчитано»: строка не снимается.
+        # «Посчитал — пусто» — валидный физический факт пересчёта:
+        # нулевой остаток и есть найденная недостача.
+        assert r.error is None
+        assert r.context.lines[0].quantity == Decimal("0")
+
+    def test_count_negative_quantity_rejected(self) -> None:
+        ctx = ScanContext(flow=ScanFlow.COUNT)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_quantity(r.context, Decimal("-2"))
         assert r.error == ScanError.QUANTITY_REQUIRED
+
+    def test_count_ignores_label_quantity(self) -> None:
+        """GS1 (37) на коробе — не факт пересчёта: оператор обязан
+        ввести физическое число, машина не пропускает QUANTITY."""
+        ctx = ScanContext(flow=ScanFlow.COUNT)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(
+            r.context,
+            _res(ScanEntityKind.PRODUCT, "p1", quantity=Decimal("24")),
+        )
+        assert r.error is None
+        assert r.context.step == ScanStep.QUANTITY
+        r = scan_quantity(r.context, Decimal("3"))
+        assert r.error is None
+        assert r.context.lines[0].quantity == Decimal("3")
+
+    def test_count_serial_scan_still_one(self) -> None:
+        """Серийник в пересчёте — единица и есть: скан SN закрывает
+        количество без лишнего ввода."""
+        ctx = ScanContext(flow=ScanFlow.COUNT)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(
+            r.context,
+            _res(
+                ScanEntityKind.PRODUCT,
+                "sn-7",
+                product_id="p1",
+                serial="SN-7",
+                quantity=Decimal("1"),
+            ),
+        )
+        assert r.error is None
+        assert r.context.step == ScanStep.REVIEW
+        assert r.context.lines[0].quantity == Decimal("1")
+        assert r.context.lines[0].serial == "SN-7"
+
+    def test_pick_zero_quantity_still_rejected(self) -> None:
+        # Движению ноль бессмысленен — «взять 0 шт» не проводится.
+        ctx = ScanContext(flow=ScanFlow.PICK)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_quantity(r.context, Decimal("0"))
+        assert r.error == ScanError.QUANTITY_REQUIRED
+
+    def test_review_rescans_next_bin_without_commit(self) -> None:
+        """Многоячеечное задание: REVIEW + скан ячейки переоткрывает
+        источник — оператор обходит задание без commit на каждой."""
+        ctx = ScanContext(flow=ScanFlow.PICK)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_quantity(r.context, Decimal("2"))
+        assert r.context.step == ScanStep.REVIEW
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-b"))
+        assert r.error is None
+        assert r.context.step == ScanStep.PRODUCT
+        assert r.context.source_id == "bin-b"
+        # Вторая ячейка набирает вторую строку — один коммит на обход.
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p2"))
+        r = scan_quantity(r.context, Decimal("5"))
+        assert r.error is None
+        assert [line.location_id for line in r.context.lines] == [
+            "bin-a",
+            "bin-b",
+        ]
+
+    def test_review_rescan_keeps_dest_for_move(self) -> None:
+        """При переоткрытии источника приёмник удерживается — та же
+        тележка/зона назначения подтверждена ранее."""
+        ctx = ScanContext(flow=ScanFlow.MOVE)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "bin-a"))
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "zone-9"))
+        r = scan_quantity(r.context, Decimal("1"))
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-b"))
+        assert r.context.source_id == "bin-b"
+        assert r.context.dest_id == "zone-9"
+
+    def test_review_location_rescan_not_for_product_first_flows(
+        self,
+    ) -> None:
+        # У receive/putaway первый шаг — товар: ячейка в REVIEW
+        # не переоткрывает источник, ждём товар или commit.
+        ctx = ScanContext(flow=ScanFlow.RECEIVE)
+        r = scan_step(ctx, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "dock"))
+        r = scan_quantity(r.context, Decimal("1"))
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-1"))
+        assert r.error == ScanError.UNEXPECTED_STEP
+        assert r.context.step == ScanStep.REVIEW
+
+    def test_review_ship_still_rejects_location(self) -> None:
+        # Ship коммитит строки документа — переоткрывать источник
+        # в REVIEW нечего.
+        ctx = ScanContext(flow=ScanFlow.SHIP)
+        r = scan_step(ctx, _res(ScanEntityKind.LOCATION, "dock-1"))
+        assert r.context.step == ScanStep.REVIEW
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "dock-2"))
+        assert r.error == ScanError.UNEXPECTED_STEP
+
+    def test_review_pack_next_box_via_container_step(self) -> None:
+        """Упаковка в несколько коробов: новая тара подтверждается
+        своим шагом — товар → тара → кол-во на каждую строку."""
+        ctx = ScanContext(flow=ScanFlow.PACK)
+        r = scan_step(ctx, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_step(r.context, _res(ScanEntityKind.CONTAINER, "box-1"))
+        r = scan_quantity(r.context, Decimal("4"))
+        assert r.context.step == ScanStep.REVIEW
+        # Второй товар → машина снова спрашивает тару → новый короб.
+        r = scan_step(r.context, _res(ScanEntityKind.PRODUCT, "p2"))
+        assert r.context.step == ScanStep.CONTAINER
+        r = scan_step(r.context, _res(ScanEntityKind.CONTAINER, "box-2"))
+        r = scan_quantity(r.context, Decimal("2"))
+        assert r.error is None
+        assert r.context.lines[1].location_dest_id == "box-2"
 
     def test_multiline_keeps_source_and_dest(self) -> None:
         """Переборка внутри зоны: ячейки не переспрашиваются
@@ -650,6 +810,168 @@ class TestScanCountCommit:
         assert quant is not None
         assert quant.inventory_quantity == Decimal("6")
         assert quant.quantity == Decimal("5")
+
+    async def test_count_session_seeds_owner_and_closes_owned_task(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Наряд на консигнацию: сессия несёт владельца задания —
+        факт пересчёта ложится на quant владельца и закрывает его
+        count-строку, чужой ownerless-ключ не трогается."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        _ = await _receipt_owned(env, Decimal("3"), "ent-owner-a")
+        stock = env.warehouse.stock_location_id
+        # Задание пересчёта консигнационного остатка.
+        move = await StockMove.create(
+            StockMove(
+                move_id=new_id("mov"),
+                company_id=env.company_id,
+                transfer_id=None,
+                warehouse_id=env.warehouse.warehouse_id,
+                product_id=env.product.product_id,
+                product_qty=STOCK_ZERO,
+                product_uom_qty=STOCK_ZERO,
+                uom_id=env.uom_id,
+                location_id=stock,
+                location_dest_id=stock,
+                state=StockMoveState.CONFIRMED,
+                operation_type_id=None,
+                origin_document_type="cycle_count",
+                origin_document_id=stock,
+                date=utcnow(),
+                created_at=utcnow(),
+            )
+        )
+        count_line = await StockMoveLine.create(
+            StockMoveLine(
+                move_line_id=new_id("mli"),
+                company_id=env.company_id,
+                move_id=move.move_id,
+                transfer_id=None,
+                warehouse_id=env.warehouse.warehouse_id,
+                kind=StockMoveLineKind.COUNT,
+                product_id=env.product.product_id,
+                owner_entity_id="ent-owner-a",
+                quantity=STOCK_ZERO,
+                done_quantity=STOCK_ZERO,
+                location_id=stock,
+                location_dest_id=stock,
+                created_at=utcnow(),
+            )
+        )
+        _, context = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=None,
+            transfer_id=None,
+            user_id="counter",
+            move_line_id=count_line.move_line_id,
+        )
+        assert context.flow == ScanFlow.COUNT
+        assert context.owner_entity_id == "ent-owner-a"
+        # Оператор дошёл до ячейки и посчитал физику: 2 шт.
+        ctx = scan_step(context, _res(ScanEntityKind.LOCATION, stock))
+        assert ctx.error is None
+        ctx = scan_step(
+            ctx.context,
+            _res(ScanEntityKind.PRODUCT, env.product.product_id),
+        )
+        assert ctx.error is None
+        ctx = scan_quantity(ctx.context, Decimal("2"))
+        assert ctx.error is None
+        _ = await env.di.scan_service.inventory_count_commit(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            context=ctx.context,
+            actor_user_id="counter",
+        )
+        owned = await StockQuant.by_key(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=stock,
+            lot_id=None,
+            owner_entity_id="ent-owner-a",
+        )
+        assert owned is not None
+        assert owned.inventory_quantity == Decimal("2")
+        ownerless = await StockQuant.by_key(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=stock,
+            lot_id=None,
+            owner_entity_id=None,
+        )
+        assert ownerless is not None
+        assert ownerless.inventory_quantity is None
+        line = await StockMoveLine.by_id(
+            env.company_id, count_line.move_line_id
+        )
+        assert line is not None and line.state == StockMoveLineState.DONE
+
+    async def test_adhoc_count_infers_single_owner(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Ad-hoc пересчёт без наряда: единственный владелец остатка
+        в ячейке — физика сама подсказывает quant для записи."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt_owned(env, Decimal("4"), "ent-owner-a")
+        stock = env.warehouse.stock_location_id
+        ctx = ScanContext(
+            flow=ScanFlow.COUNT,
+            lines=(
+                ScanLineDraft(
+                    location_id=stock,
+                    location_dest_id=None,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("4"),
+                ),
+            ),
+        )
+        ids = await env.di.scan_service.inventory_count_commit(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            context=ctx,
+            actor_user_id="counter",
+        )
+        owned = await StockQuant.by_key(
+            company_id=env.company_id,
+            product_id=env.product.product_id,
+            location_id=stock,
+            lot_id=None,
+            owner_entity_id="ent-owner-a",
+        )
+        assert owned is not None
+        assert owned.quant_id in ids
+        assert owned.inventory_quantity == Decimal("4")
+
+    async def test_adhoc_count_multiple_owners_denied(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Два владельца на одном ключе: ad-hoc пересчёт честно
+        отказывает — только наряд знает, чей остаток считали."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt_owned(env, Decimal("4"), "ent-owner-a")
+        _ = await _receipt_owned(env, Decimal("2"), "ent-owner-b")
+        stock = env.warehouse.stock_location_id
+        ctx = ScanContext(
+            flow=ScanFlow.COUNT,
+            lines=(
+                ScanLineDraft(
+                    location_id=stock,
+                    location_dest_id=None,
+                    product_id=env.product.product_id,
+                    quantity=Decimal("4"),
+                ),
+            ),
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.inventory_count_commit(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                context=ctx,
+                actor_user_id="counter",
+            )
+        assert exc.value.error_code == "scan_owner_required"
 
 
 class TestScanResolve:
@@ -1193,6 +1515,48 @@ class TestScanLegFlows:
             user_id="op-A",
         )
         assert ctx.flow == ScanFlow.PICK
+
+    async def test_open_session_claims_served_line(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Открытие документа = «я взял работу»: исполняемая строка
+        уходит из общей очереди, коллега на том же документе честно
+        видит «нет работы», а не едет за той же позицией."""
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        move = await _reserved_move(env, Decimal("3"))
+        _, ctx = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=move.move_id,
+            transfer_id=None,
+            user_id="op-A",
+        )
+        assert ctx.flow == ScanFlow.PICK
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(
+            env.company_id, move.move_id
+        )
+        assert all(
+            line.assigned_user_id == "op-A" for line in lines
+        ), "открытие обязано захватить исполняемую строку"
+        with pytest.raises(PlatformNotFoundError) as exc:
+            _ = await env.di.scan_service.open_session(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_id=move.move_id,
+                transfer_id=None,
+                user_id="op-B",
+            )
+        assert exc.value.error_code == "document_no_work"
+        # Повторное открытие владельцем — идемпотентно, не падает.
+        _, ctx2 = await env.di.scan_service.open_session(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            move_id=move.move_id,
+            transfer_id=None,
+            user_id="op-A",
+        )
+        assert ctx2.flow == ScanFlow.PICK
 
 
 class TestExpectedHint:

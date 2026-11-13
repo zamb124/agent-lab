@@ -17,3 +17,11 @@ The product card answers «where to pick from» instantly: per-bin stock rows lo
 The move route is two bin scans and a digit: the terminal verifies both bins belong to the session warehouse and hold stock. The review line shows the «source → destination» route and quantity.
 
 ![Source → destination → quantity → commit](stock-tsd-move--02-tsd-move-review.png)
+
+## Step 3. Scan the destination bin — stock is there
+
+**Result demonstration.** Bin B shows both moved products with new quantities — the move hit the ledger, not just the screen.
+
+**Summary.** Moving on the handheld: scan product → «Move» → source → destination → quantity → commit.
+
+![Scan the destination bin — stock is there](stock-tsd-move--03-tsd-move-bin-b.png)

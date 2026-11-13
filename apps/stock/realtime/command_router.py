@@ -277,7 +277,7 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/move_lines/update_requested": Operation(
         payload_model=StockMoveLineUpdatePayload, fn=op_move_lines_update
     ),
-    "stock/move_lines/queue_requested": Operation(
+    "stock/queue/list_requested": Operation(
         payload_model=StockMoveLinesQueuePayload, fn=op_move_lines_queue
     ),
     "stock/move_lines/next_requested": Operation(

@@ -68,8 +68,22 @@ export class TsdScanInput {
 
     private _onKey(event: KeyboardEvent): void {
         if (event.ctrlKey || event.metaKey || event.altKey) return;
+        const target = event.target as { tagName?: unknown; isContentEditable?: unknown } | null;
+        if (
+            target !== null
+            && typeof target === 'object'
+            && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable === true)
+        ) {
+            // Печать внутри поля — не скан: иначе быстрый ручной ввод
+            // в qty/manual поле попадал бы в буфер, а Enter уходил
+            // сканом вместо отправки значения поля.
+            this._reset();
+            return;
+        }
         const now = Date.now();
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' || event.key === 'Tab') {
+            // Терминатор сканера: классика — Enter, часть профилей
+            // Zebra/Honeywell шлют Tab — коммитим оба.
             if (this._burst && this._buffer.length >= TSD_SCAN_MIN_LENGTH) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -81,8 +95,17 @@ export class TsdScanInput {
             this._reset();
             return;
         }
-        if (event.key.length !== 1) {
-            this._reset();
+        if (event.key.length !== 1 || event.repeat) {
+            // Зажатая клавиша даёт keydown-повторы каждые ~30 мс —
+            // без отсева удержание буквы выглядело бы как пачка сканера
+            // и коммитило бы «aaaaa…» фантомным сканом.
+            if (event.key.length !== 1) this._reset();
+            return;
+        }
+        const ch = event.key.charCodeAt(0);
+        if (ch < 0x20 && ch !== 0x1d) {
+            // Управляющие обёртки сканеров (STX/ETX и др.) в код не
+            // входят; GS (\x1d, FNC1) сохраняем — разделитель AI в GS1.
             return;
         }
         const gap = now - this._lastKeyAt;
@@ -92,7 +115,19 @@ export class TsdScanInput {
         this._fastCount = gap <= this._burstMs ? this._fastCount + 1 : 0;
         if (this._fastCount >= 2) this._burst = true;
         if (this._timer !== null) clearTimeout(this._timer);
-        this._timer = setTimeout(() => this._reset(), this._burstMs * 4);
+        this._timer = setTimeout(() => this._commitBurst(), this._burstMs * 4);
+    }
+
+    private _commitBurst(): void {
+        // Сканеры без суффикса Enter/Tab: конец пачки по таймауту —
+        // иначе весь код молча терялся бы после паузы.
+        if (this._burst && this._buffer.length >= TSD_SCAN_MIN_LENGTH) {
+            const code = this._buffer;
+            this._reset();
+            this._onScan(code);
+            return;
+        }
+        this._reset();
     }
 
     private _fastCount = 0;

@@ -47,6 +47,15 @@ const ADHOC_OPERATION_CODE: Partial<Record<ScanFlow, StockOperationCode>> = {
     putaway: 'internal',
 };
 
+/** Коммиты scan_commit/scan_count_commit несут `expected` —
+ *  следующую исполнимую строку документа; ad-hoc и перевозка тары
+ *  документа не имеют и продолжения не дают. */
+function _commitNextLineId(result: unknown): string | null {
+    if (typeof result !== 'object' || result === null) return null;
+    const expected = (result as { expected?: { move_line_id?: string | null } | null }).expected;
+    return expected?.move_line_id ?? null;
+}
+
 export class StockTsdRun extends PlatformElement {
     static i18nNamespace = 'stock_tsd';
 
@@ -57,15 +66,16 @@ export class StockTsdRun extends PlatformElement {
     private _products: ControllerFor<'stock/products'>;
     private _locations: ControllerFor<'stock/locations'>;
     private _quantity: ControllerFor<'stock/scan_quantity'>;
+    private _scanOpen: ControllerFor<'stock/scan_open'>;
     private _commit: ControllerFor<'stock/scan_commit'>;
     private _countCommit: ControllerFor<'stock/scan_count_commit'>;
     private _adhocCommit: ControllerFor<'stock/scan_adhoc_commit'>;
     private _containerMove: ControllerFor<'stock/container_move'>;
+    private _release: ControllerFor<'stock/move_lines_release'>;
     private _putawaySuggest: ControllerFor<'stock/putaway_suggest'>;
     private _suggestedFor = '';
     private _suggestItems: StockPutawaySuggestionItem[] = [];
     private _qtyInput = '';
-    private _commitKey: string | null = null;
 
     static override styles = [
         PlatformElement.styles,
@@ -378,6 +388,18 @@ export class StockTsdRun extends PlatformElement {
                 box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3);
             }
             .commit-btn:disabled { opacity: 0.6; }
+            .commit-count {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 28px;
+                height: 28px;
+                padding: 0 var(--space-2);
+                border-radius: var(--radius-full);
+                background: rgba(255, 255, 255, 0.22);
+                font-size: var(--tsd-text-body);
+                font-weight: var(--font-bold);
+            }
         `,
     ];
 
@@ -390,10 +412,12 @@ export class StockTsdRun extends PlatformElement {
         this._products = this.useResource('stock/products');
         this._locations = this.useResource('stock/locations');
         this._quantity = this.useOp('stock/scan_quantity');
+        this._scanOpen = this.useOp('stock/scan_open');
         this._commit = this.useOp('stock/scan_commit');
         this._countCommit = this.useOp('stock/scan_count_commit');
         this._adhocCommit = this.useOp('stock/scan_adhoc_commit');
         this._containerMove = this.useOp('stock/container_move');
+        this._release = this.useOp('stock/move_lines_release');
         this._putawaySuggest = this.useOp('stock/putaway_suggest');
     }
 
@@ -468,7 +492,7 @@ export class StockTsdRun extends PlatformElement {
     private _renderSlots(context: ScanContext): TemplateResult | string {
         const slots: TemplateResult[] = [];
         if (context.source_id !== null && context.source_id !== undefined) {
-            slots.push(this._slot('map-pin', this._locationName(context.source_id)));
+            slots.push(this._slot('pin', this._locationName(context.source_id)));
         }
         if (context.product_id !== null && context.product_id !== undefined) {
             slots.push(this._slot('package', this._productName(context.product_id)));
@@ -477,7 +501,7 @@ export class StockTsdRun extends PlatformElement {
             slots.push(this._slot('hash', `×${tsdFormatQty(context.quantity)}`));
         }
         if (context.dest_id !== null && context.dest_id !== undefined) {
-            slots.push(this._slot('map-pin', `→ ${this._locationName(context.dest_id)}`));
+            slots.push(this._slot('pin', `→ ${this._locationName(context.dest_id)}`));
         }
         if (context.container_id !== null && context.container_id !== undefined) {
             slots.push(this._slot('box', this._locationName(context.container_id)));
@@ -488,10 +512,11 @@ export class StockTsdRun extends PlatformElement {
 
     private _qtyConfirm(): void {
         const value = Number(this._qtyInput);
-        if (this._qtyInput === '' || !Number.isFinite(value) || value <= 0) return;
         const session = this._sessionSel.value;
-        if (session.context === null) return;
+        if (this._qtyInput === '' || !Number.isFinite(value) || session.context === null) return;
         const context = session.context;
+        // «Посчитал — пусто»: ноль — валидный факт только в пересчёте.
+        if (value < 0 || (value === 0 && context.flow !== 'count')) return;
         void this._quantity.run({
             warehouse_id: this._warehouseId(),
             context,
@@ -578,7 +603,7 @@ export class StockTsdRun extends PlatformElement {
                 <span class="line-qty">×${tsdFormatQty(line.quantity)}</span>
                 <button class="line-del" @click=${() => this._session.lineRemoved({ index })}
                     aria-label=${this.t('run.line_remove')}>
-                    <platform-icon name="trash-2" size="17"></platform-icon>
+                    <platform-icon name="trash" size="17"></platform-icon>
                 </button>
             </div>
         `;
@@ -587,7 +612,6 @@ export class StockTsdRun extends PlatformElement {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const context = this._sessionSel.value.context;
-        if (context === null) this._commitKey = null;
         const wantsHint = context !== null
             && context.step === 'dest'
             && (context.flow === 'receive' || context.flow === 'putaway')
@@ -630,7 +654,7 @@ export class StockTsdRun extends PlatformElement {
                 <span class="suggest-title">${this.t('run.suggest_title')}</span>
                 ${items.map((item) => html`
                     <div class="suggest-chip">
-                        <platform-icon name="map-pin" size="15"></platform-icon>
+                        <platform-icon name="pin" size="15"></platform-icon>
                         <span class="suggest-name">${item.name}</span>
                         <span class="suggest-reason">${this.t(`run.suggest_reason_${item.reason_code}`)}</span>
                     </div>
@@ -639,11 +663,18 @@ export class StockTsdRun extends PlatformElement {
         `;
     }
 
-    /** Ключ идемпотентности коммита: стабилен внутри сессии — повтор
-     *  после потерянного ответа не даёт двойной проводки. */
+    /** Ключ идемпотентности коммита живёт в сессии и персистится:
+     *  перезагрузка терминала после потерянного ответа переотправит
+     *  коммит тем же ключом — полоса вернёт исходный исход, а не
+     *  проведёт строку второй раз. */
     private _sessionKey(): string {
-        if (this._commitKey === null) this._commitKey = tsdOutboxId();
-        return this._commitKey;
+        const session = this._sessionSel.value;
+        if (session.commit_key === '') {
+            const key = tsdOutboxId();
+            this._session.commitKeyEnsured({ key });
+            return key;
+        }
+        return session.commit_key;
     }
 
     private _commitPlan(
@@ -656,10 +687,18 @@ export class StockTsdRun extends PlatformElement {
             return {
                 op: 'stock/scan_count_commit',
                 ctl: this._countCommit,
-                payload: { warehouse_id: warehouseId, context, idempotency_key: key },
+                payload: {
+                    warehouse_id: warehouseId,
+                    context,
+                    move_id: session.move_id === '' ? null : session.move_id,
+                    idempotency_key: key,
+                },
             };
         }
-        if (context.flow === 'container_move') {
+        if (context.flow === 'container_move' && session.move_id === '') {
+            // Ad-hoc перевозка без документа — физический rebind тары.
+            // Doc-driven задача идёт через scan_commit: строка
+            // kind=container документа закрывается фактом перевозки.
             const containerId = context.container_id;
             const destId = context.dest_id;
             if (containerId === null || containerId === undefined || destId === null || destId === undefined) return null;
@@ -710,6 +749,11 @@ export class StockTsdRun extends PlatformElement {
         void plan.ctl.run(plan.payload).then((result) => {
             if (result !== null) {
                 this.toast('run.commit_done', { type: 'success' });
+                const nextLineId = _commitNextLineId(result);
+                if (session.move_id !== '' && nextLineId !== null) {
+                    void this._continueDoc(session.move_id, nextLineId);
+                    return;
+                }
                 this._session.sessionCleared(null);
                 return;
             }
@@ -721,6 +765,50 @@ export class StockTsdRun extends PlatformElement {
             }
             this.toast('run.commit_failed', { type: 'error' });
         });
+    }
+
+    /** Коммит по документу, у которого осталась работа: backend
+     *  подсказал следующую исполнимую строку — переоткрываем сессию
+     *  на ней (захват + контекст через канонический scan_open), не
+     *  выбрасывая оператора в общую очередь между ячейками. */
+    private async _continueDoc(moveId: string, moveLineId: string): Promise<void> {
+        try {
+            const opened = await this._scanOpen.run({
+                warehouse_id: this._warehouseId(),
+                move_id: moveId,
+                transfer_id: null,
+                move_line_id: moveLineId,
+            });
+            if (opened === null) throw new Error('stock/scan_open: empty response');
+            this._session.runOpened({
+                context: opened.context,
+                move_id: opened.move_id,
+                expected: opened.expected ?? null,
+            });
+        } catch {
+            // Продолжение не открылось (строку перехватил коллега или
+            // документ закрылся между коммитом и open) — честный выход
+            // в очередь: захваченное backend на open-отказе отпускает.
+            this._session.sessionCleared(null);
+        }
+    }
+
+    /** Выход из сессии: захваченное задание возвращается в общую
+     *  очередь — оператор мог физически переключиться на другую
+     *  работу, а коллега не должен ждать claims-GC. Отказ сети
+     *  выходу не мешает: GC доберёт сироту сам. */
+    private _exitRun(): void {
+        const session = this._sessionSel.value;
+        const lineId = session.expected?.move_line_id;
+        const warehouseId = this._contextSel.value.warehouse_id;
+        if (session.move_id !== '' && lineId !== null && lineId !== undefined && warehouseId !== '') {
+            void this._release.run({
+                warehouse_id: warehouseId,
+                move_line_ids: [lineId],
+                idempotency_key: null,
+            }).catch(() => undefined);
+        }
+        this._session.sessionCleared(null);
     }
 
     private _reportProblem(session: StockTsdSessionState): void {
@@ -751,9 +839,10 @@ export class StockTsdRun extends PlatformElement {
                 ${busy
                     ? html`<platform-spinner size="s"></platform-spinner>`
                     : html`<platform-icon name="check" size="26"></platform-icon>`}
-                <span>${lines.length === 0
-                    ? this.t('run.commit_plain')
-                    : this.t('run.commit', { count: lines.length })}</span>
+                <span>${this.t('run.commit_plain')}</span>
+                ${lines.length > 0
+                    ? html`<span class="commit-count">${lines.length}</span>`
+                    : ''}
             </button>
         `;
     }
@@ -769,7 +858,7 @@ export class StockTsdRun extends PlatformElement {
         return html`
             <div class="run">
                 <div class="run-head">
-                    <div class="run-icon"><platform-icon name="scan" size="26"></platform-icon></div>
+                    <div class="run-icon"><platform-icon name="qr-code" size="26"></platform-icon></div>
                     <div>
                         <h2 class="run-title">${this.t(`run.flow_${flow}`)}</h2>
                         <p class="run-sub">${this.t(`run.step_${step}`)}</p>
@@ -782,7 +871,7 @@ export class StockTsdRun extends PlatformElement {
                                 <platform-icon name="alert-triangle" size="22"></platform-icon>
                             </button>
                         ` : ''}
-                    <button class="run-close" @click=${() => this._session.sessionCleared(null)}
+                    <button class="run-close" @click=${() => this._exitRun()}
                         aria-label=${this.t('run.exit')}>
                         <platform-icon name="x" size="22"></platform-icon>
                     </button>
@@ -790,7 +879,7 @@ export class StockTsdRun extends PlatformElement {
                 ${this._renderExpected(session)}
                 <div class="step-banner ${review ? 'review' : ''} ${errored ? 'error' : ''}">
                     <div class="step-icon">
-                        <platform-icon name=${review ? 'check' : 'scan'} size="34"></platform-icon>
+                        <platform-icon name=${review ? 'check' : 'qr-code'} size="34"></platform-icon>
                     </div>
                     <p class="step-title">${this.t(`run.banner_${step}`)}</p>
                     ${session.error !== null && session.error !== undefined

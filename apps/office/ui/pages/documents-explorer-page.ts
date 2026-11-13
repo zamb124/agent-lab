@@ -4,7 +4,7 @@
  * Маршрут `/documents`. Дерево каталогов + toolbar + list/grid + details panel.
  */
 
-import { html } from 'lit';
+import { html, nothing } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { OfficeDocumentItem } from '../events/documents.types.js';
@@ -1394,18 +1394,24 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                             : ''}
                                     `}
                                 </div>
-                                <office-file-details-panel
-                                    .document=${selectedDoc}
-                                    .catalog=${activeCatalog}
-                                    .selectedCatalog=${selectedCatalog}
-                                    catalog-title=${this._activeCatalogTitle()}
-                                    subcatalog-count=${subcatalogCount}
-                                    explorer-view=${state.explorerView}
-                                    ?namespace-root=${atRoot && !selectedCatalog}
-                                    ?starred=${Boolean(selectedDoc && selectedDoc.file_id && stringList(state.starredFileIds).includes(selectedDoc.file_id))}
-                                    @close=${() => this._documents.clearFileSelection(null)}
-                                    @action=${this._onDetailsAction}
-                                ></office-file-details-panel>
+                                ${selectedDoc !== null || selectedCatalog !== null
+                                    || (state.explorerView === 'catalog' && activeCatalog != null)
+                                    || (atRoot && !selectedCatalog)
+                                    ? html`
+                                        <office-file-details-panel
+                                            .document=${selectedDoc}
+                                            .catalog=${activeCatalog}
+                                            .selectedCatalog=${selectedCatalog}
+                                            catalog-title=${this._activeCatalogTitle()}
+                                            subcatalog-count=${subcatalogCount}
+                                            explorer-view=${state.explorerView}
+                                            ?namespace-root=${atRoot && !selectedCatalog}
+                                            ?starred=${Boolean(selectedDoc && selectedDoc.file_id && stringList(state.starredFileIds).includes(selectedDoc.file_id))}
+                                            @close=${() => this._documents.clearFileSelection(null)}
+                                            @action=${this._onDetailsAction}
+                                        ></office-file-details-panel>
+                                    `
+                                    : nothing}
                             </div>
                         </div>
                     </div>

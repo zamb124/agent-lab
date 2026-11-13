@@ -108,7 +108,7 @@ export class LandingHeader extends PlatformElement {
                 object-fit: contain;
                 display: block;
                 flex: 0 0 auto;
-                filter: none;
+                filter: var(--marketing-logo-filter, none);
             }
             
             .nav {

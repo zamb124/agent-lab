@@ -169,7 +169,7 @@ export class StockTsdLoginPage extends PlatformPage {
                             >
                             ${this._cameraSupported ? html`
                                 <button class="manual-btn" @click=${() => { this._cameraOpen = true; this.requestUpdate(); }}>
-                                    <platform-icon name="qr-code" size="22"></platform-icon>
+                                    <platform-icon name="image" size="22"></platform-icon>
                                 </button>
                             ` : ''}
                         </div>
@@ -180,7 +180,7 @@ export class StockTsdLoginPage extends PlatformPage {
             </div>
             <stock-tsd-camera-scanner
                 ?active=${this._cameraOpen}
-                @tsd-scan=${(e: CustomEvent<{ code: string }>) => { this._cameraOpen = false; void this._submit(e.detail.code); }}
+                @tsd-scan=${(e: CustomEvent<{ code: string }>) => { this._cameraOpen = false; this._scanInput?.submit(e.detail.code); }}
                 @tsd-scan-close=${() => { this._cameraOpen = false; }}
             ><span slot="error">${this.t('home.camera_error')}</span></stock-tsd-camera-scanner>
         `;

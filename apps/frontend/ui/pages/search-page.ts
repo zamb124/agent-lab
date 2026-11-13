@@ -433,6 +433,7 @@ export class PublicSearchPage extends PlatformPage {
             .search-head {
                 padding: clamp(34px, 7vw, 86px) clamp(18px, 4vw, 56px) 22px;
                 display: grid;
+                grid-template-columns: minmax(0, 1fr);
                 justify-items: center;
                 gap: 18px;
             }

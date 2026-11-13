@@ -86,6 +86,7 @@ from apps.stock.models.api import (
     StockRoutesListPayload,
     StockScanAdhocCommitPayload,
     StockScanCommitPayload,
+    StockScanCommitResponse,
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
     StockScanOpenPayload,
@@ -892,8 +893,10 @@ async def scan_quantity(
     return await op_scan_quantity(body, user=_user(), di=di)
 
 
-@router.post("/scan/commit", response_model=StockMove)
-async def scan_commit(di: Di, body: StockScanCommitPayload) -> StockMove:
+@router.post("/scan/commit", response_model=StockScanCommitResponse)
+async def scan_commit(
+    di: Di, body: StockScanCommitPayload
+) -> StockScanCommitResponse:
     return await op_scan_commit(body, user=_user(), di=di)
 
 

@@ -94,7 +94,11 @@
     "header_subtitle": "Canonical layers: regions, road graph, addresses",
     "generation": "Generation",
     "status": "Status",
-    "rows": "Rows"
+    "rows": "Rows",
+    "status_idle": "Idle",
+    "status_downloading": "Downloading source",
+    "status_importing": "Importing data",
+    "status_failed": "Import failed"
   },
   "sources": {
     "header_title": "Coverage and sources",

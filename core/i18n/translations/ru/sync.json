@@ -4,7 +4,6 @@
         "platform_services": "Сервисы",
         "channel": "Канал",
         "calls_scheduled": "Звонки",
-        "settings": "Настройки",
         "call_join": "Вход по ссылке"
     },
     "bottom_nav": {
@@ -603,9 +602,6 @@
         "title": "Запланированные встречи",
         "action_create": "Создать встречу",
         "empty": "Нет запланированных встреч"
-    },
-    "settings": {
-        "title": "Настройки Sync"
     },
     "call_overlay_modal": {
         "toast_disconnect_failed": "Не удалось отключиться от звонка: {error}"

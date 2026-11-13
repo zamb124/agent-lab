@@ -65,6 +65,11 @@ export class GeoOverviewPage extends PlatformPage {
         }
     }
 
+    private _statusLabel(status: unknown): string {
+        if (typeof status !== 'string' || status.length === 0) return '—';
+        return this.t(`overview.status_${status}`);
+    }
+
     override render() {
         const status = this._statusCtl.lastResult;
         return html`
@@ -98,7 +103,7 @@ export class GeoOverviewPage extends PlatformPage {
             ></platform-map>
             <div class="map-status">
                 <span>${this.t('overview.generation')} <strong>${status?.current_generation ?? '—'}</strong></span>
-                <span>${this.t('overview.status')} <strong>${status?.status ?? '—'}</strong></span>
+                <span>${this.t('overview.status')} <strong>${this._statusLabel(status?.status)}</strong></span>
                 <span>${this.t('overview.rows')}
                     <strong>${status ? (status.rows_addresses ?? 0) + (status.rows_edges ?? 0) : '—'}</strong>
                 </span>

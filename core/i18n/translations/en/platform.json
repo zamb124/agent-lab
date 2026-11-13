@@ -1028,6 +1028,7 @@
     "scan_location_invalid": "Location not usable: another warehouse, inactive, or not a storage location",
     "scan_location_required": "Location scan required",
     "scan_nothing_to_commit": "Scan commit has nothing to post",
+    "scan_owner_required": "Bin stock has multiple owners — open a count task",
     "scan_product_mismatch": "Scanned product does not match the transfer line product",
     "scan_quantity_required": "Quantity input required",
     "scan_ship_denied": "Move is not executable as a ship leg",

@@ -159,14 +159,20 @@ export class FrontendSettingsPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host { display: block; container-type: inline-size; }
+            @media (max-width: 767px) {
+                :host { padding-bottom: var(--app-content-bottom-padding-mobile); }
+            }
 
             .tabs {
                 display: flex;
                 gap: var(--space-1);
                 margin-bottom: var(--space-3);
                 border-bottom: 1px solid var(--glass-border-subtle);
+                overflow-x: auto;
             }
             .tab {
+                flex-shrink: 0;
+                white-space: nowrap;
                 padding: var(--space-2) var(--space-3);
                 background: transparent;
                 color: var(--text-secondary);

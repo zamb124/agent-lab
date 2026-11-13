@@ -96,7 +96,6 @@ const SYNC_ROUTES = [
     { key: 'platform_services', path: 'services',        parent: 'shell', titleKey: 'routes.platform_services' },
     { key: 'channel',           path: 'c/:channelId',    parent: 'shell', titleKey: 'routes.channel' },
     { key: 'calls_scheduled',   path: 'calls/scheduled', titleKey: 'routes.calls_scheduled' },
-    { key: 'settings',          path: 'settings',        titleKey: 'routes.settings' },
     { key: 'call_join',         path: 'join/:linkToken', titleKey: 'routes.call_join' },
 ];
 
@@ -472,8 +471,6 @@ export class SyncApp extends PlatformApp {
                 return html`<sync-channel-page .channelId=${params.channelId}></sync-channel-page>`;
             case 'calls_scheduled':
                 return html`<sync-calls-scheduled-page></sync-calls-scheduled-page>`;
-            case 'settings':
-                return html`<sync-settings-page></sync-settings-page>`;
             default:
                 return html`<sync-shell-page></sync-shell-page>`;
         }

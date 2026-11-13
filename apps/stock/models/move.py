@@ -1354,15 +1354,47 @@ class StockMove(PlatformModel):
 
             if container_move is not None:
                 container_id, dest_id = container_move
-                _ = await add_line(
-                    kind=StockMoveLineKind.CONTAINER,
-                    container_id=container_id,
-                    quantity=STOCK_ZERO,
-                    done_quantity=STOCK_ZERO,
-                    location_id=container_id,
-                    location_dest_id=dest_id,
-                    sequence=_seq_of(container_id),
+                task = next(
+                    (
+                        cand
+                        for cand in open_lines
+                        if cand.kind == StockMoveLineKind.CONTAINER
+                        and cand.container_id == container_id
+                    ),
+                    None,
                 )
+                if task is not None:
+                    if (
+                        task.assigned_user_id is not None
+                        and task.assigned_user_id != actor_user_id
+                    ):
+                        raise PlatformConflictError(
+                            "Move line is claimed by another operator",
+                            error_code="move_line_claimed",
+                        )
+                    # Задание «перевезти контейнер» закрывается самим
+                    # фактом перевозки: плановый приёмник перезаписываем
+                    # реальным (скан — факт), строка проводится и гаснет.
+                    _ = await StockMoveLine.objects.filter(
+                        company_id=company_id,
+                        move_line_id=task.move_line_id,
+                    ).update(
+                        using=STOCK_DB,
+                        location_dest_id=dest_id,
+                    )
+                    task.location_dest_id = dest_id
+                    new_lines.append(task)
+                else:
+                    # Перевезли тару без задания — факт отдельной строкой.
+                    _ = await add_line(
+                        kind=StockMoveLineKind.CONTAINER,
+                        container_id=container_id,
+                        quantity=STOCK_ZERO,
+                        done_quantity=STOCK_ZERO,
+                        location_id=container_id,
+                        location_dest_id=dest_id,
+                        sequence=_seq_of(container_id),
+                    )
 
             if not new_lines:
                 raise PlatformConflictError(

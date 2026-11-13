@@ -86,6 +86,17 @@ export class FlowsAgentSkillsPage extends PlatformPage {
                     grid-template-rows: minmax(220px, 40%) minmax(0, 1fr);
                 }
             }
+            @media (max-width: 767px) {
+                .breadcrumbs-wrap {
+                    padding: 0
+                        var(--platform-mobile-sticky-header-padding-right)
+                        0
+                        var(--platform-mobile-sticky-header-padding-left);
+                }
+                .pane {
+                    padding-bottom: var(--app-content-bottom-padding-mobile);
+                }
+            }
         `,
     ];
     private _skills: ResourceController;
@@ -224,7 +235,7 @@ export class FlowsAgentSkillsPage extends PlatformPage {
         const items = asArray(this._skills.items);
         const hasSelection = typeof this._selectedId === 'string' && this._selectedId.length > 0;
         return html`
-            <platform-breadcrumbs></platform-breadcrumbs>
+            <div class="breadcrumbs-wrap"><platform-breadcrumbs></platform-breadcrumbs></div>
             <page-header title=${this.t('agent_skills.page_title')} subtitle=${this.t('agent_skills.page_subtitle')}>
                 <div slot="actions" class="header-actions">
                     <platform-button variant="secondary" density="compact" @click=${this._openImport}>

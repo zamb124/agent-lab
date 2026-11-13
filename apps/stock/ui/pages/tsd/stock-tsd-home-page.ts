@@ -50,6 +50,7 @@ export class StockTsdHomePage extends PlatformPage {
     private _scanStep: ControllerFor<'stock/scan_step'>;
     private _scanOpen: ControllerFor<'stock/scan_open'>;
     private _resourceLogin: ControllerFor<'stock/resource_login'>;
+    private _resourceLogout: ControllerFor<'stock/resources_logout'>;
     private _queue: ControllerFor<'stock/queue'>;
     private _next: ControllerFor<'stock/move_lines_next'>;
     private _release: ControllerFor<'stock/move_lines_release'>;
@@ -94,6 +95,12 @@ export class StockTsdHomePage extends PlatformPage {
                 padding-bottom: calc(var(--app-content-bottom-padding-mobile, 96px) + var(--space-4));
                 min-height: 100%;
                 box-sizing: border-box;
+                /* Терминальная колонка: на ноутбуке/десктопе контент
+                   не расползается — сценарии ТСД остаются узкой
+                   рабочей лентой как на сканере. */
+                max-width: 560px;
+                margin-inline: auto;
+                width: 100%;
             }
             .head {
                 display: flex;
@@ -110,6 +117,25 @@ export class StockTsdHomePage extends PlatformPage {
                 background: var(--accent);
                 color: var(--text-inverse);
                 flex-shrink: 0;
+            }
+            .head .head-btn {
+                display: none;
+                margin-left: auto;
+                align-items: center;
+                justify-content: center;
+                width: var(--tsd-touch-min);
+                height: var(--tsd-touch-min);
+                border: none;
+                border-radius: var(--radius-xl);
+                background: var(--surface-primary);
+                color: var(--text-secondary);
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            /* Bottom-nav с профилем живёт до 767px — на десктопе его
+               нет, иначе выход из сессии был бы недостижим. */
+            @media (min-width: 768px) {
+                .head .head-btn { display: flex; }
             }
             h1 {
                 margin: 0;
@@ -638,6 +664,7 @@ export class StockTsdHomePage extends PlatformPage {
         this._scanStep = this.useOp('stock/scan_step');
         this._scanOpen = this.useOp('stock/scan_open');
         this._resourceLogin = this.useOp('stock/resource_login');
+        this._resourceLogout = this.useOp('stock/resources_logout');
         this._queue = this.useResource('stock/queue');
         this._next = this.useOp('stock/move_lines_next');
         this._release = this.useOp('stock/move_lines_release');
@@ -780,6 +807,7 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private _startCount(locationId: string): void {
+        this._pending = '';
         this._session.stepApplied({
             context: { flow: 'count', step: 'product', source_id: locationId },
             resolution: null,
@@ -832,6 +860,9 @@ export class StockTsdHomePage extends PlatformPage {
                 move_id: opened.move_id,
                 expected: opened.expected ?? null,
             });
+            // Сессия владеет сканами: взведённый чип зоны/ресурса
+            // съел бы первый скан потока — сбрасываем при входе в run.
+            this._pending = '';
         } catch {
             this.toast('home.open_failed', { type: 'error' });
         }
@@ -927,6 +958,9 @@ export class StockTsdHomePage extends PlatformPage {
                 const resolution = response.resolution;
                 if (resolution !== null && resolution !== undefined && resolution.entity_kind === 'location' && resolution.entity_id !== null && resolution.entity_id !== undefined) {
                     this._context.setZone({ zone_location_id: resolution.entity_id, zone_code: code });
+                    // Привязка зоны сужает очередь до ближайших заданий —
+                    // без перезагрузки список показывал бы весь склад.
+                    this._refreshQueue();
                     this._applyOutcome('ok', code, '');
                 } else {
                     this._applyOutcome('error', code, this.t('home.zone_not_location'));
@@ -1026,6 +1060,12 @@ export class StockTsdHomePage extends PlatformPage {
                     <h1>${this.t('home.pick_warehouse')}</h1>
                     <p class="sub">${this.t('home.pick_warehouse_hint')}</p>
                 </div>
+                <button
+                    class="head-btn"
+                    title=${this.t('bottom_nav.profile')}
+                    aria-label=${this.t('bottom_nav.profile')}
+                    @click=${() => this.openBottomSheet('platform.service_switcher', null)}
+                ><platform-icon name="user" size="22"></platform-icon></button>
             </div>
             <div class="warehouse-list" role="listbox">
                 ${warehouses.map((warehouse) => {
@@ -1076,6 +1116,55 @@ export class StockTsdHomePage extends PlatformPage {
         `;
     }
 
+    private _chipClick(kind: 'zone' | 'resource' | 'wave'): void {
+        const context = this._contextSel.value;
+        const filled = kind === 'zone' ? context.zone_location_id !== ''
+            : kind === 'resource' ? context.resource_id !== ''
+            : context.wave_id !== '';
+        if (filled) {
+            // Тап по активному фильтру снимает его — повторная
+            // привязка: пустой чип → взвод → скан.
+            this._pending = '';
+            if (kind === 'zone') {
+                this._context.clearBinding({ kind: 'zone' });
+                this._refreshQueue();
+            } else if (kind === 'resource') {
+                void this._unbindResource();
+            } else {
+                this._context.clearBinding({ kind: 'wave' });
+                this._refreshQueue();
+            }
+            return;
+        }
+        // Во время run скан принадлежит потоку: взвод чипа угнал бы
+        // следующий скан в привязку зоны — чипы тогда только показывают
+        // контекст, перевзводится оператор на рабочем столе.
+        if (this._sessionSel.value.context !== null) {
+            return;
+        }
+        // _pending — поле компонента: без requestUpdate баннер и
+        // «взведённый» чип появятся лишь на ближайшем внешнем рендере.
+        this._pending = this._pending === kind ? '' : kind;
+        this.requestUpdate();
+    }
+
+    private async _unbindResource(): Promise<void> {
+        // Техника занята оператором на сервере — «отцепил тележку»
+        // отпускает её для остальных. Чип гаснет только после
+        // подтверждённого logout: иначе ресурс остался бы занят,
+        // а оператор видел бы его свободным.
+        try {
+            await this._resourceLogout.run({
+                warehouse_id: this._contextSel.value.warehouse_id,
+                idempotency_key: null,
+            });
+            this._context.clearBinding({ kind: 'resource' });
+        } catch {
+            this._session.scanRejected({ barcode: '', hint: this.t('home.resource_unbind_failed') });
+            this._applyOutcome('error', '', '');
+        }
+    }
+
     private _renderContextChips(context: StockTsdContextState): TemplateResult {
         const zoneSet = context.zone_location_id !== '';
         const resourceSet = context.resource_id !== '';
@@ -1083,17 +1172,17 @@ export class StockTsdHomePage extends PlatformPage {
         return html`
             <div class="context-chips">
                 <button class="chip ${this._pending === 'zone' ? 'armed' : zoneSet ? 'filled' : ''}"
-                    @click=${() => { this._pending = this._pending === 'zone' ? '' : 'zone'; }}>
-                    <platform-icon name="map-pin" size="16"></platform-icon>
+                    @click=${() => this._chipClick('zone')}>
+                    <platform-icon name="pin" size="16"></platform-icon>
                     ${zoneSet ? context.zone_code : this.t('home.chip_zone')}
                 </button>
                 <button class="chip ${this._pending === 'resource' ? 'armed' : resourceSet ? 'filled' : ''}"
-                    @click=${() => { this._pending = this._pending === 'resource' ? '' : 'resource'; }}>
+                    @click=${() => this._chipClick('resource')}>
                     <platform-icon name="truck" size="16"></platform-icon>
                     ${resourceSet ? context.resource_code : this.t('home.chip_resource')}
                 </button>
                 <button class="chip ${this._pending === 'wave' ? 'armed' : waveSet ? 'filled' : ''}"
-                    @click=${() => { this._pending = this._pending === 'wave' ? '' : 'wave'; }}>
+                    @click=${() => this._chipClick('wave')}>
                     <platform-icon name="layers" size="16"></platform-icon>
                     ${waveSet ? context.wave_name : this.t('home.chip_wave')}
                 </button>
@@ -1109,8 +1198,8 @@ export class StockTsdHomePage extends PlatformPage {
         const syncing = items.length > 0 && this._deliverable();
         return html`
             <button class="outbox-banner ${offline ? 'offline' : syncing ? 'syncing' : 'pending'}"
-                @click=${() => { this._outboxOpen = !this._outboxOpen; }}>
-                <platform-icon name=${offline ? 'wifi-off' : syncing ? 'refresh-cw' : 'cloud-upload'} size="20"></platform-icon>
+                @click=${() => { this._outboxOpen = !this._outboxOpen; this.requestUpdate(); }}>
+                <platform-icon name=${offline ? 'plug' : syncing ? 'refresh' : 'cloud'} size="20"></platform-icon>
                 <span class="outbox-text">${this.t(offline ? 'outbox.offline' : syncing ? 'outbox.syncing' : 'outbox.pending')}</span>
                 ${items.length > 0 ? html`<span class="outbox-count">${items.length}</span>` : ''}
             </button>
@@ -1124,7 +1213,7 @@ export class StockTsdHomePage extends PlatformPage {
                             </div>
                             <button class="outbox-drop" @click=${(e: Event) => { e.stopPropagation(); this._outbox.dropped(item.outbox_id); }}
                                 aria-label=${this.t('outbox.drop')}>
-                                <platform-icon name="trash-2" size="16"></platform-icon>
+                                <platform-icon name="trash" size="16"></platform-icon>
                             </button>
                         </div>
                     `)}
@@ -1158,6 +1247,7 @@ export class StockTsdHomePage extends PlatformPage {
         this._context.setWave({ wave_id: waveId, wave_name: waveName });
         this._pending = '';
         this._refreshQueue();
+        this.requestUpdate();
     }
 
     private _renderWavePicker(): TemplateResult {
@@ -1167,7 +1257,7 @@ export class StockTsdHomePage extends PlatformPage {
             <div class="pending-banner">
                 <span class="pending-banner-icon"><platform-icon name="layers" size="22"></platform-icon></span>
                 <span class="pending-banner-text">${this.t('home.pending_wave')}</span>
-                <button class="pending-cancel" @click=${() => { this._pending = ''; }}>
+                <button class="pending-cancel" @click=${() => { this._pending = ''; this.requestUpdate(); }}>
                     <platform-icon name="x" size="20"></platform-icon>
                 </button>
             </div>
@@ -1207,12 +1297,12 @@ export class StockTsdHomePage extends PlatformPage {
             return this._renderWavePicker();
         }
         const key = this._pending === 'zone' ? 'home.pending_zone' : 'home.pending_resource';
-        const icon = this._pending === 'zone' ? 'map-pin' : 'truck';
+        const icon = this._pending === 'zone' ? 'pin' : 'truck';
         return html`
             <div class="pending-banner">
                 <span class="pending-banner-icon"><platform-icon name=${icon} size="22"></platform-icon></span>
                 <span class="pending-banner-text">${this.t(key)}</span>
-                <button class="pending-cancel" @click=${() => { this._pending = ''; }}>
+                <button class="pending-cancel" @click=${() => { this._pending = ''; this.requestUpdate(); }}>
                     <platform-icon name="x" size="20"></platform-icon>
                 </button>
             </div>
@@ -1259,6 +1349,10 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private _renderLine(line: StockMoveLine): TemplateResult {
+        const user = this._authSel.value;
+        // «Отпустить» есть смысл только у закреплённой за мной строки:
+        // свободное задание отпускать нечего, чужое в списке не приходит.
+        const mine = user !== null && line.assigned_user_id === user.user_id;
         // У задания пересчёта «сколько взять» не существует — факт и
         // есть содержимое ячейки: 0/0 на карточке только путает.
         const qty = line.kind === 'count'
@@ -1272,7 +1366,7 @@ export class StockTsdHomePage extends PlatformPage {
                 <div class="task-body">
                     <div class="task-name">${this._lineName(line)}</div>
                     <div class="task-route">
-                        <platform-icon name="map-pin" size="14"></platform-icon>
+                        <platform-icon name="pin" size="14"></platform-icon>
                         ${this._locationName(line.location_id)}
                         ${line.location_dest_id !== line.location_id
                             ? html`
@@ -1287,10 +1381,12 @@ export class StockTsdHomePage extends PlatformPage {
                 </div>
                 <div class="task-side">
                     <div class="task-qty">${qty}</div>
-                    <button class="task-release" ?disabled=${this._release.busy}
-                        @click=${(e: Event) => { e.stopPropagation(); void this._releaseLine(line); }}
-                        aria-label=${this.t('home.release')}
-                    ><platform-icon name="x" size="18"></platform-icon></button>
+                    ${mine
+                        ? html`<button class="task-release" ?disabled=${this._release.busy}
+                            @click=${(e: Event) => { e.stopPropagation(); void this._releaseLine(line); }}
+                            aria-label=${this.t('home.release')}
+                        ><platform-icon name="x" size="18"></platform-icon></button>`
+                        : ''}
                 </div>
             </div>
         `;
@@ -1306,6 +1402,12 @@ export class StockTsdHomePage extends PlatformPage {
                     <h1>${warehouseName}</h1>
                     <p class="sub">${this.t('home.warehouse_active')}</p>
                 </div>
+                <button
+                    class="head-btn"
+                    title=${this.t('bottom_nav.profile')}
+                    aria-label=${this.t('bottom_nav.profile')}
+                    @click=${() => this.openBottomSheet('platform.service_switcher', null)}
+                ><platform-icon name="user" size="22"></platform-icon></button>
             </div>
             ${this._renderContextChips(context)}
             ${this._renderOutbox()}
@@ -1338,25 +1440,27 @@ export class StockTsdHomePage extends PlatformPage {
                         this._scanInput?.submit(input.value);
                         input.value = '';
                     }}
-                ><platform-icon name="scan" size="22"></platform-icon></button>
+                ><platform-icon name="qr-code" size="22"></platform-icon></button>
                 ${this._cameraSupported ? html`
                     <button class="manual-btn" @click=${() => { this._cameraOpen = true; this.requestUpdate(); }}>
-                        <platform-icon name="qr-code" size="22"></platform-icon>
+                        <platform-icon name="image" size="22"></platform-icon>
                     </button>
                 ` : ''}
             </div>
             <stock-tsd-camera-scanner
                 ?active=${this._cameraOpen}
-                @tsd-scan=${(e: CustomEvent<{ code: string }>) => { this._cameraOpen = false; void this._onScan(e.detail.code); }}
+                @tsd-scan=${(e: CustomEvent<{ code: string }>) => { this._cameraOpen = false; this._scanInput?.submit(e.detail.code); }}
                 @tsd-scan-close=${() => { this._cameraOpen = false; }}
             ><span slot="error">${this.t('home.camera_error')}</span></stock-tsd-camera-scanner>
             ${this._scanStep.busy ? html`<div class="center"><platform-spinner size="m"></platform-spinner></div>` : ''}
-            <button class="warehouse-card" @click=${() => { this._session.sessionCleared(null); this._context.resetContext(null); }}>
-                <span class="warehouse-card-icon"><platform-icon name="swap" size="22"></platform-icon></span>
-                <span class="warehouse-card-body">
-                    <span class="warehouse-card-name">${this.t('home.change_warehouse')}</span>
-                </span>
-            </button>
+            ${running ? '' : html`
+                <button class="warehouse-card" @click=${() => { this._session.sessionCleared(null); this._context.resetContext(null); }}>
+                    <span class="warehouse-card-icon"><platform-icon name="swap" size="22"></platform-icon></span>
+                    <span class="warehouse-card-body">
+                        <span class="warehouse-card-name">${this.t('home.change_warehouse')}</span>
+                    </span>
+                </button>
+            `}
         `;
     }
 
