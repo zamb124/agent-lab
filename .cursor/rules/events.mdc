@@ -33,6 +33,7 @@ alwaysApply: false
 2. Consumer group называется именем сервиса; идемпотентность — у потребителя по `event_id` (+ id сущности).
 3. Единственная группа — `flows` во `flows_worker`: `PlatformEventConsumerService` маршрутизирует employee inbox (→ `flow_employee.mdc`), HITL resume `worktracker/work_item/completed` (→ `worktracker.mdc`) и `dispatch_platform_event_triggers` (→ `flows.mdc` § Триггеры); новая группа — только под продуктовую потребность.
 4. Фильтр триггера `platform_event` — только leaf-пути `filter_fields` (string, int, number, bool, enum, nested object, discriminated union, `contains` по массиву скаляров, глубина ≤ 6); неизвестный путь или op — 400.
+5. Клиент потребителя шины создаётся с `socket_timeout > events.consumer_block_ms` (`_events_redis_client`, `core/events/consumer.py`): XREAD/XREADGROUP BLOCK ждут ответ на сервере до `block`, меньший socket_timeout превращает пустой цикл чтения в TimeoutError и лишний reconnect.
 
 ### Вне шины
 

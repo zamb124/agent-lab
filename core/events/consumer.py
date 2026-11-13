@@ -81,8 +81,23 @@ class _EventsRedis(Protocol):
     def aclose(self) -> Awaitable[None]: ...
 
 
+# XREAD/XREADGROUP BLOCK ждут ответ на сервере до consumer_block_ms —
+# socket_timeout обязан превышать block, иначе каждый пустой цикл чтения
+# завершается TimeoutError (redis-py 8.1: default socket_timeout=5) и
+# превращается в лишний reconnect.
+_EVENTS_SOCKET_CONNECT_TIMEOUT_S = 5
+_EVENTS_SOCKET_TIMEOUT_MARGIN_S = 15
+
+
 def _events_redis_client(redis_url: str) -> _EventsRedis:
-    return redis_client_from_url(_EventsRedis, redis_url, decode_responses=True)
+    block_ms = get_settings().events.consumer_block_ms
+    return redis_client_from_url(
+        _EventsRedis,
+        redis_url,
+        decode_responses=True,
+        socket_connect_timeout=_EVENTS_SOCKET_CONNECT_TIMEOUT_S,
+        socket_timeout=block_ms // 1000 + _EVENTS_SOCKET_TIMEOUT_MARGIN_S,
+    )
 
 
 def _events_redis_url() -> str:

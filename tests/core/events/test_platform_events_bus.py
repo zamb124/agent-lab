@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from pydantic import BaseModel, ValidationError
 
+import core.events.consumer as consumer_module
 from apps.crm import events as _crm_events
 from core.config import get_settings
 from core.events import (
@@ -24,6 +25,7 @@ from core.events import (
     store_registered_platform_events,
 )
 from core.events.redis_client import events_redis_client
+from core.types import JsonValue
 from core.worktracker import events as _worktracker_events
 from tests.fixtures.platform_events import initial_platform_events_cursor, platform_events_listener
 
@@ -31,6 +33,11 @@ _ = (_crm_events, _worktracker_events)
 
 class _ProbePayload(BaseModel):
     probe_id: str
+
+
+def _payload(event: dict[str, JsonValue]) -> dict[str, JsonValue] | None:
+    payload = event["payload"]
+    return payload if isinstance(payload, dict) else None
 
 
 def test_event_delivery_requires_exactly_one_target() -> None:
@@ -48,6 +55,22 @@ def test_event_delivery_requires_exactly_one_target() -> None:
 def test_empty_stream_cursor_is_not_dollar() -> None:
     assert initial_platform_events_cursor(None) == "0-0"
     assert initial_platform_events_cursor("1710000000000-0") == "1710000000000-0"
+
+
+def test_events_client_socket_timeout_covers_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    """socket_timeout клиента шины обязан превышать server-side BLOCK."""
+    captured: dict[str, int] = {}
+
+    def _fake_from_url(_client_type: type[object], _url: str, **kwargs: int) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(consumer_module, "redis_client_from_url", _fake_from_url)
+    _ = consumer_module._events_redis_client("redis://example:6379/0")  # pyright: ignore[reportPrivateUsage]
+    block_s = get_settings().events.consumer_block_ms / 1000
+    assert "socket_timeout" in captured
+    assert captured["socket_timeout"] > block_s
+    assert "socket_connect_timeout" in captured
 
 
 def test_ws_frame_excludes_delivery() -> None:
@@ -75,7 +98,10 @@ async def test_publish_to_users_delivers_one_stream_entry(unique_id: str) -> Non
             company_id="system",
         )
         events = await receive(event_type, f"u2_{unique_id}", 3.0)
-        matched = [e for e in events if e["payload"].get("marker") == marker]
+        matched = [
+            e for e in events
+            if (payload := _payload(e)) is not None and payload.get("marker") == marker
+        ]
         assert len(matched) == 1
         assert matched[0]["delivery"]["user_ids"] == [f"u1_{unique_id}", f"u2_{unique_id}"]
         assert matched[0]["company_id"] == "system"
@@ -92,7 +118,10 @@ async def test_domain_event_has_no_delivery(unique_id: str) -> None:
             actor_user_id=f"actor_{unique_id}",
         )
         events = await receive("crm/entity/created", None, 3.0)
-        matched = [e for e in events if e["payload"].get("entity_id") == marker]
+        matched = [
+            e for e in events
+            if (payload := _payload(e)) is not None and payload.get("entity_id") == marker
+        ]
         assert len(matched) == 1
         assert matched[0].get("delivery") is None
         assert matched[0]["meta"]["actor_user_id"] == f"actor_{unique_id}"
@@ -127,7 +156,7 @@ async def test_group_consumer_receives_and_acks(unique_id: str) -> None:
             {"marker": marker},
             company_id="system",
         )
-        await asyncio.wait_for(done.wait(), timeout=10.0)
+        _ = await asyncio.wait_for(done.wait(), timeout=10.0)
     finally:
         _ = consumer_task.cancel()
         try:
@@ -156,7 +185,9 @@ async def test_catalog_register_store_and_load(unique_id: str) -> None:
     catalog = await load_platform_event_catalog()
     entry = next((item for item in catalog if item.event_type == event_type), None)
     assert entry is not None
-    assert "probe_id" in entry.payload_schema.get("properties", {})
+    properties = entry.payload_schema.get("properties")
+    assert isinstance(properties, dict)
+    assert "probe_id" in properties
     assert any(field.path == "probe_id" for field in entry.filter_fields)
 
 
