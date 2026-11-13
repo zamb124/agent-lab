@@ -184,12 +184,13 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _level_for_status(status_code: int, path: str) -> int:
+        # Severity по виновнику исхода: 5xx — отказ платформы (ERROR),
+        # 4xx — клиентский исход (INFO): auth-граница, отсутствующий
+        # ресурс, rate-limit — корректная работа сервиса, а не его отказ.
         if status_code >= 500:
             return logging.ERROR
         if status_code in (401, 404) and path.startswith(("/openapi", "/docs", "/static")):
             return logging.DEBUG
-        if status_code >= 400:
-            return logging.WARNING
         return logging.INFO
 
     @staticmethod

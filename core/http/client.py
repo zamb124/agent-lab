@@ -610,7 +610,9 @@ class SmartProxyClient:
                     return response
                 raise
             if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
-                logger.warning("http.platform.proxy", status_code=response.status_code, url=url)
+                # SMART-маршрут: origin заблокировал direct, learn в proxy —
+                # штатное переключение, а не отказ (фейл всех proxy — ERROR ниже).
+                logger.info("http.platform.proxy", status_code=response.status_code, url=url)
                 await response.aclose()
                 response = await self._request_via_proxy_rotation(http_method, url, **kwargs)
                 if response.is_success:
@@ -804,7 +806,7 @@ class _StreamContextManager:
                     raise
             else:
                 if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
-                    logger.warning("http.stream.platform.proxy", status_code=response.status_code, _url=self._url)
+                    logger.info("http.stream.platform.proxy", status_code=response.status_code, _url=self._url)
                     await self._cleanup_stream()
                     settings = self._smart_client.platform_settings()
                     for attempt in range(self._smart_client.MAX_PROXY_RETRIES):

@@ -14,7 +14,7 @@ from apps.search.crawl.enrichment_skip import (
     compute_enriched_content_hash,
     should_skip_crawl_url_after_fetch,
 )
-from apps.search.crawl.errors import CrawlExtractTooShortError
+from apps.search.crawl.errors import CrawlExtractTooShortError, crawl_error_kind
 from apps.search.crawl.logging_events import (
     log_crawl_discover_completed,
     log_crawl_discover_failed,
@@ -507,6 +507,7 @@ class CrawlOrchestratorService:
                 canonical_url=crawl_url.canonical_url,
                 crawl_outcome="failed",
                 fetch_attempts=updated_url.fetch_attempts,
+                error_kind=crawl_error_kind(exc),
                 exception_type=type(exc).__name__,
                 exception_message=str(exc),
             )

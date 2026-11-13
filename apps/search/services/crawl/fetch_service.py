@@ -12,7 +12,11 @@ import httpx2
 import trafilatura
 from bs4 import BeautifulSoup
 
-from apps.search.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
+from apps.search.crawl.errors import (
+    CrawlExtractTooShortError,
+    CrawlNoExtractableContentError,
+    crawl_error_kind,
+)
 from apps.search.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed
 from apps.search.crawl.structural_signals import extract_structural_signals_from_html
 from apps.search.models import CrawlFetchResult, CrawlStructuralSignals, canonicalize_url
@@ -67,6 +71,7 @@ class CrawlFetchService:
                     canonical_url=canonical_url,
                     fetch_duration_ms=duration_ms,
                     browser_fallback=False,
+                    error_kind=crawl_error_kind(http_error),
                     exception_type=type(http_error).__name__,
                     exception_message=str(http_error),
                     http_status_code=_http_status_from_error(http_error),
@@ -97,6 +102,7 @@ class CrawlFetchService:
                     canonical_url=canonical_url,
                     fetch_duration_ms=duration_ms,
                     browser_fallback=True,
+                    error_kind=crawl_error_kind(browser_error),
                     exception_type=type(browser_error).__name__,
                     exception_message=str(browser_error),
                     http_status_code=_http_status_from_error(browser_error),

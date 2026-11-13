@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from apps.search.crawl.errors import CrawlErrorKind
 from core.logging import get_logger
 from core.logging.attributes import (
     EVENT_CRAWL_BOOTSTRAP,
@@ -37,6 +38,7 @@ from core.logging.attributes import (
     LOG_CRAWL_ENRICHMENT_MODEL,
     LOG_CRAWL_ENRICHMENT_PROMPT_VERSION,
     LOG_CRAWL_ENRICHMENT_PROVIDER,
+    LOG_CRAWL_ERROR_KIND,
     LOG_CRAWL_EXTRACT_CHARS,
     LOG_CRAWL_FETCH_ATTEMPTS,
     LOG_CRAWL_FETCH_DURATION_MS,
@@ -223,6 +225,7 @@ def log_crawl_fetch_failed(
     canonical_url: str,
     fetch_duration_ms: int,
     browser_fallback: bool,
+    error_kind: CrawlErrorKind,
     exception_type: str,
     exception_message: str,
     http_status_code: int | None = None,
@@ -231,12 +234,16 @@ def log_crawl_fetch_failed(
         LOG_CRAWL_CANONICAL_URL: _truncate_url(canonical_url),
         LOG_CRAWL_FETCH_DURATION_MS: fetch_duration_ms,
         LOG_CRAWL_BROWSER_FALLBACK: browser_fallback,
+        LOG_CRAWL_ERROR_KIND: error_kind,
         LOG_EXCEPTION_TYPE: exception_type,
         LOG_EXCEPTION_MESSAGE: exception_message,
     }
     if http_status_code is not None:
         fields[LOG_HTTP_STATUS_CODE] = http_status_code
-    logger.error(EVENT_CRAWL_FETCH_FAILED, **fields)
+    if error_kind == "domain":
+        logger.warning(EVENT_CRAWL_FETCH_FAILED, **fields)
+    else:
+        logger.error(EVENT_CRAWL_FETCH_FAILED, **fields)
 
 
 def log_crawl_url_outcome(
@@ -255,6 +262,7 @@ def log_crawl_url_outcome(
     content_hash_changed: bool | None = None,
     fetch_attempts: int | None = None,
     document_id: str | None = None,
+    error_kind: CrawlErrorKind | None = None,
     exception_type: str | None = None,
     exception_message: str | None = None,
 ) -> None:
@@ -280,12 +288,16 @@ def log_crawl_url_outcome(
         fields[LOG_CRAWL_FETCH_ATTEMPTS] = fetch_attempts
     if document_id is not None:
         fields[LOG_CRAWL_DOCUMENT_ID] = document_id
+    if error_kind is not None:
+        fields[LOG_CRAWL_ERROR_KIND] = error_kind
     if exception_type is not None:
         fields[LOG_EXCEPTION_TYPE] = exception_type
     if exception_message is not None:
         fields[LOG_EXCEPTION_MESSAGE] = exception_message
-    if crawl_outcome in ("failed", "enrichment_failed"):
+    if crawl_outcome in ("failed", "enrichment_failed") and error_kind != "domain":
         logger.error(EVENT_CRAWL_URL_OUTCOME, **fields)
+    elif crawl_outcome == "failed":
+        logger.warning(EVENT_CRAWL_URL_OUTCOME, **fields)
     else:
         logger.info(EVENT_CRAWL_URL_OUTCOME, **fields)
 

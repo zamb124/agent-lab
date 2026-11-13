@@ -274,7 +274,11 @@ async def crawl_fetch(
         raise RuntimeError("crawl_fetch: exhausted retries")
     except WsCommandError as exc:
         duration_ms = int((time.monotonic() - started_at) * 1000)
-        logger.error(
+        # upstream/gateway_timeout — исход целевой страницы, rate_limited —
+        # контрактный backpressure: это не отказ сервиса browser.
+        domain_outcome = exc.code in ("upstream", "gateway_timeout", "rate_limited")
+        log_fn = logger.warning if domain_outcome else logger.error
+        log_fn(
             EVENT_BROWSER_CRAWL_FETCH_FAILED,
             **{
                 LOG_CRAWL_CANONICAL_URL: canonical_url[:256],

@@ -70,7 +70,8 @@
     "grafana_org_id": "1",
     "loggers_levels": {
       "taskiq": "WARNING",
-      "taskiq.receiver": "WARNING"
+      "taskiq.receiver": "WARNING",
+      "trafilatura.core": "ERROR"
     },
     "loki_enabled": false
   },
