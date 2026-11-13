@@ -1142,9 +1142,8 @@ async def sync_speech_to_chat_poll_task(
     delay_override_seconds: float | None = None,
     di: Di,
 ) -> None:
-    """Keyword-only args: иначе SessionLockMiddleware принимает company_id за session_id.
+    """Первый kiq (после invite) ждёт POLL_INITIAL; следующие тики — POLL_INTERVAL.
 
-    Первый kiq (после invite) ждёт POLL_INITIAL; следующие тики — POLL_INTERVAL.
     delay_override_seconds — если lock poll занят, следующий тик с backoff из конфига.
     """
     if delay_override_seconds is not None:

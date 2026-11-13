@@ -17,7 +17,6 @@ from core.types import (
     JsonValue,
     TaskiqLabelValue,
     TaskLabelMap,
-    require_json_array,
     require_json_object,
     require_taskiq_label_value,
 )
@@ -102,12 +101,4 @@ def _task_message_label_value(
 def task_message_string_kwarg(message: TaskiqMessage, key: str) -> str | None:
     kwargs = require_json_object(message.kwargs, "TaskIQ kwargs")
     value = kwargs.get(key)
-    return value if isinstance(value, str) else None
-
-
-def task_message_string_arg(message: TaskiqMessage, index: int) -> str | None:
-    args = require_json_array(message.args, "TaskIQ args")
-    if len(args) <= index:
-        return None
-    value = args[index]
     return value if isinstance(value, str) else None

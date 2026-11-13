@@ -16,12 +16,14 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import ParamSpec, TypeVar
 
 from taskiq import AsyncBroker, AsyncTaskiqDecoratedTask
+
+from core.tasks.session_lock import wrap_with_session_lock
 
 _TASK_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -140,8 +142,8 @@ def registered_queue_brokers() -> dict[str, AsyncBroker]:
 def platform_task(
     task: TaskSpec,
 ) -> Callable[
-    [Callable[_TaskParams, _TaskReturn]],
-    AsyncTaskiqDecoratedTask[_TaskParams, _TaskReturn],
+    [Callable[_TaskParams, Awaitable[_TaskReturn]]],
+    AsyncTaskiqDecoratedTask[_TaskParams, Awaitable[_TaskReturn]],
 ]:
     """Единственный способ объявить исполнителя задачи.
 
@@ -149,17 +151,26 @@ def platform_task(
     через ``create_broker`` до импорта impl-модуля — гарантируется
     ``apps/worker_manifest.py``: сначала брокер, затем autodiscover).
     Проставляет ``queue_name`` label (нужен scheduler dispatch и kick-роутингу).
+    Функции с параметром ``session_id`` исполняются под session-lock —
+    захват внутри границы задачи (``core/tasks/session_lock.py``).
     """
     broker = _QUEUE_BROKERS.get(task.queue)
     if broker is None:
         msg = f"platform_task: брокер очереди {task.queue!r} не зарегистрирован"
         raise RuntimeError(f"{msg}; wire_worker registers the broker before impl (apps/worker_manifest)")
-    return broker.task(
+    taskiq_decorator = broker.task(
         task_name=task.name,
         queue_name=task.queue,
         retry_on_error=task.retry,
         max_retries=task.max_retries,
     )
+
+    def _decorator(
+        func: Callable[_TaskParams, Awaitable[_TaskReturn]],
+    ) -> AsyncTaskiqDecoratedTask[_TaskParams, Awaitable[_TaskReturn]]:
+        return taskiq_decorator(wrap_with_session_lock(func))
+
+    return _decorator
 
 
 __all__ = [

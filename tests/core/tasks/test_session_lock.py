@@ -1,7 +1,8 @@
-"""Тесты `SessionLockMiddleware` на реальном Redis тестового стека.
+"""Тесты session-lock границы задачи на реальном Redis тестового стека.
 
-Проверяют: взаимное исключение по session_id, ошибку при таймауте ожидания
-(задача без lock не исполняется), release по токену владельца.
+Захват lock — внутри тела задачи через ``wrap_with_session_lock``/``session_lock``:
+взаимное исключение по session_id, SessionLockTimeoutError как ошибка задачи,
+release по токену владельца.
 """
 
 from __future__ import annotations
@@ -10,61 +11,46 @@ import asyncio
 import uuid
 
 import pytest
-from taskiq import TaskiqMessage, TaskiqResult
 
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.tasks import session_lock as session_lock_module
 from core.tasks.session_lock import (
-    SessionLockMiddleware,
     SessionLockTimeoutError,
+    session_lock,
+    wrap_with_session_lock,
 )
 
 
-def _message(session_id: str) -> TaskiqMessage:
-    return TaskiqMessage(
-        task_id=uuid.uuid7().hex,
-        task_name="test/task",
-        labels={},
-        labels_types=None,
-        args=[],
-        kwargs={"session_id": session_id},
-    )
-
-
-def _result() -> TaskiqResult[None]:
-    return TaskiqResult(
-        is_err=False,
-        log=None,
-        return_value=None,
-        execution_time=0.0,
-        labels={},
-    )
+def _session_id() -> str:
+    return f"s-{uuid.uuid7().hex[:8]}"
 
 
 @pytest.mark.asyncio
 async def test_same_session_tasks_are_mutually_exclusive() -> None:
-    """Второй pre_execute ждёт release первого, затем захватывает lock."""
-    middleware = SessionLockMiddleware(queue_name="test_queue")
-    session_id = f"s-{uuid.uuid7().hex[:8]}"
-    first, second = _message(session_id), _message(session_id)
+    """Второй захват ждёт release первого, затем получает lock."""
+    session_id = _session_id()
+    entered = asyncio.Event()
+    second_entered = asyncio.Event()
 
-    await middleware.pre_execute(first)
-    wait_started = asyncio.Event()
+    async def _hold() -> None:
+        async with session_lock(session_id):
+            entered.set()
+            await asyncio.sleep(0.3)
 
-    async def second_pre() -> TaskiqMessage:
-        wait_started.set()
-        return await middleware.pre_execute(second)
+    async def _second() -> None:
+        async with session_lock(session_id):
+            second_entered.set()
 
-    waiter = asyncio.create_task(second_pre())
-    await wait_started.wait()
-    await asyncio.sleep(0.15)
-    assert not waiter.done(), "second task must wait for the session lock"
+    holder = asyncio.create_task(_hold())
+    await entered.wait()
 
-    await middleware.post_execute(first, _result())
+    waiter = asyncio.create_task(_second())
+    await asyncio.sleep(0.1)
+    assert not second_entered.is_set(), "second task must wait for the session lock"
+
     await asyncio.wait_for(waiter, timeout=10)
-
-    await middleware.post_execute(second, _result())
+    await holder
 
 
 @pytest.mark.asyncio
@@ -72,51 +58,43 @@ async def test_lock_wait_timeout_fails_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Таймаут ожидания — SessionLockTimeoutError: без lock не исполняем."""
-    middleware = SessionLockMiddleware(queue_name="test_queue")
-    session_id = f"s-{uuid.uuid7().hex[:8]}"
-    first = _message(session_id)
-    await middleware.pre_execute(first)
+    session_id = _session_id()
 
     monkeypatch.setattr(session_lock_module, "LOCK_WAIT_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(session_lock_module, "LOCK_WAIT_INITIAL_MS", 20)
     monkeypatch.setattr(session_lock_module, "LOCK_WAIT_MAX_MS", 40)
-    try:
+
+    async with session_lock(session_id):
         with pytest.raises(SessionLockTimeoutError):
-            await middleware.pre_execute(_message(session_id))
-    finally:
-        await middleware.post_execute(first, _result())
+            async with session_lock(session_id):
+                pytest.fail("lock body must not run without acquire")
 
 
 @pytest.mark.asyncio
 async def test_release_only_own_token() -> None:
     """Release по токену: истёкший и перехваченный lock не снимается."""
-    middleware = SessionLockMiddleware(queue_name="test_queue")
-    session_id = f"s-{uuid.uuid7().hex[:8]}"
-    message = _message(session_id)
-    await middleware.pre_execute(message)
-
+    session_id = _session_id()
+    foreign_token = "foreign-worker"
     redis_client = RedisClient(get_settings().database.redis_url)
     await redis_client.connect()
-    lock_key = f"session_lock:{session_id}"
-    foreign_token = "foreign-worker"
-    # Имитируем истечение TTL и захват другим воркером.
-    assert await redis_client.set(lock_key, foreign_token, ttl=300)
     try:
-        await middleware.post_execute(message, _result())
-        # Чужой lock цел.
-        assert await redis_client.get(lock_key) == foreign_token
+        async with session_lock(session_id):
+            # Имитируем истечение TTL и захват другим воркером.
+            assert await redis_client.set(
+                f"session_lock:{session_id}", foreign_token, ttl=300
+            )
+        # Чужой lock пережил release нашего владения.
+        assert await redis_client.get(f"session_lock:{session_id}") == foreign_token
     finally:
-        _ = await redis_client.delete(lock_key)
+        _ = await redis_client.delete(f"session_lock:{session_id}")
         await redis_client.close()
 
 
 @pytest.mark.asyncio
 async def test_normal_release_deletes_lock() -> None:
-    middleware = SessionLockMiddleware(queue_name="test_queue")
-    session_id = f"s-{uuid.uuid7().hex[:8]}"
-    message = _message(session_id)
-    await middleware.pre_execute(message)
-    await middleware.post_execute(message, _result())
+    session_id = _session_id()
+    async with session_lock(session_id):
+        pass
 
     redis_client = RedisClient(get_settings().database.redis_url)
     await redis_client.connect()
@@ -127,15 +105,67 @@ async def test_normal_release_deletes_lock() -> None:
 
 
 @pytest.mark.asyncio
-async def test_task_without_session_id_passes() -> None:
-    middleware = SessionLockMiddleware(queue_name="test_queue")
-    message = TaskiqMessage(
-        task_id=uuid.uuid7().hex,
-        task_name="test/task",
-        labels={},
-        labels_types=None,
-        args=[],
-        kwargs={},
-    )
-    out = await middleware.pre_execute(message)
-    assert out is message
+async def test_wrapped_task_acquires_lock_for_kwarg_session_id() -> None:
+    """Обёрнутая функция с параметром session_id исполняется под lock."""
+    session_id = _session_id()
+    observed: list[str] = []
+
+    @wrap_with_session_lock
+    async def _task(*, session_id: str) -> str:
+        observed.append(session_id)
+        return session_id
+
+    # Пока lock занят извне, вызов ждёт release.
+    async with session_lock(session_id):
+        waiter = asyncio.create_task(_task(session_id=session_id))
+        await asyncio.sleep(0.15)
+        assert not waiter.done(), "task must wait for the session lock"
+    result = await asyncio.wait_for(waiter, timeout=10)
+    assert result == session_id
+    assert observed == [session_id]
+
+
+@pytest.mark.asyncio
+async def test_wrapped_task_acquires_lock_for_positional_session_id() -> None:
+    """Позиционный аргумент session_id тоже попадает под lock."""
+    session_id = _session_id()
+
+    @wrap_with_session_lock
+    async def _task(flow_id: str, session_id: str) -> str:
+        _ = flow_id
+        return session_id
+
+    async with session_lock(session_id):
+        waiter = asyncio.create_task(_task("flow-1", session_id))
+        await asyncio.sleep(0.15)
+        assert not waiter.done(), "task must wait for the session lock"
+    assert await asyncio.wait_for(waiter, timeout=10) == session_id
+
+
+@pytest.mark.asyncio
+async def test_wrapped_task_releases_lock_on_error() -> None:
+    """Ошибка тела освобождает lock — сессия не блокируется навсегда."""
+    session_id = _session_id()
+
+    @wrap_with_session_lock
+    async def _task(*, session_id: str) -> None:
+        _ = session_id
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await _task(session_id=session_id)
+
+    redis_client = RedisClient(get_settings().database.redis_url)
+    await redis_client.connect()
+    try:
+        assert await redis_client.get(f"session_lock:{session_id}") is None
+    finally:
+        await redis_client.close()
+
+
+def test_task_without_session_id_is_not_wrapped() -> None:
+    async def _task(url: str) -> str:
+        return url
+
+    wrapped = wrap_with_session_lock(_task)
+    assert wrapped is _task

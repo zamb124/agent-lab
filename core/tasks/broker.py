@@ -20,7 +20,6 @@ from core.logging.attributes import LOG_EXCEPTION_MESSAGE, LOG_EXCEPTION_TYPE
 from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.registry import TaskSpec, get_task_spec, queue_broker, register_queue_broker
-from core.tasks.session_lock import SessionLockMiddleware
 from core.types import JsonValue
 
 logger = get_logger(__name__)
@@ -107,9 +106,8 @@ def create_broker(
     )
 
     # Порядок middleware (TaskIQ receiver):
-    # - pre_execute: по порядку регистрации — Logging → SessionLock → SimpleRetry (без pre_execute).
-    # - on_error: в обратном порядке — SimpleRetry первым (решение о повторной kiq), затем SessionLock
-    #   (снятие lock при ошибке), затем Logging.
+    # - pre_execute: по порядку регистрации — Logging → SimpleRetry (без pre_execute).
+    # - on_error: в обратном порядке — SimpleRetry первым (решение о повторной kiq), затем Logging.
     retry_middleware = SimpleRetryMiddleware(
         default_retry_count=settings.tasks.default_retry_count,
         default_retry_label=False,
@@ -135,7 +133,6 @@ def create_broker(
         stream_broker
         .with_result_backend(result_backend)
         .with_middlewares(
-            SessionLockMiddleware(queue_name=effective_queue),
             build_logging_middleware(
                 queue_name=effective_queue,
                 service_name=effective_service,

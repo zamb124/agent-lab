@@ -51,7 +51,6 @@ from core.logging.attributes import (
     LOG_SESSION_ID,
     LOG_TASK_DURATION_MS,
     LOG_TASK_ID,
-    LOG_TASK_LOCK_WAIT_MS,
     LOG_TASK_NAME,
     LOG_TASK_QUEUE,
     LOG_TASK_QUEUE_WAIT_MS,
@@ -228,9 +227,6 @@ class LoggingMiddleware(TaskiqMiddleware):
         queue_wait_ms = self._queue_wait_ms(message)
         if queue_wait_ms is not None:
             task_started_fields[LOG_TASK_QUEUE_WAIT_MS] = queue_wait_ms
-        lock_wait_ms = self._lock_wait_ms(message)
-        if lock_wait_ms is not None:
-            task_started_fields[LOG_TASK_LOCK_WAIT_MS] = lock_wait_ms
 
         self._logger.info(
             EVENT_TASK_STARTED,
@@ -338,16 +334,6 @@ class LoggingMiddleware(TaskiqMiddleware):
         except (TypeError, ValueError):
             return None
         return round((time.time() - enqueued_at) * 1000.0, 3)
-
-    @staticmethod
-    def _lock_wait_ms(message: TaskiqMessage) -> float | None:
-        raw = task_message_string_label(message, "_session_lock_wait_ms")
-        if raw is None:
-            return None
-        try:
-            return round(float(raw), 3)
-        except (TypeError, ValueError):
-            return None
 
     @staticmethod
     def _auto_id(prefix: str) -> str:
