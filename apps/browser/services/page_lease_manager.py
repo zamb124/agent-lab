@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import Counter
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from playwright.async_api import (
     ConsoleMessage,
@@ -45,6 +46,29 @@ PageEventLogger = Callable[[str, JsonObject], None]
 # «сессия существовала и закрыта» (closed=true) от неизвестного session_id (404).
 # Совпадает с TTL preview-токена flows (6 часов).
 CLOSED_SESSION_RETENTION_SEC = 6 * 60 * 60
+
+# Страница в цикле ошибок (reload-цикл SPA, битый трекер) может генерировать
+# console/requestfailed-события неограниченно. Первые N событий логируем
+# verbatim, дальше — только счётчики по сигнатуре, слитые при detach:
+# события не теряются, но debug-сink не превращается в пожарный шланг.
+_PAGE_EVENT_BUDGET = 100
+# Верхняя граница разных сигнатур подавленных событий на страницу.
+_PAGE_EVENT_SUPPRESSED_KINDS = 50
+
+
+@dataclass
+class _PageEventBudget:
+    """Бюджет debug-событий одной страницы."""
+
+    session_id: str
+    emitted: int = 0
+    suppressed: Counter[str] = field(default_factory=Counter)
+
+
+def _page_event_signature(kind: str, event: JsonObject) -> str:
+    """Сигнатура события для дедупликации: kind + начало главного поля."""
+    main = event.get("text") or event.get("url") or event.get("message") or ""
+    return f"{kind}:{str(main)[:160]}"
 
 
 @dataclass
@@ -178,9 +202,11 @@ class PageLeaseManager:
         # Потолок одновременно живых контекстов (0 — без лимита), чтобы рантайм
         # не рос неограниченно.
         self._max_contexts: int = max_contexts
-        # Debug-события страницы (console/pageerror/network) сразу уходят в sink
-        # (Loki через page_event_logger), без буфера в памяти.
+        # Debug-события страницы (console/pageerror/network) уходят в sink
+        # (Loki через page_event_logger) с бюджетом на страницу: первые
+        # _PAGE_EVENT_BUDGET verbatim, дальше — счётчики по сигнатуре.
         self._console_listeners_by_page: dict[int, PageEventListeners] = {}
+        self._page_event_budgets: dict[int, _PageEventBudget] = {}
         self._page_event_logger: PageEventLogger | None = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
         self._human_takeovers: dict[str, HumanTakeoverRecord] = {}
@@ -228,22 +254,57 @@ class PageLeaseManager:
             out["column"] = col
         return out
 
-    def _append_console_event(self, session_id: str, event: JsonObject) -> None:
+    def _append_console_event(
+        self, session_id: str, page: BrowserPage, event: JsonObject
+    ) -> None:
         if not session_id:
             raise ValueError("session_id is required")
+        budget = self._page_event_budgets.get(id(page))
+        if budget is not None:
+            if budget.emitted >= _PAGE_EVENT_BUDGET:
+                kind = str(event.get("kind") or "unknown")
+                sig = _page_event_signature(kind, event)
+                if len(budget.suppressed) < _PAGE_EVENT_SUPPRESSED_KINDS:
+                    budget.suppressed[sig] += 1
+                else:
+                    budget.suppressed["other"] += 1
+                return
+            budget.emitted += 1
         if self._page_event_logger is not None:
             payload: JsonObject = dict(event)
             payload["ts_ms"] = int(time.time() * 1000)
             self._page_event_logger(session_id, payload)
 
+    def _flush_suppressed_page_events(self, page: BrowserPage) -> None:
+        """Слить агрегат подавленных событий страницы одной записью при detach."""
+        budget = self._page_event_budgets.pop(id(page), None)
+        if (
+            budget is None
+            or not budget.suppressed
+            or self._page_event_logger is None
+        ):
+            return
+        top = budget.suppressed.most_common(10)
+        self._page_event_logger(
+            budget.session_id,
+            {
+                "kind": "events_suppressed",
+                "ts_ms": int(time.time() * 1000),
+                "suppressed_total": sum(budget.suppressed.values()),
+                "top": [{"signature": sig, "count": n} for sig, n in top],
+            },
+        )
+
     def _attach_console_listeners(self, *, session_id: str, page: BrowserPage) -> None:
         pid = id(page)
         if pid in self._console_listeners_by_page:
             raise RuntimeError("Console listeners are already registered for the page")
+        self._page_event_budgets[pid] = _PageEventBudget(session_id=session_id)
 
         def on_console(msg: ConsoleMessage) -> None:
             self._append_console_event(
                 session_id,
+                page,
                 {
                     "kind": "console",
                     "type": msg.type,
@@ -258,12 +319,13 @@ class PageLeaseManager:
             payload: JsonObject = {"kind": "pageerror", "message": message}
             if stack:
                 payload["stack"] = stack
-            self._append_console_event(session_id, payload)
+            self._append_console_event(session_id, page, payload)
 
         def on_request_failed(req: Request) -> None:
             failure = req.failure or ""
             self._append_console_event(
                 session_id,
+                page,
                 {
                     "kind": "requestfailed",
                     "url": req.url,
@@ -278,6 +340,7 @@ class PageLeaseManager:
                 return
             self._append_console_event(
                 session_id,
+                page,
                 {
                     "kind": "http_error",
                     "url": resp.url,
@@ -292,6 +355,7 @@ class PageLeaseManager:
         self._console_listeners_by_page[pid] = (on_console, on_page_error, on_request_failed, on_response)
 
     def _detach_console_listeners(self, page: BrowserPage) -> None:
+        self._flush_suppressed_page_events(page)
         pid = id(page)
         listeners = self._console_listeners_by_page.pop(pid, None)
         if listeners is None:
@@ -543,6 +607,16 @@ class PageLeaseManager:
                 for rec in list(self._leases.values())
                 if now - rec.acquired_monotonic > rec.ttl_sec
             ]
+            # Локи навигации мёртвых сессий: release_page их не трогает
+            # (kill_session чистит свой), без вычистки словарь растёт вечно.
+            stale_locks = [
+                sid
+                for sid in self._navigate_locks
+                if sid not in self._session_contexts
+                and not self._navigate_locks[sid].locked()
+            ]
+            for sid in stale_locks:
+                _ = self._navigate_locks.pop(sid, None)
         for rec in expired:
             await self.release_page(
                 rec.page,
@@ -682,6 +756,10 @@ class PageLeaseManager:
 
     def total_active_contexts(self) -> int:
         return len(self._session_contexts)
+
+    def active_session_ids(self) -> set[str]:
+        """session_id с живым контекстом или страницей — владельцы per-session состояния."""
+        return set(self._session_contexts) | set(self._session_pages)
 
     async def get_page_for_session(self, session_id: str) -> BrowserPage:
         """

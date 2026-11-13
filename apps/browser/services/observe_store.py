@@ -33,6 +33,24 @@ class ControlObserveStore:
         _ = self._interaction_seed.pop(session_id, None)
         _ = self._interaction_step.pop(session_id, None)
 
+    def prune_except(self, active_session_ids: set[str]) -> int:
+        """Снять состояние сессий, которых нет в реестре аренд.
+
+        Сессия, закрытая sweep/истёкшим TTL вне kill_session, иначе
+        оставляла бы refs и interaction-счётчики навсегда.
+        """
+        removed = 0
+        for store in (
+            self._last_refs,
+            self._interaction_profile,
+            self._interaction_seed,
+            self._interaction_step,
+        ):
+            for sid in [sid for sid in store if sid not in active_session_ids]:
+                _ = store.pop(sid, None)
+                removed += 1
+        return removed
+
     @staticmethod
     def _seed_from_session_id(session_id: str) -> int:
         if not session_id:

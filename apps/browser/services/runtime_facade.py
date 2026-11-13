@@ -100,6 +100,7 @@ class BrowserRuntimeFacade:
         """
         await self.lease_manager.sweep_expired(warm_idle_sec=self.settings.warm_idle_sec)
         await self.lease_manager.evict_idle_contexts()
+        _ = self.observe_store.prune_except(self.lease_manager.active_session_ids())
         logger.info(
             "browser.runtime.stats",
             active_contexts=self.lease_manager.total_active_contexts(),

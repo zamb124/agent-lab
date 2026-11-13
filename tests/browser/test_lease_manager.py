@@ -6,21 +6,35 @@ from typing import Any, Optional
 
 import pytest
 
+import apps.browser.services.page_lease_manager as lease_module
 from apps.browser.models.types import ContextSignature
 from apps.browser.services.page_lease_manager import PageLeaseManager
+from core.types import JsonObject
 
 
 class _FakePage:
     def __init__(self, ctx: _FakeContext) -> None:
         self.context = ctx
+        self._handlers: dict[str, list[Any]] = {}
 
     def on(self, event: str, handler: Any) -> None:
-        _ = event
-        _ = handler
+        self._handlers.setdefault(event, []).append(handler)
 
     def remove_listener(self, event: str, handler: Any) -> None:
-        _ = event
-        _ = handler
+        handlers = self._handlers.get(event)
+        if handlers and handler in handlers:
+            handlers.remove(handler)
+
+    def fire(self, event: str, obj: Any) -> None:
+        for handler in list(self._handlers.get(event, [])):
+            handler(obj)
+
+
+class _FakeRequest:
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.method = "GET"
+        self.failure = "net::ERR_FAILED"
 
 
 class _FakeContext:
@@ -202,3 +216,58 @@ async def test_endpoint_drain_blocks_only_selected_endpoint() -> None:
         warm_idle_sec=0,
     )
     assert page is not None
+
+
+@pytest.mark.asyncio
+async def test_page_event_budget_suppresses_flood_and_flushes() -> None:
+    """Страница в цикле ошибок: первые N событий verbatim, остальное — агрегат."""
+    events: list[tuple[str, JsonObject]] = []
+
+    def logger_fn(session_id: str, event: JsonObject) -> None:
+        events.append((session_id, event))
+
+    factory = FakeContextFactory()
+    lm = PageLeaseManager(factory, page_event_logger=logger_fn)  # type: ignore[arg-type]
+    budget = lease_module._PAGE_EVENT_BUDGET  # pyright: ignore[reportPrivateUsage]
+    _, page, _ = await lm.lease_page(
+        object(),
+        "ep",
+        _sig(),
+        "sess-ev",
+        storage_state=None,
+        session_mode="warm",
+        page_ttl_sec=3600,
+        warm_idle_sec=0,
+    )
+    assert isinstance(page, _FakePage)
+    flood = budget + 50
+    for i in range(flood):
+        page.fire("requestfailed", _FakeRequest(f"https://x/r{i}"))
+    verbatim = [e for _, e in events if e.get("kind") == "requestfailed"]
+    assert len(verbatim) == budget
+    await lm.kill_session("sess-ev", warm_idle_sec=0)
+    summaries = [e for _, e in events if e.get("kind") == "events_suppressed"]
+    assert len(summaries) == 1
+    assert summaries[0]["suppressed_total"] == 50
+
+
+@pytest.mark.asyncio
+async def test_navigate_locks_pruned_for_dead_sessions() -> None:
+    """Sweep вычищает _navigate_locks сессий, у которых не осталось контекста."""
+    factory = FakeContextFactory()
+    lm = PageLeaseManager(factory)  # type: ignore[arg-type]
+    _, page, _ = await lm.lease_page(
+        object(),
+        "ep",
+        _sig(),
+        "sess-lock",
+        storage_state=None,
+        session_mode="warm",
+        page_ttl_sec=3600,
+        warm_idle_sec=0,
+    )
+    async with lm.session_navigate_exclusive("sess-lock"):
+        pass
+    await lm.release_page(page, warm_idle_sec=0)
+    await lm.sweep_expired(warm_idle_sec=0)
+    assert "sess-lock" not in lm._navigate_locks  # pyright: ignore[reportPrivateUsage]
