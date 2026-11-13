@@ -31,6 +31,7 @@ _LOKI_DEFAULT_URL = "http://loki.platform.svc.cluster.local:3100"
 _TELEGRAM_API_BASE = "https://api.telegram.org"
 TELEGRAM_LIMIT = 4096
 TOP_N = 10
+_NAME_LIMIT = 160
 _VISIT = '{service="frontend",log_type="seo"} | json | message="seo.visit"'
 
 
@@ -70,11 +71,7 @@ def loki_vector(loki_url: str, expr: str) -> list[tuple[dict[str, str], float]]:
             continue
         metric = entry.get("metric")
         value = entry.get("value")
-        if (
-            not isinstance(metric, dict)
-            or not isinstance(value, list)
-            or len(value) != 2
-        ):
+        if not isinstance(metric, dict) or not isinstance(value, list) or len(value) != 2:
             continue
         rows.append(({str(k): str(v) for k, v in metric.items()}, float(str(value[1]))))
     return rows
@@ -110,9 +107,7 @@ class VisitStats:
 
 def collect_stats(loki_url: str, hours: int) -> VisitStats:
     """Все агрегаты за ``hours`` часов одним проходом по Loki."""
-    results = {
-        name: loki_vector(loki_url, expr) for name, expr in queries(hours).items()
-    }
+    results = {name: loki_vector(loki_url, expr) for name, expr in queries(hours).items()}
     unique = int(sum(v for _m, v in results["unique"]))
     surface_human = to_counts(results["surface_human"], "surface")
     surface_bot = to_counts(results["surface_bot"], "surface")
@@ -135,19 +130,23 @@ def _esc(value: str) -> str:
     return html.escape(value, quote=False)
 
 
-def top_lines(counts: dict[str, int], limit: int = TOP_N, *,
-               key_width: int = 0) -> list[str]:
+def _clip(value: str) -> str:
+    """Баунд одного имени до экранирования — сырой текст без entities."""
+    return value if len(value) <= _NAME_LIMIT else value[: _NAME_LIMIT - 1] + "…"
+
+
+def top_lines(counts: dict[str, int], limit: int = TOP_N, *, key_width: int = 0) -> list[str]:
     """``count · key`` строки по убыванию; одинаковые count — по имени."""
     items = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
     if not items:
         return []
     width = key_width or max(len(str(v)) for v, _k in items)
-    return [f"<code>{count:>{width}}</code> · {_esc(name)}" for name, count in items]
+    return [f"<code>{count:>{width}}</code> · {_esc(_clip(name))}" for name, count in items]
 
 
 def _inline_top(counts: dict[str, int], limit: int = TOP_N) -> str:
     items = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
-    return " · ".join(f"{_esc(name)} {count}" for name, count in items)
+    return " · ".join(f"{_esc(_clip(name))} {count}" for name, count in items)
 
 
 def _doc_paths(stats: VisitStats) -> dict[str, int]:
@@ -166,10 +165,12 @@ def build_report(stats: VisitStats) -> str:
         "",
         f"Посетителей: <b>{stats.unique}</b> уникальных · люди <b>{stats.humans}</b> · боты <b>{stats.bots}</b>",
     ]
-    surfaces = _inline_top({
-        name: stats.surface_human.get(name, 0) + stats.surface_bot.get(name, 0)
-        for name in stats.surface_human.keys() | stats.surface_bot.keys()
-    })
+    surfaces = _inline_top(
+        {
+            name: stats.surface_human.get(name, 0) + stats.surface_bot.get(name, 0)
+            for name in stats.surface_human.keys() | stats.surface_bot.keys()
+        }
+    )
     if surfaces:
         lines += ["", f"<b>Поверхности:</b> {surfaces}"]
     if stats.country:
@@ -187,12 +188,17 @@ def build_report(stats: VisitStats) -> str:
         lines += ["", "<b>Страницы (боты)</b>", *top_lines(stats.path_bot)]
     text = "\n".join(lines)
     if len(text) > TELEGRAM_LIMIT - 64:
-        text = text[: TELEGRAM_LIMIT - 80] + "\n…"
+        # Резать только по строкам: каждая строка самодостаточна
+        # (<code>…</code> + экранированный текст), срез внутри строки
+        # рвал бы entity/tag → Telegram отвечает 400 can't parse entities.
+        while len(lines) > 1 and len("\n".join(lines)) > TELEGRAM_LIMIT - 80:
+            del lines[-1]
+        text = "\n".join(lines) + "\n…"
     return text
 
 
-def send_telegram(token: str, chat_id: str, text: str) -> int:
-    """POST sendMessage → HTTP status. Прокси — через env HTTPS_PROXY."""
+def send_telegram(token: str, chat_id: str, text: str) -> tuple[int, str | None]:
+    """POST sendMessage → (HTTP status, описание ошибки Telegram)."""
     response = httpx2.post(
         f"{_TELEGRAM_API_BASE}/bot{token}/sendMessage",
         json={
@@ -203,17 +209,38 @@ def send_telegram(token: str, chat_id: str, text: str) -> int:
         },
         timeout=30.0,
     )
-    return response.status_code
+    detail: str | None = None
+    if response.status_code != 200:
+        try:
+            body = parse_json_object(response.text, "telegram_response")
+            raw = body.get("description")
+            detail = raw[:200] if isinstance(raw, str) else None
+        except ValueError:
+            detail = response.text[:200]
+    return response.status_code, detail
 
 
-def _emit_event(event: str, *, hours: int, visits: int, http_status: int | None) -> None:
-    print(json.dumps({
-        "message": event,
-        "level": "WARNING" if event.endswith("failed") else "INFO",
-        "hours": hours,
-        "visits": visits,
-        "http_status": http_status,
-    }, ensure_ascii=False))
+def _emit_event(
+    event: str,
+    *,
+    hours: int,
+    visits: int,
+    http_status: int | None,
+    error_detail: str | None = None,
+) -> None:
+    print(
+        json.dumps(
+            {
+                "message": event,
+                "level": "WARNING" if event.endswith("failed") else "INFO",
+                "hours": hours,
+                "visits": visits,
+                "http_status": http_status,
+                "error_detail": error_detail,
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 @dataclasses.dataclass
@@ -226,7 +253,9 @@ class _Args:
 def main() -> int:
     parser = argparse.ArgumentParser(description="SEO hourly report → Telegram")
     _ = parser.add_argument("--hours", type=int, default=1)
-    _ = parser.add_argument("--loki-url", default=os.environ.get("SEO_REPORT_LOKI_URL", _LOKI_DEFAULT_URL))
+    _ = parser.add_argument(
+        "--loki-url", default=os.environ.get("SEO_REPORT_LOKI_URL", _LOKI_DEFAULT_URL)
+    )
     _ = parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(namespace=_Args())
 
@@ -245,7 +274,7 @@ def main() -> int:
         _emit_event("seo.report_skipped", hours=args.hours, visits=stats.total, http_status=None)
         return 0
     try:
-        status = send_telegram(token, chat_id, text)
+        status, detail = send_telegram(token, chat_id, text)
     except httpx2.HTTPError as exc:
         print(f"seo.report: transport error: {exc}")
         _emit_event("seo.report_failed", hours=args.hours, visits=stats.total, http_status=None)
@@ -253,7 +282,10 @@ def main() -> int:
     ok = status == 200
     _emit_event(
         "seo.report_sent" if ok else "seo.report_failed",
-        hours=args.hours, visits=stats.total, http_status=status,
+        hours=args.hours,
+        visits=stats.total,
+        http_status=status,
+        error_detail=detail,
     )
     return 0 if ok else 1
 

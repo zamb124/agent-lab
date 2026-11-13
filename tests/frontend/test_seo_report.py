@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from typing import cast
 
@@ -48,8 +49,12 @@ def _stats(**overrides: object) -> seo_report.VisitStats:
         unique=_int(overrides, "unique", cast(int, defaults["unique"])),
         humans=_int(overrides, "humans", cast(int, defaults["humans"])),
         bots=_int(overrides, "bots", cast(int, defaults["bots"])),
-        surface_human=_counts(overrides, "surface_human", cast(dict[str, int], defaults["surface_human"])),
-        surface_bot=_counts(overrides, "surface_bot", cast(dict[str, int], defaults["surface_bot"])),
+        surface_human=_counts(
+            overrides, "surface_human", cast(dict[str, int], defaults["surface_human"])
+        ),
+        surface_bot=_counts(
+            overrides, "surface_bot", cast(dict[str, int], defaults["surface_bot"])
+        ),
         country=_counts(overrides, "country", cast(dict[str, int], defaults["country"])),
         referer=_counts(overrides, "referer", cast(dict[str, int], defaults["referer"])),
         bot_family=_counts(overrides, "bot_family", cast(dict[str, int], defaults["bot_family"])),
@@ -60,9 +65,16 @@ def _stats(**overrides: object) -> seo_report.VisitStats:
 
 def _empty_stats() -> seo_report.VisitStats:
     return _stats(
-        unique=0, humans=0, bots=0,
-        surface_human={}, surface_bot={}, country={}, referer={},
-        bot_family={}, path_human={}, path_bot={},
+        unique=0,
+        humans=0,
+        bots=0,
+        surface_human={},
+        surface_bot={},
+        country={},
+        referer={},
+        bot_family={},
+        path_human={},
+        path_bot={},
     )
 
 
@@ -121,12 +133,31 @@ def test_report_truncates_over_limit() -> None:
     assert len(text) <= seo_report.TELEGRAM_LIMIT
 
 
+def test_report_truncation_keeps_html_integrity() -> None:
+    """Срез по строкам: без битых entity/tag — иначе Telegram отвечает 400."""
+    stats = _stats(
+        path_human={
+            f"/docs/{'a' * 150}-{i}?utm=x&utm_medium=y&utm_campaign={'c' * 40}": 5
+            for i in range(40)
+        },
+        path_bot={f"/en/blog/{'b' * 150}-{i}?ref=x&y=z": 3 for i in range(40)},
+    )
+    text = seo_report.build_report(stats)
+    assert len(text) <= seo_report.TELEGRAM_LIMIT
+    assert text.count("<code>") == text.count("</code>")
+    assert text.count("<b>") == text.count("</b>")
+    for line in text.split("\n"):
+        assert not re.search(r"&[a-zA-Z]*$", line), line[-40:]
+
+
 def test_loki_vector_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {
-        "data": {"result": [
-            {"metric": {"surface": "docs"}, "value": [1700000000, "42"]},
-            {"metric": {"surface": "page"}, "value": [1700000000, "7"]},
-        ]}
+        "data": {
+            "result": [
+                {"metric": {"surface": "docs"}, "value": [1700000000, "42"]},
+                {"metric": {"surface": "page"}, "value": [1700000000, "7"]},
+            ]
+        }
     }
 
     class _Resp:
@@ -186,13 +217,31 @@ def test_send_telegram_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         return _Resp()
 
     monkeypatch.setattr(seo_report.httpx2, "post", _post)  # pyright: ignore[reportPrivateLocalImportUsage]
-    status = seo_report.send_telegram("tok", "chat1", "hello")
+    status, detail = seo_report.send_telegram("tok", "chat1", "hello")
     assert status == 200
+    assert detail is None
     assert sent["url"] == "https://api.telegram.org/bottok/sendMessage"
     body = cast(dict[str, object], sent["json"])
     assert body["chat_id"] == "chat1"
     assert body["parse_mode"] == "HTML"
     assert body["disable_web_page_preview"] is True
+
+
+def test_send_telegram_error_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Resp:
+        status_code: int = 400
+        text: str = json.dumps(
+            {
+                "ok": False,
+                "error_code": 400,
+                "description": "Bad Request: can't parse entities",
+            }
+        )
+
+    monkeypatch.setattr(seo_report.httpx2, "post", lambda *_a, **_k: _Resp())  # pyright: ignore[reportPrivateLocalImportUsage]
+    status, detail = seo_report.send_telegram("tok", "chat1", "<b>broken")
+    assert status == 400
+    assert detail == "Bad Request: can't parse entities"
 
 
 def test_main_skips_when_no_visits(
@@ -202,9 +251,7 @@ def test_main_skips_when_no_visits(
         return _empty_stats()
 
     monkeypatch.setattr(seo_report, "collect_stats", _collect)
-    monkeypatch.setattr(
-        sys, "argv", ["report", "--loki-url", "http://x"]
-    )
+    monkeypatch.setattr(sys, "argv", ["report", "--loki-url", "http://x"])
     assert seo_report.main() == 0
     out = capsys.readouterr().out
     assert "seo.report_skipped" in out
@@ -216,8 +263,8 @@ def test_main_sends_when_visits(
     def _collect(_url: str, _hours: int) -> seo_report.VisitStats:
         return _stats()
 
-    def _send(_token: str, _chat: str, _text: str) -> int:
-        return 200
+    def _send(_token: str, _chat: str, _text: str) -> tuple[int, str | None]:
+        return 200, None
 
     monkeypatch.setattr(seo_report, "collect_stats", _collect)
     monkeypatch.setattr(seo_report, "send_telegram", _send)
@@ -234,8 +281,8 @@ def test_main_failed_status(
     def _collect(_url: str, _hours: int) -> seo_report.VisitStats:
         return _stats()
 
-    def _send(_token: str, _chat: str, _text: str) -> int:
-        return 403
+    def _send(_token: str, _chat: str, _text: str) -> tuple[int, str | None]:
+        return 400, "Bad Request: can't parse entities"
 
     monkeypatch.setattr(seo_report, "collect_stats", _collect)
     monkeypatch.setattr(seo_report, "send_telegram", _send)
@@ -243,7 +290,9 @@ def test_main_failed_status(
     monkeypatch.setenv("TELEGRAM_ALERTS_CHAT_ID", "chat")
     monkeypatch.setattr(sys, "argv", ["report"])
     assert seo_report.main() == 1
-    assert "seo.report_failed" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "seo.report_failed" in out
+    assert "can't parse entities" in out
 
 
 def test_queries_reference_seo_visit_stream() -> None:
