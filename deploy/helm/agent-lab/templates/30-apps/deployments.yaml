@@ -103,6 +103,13 @@ spec:
             - name: CODE_RUNNER__PYTHON_WORKERS
               value: "2"
             {{- end }}
+            {{- if eq $name "shop" }}
+            # M1 canary: jemalloc перехватывает native malloc() C-extensions
+            # (pymupdf/grpc/lxml); объекты Python на 3.14t идут в mimalloc и
+            # LD_PRELOAD их не касается. Меряем RSS/PSS против флота до rollout.
+            - name: LD_PRELOAD
+              value: /usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+            {{- end }}
             {{- if eq $name "guest-runtime" }}
             - name: GUEST_RUNTIME__EXECUTOR
               value: {{ $.Values.guestRuntime.executor | quote }}

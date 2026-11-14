@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     docker.io \
     git \
+    libjemalloc2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain нужен для сборки PyO3-extensions без cp314t wheel:
