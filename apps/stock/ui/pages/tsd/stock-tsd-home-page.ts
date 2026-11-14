@@ -91,10 +91,10 @@ export class StockTsdHomePage extends PlatformPage {
             .wrap {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-5);
-                padding: var(--space-5);
-                padding-top: max(var(--space-5), var(--platform-safe-top));
-                padding-bottom: calc(var(--app-content-bottom-padding-mobile, 96px) + var(--space-4));
+                gap: var(--space-4);
+                padding: var(--space-3);
+                padding-top: max(var(--space-3), var(--platform-safe-top));
+                padding-bottom: calc(var(--app-content-bottom-padding-mobile, 96px) + var(--space-3));
                 min-height: 100%;
                 box-sizing: border-box;
                 /* Терминальная колонка: на ноутбуке/десктопе контент
@@ -569,7 +569,7 @@ export class StockTsdHomePage extends PlatformPage {
                 flex-direction: column;
                 align-items: center;
                 gap: var(--space-4);
-                padding: var(--space-8) var(--space-4);
+                padding: var(--space-6) var(--space-4);
                 border: 1px dashed var(--border-strong);
                 border-radius: var(--radius-2xl);
                 background: var(--bg-surface);
@@ -606,7 +606,7 @@ export class StockTsdHomePage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-                padding: var(--space-5);
+                padding: var(--space-4);
                 border-radius: var(--radius-2xl);
                 border: 2px solid var(--border-default);
                 background: var(--bg-surface);
@@ -670,7 +670,7 @@ export class StockTsdHomePage extends PlatformPage {
                 from { opacity: 0.35; }
                 to { opacity: 0; }
             }
-            platform-empty-state { margin-top: var(--space-8); }
+            platform-empty-state { margin-top: var(--space-4); }
         `,
     ];
 
@@ -928,7 +928,9 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private _locationName(locationId: string): string {
-        return tsdLocationName(this._locations.items, locationId, this.t);
+        // `this.t` несвязанной отдать нельзя — внутри читает
+        // this.constructor для i18n-namespace. Передаём бинд.
+        return tsdLocationName(this._locations.items, locationId, (k) => this.t(k));
     }
 
     private _waveName(waveId: string): string {

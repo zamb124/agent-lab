@@ -79,9 +79,18 @@ async def _tsd_qty(page: Page, digits: str) -> None:
 
 
 async def _tsd_commit_click(page: Page) -> None:
-    btn = page.locator("stock-tsd-run .commit-btn")
-    await expect(btn).to_be_enabled(timeout=10_000)
-    await btn.click()
+    """Slide-to-commit: тянем бегунок до правого края трека, как оператор пальцем."""
+    track = page.locator("stock-tsd-run .commit-btn")
+    await expect(track).to_be_visible(timeout=10_000)
+    track_box = await track.bounding_box()
+    thumb_box = await track.locator(".commit-thumb").bounding_box()
+    assert track_box is not None and thumb_box is not None
+    start_x = thumb_box["x"] + thumb_box["width"] / 2
+    start_y = thumb_box["y"] + thumb_box["height"] / 2
+    await page.mouse.move(start_x, start_y)
+    await page.mouse.down()
+    await page.mouse.move(track_box["x"] + track_box["width"] - 4, start_y, steps=12)
+    await page.mouse.up()
 
 
 async def _tsd_commit(page: Page) -> None:

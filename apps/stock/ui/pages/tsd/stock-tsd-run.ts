@@ -73,6 +73,12 @@ export class StockTsdRun extends PlatformElement {
     private _commit: ControllerFor<'stock/scan_commit'>;
     private _countCommit: ControllerFor<'stock/scan_count_commit'>;
     private _adhocCommit: ControllerFor<'stock/scan_adhoc_commit'>;
+    private _slideX = 0;
+    private _slideMax = 0;
+    private _slideStart = 0;
+    private _slidePointer: number | null = null;
+    private _sliding = false;
+    private _slideArmed = false;
     private _containerMove: ControllerFor<'stock/container_move'>;
     private _release: ControllerFor<'stock/move_lines_release'>;
     private _putawaySuggest: ControllerFor<'stock/putaway_suggest'>;
@@ -222,7 +228,7 @@ export class StockTsdRun extends PlatformElement {
                 flex-direction: column;
                 align-items: center;
                 gap: var(--space-3);
-                padding: var(--space-6) var(--space-4);
+                padding: var(--space-4);
                 border: 2px dashed var(--accent);
                 border-radius: var(--radius-2xl);
                 background: var(--accent-subtle);
@@ -402,34 +408,75 @@ export class StockTsdRun extends PlatformElement {
                 background: var(--tsd-error-subtle);
                 color: var(--tsd-error);
             }
+            /* Slide-to-commit: свайп бегунка вправо вместо тапа —
+               защита от случайной проводки перчаткой на ходу. */
             .commit-btn {
+                position: relative;
+                width: 100%;
+                height: var(--tsd-touch-xl);
+                border: none;
+                border-radius: var(--radius-2xl);
+                background: linear-gradient(160deg, var(--tsd-ok) 0%, #15803d 100%);
+                color: var(--text-inverse);
+                cursor: pointer;
+                overflow: hidden;
+                box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+                touch-action: none;
+                user-select: none;
+            }
+            .commit-btn:focus-visible {
+                outline: 3px solid var(--accent);
+                outline-offset: 2px;
+            }
+            .commit-btn.busy { opacity: 0.85; }
+            .commit-fill {
+                position: absolute;
+                inset: 0 auto 0 0;
+                background: rgba(255, 255, 255, 0.18);
+            }
+            .commit-hint {
+                position: absolute;
+                inset: 0;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: var(--space-3);
-                min-height: var(--tsd-touch-xl);
-                border: none;
-                border-radius: var(--radius-2xl);
-                background: var(--tsd-ok);
-                color: var(--text-inverse);
+                gap: var(--space-2);
                 font-size: var(--tsd-text-title);
                 font-weight: var(--font-bold);
-                cursor: pointer;
-                box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3);
+                pointer-events: none;
             }
-            .commit-btn:disabled { opacity: 0.6; }
-            .commit-count {
-                display: inline-flex;
+            .commit-hint platform-icon {
+                opacity: 0.25;
+                animation: commit-chev 1.5s ease-in-out infinite;
+            }
+            .commit-hint platform-icon:nth-of-type(2) { animation-delay: 0.15s; }
+            .commit-hint platform-icon:nth-of-type(3) { animation-delay: 0.3s; }
+            @keyframes commit-chev {
+                0%, 100% { opacity: 0.25; }
+                50% { opacity: 1; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .commit-hint platform-icon { animation: none; opacity: 0.6; }
+            }
+            .commit-thumb {
+                position: absolute;
+                left: 8px;
+                top: 8px;
+                bottom: 8px;
+                width: 76px;
+                display: flex;
                 align-items: center;
                 justify-content: center;
-                min-width: 28px;
-                height: 28px;
-                padding: 0 var(--space-2);
-                border-radius: var(--radius-full);
-                background: rgba(255, 255, 255, 0.22);
-                font-size: var(--tsd-text-body);
-                font-weight: var(--font-bold);
+                border-radius: var(--radius-xl);
+                background: var(--text-inverse);
+                color: var(--tsd-ok);
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+                transition: transform 0.18s ease-out;
             }
+            .commit-btn.sliding .commit-thumb,
+            .commit-btn.sliding .commit-fill { transition: none; }
+            .commit-btn.armed .commit-thumb { color: var(--text-inverse); background: var(--tsd-ok); }
         `,
     ];
 
@@ -469,14 +516,14 @@ export class StockTsdRun extends PlatformElement {
     }
 
     private _locationName(locationId: string): string {
-        return tsdLocationName(this._locations.items, locationId, this.t);
+        return tsdLocationName(this._locations.items, locationId, (k) => this.t(k));
     }
 
     /** Короткое имя ячейки для маршрута строки: полный путь уже виден
      * в чипах-подсказках, в «источник → приёмник» важна различимость
      * концов («А010 → Б010»), а не префикс склада. */
     private _locationShortName(locationId: string): string {
-        return tsdLocationShortName(this._locations.items, locationId, this.t);
+        return tsdLocationShortName(this._locations.items, locationId, (k) => this.t(k));
     }
 
     private _slot(icon: string, text: string): TemplateResult {
@@ -644,6 +691,10 @@ export class StockTsdRun extends PlatformElement {
 
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
+        if (this._slideArmed && !this._commitBusy()) {
+            this._slideArmed = false;
+            this._slideX = 0;
+        }
         const context = this._sessionSel.value.context;
         const wantsHint = context !== null
             && context.step === 'dest'
@@ -856,27 +907,87 @@ export class StockTsdRun extends PlatformElement {
         });
     }
 
+    /** Slide-to-commit: бегунок довели до ~80% трека — проводка; отпустили
+     *  раньше — пружинит назад. Порог защищает от случайного тапа на ходу. */
+    private _slideDown(e: PointerEvent): void {
+        if (this._commitBusy() || this._slidePointer !== null) return;
+        const track = e.currentTarget as HTMLElement;
+        track.setPointerCapture(e.pointerId);
+        this._slidePointer = e.pointerId;
+        this._slideMax = Math.max(0, track.clientWidth - 92);
+        this._slideStart = e.clientX - this._slideX;
+        this._sliding = true;
+        this.requestUpdate();
+    }
+
+    private _slideMove(e: PointerEvent): void {
+        if (e.pointerId !== this._slidePointer) return;
+        this._slideX = Math.min(Math.max(0, e.clientX - this._slideStart), this._slideMax);
+        this.requestUpdate();
+    }
+
+    private _slideEnd(e: PointerEvent): void {
+        if (e.pointerId !== this._slidePointer) return;
+        this._slidePointer = null;
+        this._sliding = false;
+        if (this._slideX >= this._slideMax * 0.8 && this._slideMax > 0) {
+            this._slideX = this._slideMax;
+            this._slideArmed = true;
+            this.requestUpdate();
+            this._commitRun();
+            return;
+        }
+        this._slideX = 0;
+        this.requestUpdate();
+    }
+
+    private _slideKey(e: KeyboardEvent, busy: boolean): void {
+        if (busy || (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'ArrowRight')) return;
+        e.preventDefault();
+        this._commitRun();
+    }
+
+    private _commitBusy(): boolean {
+        return this._commit.busy || this._countCommit.busy
+            || this._adhocCommit.busy || this._containerMove.busy;
+    }
+
     private _renderReview(session: StockTsdSessionState): TemplateResult | string {
         const context = session.context;
         if (context === null || context.step !== 'review') return '';
         const lines = context.lines ?? [];
-        const busy = this._commit.busy || this._countCommit.busy
-            || this._adhocCommit.busy || this._containerMove.busy;
+        const busy = this._commitBusy();
         return html`
             ${lines.length === 0 ? '' : html`
                 <div class="lines">
                     ${lines.map((line, index) => this._renderLine(line, index))}
                 </div>
             `}
-            <button class="commit-btn" ?disabled=${busy} @click=${() => this._commitRun()}>
-                ${busy
-                    ? html`<platform-spinner size="s"></platform-spinner>`
-                    : html`<platform-icon name="check" size="26"></platform-icon>`}
-                <span>${this.t('run.commit_plain')}</span>
-                ${lines.length > 0
-                    ? html`<span class="commit-count">${lines.length}</span>`
-                    : ''}
-            </button>
+            <div class="commit-btn ${busy ? 'busy' : ''} ${this._sliding ? 'sliding' : ''} ${this._slideArmed ? 'armed' : ''}"
+                role="slider" tabindex="${busy ? -1 : 0}"
+                aria-label=${this.t('run.commit_slide')}
+                aria-valuemin="0" aria-valuemax="100"
+                aria-valuenow=${this._slideMax > 0 ? Math.round(this._slideX / this._slideMax * 100) : 0}
+                @pointerdown=${this._slideDown}
+                @pointermove=${this._slideMove}
+                @pointerup=${this._slideEnd}
+                @pointercancel=${this._slideEnd}
+                @keydown=${(e: KeyboardEvent) => this._slideKey(e, busy)}>
+                <div class="commit-fill" style="width: ${this._slideMax > 0 ? Math.round(this._slideX / this._slideMax * 100) : 0}%"></div>
+                <div class="commit-hint">
+                    ${busy
+                        ? html`<span>${this.t('run.commit_plain')}</span>`
+                        : html`<platform-icon name="arrow-right" size="22"></platform-icon>
+                               <platform-icon name="arrow-right" size="22"></platform-icon>
+                               <platform-icon name="arrow-right" size="22"></platform-icon>
+                               <span>${this.t('run.commit_slide')}${lines.length > 0 ? html` · ${lines.length}` : ''}</span>`}
+                </div>
+                <div class="commit-thumb" style="transform: translateX(${this._slideX}px)">
+                    ${busy
+                        ? html`<platform-spinner size="s"></platform-spinner>`
+                        : html`<platform-icon name=${this._slideArmed ? 'check' : 'arrow-right'} size="30"></platform-icon>`}
+                </div>
+            </div>
         `;
     }
 

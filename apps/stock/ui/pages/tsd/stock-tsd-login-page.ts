@@ -37,9 +37,9 @@ export class StockTsdLoginPage extends PlatformPage {
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                gap: var(--space-6);
+                gap: var(--space-4);
                 min-height: 100%;
-                padding: var(--space-6);
+                padding: var(--space-4);
                 box-sizing: border-box;
                 text-align: center;
             }
