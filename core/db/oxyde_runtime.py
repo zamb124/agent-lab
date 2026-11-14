@@ -68,6 +68,7 @@ async def init_oxyde_databases(
     pool = PoolSettings(
         max_connections=settings.database.pool_max_connections,
         acquire_timeout=settings.database.pool_acquire_timeout_seconds,
+        test_before_acquire=settings.database.pool_test_before_acquire,
     )
     await db.close()
     databases: dict[str, str] = {"default": service_url, "shared": shared_url}
@@ -112,6 +113,7 @@ async def init_oxyde_databases(
         configured_urls,
         max_connections=settings.database.pool_max_connections,
         acquire_timeout=settings.database.pool_acquire_timeout_seconds,
+        test_before_acquire=settings.database.pool_test_before_acquire,
     )
     await db.init(settings=pool, **databases)
     logger.info("oxyde.databases_ready", shared_is_default=service_url == shared_url)

@@ -26,6 +26,14 @@ spec:
             - "max_connections={{ .Values.postgres.maxConnections }}"
             - "-c"
             - "shared_buffers={{ required "postgres.sharedBuffers is required" .Values.postgres.sharedBuffers }}"
+            # Deploy-шторм: убитые поды оставляют backend'ы с живым TCP до keepalive-таймаута
+            # (дефолт ~2ч) — сотни зомби раздувают RSS → OOMKill postmaster. ~90с на reap.
+            - "-c"
+            - "tcp_keepalives_idle={{ .Values.postgres.tcpKeepalivesIdle }}"
+            - "-c"
+            - "tcp_keepalives_interval={{ .Values.postgres.tcpKeepalivesInterval }}"
+            - "-c"
+            - "tcp_keepalives_count={{ .Values.postgres.tcpKeepalivesCount }}"
           env:
             - name: POSTGRES_DB
               value: platform_shared

@@ -46,9 +46,13 @@ postgres:
       memory: 1Gi
     limits:
       cpu: "2"
-      memory: 4Gi
+      memory: 8Gi
   maxConnections: 256
   sharedBuffers: 512MB
+  # Reap backend'ов мёртвых TCP-пиров при deploy-шторме (убитые поды, OOMKill клиентов).
+  tcpKeepalivesIdle: 60
+  tcpKeepalivesInterval: 10
+  tcpKeepalivesCount: 3
 
 openfga:
   enabled: true

@@ -186,6 +186,14 @@ class DatabaseConfig(BaseModel):
         description="Сколько секунд ждать свободное соединение пула Oxyde.",
         gt=0,
     )
+    pool_test_before_acquire: bool = Field(
+        default=True,
+        description=(
+            "Ping соединения при checkout из пула Oxyde. Мёртвый сокет "
+            "(OOM/рестарт postgres, убитый pod) детектится на acquire, "
+            "а не первым запросом с EOF."
+        ),
+    )
 
 
 class SecretsConfig(BaseModel):

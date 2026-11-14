@@ -20,6 +20,7 @@ _alias_urls: dict[str, str] = {}
 _alias_locks: dict[str, asyncio.Lock] = {}
 _max_connections = 0
 _acquire_timeout = 0.0
+_test_before_acquire = True
 
 
 def configure_oxyde_aliases(
@@ -27,15 +28,17 @@ def configure_oxyde_aliases(
     *,
     max_connections: int,
     acquire_timeout: float,
+    test_before_acquire: bool = True,
 ) -> None:
     """Запомнить URL алиасов и размер пула. Пустые URL не записываются."""
-    global _max_connections, _acquire_timeout
+    global _max_connections, _acquire_timeout, _test_before_acquire
     if max_connections < 1:
         raise RuntimeError("pool max_connections must be at least 1")
     if acquire_timeout <= 0:
         raise RuntimeError("pool acquire_timeout must be positive")
     _max_connections = max_connections
     _acquire_timeout = acquire_timeout
+    _test_before_acquire = test_before_acquire
     for alias, url in urls.items():
         if alias == "" or url == "":
             raise RuntimeError(f"database alias {alias} has an empty URL")
@@ -60,6 +63,7 @@ async def ensure_oxyde_alias(alias: str | None) -> None:
                 pool = PoolSettings(
                     max_connections=_max_connections,
                     acquire_timeout=_acquire_timeout,
+                    test_before_acquire=_test_before_acquire,
                 )
                 database = AsyncDatabase(
                     url,
