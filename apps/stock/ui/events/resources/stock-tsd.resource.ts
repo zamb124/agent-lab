@@ -631,8 +631,11 @@ export const stockTsdOutboxSlice = createSlice<StockTsdOutboxState, {
             return { ...state, items: [...state.items, next] };
         }
         if (event.type === events.DELIVERED || event.type === events.DROPPED) {
-            const outboxId = event.payload;
-            if (typeof outboxId !== 'string' || outboxId === '') {
+            const payload = event.payload;
+            const outboxId = isPlainRecord(payload) && typeof payload.outbox_id === 'string'
+                ? payload.outbox_id
+                : '';
+            if (outboxId === '') {
                 throw new Error(`stock/tsd_outbox.${event.type}: outbox_id required`);
             }
             return {

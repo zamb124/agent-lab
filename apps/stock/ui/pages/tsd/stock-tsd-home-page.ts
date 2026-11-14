@@ -774,7 +774,9 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     /** Дрейн outbox FIFO: успех снимает элемент, отказ останавливает
-     *  очередь — конфликт мог каскадить на следующие команды. */
+     *  очередь — конфликт мог каскадить на следующие команды.
+     *  Брошенная ошибка транспорта — та же неудача попытки: без
+     *  catch элемент завис бы в очереди навсегда. */
     private async _drainOutbox(): Promise<void> {
         if (this._draining) return;
         this._draining = true;
@@ -784,17 +786,30 @@ export class StockTsdHomePage extends PlatformPage {
                 if (item === undefined || !this._deliverable()) break;
                 const target = this._outboxTargets()[item.op];
                 if (target === undefined) {
-                    this._outbox.dropped(item.outbox_id);
+                    this._outbox.dropped({ outbox_id: item.outbox_id });
                     continue;
                 }
-                const result = await target.run(item.payload);
+                let result: unknown = null;
+                try {
+                    result = await target.run(item.payload);
+                } catch {
+                    result = null;
+                }
                 if (result !== null) {
-                    this._outbox.delivered(item.outbox_id);
+                    this._outbox.delivered({ outbox_id: item.outbox_id });
                     this._refreshQueue();
                     continue;
                 }
                 this._outbox.attemptFailed({ outbox_id: item.outbox_id, error: 'delivery_failed' });
                 this._drainCooldownUntil = Date.now() + 30_000;
+                // Повтор по таймеру: следующий updated() может и не
+                // прийти — без будильника элемент висел бы в очереди
+                // до случайного события страницы.
+                setTimeout(() => {
+                    if (this.isConnected && this._outboxSel.value.items.length > 0) {
+                        void this._drainOutbox();
+                    }
+                }, 30_000);
                 break;
             }
         } finally {
@@ -1236,7 +1251,7 @@ export class StockTsdHomePage extends PlatformPage {
                                 <span class="outbox-item-op">${this.t(`outbox.op_${OUTBOX_OP_LABEL[item.op] ?? 'op'}`)}</span>
                                 <span class="outbox-item-time">${this._outboxWhen(item)}${item.attempts > 0 ? ` · ${this.t('outbox.retries', { count: String(item.attempts) })}` : ''}</span>
                             </div>
-                            <button class="outbox-drop" @click=${(e: Event) => { e.stopPropagation(); this._outbox.dropped(item.outbox_id); }}
+                            <button class="outbox-drop" @click=${(e: Event) => { e.stopPropagation(); this._outbox.dropped({ outbox_id: item.outbox_id }); }}
                                 aria-label=${this.t('outbox.drop')}>
                                 <platform-icon name="trash" size="16"></platform-icon>
                             </button>

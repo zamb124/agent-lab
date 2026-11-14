@@ -2887,9 +2887,9 @@ async def test_stock_tsd_document_container_move(
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_wait_step(page, "container")
-
-    # --- Скан паллеты → приёмник → коммит ---
+    # Сессия открывается на шаге 'start' — машина уже ждёт скан тары
+    # (expected = строка kind=container). 'container' — это переход
+    # ПОСЛЕ скана, ждать его до скана бессмысленно.
     await _tsd_scan(page, f"PAL-{unique_id[:6]}")
     await _tsd_wait_step(page, "dest")
     await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
