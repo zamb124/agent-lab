@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import tracemalloc
 
@@ -26,14 +27,11 @@ def _smaps_rollup() -> JsonObject:
         "Shared_Clean": "shared_clean_kb",
     }
     out: JsonObject = {}
-    try:
-        with open("/proc/self/smaps_rollup") as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) == 3 and parts[0].rstrip(":") in keys:
-                    out[keys[parts[0].rstrip(":")]] = int(parts[1])
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open("/proc/self/smaps_rollup") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) == 3 and parts[0].rstrip(":") in keys:
+                out[keys[parts[0].rstrip(":")]] = int(parts[1])
     return out
 
 

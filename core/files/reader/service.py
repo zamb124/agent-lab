@@ -20,27 +20,19 @@ from email.message import Message as EmailMessage
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Literal, Protocol, TypedDict, TypeIs, overload
+from typing import (
+    TYPE_CHECKING,
+    BinaryIO,
+    ClassVar,
+    Literal,
+    Protocol,
+    TypedDict,
+    TypeIs,
+    overload,
+)
 
-import ebooklib
-import extract_msg
-import olefile
-import pymupdf
-import trafilatura
-import xlrd
 from a2a.types import Message, Part, Role
 from botocore.exceptions import ClientError
-from bs4 import BeautifulSoup
-from charset_normalizer import from_bytes
-from ebooklib import epub
-from odf import opendocument as odf_opendocument
-from odf import teletype as odf_teletype
-from odf import text as odf_text
-from pptx import Presentation as raw_presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pymupdf import mupdf as pymupdf_lowlevel
-from striprtf.striprtf import rtf_to_text
-from unstructured.partition.auto import partition as raw_partition
 
 from core.ai.runtime import create_vision_llm_client, resolve_vision_ai_model
 from core.context import get_context
@@ -73,11 +65,51 @@ from core.files.reader.vision import prepare_visual_payload
 from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
-from core.imports import module_sdk, typed_view
+from core.imports import lazy_module, module_sdk, typed_view
 from core.text_transforms import TextTransformService
 from core.tracing import attributes as tattr
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue
+
+if TYPE_CHECKING:
+    import bs4
+    import charset_normalizer
+    import ebooklib
+    import extract_msg
+    import olefile
+    import pptx
+    import pymupdf
+    import trafilatura
+    import xlrd
+    from ebooklib import epub
+    from odf import opendocument as odf_opendocument
+    from odf import teletype as odf_teletype
+    from odf import text as odf_text
+    from pptx.enum import shapes as pptx_enum_shapes
+    from pymupdf import mupdf as pymupdf_lowlevel
+    from striprtf import striprtf
+    from unstructured.partition import auto as unstructured_auto
+else:
+    # Тяжёлые парсеры форматов (~50+Mi RSS): импорт при первом обращении
+    # к атрибуту — сервисы без file-reading не платят за них на старте.
+    bs4 = lazy_module("bs4")
+    charset_normalizer = lazy_module("charset_normalizer")
+    ebooklib = lazy_module("ebooklib")
+    extract_msg = lazy_module("extract_msg")
+    olefile = lazy_module("olefile")
+    pptx = lazy_module("pptx")
+    pymupdf = lazy_module("pymupdf")
+    pymupdf_lowlevel = lazy_module("pymupdf.mupdf")
+    odf_opendocument = lazy_module("odf.opendocument")
+    odf_teletype = lazy_module("odf.teletype")
+    odf_text = lazy_module("odf.text")
+    pptx_enum_shapes = lazy_module("pptx.enum.shapes")
+    striprtf = lazy_module("striprtf.striprtf")
+    trafilatura = lazy_module("trafilatura")
+    unstructured_auto = lazy_module("unstructured.partition.auto")
+    xlrd = lazy_module("xlrd")
+    epub = lazy_module("ebooklib.epub")
+
 
 SourceInput = Path | str | bytes
 
@@ -205,7 +237,7 @@ class _PptxShape(Protocol):
     text_frame: _PptxTextFrame
     has_table: bool
     table: _PptxTable
-    shape_type: MSO_SHAPE_TYPE
+    shape_type: pptx_enum_shapes.MSO_SHAPE_TYPE
     image: _PptxImage
 
 
@@ -484,7 +516,7 @@ def _zip_embedded_media_assets(
 
 
 def _pptx_picture_asset(shape: _PptxShape, *, include_bytes: bool) -> ReadAsset | None:
-    if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+    if shape.shape_type != pptx_enum_shapes.MSO_SHAPE_TYPE.PICTURE:
         return None
     image = shape.image
     content_type = image.content_type
@@ -880,7 +912,7 @@ def _read_html_sync(
         extracted = None
     # Резерв на BeautifulSoup для простой/частичной HTML-разметки
     if extracted is None or extracted.strip() == "":
-        soup = BeautifulSoup(html, "html.parser")
+        soup = bs4.BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "noscript"]):
             tag.decompose()
         extracted = soup.get_text(separator="\n", strip=True)
@@ -913,7 +945,7 @@ def _decode_text_bytes(raw: bytes, file_name: str) -> str:
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        best = from_bytes(raw).best()
+        best = charset_normalizer.from_bytes(raw).best()
         if best is None:
             raise FileReadError(f"Failed to detect text file encoding: {file_name}")
         return str(best)
@@ -1455,7 +1487,11 @@ def _read_unstructured_sync(
     kind: FileReadKind,
     opts: ReadOptions,
 ) -> FileReadResult:
-    partition = typed_view(raw_partition, type(raw_partition), _UnstructuredPartition)
+    partition = typed_view(
+        unstructured_auto.partition,
+        type(unstructured_auto.partition),
+        _UnstructuredPartition,
+    )
 
     warnings: list[str] = []
     file_obj = BytesIO(raw)
@@ -1529,7 +1565,11 @@ def _read_pptx_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint .pptx через python-pptx; одна страница на слайд."""
-    presentation = typed_view(raw_presentation, type(raw_presentation), _PptxPresentationFactory)
+    presentation = typed_view(
+        pptx.Presentation,
+        type(pptx.Presentation),
+        _PptxPresentationFactory,
+    )
     try:
         prs = presentation(BytesIO(raw))
     except Exception as exc:
@@ -1623,7 +1663,7 @@ def _read_rtf_sync(
     del opts
     try:
         rtf_text = raw.decode("utf-8", errors="replace")
-        text = rtf_to_text(rtf_text, errors="ignore")
+        text = striprtf.rtf_to_text(rtf_text, errors="ignore")
     except Exception as exc:
         raise FileReadError(f"Failed to parse RTF: {file_name}") from exc
     if not text.strip():
@@ -1698,7 +1738,7 @@ def _read_epub_sync(
             raise FileReadError(f"Failed to open EPUB: {file_name}") from exc
         pages: list[ReadPage] = []
         for idx, item in enumerate(book.get_items_of_type(typed_ebooklib.ITEM_DOCUMENT)):
-            soup = BeautifulSoup(item.get_content(), "html.parser")
+            soup = bs4.BeautifulSoup(item.get_content(), "html.parser")
             text = soup.get_text(separator="\n", strip=True)
             if text:
                 pages.append(
@@ -1817,7 +1857,7 @@ def _read_eml_sync(
                             if hasattr(part, "get_content")
                             else _payload_to_text(part.get_payload(decode=True))
                         )
-                        body = BeautifulSoup(html, "html.parser").get_text(
+                        body = bs4.BeautifulSoup(html, "html.parser").get_text(
                             separator="\n", strip=True
                         )
                     except Exception:
