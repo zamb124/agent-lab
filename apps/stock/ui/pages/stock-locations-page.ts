@@ -15,6 +15,8 @@ import {
     buildLocationTree, filterTree, subtreeIds, usageIcon,
 } from '../_helpers/stock-location-tree.js';
 import { StockLocationModal } from '../modals/stock-location-modal.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-tree.js';
 import '@platform/lib/components/platform-resizable-split.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -38,24 +40,17 @@ export class StockLocationsPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
             :host { display: block; height: 100%; overflow: hidden; }
             .side { display: flex; flex-direction: column; height: 100%; padding: var(--space-3); gap: var(--space-2); overflow: hidden; }
             .tree-scroll { flex: 1; overflow-y: auto; }
-            .main { height: 100%; overflow-y: auto; padding: var(--space-5); }
-            .loc-header { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
-            .loc-header h1 { margin: 0; font-size: var(--text-xl); color: var(--text-primary); }
-            .loc-path { color: var(--text-tertiary); font-size: var(--text-sm); }
-            .badges { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+            .main { height: 100%; overflow-y: auto; padding: var(--space-6); }
+            .badges { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
             .badge { padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--text-xs); background: var(--surface-2); color: var(--text-secondary); }
             .badge.warn { background: var(--color-warning-bg, #fff3cd); color: var(--color-warning-text, #8a6d00); }
             .badge.off { opacity: 0.6; }
             .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
-            .actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); flex-wrap: wrap; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary); }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             .hint { color: var(--text-tertiary); margin-top: var(--space-6); text-align: center; }
             .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-2) var(--space-4); margin-bottom: var(--space-4); font-size: var(--text-sm); }
             .meta-grid dt { color: var(--text-tertiary); }
@@ -197,7 +192,7 @@ export class StockLocationsPage extends PlatformPage {
         if (this._quants.loading) return html`<div class="hint">${this.t('settings.loading')}</div>`;
         if (quants.length === 0) return html`<platform-empty-state .message=${this.t('explorer.empty_contents')}></platform-empty-state>`;
         return html`
-            <table><thead><tr>
+            <div class="table-card"><div class="scroll"><table><thead><tr>
                 <th>${this.t('explorer.col_product')}</th>
                 <th>${this.t('explorer.col_lot')}</th>
                 <th>${this.t('explorer.col_owner')}</th>
@@ -215,7 +210,7 @@ export class StockLocationsPage extends PlatformPage {
                     <td class="num">${Number(q.quantity) - Number(q.reserved_quantity)}</td>
                     <td>${q.in_date ?? '—'}</td>
                 </tr>`)}
-            </tbody></table>
+            </tbody></table></div></div>
         `;
     }
 
@@ -223,13 +218,13 @@ export class StockLocationsPage extends PlatformPage {
         const kids = this._childrenOf(loc.location_id);
         if (kids.length === 0) return html`<platform-empty-state .message=${this.t('explorer.empty_children')}></platform-empty-state>`;
         return html`
-            <table><tbody>
+            <div class="table-card"><div class="scroll"><table><tbody>
                 ${kids.map((k) => html`<tr>
                     <td style="width:32px"><platform-icon name=${usageIcon(k.usage)} size="16"></platform-icon></td>
                     <td><a class="link" @click=${() => this.navigate('stock_location', { locationId: k.location_id })}>${k.complete_name || k.name}</a></td>
                     <td>${this._usageLabel(k.usage)}</td>
                 </tr>`)}
-            </tbody></table>
+            </tbody></table></div></div>
         `;
     }
 
@@ -237,7 +232,7 @@ export class StockLocationsPage extends PlatformPage {
         const items = this._moves.items;
         const body = items.length === 0
             ? html`<platform-empty-state .message=${this.t('explorer.empty_moves')}></platform-empty-state>`
-            : html`<table><thead><tr>
+            : html`<div class="table-card"><div class="scroll"><table><thead><tr>
                     <th>${this.t('moves.col_date')}</th>
                     <th>${this.t('moves.col_product')}</th>
                     <th>${this.t('moves.col_from_to')}</th>
@@ -251,7 +246,7 @@ export class StockLocationsPage extends PlatformPage {
                         <td class="num">${m.product_qty}</td>
                         <td>${this.t(`moves.state_${m.state ?? 'draft'}`)}</td>
                     </tr>`)}
-                </tbody></table>`;
+                </tbody></table></div></div>`;
         return html`
             ${body}
             <div style="margin-top: var(--space-3)">
@@ -268,24 +263,20 @@ export class StockLocationsPage extends PlatformPage {
         const quants = this._quantsFor(loc);
         const tab = this._tab;
         return html`
-            <div class="loc-header">
-                <h1><platform-icon name=${usageIcon(loc.usage)} size="20"></platform-icon> ${loc.name}</h1>
-                <span class="loc-path">${loc.complete_name}</span>
-                <div class="badges">
-                    <span class="badge">${this._usageLabel(loc.usage)}</span>
-                    ${loc.putaway_blocked ? html`<span class="badge warn">${this.t('explorer.blocked_putaway')}</span>` : ''}
-                    ${loc.removal_blocked ? html`<span class="badge warn">${this.t('explorer.blocked_removal')}</span>` : ''}
-                    ${loc.is_active === false ? html`<span class="badge off">${this.t('explorer.inactive')}</span>` : ''}
-                    ${loc.allow_negative ? html`<span class="badge">${this.t('explorer.allow_negative')}</span>` : ''}
-                </div>
-            </div>
-            <div class="actions">
-                <platform-button variant="primary" density="compact"
-                    @click=${() => this.openModal(StockLocationModal, { parentId: loc.location_id })}
-                ><platform-icon name="plus" size="14"></platform-icon> ${this.t('explorer.create_child')}</platform-button>
-                <platform-button variant="secondary" density="compact"
+            <page-header title=${loc.name} subtitle=${loc.complete_name} dense>
+                <platform-button slot="actions" variant="secondary" density="compact"
                     @click=${() => this.openModal(StockLocationModal, { locationId: loc.location_id })}
                 ><platform-icon name="edit" size="14"></platform-icon> ${this.t('explorer.edit')}</platform-button>
+                <platform-button slot="actions" variant="primary" density="compact"
+                    @click=${() => this.openModal(StockLocationModal, { parentId: loc.location_id })}
+                ><platform-icon name="plus" size="14"></platform-icon> ${this.t('explorer.create_child')}</platform-button>
+            </page-header>
+            <div class="badges">
+                <span class="badge">${this._usageLabel(loc.usage)}</span>
+                ${loc.putaway_blocked ? html`<span class="badge warn">${this.t('explorer.blocked_putaway')}</span>` : ''}
+                ${loc.removal_blocked ? html`<span class="badge warn">${this.t('explorer.blocked_removal')}</span>` : ''}
+                ${loc.is_active === false ? html`<span class="badge off">${this.t('explorer.inactive')}</span>` : ''}
+                ${loc.allow_negative ? html`<span class="badge">${this.t('explorer.allow_negative')}</span>` : ''}
             </div>
             ${this._renderKpis(quants)}
             <dl class="meta-grid">

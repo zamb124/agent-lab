@@ -13,12 +13,14 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type { StockLocation, StockQuant } from '@platform/lib/events/wire/stock.gen.js';
 import { usageIcon } from '../_helpers/stock-location-tree.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-resizable-split.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 
 export class StockInventoryPage extends PlatformPage {
     static override properties = {
@@ -34,6 +36,7 @@ export class StockInventoryPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
             :host { display: block; height: 100%; overflow: hidden; }
             .side { display: flex; flex-direction: column; height: 100%; padding: var(--space-3); gap: var(--space-2); overflow-y: auto; }
@@ -41,11 +44,7 @@ export class StockInventoryPage extends PlatformPage {
             .due:hover { background: var(--surface-2); }
             .due.active { background: var(--accent-primary-bg, var(--surface-2)); font-weight: var(--font-medium); }
             .due .days { margin-left: auto; font-size: var(--text-xs); color: var(--color-danger-text, #a02622); }
-            .main { height: 100%; overflow-y: auto; padding: var(--space-5); }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin-top: var(--space-3); }
-            th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary); }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+            .main { height: 100%; overflow-y: auto; padding: var(--space-6); }
             .hint { color: var(--text-tertiary); margin-top: var(--space-6); text-align: center; }
             .section { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-2) 0; }
             platform-field { min-width: 110px; }
@@ -155,7 +154,7 @@ export class StockInventoryPage extends PlatformPage {
         const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
         const due = this._dueItems();
         return html`
-            <platform-searchable-combobox
+            <platform-searchable-combobox compact
                 .label=${this.t('report.warehouse')}
                 .value=${this._warehouseId}
                 .options=${whOptions}
@@ -184,9 +183,18 @@ export class StockInventoryPage extends PlatformPage {
         if (this._selectedId === '') return html`<div class="hint">${this.t('inventory.select_hint')}</div>`;
         const quants = this._quantsFor();
         return html`
+            <page-header
+                title=${this.t('inventory.title')}
+                dense
+            >
+                <platform-button slot="actions" variant="primary" density="compact" ?disabled=${quants.length === 0}
+                    ?loading=${this._applyOp.busy} @click=${() => this._applyAll()}>
+                    <platform-icon name="check" size="14"></platform-icon> ${this.t('inventory.apply')}
+                </platform-button>
+            </page-header>
             ${quants.length === 0
                 ? html`<platform-empty-state .message=${this.t('explorer.empty_contents')}></platform-empty-state>`
-                : html`<table><thead><tr>
+                : html`<div class="table-card"><div class="scroll"><table><thead><tr>
                     <th>${this.t('report.col_product')}</th>
                     <th>${this.t('explorer.col_lot')}</th>
                     <th class="num">${this.t('explorer.col_qty')}</th>
@@ -213,12 +221,7 @@ export class StockInventoryPage extends PlatformPage {
                             @click=${() => this._setCount(q)}
                         ><platform-icon name="check" size="14"></platform-icon> ${this.t('inventory.set_count')}</platform-button></td>
                     </tr>`)}
-                </tbody></table>
-                <div style="margin-top: var(--space-3)">
-                    <platform-button variant="primary" ?loading=${this._applyOp.busy} @click=${() => this._applyAll()}>
-                        <platform-icon name="check" size="14"></platform-icon> ${this.t('inventory.apply')}
-                    </platform-button>
-                </div>`}
+                </tbody></table></div></div>`}
         `;
     }
 

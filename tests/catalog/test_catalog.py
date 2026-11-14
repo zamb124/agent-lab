@@ -315,6 +315,126 @@ class TestBarcodes:
         assert row is None
 
 
+class TestUom:
+    """Глобальные ЕИ компании: пользовательские создаются/удаляются,
+    reference и базовая ЕИ товара — под защитой."""
+
+    async def test_create_and_delete_custom_uom(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        uom = await stock_di.catalog_service.create_uom(
+            company_id=company_id,
+            name=f"Crate {unique_id}",
+            category="unit",
+            factor=Decimal("12"),
+        )
+        assert uom.product_id is None and uom.is_reference is False
+        assert any(
+            u.uom_id == uom.uom_id
+            for u in await stock_di.catalog_service.list_uoms(company_id=company_id)
+        )
+        deleted = await stock_di.catalog_service.delete_uom(
+            company_id=company_id, uom_id=uom.uom_id
+        )
+        assert deleted.uom_id == uom.uom_id
+        assert all(
+            u.uom_id != uom.uom_id
+            for u in await stock_di.catalog_service.list_uoms(company_id=company_id)
+        )
+
+    async def test_create_duplicate_name_conflicts(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        await stock_di.catalog_service.create_uom(
+            company_id=company_id, name=f"Box {unique_id}", category="unit", factor=Decimal("6")
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            await stock_di.catalog_service.create_uom(
+                company_id=company_id,
+                name=f"Box {unique_id}",
+                category="unit",
+                factor=Decimal("1"),
+            )
+        assert exc.value.error_code == "uom_conflict"
+
+    async def test_create_non_positive_factor_rejected(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        with pytest.raises(PlatformConflictError) as exc:
+            await stock_di.catalog_service.create_uom(
+                company_id=company_id,
+                name=f"Zero {unique_id}",
+                category="unit",
+                factor=Decimal("0"),
+            )
+        assert exc.value.error_code == "uom_factor_not_positive"
+
+    async def test_delete_reference_uom_locked(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        units = await CatalogUom.by_name(company_id, "Units")
+        assert units is not None and units.is_reference
+        with pytest.raises(PlatformConflictError) as exc:
+            await stock_di.catalog_service.delete_uom(
+                company_id=company_id, uom_id=units.uom_id
+            )
+        assert exc.value.error_code == "uom_reference_locked"
+
+    async def test_delete_product_base_uom_blocked(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        custom = await stock_di.catalog_service.create_uom(
+            company_id=company_id,
+            name=f"Base {unique_id}",
+            category="unit",
+            factor=Decimal("1"),
+        )
+        await stock_di.catalog_service.create_product(
+            company_id=company_id, name=f"P {unique_id}", uom_id=custom.uom_id
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            await stock_di.catalog_service.delete_uom(
+                company_id=company_id, uom_id=custom.uom_id
+            )
+        assert exc.value.error_code == "uom_in_use"
+
+    async def test_delete_packaging_row_not_found(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Упаковки (product_id IS NOT NULL) удаляются через delete_packaging."""
+        company_id = await _env(stock_di, unique_id)
+        uom_id = await _uom(stock_di, company_id)
+        product = await stock_di.catalog_service.create_product(
+            company_id=company_id, name=f"PK {unique_id}", uom_id=uom_id
+        )
+        pack = await stock_di.catalog_service.create_packaging(
+            company_id=company_id,
+            product_id=product.product_id,
+            name="Tray10",
+            quantity=Decimal("10"),
+        )
+        with pytest.raises(PlatformNotFoundError) as exc:
+            await stock_di.catalog_service.delete_uom(
+                company_id=company_id, uom_id=pack.packaging_id
+            )
+        assert exc.value.error_code == "uom_not_found"
+
+    async def test_delete_missing_uom_not_found(
+        self, stock_di, unique_id: str
+    ) -> None:
+        company_id = await _env(stock_di, unique_id)
+        with pytest.raises(PlatformNotFoundError) as exc:
+            await stock_di.catalog_service.delete_uom(
+                company_id=company_id, uom_id="uom-missing"
+            )
+        assert exc.value.error_code == "uom_not_found"
+
+
 class TestSuggest:
     async def test_suggest_by_sku_barcode_name(
         self, stock_di, unique_id: str

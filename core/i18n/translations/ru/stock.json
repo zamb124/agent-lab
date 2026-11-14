@@ -19,7 +19,8 @@
     "stock_resources": "Ресурсы",
     "stock_putaway_rules": "Правила размещения",
     "stock_reorder_rules": "Правила пополнения",
-    "stock_routes": "Маршруты"
+    "stock_routes": "Маршруты",
+    "stock_uoms": "Единицы измерения"
   },
   "bottom_nav": {
     "home": "Склад",
@@ -50,14 +51,16 @@
       "stock_resources": "Ресурсы",
       "stock_putaway_rules": "Размещение",
       "stock_reorder_rules": "Пополнение",
-      "stock_routes": "Маршруты"
+      "stock_routes": "Маршруты",
+      "stock_uoms": "Единицы измерения"
     }
   },
   "home": {
     "title": "Пульс склада",
     "empty": "Склад не настроен",
     "quants": "Остатки",
-    "transfers": "Переводы"
+    "transfers": "Переводы",
+    "subtitle": "Остатки и открытые переводы"
   },
   "transfers": {
     "title": "Переводы",
@@ -259,7 +262,15 @@
     "route_created": "Маршрут создан",
     "route_create_failed": "Не удалось создать маршрут",
     "warehouse_updated": "Склад обновлён",
-    "warehouse_update_failed": "Не удалось обновить склад"
+    "warehouse_update_failed": "Не удалось обновить склад",
+    "uom_created": "Единица создана",
+    "uom_create_failed": "Не удалось создать единицу",
+    "uom_deleted": "Единица удалена",
+    "uom_delete_failed": "Не удалось удалить единицу",
+    "packaging_created": "Упаковка создана",
+    "packaging_create_failed": "Не удалось создать упаковку",
+    "packaging_deleted": "Упаковка удалена",
+    "packaging_delete_failed": "Не удалось удалить упаковку"
   },
   "explorer": {
     "search_placeholder": "Поиск ячейки, зоны или штрихкода…",
@@ -427,7 +438,17 @@
     "pick_sequence": "Порядок отбора",
     "delay": "Задержка",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "warehouses_subtitle": "Склады компании и типы операций на них",
+    "storage_types_subtitle": "Политики хранения для ячеек склада",
+    "container_types_subtitle": "Типы тары и контейнеров",
+    "resources_subtitle": "Техника и рабочие ресурсы склада",
+    "putaway_rules_subtitle": "Куда размещать товар при приёмке",
+    "reorder_rules_subtitle": "Автоматическое пополнение точек отбора",
+    "routes_subtitle": "Маршруты движения товара по складу",
+    "handles_loose": "Штучный товар",
+    "max_level": "Макс. уровень",
+    "max_load_weight": "Макс. вес нагрузки"
   },
   "modal": {
     "location_create": "Новая локация",
@@ -435,5 +456,25 @@
     "location_create_child": "Дочерняя локация",
     "product_new": "Новый товар",
     "product_edit": "Товар склада"
+  },
+  "uoms": {
+    "title": "Единицы измерения",
+    "subtitle": "Базовые единицы и упаковки товаров",
+    "base_title": "Базовые единицы",
+    "packagings_title": "Упаковки товаров",
+    "create_uom": "Создать единицу",
+    "create_packaging": "Создать упаковку",
+    "category": "Категория",
+    "factor": "Коэффициент",
+    "quantity": "Кол-во в базовых ЕИ",
+    "reference": "базовая",
+    "empty": "Единиц нет",
+    "empty_packagings": "Упаковок нет",
+    "confirm_delete_uom": "Удалить единицу измерения?",
+    "confirm_delete_packaging": "Удалить упаковку?",
+    "category_unit": "Штуки",
+    "category_weight": "Вес",
+    "category_length": "Длина",
+    "category_volume": "Объём"
   }
 }

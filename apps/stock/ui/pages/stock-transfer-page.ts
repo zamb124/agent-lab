@@ -22,8 +22,10 @@ interface TransferDetail {
 function isTransferDetail(value: unknown): value is TransferDetail {
     return isPlainRecord(value);
 }
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 
 export class StockTransferPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -45,19 +47,10 @@ export class StockTransferPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
-            h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); }
             .state { color: var(--text-secondary); margin: var(--space-2) 0 var(--space-4); }
             .actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td {
-                padding: var(--space-2) var(--space-3); text-align: left;
-                border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary);
-            }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            .num { text-align: right; font-variant-numeric: tabular-nums; }
         `,
     ];
 
@@ -124,15 +117,17 @@ export class StockTransferPage extends PlatformPage {
         const names = this._nameMaps();
         return html`
             <div class="wrap">
-                <h1>${transfer.name}</h1>
-                <div class="state">${this.t('fields.state')}: ${transfer.state}</div>
-                <div class="actions">
-                    <platform-button @click=${(e: Event) => this._act(this._confirm, e)}>${this.t('transfer.confirm')}</platform-button>
-                    <platform-button @click=${(e: Event) => this._act(this._assign, e)}>${this.t('transfer.assign')}</platform-button>
-                    <platform-button @click=${(e: Event) => this._act(this._validate, e)}>${this.t('transfer.validate')}</platform-button>
-                    <platform-button @click=${(e: Event) => this._act(this._cancel, e)}>${this.t('transfer.cancel')}</platform-button>
-                </div>
-                <table>
+                <page-header
+                    title=${typeof transfer.name === 'string' ? transfer.name : ''}
+                    subtitle=${`${this.t('fields.state')}: ${String(transfer.state ?? '')}`}
+                    dense
+                >
+                    <platform-button slot="actions" variant="secondary" density="compact" @click=${(e: Event) => this._act(this._confirm, e)}>${this.t('transfer.confirm')}</platform-button>
+                    <platform-button slot="actions" variant="secondary" density="compact" @click=${(e: Event) => this._act(this._assign, e)}>${this.t('transfer.assign')}</platform-button>
+                    <platform-button slot="actions" variant="primary" density="compact" @click=${(e: Event) => this._act(this._validate, e)}>${this.t('transfer.validate')}</platform-button>
+                    <platform-button slot="actions" variant="secondary" density="compact" @click=${(e: Event) => this._act(this._cancel, e)}>${this.t('transfer.cancel')}</platform-button>
+                </page-header>
+                <div class="table-card"><div class="scroll"><table>
                     <thead><tr>
                         <th>${this.t('fields.product')}</th>
                         <th>${this.t('fields.from')}</th>
@@ -151,7 +146,7 @@ export class StockTransferPage extends PlatformPage {
                             </tr>
                         `)}
                     </tbody>
-                </table>
+                </table></div></div>
             </div>
         `;
     }

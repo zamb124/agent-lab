@@ -97,12 +97,88 @@ async def stock_e2e_open_transfer(page: Page, transfer_id: str) -> None:
     row = page.locator(f"stock-transfers-page tr[data-id='{transfer_id}']")
     await expect(row).to_be_visible(timeout=15_000)
     await row.click()
-    await expect(page.locator("stock-transfer-page h1")).to_be_visible(timeout=15_000)
+    await expect(page.locator("stock-transfer-page page-header")).to_be_visible(timeout=15_000)
+
+
+async def stock_e2e_seed_product_image(
+    page: Page,
+    product_id: str,
+    *,
+    color: str = "#5b8def",
+) -> str:
+    """Присваивает товару сгенерированную картинку (chunked Files API + overlay).
+
+    Рисует цветной квадрат 96×96 в canvas страницы и грузит его тем же
+    путём, что и SPA: init ``/uploads`` → PUT part → complete, затем
+    ``stock/product_update`` с ``overlay.image_file_ids``. Возвращает file_id.
+    """
+    file_id = await page.evaluate(
+        """async ({ productId, color }) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 96; canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, 96, 96);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath();
+            ctx.arc(48, 40, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = color;
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('SKU', 48, 47);
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.font = '12px sans-serif';
+            ctx.fillText(productId.slice(-6), 48, 82);
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+            if (blob === null) throw new Error('canvas.toBlob вернул null');
+            const buf = await blob.arrayBuffer();
+            const spec = {
+                source_kind: 'product',
+                source_ref: { product_id: productId },
+                retention: { kind: 'product' },
+                post_create: { is_public: false },
+            };
+            const init = await fetch('/stock/api/v1/files/uploads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    spec,
+                    original_name: `product-${productId}.png`,
+                    content_type: 'image/png',
+                    file_size: buf.byteLength,
+                }),
+            });
+            if (!init.ok) throw new Error(`upload init: ${init.status} ${await init.text()}`);
+            const { upload_id, file_id } = await init.json();
+            const put = await fetch(`/stock/api/v1/files/uploads/${upload_id}/parts/1`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/octet-stream' },
+                body: buf,
+            });
+            if (!put.ok) throw new Error(`upload part: ${put.status} ${await put.text()}`);
+            const done = await fetch(`/stock/api/v1/files/uploads/${upload_id}/complete`, {
+                method: 'POST',
+            });
+            if (!done.ok) throw new Error(`upload complete: ${done.status} ${await done.text()}`);
+            return file_id;
+        }""",
+        {"productId": product_id, "color": color},
+    )
+    if not isinstance(file_id, str) or file_id == "":
+        raise AssertionError(f"seed product image: file_id не получен ({file_id!r})")
+    await stock_e2e_op(
+        page,
+        "stock/product_update",
+        "stock/products/update_requested",
+        {"product_id": product_id, "overlay": {"image_file_ids": [file_id]}},
+    )
+    return file_id
 
 
 async def stock_e2e_transfer_action(page: Page, button_index: int, op: str, state: str) -> None:
     """Действие карточки перевода: клик, исход op на bus, обновлённый state."""
-    button = page.locator("stock-transfer-page .actions platform-button").nth(button_index)
+    button = page.locator("stock-transfer-page page-header platform-button").nth(button_index)
     await expect(button).to_be_visible(timeout=10_000)
     await ui_click_and_wait_bus_op(page, button, op)
-    await expect(page.locator("stock-transfer-page .state")).to_contain_text(state, timeout=15_000)
+    await expect(page.locator("stock-transfer-page page-header")).to_contain_text(state, timeout=15_000)

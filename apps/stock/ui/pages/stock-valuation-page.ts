@@ -13,6 +13,7 @@ import type { ComboboxOption } from '@platform/lib/components/platform-searchabl
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { formatMoney, formatQty, formatUnitCost, parseDecimal } from '../_helpers/valuation.js';
 import { StockValuationRevalueModal } from '../modals/stock-valuation-revalue-modal.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -95,16 +96,8 @@ export class StockValuationPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
-            .toolbar {
-                display: flex;
-                gap: var(--space-3);
-                align-items: center;
-                margin-bottom: var(--space-4);
-                flex-wrap: wrap;
-            }
             .kpis {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -138,28 +131,6 @@ export class StockValuationPage extends PlatformPage {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .table-card {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-            .scroll { overflow-x: auto; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td {
-                padding: var(--space-2) var(--space-4);
-                text-align: left;
-                border-bottom: 1px solid var(--glass-border-subtle);
-                color: var(--text-primary);
-            }
-            th {
-                color: var(--text-tertiary);
-                font-weight: var(--font-medium);
-                font-size: var(--text-xs);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-            }
-            tbody tr:last-child td { border-bottom: none; }
             tr.row {
                 cursor: pointer;
                 background: linear-gradient(
@@ -170,35 +141,18 @@ export class StockValuationPage extends PlatformPage {
             }
             tr.row:hover td { background: transparent; }
             tr.row:hover { filter: brightness(1.05); }
-            .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+            .num { white-space: nowrap; }
             .product { display: flex; flex-direction: column; }
             .product-name { font-weight: var(--font-medium); }
             .product-sku { font-size: var(--text-xs); color: var(--text-tertiary); }
             .value-cell { font-weight: var(--font-semibold); }
             .row-actions { display: flex; gap: var(--space-1); justify-content: flex-end; }
-            .icon-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                border: none;
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                padding: 0;
-            }
-            .icon-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
             .more {
                 display: flex;
                 justify-content: center;
                 padding: var(--space-3);
             }
             platform-empty-state { margin-top: var(--space-8); }
-            @media (max-width: 767px) {
-                .wrap { padding: var(--space-3); }
-            }
         `,
     ];
 

@@ -10,11 +10,13 @@ import type { OpController, ResourceController } from '@platform/lib/base/use-re
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { StockLocation, StockQuant } from '@platform/lib/events/wire/stock.gen.js';
 import { usageIcon } from '../_helpers/stock-location-tree.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-resizable-split.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 
 export class StockPackagesPage extends PlatformPage {
     static override properties = {
@@ -32,6 +34,7 @@ export class StockPackagesPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
             :host { display: block; height: 100%; overflow: hidden; }
             .side { display: flex; flex-direction: column; height: 100%; padding: var(--space-3); gap: var(--space-2); overflow-y: auto; }
@@ -39,14 +42,10 @@ export class StockPackagesPage extends PlatformPage {
             .pkg:hover { background: var(--surface-2); }
             .pkg.active { background: var(--accent-primary-bg, var(--surface-2)); font-weight: var(--font-medium); }
             .pkg .where { color: var(--text-tertiary); font-size: var(--text-xs); margin-left: auto; }
-            .main { height: 100%; overflow-y: auto; padding: var(--space-5); }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin-top: var(--space-3); }
-            th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary); }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+            .main { height: 100%; overflow-y: auto; padding: var(--space-6); }
             .hint { color: var(--text-tertiary); margin-top: var(--space-6); text-align: center; }
-            .move-bar { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-md); }
-            .move-bar platform-searchable-combobox { flex: 1; }
+            .move-bar { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-md); }
+            .move-bar platform-searchable-combobox { flex: 1; --field-pill-compact-radius: var(--radius-full); }
             .meta { color: var(--text-secondary); font-size: var(--text-sm); display: flex; gap: var(--space-4); flex-wrap: wrap; }
         `,
     ];
@@ -125,7 +124,7 @@ export class StockPackagesPage extends PlatformPage {
         const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
         const containers = this._containerItems().filter((c) => this._warehouseId === '' || c.warehouse_id === this._warehouseId);
         return html`
-            <platform-searchable-combobox
+            <platform-searchable-combobox compact
                 .label=${this.t('report.warehouse')}
                 .value=${this._warehouseId}
                 .options=${[{ value: '', label: this.t('report.all_warehouses') }, ...whOptions]}
@@ -152,20 +151,18 @@ export class StockPackagesPage extends PlatformPage {
             .filter((l) => l.usage === 'view' || l.usage === 'bin')
             .map((l) => ({ value: l.location_id, label: l.complete_name || l.name }));
         return html`
-            <h1 style="margin: 0 0 var(--space-3); font-size: var(--text-xl); color: var(--text-primary);">
-                <platform-icon name="box" size="20"></platform-icon> ${c?.name ?? this._selectedId}
-            </h1>
-            <div class="meta">
-                <span>${this.t('packages.current_location')}: ${this._locationName(c?.parent_id)}</span>
-            </div>
-            <div style="margin-top: var(--space-3); display:flex; gap: var(--space-2);">
-                <platform-button variant="secondary" density="compact" @click=${() => { this._moveOpen = !this._moveOpen; }}>
+            <page-header
+                title=${c?.name ?? this._selectedId}
+                subtitle=${`${this.t('packages.current_location')}: ${this._locationName(c?.parent_id)}`}
+                dense
+            >
+                <platform-button slot="actions" variant="secondary" density="compact" @click=${() => { this._moveOpen = !this._moveOpen; }}>
                     <platform-icon name="truck" size="14"></platform-icon> ${this.t('packages.move')}
                 </platform-button>
-            </div>
+            </page-header>
             ${this._moveOpen ? html`
                 <div class="move-bar">
-                    <platform-searchable-combobox
+                    <platform-searchable-combobox compact
                         .label=${this.t('packages.move_dest')}
                         .value=${this._moveDest}
                         .options=${locOptions}
@@ -177,10 +174,10 @@ export class StockPackagesPage extends PlatformPage {
                     </platform-button>
                 </div>
             ` : ''}
-            <h2 style="font-size: var(--text-base); color: var(--text-secondary); margin: var(--space-4) 0 0;">${this.t('packages.contents')}</h2>
+            <div class="section"><h2>${this.t('packages.contents')}</h2></div>
             ${quants.length === 0 && nested.length === 0
                 ? html`<platform-empty-state .message=${this.t('packages.empty_contents')}></platform-empty-state>`
-                : html`<table><thead><tr>
+                : html`<div class="table-card"><div class="scroll"><table><thead><tr>
                     <th>${this.t('report.col_product')}</th>
                     <th class="num">${this.t('report.col_qty')}</th>
                     <th class="num">${this.t('report.col_reserved')}</th>
@@ -193,7 +190,7 @@ export class StockPackagesPage extends PlatformPage {
                     ${nested.map((n) => html`<tr>
                         <td colspan="3"><platform-icon name=${usageIcon(n.usage)} size="14"></platform-icon> ${n.name} <span style="color:var(--text-tertiary)">(${this.t('packages.nested')})</span></td>
                     </tr>`)}
-                </tbody></table>`}
+                </tbody></table></div></div>`}
         `;
     }
 

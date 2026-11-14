@@ -48,6 +48,7 @@ const NAV_TREE: NavNodeSpec[] = [
         label_key: 'sidebar.nav.stock_settings',
         children: [
             { id: 'stock_warehouses', label_key: 'sidebar.nav.stock_warehouses', route: 'stock_warehouses' },
+            { id: 'stock_uoms', label_key: 'sidebar.nav.stock_uoms', route: 'stock_uoms' },
             { id: 'stock_storage_types', label_key: 'sidebar.nav.stock_storage_types', route: 'stock_storage_types' },
             { id: 'stock_container_types', label_key: 'sidebar.nav.stock_container_types', route: 'stock_container_types' },
             { id: 'stock_resources', label_key: 'sidebar.nav.stock_resources', route: 'stock_resources' },

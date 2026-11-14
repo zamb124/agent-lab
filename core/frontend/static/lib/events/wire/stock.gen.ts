@@ -2341,6 +2341,26 @@ export interface StockTransfersListPayload {
 }
 
 /**
+ * StockUomCreatePayload
+ */
+export interface StockUomCreatePayload {
+    "name": string;
+    "category": string;
+    "factor": number | string;
+    "weight"?: number | string | null | undefined;
+    "volume"?: number | string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * StockUomIdPayload
+ */
+export interface StockUomIdPayload {
+    "uom_id": string;
+    [key: string]: unknown;
+}
+
+/**
  * Факт изменения стоимости (revalue/correction — вне done).
  */
 export interface StockValuationChangedPayload {
@@ -2762,6 +2782,8 @@ export interface StockCommandMap {
     "stock/transfers/list_requested": { payload: StockTransfersListPayload; result: OffsetPage_StockTransfer_ },
     "stock/transfers/return_requested": { payload: StockTransferReturnPayload; result: StockTransfer },
     "stock/transfers/validate_requested": { payload: StockTransferValidatePayload; result: StockTransfer },
+    "stock/uoms/create_requested": { payload: StockUomCreatePayload; result: CatalogUom },
+    "stock/uoms/delete_requested": { payload: StockUomIdPayload; result: CatalogUom },
     "stock/uoms/list_requested": { payload: EmptyPayload; result: StockItemsResponse_CatalogUom_ },
     "stock/valuation/correction_requested": { payload: StockValuationCorrectionPayload; result: StockValueLayer },
     "stock/valuation/layers_list_requested": { payload: StockValuationLayersPayload; result: StockValuationLayersPage },
@@ -3029,6 +3051,12 @@ export interface StockEventMap {
     "stock/transfers/validate_failed": PlatformCommandEventPayload,
     "stock/transfers/validate_requested": PlatformCommandEventPayload,
     "stock/transfers/validate_succeeded": PlatformCommandEventPayload,
+    "stock/uoms/create_failed": PlatformCommandEventPayload,
+    "stock/uoms/create_requested": PlatformCommandEventPayload,
+    "stock/uoms/create_succeeded": PlatformCommandEventPayload,
+    "stock/uoms/delete_failed": PlatformCommandEventPayload,
+    "stock/uoms/delete_requested": PlatformCommandEventPayload,
+    "stock/uoms/delete_succeeded": PlatformCommandEventPayload,
     "stock/uoms/list_failed": PlatformCommandEventPayload,
     "stock/uoms/list_requested": PlatformCommandEventPayload,
     "stock/uoms/list_succeeded": PlatformCommandEventPayload,

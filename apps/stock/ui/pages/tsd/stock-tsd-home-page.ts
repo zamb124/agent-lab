@@ -213,10 +213,26 @@ export class StockTsdHomePage extends PlatformPage {
             }
             .context-chips {
                 display: flex;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 gap: var(--space-2);
+                overflow-x: auto;
+                scrollbar-width: none;
+                -webkit-overflow-scrolling: touch;
+                scroll-snap-type: x proximity;
             }
+            /* Стрелки-подсказки не нужны: срезанный край чипа сам
+             * показывает, что ряд продолжается за экраном. Маска
+             * включается только при реальном переполнении — влезшие
+             * чипы не выглядят «обрезанными». */
+            .context-chips.can-scroll {
+                mask-image: linear-gradient(
+                    to right, black calc(100% - 28px), transparent
+                );
+            }
+            .context-chips::-webkit-scrollbar { display: none; }
             .chip {
+                flex-shrink: 0;
+                scroll-snap-align: start;
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
@@ -707,6 +723,12 @@ export class StockTsdHomePage extends PlatformPage {
         }
         if (context.warehouse_id === '' && this._loadedFor !== '') {
             this._loadedFor = '';
+        }
+        // Fade-маска края — только когда чипы реально не влезли:
+        // длинные коды зоны/техники делают ряд шире терминала.
+        const chips = this.renderRoot.querySelector('.context-chips');
+        if (chips instanceof HTMLElement) {
+            chips.classList.toggle('can-scroll', chips.scrollWidth > chips.clientWidth);
         }
         // Сессия закрылась (коммит, исключение, выход) — задание ушло
         // в леджер: очередь и показатели оператора обновляем сразу.

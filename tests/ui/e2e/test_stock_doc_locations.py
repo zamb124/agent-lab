@@ -144,7 +144,7 @@ async def test_locations_tree(
 
     await bin_node.click()
     await expect(
-        page.locator("stock-locations-page .loc-header")
+        page.locator("stock-locations-page page-header")
     ).to_contain_text(bin_name, timeout=15_000)
 
     await scenario.step(

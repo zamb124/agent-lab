@@ -22,6 +22,8 @@
 | `stock-packages-page` | Тара/упаковки: содержимое и перемещение целиком |
 | `stock-inventory-page` | Инвентаризация: due-ячейки, факт vs учёт |
 | `stock-*-settings` | Справочники: склады, типы хранения/тары, ресурсы, правила |
+| `stock-valuation-journal-page` | Журнал слоёв оценки: приходы и списания |
+| `stock-valuation-batches-page` | Партии запасов (FIFO-слои) по товарам |
 
 ## Блоки и инструкции
 
@@ -67,6 +69,8 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `settings-warehouse` | Склады, типы хранения, тара | `test_stock_doc_operations.py` | 🚧 |
+| 2 | `settings-uoms` | Единицы измерения и упаковки | `test_stock_doc_operations.py` | 🚧 |
+| 2 | `settings-catalogs` | Ресурсы/техника, правила размещения и пополнения, маршруты, партии | `test_stock_doc_operations.py` | 🚧 |
 
 ### tsd — ТСД-сканер
 

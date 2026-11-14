@@ -539,6 +539,59 @@ export const stockUomsListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/stock/api/v1/uoms' },
 });
 
+export const stockUomCreateOp = createAsyncOp({
+    name: 'stock/uom_create',
+    successToastKey: 'stock:toast.uom_created',
+    errorToastKey: 'stock:toast.uom_create_failed',
+    commandType: 'stock/uoms/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/stock/api/v1/uoms' },
+    onSuccess: (ctx) => { rerunLastRequest(ctx, stockUomsListOp); },
+});
+
+export const stockUomDeleteOp = createAsyncOp({
+    name: 'stock/uom_delete',
+    successToastKey: 'stock:toast.uom_deleted',
+    errorToastKey: 'stock:toast.uom_delete_failed',
+    commandType: 'stock/uoms/delete_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/stock/api/v1/uoms/{uom_id}' },
+    onSuccess: (ctx) => { rerunLastRequest(ctx, stockUomsListOp); },
+});
+
+export const stockPackagingsListOp = createAsyncOp({
+    name: 'stock/packagings_list',
+    silent: true,
+    commandType: 'stock/packagings/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/stock/api/v1/packagings' },
+});
+
+export const stockPackagingCreateOp = createAsyncOp({
+    name: 'stock/packaging_create',
+    successToastKey: 'stock:toast.packaging_created',
+    errorToastKey: 'stock:toast.packaging_create_failed',
+    commandType: 'stock/packagings/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/stock/api/v1/packagings' },
+    onSuccess: (ctx) => { rerunLastRequest(ctx, stockPackagingsListOp); },
+});
+
+export const stockPackagingDeleteOp = createAsyncOp({
+    name: 'stock/packaging_delete',
+    successToastKey: 'stock:toast.packaging_deleted',
+    errorToastKey: 'stock:toast.packaging_delete_failed',
+    commandType: 'stock/packagings/delete_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/stock/api/v1/packagings/{packaging_id}' },
+    onSuccess: (ctx) => { rerunLastRequest(ctx, stockPackagingsListOp); },
+});
+
 export const stockMovesList = createCursorList<StockMove>({
     name: 'stock/moves',
     baseUrl: '/stock/api/v1/moves',
@@ -940,6 +993,11 @@ declare module '@platform/lib/events/factory-registry.js' {
         'stock/lots_list': typeof stockLotsListOp;
         'stock/lot_create': typeof stockLotCreateOp;
         'stock/uoms_list': typeof stockUomsListOp;
+        'stock/uom_create': typeof stockUomCreateOp;
+        'stock/uom_delete': typeof stockUomDeleteOp;
+        'stock/packagings_list': typeof stockPackagingsListOp;
+        'stock/packaging_create': typeof stockPackagingCreateOp;
+        'stock/packaging_delete': typeof stockPackagingDeleteOp;
         'stock/moves': typeof stockMovesList;
         'stock/containers_list': typeof stockContainersListOp;
         'stock/container_item': typeof stockContainerItemOp;

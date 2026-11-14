@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import base64
 from decimal import Decimal
 from typing import Any
 from urllib.parse import urlsplit
@@ -104,6 +105,68 @@ async def _stock_rest(
     return await resp.json()
 
 
+async def _tsd_seed_product_image(
+    page: Page, product_id: str, *, color: str, label: str
+) -> str:
+    """Присваивает товару картинку: рисует PNG в canvas страницы и грузит
+    chunked Files API (`/stock/api/v1/files/uploads`), затем привязывает
+    file_id через overlay карточки. Так карточки на скриншотах — с фото."""
+    data_url: str = await page.evaluate(
+        """({ color, label }) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 96; canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, 96, 96);
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.beginPath(); ctx.arc(48, 42, 24, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = color;
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, 48, 49);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.font = '11px sans-serif';
+            ctx.fillText('ФОТО', 48, 84);
+            return canvas.toDataURL('image/png');
+        }""",
+        {"color": color, "label": label},
+    )
+    content = base64.b64decode(data_url.split(",", 1)[1])
+    parts = urlsplit(page.url)
+    base = f"{parts.scheme}://{parts.netloc}/stock/api/v1/files/uploads"
+    init = await page.request.post(
+        base,
+        data={
+            "spec": {
+                "source_kind": "product",
+                "source_ref": {"product_id": product_id},
+                "retention": {"kind": "product"},
+                "post_create": {"is_public": False},
+            },
+            "original_name": f"product-{product_id}.png",
+            "content_type": "image/png",
+            "file_size": len(content),
+        },
+    )
+    assert init.ok, f"upload init → {init.status}: {await init.text()}"
+    upload = await init.json()
+    put = await page.request.fetch(
+        f"{base}/{upload['upload_id']}/parts/1",
+        method="PUT",
+        data=content,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    assert put.ok, f"upload part → {put.status}: {await put.text()}"
+    done = await page.request.post(f"{base}/{upload['upload_id']}/complete")
+    assert done.ok, f"upload complete → {done.status}: {await done.text()}"
+    file_id = upload["file_id"]
+    await _stock_rest(
+        page, "PATCH", f"/products/{product_id}",
+        {"overlay": {"image_file_ids": [file_id]}},
+    )
+    return str(file_id)
+
+
 async def _quant_row(
     page: Page, warehouse_id: str, product_id: str, location_id: str
 ) -> dict[str, Any]:
@@ -191,6 +254,12 @@ async def _tsd_seed_warehouse(
             "is_storable": True,
             "barcodes": [f"BC-2-{unique_id[:6]}"],
         },
+    )
+    await _tsd_seed_product_image(
+        page, str(product_1["product_id"]), color="#b4690e", label="КОФЕ"
+    )
+    await _tsd_seed_product_image(
+        page, str(product_2["product_id"]), color="#2e7d46", label="ЧАЙ"
     )
     return {
         "warehouse": warehouse,

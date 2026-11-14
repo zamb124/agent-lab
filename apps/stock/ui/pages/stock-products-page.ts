@@ -10,13 +10,16 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import type { StockProductView } from '@platform/lib/events/wire/stock.gen.js';
 import { PlatformCatalogProductPicker } from '@platform/lib/catalog/product-picker.js';
 import type { CatalogProductPick } from '@platform/lib/catalog/product-picker.js';
 import { StockProductModal } from '../modals/stock-product-modal.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-empty-state.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 
 export class StockProductsPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -25,20 +28,9 @@ export class StockProductsPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
-            .head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
-            h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); flex: 1; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td {
-                padding: var(--space-2) var(--space-3); text-align: left;
-                border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary);
-            }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             tbody tr { cursor: pointer; }
-            tbody tr:hover { background: var(--surface-2); }
-            .num { text-align: right; font-variant-numeric: tabular-nums; }
             tbody tr.off td { opacity: 0.45; }
             .ptag {
                 display: inline-flex; align-items: center; gap: 3px; margin-left: var(--space-2);
@@ -48,6 +40,15 @@ export class StockProductsPage extends PlatformPage {
                 vertical-align: middle;
             }
             .ptag platform-icon { color: var(--text-secondary); }
+            .pimg {
+                width: 28px; height: 28px; border-radius: var(--radius-md);
+                object-fit: cover; display: block; background: var(--bg-muted);
+            }
+            .pimg-ph {
+                width: 28px; height: 28px; border-radius: var(--radius-md);
+                display: flex; align-items: center; justify-content: center;
+                background: var(--bg-muted); color: var(--text-tertiary);
+            }
             platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
@@ -85,23 +86,31 @@ export class StockProductsPage extends PlatformPage {
         });
     }
 
+    private _productImage(row: unknown) {
+        const fileId = isPlainRecord(row) && Array.isArray(row.image_file_ids)
+            ? row.image_file_ids[0] : null;
+        return typeof fileId === 'string' && fileId !== ''
+            ? html`<img class="pimg" src=${buildPlatformFileDownloadUrl(fileId)} alt="">`
+            : html`<div class="pimg-ph"><platform-icon name="package" size="14"></platform-icon></div>`;
+    }
+
     override render() {
         const items = this._products.items;
         return html`
             <div class="wrap">
-                <div class="head">
-                    <h1>${this.t('products.title')}</h1>
-                    <platform-button variant="primary" density="compact" @click=${this._openCreate}>
+                <page-header title=${this.t('products.title')} dense>
+                    <platform-button slot="actions" variant="primary" @click=${this._openCreate}>
                         <platform-icon name="plus" size="14"></platform-icon> ${this.t('products.create')}
                     </platform-button>
-                </div>
+                </page-header>
                 ${this._products.loading
                     ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
                     ? html`<platform-empty-state icon="tag" title=${this.t('products.empty')}></platform-empty-state>`
                     : html`
-                        <table>
+                        <div class="table-card"><div class="scroll"><table>
                             <thead><tr>
+                                <th></th>
                                 <th>${this.t('fields.sku')}</th>
                                 <th>${this.t('fields.name')}</th>
                                 <th>${this.t('fields.barcodes')}</th>
@@ -114,6 +123,7 @@ export class StockProductsPage extends PlatformPage {
                                     <tr class=${row.is_archived || row.is_active === false ? 'off' : ''}
                                         data-product-id=${isPlainRecord(row) ? String(row.product_id ?? '') : ''}
                                         @click=${() => this._openEdit(row)}>
+                                        <td>${this._productImage(row)}</td>
                                         <td>${row.sku}</td>
                                         <td>${row.name}${row.is_archived
                                             ? html`<span class="ptag"><platform-icon name="box" size="11"></platform-icon>${this.t('products.archived')}</span>`
@@ -127,7 +137,7 @@ export class StockProductsPage extends PlatformPage {
                                     </tr>
                                 `)}
                             </tbody>
-                        </table>
+                        </table></div></div>
                     `}
             </div>
         `;

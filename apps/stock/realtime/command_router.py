@@ -74,6 +74,8 @@ from apps.stock.models.api import (
     StockTransferReturnPayload,
     StockTransfersListPayload,
     StockTransferValidatePayload,
+    StockUomCreatePayload,
+    StockUomIdPayload,
     StockValuationCorrectionPayload,
     StockValuationLayersPayload,
     StockValuationProductValuePayload,
@@ -163,6 +165,8 @@ from apps.stock.realtime.operations import (
     op_transfers_list,
     op_transfers_return,
     op_transfers_validate,
+    op_uoms_create,
+    op_uoms_delete,
     op_uoms_list,
     op_valuation_correction,
     op_valuation_layers_list,
@@ -438,6 +442,12 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/uoms/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_uoms_list
+    ),
+    "stock/uoms/create_requested": Operation(
+        payload_model=StockUomCreatePayload, fn=op_uoms_create
+    ),
+    "stock/uoms/delete_requested": Operation(
+        payload_model=StockUomIdPayload, fn=op_uoms_delete
     ),
     "stock/warehouse/pulse_requested": Operation(
         payload_model=StockWarehousePulsePayload, fn=op_warehouse_pulse

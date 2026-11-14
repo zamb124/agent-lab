@@ -167,8 +167,9 @@ async def test_ui_audit_public(
     "route", DARK_SPOT_CHECK, ids=[f"{svc}-{_slug(url)}" for svc, url, _ in DARK_SPOT_CHECK]
 )
 async def test_ui_audit_dark(ui_page_system: Page, route: tuple[str, str, str]) -> None:
-    """Spot-check dark theme на авторизованных маршрутах."""
+    """Spot-check dark theme на авторизованных маршрутах (desktop + mobile)."""
     svc, url, shell = route
     page = ui_page_system
-    await page.set_viewport_size(VIEWPORTS["desktop"])
-    await _shot(page, svc, url, shell, "dark", theme="dark")
+    for tag in ("desktop", "mobile"):
+        await page.set_viewport_size(VIEWPORTS[tag])
+        await _shot(page, svc, url, shell, f"dark_{tag}", theme="dark")

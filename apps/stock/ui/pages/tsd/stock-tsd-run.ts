@@ -31,6 +31,7 @@ import type {
     StockTsdSessionState,
 } from '../../events/resources/stock-tsd.resource.js';
 import { formatPlatformError } from '@platform/lib/utils/platform-error-message.js';
+import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import {
     tsdFormatQty,
     tsdVirtualLocationKey,
@@ -114,18 +115,29 @@ export class StockTsdRun extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
             }
+            .run-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                margin-left: auto;
+                flex-shrink: 0;
+            }
             .run-close {
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 width: var(--tsd-touch-min);
                 height: var(--tsd-touch-min);
-                margin-left: auto;
                 border: 1px solid var(--border-default);
                 border-radius: 50%;
                 background: var(--bg-surface);
                 color: var(--text-secondary);
                 cursor: pointer;
+            }
+            .run-close.problem {
+                border-color: var(--tsd-warn);
+                background: var(--tsd-warn-subtle);
+                color: var(--tsd-warn);
             }
             .expected {
                 display: flex;
@@ -139,6 +151,22 @@ export class StockTsdRun extends PlatformElement {
                 color: var(--text-primary);
             }
             .expected-icon { color: var(--tsd-info); flex-shrink: 0; }
+            .expected-img {
+                width: 56px;
+                height: 56px;
+                border-radius: var(--radius-lg);
+                object-fit: cover;
+                flex-shrink: 0;
+                background: var(--bg-surface);
+            }
+            .line-img {
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-md);
+                object-fit: cover;
+                flex-shrink: 0;
+                background: var(--bg-surface);
+            }
             .expected-body {
                 display: flex;
                 flex-direction: column;
@@ -435,6 +463,12 @@ export class StockTsdRun extends PlatformElement {
         return product === undefined ? productId : product.name;
     }
 
+    private _productImageUrl(productId: string): string | null {
+        const product = this._products.items.find((row) => row.product_id === productId);
+        const fileId = product?.image_file_ids?.[0];
+        return typeof fileId === 'string' && fileId !== '' ? buildPlatformFileDownloadUrl(fileId) : null;
+    }
+
     private _locationName(locationId: string): string {
         const location = this._locations.items.find((row) => row.location_id === locationId);
         if (location === undefined) return locationId;
@@ -473,9 +507,13 @@ export class StockTsdRun extends PlatformElement {
             && expected.location_dest_id !== expected.location_id
             ? this._locationName(expected.location_dest_id) : '';
         if (parts.length === 0 && dest === '') return '';
+        const imgUrl = expected.product_id !== null && expected.product_id !== undefined
+            ? this._productImageUrl(expected.product_id) : null;
         return html`
             <div class="expected">
-                <platform-icon class="expected-icon" name="zap" size="22"></platform-icon>
+                ${imgUrl !== null
+                    ? html`<img class="expected-img" src=${imgUrl} alt="">`
+                    : html`<platform-icon class="expected-icon" name="zap" size="22"></platform-icon>`}
                 <div class="expected-body">
                     <div class="expected-route">
                         ${parts}
@@ -589,8 +627,10 @@ export class StockTsdRun extends PlatformElement {
             ? this._locationShortName(line.location_id) : '';
         const dest = line.location_dest_id !== null && line.location_dest_id !== undefined
             ? this._locationShortName(line.location_dest_id) : '';
+        const imgUrl = productId !== '' ? this._productImageUrl(productId) : null;
         return html`
             <div class="line-row">
+                ${imgUrl !== null ? html`<img class="line-img" src=${imgUrl} alt="">` : ''}
                 <span class="line-product">
                     ${this._productName(productId)}
                     ${serial !== '' ? html`<span class="line-track">${serial}</span>` : ''}
@@ -863,18 +903,20 @@ export class StockTsdRun extends PlatformElement {
                         <h2 class="run-title">${this.t(`run.flow_${flow}`)}</h2>
                         <p class="run-sub">${this.t(`run.step_${step}`)}</p>
                     </div>
-                    ${session.expected !== null && session.expected.move_line_id !== null && session.expected.move_line_id !== undefined && flow !== 'count'
-                        ? html`
-                            <button class="run-close" data-action="report-problem"
-                                @click=${() => this._reportProblem(session)}
-                                aria-label=${this.t('run.problem')}>
-                                <platform-icon name="alert-triangle" size="22"></platform-icon>
-                            </button>
-                        ` : ''}
-                    <button class="run-close" @click=${() => this._exitRun()}
-                        aria-label=${this.t('run.exit')}>
-                        <platform-icon name="x" size="22"></platform-icon>
-                    </button>
+                    <div class="run-actions">
+                        ${session.expected !== null && session.expected.move_line_id !== null && session.expected.move_line_id !== undefined && flow !== 'count'
+                            ? html`
+                                <button class="run-close problem" data-action="report-problem"
+                                    @click=${() => this._reportProblem(session)}
+                                    aria-label=${this.t('run.problem')}>
+                                    <platform-icon name="alert-triangle" size="22"></platform-icon>
+                                </button>
+                            ` : ''}
+                        <button class="run-close" @click=${() => this._exitRun()}
+                            aria-label=${this.t('run.exit')}>
+                            <platform-icon name="x" size="22"></platform-icon>
+                        </button>
+                    </div>
                 </div>
                 ${this._renderExpected(session)}
                 <div class="step-banner ${review ? 'review' : ''} ${errored ? 'error' : ''}">

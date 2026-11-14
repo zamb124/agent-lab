@@ -267,12 +267,7 @@ export class OfficeExplorerTree extends PlatformElement {
     }
 
     private _showContextMenu(clientX: number, clientY: number, catalog: CatalogRecord, hasChildCatalogs: boolean) {
-        const hostRect = this.getBoundingClientRect();
-        const menuWidth = 200;
-        const menuHeight = 180;
-        const x = Math.min(Math.max(clientX - hostRect.left, 8), hostRect.width - menuWidth);
-        const y = Math.min(Math.max(clientY - hostRect.top, 8), hostRect.height - menuHeight);
-        this._contextMenu = { x, y, catalog, hasChildCatalogs };
+        this._contextMenu = { x: clientX, y: clientY, catalog, hasChildCatalogs };
         this.requestUpdate();
     }
 

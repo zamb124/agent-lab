@@ -97,6 +97,8 @@ from apps.stock.models.api import (
     StockStorageTypeCreatePayload,
     StockStorageTypesListPayload,
     StockStorageTypeUpdatePayload,
+    StockUomCreatePayload,
+    StockUomIdPayload,
     StockValuationCorrectionPayload,
     StockValuationLayersPage,
     StockValuationLayersPayload,
@@ -169,6 +171,8 @@ from apps.stock.realtime.operations import (
     op_storage_types_create,
     op_storage_types_list,
     op_storage_types_update,
+    op_uoms_create,
+    op_uoms_delete,
     op_uoms_list,
     op_valuation_correction,
     op_valuation_layers_list,
@@ -864,6 +868,16 @@ async def delete_packaging(
 @router.get("/uoms", response_model=StockItemsResponse[CatalogUom])
 async def list_uoms(di: Di) -> StockItemsResponse[CatalogUom]:
     return await op_uoms_list(EmptyPayload(), user=_user(), di=di)
+
+
+@router.post("/uoms", response_model=CatalogUom)
+async def create_uom(di: Di, body: StockUomCreatePayload) -> CatalogUom:
+    return await op_uoms_create(body, user=_user(), di=di)
+
+
+@router.delete("/uoms/{uom_id}", response_model=CatalogUom)
+async def delete_uom(di: Di, uom_id: str) -> CatalogUom:
+    return await op_uoms_delete(StockUomIdPayload(uom_id=uom_id), user=_user(), di=di)
 
 
 @router.get("/barcode/{barcode}", response_model=StockBarcodeResolveResponse)

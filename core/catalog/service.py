@@ -342,6 +342,48 @@ class CatalogService:
     async def list_uoms(self, *, company_id: str) -> list[CatalogUom]:
         return await CatalogUom.list_by_category_and_name_asc(company_id)
 
+    async def create_uom(
+        self,
+        *,
+        company_id: str,
+        name: str,
+        category: str,
+        factor: Decimal,
+        weight: Decimal | None = None,
+        volume: Decimal | None = None,
+    ) -> CatalogUom:
+        """Глобальная ЕИ компании («ящик», «паллета»): ``product_id IS NULL``."""
+        if factor <= Decimal("0"):
+            raise _conflict("UoM factor must be positive", "uom_factor_not_positive")
+        try:
+            return await CatalogUom.create(
+                CatalogUom(
+                    uom_id=new_id("uom"),
+                    company_id=company_id,
+                    name=name,
+                    category=category,
+                    factor=factor,
+                    is_reference=False,
+                    weight=weight,
+                    volume=volume,
+                )
+            )
+        except UniqueViolationError as exc:
+            raise _conflict("Uom name already exists", "uom_conflict") from exc
+
+    async def delete_uom(self, *, company_id: str, uom_id: str) -> CatalogUom:
+        """Удалить пользовательскую глобальную ЕИ; reference и базовая ЕИ товара — нельзя."""
+        uom = await CatalogUom.by_id(company_id, uom_id)
+        if uom is None or uom.product_id is not None:
+            raise _not_found("Uom not found", "uom_not_found")
+        if uom.is_reference:
+            raise _conflict("Reference uom cannot be deleted", "uom_reference_locked")
+        if await CatalogProduct.exists_by_uom_id(company_id, uom_id):
+            raise _conflict("Uom is used as product base", "uom_in_use")
+        await CatalogBarcode.release_uom(company_id, uom_id)
+        await CatalogUom.delete_uom(company_id, uom_id)
+        return uom
+
     async def ensure_company_uoms(self, *, company_id: str) -> None:
         """Идемпотентный сид reference-ЕИ компании (Units/kg/g/m/l).
 

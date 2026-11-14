@@ -91,6 +91,12 @@ class CatalogProduct(PlatformModel):
         return await cls.objects.filter(company_id=company_id, sku=sku).get_or_none()
 
     @classmethod
+    async def exists_by_uom_id(cls, company_id: str, uom_id: str) -> bool:
+        return await cls.objects.filter(
+            company_id=company_id, uom_id=uom_id
+        ).exists()
+
+    @classmethod
     async def list_ids_by_text_icontains(
         cls, company_id: str, text: str
     ) -> list[str]:

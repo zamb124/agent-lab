@@ -47,6 +47,11 @@ import {
     stockLotsListOp,
     stockLotCreateOp,
     stockUomsListOp,
+    stockUomCreateOp,
+    stockUomDeleteOp,
+    stockPackagingsListOp,
+    stockPackagingCreateOp,
+    stockPackagingDeleteOp,
     stockMovesList,
     stockContainersListOp,
     stockContainerItemOp,
@@ -91,6 +96,8 @@ import '../pages/stock-moves-page.js';
 import '../pages/stock-packages-page.js';
 import '../pages/stock-inventory-page.js';
 import '../pages/stock-settings-pages.js';
+import '../pages/stock-uoms-page.js';
+import '../modals/stock-entity-form-modal.js';
 import '../modals/stock-location-modal.js';
 import '../pages/stock-valuation-page.js';
 import '../pages/stock-valuation-journal-page.js';
@@ -116,6 +123,7 @@ const STOCK_ROUTES = [
     { key: 'stock_putaway_rules', path: 'settings/putaway-rules', parent: 'stock_home', titleKey: 'routes.stock_putaway_rules' },
     { key: 'stock_reorder_rules', path: 'settings/reorder-rules', parent: 'stock_home', titleKey: 'routes.stock_reorder_rules' },
     { key: 'stock_routes',    path: 'settings/routes',     parent: 'stock_home', titleKey: 'routes.stock_routes' },
+    { key: 'stock_uoms',      path: 'settings/uoms',       parent: 'stock_home', titleKey: 'routes.stock_uoms' },
     { key: 'stock_valuation', path: 'valuation',           parent: 'stock_home', titleKey: 'routes.stock_valuation' },
     { key: 'stock_valuation_journal', path: 'valuation/journal', parent: 'stock_valuation', titleKey: 'routes.stock_valuation_journal' },
     { key: 'stock_valuation_batches', path: 'valuation/batches', parent: 'stock_valuation', titleKey: 'routes.stock_valuation_batches' },
@@ -175,6 +183,11 @@ export class StockApp extends PlatformApp {
         stockLotsListOp,
         stockLotCreateOp,
         stockUomsListOp,
+        stockUomCreateOp,
+        stockUomDeleteOp,
+        stockPackagingsListOp,
+        stockPackagingCreateOp,
+        stockPackagingDeleteOp,
         stockMovesList,
         stockContainersListOp,
         stockContainerItemOp,
@@ -309,6 +322,8 @@ export class StockApp extends PlatformApp {
                 return html`<stock-reorder-rules-page></stock-reorder-rules-page>`;
             case 'stock_routes':
                 return html`<stock-routes-page></stock-routes-page>`;
+            case 'stock_uoms':
+                return html`<stock-uoms-page></stock-uoms-page>`;
             case 'stock_valuation':
                 return html`<stock-valuation-page></stock-valuation-page>`;
             case 'stock_valuation_journal':

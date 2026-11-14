@@ -29,6 +29,7 @@ import {
 import type { StockValueLayer, ValueEntryKind } from '@platform/lib/events/wire/stock.gen.js';
 import { StockValuationCorrectionModal } from '../modals/stock-valuation-correction-modal.js';
 import { StockValuationRevalueModal } from '../modals/stock-valuation-revalue-modal.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -71,16 +72,9 @@ export class StockValuationJournalPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1280px; margin: 0 auto; padding: var(--space-6); }
-            .toolbar {
-                display: flex;
-                gap: var(--space-3);
-                align-items: center;
-                margin-bottom: var(--space-3);
-                flex-wrap: wrap;
-            }
+            .wrap { max-width: 1280px; }
             .grouping {
                 display: flex;
                 align-items: center;
@@ -107,29 +101,6 @@ export class StockValuationJournalPage extends PlatformPage {
                 cursor: pointer;
             }
             .chip:hover { background: var(--glass-tint-medium); }
-            .table-card {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-            .scroll { overflow-x: auto; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td {
-                padding: var(--space-2) var(--space-3);
-                text-align: left;
-                border-bottom: 1px solid var(--glass-border-subtle);
-                color: var(--text-primary);
-                vertical-align: middle;
-            }
-            th {
-                color: var(--text-tertiary);
-                font-weight: var(--font-medium);
-                font-size: var(--text-xs);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                white-space: nowrap;
-            }
             .group-head td {
                 background: var(--glass-tint-subtle);
                 border-bottom: 1px solid var(--glass-border-subtle);
@@ -147,7 +118,7 @@ export class StockValuationJournalPage extends PlatformPage {
                 font-variant-numeric: tabular-nums;
                 font-weight: var(--font-semibold);
             }
-            .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+            .num { white-space: nowrap; }
             .pos { color: var(--success); }
             .neg { color: var(--error); }
             .muted { color: var(--text-tertiary); }
@@ -177,20 +148,6 @@ export class StockValuationJournalPage extends PlatformPage {
                 text-align: left;
             }
             .doc-link:hover { text-decoration: underline; }
-            .icon-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                border: none;
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                padding: 0;
-            }
-            .icon-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
             .more {
                 display: flex;
                 justify-content: center;
@@ -198,9 +155,6 @@ export class StockValuationJournalPage extends PlatformPage {
             }
             platform-empty-state { margin-top: var(--space-8); }
             platform-date-picker { min-width: 220px; }
-            @media (max-width: 767px) {
-                .wrap { padding: var(--space-3); }
-            }
         `,
     ];
 

@@ -615,6 +615,18 @@ class StockPackagingIdPayload(StrictBaseModel):
     packaging_id: str
 
 
+class StockUomCreatePayload(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    category: str = Field(min_length=1, max_length=64)
+    factor: Decimal = Field(gt=0)
+    weight: Decimal | None = Field(default=None, ge=0)
+    volume: Decimal | None = Field(default=None, ge=0)
+
+
+class StockUomIdPayload(StrictBaseModel):
+    uom_id: str
+
+
 # --- Пульс / barcode / init ---
 
 

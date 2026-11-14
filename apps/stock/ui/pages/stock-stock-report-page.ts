@@ -10,10 +10,12 @@ import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { groupQuants } from '../_helpers/stock-location-tree.js';
 import type { StockLocation, StockQuant } from '@platform/lib/events/wire/stock.gen.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
 
 type GroupMode = 'location' | 'product';
 
@@ -44,16 +46,9 @@ export class StockStockReportPage extends PlatformPage {
 
     static override styles = [
         PlatformPage.styles,
+        stockPageStyles,
         css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1200px; margin: 0 auto; padding: var(--space-5); }
-            .toolbar { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-4); }
-            .toolbar platform-searchable-combobox { min-width: 220px; }
             .toggle { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary); }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             tr.group { cursor: pointer; background: var(--surface-2); font-weight: var(--font-medium); }
             tr.group td { padding: var(--space-3); }
             tr.subtotal td { color: var(--text-secondary); font-style: italic; border-top: 1px dashed var(--glass-border-subtle); }
@@ -151,7 +146,7 @@ export class StockStockReportPage extends PlatformPage {
         }));
         return html`
             <div class="toolbar">
-                <platform-searchable-combobox
+                <platform-searchable-combobox compact
                     .label=${this.t('report.warehouse')}
                     .placeholder=${this.t('report.all_warehouses')}
                     .value=${this._warehouseId}
@@ -161,7 +156,7 @@ export class StockStockReportPage extends PlatformPage {
                         this._load();
                     }}
                 ></platform-searchable-combobox>
-                <platform-searchable-combobox
+                <platform-searchable-combobox compact
                     .label=${this.t('report.product')}
                     .placeholder=${this.t('report.all_products')}
                     .value=${this._productId}
@@ -214,11 +209,11 @@ export class StockStockReportPage extends PlatformPage {
         const totals = allGroups.reduce((s, g) => ({ qty: s.qty + g.qty, res: s.res + g.reserved, av: s.av + g.available }), { qty: 0, res: 0, av: 0 });
         return html`
             <div class="wrap">
-                <h1 style="margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary);">${this.t('report.title')}</h1>
+                <page-header title=${this.t('report.title')} dense></page-header>
                 ${this._renderToolbar()}
                 ${allGroups.length === 0
                     ? html`<platform-empty-state .message=${this.t('report.empty')}></platform-empty-state>`
-                    : html`<table><thead><tr>
+                    : html`<div class="table-card"><div class="scroll"><table><thead><tr>
                         ${this._mode === 'product' ? html`<th>${this.t('report.col_location')}</th>` : html`<th>${this.t('report.col_product')}</th>`}
                         <th>Lot</th><th>Owner</th>
                         <th class="num">${this.t('report.col_qty')}</th>
@@ -250,7 +245,7 @@ export class StockStockReportPage extends PlatformPage {
                             <td class="num">${totals.res}</td>
                             <td class="num">${totals.av}</td>
                         </tr>
-                    </tbody></table>`}
+                    </tbody></table></div></div>`}
             </div>
         `;
     }

@@ -118,6 +118,8 @@ from apps.stock.models.api import (
     StockTransferReturnPayload,
     StockTransfersListPayload,
     StockTransferValidatePayload,
+    StockUomCreatePayload,
+    StockUomIdPayload,
     StockValuationCorrectionPayload,
     StockValuationLayersPage,
     StockValuationLayersPayload,
@@ -1647,6 +1649,31 @@ async def op_uoms_list(
     scope = await require_company_viewer(di.authz_service)
     return StockItemsResponse(
         items=await di.catalog_service.list_uoms(company_id=scope.company_id)
+    )
+
+
+async def op_uoms_create(
+    payload: StockUomCreatePayload, *, user: User, di: Di
+) -> CatalogUom:
+    _ = user
+    scope = await _company_editor(di)
+    return await di.catalog_service.create_uom(
+        company_id=scope.company_id,
+        name=payload.name,
+        category=payload.category,
+        factor=payload.factor,
+        weight=payload.weight,
+        volume=payload.volume,
+    )
+
+
+async def op_uoms_delete(
+    payload: StockUomIdPayload, *, user: User, di: Di
+) -> CatalogUom:
+    _ = user
+    scope = await _company_editor(di)
+    return await di.catalog_service.delete_uom(
+        company_id=scope.company_id, uom_id=payload.uom_id
     )
 
 

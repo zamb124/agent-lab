@@ -1,26 +1,30 @@
 /**
  * Конфигурационные страницы склада — один паттерн на все справочники:
- * combobox склада, таблица `StockItemsResponse`, раскрываемая форма
- * создания (platform-field), toggle-апдейты через update-опы.
+ * `page-header` с CTA «Создать» → `stock-entity-form-modal`, тулбар
+ * с compact-combobox склада, таблица `StockItemsResponse` в `.table-card`,
+ * toggle-апдейты через update-опы.
  *
  * Элементы: stock-warehouses-page, stock-storage-types-page,
  * stock-container-types-page, stock-resources-page,
  * stock-putaway-rules-page, stock-reorder-rules-page, stock-routes-page.
  */
 
-import { html, css } from 'lit';
-import type { TemplateResult } from 'lit';
+import { html } from 'lit';
+import type { PropertyValues, TemplateResult } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
-import type { AsyncOpFactory } from '@platform/lib/events/factories/async-op.js';
 import type { FactoryNameOfKind } from '@platform/lib/events/factory-registry.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-searchable-combobox.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import { stockPageStyles } from '../styles/stock-page.styles.js';
+import { StockEntityFormModal } from '../modals/stock-entity-form-modal.js';
+import type { StockEntityFormField } from '../modals/stock-entity-form-modal.js';
 
 type PlainRow = Record<string, unknown>;
 
@@ -41,6 +45,7 @@ interface FormField {
 
 interface EntityConfig {
     titleKey: string;
+    subtitleKey?: string;
     listOp?: FactoryNameOfKind<'async-op'>;
     listResource?: FactoryNameOfKind<'resource-collection'>;
     createOp?: FactoryNameOfKind<'async-op'>;
@@ -52,52 +57,34 @@ interface EntityConfig {
     formFields?: FormField[];
     buildCreatePayload?: (draft: PlainRow, warehouseId: string) => PlainRow;
     onRowClick?: (row: PlainRow) => void;
+    /** List op требует warehouse_id — «все склады» невозможно: прячем
+     * пункт и автовыбираем первый склад, иначе список навсегда пуст. */
+    warehouseRequired?: boolean;
 }
 
 abstract class StockSettingsPageBase extends PlatformPage {
     static override properties = {
         _warehouseId: { state: true },
-        _formOpen: { state: true },
-        _draft: { state: true },
     };
     declare private _warehouseId: string;
-    declare private _formOpen: boolean;
-    declare private _draft: PlainRow;
 
     static i18nNamespace = 'stock';
 
     static override styles = [
         PlatformPage.styles,
-        css`
-            :host { display: block; height: 100%; overflow-y: auto; }
-            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-5); }
-            .head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
-            .head h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); flex: 1; }
-            .head platform-searchable-combobox { min-width: 200px; }
-            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-            th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary); }
-            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-            tr.clickable { cursor: pointer; }
-            tr.clickable:hover td { background: var(--surface-2); }
-            .create-panel { border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4); display: grid; gap: var(--space-3); }
-            .create-panel .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
-            h2.section { font-size: var(--text-base); color: var(--text-secondary); margin: var(--space-5) 0 var(--space-2); }
-        `,
+        stockPageStyles,
     ];
 
     protected abstract config: EntityConfig;
     private _list!: OpController | null;
     private _createOp!: OpController | null;
-    private _updateOp!: OpController | null;
+    protected _updateOp!: OpController | null;
     private _listResource: ResourceController | null = null;
     protected _warehouses!: ResourceController;
 
     constructor() {
         super();
         this._warehouseId = '';
-        this._formOpen = false;
-        this._draft = {};
     }
 
     protected init() {
@@ -108,17 +95,9 @@ abstract class StockSettingsPageBase extends PlatformPage {
         this._listResource = this.config.listResource !== undefined ? this.useResource(this.config.listResource, { autoload: true }) : null;
     }
 
-
-
     override connectedCallback(): void {
         super.connectedCallback();
         this.reload();
-        if (this._createOp !== null) {
-            this.useEvent((this._createOp.op as AsyncOpFactory).events.SUCCEEDED, () => {
-                this._formOpen = false;
-                this._draft = {};
-            });
-        }
     }
 
     protected reload() {
@@ -143,82 +122,92 @@ abstract class StockSettingsPageBase extends PlatformPage {
 
     protected warehouseId(): string { return this._warehouseId; }
 
-    protected locationOptions(): { value: string; label: string }[] {
-        return [];
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (this.config.warehouseRequired !== true || this._warehouseId !== '') return;
+        const first = this._warehouses.items.filter(isPlainRecord)[0];
+        if (first === undefined || typeof first.warehouse_id !== 'string') return;
+        this._warehouseId = first.warehouse_id;
+        this.reload();
     }
 
-    protected _renderHead(): TemplateResult {
-        const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
-        return html`
-            <div class="head">
-                <h1>${this.t(this.config.titleKey)}</h1>
-                ${this.config.warehouseFilter ? html`
-                    <platform-searchable-combobox
-                        .label=${this.t('settings.warehouse')}
-                        .value=${this._warehouseId}
-                        .options=${whOptions}
-                        @change=${(e: CustomEvent) => {
-                            this._warehouseId = typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this.reload();
-                        }}
-                    ></platform-searchable-combobox>
-                ` : ''}
-                ${this._createOp !== null ? html`
-                    <platform-button variant="primary" density="compact" @click=${() => { this._formOpen = !this._formOpen; }}>
-                        <platform-icon name="plus" size="14"></platform-icon> ${this.t('settings.create')}
-                    </platform-button>
-                ` : ''}
-            </div>
-        `;
+    protected _warehouseOptions(): { value: string; label: string }[] {
+        return this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
     }
 
-    private _renderCreateForm(): TemplateResult | '' {
-        if (!this._formOpen || this._createOp === null || this.config.formFields === undefined) return '';
-        return html`
-            <div class="create-panel">
-                <div class="grid">
-                    ${this.config.formFields.map((f) => html`
-                        <platform-field
-                            type=${f.type ?? 'string'} mode="edit"
-                            .label=${this.t(f.labelKey)}
-                            .value=${this._draft[f.key] ?? (f.type === 'boolean' ? false : '')}
-                            ?required=${f.required === true}
-                            .config=${f.options !== undefined ? { values: f.options() } : {}}
-                            @change=${(e: CustomEvent) => { this._draft = { ...this._draft, [f.key]: e.detail.value }; }}
-                        ></platform-field>
-                    `)}
-                </div>
-                <div style="display:flex; gap: var(--space-2);">
-                    <platform-button variant="primary" ?loading=${this._createOp.busy} @click=${() => this._submitCreate()}>
-                        <platform-icon name="check" size="14"></platform-icon> ${this.t('settings.save')}
-                    </platform-button>
-                    <platform-button variant="secondary" @click=${() => { this._formOpen = false; }}>${this.t('settings.cancel')}</platform-button>
-                </div>
-            </div>
-        `;
-    }
-
-    private _submitCreate() {
-        if (this._createOp === null || this.config.buildCreatePayload === undefined) return;
-        const payload = this.config.buildCreatePayload(this._draft, this._warehouseId);
-        this._createOp.run(payload);
+    protected _openCreate(): void {
+        const cfg = this.config;
+        if (cfg.createOp === undefined || cfg.formFields === undefined || cfg.buildCreatePayload === undefined) return;
+        const buildPayload = cfg.buildCreatePayload;
+        const fields: StockEntityFormField[] = [];
+        if (cfg.warehouseFilter) {
+            fields.push({
+                key: 'warehouse_id', label: this.t('settings.warehouse'),
+                type: 'enum', required: true, options: this._warehouseOptions(),
+            });
+        }
+        for (const f of cfg.formFields) {
+            fields.push({ key: f.key, label: this.t(f.labelKey), type: f.type, required: f.required, options: f.options?.() });
+        }
+        this.openModal(StockEntityFormModal, {
+            modalTitle: `${this.t('settings.create')} · ${this.t(cfg.titleKey)}`,
+            fields,
+            submitOp: cfg.createOp,
+            initialDraft: { warehouse_id: this._warehouseId },
+            buildPayload: (draft: PlainRow) => buildPayload(
+                draft,
+                typeof draft.warehouse_id === 'string' && draft.warehouse_id !== '' ? draft.warehouse_id : this._warehouseId,
+            ),
+        });
     }
 
     protected _renderTable(columns: Column[], items: PlainRow[], emptyKey = 'settings.empty'): TemplateResult {
-        if (items.length === 0) {
-            return html`<platform-empty-state .message=${this.t(emptyKey)}></platform-empty-state>`;
-        }
         return html`
-            <table><thead><tr>
-                ${columns.map((c) => html`<th class=${c.num === true ? 'num' : ''}>${this.t(c.labelKey)}</th>`)}
-            </tr></thead><tbody>
-                ${items.map((row) => html`
-                    <tr class=${this.config.onRowClick !== undefined ? 'clickable' : ''}
-                        @click=${() => this.config.onRowClick?.(row)}>
-                        ${columns.map((c) => html`<td class=${c.num === true ? 'num' : ''}>${c.render !== undefined ? c.render(row) : (row[c.key] ?? '—')}</td>`)}
-                    </tr>
-                `)}
-            </tbody></table>
+            <div class="table-card"><div class="scroll">
+                ${items.length === 0
+                    ? html`<platform-empty-state .message=${this.t(emptyKey)}></platform-empty-state>`
+                    : html`
+                        <table><thead><tr>
+                            ${columns.map((c) => html`<th class=${c.num === true ? 'num' : ''}>${this.t(c.labelKey)}</th>`)}
+                        </tr></thead><tbody>
+                            ${items.map((row) => html`
+                                <tr class=${this.config.onRowClick !== undefined ? 'clickable' : ''}
+                                    @click=${() => this.config.onRowClick?.(row)}>
+                                    ${columns.map((c) => html`<td class=${c.num === true ? 'num' : ''}>${c.render !== undefined ? c.render(row) : (row[c.key] ?? '—')}</td>`)}
+                                </tr>
+                            `)}
+                        </tbody></table>
+                    `}
+            </div></div>
+        `;
+    }
+
+    protected _renderToolbar(): TemplateResult | '' {
+        if (!this.config.warehouseFilter) return '';
+        return html`
+            <div class="toolbar">
+                <platform-searchable-combobox compact
+                    .placeholder=${this.t('settings.warehouse')}
+                    .value=${this._warehouseId}
+                    .options=${[
+                        ...(this.config.warehouseRequired === true ? [] : [{ value: '', label: this.t('settings.all_warehouses') }]),
+                        ...this._warehouseOptions(),
+                    ]}
+                    @change=${(e: CustomEvent) => {
+                        this._warehouseId = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.reload();
+                    }}
+                ></platform-searchable-combobox>
+            </div>
+        `;
+    }
+
+    protected _renderSection(titleKey: string, action?: TemplateResult): TemplateResult {
+        return html`
+            <div class="section">
+                <h2>${this.t(titleKey)}</h2>
+                ${action ?? ''}
+            </div>
         `;
     }
 
@@ -227,8 +216,19 @@ abstract class StockSettingsPageBase extends PlatformPage {
     override render() {
         return html`
             <div class="wrap">
-                ${this._renderHead()}
-                ${this._renderCreateForm()}
+                <page-header
+                    title=${this.t(this.config.titleKey)}
+                    subtitle=${this.config.subtitleKey !== undefined ? this.t(this.config.subtitleKey) : ''}
+                    dense
+                >
+                    ${this._createOp !== null ? html`
+                        <platform-button slot="actions" variant="primary" data-create @click=${() => this._openCreate()}>
+                            <platform-icon name="plus" size="14"></platform-icon>
+                            ${this.t('settings.create')}
+                        </platform-button>
+                    ` : ''}
+                </page-header>
+                ${this._renderToolbar()}
                 ${this._renderTable(this.config.columns, this.items())}
                 ${this.renderExtra()}
             </div>
@@ -241,7 +241,7 @@ function txt(row: PlainRow, key: string): string {
     return typeof v === 'string' && v !== '' ? v : '—';
 }
 
-function toggleCell(page: StockSettingsPageBase, row: PlainRow, idField: string, op: OpController | null, field: string): TemplateResult {
+function toggleCell(row: PlainRow, idField: string, op: OpController | null, field: string): TemplateResult {
     const on = row[field] !== false;
     return html`
         <input type="checkbox" ?checked=${on} ?disabled=${op === null || op.busy}
@@ -278,6 +278,7 @@ function scanFlowCell(page: StockSettingsPageBase, row: PlainRow, op: OpControll
 export class StockWarehousesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.warehouses_title',
+        subtitleKey: 'settings.warehouses_subtitle',
         listResource: 'stock/warehouses', createOp: 'stock/warehouse_create', updateOp: 'stock/warehouse_update',
         idField: 'warehouse_id', warehouseFilter: false,
         columns: [
@@ -324,43 +325,34 @@ export class StockWarehousesPage extends StockSettingsPageBase {
         this.init();
     }
 
-    protected override reload() {
-        super.reload();
-        if (this._opWarehouseId !== '') this._opTypes?.run({ warehouse_id: this._opWarehouseId });
-    }
-
     override connectedCallback(): void {
         this._opTypes = this.useOp('stock/operation_types_list');
         this._opTypeUpdate = this.useOp('stock/operation_type_update');
         super.connectedCallback();
     }
 
-    protected override _renderHead(): TemplateResult {
-        const head = super._renderHead();
-        return head;
-    }
-
     protected override renderExtra(): TemplateResult {
-        const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
         const result = this._opTypes.lastResult;
         const items = isPlainRecord(result) && Array.isArray(result.items) ? result.items.filter(isPlainRecord) : [];
         return html`
-            <h2 class="section">${this.t('settings.operation_types')}</h2>
-            <platform-searchable-combobox
-                .label=${this.t('settings.warehouse')}
-                .value=${this._opWarehouseId}
-                .options=${whOptions}
-                @change=${(e: CustomEvent) => {
-                    this._opWarehouseId = typeof e.detail.value === 'string' ? e.detail.value : '';
-                    if (this._opWarehouseId !== '') this._opTypes.run({ warehouse_id: this._opWarehouseId });
-                }}
-            ></platform-searchable-combobox>
+            ${this._renderSection('settings.operation_types')}
+            <div class="toolbar">
+                <platform-searchable-combobox compact
+                    .placeholder=${this.t('settings.warehouse')}
+                    .value=${this._opWarehouseId}
+                    .options=${this._warehouseOptions()}
+                    @change=${(e: CustomEvent) => {
+                        this._opWarehouseId = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        if (this._opWarehouseId !== '') this._opTypes.run({ warehouse_id: this._opWarehouseId });
+                    }}
+                ></platform-searchable-combobox>
+            </div>
             ${this._opWarehouseId === '' ? '' : this._renderTable([
                 { key: 'name', labelKey: 'settings.name' },
                 { key: 'code', labelKey: 'settings.code' },
                 {
                     key: 'auto_validate', labelKey: 'settings.auto_validate',
-                    render: (row) => toggleCell(this, row, 'operation_type_id', this._opTypeUpdate, 'auto_validate'),
+                    render: (row) => toggleCell(row, 'operation_type_id', this._opTypeUpdate, 'auto_validate'),
                 },
                 {
                     key: 'scan_flow', labelKey: 'settings.scan_flow',
@@ -377,8 +369,9 @@ customElements.define('stock-warehouses-page', StockWarehousesPage);
 export class StockStorageTypesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.storage_types_title',
+        subtitleKey: 'settings.storage_types_subtitle',
         listOp: 'stock/storage_types_list', createOp: 'stock/storage_type_create', updateOp: 'stock/storage_type_update',
-        idField: 'storage_type_id', warehouseFilter: true,
+        idField: 'storage_type_id', warehouseFilter: true, warehouseRequired: true,
         columns: [
             { key: 'name', labelKey: 'settings.name' },
             { key: 'container_policy', labelKey: 'settings.container_policy' },
@@ -409,8 +402,9 @@ customElements.define('stock-storage-types-page', StockStorageTypesPage);
 export class StockContainerTypesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.container_types_title',
+        subtitleKey: 'settings.container_types_subtitle',
         listOp: 'stock/container_types_list', createOp: 'stock/container_type_create', updateOp: 'stock/container_type_update',
-        idField: 'container_type_id', warehouseFilter: true,
+        idField: 'container_type_id', warehouseFilter: true, warehouseRequired: true,
         columns: [
             { key: 'name', labelKey: 'settings.name' },
             { key: 'kind', labelKey: 'settings.kind' },
@@ -448,8 +442,9 @@ customElements.define('stock-container-types-page', StockContainerTypesPage);
 export class StockResourcesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.resources_title',
+        subtitleKey: 'settings.resources_subtitle',
         listOp: 'stock/resources_list', createOp: 'stock/resource_create', updateOp: 'stock/resource_update',
-        idField: 'resource_id', warehouseFilter: true,
+        idField: 'resource_id', warehouseFilter: true, warehouseRequired: true,
         columns: [
             { key: 'code', labelKey: 'settings.code' },
             { key: 'resource_type_id', labelKey: 'settings.type_field', render: (r) => this._typeName(r.resource_type_id) },
@@ -467,15 +462,17 @@ export class StockResourcesPage extends StockSettingsPageBase {
     };
 
     private _types!: OpController;
-    private _typeCreate!: OpController;
 
     constructor() { super(); this.init(); }
 
     override connectedCallback(): void {
         this._types = this.useOp('stock/resource_types_list');
-        this._typeCreate = this.useOp('stock/resource_type_create');
         super.connectedCallback();
-        this._types.run(this.warehouseId() !== '' ? { warehouse_id: this.warehouseId() } : {});
+    }
+
+    protected override reload() {
+        super.reload();
+        if (this.warehouseId() !== '') this._types.run({ warehouse_id: this.warehouseId() });
     }
 
     private _typeOptions(): { value: string; label: string }[] {
@@ -490,14 +487,46 @@ export class StockResourcesPage extends StockSettingsPageBase {
         return found !== undefined ? found.label : '—';
     }
 
+    private _openTypeCreate(): void {
+        this.openModal(StockEntityFormModal, {
+            modalTitle: `${this.t('settings.create')} · ${this.t('settings.resource_types')}`,
+            fields: [
+                {
+                    key: 'warehouse_id', label: this.t('settings.warehouse'),
+                    type: 'enum', required: true, options: this._warehouseOptions(),
+                },
+                { key: 'name', label: this.t('settings.name'), required: true },
+                { key: 'handles_loose', label: this.t('settings.handles_loose'), type: 'boolean' },
+                { key: 'max_level', label: this.t('settings.max_level'), type: 'number' },
+                { key: 'max_load_weight', label: this.t('settings.max_load_weight'), type: 'number' },
+            ],
+            submitOp: 'stock/resource_type_create',
+            initialDraft: { warehouse_id: this.warehouseId(), handles_loose: true },
+            buildPayload: (d: PlainRow) => ({
+                warehouse_id: typeof d.warehouse_id === 'string' ? d.warehouse_id : '',
+                name: d.name,
+                handles_loose: d.handles_loose !== false,
+                max_level: Number.isFinite(Number(d.max_level)) && d.max_level !== '' ? Number(d.max_level) : null,
+                max_load_weight: Number.isFinite(Number(d.max_load_weight)) && d.max_load_weight !== '' ? Number(d.max_load_weight) : null,
+            }),
+        });
+    }
+
     protected override renderExtra(): TemplateResult {
         const result = this._types.lastResult;
         const types = isPlainRecord(result) && Array.isArray(result.items) ? result.items.filter(isPlainRecord) : [];
         return html`
-            <h2 class="section">${this.t('settings.resource_types')}</h2>
+            ${this._renderSection('settings.resource_types', html`
+                <platform-button variant="secondary" density="compact" @click=${() => this._openTypeCreate()}>
+                    <platform-icon name="plus" size="14"></platform-icon>
+                    ${this.t('settings.create')}
+                </platform-button>
+            `)}
             ${this._renderTable([
                 { key: 'name', labelKey: 'settings.name' },
-                { key: 'handles_loose', labelKey: 'settings.is_active', render: (r) => (r.handles_loose === true ? '✓' : '—') },
+                { key: 'handles_loose', labelKey: 'settings.handles_loose', render: (r) => (r.handles_loose === true ? '✓' : '—') },
+                { key: 'max_level', labelKey: 'settings.max_level', num: true },
+                { key: 'max_load_weight', labelKey: 'settings.max_load_weight', num: true },
             ], types)}
         `;
     }
@@ -509,8 +538,9 @@ customElements.define('stock-resources-page', StockResourcesPage);
 export class StockPutawayRulesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.putaway_rules_title',
+        subtitleKey: 'settings.putaway_rules_subtitle',
         listOp: 'stock/putaway_rules_list', createOp: 'stock/putaway_rule_create', updateOp: 'stock/putaway_rule_update',
-        idField: 'rule_id', warehouseFilter: true,
+        idField: 'rule_id', warehouseFilter: true, warehouseRequired: true,
         columns: [
             { key: 'location_in_id', labelKey: 'settings.location_in', render: (r) => this._locName(r.location_in_id) },
             { key: 'location_out_id', labelKey: 'settings.location_out', render: (r) => this._locName(r.location_out_id) },
@@ -518,7 +548,7 @@ export class StockPutawayRulesPage extends StockSettingsPageBase {
             { key: 'sequence', labelKey: 'settings.sequence', num: true },
             {
                 key: 'is_active', labelKey: 'settings.is_active',
-                render: (r) => toggleCell(this, r, 'rule_id', this._update, 'is_active'),
+                render: (r) => toggleCell(r, 'rule_id', this._updateOp, 'is_active'),
             },
             {
                 key: 'x', labelKey: '',
@@ -541,7 +571,6 @@ export class StockPutawayRulesPage extends StockSettingsPageBase {
         }),
     };
 
-    private _update!: OpController;
     private _deleteOp!: OpController;
     protected _locations!: ResourceController;
     protected _products!: ResourceController;
@@ -549,7 +578,6 @@ export class StockPutawayRulesPage extends StockSettingsPageBase {
     constructor() { super(); this.init(); }
 
     override connectedCallback(): void {
-        this._update = this.useOp('stock/putaway_rule_update');
         this._deleteOp = this.useOp('stock/putaway_rule_delete');
         this._locations = this.useResource('stock/locations', { autoload: true });
         this._products = this.useResource('stock/products', { autoload: true });
@@ -589,6 +617,7 @@ customElements.define('stock-putaway-rules-page', StockPutawayRulesPage);
 export class StockReorderRulesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.reorder_rules_title',
+        subtitleKey: 'settings.reorder_rules_subtitle',
         listOp: 'stock/reorder_rules_list', createOp: 'stock/reorder_rule_create', updateOp: 'stock/reorder_rule_update',
         idField: 'rule_id', warehouseFilter: true,
         columns: [
@@ -599,7 +628,7 @@ export class StockReorderRulesPage extends StockSettingsPageBase {
             { key: 'route_id', labelKey: 'settings.route', render: (r) => txt(r, 'route_id') },
             {
                 key: 'is_active', labelKey: 'settings.is_active',
-                render: (r) => toggleCell(this, r, 'rule_id', this._reorderUpdate, 'is_active'),
+                render: (r) => toggleCell(r, 'rule_id', this._updateOp, 'is_active'),
             },
         ],
         formFields: [
@@ -616,7 +645,6 @@ export class StockReorderRulesPage extends StockSettingsPageBase {
         }),
     };
 
-    private _reorderUpdate!: OpController;
     private _opTypes!: OpController;
     private _locationsRes!: ResourceController;
     private _productsRes!: ResourceController;
@@ -624,7 +652,6 @@ export class StockReorderRulesPage extends StockSettingsPageBase {
     constructor() { super(); this.init(); }
 
     override connectedCallback(): void {
-        this._reorderUpdate = this.useOp('stock/reorder_rule_update');
         this._opTypes = this.useOp('stock/operation_types_list');
         this._locationsRes = this.useResource('stock/locations', { autoload: true });
         this._productsRes = this.useResource('stock/products', { autoload: true });
@@ -661,6 +688,7 @@ customElements.define('stock-reorder-rules-page', StockReorderRulesPage);
 export class StockRoutesPage extends StockSettingsPageBase {
     protected config: EntityConfig = {
         titleKey: 'settings.routes_title',
+        subtitleKey: 'settings.routes_subtitle',
         listOp: 'stock/routes_list', createOp: 'stock/route_create',
         idField: 'route_id', warehouseFilter: false,
         listQuery: () => ({}),
@@ -675,11 +703,12 @@ export class StockRoutesPage extends StockSettingsPageBase {
         formFields: [
             { key: 'name', labelKey: 'settings.name', required: true },
             { key: 'code', labelKey: 'settings.code' },
+            { key: 'warehouse_id', labelKey: 'settings.warehouse', type: 'enum', options: () => this._warehouseOptions() },
         ],
-        buildCreatePayload: (d) => ({
+        buildCreatePayload: (d, wh) => ({
             name: d.name,
             code: typeof d.code === 'string' && d.code !== '' ? d.code : undefined,
-            warehouse_id: null,
+            warehouse_id: wh !== '' ? wh : null,
         }),
     };
     constructor() { super(); this.init(); }

@@ -19,7 +19,8 @@
     "stock_resources": "Resources",
     "stock_putaway_rules": "Putaway rules",
     "stock_reorder_rules": "Reorder rules",
-    "stock_routes": "Routes"
+    "stock_routes": "Routes",
+    "stock_uoms": "Units of measure"
   },
   "bottom_nav": {
     "home": "Stock",
@@ -50,14 +51,16 @@
       "stock_resources": "Resources",
       "stock_putaway_rules": "Putaway rules",
       "stock_reorder_rules": "Reorder rules",
-      "stock_routes": "Routes"
+      "stock_routes": "Routes",
+      "stock_uoms": "Units of measure"
     }
   },
   "home": {
     "title": "Warehouse pulse",
     "empty": "No warehouse configured",
     "quants": "On hand",
-    "transfers": "Transfers"
+    "transfers": "Transfers",
+    "subtitle": "Stock on hand and open transfers"
   },
   "transfers": {
     "title": "Transfers",
@@ -259,7 +262,15 @@
     "route_created": "Route created",
     "route_create_failed": "Failed to create route",
     "warehouse_updated": "Warehouse updated",
-    "warehouse_update_failed": "Failed to update warehouse"
+    "warehouse_update_failed": "Failed to update warehouse",
+    "uom_created": "Unit created",
+    "uom_create_failed": "Failed to create unit",
+    "uom_deleted": "Unit deleted",
+    "uom_delete_failed": "Failed to delete unit",
+    "packaging_created": "Packaging created",
+    "packaging_create_failed": "Failed to create packaging",
+    "packaging_deleted": "Packaging deleted",
+    "packaging_delete_failed": "Failed to delete packaging"
   },
   "explorer": {
     "search_placeholder": "Search bin, zone or barcode…",
@@ -427,7 +438,17 @@
     "pick_sequence": "Pick sequence",
     "delay": "Delay",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "warehouses_subtitle": "Company warehouses and their operation types",
+    "storage_types_subtitle": "Storage policies for warehouse cells",
+    "container_types_subtitle": "Container and packaging types",
+    "resources_subtitle": "Equipment and warehouse work resources",
+    "putaway_rules_subtitle": "Where to place goods on receipt",
+    "reorder_rules_subtitle": "Automatic replenishment of pick faces",
+    "routes_subtitle": "Goods movement routes across the warehouse",
+    "handles_loose": "Handles loose goods",
+    "max_level": "Max level",
+    "max_load_weight": "Max load weight"
   },
   "modal": {
     "location_create": "New location",
@@ -435,5 +456,25 @@
     "location_create_child": "Child location",
     "product_new": "New product",
     "product_edit": "Warehouse product"
+  },
+  "uoms": {
+    "title": "Units of measure",
+    "subtitle": "Base units and product packagings",
+    "base_title": "Base units",
+    "packagings_title": "Product packagings",
+    "create_uom": "Create unit",
+    "create_packaging": "Create packaging",
+    "category": "Category",
+    "factor": "Factor",
+    "quantity": "Qty in base units",
+    "reference": "base",
+    "empty": "No units",
+    "empty_packagings": "No packagings",
+    "confirm_delete_uom": "Delete unit of measure?",
+    "confirm_delete_packaging": "Delete packaging?",
+    "category_unit": "Pieces",
+    "category_weight": "Weight",
+    "category_length": "Length",
+    "category_volume": "Volume"
   }
 }
