@@ -91,6 +91,15 @@ def _imap_sdk(client: aioimaplib.IMAP4_SSL) -> _ImapSdk:
     return typed_view(client, aioimaplib.IMAP4_SSL, _ImapSdk)
 
 
+def _io_error_detail(exc: Exception) -> str:
+    # TimeoutError/OSError без сообщения дают пустой str(exc) — лог должен назвать причину.
+    if str(exc):
+        return str(exc)
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    return type(exc).__name__
+
+
 _HEADER_FETCH = (
     "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID TO DATE IN-REPLY-TO REFERENCES)] UID)"
 )
@@ -412,7 +421,7 @@ class ImapSmtpTransport:
                 await asyncio.sleep(1.5 * float(attempt + 1))
         if last_error is None:
             raise MailTransportError("SMTP connect failed without error")
-        raise MailTransportError(f"SMTP connect failed: {last_error}") from last_error
+        raise MailTransportError(f"SMTP connect failed: {_io_error_detail(last_error)}") from last_error
 
     async def _connect_imap(self, *, timeout: float = 30.0) -> aioimaplib.IMAP4_SSL:
         last_error: Exception | None = None
@@ -427,7 +436,7 @@ class ImapSmtpTransport:
                 await asyncio.sleep(1.5 * float(attempt + 1))
         if last_error is None:
             raise MailTransportError("IMAP connect failed without error")
-        raise MailTransportError(f"IMAP connect failed: {last_error}") from last_error
+        raise MailTransportError(f"IMAP connect failed: {_io_error_detail(last_error)}") from last_error
 
     async def _login_imap(self, binding_secret: MailboxSecret) -> aioimaplib.IMAP4_SSL:
         client = await self._connect_imap()
@@ -438,7 +447,7 @@ class ImapSmtpTransport:
             )
         except (TimeoutError, OSError) as exc:
             raise MailTransportError(
-                f"IMAP login failed for {binding_secret.email_address}: {exc}"
+                f"IMAP login failed for {binding_secret.email_address}: {_io_error_detail(exc)}"
             ) from exc
         if login_response.result != "OK":
             _ = await client.logout()

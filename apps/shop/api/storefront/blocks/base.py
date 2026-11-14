@@ -10,7 +10,7 @@ CSS: str = """*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-c
 img{background:var(--card2);transition:opacity .35s ease}
 img:not(.ld){opacity:0}
 body.lock{overflow:hidden}
-body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation;overflow-x:hidden;overflow-x:clip;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:pan-x pan-y;overflow-x:hidden;overflow-x:clip;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}"""
 
 JS: str = """const S=JSON.parse(document.getElementById('snapshot').textContent);
@@ -51,4 +51,13 @@ function hoursBadge(){
     if(tr)return{t:'Откроемся '+DAYS[nd]+' '+span(tr),open:false};
   }
   return{t:'Временно не работает',open:false};
-}"""
+}
+/* Запрет зума на мобиле — витрина должна вести себя как приложение.
+   maximum-scale/user-scalable Safari игнорирует, поэтому глушим и
+   жесты; пинч внутри <platform-map> — легальный зум карты, пропускаем. */
+document.addEventListener('gesturestart',e=>e.preventDefault());
+document.addEventListener('gesturechange',e=>e.preventDefault());
+document.addEventListener('gestureend',e=>e.preventDefault());
+document.addEventListener('touchmove',e=>{
+  if(e.touches.length>1&&!e.target.closest('platform-map'))e.preventDefault();
+},{passive:false});"""

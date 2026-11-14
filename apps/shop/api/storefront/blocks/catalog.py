@@ -4,7 +4,7 @@
 в shell как есть — без экранирования скобок.
 """
 
-CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}
+CSS: str = """.tabs{position:sticky;top:env(safe-area-inset-top);z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:var(--bg);scrollbar-width:none}
 .csearch{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px;transition:border-color .15s,box-shadow .15s}
 .csearch:focus-within{border-color:var(--afg);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 .csearch svg{opacity:.5;flex-shrink:0}
@@ -123,7 +123,10 @@ function renderCatalog(){
   const flush=()=>{const b=queue.shift();
     if(!b){sent.remove();moreIO?.disconnect();return;}
     body.insertAdjacentHTML('beforeend',chunkHtml(b));
-    spy(body);};
+    spy(body);
+    /* Очередь опустела — сентинел со скелетонами уходит сразу: обсервер
+       зовёт flush лишь пока queue.length>0 и «добить» его сам не успеет. */
+    if(!queue.length){sent.remove();moreIO?.disconnect();}};
   const first=roots[0]?.id||(other.length?'other':'');
   if(first)activate(first);
   for(let i=0;i<3&&queue.length;i++)flush();

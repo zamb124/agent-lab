@@ -32,6 +32,7 @@ from apps.stock.models import (
     StockTransfer,
 )
 from apps.stock.models.common import STOCK_DB
+from apps.stock.models.storage_rules import resource_allows
 from core.errors.boundary import PlatformNotFoundError
 from core.files.models import FileRecord
 from core.lanes import publish_lane_run
@@ -44,6 +45,7 @@ def line_fits_resource(
     line: StockMoveLine,
     *,
     source_location: StockLocation | None,
+    dest_location: StockLocation | None,
     container: StockLocation | None,
     resource_type: StockResourceType,
 ) -> bool:
@@ -54,36 +56,37 @@ def line_fits_resource(
     обслуживает, до какого яруса достаёт, какую тару везёт и берёт ли
     россыпь. Задание «не по силам» просто не показывается оператору.
 
-    Проверки (все должны пройти):
-      * ярус исходной ячейки ≤ ``max_level`` ресурса;
-      * ``storage_type`` ячейки входит в ``storage_type_ids``
-        (пустой список = без ограничений);
-      * задание по таре — тип контейнера ∈ ``allowed_container_type_ids``;
-      * задание по россыпи — ресурс умеет ``handles_loose``.
+    Правила — единый ``resource_allows`` (storage_rules): та же
+    проверка стоит в ``claim_in_lane``, поэтому «дать работу» не
+    выдаёт строку, которую захват тут же отвергнет бы.
     """
-    if source_location is not None:
-        if (
-            resource_type.max_level is not None
-            and source_location.level > resource_type.max_level
-        ):
-            return False
-        if (
-            resource_type.storage_type_ids
-            and source_location.storage_type_id is not None
-            and source_location.storage_type_id
-            not in resource_type.storage_type_ids
-        ):
-            return False
-    if line.kind == StockMoveLineKind.CONTAINER:
-        allowed = resource_type.allowed_container_type_ids
-        if allowed and (
-            container is None
-            or container.container_type_id not in allowed
-        ):
-            return False
-    elif not resource_type.handles_loose:
-        return False
-    return True
+    return (
+        resource_allows(
+            resource_type=resource_type,
+            container_type_id=(
+                container.container_type_id if container is not None else None
+            ),
+            loose=line.kind != StockMoveLineKind.CONTAINER,
+            src_level=(
+                source_location.level if source_location is not None else None
+            ),
+            dst_level=(
+                dest_location.level if dest_location is not None else None
+            ),
+            src_storage_type_id=(
+                source_location.storage_type_id
+                if source_location is not None
+                else None
+            ),
+            dst_storage_type_id=(
+                dest_location.storage_type_id
+                if dest_location is not None
+                else None
+            ),
+            load_weight=None,
+        )
+        is None
+    )
 
 
 
@@ -190,6 +193,7 @@ class TaskService:
                     if line_fits_resource(
                         line,
                         source_location=locations.get(line.location_id),
+                        dest_location=locations.get(line.location_dest_id),
                         container=(
                             locations.get(line.container_id)
                             if line.container_id is not None

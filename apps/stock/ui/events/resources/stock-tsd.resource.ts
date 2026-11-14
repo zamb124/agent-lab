@@ -235,7 +235,10 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
             const expected = isPlainRecord(payload.expected) ? (payload.expected as unknown as StockScanExpected) : state.expected;
             return {
                 ...state,
-                context,
+                // inquiry — свободный осмотр, а не сессия исполнения:
+                // иначе рабочий стол переключался бы в режим «идёт
+                // задание» под карточкой сущности и прятал очередь.
+                context: context.flow === 'inquiry' ? null : context,
                 resolution,
                 last_barcode: barcode,
                 outcome: error !== null ? 'error' : 'ok',
@@ -320,7 +323,8 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
                 throw new Error('stock/tsd_session.sessionHydrated: payload required');
             }
             const context = isPlainRecord(payload.context) ? (payload.context as unknown as ScanContext) : null;
-            if (context === null) {
+            if (context === null || context.flow === 'inquiry') {
+                // inquiry-контекст старых персистов — не сессия (см. stepApplied).
                 return { ...state, context: null, resolution: null, last_barcode: '', outcome: '', hint: '', error: null, move_id: '', expected: null, commit_key: '' };
             }
             const moveId = typeof payload.move_id === 'string' ? payload.move_id : '';

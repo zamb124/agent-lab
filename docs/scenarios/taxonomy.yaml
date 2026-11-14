@@ -449,6 +449,10 @@ services:
         label_ru: Документы
         label_en: Documents
         order: 3
+      settings:
+        label_ru: Настройки
+        label_en: Settings
+        order: 4
 
   frontend:
     label_ru: Frontend
@@ -646,6 +650,42 @@ services:
         label_ru: "ТСД: приёмка"
         label_en: "Scanner (TSD): receiving"
         order: 9
+      tsd-putaway:
+        label_ru: "ТСД: размещение"
+        label_en: "Scanner (TSD): putaway"
+        order: 10
+      tsd-move:
+        label_ru: "ТСД: перемещение"
+        label_en: "Scanner (TSD): move"
+        order: 11
+      tsd-container-move:
+        label_ru: "ТСД: перемещение контейнера"
+        label_en: "Scanner (TSD): container move"
+        order: 12
+      tsd-count:
+        label_ru: "ТСД: инвентаризация"
+        label_en: "Scanner (TSD): counting"
+        order: 13
+      tsd-document-pick:
+        label_ru: "ТСД: подбор по документу"
+        label_en: "Scanner (TSD): document picking"
+        order: 14
+      tsd-document-pack:
+        label_ru: "ТСД: упаковка по документу"
+        label_en: "Scanner (TSD): document packing"
+        order: 15
+      tsd-document-ship:
+        label_ru: "ТСД: отгрузка по документу"
+        label_en: "Scanner (TSD): document shipping"
+        order: 16
+      tsd-document-exception:
+        label_ru: "ТСД: расхождения по документу"
+        label_en: "Scanner (TSD): document exception"
+        order: 17
+      tsd-context-chips:
+        label_ru: "ТСД: контекстные подсказки"
+        label_en: "Scanner (TSD): context chips"
+        order: 18
 
   geo:
     label_ru: Geo
@@ -670,6 +710,10 @@ services:
         label_ru: Маршрутная лаборатория
         label_en: Route lab
         order: 3
+      map_lab:
+        label_ru: Карта
+        label_en: Map
+        order: 4
       getting-started:
         label_ru: Начало работы
         label_en: Getting started

@@ -717,7 +717,10 @@ class StockScanStepPayload(StrictBaseModel):
 class StockScanQuantityPayload(StrictBaseModel):
     warehouse_id: str
     context: ScanContext
-    quantity: Decimal = Field(gt=Decimal("0"))
+    # Ноль валиден только для count («в ячейке пусто» — факт
+    # инвентаризации): flow-правило живёт в машине `scan_quantity`,
+    # граница отсекает лишь отрицательное.
+    quantity: Decimal = Field(ge=Decimal("0"))
     move_id: str | None = None
 
 

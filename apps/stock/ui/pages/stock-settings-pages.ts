@@ -168,7 +168,7 @@ abstract class StockSettingsPageBase extends PlatformPage {
                     ? html`<platform-empty-state .message=${this.t(emptyKey)}></platform-empty-state>`
                     : html`
                         <table><thead><tr>
-                            ${columns.map((c) => html`<th class=${c.num === true ? 'num' : ''}>${this.t(c.labelKey)}</th>`)}
+                            ${columns.map((c) => html`<th class=${c.num === true ? 'num' : ''}>${c.labelKey !== '' ? this.t(c.labelKey) : ''}</th>`)}
                         </tr></thead><tbody>
                             ${items.map((row) => html`
                                 <tr class=${this.config.onRowClick !== undefined ? 'clickable' : ''}
@@ -544,7 +544,7 @@ export class StockPutawayRulesPage extends StockSettingsPageBase {
         columns: [
             { key: 'location_in_id', labelKey: 'settings.location_in', render: (r) => this._locName(r.location_in_id) },
             { key: 'location_out_id', labelKey: 'settings.location_out', render: (r) => this._locName(r.location_out_id) },
-            { key: 'product_id', labelKey: 'settings.product', render: (r) => txt(r, 'product_id') },
+            { key: 'product_id', labelKey: 'settings.product', render: (r) => this._productName(r.product_id) },
             { key: 'sequence', labelKey: 'settings.sequence', num: true },
             {
                 key: 'is_active', labelKey: 'settings.is_active',
@@ -601,6 +601,12 @@ export class StockPutawayRulesPage extends StockSettingsPageBase {
     private _locName(id: unknown): string {
         const opts = this._locOptions();
         const found = opts.find((o) => o.value === id);
+        return found !== undefined ? found.label : '—';
+    }
+
+    private _productName(id: unknown): string {
+        if (typeof id !== 'string' || id === '') return '—';
+        const found = this._productOptions().find((o) => o.value === id);
         return found !== undefined ? found.label : '—';
     }
 

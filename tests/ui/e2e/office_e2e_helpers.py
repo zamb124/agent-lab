@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx2
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
+from pydantic import TypeAdapter
 
 from core.di.platform import PlatformDi
 from tests.office.access_helpers import (
@@ -26,6 +27,9 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_select_namespace,
 )
 from tests.ui.e2e_worker import ui_e2e_company_id
+from tests.ui.harness import AppUI
+
+_JSON_OBJECT = TypeAdapter(dict[str, object])
 
 _MIN_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -40,7 +44,7 @@ def office_e2e_namespace_name(unique_id: str, *, suffix: str = "ui") -> str:
 
 
 async def office_e2e_set_locale_ru(page: Page) -> None:
-    await page.add_init_script(
+    _ = await page.add_init_script(
         """
         (() => {
             window.localStorage.setItem('platform_locale', 'ru');
@@ -71,7 +75,7 @@ def office_e2e_catalog_row(page: Page, title: str) -> Locator:
     return office_e2e_tree(page).locator("button.item-main").filter(has_text=title).first
 
 
-async def office_e2e_open(office_ui, page: Page) -> None:
+async def office_e2e_open(office_ui: AppUI, page: Page) -> None:
     await office_ui.open(page)
     await office_ui.expect_shell(page)
     await office_e2e_expect_explorer(page)
@@ -82,7 +86,7 @@ async def office_e2e_expect_explorer(page: Page, *, timeout: float = 30_000) -> 
 
 
 async def office_e2e_open_with_namespace(
-    office_ui,
+    office_ui: AppUI,
     page: Page,
     unique_id: str,
     *,
@@ -424,20 +428,20 @@ async def office_api_create_catalog(
     *,
     namespace: str,
     title_prefix: str = "catalog",
-    is_public: bool = True,
+    company_visible: bool = True,
     parent_catalog_id: str | None = None,
 ) -> str:
     async with _office_client(origin, auth_token, namespace=namespace) as client:
         payload: dict[str, object] = {
             "title": f"{title_prefix}-{unique_id}",
-            "is_public": is_public,
+            "company_visible": company_visible,
         }
         if parent_catalog_id:
             payload["parent_catalog_id"] = parent_catalog_id
         response = await client.post("/documents/api/v1/catalogs", json=payload)
         if response.status_code != 200:
             raise AssertionError(f"create catalog failed: {response.status_code} {response.text}")
-        body = response.json()
+        body = _JSON_OBJECT.validate_python(response.json())
         catalog_id = body.get("catalog_id")
         if not isinstance(catalog_id, str) or catalog_id == "":
             raise AssertionError("catalog_id required in create catalog response")
@@ -464,7 +468,7 @@ async def office_api_create_empty_document(
         )
         if response.status_code != 200:
             raise AssertionError(f"create empty doc failed: {response.status_code} {response.text}")
-        body = response.json()
+        body = _JSON_OBJECT.validate_python(response.json())
         file_id = body.get("file_id")
         if not isinstance(file_id, str) or file_id == "":
             raise AssertionError("file_id required in empty document response")
@@ -472,7 +476,7 @@ async def office_api_create_empty_document(
 
 
 async def office_api_upload_txt(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     *,
     namespace: str,
@@ -522,7 +526,7 @@ async def office_api_upload_txt_auth(
             raise AssertionError(
                 f"upload txt failed: {response.status_code} {response.text}"
             )
-        body = response.json()
+        body = _JSON_OBJECT.validate_python(response.json())
         bound_id = body.get("file_id")
         if not isinstance(bound_id, str) or bound_id == "":
             raise AssertionError("file_id required in upload response")
@@ -543,7 +547,7 @@ async def office_api_delete_document_auth(
 
 
 async def office_api_setup_private_catalog(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     unique_id: str,
     *,
@@ -559,7 +563,7 @@ async def office_api_setup_private_catalog(
 
 
 async def office_api_setup_public_catalog(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     unique_id: str,
     *,
@@ -573,7 +577,7 @@ async def office_api_setup_public_catalog(
 
 
 async def office_api_enable_catalog_public_link(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     catalog_id: str,
     *,
@@ -585,7 +589,7 @@ async def office_api_enable_catalog_public_link(
 
 
 async def office_api_enable_binding_public_link(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     file_id: str,
     *,
@@ -597,7 +601,7 @@ async def office_api_enable_binding_public_link(
 
 
 async def office_api_enable_rag_index(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     catalog_id: str,
     *,
@@ -612,7 +616,7 @@ async def office_api_enable_rag_index(
 
 
 async def office_api_delete_document(
-    office_client_http,
+    office_client_http: httpx2.AsyncClient,
     auth_headers: dict[str, str],
     file_id: str,
     *,
@@ -628,7 +632,7 @@ async def office_api_delete_document(
 
 def office_e2e_min_png_path(tmp_path: Path, name: str) -> Path:
     path = tmp_path / name
-    path.write_bytes(_MIN_PNG)
+    _ = path.write_bytes(_MIN_PNG)
     return path
 
 
@@ -645,21 +649,21 @@ async def office_e2e_expect_editor_loaded(page: Page) -> None:
     ).to_be_hidden(timeout=120_000)
     # OnlyOffice грузится как iframe[name="frameEditor"], нативные viewer'ы —
     # свои компоненты; ждём, что раньше появится — без этого кадр пустой.
-    await page.wait_for_selector(
+    _ = await page.wait_for_selector(
         'iframe[name="frameEditor"], '
-        'office-document-editor-page platform-document-image-viewer, '
-        'office-document-editor-page platform-document-text-viewer, '
-        'office-document-editor-page platform-document-media-viewer, '
-        'office-document-editor-page platform-document-binary-viewer, '
-        'office-document-editor-page platform-viz-host, '
-        'office-document-editor-page platform-data-table-host',
+        + 'office-document-editor-page platform-document-image-viewer, '
+        + 'office-document-editor-page platform-document-text-viewer, '
+        + 'office-document-editor-page platform-document-media-viewer, '
+        + 'office-document-editor-page platform-document-binary-viewer, '
+        + 'office-document-editor-page platform-viz-host, '
+        + 'office-document-editor-page platform-data-table-host',
         state="visible",
         timeout=60_000,
     )
 
 
-async def office_e2e_goto_public_preview(office_ui, page: Page, token: str) -> None:
+async def office_e2e_goto_public_preview(office_ui: AppUI, page: Page, token: str) -> None:
     url = f"{office_ui.origin}/documents/p/{token}"
-    await page.goto(url, wait_until="domcontentloaded")
+    _ = await page.goto(url, wait_until="domcontentloaded")
     await expect(page.locator("office-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("office-public-preview-page")).to_be_visible(timeout=60_000)

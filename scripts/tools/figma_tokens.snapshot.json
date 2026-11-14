@@ -322,6 +322,10 @@
    "reason": "gradient"
   },
   {
+   "css": "--marketing-logo-filter",
+   "reason": "css-keyword"
+  },
+  {
    "css": "--marketing-shot-shadow",
    "reason": "alias-unsupported:glass-shadow-ultra"
   },

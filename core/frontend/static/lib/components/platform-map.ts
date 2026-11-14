@@ -417,7 +417,6 @@ export class PlatformMapEl extends PlatformElement {
                 ${this._renderRouteChip()}
                 ${this.config.draw ? this._renderZoneStats() : nothing}
                 ${panel ? this._renderAddressesPanel(panel) : nothing}
-                ${this.config.statusBar === true && this._ready ? this._renderStatusBar() : nothing}
                 ${this.config.controls?.miniMap === true && this._ready ? html`<div class="pm-minimap" @click=${(e: Event) => e.stopPropagation()}></div>` : nothing}
                 ${this._menu ? this._renderMenu() : nothing}
                 ${this._toast !== '' ? html`<div class="pm-toast" role="status">${this._toast}</div>` : nothing}
@@ -486,7 +485,8 @@ export class PlatformMapEl extends PlatformElement {
         const tilt = c.tilt === true && this._ready;
         const share = c.share === true && this._ready;
         const fullscreen = c.fullscreen === true && this._ready;
-        if (!zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !exportBtn && !tilt && !share && !fullscreen) return nothing;
+        const status = this.config.statusBar === true && this._ready;
+        if (!status && !zoom && !layers && !locate && !ruler && !rulerArea && !fit && !compass && !scheme && !route && !exportBtn && !tilt && !share && !fullscreen) return nothing;
         const hidden = this._mapCtl?.value.hidden ?? {};
         return html`
             <div class="pm-controls">
@@ -634,6 +634,7 @@ export class PlatformMapEl extends PlatformElement {
                           )}
                       </div>`
                     : nothing}
+                ${status ? this._renderStatusBar() : nothing}
             </div>
         `;
     }
@@ -748,8 +749,9 @@ export class PlatformMapEl extends PlatformElement {
     private _renderZoneStats() {
         const s = this._zoneStats;
         if (!s) return nothing;
+        const raised = this.config.controls?.miniMap === true;
         return html`
-            <div class="pm-stats">
+            <div class="pm-stats${raised ? ' pm-stats-raised' : ''}">
                 <span>${this.t('zone_editor.area')} <b>${this._fmtAreaM2(s.areaM2)}</b></span>
                 <span>${this.t('zone_editor.perimeter')} <b>${this._fmtDist(s.perimeterM)}</b></span>
                 ${!s.valid ? html`<span class="pm-stats-err">${this.t('zone_editor.self_intersection')}</span>` : nothing}
@@ -2801,11 +2803,16 @@ export class PlatformMapEl extends PlatformElement {
             position: absolute;
             top: 12px;
             right: 12px;
+            bottom: 12px;
             display: flex;
             flex-direction: column;
             gap: 8px;
             align-items: flex-end;
             z-index: 5;
+            pointer-events: none;
+        }
+        .pm-controls > * {
+            pointer-events: auto;
         }
         .pm-ctrl {
             background: color-mix(in srgb, var(--color-surface, #fff) 88%, transparent);
@@ -2858,6 +2865,10 @@ export class PlatformMapEl extends PlatformElement {
             display: flex;
             flex-direction: column;
             padding: 4px;
+            max-height: 240px;
+            overflow-y: auto;
+            flex-shrink: 1;
+            min-height: 0;
         }
         .pm-layers button {
             display: flex;
@@ -2904,6 +2915,9 @@ export class PlatformMapEl extends PlatformElement {
             font-size: 12px;
             color: var(--color-text-muted, #64748b);
             z-index: 5;
+        }
+        .pm-stats.pm-stats-raised {
+            bottom: 129px;
         }
         .pm-stats b {
             color: var(--color-text, #0f172a);
@@ -3217,9 +3231,6 @@ export class PlatformMapEl extends PlatformElement {
             color: var(--color-text-muted, #64748b);
         }
         .pm-status {
-            position: absolute;
-            right: 12px;
-            bottom: 12px;
             display: flex;
             gap: 10px;
             align-items: center;

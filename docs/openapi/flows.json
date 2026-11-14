@@ -20894,6 +20894,22 @@
             "type": "string",
             "title": "Text",
             "x-flow-ui": "template"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "success",
+              "warning",
+              "error"
+            ],
+            "title": "Tone",
+            "default": "success"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": "",
+            "x-flow-ui": "template"
           }
         },
         "additionalProperties": false,

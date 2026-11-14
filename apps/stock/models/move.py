@@ -1341,7 +1341,9 @@ class StockMove(PlatformModel):
                     )
                     remaining -= take
                 if remaining > STOCK_ZERO:
-                    # Скан сверх резерва — факт без обещания.
+                    # Скан сверх резерва — факт без обещания; владелец
+                    # остатка — тот, чей товар физически отобрали
+                    # (задание-источник знает консигнацию).
                     _ = await add_line(
                         kind=StockMoveLineKind.QUANTITY,
                         lot_id=draft.lot_id,
@@ -1349,6 +1351,7 @@ class StockMove(PlatformModel):
                         done_quantity=remaining,
                         location_id=src_id,
                         location_dest_id=dst_id,
+                        owner=draft.owner_entity_id,
                         sequence=_seq_of(src_id),
                     )
 

@@ -2,7 +2,8 @@
 
 Tick-функции в ``apps/idle/tasks/*`` запускаются worker-процессом через
 ``make test-up`` и не инструментируются coverage. Эти тесты вызывают tick-функции
-напрямую и передают ``di`` процесса idle_worker (``idle_worker_di``).
+напрямую и передают ``di`` процесса idle_worker (полученный через
+``service_processes.di(IdleDi)``; ``frontend_di`` — bootstrap-фикстура).
 
 Покрытие: ``file_retention_purge_tick``, ``file_retention_backfill_tick``,
 ``platform_schedules_gc_tick``, ``redis_inventory_tick``.
@@ -12,24 +13,24 @@ from __future__ import annotations
 
 import pytest
 
-from apps.frontend.di import FrontendDi
 from apps.idle.di import IdleDi
 from apps.idle.tasks import file_retention_tasks
 from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
 from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.registry import default_retention_for_source
+from tests.fixtures.service_processes import ServiceProcesses
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("frontend_di")
 async def test_file_retention_purge_tick_returns_zero_when_disabled(
-    frontend_di: FrontendDi,
-    idle_worker_di: IdleDi,
+    service_processes: ServiceProcesses,
 ) -> None:
     """Purge выключен через ``files.retention.purge_enabled=false`` → no-op."""
     from core.config import get_settings
 
-    _ = frontend_di
+    idle_di = await service_processes.di(IdleDi)
     settings = get_settings()
     original = settings.files.retention.purge_enabled
     settings.files.retention.purge_enabled = False
@@ -37,7 +38,7 @@ async def test_file_retention_purge_tick_returns_zero_when_disabled(
         result = await file_retention_tasks.file_retention_purge_tick(
             schedule_task_id="test-schedule-id",
             company_id=None,
-            di=idle_worker_di,
+            di=idle_di,
         )
     finally:
         settings.files.retention.purge_enabled = original
@@ -46,15 +47,15 @@ async def test_file_retention_purge_tick_returns_zero_when_disabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("frontend_di")
 async def test_file_retention_purge_tick_runs_batch_without_failures(
-    frontend_di: FrontendDi,
-    idle_worker_di: IdleDi,
+    service_processes: ServiceProcesses,
     unique_id: str,
 ) -> None:
     """Purge тик исполняет ``purge_expired_batch`` на пустой shared БД без ошибок."""
     from core.config import get_settings
 
-    _ = frontend_di
+    idle_di = await service_processes.di(IdleDi)
     settings = get_settings()
     original = settings.files.retention.purge_enabled
     settings.files.retention.purge_enabled = True
@@ -62,7 +63,7 @@ async def test_file_retention_purge_tick_runs_batch_without_failures(
         result = await file_retention_tasks.file_retention_purge_tick(
             schedule_task_id=f"purge_{unique_id}",
             company_id=None,
-            di=idle_worker_di,
+            di=idle_di,
         )
     finally:
         settings.files.retention.purge_enabled = original
@@ -79,12 +80,11 @@ async def test_file_retention_purge_tick_runs_batch_without_failures(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("frontend_di")
 async def test_file_retention_backfill_tick_skips_empty_repository(
-    frontend_di: FrontendDi,
     unique_id: str,
 ) -> None:
     """Backfill тик исполняется на shared БД и возвращает корректную структуру."""
-    _ = frontend_di
     result = await file_retention_tasks.file_retention_backfill_tick(
         schedule_task_id=f"backfill_{unique_id}",
         company_id=None,
@@ -97,12 +97,11 @@ async def test_file_retention_backfill_tick_skips_empty_repository(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("frontend_di")
 async def test_file_retention_backfill_tick_updates_record_missing_retention(
-    frontend_di: FrontendDi,
     unique_id: str,
 ) -> None:
     """Backfill обновляет FileRecord без retention, заполняя его по source_kind."""
-    _ = frontend_di
     retention = default_retention_for_source(FileSourceKind.FLOW_SESSION)
 
     company_id = f"co_backfill_{unique_id}"

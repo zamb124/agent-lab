@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
 
@@ -18,6 +20,17 @@ from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
 _DESKTOP = ViewportSize(width=1440, height=900)
+
+
+async def _pick_warehouse(page_el: Any, warehouse_name: str) -> None:
+    """Выбор склада в toolbar-combobox settings-страницы."""
+    combo = page_el.locator(".toolbar platform-searchable-combobox")
+    input_el = combo.locator("input")
+    await input_el.click()
+    await input_el.fill("")
+    option = combo.locator("li.item").filter(has_text=warehouse_name)
+    await expect(option.first).to_be_visible(timeout=15_000)
+    await option.first.click()
 
 
 async def _ctx(page: Page, unique_id: str) -> dict[str, str]:
@@ -639,13 +652,7 @@ async def test_settings_warehouse(
         page, 'stock_storage_types', page_selector="stock-storage-types-page"
     )
     st_page = page.locator("stock-storage-types-page")
-    wh_filter = st_page.locator(".toolbar platform-searchable-combobox")
-    await wh_filter.locator("input").click()
-    wh_option = wh_filter.locator("li.item").filter(
-        has_text=f"Склад-филиал {unique_id[:4]}"
-    )
-    await expect(wh_option.first).to_be_visible(timeout=15_000)
-    await wh_option.first.click()
+    await _pick_warehouse(st_page, f"Склад-филиал {unique_id[:4]}")
     await st_page.locator("page-header platform-button[data-create]").first.locator("button").click()
     st_form = page.locator("stock-entity-form-modal")
     await expect(st_form.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -914,6 +921,7 @@ async def test_settings_catalogs(
         page, 'stock_resources', page_selector="stock-resources-page"
     )
     res_page = page.locator("stock-resources-page")
+    await _pick_warehouse(res_page, f"Склад {unique_id[:4]}")
     await res_page.locator(".section platform-button").locator("button").click()
     type_modal = page.locator("stock-entity-form-modal")
     await expect(type_modal.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -938,15 +946,23 @@ async def test_settings_catalogs(
         ),
     )
     await type_modal.locator(".header-save-btn").click()
-    types = await stock_e2e_op(
-        page,
-        "stock/resource_types_list", "stock/resource_types_list/requested",
-        {"warehouse_id": ctx["warehouse_id"]},
+    type_row = res_page.locator("tbody tr").filter(
+        has_text=f"Погрузчик {unique_id[:4]}"
+    )
+    await expect(type_row.first).to_be_visible(timeout=15_000)
+    types: dict[str, Any] = await page.evaluate(
+        """async (wh) => {
+            const r = await fetch(`/stock/api/v1/resource-types?warehouse_id=${wh}`);
+            return await r.json();
+        }""",
+        ctx["warehouse_id"],
     )
     type_id = next(
-        t["resource_type_id"] for t in types["items"]
-        if t["name"] == f"Погрузчик {unique_id[:4]}"
+        (t["resource_type_id"] for t in types.get("items", [])
+         if t["name"] == f"Погрузчик {unique_id[:4]}"),
+        None,
     )
+    assert type_id is not None, f"resource type не найден в списке: {types}"
 
     await res_page.locator("page-header platform-button[data-create]").locator("button").click()
     res_modal = page.locator("stock-entity-form-modal")
@@ -982,6 +998,7 @@ async def test_settings_catalogs(
         page, 'stock_putaway_rules', page_selector="stock-putaway-rules-page"
     )
     putaway_page = page.locator("stock-putaway-rules-page")
+    await _pick_warehouse(putaway_page, f"Склад {unique_id[:4]}")
     await putaway_page.locator("page-header platform-button[data-create]").locator("button").click()
     put_modal = page.locator("stock-entity-form-modal")
     await expect(put_modal.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -991,7 +1008,9 @@ async def test_settings_catalogs(
     await ui_set_platform_field(put_fields.nth(2), ctx["bin_id"])
     await ui_set_platform_field(put_fields.nth(3), ctx["product_id"])
     await ui_set_platform_field(put_fields.nth(4), "10")
+    await expect(put_modal.locator(".header-save-btn")).to_be_enabled(timeout=10_000)
     await put_modal.locator(".header-save-btn").click()
+    await expect(put_modal).to_be_hidden(timeout=15_000)
     put_row = putaway_page.locator("tbody tr").filter(has_text=f"Зона {unique_id[:4]}")
     await expect(put_row.first).to_be_visible(timeout=15_000)
     await scenario.step(
@@ -1025,11 +1044,7 @@ async def test_settings_catalogs(
         page, 'stock_reorder_rules', page_selector="stock-reorder-rules-page"
     )
     reorder_page = page.locator("stock-reorder-rules-page")
-    wh_combo = reorder_page.locator(".toolbar platform-searchable-combobox")
-    await wh_combo.locator("input").click()
-    await wh_combo.locator("li.item").filter(
-        has_text=f"Склад {unique_id[:4]}"
-    ).first.click()
+    await _pick_warehouse(reorder_page, f"Склад {unique_id[:4]}")
     await reorder_page.locator("page-header platform-button[data-create]").locator("button").click()
     re_modal = page.locator("stock-entity-form-modal")
     await expect(re_modal.locator("platform-field").first).to_be_visible(timeout=15_000)

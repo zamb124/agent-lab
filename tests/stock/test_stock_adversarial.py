@@ -942,19 +942,28 @@ class TestReadSurfaces:
         )
         # Ярус выше потолка техники.
         assert (
-            line_fits_resource(line, source_location=src, container=None, resource_type=rtype)
+            line_fits_resource(
+                line, source_location=src, dest_location=None,
+                container=None, resource_type=rtype,
+            )
             is False
         )
         # Потолок снят — россыпь разрешена.
         rtype2 = rtype.model_copy(update={"max_level": None})
         assert (
-            line_fits_resource(line, source_location=src, container=None, resource_type=rtype2)
+            line_fits_resource(
+                line, source_location=src, dest_location=None,
+                container=None, resource_type=rtype2,
+            )
             is True
         )
         # Россыпь запрещена — строка не по таре.
         rtype3 = rtype2.model_copy(update={"handles_loose": False})
         assert (
-            line_fits_resource(line, source_location=src, container=None, resource_type=rtype3)
+            line_fits_resource(
+                line, source_location=src, dest_location=None,
+                container=None, resource_type=rtype3,
+            )
             is False
         )
         # Строка по таре + тип тары не в списке допуска.
@@ -967,6 +976,7 @@ class TestReadSurfaces:
             line_fits_resource(
                 container_line,
                 source_location=src,
+                dest_location=None,
                 container=pallet,
                 resource_type=rtype4,
             )

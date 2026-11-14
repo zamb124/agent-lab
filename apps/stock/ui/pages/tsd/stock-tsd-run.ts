@@ -31,10 +31,12 @@ import type {
     StockTsdSessionState,
 } from '../../events/resources/stock-tsd.resource.js';
 import { formatPlatformError } from '@platform/lib/utils/platform-error-message.js';
-import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import {
     tsdFormatQty,
-    tsdVirtualLocationKey,
+    tsdLocationName,
+    tsdLocationShortName,
+    tsdProductImageUrl,
+    tsdProductName,
 } from './tsd-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
@@ -459,31 +461,22 @@ export class StockTsdRun extends PlatformElement {
     }
 
     private _productName(productId: string): string {
-        const product = this._products.items.find((row) => row.product_id === productId);
-        return product === undefined ? productId : product.name;
+        return tsdProductName(this._products.items, productId);
     }
 
     private _productImageUrl(productId: string): string | null {
-        const product = this._products.items.find((row) => row.product_id === productId);
-        const fileId = product?.image_file_ids?.[0];
-        return typeof fileId === 'string' && fileId !== '' ? buildPlatformFileDownloadUrl(fileId) : null;
+        return tsdProductImageUrl(this._products.items, productId);
     }
 
     private _locationName(locationId: string): string {
-        const location = this._locations.items.find((row) => row.location_id === locationId);
-        if (location === undefined) return locationId;
-        const virtual = tsdVirtualLocationKey(location.usage, location.partner_role);
-        return virtual !== null ? this.t(virtual) : (location.complete_name ?? location.name);
+        return tsdLocationName(this._locations.items, locationId, this.t);
     }
 
     /** Короткое имя ячейки для маршрута строки: полный путь уже виден
      * в чипах-подсказках, в «источник → приёмник» важна различимость
      * концов («А010 → Б010»), а не префикс склада. */
     private _locationShortName(locationId: string): string {
-        const location = this._locations.items.find((row) => row.location_id === locationId);
-        if (location === undefined) return locationId;
-        const virtual = tsdVirtualLocationKey(location.usage, location.partner_role);
-        return virtual !== null ? this.t(virtual) : location.name;
+        return tsdLocationShortName(this._locations.items, locationId, this.t);
     }
 
     private _slot(icon: string, text: string): TemplateResult {

@@ -186,12 +186,14 @@ class ScanService:
         lines: list[StockMoveLine], user_id: str
     ) -> list[StockMoveLine]:
         """Строки, которые этот оператор реально исполнит: свободные
-        или уже закреплённые за ним. Чужой claim — не его работа."""
-        return [
-            line
-            for line in lines
-            if line.assigned_user_id in {None, user_id}
-        ]
+        или уже закреплённые за ним. Чужой claim — не его работа.
+        Захваченные им — первыми: сессия открыта на конкретной
+        строке, и подсказка `expected` обязана показывать её, а не
+        более раннюю свободную (release/report-problem на экране
+        целятся именно в исполняемую строку)."""
+        mine = [line for line in lines if line.assigned_user_id == user_id]
+        free = [line for line in lines if line.assigned_user_id is None]
+        return mine + free
 
     async def first_executable_line(
         self,

@@ -16,6 +16,7 @@ import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type {
+    ScanResolution,
     StockLocation,
     StockProductView,
     StockQuant,
@@ -23,7 +24,7 @@ import type {
     StockScanOpenResponse,
     StockTransferDetail,
 } from '@platform/lib/events/wire/stock.gen.js';
-import type { StockTsdContextState } from '../../events/resources/stock-tsd.resource.js';
+import type { StockTsdContextState, StockTsdSessionState } from '../../events/resources/stock-tsd.resource.js';
 import { tsdFormatQty, tsdVirtualLocationKey } from './tsd-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
@@ -34,13 +35,6 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
 
     static override properties: PropertyDeclarations = {
         ...PlatformBottomSheet.properties,
-        barcode: { type: String },
-        entity_kind: { type: String },
-        entity_id: { type: String },
-        product_id: { type: String },
-        serial: { type: String },
-        quantity: { attribute: false },
-        warehouse_id: { type: String },
         _product: { state: true },
         _location: { state: true },
         _transfer: { state: true },
@@ -49,13 +43,6 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         _failed: { state: true },
     };
 
-    declare barcode: string;
-    declare entity_kind: string;
-    declare entity_id: string;
-    declare product_id: string;
-    declare serial: string;
-    declare quantity: number | string | null;
-    declare warehouse_id: string;
     declare private _product: StockProductView | null;
     declare private _location: StockLocation | null;
     declare private _transfer: StockTransferDetail | null;
@@ -64,6 +51,8 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     declare private _failed: boolean;
 
     private _contextSel: SelectController<StockTsdContextState>;
+    private _sessionSel: SelectController<StockTsdSessionState>;
+    private _loadedKey = '';
     private _quants: ControllerFor<'stock/quants'>;
     private _products: ControllerFor<'stock/products'>;
     private _locations: ControllerFor<'stock/locations'>;
@@ -234,6 +223,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     constructor() {
         super();
         this._contextSel = this.select((s) => s.stockTsdContext as StockTsdContextState);
+        this._sessionSel = this.select((s) => s.stockTsdSession as StockTsdSessionState);
         this._quants = this.useResource('stock/quants');
         this._products = this.useResource('stock/products');
         this._locations = this.useResource('stock/locations');
@@ -253,10 +243,45 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._failed = false;
     }
 
+    // Лист — проекция `stock/tsd_session.resolution`: повторный скан
+    // на рабочем столе подменяет карточку по месту, нового листа в
+    // стеке не появляется.
+    private get _res(): ScanResolution | null {
+        return this._sessionSel.value.resolution;
+    }
+
+    private get _barcode(): string {
+        return this._sessionSel.value.last_barcode;
+    }
+
+    private get _entityKind(): string {
+        return this._res?.entity_kind ?? 'unknown';
+    }
+
+    private get _entityId(): string {
+        return this._res?.entity_id ?? '';
+    }
+
+    private get _productId(): string {
+        return this._res?.product_id ?? '';
+    }
+
+    private get _serial(): string {
+        return this._res?.serial ?? '';
+    }
+
+    private get _quantity(): number | string | null {
+        return this._res?.quantity ?? null;
+    }
+
     override updated(changed: PropertyValues): void {
-        if (changed.has('entity_id') && this.entity_id !== '') {
-            void this._load();
-        }
+        const res = this._res;
+        const entityId = res?.entity_id;
+        const key = typeof entityId === 'string' && entityId !== ''
+            ? `${res?.entity_kind ?? 'unknown'}:${entityId}` : '';
+        if (key === this._loadedKey) return;
+        this._loadedKey = key;
+        if (key !== '') void this._load();
     }
 
     private async _load(): Promise<void> {
@@ -266,10 +291,10 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._resource = null;
         this._containerQuants = [];
         this._failed = false;
-        const kind = this.entity_kind;
+        const kind = this._entityKind;
         try {
             if (kind === 'product' || kind === 'packaging' || kind === 'lot') {
-                const productId = this.product_id !== '' ? this.product_id : this.entity_id;
+                const productId = this._productId !== '' ? this._productId : this._entityId;
                 const product = await this._productItem.run({ product_id: productId });
                 this._product = product;
                 const warehouseId = this._contextSel.value.warehouse_id;
@@ -282,16 +307,16 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 );
                 if (warehouseId !== '') this._locations.load({ warehouse_id: warehouseId, include_virtual: true });
             } else if (kind === 'location') {
-                this._location = await this._locationItem.run({ location_id: this.entity_id });
-                this._loadQuants({ location_id: this.entity_id });
+                this._location = await this._locationItem.run({ location_id: this._entityId });
+                this._loadQuants({ location_id: this._entityId });
                 this._products.load({ limit: 500 });
             } else if (kind === 'container') {
-                const contents = await this._containerItem.run({ container_id: this.entity_id });
+                const contents = await this._containerItem.run({ container_id: this._entityId });
                 this._location = contents === null ? null : contents.container;
                 this._containerQuants = contents === null ? [] : contents.quants;
                 this._products.load({ limit: 500 });
             } else if (kind === 'document') {
-                this._transfer = await this._transferItem.run({ transfer_id: this.entity_id });
+                this._transfer = await this._transferItem.run({ transfer_id: this._entityId });
             }
         } catch {
             this._failed = true;
@@ -326,7 +351,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     private _renderQuantRow(quant: StockQuant): TemplateResult {
         const qty = quant.quantity ?? 0;
         const reserved = quant.reserved_quantity ?? 0;
-        const name = this.entity_kind === 'product' || this.entity_kind === 'packaging' || this.entity_kind === 'lot'
+        const name = this._entityKind === 'product' || this._entityKind === 'packaging' || this._entityKind === 'lot'
             ? this._locationName(quant.location_id)
             : this._productName(quant.product_id);
         return html`
@@ -341,12 +366,12 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     }
 
     private _renderQuants(): TemplateResult | string {
-        if (!['product', 'packaging', 'lot', 'location', 'container'].includes(this.entity_kind)) return '';
-        const items = this.entity_kind === 'container' ? this._containerQuants : this._quants.items.filter((q) => {
-            if (this.entity_kind === 'location' || this.entity_kind === 'container') {
-                return q.location_id === this.entity_id;
+        if (!['product', 'packaging', 'lot', 'location', 'container'].includes(this._entityKind)) return '';
+        const items = this._entityKind === 'container' ? this._containerQuants : this._quants.items.filter((q) => {
+            if (this._entityKind === 'location' || this._entityKind === 'container') {
+                return q.location_id === this._entityId;
             }
-            const productId = this.product_id !== '' ? this.product_id : this.entity_id;
+            const productId = this._productId !== '' ? this._productId : this._entityId;
             return q.product_id === productId;
         });
         return html`
@@ -382,46 +407,46 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         // Слоты уже отсканированной сущности: машина пропускает
         // шаги с заполненными слотами — товар, партию и серийник
         // повторно сканировать не нужно.
-        const productId = this.product_id !== '' ? this.product_id : this.entity_id;
+        const productId = this._productId !== '' ? this._productId : this._entityId;
         return {
             product_id: productId,
-            lot_id: this.entity_kind === 'lot' ? this.entity_id : null,
-            serial: this.serial !== '' ? this.serial : null,
-            quantity: this.quantity,
+            lot_id: this._entityKind === 'lot' ? this._entityId : null,
+            serial: this._serial !== '' ? this._serial : null,
+            quantity: this._quantity,
         };
     }
 
     private _startCount(): void {
-        const hasSource = this.entity_kind === 'location' || this.entity_kind === 'container';
+        const hasSource = this._entityKind === 'location' || this._entityKind === 'container';
         // Пересчёт всегда спрашивает факт у оператора: количество с
         // этикетки («на коробе написано 24») пропустило бы шаг ввода
         // и записало бы надпись как физический остаток. Серийник —
         // исключение: сам скан SN и есть «единица на месте».
         const scanned = { ...this._scannedProduct() };
-        if (this.serial === '') scanned['quantity'] = null;
+        if (this._serial === '') scanned['quantity'] = null;
         this._startFlow(hasSource
-            ? { flow: 'count', step: 'product', source_id: this.entity_id }
+            ? { flow: 'count', step: 'product', source_id: this._entityId }
             : { flow: 'count', step: 'location', ...scanned });
     }
 
     private _startMove(): void {
-        if (this.entity_kind === 'location' || this.entity_kind === 'container') {
-            this._startFlow({ flow: 'move', step: 'product', source_id: this.entity_id });
+        if (this._entityKind === 'location' || this._entityKind === 'container') {
+            this._startFlow({ flow: 'move', step: 'product', source_id: this._entityId });
             return;
         }
         this._startFlow({ flow: 'move', step: 'location', ...this._scannedProduct() });
     }
 
     private _startPutaway(): void {
-        if (this.entity_kind === 'location') {
-            this._startFlow({ flow: 'putaway', step: 'product', source_id: this.entity_id });
+        if (this._entityKind === 'location') {
+            this._startFlow({ flow: 'putaway', step: 'product', source_id: this._entityId });
             return;
         }
         this._startFlow({ flow: 'putaway', step: 'location', ...this._scannedProduct() });
     }
 
     private _startContainerMove(): void {
-        this._startFlow({ flow: 'container_move', step: 'dest', container_id: this.entity_id });
+        this._startFlow({ flow: 'container_move', step: 'dest', container_id: this._entityId });
     }
 
     private _startReceive(): void {
@@ -433,7 +458,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         const opened: StockScanOpenResponse | null = await this._scanOpen.run({
             warehouse_id: warehouseId,
             move_id: null,
-            transfer_id: this.entity_id,
+            transfer_id: this._entityId,
         });
         if (opened === null) return;
         this._session.runOpened({
@@ -448,7 +473,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         const warehouseId = this._contextSel.value.warehouse_id;
         const resource = await this._resourceLogin.run({
             warehouse_id: warehouseId,
-            barcode: this.barcode,
+            barcode: this._barcode,
             resource_id: null,
             idempotency_key: null,
         });
@@ -460,7 +485,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     }
 
     private _renderActions(): TemplateResult | string {
-        const kind = this.entity_kind;
+        const kind = this._entityKind;
         if (kind === 'document') {
             return html`
                 <div class="actions">
@@ -539,7 +564,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     }
 
     override renderBody(): TemplateResult {
-        const kind = this.entity_kind;
+        const kind = this._entityKind;
         const product = this._product;
         const photoId = product !== null && product.image_file_ids.length > 0 ? (product.image_file_ids[0] ?? null) : null;
         const title = product !== null
@@ -550,12 +575,12 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 ? this._transfer.transfer.name
                 : this._resource !== null
                   ? this._resource.code
-                  : this.barcode;
+                  : this._barcode;
         const meta = product !== null
-            ? (product.sku ?? this.barcode)
+            ? (product.sku ?? this._barcode)
             : this._transfer !== null
               ? this.t('entity.document_meta', { lines: String(this._transfer.lines.length) })
-              : this.barcode;
+              : this._barcode;
         return html`
             <div class="entity">
                 <div class="head">

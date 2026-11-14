@@ -81,7 +81,12 @@ async def ui_click_and_wait_bus_op(
                 throw new Error('__PLATFORM_BUS__ недоступен для ожидания исхода op');
             }
             window[m] = [];
-            bus.subscribeAny((event) => { window[m].push(event.type); });
+            bus.subscribeAny((event) => {
+                window[m].push(event.type);
+                if (event.type.endsWith('/failed')) {
+                    window[m].push('detail: ' + JSON.stringify(event.payload));
+                }
+            });
         }""",
         marker,
     )

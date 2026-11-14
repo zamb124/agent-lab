@@ -370,11 +370,6 @@ class StockMoveEngine:
                 # Плечо маршрута: приёмник задан шагом маршрута —
                 # рукопожатие цепочки нельзя перебивать putaway-рефлексом.
                 continue
-            if move.location_dest_id != operation_type.default_dest_location_id:
-                # Приёмник выбран явно (оператор в накладной, задание
-                # ТСД) — размещение уже решено; рефлекс перебирает
-                # кандидатов только для груза на дефолтном приёмнике.
-                continue
             dst = await StockLocation.by_id(company_id, move.location_dest_id)
             src = await StockLocation.by_id(company_id, move.location_id)
             if (
@@ -383,6 +378,16 @@ class StockMoveEngine:
                 or dst.usage not in STOCK_QUANT_USAGES | {StockLocationUsage.VIEW}
                 or src.usage in STOCK_QUANT_USAGES
             ):
+                continue
+            if (
+                move.location_dest_id != operation_type.default_dest_location_id
+                and dst.usage != StockLocationUsage.VIEW
+            ):
+                # Приёмник выбран явно и это конечная ячейка (оператор
+                # в накладной, задание ТСД) — размещение уже решено;
+                # рефлекс перебирает кандидатов только для груза на
+                # дефолтном приёмнике или view-узле (view не держит
+                # остаток — ячейку внутри выбирает putaway).
                 continue
             decision = await self._placement.resolve_putaway(
                 company_id=company_id,

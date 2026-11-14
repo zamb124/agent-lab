@@ -70,4 +70,14 @@ body[data-hero=cover] .hero{height:340px}
 .tabs{top:calc(env(safe-area-inset-top) + 4px)}
 .panel{width:min(640px,100vw)}
 }
-@media(max-width:520px){.hero{height:210px}body[data-hero=cover] .hero{height:250px}.hero h1{font-size:26px}.grid{grid-template-columns:1fr 1fr;gap:10px}}"""
+@media(max-width:520px){.hero{height:210px}body[data-hero=cover] .hero{height:250px}.hero h1{font-size:26px}.grid{grid-template-columns:1fr 1fr;gap:10px}}
+/* Мобильные горизонтальные скроллы — от края до края экрана: чипы и
+   карточки клипаются о viewport, а не зависают узкими полосами в полях
+   .wrap. Хвост .tabs — спейсер, чтобы последний чип не заезжал под
+   плавающую кнопку профиля; scroll-padding — snap к тому же отступу. */
+@media(max-width:720px){
+.tabs{margin:0 -16px;padding:12px 18px}
+.tabs::after{content:"";flex:0 0 56px}
+#app .bnrs,#app .sh .rail{margin:0 -16px;padding-left:18px;padding-right:18px}
+#app .sh .rail{scroll-padding-left:18px}
+}"""

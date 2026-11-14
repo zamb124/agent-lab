@@ -14,6 +14,7 @@ import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { NetworkState } from '@platform/lib/events/reducers/network.js';
+import type { BottomSheetsState } from '@platform/lib/events/reducers/bottom_sheets.js';
 import type { ScanResolution, StockMoveLine, StockWarehouse } from '@platform/lib/events/wire/stock.gen.js';
 import type {
     StockTsdContextState,
@@ -22,7 +23,7 @@ import type {
     TsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
 import { TsdScanInput } from './scan/scan-input.js';
-import { tsdFormatQty, tsdVirtualLocationKey } from './tsd-format.js';
+import { tsdFormatQty, tsdLocationName } from './tsd-format.js';
 import { tsdScanFeedback } from './scan/scan-feedback.js';
 import { tsdCameraScanSupported } from './scan/scan-camera.js';
 import './scan/scan-camera.js';
@@ -64,6 +65,7 @@ export class StockTsdHomePage extends PlatformPage {
     private _outbox: ControllerFor<'stock/tsd_outbox'>;
     private _outboxSel: SelectController<StockTsdOutboxState>;
     private _networkSel: SelectController<NetworkState>;
+    private _sheetsSel: SelectController<BottomSheetsState>;
     private _scanCommit: ControllerFor<'stock/scan_commit'>;
     private _scanCountCommit: ControllerFor<'stock/scan_count_commit'>;
     private _scanAdhocCommit: ControllerFor<'stock/scan_adhoc_commit'>;
@@ -694,6 +696,7 @@ export class StockTsdHomePage extends PlatformPage {
         this._outbox = this.useSlice('stock/tsd_outbox');
         this._outboxSel = this.select((s) => s.stockTsdOutbox as StockTsdOutboxState);
         this._networkSel = this.select((s) => s.network as NetworkState);
+        this._sheetsSel = this.select((s) => s.bottomSheets as BottomSheetsState);
         this._scanCommit = this.useOp('stock/scan_commit');
         this._scanCountCommit = this.useOp('stock/scan_count_commit');
         this._scanAdhocCommit = this.useOp('stock/scan_adhoc_commit');
@@ -910,10 +913,7 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private _locationName(locationId: string): string {
-        const location = this._locations.items.find((row) => row.location_id === locationId);
-        if (location === undefined) return locationId;
-        const virtual = tsdVirtualLocationKey(location.usage, location.partner_role);
-        return virtual !== null ? this.t(virtual) : (location.complete_name ?? location.name);
+        return tsdLocationName(this._locations.items, locationId, this.t);
     }
 
     private _waveName(waveId: string): string {
@@ -949,18 +949,25 @@ export class StockTsdHomePage extends PlatformPage {
     private async _handleScan(code: string): Promise<void> {
         const warehouseId = this._contextSel.value.warehouse_id;
         if (warehouseId === '') {
-            this._applyOutcome('error', code, '');
+            // Скан без склада — не «ошибка сканера»: подсказываем
+            // оператору первый шаг, иначе терминал просто краснеет.
+            this._applyOutcome('error', code, this.t('home.scan_no_warehouse'));
+            return;
+        }
+        // Лист исключения — форма ввода: скан «за спиной» продвигал бы
+        // поток незаметно для оператора (штрихкод в её поле ввода
+        // доходит как обычный текст — scan-input поля пропускает).
+        if (this._sheetsSel.value.stack.some((s) => s.kind === 'stock.tsd_exception' && s.closing !== true)) {
+            this._applyOutcome('error', code, this.t('home.scan_sheet_busy'));
             return;
         }
         const session = this._sessionSel.value;
-        // Открытая сессия владеет сканами — «взведённый» чип зоны,
-        // ресурса или волны гасим, иначе первый шаг потока ушёл бы
-        // на биндинг контекста, а не на работу.
-        if (session.context !== null) {
-            this._pending = '';
-        }
-        if (this._pending === 'resource') {
-            this._pending = '';
+        // «Взведённый» чип потребляет ближайший скан — зона, ресурс
+        // или выбор из списка волн; скан чего-то другого означает,
+        // что оператор передумал — взвод снимаем и код идёт как есть.
+        const pending = this._pending;
+        this._pending = '';
+        if (pending === 'resource') {
             await this._bindResource(code, warehouseId);
             return;
         }
@@ -975,8 +982,7 @@ export class StockTsdHomePage extends PlatformPage {
             if (response === null) {
                 throw new Error('stock/scan_step: empty response');
             }
-            if (this._pending === 'zone') {
-                this._pending = '';
+            if (pending === 'zone') {
                 const resolution = response.resolution;
                 if (resolution !== null && resolution !== undefined && resolution.entity_kind === 'location' && resolution.entity_id !== null && resolution.entity_id !== undefined) {
                     this._context.setZone({ zone_location_id: resolution.entity_id, zone_code: code });
@@ -1000,29 +1006,26 @@ export class StockTsdHomePage extends PlatformPage {
             this._applyOutcome(response.error !== null && response.error !== undefined ? 'error' : 'ok', code, response.hint ?? '');
             const resolution = response.resolution;
             if (session.context === null && resolution !== null && resolution !== undefined) {
-                this._openEntity(code, resolution);
+                this._openEntity(resolution);
             }
         } catch {
-            this._pending = '';
             this._session.scanRejected({ barcode: code, hint: this.t('home.scan_failed') });
             this._applyOutcome('error', code, '');
         }
     }
 
-    private _openEntity(code: string, resolution: ScanResolution): void {
+    private _openEntity(resolution: ScanResolution): void {
         const entityId = resolution.entity_id;
         if (entityId === null || entityId === undefined || entityId === '') {
             return;
         }
-        this.openBottomSheet('stock.tsd_entity', {
-            barcode: code,
-            entity_kind: resolution.entity_kind,
-            entity_id: entityId,
-            product_id: resolution.product_id ?? '',
-            serial: resolution.serial ?? '',
-            quantity: resolution.quantity ?? null,
-            warehouse_id: this._contextSel.value.warehouse_id,
-        });
+        // Лист уже на экране — его контент следует за resolution из
+        // `stock/tsd_session`, открывать второй экземпляр не нужно.
+        const open = this._sheetsSel.value.stack.some(
+            (s) => s.kind === 'stock.tsd_entity' && s.closing !== true,
+        );
+        if (open) return;
+        this.openBottomSheet('stock.tsd_entity', null);
     }
 
     private async _bindResource(code: string, warehouseId: string): Promise<void> {

@@ -138,7 +138,7 @@
     "catalog_context_menu": {
         "edit": "Edit",
         "access": "Sharing",
-        "members": "Access",
+        "members": "Members",
         "rag": "RAG indexing",
         "delete": "Delete"
     },

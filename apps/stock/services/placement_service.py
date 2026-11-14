@@ -219,8 +219,16 @@ class PlacementService:
         """Кандидаты + множество id, пришедших из правил размещения."""
         product = await StockProduct.by_id(company_id, move.product_id)
         category = product.category if product is not None else ""
+        dest = await StockLocation.by_id(company_id, move.location_dest_id)
+        # Явный view-приёмник — направление «внутрь этого узла»:
+        # кандидаты — только поддерево узла (view сам остаток не держит).
+        subtree_root = (
+            move.location_dest_id
+            if dest is not None and dest.usage == StockLocationUsage.VIEW
+            else warehouse.view_location_id
+        )
         subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
-            company_id, warehouse.view_location_id
+            company_id, subtree_root
         )
         rules = await StockPutawayRule.list_active_matched_by_sequence_asc_and_specificity_desc(
             company_id=company_id,

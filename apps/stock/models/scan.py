@@ -154,9 +154,6 @@ class ScanContext:
     lines: tuple[ScanLineDraft, ...] = ()
     owner_entity_id: str | None = None
 
-    def expected(self) -> ScanStep:
-        return self.step
-
 
 # --- машина состояний --------------------------------------------------------
 

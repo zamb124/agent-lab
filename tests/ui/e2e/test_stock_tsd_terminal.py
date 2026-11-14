@@ -162,7 +162,7 @@ async def _tsd_seed_product_image(
     file_id = upload["file_id"]
     await _stock_rest(
         page, "PATCH", f"/products/{product_id}",
-        {"overlay": {"image_file_ids": [file_id]}},
+        {"product_id": product_id, "overlay": {"image_file_ids": [file_id]}},
     )
     return str(file_id)
 
@@ -2118,5 +2118,829 @@ async def test_stock_tsd_context_chips(
             "transaction.\n\n"
             "**Summary.** Context: zone chip → scan → wave chip → "
             "tap → equipment chip → scan → «give me work»."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-inquiry",
+    doc_slug="stock-tsd-inquiry",
+    title="Свободный осмотр: скан чего угодно — карточка сущности",
+    title_en="Free inquiry: scan anything — entity card follows",
+    description=(
+        "**Для чего:** оператор может сканировать любой баркод в "
+        "любой момент — не думая, на каком он экране: товар, ячейка, "
+        "тара или техника — терминал показывает её карточку и "
+        "осмысленные действия.\n\n"
+        "**Какие проблемы решает:** повторный скан обновляет "
+        "открытую карточку по месту, а не плодит стек окон; скан "
+        "баркида тележки предлагает привязать её к смене прямо из "
+        "карточки.\n\n"
+        "**Результат:** три разных скана сменили содержимое одной "
+        "карточки; техника привязана без входа в меню."
+    ),
+    description_en=(
+        "**Purpose:** the operator can scan any barcode at any "
+        "moment — regardless of the current screen: product, bin, "
+        "container or equipment — the terminal shows its card with "
+        "meaningful actions.\n\n"
+        "**Problems solved:** a rescan refreshes the open card in "
+        "place instead of stacking windows; scanning a cart barcode "
+        "offers binding it to the shift right from the card.\n\n"
+        "**Result:** three different scans swapped the contents of "
+        "a single card; equipment bound without opening menus."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_inquiry_rescan(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    product_1 = seed["product_1"]
+    product_2 = seed["product_2"]
+    await _tsd_seed_stock(
+        page,
+        warehouse_id,
+        [
+            {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
+            {"location_dest_id": bin_a["location_id"], "product_id": product_2["product_id"], "quantity": "8"},
+        ],
+    )
+    # Техника с баркодом — скан вне «взведённого» чипа открывает её карточку.
+    rtype = await _stock_rest(
+        page, "POST", "/resource-types",
+        {"warehouse_id": warehouse_id, "name": f"Тележка {unique_id[:4]}"},
+    )
+    await _stock_rest(
+        page, "POST", "/resources",
+        {
+            "warehouse_id": warehouse_id,
+            "resource_type_id": rtype["resource_type_id"],
+            "code": f"T-{unique_id[:4]}",
+            "barcode": f"RES-{unique_id[:6]}",
+        },
+    )
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Скан товара: карточка открылась ---
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "Скан товара — карточка с остатками",
+        page,
+        screenshot_name="tsd-inquiry-product",
+        label_en="Product scan — card with stock",
+        details=(
+            "Свободный осмотр: скан товара без всякого задания "
+            "открывает его карточку — фото, штрихкод, остатки по "
+            "ячейкам (грузятся с лоудерами) и действия «принять / "
+            "переместить / посчитать»."
+        ),
+        details_en=(
+            "Free inquiry: scanning a product with no active task "
+            "opens its card — photo, barcode, per-bin stock "
+            "(loading asynchronously) and «receive / move / count» "
+            "actions."
+        ),
+    )
+
+    # --- Рескан ДРУГОГО товара: та же карточка обновилась по месту ---
+    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    # В стеке ровно один лист — карточек «поверх» не наслаивается.
+    await expect(sheet).to_have_count(1, timeout=15_000)
+    await expect(sheet).to_contain_text(f"Чай листовой {unique_id[:4]}", timeout=15_000)
+    await expect(sheet).not_to_contain_text(f"Кофе зерновой {unique_id[:4]}")
+
+    # --- Скан ячейки поверх открытой карточки: содержимое подменилось ---
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await expect(sheet).to_have_count(1, timeout=15_000)
+    await expect(sheet).to_contain_text(f"Ячейка А{unique_id[:3]}", timeout=15_000)
+    await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "Скан ячейки — карточка переключилась на её содержимое",
+        page,
+        screenshot_name="tsd-inquiry-bin",
+        label_en="Bin scan — the card switched to its contents",
+        details=(
+            "Тот же лист по месту стал карточкой ячейки: учётное "
+            "содержимое «Кофе 5 + Чай 8». Стек окон не растёт — "
+            "оператор сканирует подряд, терминал следует за рукой."
+        ),
+        details_en=(
+            "The same sheet in place became the bin card: book "
+            "contents «Coffee 5 + Tea 8». No window stack growth — "
+            "the operator scans in a row, the terminal follows."
+        ),
+    )
+
+    # --- Скан баркода тележки: карточка ресурса → привязка ---
+    await _tsd_scan(page, f"RES-{unique_id[:6]}")
+    # У ресурса одно действие «привязать» — ждём переключения карточки
+    # (у ячейки три кнопки: переходный кадр ловить нельзя).
+    await expect(sheet.locator(".action")).to_have_count(1, timeout=15_000)
+    await sheet.locator(".action").click()
+    await expect(sheet).to_have_count(0, timeout=15_000)
+    # Привязка прошла на сервере — чип техники заполнен кодом.
+    chip = page.locator("stock-tsd-home-page .context-chips .chip").nth(1)
+    await expect(chip).to_contain_text(f"T-{unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "Скан техники — привязана к смене из карточки",
+        page,
+        screenshot_name="tsd-inquiry-resource",
+        label_en="Equipment scan — bound to the shift from the card",
+        details=(
+            "**Демонстрация результата.** Штрихкод тележки открыл "
+            "карточку ресурса, кнопка «привязать» закрепила её за "
+            "оператором на сервере — чип техники теперь показывает "
+            "код тележки. Никаких меню и ручного ввода.\n\n"
+            "**Итог.** Любой скан с любого экрана — правильная "
+            "карточка; рескан обновляет её по месту."
+        ),
+        details_en=(
+            "**Result demonstration.** The cart barcode opened the "
+            "resource card, «bind» claimed it for the operator on "
+            "the server — the equipment chip now shows the cart "
+            "code. No menus, no typing.\n\n"
+            "**Summary.** Any scan from any screen — the right "
+            "card; a rescan refreshes it in place."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-receive-multiline",
+    doc_slug="stock-tsd-receive-multiline",
+    title="Приёмка пачкой: три товара в один документ",
+    title_en="Batch receiving: three products, one document",
+    description=(
+        "**Для чего:** машина с паллетой везёт несколько позиций — "
+        "оператор набирает строки подряд и проводит одну приёмку, а "
+        "не три отдельные.\n\n"
+        "**Какие проблемы решает:** после ввода количества терминал "
+        "снова ждёт товар — ячейка удерживается между строками; "
+        "review показывает все набранные позиции перед проводкой.\n\n"
+        "**Результат:** три товара проведены одним документом на "
+        "одну ячейку, остатки легли по леджеру."
+    ),
+    description_en=(
+        "**Purpose:** a pallet carries several items — the operator "
+        "enters lines back to back and posts a single receipt "
+        "instead of three.\n\n"
+        "**Problems solved:** after quantity entry the terminal "
+        "asks for the next product — the bin sticks between lines; "
+        "review lists all entered positions before posting.\n\n"
+        "**Result:** three products posted in one document to one "
+        "bin, stock landed in the ledger."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_receive_multiline(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    product_1 = seed["product_1"]
+    product_2 = seed["product_2"]
+    uom_id = seed["uom_id"]
+    product_3 = await _stock_rest(
+        page, "POST", "/products",
+        {
+            "name": f"Какао {unique_id[:4]}",
+            "sku": f"CACAO-{unique_id[:6]}",
+            "uom_id": uom_id,
+            "valuation_method": "fifo",
+            "standard_price": "0",
+            "tracking": "none",
+            "is_storable": True,
+            "barcodes": [f"BC-3-{unique_id[:6]}"],
+        },
+    )
+    await _tsd_seed_product_image(
+        page, str(product_3["product_id"]), color="#5d4037", label="КАКАО"
+    )
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Приёмка: товар 1 → ячейка → количество → товар 2 → ... ---
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await sheet.locator(".action[data-action='receive']").click()
+    await expect(sheet).to_have_count(0, timeout=15_000)
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=15_000)
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
+    await _tsd_qty(page, "5")
+    # Review: скан второго товара добавляет строку — направление
+    # каждой строки подтверждается явным сканом ячейки (физика: куда
+    # кладут ЭТИ короба).
+    await _tsd_wait_step(page, "review")
+    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await _tsd_wait_step(page, "dest")
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await _tsd_wait_step(page, "quantity")
+    await _tsd_qty(page, "7")
+    await _tsd_wait_step(page, "review")
+    await _tsd_scan(page, f"BC-3-{unique_id[:6]}")
+    await _tsd_wait_step(page, "dest")
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await _tsd_wait_step(page, "quantity")
+    await _tsd_qty(page, "3")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await expect(run.locator(".line-row")).to_have_count(3, timeout=15_000)
+    await scenario.step(
+        "Три строки в review — одна проводка",
+        page,
+        screenshot_name="tsd-receive-multiline-review",
+        label_en="Three lines in review — one posting",
+        details=(
+            "После «5» по кофе терминал ждал следующий товар. Скан "
+            "чая → повторный скан ячейки (куда кладём ЭТОТ товар) → "
+            "«7», скан какао → ячейка → «3»: три строки набраны "
+            "подряд. Проводка пойдёт одним документом."
+        ),
+        details_en=(
+            "After «5» for coffee the terminal waited for the next "
+            "product. Tea scan → rescan the bin (where THIS product "
+            "goes) → «7», cocoa scan → bin → «3»: three lines "
+            "entered in a row. Posting goes as a single document."
+        ),
+    )
+    await _tsd_commit(page)
+
+    # --- Один коммит положил все три товара ---
+    for product, qty in ((product_1, "5"), (product_2, "7"), (product_3, "3")):
+        actual = await _quant_qty(
+            page, warehouse_id, product["product_id"], bin_a["location_id"]
+        )
+        assert actual == Decimal(qty), f"{product['name']}: {actual} != {qty}"
+
+    await scenario.step(
+        "Остатки: три позиции на одной ячейке",
+        page,
+        screenshot_name="tsd-receive-multiline-done",
+        label_en="Stock: three items on one bin",
+        details=(
+            "**Демонстрация результата.** Леджер подтверждает: кофе "
+            "5 + чай 7 + какао 3 лежат на ячейке А — все пришли "
+            "единственной проводкой.\n\n"
+            "**Итог.** Приёмка пачкой: товар → ячейка → количество → "
+            "следующий товар → … → один commit."
+        ),
+        details_en=(
+            "**Result demonstration.** The ledger confirms: coffee "
+            "5 + tea 7 + cocoa 3 sit on bin A — all posted by a "
+            "single commit.\n\n"
+            "**Summary.** Batch receiving: product → bin → qty → "
+            "next product → … → one commit."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-count-zero",
+    doc_slug="stock-tsd-count-zero",
+    title="Пересчёт до нуля: «в ячейке пусто» — тоже факт",
+    title_en="Counting down to zero: «bin is empty» is a fact too",
+    description=(
+        "**Для чего:** оператор дошёл до ячейки и физически видит "
+        "пустоту — система обязана принять нулевой факт, а не "
+        "заставлять вводить ложное количество.\n\n"
+        "**Какие проблемы решает:** ноль — легальное количество "
+        "только в пересчёте: записывается как факт инвентаризации и "
+        "даёт расхождение на утверждение, вместо отказа «количество "
+        "должно быть больше нуля».\n\n"
+        "**Результат:** факт 0 записан на остаток ячейки, расхождение "
+        "−5 видно системе."
+    ),
+    description_en=(
+        "**Purpose:** the operator reached the bin and physically "
+        "sees emptiness — the system must accept a zero fact instead "
+        "of forcing a fake quantity.\n\n"
+        "**Problems solved:** zero is a legal quantity only in "
+        "counting: recorded as the count fact and produces a "
+        "variance for approval, instead of «quantity must be "
+        "greater than zero» rejection.\n\n"
+        "**Result:** fact 0 written onto the bin stock, variance "
+        "−5 visible to the system."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_count_zero(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    product_1 = seed["product_1"]
+    await _tsd_seed_stock(
+        page,
+        warehouse_id,
+        [
+            {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
+        ],
+    )
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Скан ячейки → «Посчитать» → скан товара → факт 0 ---
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await sheet.locator(".action[data-action='count']").click()
+    await expect(sheet).to_have_count(0, timeout=15_000)
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=15_000)
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
+    await _tsd_qty(page, "0")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Факт 0 принят — review показывает расхождение",
+        page,
+        screenshot_name="tsd-count-zero-review",
+        label_en="Fact 0 accepted — review shows the variance",
+        details=(
+            "Учётно на ячейке 5, физически пусто: «0» — честный "
+            "факт пересчёта, не ошибка ввода. Строка готова к "
+            "проводке — система запишет факт и отметит минус 5 "
+            "для сверки."
+        ),
+        details_en=(
+            "The book says 5, physically empty: «0» is an honest "
+            "count fact, not an input error. The line is ready to "
+            "post — the system records the fact and flags −5 for "
+            "reconciliation."
+        ),
+    )
+    await _tsd_commit(page)
+
+    # --- Факт 0 записан: inventory_quantity = 0 ---
+    row = await _quant_row(
+        page, warehouse_id, product_1["product_id"], bin_a["location_id"]
+    )
+    assert Decimal(str(row["inventory_quantity"])) == Decimal("0")
+    await scenario.step(
+        "Факт нуля лёг на остаток — расхождение видно",
+        page,
+        screenshot_name="tsd-count-zero-done",
+        label_en="Zero fact on the stock — variance visible",
+        details=(
+            "**Демонстрация результата.** На остатке ячейки "
+            "записан факт инвентаризации 0 — разница с учётными 5 "
+            "уйдёт на утверждение корректировки.\n\n"
+            "**Итог.** «Пустая ячейка» вводится как 0 — терминал "
+            "не требует выдумывать количество."
+        ),
+        details_en=(
+            "**Result demonstration.** The bin stock now carries "
+            "the count fact 0 — the difference against book 5 "
+            "goes for adjustment approval.\n\n"
+            "**Summary.** «Empty bin» is entered as 0 — the "
+            "terminal does not force inventing a quantity."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-hid-scan",
+    doc_slug="stock-tsd-hid-scan",
+    title="HID-сканер: быстрый клавиатурный ввод = скан",
+    title_en="HID scanner: fast keyboard burst = scan",
+    description=(
+        "**Для чего:** аппаратный сканер работает как клавиатура — "
+        "выстреливает символы пачкой и заканчивает Enter. Терминал "
+        "отличает такой ввод от набора руками и в поле поиска его "
+        "не ждёт.\n\n"
+        "**Какие проблемы решает:** ручной ввод того же кода "
+        "ничего не откроет (это обычный текст), а burst быстрее "
+        "порога с Enter-суффиксом распознаётся как скан и идёт в "
+        "ту же машину, что DataWedge-канал.\n\n"
+        "**Результат:** код, «набранный» со скоростью сканера, "
+        "открыл карточку товара — без полей и кнопок."
+    ),
+    description_en=(
+        "**Purpose:** a hardware scanner acts as a keyboard — it "
+        "fires characters in a burst ending with Enter. The "
+        "terminal tells that apart from hand typing and does not "
+        "wait for it in a search field.\n\n"
+        "**Problems solved:** hand-typing the same code opens "
+        "nothing (plain text), while a burst faster than the "
+        "threshold with an Enter suffix is recognised as a scan "
+        "and enters the same machine as the DataWedge channel.\n\n"
+        "**Result:** the code «typed» at scanner speed opened the "
+        "product card — no fields, no buttons."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_hid_scan(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- HID-burst: keydown-пачка быстрее 40 мс + Enter-суффикс ---
+    # page.keyboard.type эмитирует trusted-события с задержкой —
+    # 15 мс на символ укладывается в окно burst-эвристики сканера.
+    await page.keyboard.type(f"BC-1-{unique_id[:6]}", delay=15)
+    await page.keyboard.press("Enter")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
+    await scenario.step(
+        "HID-ввод распознан как скан — карточка открылась",
+        page,
+        screenshot_name="tsd-hid-scan-card",
+        label_en="HID input recognised as a scan — card opened",
+        details=(
+            "**Демонстрация результата.** Символы пришли пачкой по "
+            "15 мс и закрылись Enter — эвристика сканера сработала, "
+            "текстовое поле не понадобилось. Тот же код руками "
+            "(медленнее порога) остался бы обычным набором.\n\n"
+            "**Итог.** Аппаратный сканер «из коробки» — без "
+            "DataWedge и без полей ввода."
+        ),
+        details_en=(
+            "**Result demonstration.** Characters arrived in a "
+            "15 ms burst closed by Enter — the scanner heuristic "
+            "fired, no text field needed. The same code typed by "
+            "hand (slower than the threshold) would stay plain "
+            "typing.\n\n"
+            "**Summary.** A hardware scanner works out of the box "
+            "— no DataWedge, no input fields."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-offline-outbox",
+    doc_slug="stock-tsd-offline-outbox",
+    title="Мёртвая зона Wi-Fi: проводка уедет из outbox при связи",
+    title_en="Wi-Fi dead zone: the posting ships from the outbox",
+    description=(
+        "**Для чего:** металлические стеллажи глушат связь — "
+        "оператор не должен останавливаться или повторять работу: "
+        "коммит встаёт в outbox и уезжает сам при возврате сети.\n\n"
+        "**Какие проблемы решает:** ключ идемпотентности пишется "
+        "ДО первой попытки — потерянный ответ не даст двойной "
+        "проводки; очередь FIFO, доменный отказ останавливает "
+        "дрейн, а не молча пропускает.\n\n"
+        "**Результат:** приёмка набрана офлайн, уехала при "
+        "восстановлении связи, остатки легли один раз."
+    ),
+    description_en=(
+        "**Purpose:** metal racks kill connectivity — the operator "
+        "must not stop or redo work: the commit lands in the "
+        "outbox and ships itself when the network returns.\n\n"
+        "**Problems solved:** the idempotency key is written "
+        "BEFORE the first attempt — a lost response cannot double "
+        "post; the queue is FIFO, a domain rejection stops "
+        "draining instead of silently skipping.\n\n"
+        "**Result:** a receipt entered offline shipped on "
+        "reconnect, stock posted exactly once."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_offline_outbox(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    product_1 = seed["product_1"]
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Сессия набрана ОНЛАЙН: товар → ячейка → количество ---
+    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await sheet.locator(".action[data-action='receive']").click()
+    await expect(sheet).to_have_count(0, timeout=15_000)
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=15_000)
+    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
+    await _tsd_qty(page, "9")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+
+    # --- Офлайн: коммит уходит в outbox, сессия закрывается честно ---
+    # Эмулируем потерю связи на уровне терминала: navigator.onLine
+    # (его читает tsdOffline) + bus-событие connectivity/offline —
+    # ровно то, что слушает сеть терминала. Настоящий 'offline'
+    # event ронял бы Centrifugo-транспорт вместе с CDP-прогоном.
+    await page.evaluate(
+        """() => {
+            Object.defineProperty(navigator, 'onLine',
+                { configurable: true, get: () => false });
+            window.__PLATFORM_BUS__.dispatch({
+                type: 'network/connectivity/offline', payload: null,
+            });
+        }"""
+    )
+    await _tsd_commit_click(page)
+    await expect(run).to_have_count(0, timeout=15_000)
+    banner = page.locator("stock-tsd-home-page .outbox-banner")
+    await expect(banner).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Без связи коммит встал в outbox",
+        page,
+        screenshot_name="tsd-offline-enqueued",
+        label_en="Offline commit queued in the outbox",
+        details=(
+            "Связь пропала между набором и проводкой — терминал не "
+            "завис и не потерял работу: документ в outbox'е с "
+            "готовым ключом идемпотентности, баннер показывает "
+            "«ожидает отправки: 1»."
+        ),
+        details_en=(
+            "Connectivity dropped between entry and posting — the "
+            "terminal neither hung nor lost work: the document sits "
+            "in the outbox with a ready idempotency key, the banner "
+            "shows «pending: 1»."
+        ),
+    )
+
+    # --- Связь вернулась: дрейн доставил документ ровно один раз ---
+    await page.evaluate(
+        """() => {
+            Object.defineProperty(navigator, 'onLine',
+                { configurable: true, get: () => true });
+            window.__PLATFORM_BUS__.dispatch({
+                type: 'network/connectivity/online', payload: null,
+            });
+        }"""
+    )
+    # WS настоящий (жил всё время) — дрейн сработает по событию online.
+    await page.wait_for_function(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            const s = bus.getState();
+            return s.network?.ws?.status === 'open'
+                && (s.stockTsdOutbox?.items ?? []).length === 0;
+        }""",
+        timeout=60_000,
+    )
+    qty = await _quant_qty(
+        page, warehouse_id, product_1["product_id"], bin_a["location_id"]
+    )
+    assert qty == Decimal("9")
+    await scenario.step(
+        "Связь вернулась — документ доехал один раз",
+        page,
+        screenshot_name="tsd-offline-drained",
+        label_en="Back online — the document shipped exactly once",
+        details=(
+            "**Демонстрация результата.** Outbox пуст, на ячейке "
+            "ровно 9 — повторной доставки не было: ключ, записанный "
+            "до первой попытки, защитил от дубля.\n\n"
+            "**Итог.** Офлайн — не стоп-кран: набирай и сканируй, "
+            "терминал дошлёт сам."
+        ),
+        details_en=(
+            "**Result demonstration.** The outbox is empty, the "
+            "bin holds exactly 9 — no re-delivery: the key written "
+            "before the first attempt prevented a duplicate.\n\n"
+            "**Summary.** Offline is not a stop sign: keep "
+            "scanning, the terminal ships it itself."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-document-container-move",
+    doc_slug="stock-tsd-document-container-move",
+    title="Задание на паллету: документ ведёт перевоз тары",
+    title_en="Pallet task: the document drives container hauling",
+    description=(
+        "**Для чего:** отгрузка целой паллеты — диспетчер отпустил "
+        "накладную со стратегией «минимум тары», система "
+        "зарезервировала паллету целиком и выдала задание «увезти "
+        "тару», а не «набрать штуки».\n\n"
+        "**Какие проблемы решает:** backend сам выбирает поток по "
+        "kind строки документа — терминал просит скан тары, затем "
+        "приёмник; товар разбирать не нужно.\n\n"
+        "**Результат:** паллета со всем содержимым переехала в "
+        "зону отгрузки одним коммитом."
+    ),
+    description_en=(
+        "**Purpose:** shipping a whole pallet — the dispatcher "
+        "released an order with the «least containers» strategy, "
+        "the system reserved a full pallet and issued a «haul the "
+        "container» task instead of «pick pieces».\n\n"
+        "**Problems solved:** the backend picks the flow from the "
+        "document line kind — the terminal asks for the container "
+        "scan, then the destination; nothing needs unpacking.\n\n"
+        "**Result:** the pallet with all contents moved to the "
+        "shipping zone in one commit."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_document_container_move(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(_TSD)
+    await _tsd_open(page, stock_ui)
+    seed = await _tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    bin_b = seed["bin_b"]
+    product_1 = seed["product_1"]
+    uom_id = seed["uom_id"]
+
+    # --- Паллета в ячейке А с однородным товаром, покрывающим заказ ---
+    ctype = await _stock_rest(
+        page, "POST", "/container-types",
+        {"warehouse_id": warehouse_id, "name": f"Паллета {unique_id[:4]}", "kind": "pallet"},
+    )
+    pallet = await _stock_rest(
+        page, "POST", "/containers",
+        {
+            "warehouse_id": warehouse_id,
+            "parent_location_id": bin_a["location_id"],
+            "container_type_id": ctype["container_type_id"],
+            "name": f"Паллета {unique_id[:4]}",
+            "barcode": f"PAL-{unique_id[:6]}",
+        },
+    )
+    await _tsd_seed_stock(
+        page,
+        warehouse_id,
+        [
+            {"location_dest_id": pallet["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
+        ],
+    )
+    # «Минимум тары» на товаре — резерв возьмёт паллету целиком.
+    await _stock_rest(
+        page, "PATCH", f"/products/{product_1['product_id']}",
+        {"product_id": product_1["product_id"], "removal_strategy": "least_containers"},
+    )
+
+    # --- Накладная на отгрузку 5 шт → assign → container-строка ---
+    op_types = await _stock_rest(
+        page, "GET", f"/operation-types?warehouse_id={warehouse_id}"
+    )
+    outgoing_id = next(
+        ot["operation_type_id"] for ot in op_types["items"] if ot["code"] == "outgoing"
+    )
+    transfer = await _stock_rest(
+        page, "POST", "/transfers",
+        {
+            "warehouse_id": warehouse_id,
+            "operation_type_id": outgoing_id,
+            "barcode": f"DOC-{unique_id[:6]}",
+            "moves": [
+                {
+                    "product_id": product_1["product_id"],
+                    "product_qty": "5",
+                    "uom_id": uom_id,
+                    "location_id": bin_a["location_id"],
+                    "location_dest_id": bin_b["location_id"],
+                },
+            ],
+        },
+    )
+    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
+    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
+
+    await _tsd_pick_warehouse(page, unique_id)
+
+    # --- Скан накладной → вход в исполнение → поток «перевоз тары» ---
+    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    sheet = page.locator("stock-tsd-entity-sheet")
+    await expect(sheet).to_be_visible(timeout=15_000)
+    await expect(sheet).to_contain_text(transfer["name"], timeout=15_000)
+    await scenario.step(
+        "Накладная резервировала паллету целиком",
+        page,
+        screenshot_name="tsd-doc-container-card",
+        label_en="The order reserved the whole pallet",
+        details=(
+            "Стратегия «минимум тары» нашла однородную паллету, "
+            "покрывающую заказ: строка задания — «увезти тару», а "
+            "не «набрать 5 штук». Карточка документа предлагает "
+            "начать исполнение."
+        ),
+        details_en=(
+            "The «least containers» strategy found a homogeneous "
+            "pallet covering the order: the task line says «haul "
+            "the container», not «pick 5 pieces». The document "
+            "card offers to start execution."
+        ),
+    )
+    await sheet.locator(".action").click()
+    await expect(sheet).to_have_count(0, timeout=15_000)
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=15_000)
+    await _tsd_wait_step(page, "container")
+
+    # --- Скан паллеты → приёмник → коммит ---
+    await _tsd_scan(page, f"PAL-{unique_id[:6]}")
+    await _tsd_wait_step(page, "dest")
+    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Поток просил тару, затем приёмник",
+        page,
+        screenshot_name="tsd-doc-container-review",
+        label_en="The flow asked for the container, then destination",
+        details=(
+            "Backend выбрал поток по kind строки: сначала скан "
+            "паллеты, потом ячейки-приёмника. Разбирать тару и "
+            "пересканировать содержимое не нужно."
+        ),
+        details_en=(
+            "The backend picked the flow from the line kind: "
+            "first the pallet scan, then the destination bin. No "
+            "unpacking or re-scanning the contents."
+        ),
+    )
+    await _tsd_commit(page)
+
+    # --- Тара переехала под приёмник со всем содержимым ---
+    locations = await _stock_rest(page, "GET", "/locations")
+    moved = next(
+        loc for loc in locations["items"]
+        if loc["location_id"] == pallet["location_id"]
+    )
+    assert moved["parent_id"] == bin_b["location_id"], f"паллета не переехала: {moved}"
+    qty = await _quant_qty(
+        page, warehouse_id, product_1["product_id"], pallet["location_id"]
+    )
+    assert qty == Decimal("5")
+    await scenario.step(
+        "Паллета под новой ячейкой — товар ехал внутри",
+        page,
+        screenshot_name="tsd-doc-container-done",
+        label_en="Pallet under the new bin — goods rode inside",
+        details=(
+            "**Демонстрация результата.** Контейнер переподвешен "
+            "под ячейку Б, все 5 кофе остались внутри — физически "
+            "и в системе это была одна операция «перевезти тару».\n\n"
+            "**Итог.** Документ сам выбрал поток перевозки: скан "
+            "накладной → паллета → приёмник → проводка."
+        ),
+        details_en=(
+            "**Result demonstration.** The container re-hung under "
+            "bin B, all 5 coffee units still inside — physically "
+            "and in the system it was a single «haul the "
+            "container» operation.\n\n"
+            "**Summary.** The document picked the hauling flow "
+            "itself: order scan → pallet → destination → commit."
         ),
     )

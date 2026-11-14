@@ -138,7 +138,7 @@
     "catalog_context_menu": {
         "edit": "Редактировать",
         "access": "Доступ",
-        "members": "Доступ",
+        "members": "Участники",
         "rag": "RAG-индексация",
         "delete": "Удалить"
     },
