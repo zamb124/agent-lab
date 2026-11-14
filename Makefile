@@ -295,6 +295,7 @@ k8s-template: render-helm-app-conf require-image-tag
 k8s-deploy: render-helm-app-conf require-image-tag
 	@bash -ec '\
 	set -euo pipefail; \
+	bash deploy/scripts/prepull-image.sh ghcr.io/zamb124/agent-lab:$(IMAGE_TAG); \
 	JSON_ARGS=(); \
 	OPENFGA_SET_ARGS=(); \
 	eval "$$(PLATFORM_NS="$(K8S_NAMESPACE)" bash deploy/scripts/openfga_load_pinned_ids.sh)"; \

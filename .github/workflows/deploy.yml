@@ -347,6 +347,13 @@ jobs:
           printf '%s\n' "image_tag=$TAG" >> "${GITHUB_OUTPUT}"
           printf '%s\n' "Deploying image tag: ${TAG}"
 
+      - name: Pre-pull image to master node
+        # Образ ~2GB тянется с GHCR ~25 мин — без pre-pull старые поды уже мертвы,
+        # пока новые висят в ImagePull. До helm upgrade нода должна иметь образ.
+        env:
+          PREPULL_IMAGE: ${{ env.IMAGE }}:${{ steps.tag.outputs.image_tag }}
+        run: bash deploy/scripts/prepull-image.sh "${PREPULL_IMAGE}"
+
       - name: Render Helm app-conf (conf.json + K8s overlay)
         run: python3 deploy/scripts/render_helm_app_conf.py
 

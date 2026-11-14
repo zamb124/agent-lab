@@ -75,10 +75,21 @@ spec:
       imagePullPolicy: IfNotPresent
       command: ["true"]
 EOF
-  if ! $K wait pod/"$pod_name" -n "$NS" --for=condition=Succeeded --timeout="${PULL_TIMEOUT_SEC}s"; then
+  # kubectl wait --for=condition=Succeeded на Pod не работает: Succeeded — phase,
+  # не condition. Поллим phase.
+  if ! wait_for \
+    "pod ${pod_name} Succeeded" \
+    "phase=\$($K get pod ${pod_name} -n ${NS} -o jsonpath='{.status.phase}' 2>/dev/null); [ \"\$phase\" = 'Succeeded' ] || [ \"\$phase\" = 'Failed' ]" \
+    "${PULL_TIMEOUT_SEC}" 10; then
     $K describe pod "$pod_name" -n "$NS" | tail -30 >&2
     $K delete pod "$pod_name" -n "$NS" --ignore-not-found >/dev/null
     log_error "master не смог pull ${image_ref} за ${PULL_TIMEOUT_SEC}s"
+    return 1
+  fi
+  if [ "$($K get pod "$pod_name" -n "$NS" -o jsonpath='{.status.phase}')" != "Succeeded" ]; then
+    $K describe pod "$pod_name" -n "$NS" | tail -30 >&2
+    $K delete pod "$pod_name" -n "$NS" --ignore-not-found >/dev/null
+    log_error "pull-pod ${pod_name} завершился не Succeeded"
     return 1
   fi
   $K delete pod "$pod_name" -n "$NS" --ignore-not-found --wait=true >/dev/null
