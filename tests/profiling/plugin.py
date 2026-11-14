@@ -20,15 +20,32 @@ from tests.profiling.collector import (
 )
 from tests.profiling.filelock_patch import install_filelock_patch
 from tests.profiling.loop_patch import install_loop_watchdog, try_install_on_running_loop
+from tests.profiling.resources import (
+    MergedResourceReport,
+    default_resources_report_path,
+    get_resources_collector,
+    metric,
+)
+from tests.profiling.resources import (
+    merge_worker_reports as merge_resource_reports,
+)
 
 _HEARTBEAT_GLOB = "/tmp/platform_test_runtime_heartbeat_*.json"
+_RESOURCES_GLOB = "/tmp/platform_test_resources_*.json"
 _PROGRESS_PATH = Path("/tmp/platform_test_runtime_progress.json")
 _STALL_SECONDS = float(os.environ.get("PLATFORM_TEST_PROFILE_STALL_SECONDS", "8"))
+# Ресурсный бюджет: превышение по одному тесту роняет прогон — новый жрущий
+# код не проскочит мимо. Значения — потолки регрессии, не целевые показатели.
+_RSS_DELTA_FAIL_MB = float(os.environ.get("PLATFORM_TEST_RSS_DELTA_FAIL_MB", "1024"))
+_CPU_FAIL_S = float(os.environ.get("PLATFORM_TEST_CPU_FAIL_S", "90"))
+_last_outcome: str = "no-report"
 _stall_stop_event = threading.Event()
 _stall_thread: threading.Thread | None = None
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    for stale_report in glob.glob("/tmp/platform_test_resources_*.json"):
+        Path(stale_report).unlink(missing_ok=True)
     if not profiling_enabled():
         return
     for stale_report in glob.glob("/tmp/platform_test_runtime_profile_*.json"):
@@ -50,6 +67,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_setup(item: pytest.Item) -> Generator[None, object, object]:
+    get_resources_collector().begin_test()
     if profiling_enabled():
         get_collector().set_current_test(item.nodeid)
         _write_heartbeat(item.nodeid, "setup")
@@ -70,9 +88,12 @@ def pytest_runtest_teardown(item: pytest.Item) -> Generator[None, object, object
         get_collector().set_current_test(item.nodeid)
         _write_heartbeat(item.nodeid, "teardown")
     yield
+    get_resources_collector().end_test(item.nodeid, _last_outcome)
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    global _last_outcome
+    _last_outcome = report.outcome
     if not profiling_enabled():
         return
     if report.when == "call":
@@ -93,7 +114,10 @@ async def _platform_runtime_loop_profile() -> AsyncGenerator[None, None]:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    get_resources_collector().write_report(default_resources_report_path())
     if not profiling_enabled():
+        if not hasattr(session.config, "workerinput"):
+            _finish_resources(session)
         return
 
     _write_heartbeat("session", f"session_finish:{exitstatus}")
@@ -120,6 +144,67 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         encoding="utf-8",
     )
     _print_summary(merged, merged_path)
+    _finish_resources(session)
+
+
+def _finish_resources(session: pytest.Session) -> None:
+    """Сводит ресурсные отчёты воркеров: топ-потребители + бюджет-нарушения."""
+    worker_reports = [Path(path) for path in glob.glob(_RESOURCES_GLOB)]
+    merged = merge_resource_reports(worker_reports)
+    merged_path = Path("/tmp/platform_test_resources_merged.json")
+    _ = merged_path.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _print_resources_summary(merged, merged_path)
+
+    violations = [
+        row
+        for row in merged["samples"]
+        if metric(row, "cpu_s") > _CPU_FAIL_S
+        or metric(row, "rss_delta_mb") > _RSS_DELTA_FAIL_MB
+    ]
+    if violations:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        print(f"=== RESOURCE BUDGET VIOLATIONS ({len(violations)}) ===")
+        for row in violations[:20]:
+            print(
+                f"  {row.get('nodeid')}: cpu={metric(row, 'cpu_s'):.1f}s"
+                + f" rss_delta={row.get('rss_delta_mb')}Mi"
+                + f" (budgets cpu<={_CPU_FAIL_S:.0f}s rss_delta<={_RSS_DELTA_FAIL_MB:.0f}Mi)"
+            )
+        print("=== END RESOURCE BUDGET VIOLATIONS ===\n")
+
+
+def _print_resources_summary(
+    merged: MergedResourceReport, merged_path: Path
+) -> None:
+    samples = merged["samples"]
+    peak_lines = ", ".join(
+        f"{worker}={peak:.0f}Mi"
+        for worker, peak in sorted(merged["worker_peak_rss_mb"].items())
+    )
+    print("\n=== TEST RESOURCE PROFILE ===")
+    print(f"merged report: {merged_path}")
+    print(f"worker peak RSS: {peak_lines}")
+    by_rss = sorted(
+        (row for row in samples if row.get("rss_delta_mb") is not None),
+        key=lambda row: metric(row, "rss_delta_mb"),
+        reverse=True,
+    )
+    print("\nTop-15 по RSS delta (MiB):")
+    for row in by_rss[:15]:
+        print(
+            f"  +{metric(row, 'rss_delta_mb'):7.1f}Mi mods={row.get('modules_delta')}"
+            + f" {row.get('worker')} {row.get('nodeid')}"
+        )
+    print("\nTop-10 по CPU:")
+    for row in samples[:10]:
+        print(
+            f"  {metric(row, 'cpu_s'):6.1f}s"
+            + f" wall={metric(row, 'wall_s'):5.1f}s"
+            + f" {row.get('worker')} {row.get('nodeid')}"
+        )
+    print("=== END TEST RESOURCE PROFILE ===\n")
 
 
 def _worker_label() -> str:
