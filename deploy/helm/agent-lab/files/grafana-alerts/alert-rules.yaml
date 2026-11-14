@@ -1992,6 +1992,49 @@ groups:
       description: Memory usage is {{ printf "%.1f" $values.B.Value }}%
     labels:
       severity: warning
+  - uid: container-oomkilled
+    title: Container OOMKilled
+    condition: C
+    data:
+    - refId: A
+      queryType: instant
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: prometheus
+      model:
+        # last_terminated_reason латчится навсегда → гейт на свежий рестарт за 15м.
+        expr: kube_pod_container_status_last_terminated_reason{namespace="platform", reason="OOMKilled"}
+          and on(namespace, pod, container) (increase(kube_pod_container_status_restarts_total{namespace="platform"}[15m])
+          > 0)
+        refId: A
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: A
+        reducer: last
+        refId: B
+        type: reduce
+    - refId: C
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        expression: $B > 0
+        refId: C
+        type: math
+    noDataState: OK
+    execErrState: Error
+    for: 0m
+    annotations:
+      summary: OOMKilled {{ $labels.pod }}/{{ $labels.container }}
+      description: Container was OOMKilled and restarted within the last 15 minutes
+    labels:
+      severity: critical
 
 deleteRules:
   - orgId: 1
