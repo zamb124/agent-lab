@@ -42,6 +42,7 @@ from core.api.integrations import router as core_integrations_router
 from core.api.mail import router as core_mail_router
 from core.api.platform_brand import router as platform_brand_router
 from core.api.team import router as core_team_router
+from core.app.debug_memory import build_debug_memory_router
 from core.app.file_types_route import register_platform_file_types_route
 from core.app.health_payload import build_health_payload
 from core.app.i18n_routes import register_platform_i18n_routes
@@ -781,6 +782,9 @@ def assemble_service_app(
         return build_health_payload(settings)
 
     _ = health
+
+    # Debug-интроспекция памяти — internal api auth (route_config).
+    app.include_router(build_debug_memory_router(service_name))
 
     @app.get("/")
     async def root() -> JsonObject:

@@ -106,6 +106,11 @@ SKIP_PATHS = [
 ]
 
 ROUTE_RULES: list[RouteRule] = [
+    # Debug-интроспекция процесса (smaps/tracemalloc) — internal api auth.
+    # Первое правило: service catch-all'ы (`/shop/*` и др.) ниже не должны
+    # перехватывать `/{svc}/api/internal/debug/*`.
+    RouteRule("/*/api/internal/debug/*", context_type="api", auth_required=True),
+
     # ============================================================================
     # ПУБЛИЧНЫЕ ENDPOINTS (без авторизации)
     # ============================================================================
