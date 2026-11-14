@@ -23,6 +23,7 @@ Browser-объект для endpoint-а.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 
 from playwright.async_api import Playwright, async_playwright
@@ -35,6 +36,19 @@ from core.utils.background import run_with_log_context
 logger = get_logger(__name__)
 
 EndpointDisconnectedCallback = Callable[[str], Awaitable[None]]
+
+_DRIVER_STOP_TIMEOUT_SEC = 5.0
+
+
+def _is_dead_driver_error(exc: Exception) -> bool:
+    """
+    `Playwright` держит Node driver на stdio-pipe; его смерть (OOM-killer внутри
+    контейнера, crash node-процесса) — единственное состояние, при котором
+    `_playwright` формально жив, но любой send падает raw `Exception` с этими
+    маркерами. CDP-отказ самого Chromium (ECONNREFUSED/timeout) сюда не попадает.
+    """
+    message = str(exc)
+    return "reading from the driver" in message or "pipe closed" in message
 
 
 class CDPConnectionPool:
@@ -91,8 +105,11 @@ class CDPConnectionPool:
 
     async def start(self) -> None:
         async with self._lock:
-            if self._playwright is None:
-                self._playwright = await async_playwright().start()
+            await self._start_locked()
+
+    async def _start_locked(self) -> None:
+        if self._playwright is None:
+            self._playwright = await async_playwright().start()
 
     async def acquire_browser(self, endpoint_key: str, cdp_url: str) -> BrowserHandle:
         """
@@ -108,6 +125,7 @@ class CDPConnectionPool:
         if not cdp_url:
             raise ValueError("cdp_url is required")
         await self.start()
+        dead_endpoints: list[str] = []
         async with self._lock:
             if self._playwright is None:
                 raise RuntimeError("Playwright is not initialized")
@@ -121,11 +139,20 @@ class CDPConnectionPool:
                     endpoint_key=endpoint_key,
                 )
             ws_url = await normalize_playwright_cdp_connect_url(cdp_url)
-            browser = await self._playwright.chromium.connect_over_cdp(ws_url)
+            try:
+                browser = await self._playwright.chromium.connect_over_cdp(ws_url)
+            except Exception as exc:
+                if not _is_dead_driver_error(exc):
+                    raise
+                dead_endpoints = await self._restart_driver_locked()
+                browser = await self._playwright.chromium.connect_over_cdp(ws_url)
             self._register_disconnect_listener(endpoint_key, browser)
             self._browsers[endpoint_key] = browser
             logger.info("browser.cdp.connected", endpoint_key=endpoint_key)
-            return browser
+        for key in dead_endpoints:
+            if self._on_endpoint_disconnected is not None:
+                await self._on_endpoint_disconnected(key)
+        return browser
 
     def _register_disconnect_listener(self, endpoint_key: str, browser: BrowserHandle) -> None:
         def _on_disconnected(_browser: BrowserHandle) -> None:
@@ -150,6 +177,25 @@ class CDPConnectionPool:
         if self._on_endpoint_disconnected is not None:
             await self._on_endpoint_disconnected(endpoint_key)
 
+    async def _restart_driver_locked(self) -> list[str]:
+        """
+        Мёртвый Playwright driver (pipe закрыт): весь пул Browser-хэндлов мёртв
+        вместе с ним. Выбросить endpoints, best-effort остановить старый объект
+        и поднять свежий driver. Возвращает список погибших endpoints —
+        верхний слой обязан закрыть их контексты/lease после выхода из `_lock`.
+        """
+        dead = list(self._browsers)
+        self._browsers.clear()
+        old = self._playwright
+        self._playwright = None
+        logger.warning("browser.cdp.driver_dead_restart", dead_endpoints=len(dead))
+        if old is not None:
+            # драйвер уже мёртв — cleanup только best-effort
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(old.stop(), timeout=_DRIVER_STOP_TIMEOUT_SEC)
+        await self._start_locked()
+        return dead
+
     async def disconnect(self, endpoint_key: str) -> None:
         async with self._lock:
             browser = self._browsers.pop(endpoint_key, None)
@@ -163,9 +209,12 @@ class CDPConnectionPool:
             pw = self._playwright
             self._playwright = None
         for browser in browsers:
-            await browser.close()
+            # shutdown: мёртвый драйвер не должен рвать закрытие остальных
+            with contextlib.suppress(Exception):
+                await browser.close()
         if pw is not None:
-            await pw.stop()
+            with contextlib.suppress(Exception):
+                await pw.stop()
 
     def has_endpoint(self, endpoint_key: str) -> bool:
         return endpoint_key in self._browsers
