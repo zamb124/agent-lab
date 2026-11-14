@@ -41,9 +41,10 @@ postgres:
   image: ghcr.io/zamb124/agent-lab-postgres:latest
   storage: 50Gi
   resources:
+    # Steady-state ~2Gi (shared_buffers + backends); request = флор фактического.
     requests:
       cpu: 300m
-      memory: 1Gi
+      memory: 2Gi
     limits:
       cpu: "2"
       memory: 8Gi
@@ -95,10 +96,11 @@ redis:
   image: redis:8.8.4-alpine
   storage: 10Gi
   resources:
-    # RDB на диске ~1.9–2.5 Gi; при старте пик RSS + AOF rewrite. 2Gi limits → OOMKilled (exit 137).
+    # RDB на диске ~1.9–2.5 Gi; при старте пик RSS + AOF rewrite — это про limits,
+    # а не request: стабильный RSS ~230Mi, request держит 3x запас над фактом.
     requests:
       cpu: 200m
-      memory: 2Gi
+      memory: 768Mi
     limits:
       cpu: "1"
       memory: 4Gi
@@ -468,7 +470,7 @@ applications:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
+        memory: 512Mi
       limits:
         cpu: "1"
         memory: 1Gi
