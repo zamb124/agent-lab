@@ -102,7 +102,7 @@ async def _seed_addresses() -> None:
 
 
 async def test_gar_full_sync_matches_and_enqueues_unresolved(
-    service: GarImportService, _seed_addresses: None
+    service: GarImportService, settings: GeoSettings, _seed_addresses: None
 ) -> None:
     result = await service.run_sync()
     region = result.regions[_REGION]
@@ -128,6 +128,8 @@ async def test_gar_full_sync_matches_and_enqueues_unresolved(
     assert cursor is not None
     assert cursor.status == GeoCursorStatus.DONE
     assert cursor.cursor == "100"
+    # Range-разбор: архив на gar_work_dir не материализуется ни на каком шаге.
+    assert not list(Path(settings.gar_work_dir).glob("gar_*.zip"))
 
 
 async def test_gar_second_run_is_noop(

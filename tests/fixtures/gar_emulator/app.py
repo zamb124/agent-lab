@@ -165,24 +165,47 @@ async def delta_archive(version: int, request: Request) -> Response:
 
 
 def _archive_response(body: bytes, request: Request) -> Response:
-    """206 по ``Range: bytes=N-`` — resume-протокол fias-file.nalog.ru."""
+    """Range-протокол fias-file.nalog.ru: ``bytes=start[-end]`` и суффикс ``bytes=-N``.
+
+    remotezip читает central directory суффикс-запросами и members
+    произвольными диапазонами — эмулятор обязан отдавать корректный 206
+    на любой валидный Range, иначе проверяемый путь не эквивалентен продy.
+    """
     range_header = request.headers.get("range", "")
-    if range_header.startswith("bytes="):
-        start = int(range_header.removeprefix("bytes=").split("-")[0])
-        if start > 0:
-            return Response(
-                content=body[start:],
-                status_code=206,
-                media_type="application/zip",
-                headers={
-                    "Content-Range": f"bytes {start}-{len(body) - 1}/{len(body)}",
-                    "Content-Length": str(len(body) - start),
-                },
-            )
+    if not range_header.startswith("bytes="):
+        return Response(
+            content=body,
+            media_type="application/zip",
+            headers={
+                "Content-Length": str(len(body)),
+                "Accept-Ranges": "bytes",
+            },
+        )
+    start_raw, _sep, end_raw = (
+        range_header.removeprefix("bytes=").partition("-")
+    )
+    if start_raw:
+        start = int(start_raw)
+        end = int(end_raw) if end_raw else len(body) - 1
+    else:
+        start = max(0, len(body) - int(end_raw))
+        end = len(body) - 1
+    end = min(end, len(body) - 1)
+    if start > end:
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{len(body)}"},
+        )
+    chunk = body[start : end + 1]
     return Response(
-        content=body,
+        content=chunk,
+        status_code=206,
         media_type="application/zip",
-        headers={"Content-Length": str(len(body))},
+        headers={
+            "Content-Range": f"bytes {start}-{end}/{len(body)}",
+            "Content-Length": str(len(chunk)),
+            "Accept-Ranges": "bytes",
+        },
     )
 
 

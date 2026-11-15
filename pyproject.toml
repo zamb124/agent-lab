@@ -29,6 +29,7 @@ dependencies = [
     "fsspec[http]>=2026.7.0",
     "tenacity==9.2.1",
     "memray>=1.18,<2",
+    "remotezip>=0.12.6",
 ]
 [tool.uv]
 default-groups = [

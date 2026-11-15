@@ -36,6 +36,7 @@ from xml.etree.ElementTree import Element
 
 import defusedxml.ElementTree as _det
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from remotezip import RemoteZip
 
 from apps.geo.config import GeoSettings
 from apps.geo.db.import_lock import geo_import_lock
@@ -155,7 +156,7 @@ def _active(attrs: dict[str, str]) -> bool:
     return attrs.get("ISACTUAL", "1") == "1" and attrs.get("ISACTIVE", "1") == "1"
 
 
-def _parse_archive(path: str, region_code: str) -> _ParsedArchive:
+def _parse_archive(archive: zipfile.ZipFile, region_code: str) -> _ParsedArchive:
     """Потоковый разбор ``gar_xml.zip``: три таблицы директории региона.
 
     Порядок членов в zip не гарантирован — таблицы разбираются явно по
@@ -167,55 +168,71 @@ def _parse_archive(path: str, region_code: str) -> _ParsedArchive:
     houses: list[_HouseRow] = []
     paths: dict[int, str] = {}
     gone_houses: list[int] = []
-    with zipfile.ZipFile(path) as archive:
-        members: dict[str, str] = {}
-        for name in archive.namelist():
-            match = member_re.match(name)
-            if match is not None:
-                members[name] = match.group(2)
-        for name, kind in members.items():
-            if kind != "AS_ADDR_OBJ":
-                continue
-            with archive.open(name) as stream:
-                for attrs in _iter_row_attrs(stream):
-                    if not _active(attrs):
-                        continue
-                    name_part = attrs.get("NAME", "")
-                    type_part = attrs.get("TYPENAME", "")
-                    addr_names[int(attrs["OBJECTID"])] = (
-                        f"{type_part} {name_part}".strip()
+    members: dict[str, str] = {}
+    for name in archive.namelist():
+        match = member_re.match(name)
+        if match is not None:
+            members[name] = match.group(2)
+    for name, kind in members.items():
+        if kind != "AS_ADDR_OBJ":
+            continue
+        with archive.open(name) as stream:
+            for attrs in _iter_row_attrs(stream):
+                if not _active(attrs):
+                    continue
+                name_part = attrs.get("NAME", "")
+                type_part = attrs.get("TYPENAME", "")
+                addr_names[int(attrs["OBJECTID"])] = (
+                    f"{type_part} {name_part}".strip()
+                )
+    house_ids: set[int] = set()
+    for name, kind in members.items():
+        if kind != "AS_HOUSES":
+            continue
+        with archive.open(name) as stream:
+            for attrs in _iter_row_attrs(stream):
+                object_id = int(attrs["OBJECTID"])
+                if not _active(attrs):
+                    gone_houses.append(object_id)
+                    continue
+                houses.append(
+                    _HouseRow(
+                        object_id=object_id,
+                        guid=attrs.get("OBJECTGUID", ""),
+                        housenum=attrs.get("HOUSENUM", ""),
+                        addnum1=attrs.get("ADDNUM1", ""),
+                        addnum2=attrs.get("ADDNUM2", ""),
                     )
-        house_ids: set[int] = set()
-        for name, kind in members.items():
-            if kind != "AS_HOUSES":
-                continue
-            with archive.open(name) as stream:
-                for attrs in _iter_row_attrs(stream):
-                    object_id = int(attrs["OBJECTID"])
-                    if not _active(attrs):
-                        gone_houses.append(object_id)
-                        continue
-                    houses.append(
-                        _HouseRow(
-                            object_id=object_id,
-                            guid=attrs.get("OBJECTGUID", ""),
-                            housenum=attrs.get("HOUSENUM", ""),
-                            addnum1=attrs.get("ADDNUM1", ""),
-                            addnum2=attrs.get("ADDNUM2", ""),
-                        )
-                    )
-                    house_ids.add(object_id)
-        for name, kind in members.items():
-            if kind != "AS_ADM_HIERARCHY":
-                continue
-            with archive.open(name) as stream:
-                for attrs in _iter_row_attrs(stream):
-                    object_id = int(attrs["OBJECTID"])
-                    if object_id in house_ids:
-                        paths[object_id] = attrs.get("PATH", "")
+                )
+                house_ids.add(object_id)
+    for name, kind in members.items():
+        if kind != "AS_ADM_HIERARCHY":
+            continue
+        with archive.open(name) as stream:
+            for attrs in _iter_row_attrs(stream):
+                object_id = int(attrs["OBJECTID"])
+                if object_id in house_ids:
+                    paths[object_id] = attrs.get("PATH", "")
     return _ParsedArchive(
         addr_names=addr_names, houses=houses, paths=paths, gone_houses=gone_houses
     )
+
+
+def _parse_local(path: str, region_code: str) -> _ParsedArchive:
+    """Разбор локального zip (``file://`` — тесты и ручные импорты)."""
+    with zipfile.ZipFile(path) as archive:
+        return _parse_archive(archive, region_code)
+
+
+def _parse_remote(url: str, region_code: str) -> _ParsedArchive:
+    """Разбор zip по HTTP Range: central directory + только members региона.
+
+    Полный ``gar_xml.zip`` (~54 GiB) на диск не скачивается — remotezip читает
+    каталог архива и байтовые диапазоны выбранных файлов. Это устраняет и
+    расход PVC, и cgroup-OOM на dirty page cache при стриминге записи.
+    """
+    with RemoteZip(url) as archive:
+        return _parse_archive(archive, region_code)
 
 
 _norm = address_match.norm
@@ -261,6 +278,7 @@ class GarImportService:
         async with geo_import_lock(self._settings.database.geo_url) as acquired:
             if not acquired:
                 return GarSyncResult(skipped="locked")
+            await asyncio.to_thread(self._gc_orphan_archives)
             async with get_httpx_client(
                 timeout=self._settings.gar_http_timeout_seconds
             ) as client:
@@ -273,7 +291,6 @@ class GarImportService:
                 regions: dict[str, GarRegionSync] = {}
                 for region, code in self._settings.gar_region_codes.items():
                     regions[region] = await self._sync_region(
-                        client,
                         region=region,
                         code=code,
                         last=last,
@@ -302,7 +319,6 @@ class GarImportService:
 
     async def _sync_region(
         self,
-        client: SmartProxyClient,
         *,
         region: str,
         code: str,
@@ -336,7 +352,6 @@ class GarImportService:
                 unresolved = 0
                 for info in pending:
                     counts = await self._apply_archive(
-                        client,
                         url=info.delta_url,
                         region=region,
                         code=code,
@@ -361,7 +376,6 @@ class GarImportService:
                     unresolved=unresolved,
                 )
             counts = await self._apply_archive(
-                client,
                 url=last.full_url,
                 region=region,
                 code=code,
@@ -390,7 +404,6 @@ class GarImportService:
 
     async def _apply_archive(
         self,
-        client: SmartProxyClient,
         *,
         url: str,
         region: str,
@@ -398,19 +411,13 @@ class GarImportService:
         version: int,
         mode: str,
     ) -> _ApplyCounts:
-        """Скачать (resume) → распарсить → merge состояния → матч → enrich."""
-        work_dir = Path(self._settings.gar_work_dir)
-        work_dir.mkdir(parents=True, exist_ok=True)
-        local = work_dir / f"gar_{region}_{version}.zip"
-        try:
-            if url.startswith("file://"):
-                archive_path = url.removeprefix("file://")
-            else:
-                await self._download(client, url=url, dest=local)
-                archive_path = str(local)
-            parsed = await asyncio.to_thread(_parse_archive, archive_path, code)
-        finally:
-            local.unlink(missing_ok=True)
+        """Распарсить (Range/локально) → merge состояния → матч → enrich."""
+        if url.startswith("file://"):
+            parsed = await asyncio.to_thread(
+                _parse_local, url.removeprefix("file://"), code
+            )
+        else:
+            parsed = await asyncio.to_thread(_parse_remote, url, code)
         state, removed_guids = self._merge_state(region, parsed, mode=mode)
         return await self._match_and_apply(
             region=region,
@@ -461,20 +468,21 @@ class GarImportService:
                 if gone is not None and gone.guid:
                     removed_guids.append(gone.guid)
                 _ = state.paths.pop(gone_id, None)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
         _ = state_path.write_text(state.model_dump_json())
         return state, removed_guids
 
-    async def _download(self, client: SmartProxyClient, *, url: str, dest: Path) -> None:
-        """GET с resume по HTTP Range: частичный файл докачивается, а не перезаписывается."""
-        size = dest.stat().st_size if dest.exists() else 0
-        headers = {"Range": f"bytes={size}-"} if size else {}
-        async with client.stream("GET", url, headers=headers) as response:
-            _ = response.raise_for_status()
-            append = size > 0 and response.status_code == 206
-            mode = "ab" if append else "wb"
-            with dest.open(mode) as out:
-                async for chunk in response.aiter_bytes(1 << 20):
-                    _ = out.write(chunk)
+    def _gc_orphan_archives(self) -> None:
+        """Снос ``gar_*.zip``, оставшихся после SIGKILL воркера (OOM/эвикт).
+
+        ``finally: unlink`` не срабатывает при kill — без прохода при старте
+        мёртвые десятки GiB копятся на PVC бессрочно.
+        """
+        work_dir = Path(self._settings.gar_work_dir)
+        if not work_dir.is_dir():
+            return
+        for orphan in work_dir.glob("gar_*.zip"):
+            orphan.unlink(missing_ok=True)
 
     async def _match_and_apply(
         self,
