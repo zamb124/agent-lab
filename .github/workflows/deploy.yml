@@ -74,6 +74,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     outputs:
       # Совпадает с type=sha,format=short в docker/metadata-action; не полагаться на meta.outputs.version (не всегда short SHA).
       image_tag: ${{ steps.helm_image_tag.outputs.tag }}
@@ -131,6 +132,73 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      # Push, меняющий deps (pyproject/uv.lock/Dockerfile.base*), триггернет build-base*,
+      # который собирается ~40m. Если deploy стартует раньше его конца, :latest на момент
+      # резолва digest указывает на base БЕЗ новых deps — app-образ получает их отсутствие
+      # (был инцидент: geo в CrashLoop, ModuleNotFoundError scipy). Ждём завершения
+      # build-base ранов для последнего dep-коммита в истории GITHUB_SHA: после него
+      # :latest гарантированно покрывает dep-сет деплоимого коммита.
+      - name: Wait for base image rebuilds (dep commits)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # SHA последнего коммита, тронувшего любой из dep-файлов, в истории GITHUB_SHA.
+          last_dep_sha() {
+            local newest_sha="" newest_date="" sha date resp
+            for f in "$@"; do
+              resp="$(gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${GITHUB_SHA}&path=${f}&per_page=1")"
+              sha="$(jq -r '.[0].sha // empty' <<<"${resp}")"
+              date="$(jq -r '.[0].commit.committer.date // empty' <<<"${resp}")"
+              if [ -n "${date}" ] && { [ -z "${newest_date}" ] || [[ "${date}" > "${newest_date}" ]]; }; then
+                newest_sha="${sha}"
+                newest_date="${date}"
+              fi
+            done
+            printf '%s' "${newest_sha}"
+          }
+
+          # Ждать completed build-base рана, чей headSha = dep_sha (trigger paths гарантируют,
+          # что run существует для такого push). Отсутствие рана = dep-коммит старше любых
+          # живых rebuild-ов — :latest уже свежий.
+          wait_base_run() {
+            local workflow="$1" dep_sha="$2"
+            if [ -z "${dep_sha}" ]; then
+              echo "${workflow}: dep-файлы не найдены — пропуск"
+              return 0
+            fi
+            echo "${workflow}: последний dep-коммит ${dep_sha}"
+            local i status conclusion
+            for i in $(seq 1 90); do
+              status="$(gh run list --workflow "${workflow}" --branch main --commit "${dep_sha}" \
+                --json status -q '.[0].status // empty')"
+              case "${status}" in
+                "" | completed) break ;;
+                *)
+                  echo "${workflow}: run status=${status} — жду (${i}/90)"
+                  sleep 60
+                  ;;
+              esac
+            done
+            if [ -n "${status}" ] && [ "${status}" != "completed" ]; then
+              echo "::error::${workflow} для ${dep_sha} не завершился за 90m"
+              exit 1
+            fi
+            conclusion="$(gh run list --workflow "${workflow}" --branch main --commit "${dep_sha}" \
+              --json conclusion -q '.[0].conclusion // empty')"
+            if [ -n "${conclusion}" ] && [ "${conclusion}" != "success" ]; then
+              echo "::error::${workflow} для ${dep_sha} завершился с conclusion=${conclusion} — base без нужных deps"
+              exit 1
+            fi
+            echo "${workflow}: base для ${dep_sha} готов (conclusion=${conclusion:-none})"
+          }
+
+          platform_dep_sha="$(last_dep_sha pyproject.toml uv.lock Dockerfile.base .github/workflows/build-base.yml)"
+          gpu_dep_sha="$(last_dep_sha pyproject.toml uv.lock Dockerfile.base.gpu .github/workflows/build-base-gpu.yml)"
+          wait_base_run build-base.yml "${platform_dep_sha}"
+          wait_base_run build-base-gpu.yml "${gpu_dep_sha}"
 
       # Pin FROM к digest :latest на момент сборки. Иначе GHA cache + тот же short SHA
       # переиспользуют app-образ, собранный до Build Base (нет новых deps вроде openfga-sdk).
