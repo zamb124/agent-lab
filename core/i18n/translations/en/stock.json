@@ -476,5 +476,10 @@
     "category_weight": "Weight",
     "category_length": "Length",
     "category_volume": "Volume"
+  },
+  "notifications": {
+    "task_assigned_title": "New warehouse task",
+    "task_assigned_message": "Tasks assigned to you: {count}",
+    "open_tsd": "Open TSD"
   }
 }

@@ -13,15 +13,15 @@ interface Dispatched {
     payload: unknown;
 }
 
-type PwaState = { pwa?: { deploymentVersion?: string | null } };
+type PwaState = { pwa?: { deploymentVersion?: string | null }; auth?: { status?: string } };
 
-function makeCtx(): { ctx: EffectCtx<PwaState>; dispatched: Dispatched[] } {
+function makeCtx(state: PwaState = {}): { ctx: EffectCtx<PwaState>; dispatched: Dispatched[] } {
     const dispatched: Dispatched[] = [];
     const ctx: EffectCtx<PwaState> = {
         dispatch: (type, payload) => {
             dispatched.push({ type: typeof type === 'string' ? type : type.type, payload });
         },
-        getState: () => ({}),
+        getState: () => state,
     };
     return { ctx, dispatched };
 }
@@ -133,15 +133,52 @@ describe('pwaEffect: разрешение на уведомления', () => {
         await createPwaEffect()(eventOf(PWA_EVENTS.PUSH_PERMISSION_REQUEST_REQUESTED), ctx);
         expect(dispatched).toEqual([]);
     });
+
+    it('permission granted при живой сессии ведёт в подписку', async () => {
+        const { ctx, dispatched } = makeCtx({ auth: { status: 'authenticated' } });
+        await createPwaEffect()(eventOf(CoreEvents.PWA_PUSH_PERMISSION_REQUESTED, { permission: 'granted' }), ctx);
+        expect(dispatched).toEqual([{ type: PWA_EVENTS.PUSH_SUBSCRIBE_REQUESTED, payload: null }]);
+    });
+
+    it('permission granted до логина подписку не запускает — дождётся AUTH_USER_LOADED', async () => {
+        const { ctx, dispatched } = makeCtx({ auth: { status: 'unauthenticated' } });
+        await createPwaEffect()(eventOf(CoreEvents.PWA_PUSH_PERMISSION_REQUESTED, { permission: 'granted' }), ctx);
+        expect(dispatched).toEqual([]);
+    });
+
+    it('permission denied подписку не запускает', async () => {
+        const { ctx, dispatched } = makeCtx({ auth: { status: 'authenticated' } });
+        await createPwaEffect()(eventOf(CoreEvents.PWA_PUSH_PERMISSION_REQUESTED, { permission: 'denied' }), ctx);
+        expect(dispatched).toEqual([]);
+    });
+
+    it('после загрузки юзера с уже данным permission подписка стартует', async () => {
+        vi.stubGlobal('Notification', { permission: 'granted' });
+        const { ctx, dispatched } = makeCtx();
+        await createPwaEffect()(eventOf(CoreEvents.AUTH_USER_LOADED, { user: {} }), ctx);
+        expect(dispatched).toEqual([{ type: PWA_EVENTS.PUSH_SUBSCRIBE_REQUESTED, payload: null }]);
+    });
+
+    it('после загрузки юзера без permission подписка не стартует', async () => {
+        vi.stubGlobal('Notification', { permission: 'default' });
+        const { ctx, dispatched } = makeCtx();
+        await createPwaEffect()(eventOf(CoreEvents.AUTH_USER_LOADED, { user: {} }), ctx);
+        expect(dispatched).toEqual([]);
+    });
 });
 
 describe('pwaEffect: веб-подписка', () => {
-    it('уже существующая подписка возвращается без запросов к серверу', async () => {
-        stubBrowser({ existing: makeSubscription({}) });
-        const fetchSpy = stubFetchJson({});
+    it('существующая подписка всё равно upsert-ится на бэке (юзер мог смениться)', async () => {
+        stubBrowser({ existing: makeSubscription({ p256dh: 'P', auth: 'A' }) });
+        const fetchSpy = stubFetchJson({ '/svc/api/push/subscribe': {} });
         const { ctx, dispatched } = makeCtx();
         await createPwaEffect({ baseUrl: '/svc' })(eventOf(PWA_EVENTS.PUSH_SUBSCRIBE_REQUESTED), ctx);
-        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(subscribeBody(fetchSpy)).toEqual({
+            transport: 'web_vapid',
+            endpoint: 'https://push.example/sub1',
+            keys: { p256dh: 'P', auth: 'A' },
+            platform: 'web',
+        });
         expect(dispatched).toEqual([
             { type: CoreEvents.PWA_PUSH_REGISTERED, payload: { endpoint: 'https://push.example/sub1', transport: 'web_vapid' } },
         ]);

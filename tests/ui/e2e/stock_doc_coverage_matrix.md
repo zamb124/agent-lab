@@ -38,10 +38,10 @@
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
 | 2 | `locations-tree` | Создать склад и зоны хранения | `test_stock_doc_locations.py` | ✅ |
-| 2 | `stock-by-location` | Остатки по локациям: где что лежит | `test_stock_doc_stock_report.py` | 🚧 |
-| 3 | `moves-journal` | Журнал движений строками товара | `test_stock_doc_operations.py` | 🚧 |
-| 3 | `packages-containers` | Тара: содержимое и перемещение | `test_stock_doc_operations.py` | 🚧 |
-| 3 | `inventory-count` | Инвентаризация: факт vs учёт | `test_stock_doc_operations.py` | 🚧 |
+| 2 | `stock-by-location` | Остатки по локациям: где что лежит | `test_stock_doc_stock_report.py` | ✅ |
+| 3 | `moves-journal` | Журнал движений строками товара | `test_stock_doc_operations.py` | ✅ |
+| 3 | `packages-containers` | Тара: содержимое и перемещение | `test_stock_doc_operations.py` | ✅ |
+| 3 | `inventory-count` | Инвентаризация: факт vs учёт | `test_stock_doc_operations.py` | ✅ |
 
 ### products — Товары
 
@@ -68,15 +68,32 @@
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 2 | `settings-warehouse` | Склады, типы хранения, тара | `test_stock_doc_operations.py` | 🚧 |
-| 2 | `settings-uoms` | Единицы измерения и упаковки | `test_stock_doc_operations.py` | 🚧 |
-| 2 | `settings-catalogs` | Ресурсы/техника, правила размещения и пополнения, маршруты, партии | `test_stock_doc_operations.py` | 🚧 |
+| 2 | `settings-warehouse` | Склады, типы хранения, тара | `test_stock_doc_operations.py` | ✅ |
+| 2 | `settings-uoms` | Единицы измерения и упаковки | `test_stock_doc_operations.py` | ✅ |
+| 2 | `settings-catalogs` | Ресурсы/техника, правила размещения и пополнения, маршруты, партии | `test_stock_doc_operations.py` | ✅ |
 
 ### tsd — ТСД-сканер
 
+Все сценарии — `test_stock_tsd_terminal.py` (16 тестов, `-n4` зелёные).
+
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
-| 1 | `tsd-scanner` | Мобильный сканер: логин, очередь, скан | — | 📝 |
+| 1 | `tsd-receive` | Приёмка сканом: локация → товар → количество | `test_stock_tsd_receive` | ✅ |
+| 1 | `tsd-receive-multiline` | Приёмка по накладной, несколько товаров | `test_stock_tsd_receive_multiline` | ✅ |
+| 1 | `tsd-move` | Перемещение между ячейками | `test_stock_tsd_move` | ✅ |
+| 1 | `tsd-putaway` | Размещение с подсказкой ячейки | `test_stock_tsd_putaway` | ✅ |
+| 1 | `tsd-count` | Пересчёт ячейки | `test_stock_tsd_count` | ✅ |
+| 1 | `tsd-count-zero` | Пересчёт: фактический ноль | `test_stock_tsd_count_zero` | ✅ |
+| 1 | `tsd-container-move` | Перемещение тары целиком | `test_stock_tsd_container_move` | ✅ |
+| 2 | `tsd-document-pick` | Отбор по накладной | `test_stock_tsd_document_pick` | ✅ |
+| 2 | `tsd-document-pack` | Упаковка по накладной | `test_stock_tsd_document_pack` | ✅ |
+| 2 | `tsd-document-ship` | Отгрузка по накладной | `test_stock_tsd_document_ship` | ✅ |
+| 2 | `tsd-document-exception` | Исключение: недостача по строке | `test_stock_tsd_document_exception` | ✅ |
+| 2 | `tsd-document-container-move` | Перемещение тары по документу | `test_stock_tsd_document_container_move` | ✅ |
+| 2 | `tsd-inquiry` | Справочный скан: товар и остатки | `test_stock_tsd_inquiry_rescan` | ✅ |
+| 2 | `tsd-context-chips` | Контекст-чипы: оператор, ресурс, документ | `test_stock_tsd_context_chips` | ✅ |
+| 3 | `tsd-offline-outbox` | Офлайн-очередь исполнения | `test_stock_tsd_offline_outbox` | ✅ |
+| 1 | `tsd-scanner` | Общая инструкция входа и скана | — | ⛔ покрыто набором выше |
 
 ## Долг и заметки
 

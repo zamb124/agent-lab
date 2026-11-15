@@ -56,6 +56,8 @@ interface PendingEntry {
     timeoutHandle: ReturnType<typeof setTimeout>;
     expectedSucceeded: string;
     expectedFailed: string;
+    type: string;
+    terminalLookupActive: boolean;
 }
 
 let _CentrifugeCtor: CentrifugeCtor = Centrifuge;
@@ -69,6 +71,11 @@ let _requestSeq = 0;
 const _pending = new Map<string, PendingEntry>();
 const _preConnectQueue: QueuedCommand[] = [];
 const PRE_CONNECT_MAX_WAIT_MS = 5_000;
+// Серверный deadline команды: realtime.command_deadline_seconds (30s) +
+// sweeper_interval (5s) + запас сети — к этому моменту терминал
+// гарантирован исполнением либо синтетическим deadline_exceeded.
+const TERMINAL_LOOKUP_INTERVAL_MS = 1_500;
+const TERMINAL_LOOKUP_MAX_ATTEMPTS = 30; // ~45s ожидания исхода
 
 export class WsTransportError extends Error {
     code: string | undefined;
@@ -223,12 +230,6 @@ function disconnectReason(ctx: unknown): string {
     return ctx.reason;
 }
 
-function rpcErrorMessage(err: unknown): string {
-    if (err instanceof Error && err.message.length > 0) return err.message;
-    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) return err.message;
-    return 'Centrifugo rpc platform.event failed';
-}
-
 function _dispatchPlatformEvent(frame: WsFrame | null | undefined): void {
     if (!frame || typeof frame.type !== 'string') {
         return;
@@ -313,7 +314,13 @@ function _open(): void {
         const reason = disconnectReason(ctxRaw);
         _ctxRef?.dispatch(CoreEvents.WS_DISCONNECTED, { reason }, { source: 'ws' });
         if (!_intentionalClose) {
-            _rejectAllPending(new WsTransportError('WebSocket disconnected', 'ws_disconnected'));
+            // Обрыв сокета ≠ *_failed: отправленная команда могла быть
+            // доставлена и исполнена — исход определяет только terminal
+            // lookup. Слепой reject провоцирует повтор оператора и дубль
+            // мутации на сервере.
+            for (const [eventId] of _pending) {
+                _scheduleTerminalLookup(eventId);
+            }
         }
     });
     _client.on('publication', _onPublication);
@@ -387,7 +394,7 @@ function _sendRpcNow(queued: QueuedCommand): void {
     const event = _buildCommandEvent(queued);
     const eventId = event.event_id;
     const timeoutHandle = setTimeout(() => {
-        void _onCommandTimeout(eventId, queued);
+        _scheduleTerminalLookup(eventId);
     }, queued.timeoutMs);
     _pending.set(eventId, {
         resolve: queued.resolve,
@@ -395,64 +402,71 @@ function _sendRpcNow(queued: QueuedCommand): void {
         timeoutHandle,
         expectedSucceeded: queued.expectedSucceeded,
         expectedFailed: queued.expectedFailed,
+        type: queued.type,
+        terminalLookupActive: false,
     });
     queued.eventId = eventId;
-    _client.rpc('platform.event', event).then(() => undefined, (err) => {
+    _client.rpc('platform.event', event).then(() => undefined, () => {
         if (!_pending.has(eventId)) {
             return;
         }
-        const entry = _pending.get(eventId);
-        if (entry === undefined) {
-            throw new Error(`ws: pending command ${eventId} missing`);
-        }
-        _pending.delete(eventId);
-        clearTimeout(entry.timeoutHandle);
-        const message = rpcErrorMessage(err);
-        entry.reject(new WsTransportError(message, 'ws_disconnected'));
+        // RPC-ошибка ≠ не доставлено: ack мог потеряться после ingest —
+        // исход определяет terminal lookup, а не состояние сокета.
+        _scheduleTerminalLookup(eventId);
     });
 }
 
-async function _onCommandTimeout(eventId: string, queued: QueuedCommand): Promise<void> {
-    if (!_pending.has(eventId)) {
+function _sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function _scheduleTerminalLookup(eventId: string): void {
+    const entry = _pending.get(eventId);
+    if (!entry || entry.terminalLookupActive) {
         return;
     }
-    try {
-        const response = await fetch(
-            `/realtime/api/v1/events/${encodeURIComponent(eventId)}/terminal`,
-            { credentials: 'include' },
-        );
-        if (response.ok) {
-            const frame = wsFrame(await response.json());
-            if (frame === null) {
-                throw new Error('ws: terminal event is not a frame');
-            }
-            if (_matchPending(frame)) {
-                return;
-            }
-        } else if (response.status !== 404) {
-            throw new Error(`terminal lookup HTTP ${response.status}`);
-        }
-    } catch (err) {
-        const failed = _pending.get(eventId);
-        if (!failed) {
+    entry.terminalLookupActive = true;
+    void _terminalLookupLoop(eventId);
+}
+
+async function _terminalLookupLoop(eventId: string): Promise<void> {
+    // Timeout RPC и обрыв сокета не являются исходом команды: кадр мог
+    // дойти до сервера и исполниться. Опрашиваем /terminal до серверного
+    // дедлайна — sweeper гарантирует deadline_exceeded даже для зависшей
+    // команды. Фейлить раньше нельзя: повтор оператора создаст вторую
+    // команду с новым event_id и спровоцирует дубль мутации.
+    for (let attempt = 0; attempt < TERMINAL_LOOKUP_MAX_ATTEMPTS; attempt++) {
+        const entry = _pending.get(eventId);
+        if (!entry) {
             return;
         }
-        _pending.delete(eventId);
-        clearTimeout(failed.timeoutHandle);
-        const message = err instanceof Error && err.message
-            ? err.message
-            : 'terminal lookup failed';
-        failed.reject(new WsTransportError(message, 'ws_disconnected'));
-        return;
+        try {
+            const response = await fetch(
+                `/realtime/api/v1/events/${encodeURIComponent(eventId)}/terminal`,
+                { credentials: 'include' },
+            );
+            if (response.ok) {
+                const frame = wsFrame(await response.json());
+                if (frame === null) {
+                    throw new Error('ws: terminal event is not a frame');
+                }
+                if (_matchPending(frame)) {
+                    return;
+                }
+            }
+        } catch {
+            // Сеть или сервер недоступны — продолжаем опрос до дедлайна.
+        }
+        await _sleep(TERMINAL_LOOKUP_INTERVAL_MS);
     }
-    const entry = _pending.get(eventId);
-    if (!entry) {
+    const current = _pending.get(eventId);
+    if (!current) {
         return;
     }
     _pending.delete(eventId);
-    clearTimeout(entry.timeoutHandle);
-    entry.reject(new WsTransportError(
-        `WS command "${queued.type}" timed out after ${queued.timeoutMs}ms`,
+    clearTimeout(current.timeoutHandle);
+    current.reject(new WsTransportError(
+        `WS command "${current.type}" produced no terminal before command deadline`,
         'ws_timeout',
     ));
 }

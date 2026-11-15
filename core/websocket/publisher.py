@@ -48,6 +48,7 @@ class NotificationType(StrEnum):
     WORK_ITEM_ASSIGNED = "work_item_assigned"
     WORK_ITEM_UPDATED = "work_item_updated"
     WORK_ITEM_COMMENT = "work_item_comment"
+    STOCK_TASK_ASSIGNED = "stock_task_assigned"
 
 
 class NotificationAction(BaseModel):

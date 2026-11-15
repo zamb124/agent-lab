@@ -277,37 +277,74 @@ describe('platformWs.request: round-trip', () => {
         await expect(promise).rejects.toMatchObject({ name: 'WsTransportError', code: 'invalid', message: 'invalid' });
     });
 
-    it('таймаут без terminal → reject ws_timeout, не *_failed', async () => {
+    it('таймаут без terminal → опрос до серверного дедлайна, затем ws_timeout', async () => {
         await _connect();
         const promise = Reflect.apply(platformWs.request, platformWs, [{
             type: 'svc/cmd/requested', payload: null, timeoutMs: 100,
             expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
         }]);
         const expectation = expect(promise).rejects.toMatchObject({ code: 'ws_timeout' });
-        await vi.advanceTimersByTimeAsync(150);
+        // terminal lookup 404 → команда ждёт исход до дедлайна сервера
+        // (45s), а не фейлится по истечении timeoutMs: иначе повтор
+        // оператора порождает дубль мутации.
+        await vi.advanceTimersByTimeAsync(50_000);
         await expectation;
         expect(globalThis.fetch).toHaveBeenCalled();
     });
 
-    it('disconnect → reject всех pending как ws_disconnected', async () => {
+    it('disconnect → исход команды берётся из terminal lookup, не ws_disconnected', async () => {
         await _connect();
         const promise = Reflect.apply(platformWs.request, platformWs, [{
             type: 'svc/cmd/requested', payload: null, timeoutMs: 5000,
             expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
         }]);
         const client = MockCentrifuge.latest();
+        const sent = client.rpcCalls[0]?.data;
+        if (sent === undefined) {
+            throw new Error('rpcCalls[0].data required');
+        }
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                type: 'svc/cmd/succeeded',
+                payload: { ok: true },
+                meta: { causation_id: prop(sent, 'event_id') },
+            }),
+        } as Response);
         client.disconnect();
-        await expect(promise).rejects.toMatchObject({ code: 'ws_disconnected' });
+        await expect(promise).resolves.toEqual({ ok: true });
     });
 
-    it('ошибка rpc → reject ws_disconnected, не ждать timeout', async () => {
+    it('disconnect без terminal → ws_timeout после дедлайна', async () => {
         await _connect();
-        const client = MockCentrifuge.latest();
-        client.rpc = () => Promise.reject(new Error('rpc down'));
-        await expect(Reflect.apply(platformWs.request, platformWs, [{
+        const promise = Reflect.apply(platformWs.request, platformWs, [{
             type: 'svc/cmd/requested', payload: null, timeoutMs: 5000,
             expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
-        }])).rejects.toMatchObject({ code: 'ws_disconnected', message: 'rpc down' });
+        }]);
+        const client = MockCentrifuge.latest();
+        const expectation = expect(promise).rejects.toMatchObject({ code: 'ws_timeout' });
+        client.disconnect();
+        await vi.advanceTimersByTimeAsync(50_000);
+        await expectation;
+    });
+
+    it('ошибка rpc → terminal lookup решает исход, не ws_disconnected', async () => {
+        await _connect();
+        const client = MockCentrifuge.latest();
+        let eventId: unknown;
+        client.rpc = (method: string, data: Record<string, unknown>) => {
+            eventId = data.event_id;
+            return Promise.reject(new Error('rpc down'));
+        };
+        const promise = Reflect.apply(platformWs.request, platformWs, [{
+            type: 'svc/cmd/requested', payload: null, timeoutMs: 5000,
+            expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
+        }]);
+        const expectation = expect(promise).rejects.toMatchObject({ code: 'ws_timeout' });
+        void eventId;
+        await vi.advanceTimersByTimeAsync(50_000);
+        await expectation;
     });
 });
 

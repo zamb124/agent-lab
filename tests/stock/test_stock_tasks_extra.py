@@ -45,6 +45,7 @@ from core.errors.boundary import (
 )
 from core.files.models import FileRecord
 from core.lanes import LaneCommit
+from tests.fixtures.platform_events import platform_events_listener
 
 from .test_stock_domain import StockEnv, _make_env, _receipt
 
@@ -377,6 +378,55 @@ class TestClaimAssignRelease:
         fresh = await StockMoveLine.by_id(env.company_id, line.move_line_id)
         assert fresh.assigned_user_id == "op-9"
         assert fresh.resource_id == cart.resource_id
+
+    async def test_assign_notifies_assignee(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Диспетчерская раздача пушит оператора notify-событием шины."""
+
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        line = await _reserved_delivery_line(env, Decimal("3"))
+        async with platform_events_listener() as receive:
+            result = await env.di.task_service.assign(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_line_ids=[line.move_line_id],
+                assignee_user_id="op-9",
+                resource_id=None,
+                actor_user_id="dispatcher",
+            )
+            events = await receive(
+                "notify/stock/stock_task_assigned_received", "op-9", 10.0
+            )
+        assert result.assigned_user_id == "op-9"
+        assert len(events) == 1
+        payload = events[0]["payload"]
+        assert payload["kind"] == "stock_task_assigned"
+        assert payload["action_url"] == "/stock/tsd"
+        assert payload["data"]["warehouse_id"] == env.warehouse.warehouse_id
+
+    async def test_assign_same_actor_does_not_notify(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Самоназначение (оператор сам взял строку) пуша не даёт."""
+
+        env = await _env(stock_di, unique_id)
+        _ = await _receipt(env, Decimal("5"), Decimal("2"))
+        line = await _reserved_delivery_line(env, Decimal("3"))
+        async with platform_events_listener() as receive:
+            _ = await env.di.task_service.assign(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                move_line_ids=[line.move_line_id],
+                assignee_user_id="op-9",
+                resource_id=None,
+                actor_user_id="op-9",
+            )
+            events = await receive(
+                "notify/stock/stock_task_assigned_received", "op-9", 2.0
+            )
+        assert events == []
 
     async def test_release_foreign_line_denied_but_dispatcher_ok(
         self, stock_di, unique_id: str

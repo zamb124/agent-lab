@@ -484,7 +484,9 @@ async def tsd_pick_warehouse(page: Page, unique_id: str) -> None:
     await tsd_wait_ws_open(page)
     card = page.locator(
         "stock-tsd-home-page .warehouse-card",
-        has_text=f"Склад {unique_id[:4]}",
+        # Имя `Склад {uid[:4]}` коллидирует между прогонами в общей
+        # компании воркера — код `0-{uid[:8]}` уникален на прогон.
+        has_text=f"0-{unique_id[:8].upper()}",
     )
     # Autoload списка мог стартовать до поднятия WS: при отказе страница
     # показывает ошибку с «Повторить» — физически оператор жмёт её.

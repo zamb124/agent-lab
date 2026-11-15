@@ -154,18 +154,19 @@ async function _registerWebPush(base: string): Promise<{ transport: string; endp
         throw new Error('service worker not ready');
     }
     const existing = await reg.pushManager.getSubscription();
-    if (existing) {
-        return { transport: 'web_vapid', endpoint: existing.endpoint };
-    }
-    const vapid = await httpRequest({ method: 'GET', url: `${base}/api/push/vapid-public-key` });
-    const publicKey = isPlainRecord(vapid) ? vapid.publicKey : undefined;
-    if (typeof publicKey !== 'string' || publicKey.length === 0) {
-        throw new Error('VAPID public key недоступен');
-    }
-    const subscription = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidApplicationServerKey(publicKey),
-    });
+    const subscription = existing ?? await (async () => {
+        const vapid = await httpRequest({ method: 'GET', url: `${base}/api/push/vapid-public-key` });
+        const publicKey = isPlainRecord(vapid) ? vapid.publicKey : undefined;
+        if (typeof publicKey !== 'string' || publicKey.length === 0) {
+            throw new Error('VAPID public key недоступен');
+        }
+        return await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidApplicationServerKey(publicKey),
+        });
+    })();
+    // Upsert на бэке обязателен и для существующего endpoint: подписка
+    // привязана к user_id, а юзер мог смениться между сессиями.
     const json = subscription.toJSON();
     const keys = json.keys === undefined ? {} : json.keys;
     await httpRequest({
@@ -391,6 +392,28 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl
                 if (typeof Notification === 'undefined') return;
                 const perm = await Notification.requestPermission();
                 ctx.dispatch(CoreEvents.PWA_PUSH_PERMISSION_REQUESTED, { permission: perm }, { causation_id: event.id, source: 'system' });
+                return;
+            }
+
+            case CoreEvents.AUTH_USER_LOADED: {
+                // Юзер аутентифицирован: если permission уже дан — подписываем.
+                // POST /api/push/subscribe требует сессию, до логина уйдёт в 401.
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    ctx.dispatch(PWA_EVENTS.PUSH_SUBSCRIBE_REQUESTED, null, { causation_id: event.id, source: 'system' });
+                }
+                return;
+            }
+
+            case CoreEvents.PWA_PUSH_PERMISSION_REQUESTED: {
+                // granted — подписка на push: без этого шага permission
+                // есть, а PushSubscription на бэке не появляется никогда.
+                // Без сессии subscribe уйдёт в 401 — после логина повторит
+                // ветка AUTH_USER_LOADED.
+                const perm = isPlainRecord(event.payload) ? event.payload.permission : null;
+                const authed = (ctx.getState() as { auth?: { status?: string } }).auth?.status === 'authenticated';
+                if (perm === 'granted' && authed) {
+                    ctx.dispatch(PWA_EVENTS.PUSH_SUBSCRIBE_REQUESTED, null, { causation_id: event.id, source: 'system' });
+                }
                 return;
             }
 

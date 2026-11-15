@@ -106,6 +106,9 @@ export const stockMoveLinesNextOp = createAsyncOp<StockMoveLineNextResponse>({
     wsTimeoutMs: 15_000,
     commandType: 'stock/move_lines/next_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/next' },
+    // `stock/move_line/assigned` мержит `stock/queue` (extraReducer +
+    // reloadLastList): `next` — мутация с claim, её перезапуск на
+    // push-событие клеймил бы очередь в бесконечном цикле.
 });
 
 export const stockMoveLinesReleaseOp = createAsyncOp<StockMoveLineClaimResult>({

@@ -6,11 +6,11 @@
 
 **Result:** shortage recorded, reserve freed, session closed — the queue gives the next work.
 
-## Step 1. Problem sheet: reason and shortage
+## Step 1. Problem sheet: reason, shortage and photo
 
 The operator physically cannot fulfil the line — the goods are missing. The sheet asks the reason and how many are short; photos attach as escalation evidence.
 
-![Problem sheet: reason and shortage](stock-tsd-document-exception--01-tsd-exception-sheet.png)
+![Problem sheet: reason, shortage and photo](stock-tsd-document-exception--01-tsd-exception-sheet.png)
 
 ## Step 2. Shortage recorded — line and reserve reconciled
 
@@ -25,3 +25,9 @@ The operator physically cannot fulfil the line — the goods are missing. The sh
 «Give me work» issued the suspect-bin recount task — it outranks the remaining pick. The operator walked to the spot, scanned the bin and the product, entered the counted 8: more than book — the delta goes to inventory approval.
 
 ![Recount task — counted fact](stock-tsd-document-exception--03-tsd-exception-recount.png)
+
+## Step 4. Picking the remainder after recount
+
+Recount closed — the queue returned the operator to the remaining pick line: the system never abandons unfinished work. The operator picks the shortened 2 units — the document closes honestly.
+
+![Picking the remainder after recount](stock-tsd-document-exception--04-tsd-exception-resume.png)

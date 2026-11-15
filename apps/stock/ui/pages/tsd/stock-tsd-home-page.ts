@@ -22,6 +22,7 @@ import type {
     StockTsdSessionState,
     TsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
+import { PWA_EVENTS } from '@platform/lib/events/effects/pwa.effect.js';
 import { TsdScanInput } from './scan/scan-input.js';
 import { tsdOpRetry, tsdScanIdle, tsdScanTransition } from './scan/tsd-scan-lock.js';
 import { tsdFormatQty, tsdLocationName } from './tsd-format.js';
@@ -714,6 +715,17 @@ export class StockTsdHomePage extends PlatformPage {
         super.connectedCallback();
         this._scanInput = new TsdScanInput((code) => this._onScan(code));
         this._scanInput.attach();
+        // Пуши заданий: разрешение спрашиваем один раз при входе на
+        // терминал — дальше pwa-effect ведёт в подписку на бэке.
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            this.dispatch(PWA_EVENTS.PUSH_PERMISSION_REQUEST_REQUESTED, null);
+        }
+        // Онлайн-уведомление о назначении — тост; сама очередь
+        // обновляется фабрикой stock/move_lines_next на push
+        // stock/move_line/assigned (extraEffect → rerunLastRequest).
+        this.useEvent('notify/stock/stock_task_assigned_received', () => {
+            this.toast('home.task_assigned', { type: 'info' });
+        });
     }
 
     override disconnectedCallback(): void {

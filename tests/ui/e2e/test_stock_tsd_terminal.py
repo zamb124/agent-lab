@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
@@ -32,6 +33,13 @@ from tests.ui.e2e.stock_e2e_helpers import (
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
+
+# Минимальный валидный PNG 1x1 — фото-доказательство в репорте недостачи.
+_MIN_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 @pytest.mark.scenario(
@@ -1429,6 +1437,7 @@ async def test_stock_tsd_document_exception(
     stock_ui: AppUI,
     ui_page_system: Page,
     unique_id: str,
+    tmp_path: Path,
 ) -> None:
     page = ui_page_system
     await page.set_viewport_size(TSD_VIEWPORT)
@@ -1477,11 +1486,21 @@ async def test_stock_tsd_document_exception(
     exc = page.locator("stock-tsd-exception-sheet")
     await expect(exc).to_be_visible(timeout=15_000)
     await exc.locator(".qty-btn", has_text="+").click()
+    # Фото недостачи — реальный upload через platform/file_create
+    # (FilesService → S3); появление крестика на миниатюре = file_id
+    # получен и уедет в file_ids репорта.
+    png_path = tmp_path / "shortage.png"
+    png_path.write_bytes(_MIN_PNG)
+    await exc.locator(".photo-input").set_input_files(str(png_path))
+    # Upload идёт параллельно выбору причины; готовое фото — миниатюра
+    # без спиннера/иконки retry (submit заблокирован, пока грузится).
+    await expect(exc.locator(".photo-thumb")).to_be_visible(timeout=15_000)
+    await expect(exc.locator(".photo-thumb .photo-state")).to_have_count(0, timeout=30_000)
     await scenario.step(
-        "Лист проблемы: причина и недостача",
+        "Лист проблемы: причина, недостача и фото",
         page,
         screenshot_name="tsd-exception-sheet",
-        label_en="Problem sheet: reason and shortage",
+        label_en="Problem sheet: reason, shortage and photo",
         details=(
             "Оператор физически не может выполнить строку — товара "
             "нет. Лист спрашивает причину и сколько недостаёт; "
@@ -1557,6 +1576,36 @@ async def test_stock_tsd_document_exception(
             "spot, scanned the bin and the product, entered the "
             "counted 8: more than book — the delta goes to inventory "
             "approval."
+        ),
+    )
+    # Пересчёт закрыт — сессия завершена, оператор на рабочем столе.
+    # Строка отбора (2 шт) ещё жива: «дайте работу» возвращает её —
+    # система не бросает недоделанный документ.
+    await tsd_commit(page)
+    await page.locator(".give-work").click()
+    await expect(run).to_be_visible(timeout=30_000)
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "2")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Добор остатка после пересчёта",
+        page,
+        screenshot_name="tsd-exception-resume",
+        label_en="Picking the remainder after recount",
+        details=(
+            "Пересчёт закрыт — очередь вернула оператора на "
+            "оставшуюся строку отбора: система не бросает "
+            "недоделанную работу. Оператор добирает укороченные "
+            "2 шт — документ закрывается честно."
+        ),
+        details_en=(
+            "Recount closed — the queue returned the operator to "
+            "the remaining pick line: the system never abandons "
+            "unfinished work. The operator picks the shortened 2 "
+            "units — the document closes honestly."
         ),
     )
     await tsd_commit(page)
@@ -2646,5 +2695,236 @@ async def test_stock_tsd_document_container_move(
             "container» operation.\n\n"
             "**Summary.** The document picked the hauling flow "
             "itself: order scan → pallet → destination → commit."
+        ),
+    )
+
+
+@pytest.mark.scenario(
+    service="stock",
+    tag="tsd-task-switch",
+    doc_slug="stock-tsd-task-switch",
+    title="Переключение между заданиями: вышел — строка вернулась в очередь",
+    title_en="Switching between tasks: exit returns the line to the queue",
+    description=(
+        "**Для чего:** оператор физически лучше знает порядок обхода — "
+        "взял задание, дошёл до ячейки и понял, что другая строка "
+        "лижет рядом. Терминал должен отпустить первую без конфликтов.\n\n"
+        "**Какие проблемы решает:** выход из прогона возвращает "
+        "захват строки в общую очередь мгновенно — коллега не ждёт "
+        "GC, оператор берёт ближнюю работу руками.\n\n"
+        "**Результат:** обе строки накладной проведены в удобном "
+        "оператору порядке — документ закрыт."
+    ),
+    description_en=(
+        "**Purpose:** the operator knows the physical walk order "
+        "best — claimed a task, reached the bin and realised another "
+        "line is closer. The terminal must release the first one "
+        "cleanly.\n\n"
+        "**Problems solved:** leaving a run returns the line claim "
+        "to the shared queue instantly — colleagues do not wait for "
+        "GC, the operator hand-picks the nearest work.\n\n"
+        "**Result:** both order lines posted in the operator's "
+        "preferred order — the document closed."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(300)
+async def test_stock_tsd_task_switch(
+    scenario: ScenarioRecorder,
+    stock_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+) -> None:
+    page = ui_page_system
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+
+    seed = await tsd_seed_warehouse(page, unique_id)
+    warehouse_id = seed["warehouse"]["warehouse_id"]
+    bin_a = seed["bin_a"]
+    bin_b = seed["bin_b"]
+    product_1 = seed["product_1"]
+    product_2 = seed["product_2"]
+    uom_id = seed["uom_id"]
+    await tsd_seed_stock(
+        page,
+        warehouse_id,
+        [
+            {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
+            {"location_dest_id": bin_b["location_id"], "product_id": product_2["product_id"], "quantity": "6"},
+        ],
+    )
+    op_types = await stock_rest(
+        page, "GET", f"/operation-types?warehouse_id={warehouse_id}"
+    )
+    outgoing_id = next(
+        ot["operation_type_id"] for ot in op_types["items"] if ot["code"] == "outgoing"
+    )
+    transfer = await stock_rest(
+        page, "POST", "/transfers",
+        {
+            "warehouse_id": warehouse_id,
+            "operation_type_id": outgoing_id,
+            "barcode": f"DOC-{unique_id[:6]}",
+            "moves": [
+                {
+                    "product_id": product_1["product_id"],
+                    "product_qty": "3",
+                    "uom_id": uom_id,
+                    "location_id": bin_a["location_id"],
+                },
+                {
+                    "product_id": product_2["product_id"],
+                    "product_qty": "4",
+                    "uom_id": uom_id,
+                    "location_id": bin_b["location_id"],
+                },
+            ],
+        },
+    )
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
+    await tsd_pick_warehouse(page, unique_id)
+
+    # --- «Дать работу» выдаёт первую строку и захватывает её за оператором ---
+    await expect(page.locator(".task-card").first).to_be_visible(timeout=15_000)
+    await page.locator(".give-work").click()
+    run = page.locator("stock-tsd-run")
+    await expect(run).to_be_visible(timeout=30_000)
+    expected = run.locator(".expected")
+    await expect(expected).to_be_visible(timeout=15_000)
+    first_product = f"Кофе зерновой {unique_id[:4]}"
+    second_product = f"Чай листовой {unique_id[:4]}"
+    await expect(expected).to_contain_text(first_product, timeout=10_000)
+
+    await scenario.step(
+        "«Дать работу» выдало строку кофе — она захвачена",
+        page,
+        screenshot_name="tsd-switch-claimed",
+        label_en="«Give me work» issued the coffee line — claimed",
+        details=(
+            "Первая строка захвачена за оператором: пока он в "
+            "прогоне, коллеги эту строку не видят. Но оператор уже "
+            "у ячейки Б — ему ближе чай."
+        ),
+        details_en=(
+            "The first line is claimed by the operator: while they "
+            "are in the run, colleagues do not see it. But the "
+            "operator is already at bin B — the tea is closer."
+        ),
+    )
+
+    # --- Крест выхода: прогон закрывается, захват возвращается в очередь ---
+    await run.locator(".run-close:not(.problem)").click()
+    await expect(run).to_have_count(0, timeout=15_000)
+    await expect(page.locator(".task-card").first).to_be_visible(timeout=15_000)
+    # Release — fire-and-forget команда из _exitRun: ждём, пока
+    # захват реально снимется на backend, а не полагаемся на тик.
+    for _ in range(20):
+        queue = await stock_rest(
+            page, "POST", "/move-lines/queue", {"warehouse_id": warehouse_id}
+        )
+        claimed = [
+            ln for ln in queue["items"]
+            if ln["assigned_user_id"] is not None and ln["state"] == "open"
+        ]
+        if not claimed:
+            break
+        await page.wait_for_timeout(500)
+    assert claimed == [], f"строки не освободились после выхода: {claimed}"
+
+    await scenario.step(
+        "Крест — строка мгновенно свободна для всех",
+        page,
+        screenshot_name="tsd-switch-released",
+        label_en="Close — the line is free for everyone instantly",
+        details=(
+            "Выход из прогона отпустил захват до любых GC-таймеров: "
+            "строка кофе снова в общей очереди — её увидит и коллега. "
+            "Оператор берёт ближнюю работу тапом по карточке чая."
+        ),
+        details_en=(
+            "Exiting the run released the claim ahead of any GC "
+            "timers: the coffee line is back in the shared queue — "
+            "a colleague can see it too. The operator taps the tea "
+            "card for the nearest work."
+        ),
+    )
+
+    # --- Тап по карточке другой строки — микрозадание переключено ---
+    tea_card = page.locator(".task-card", has_text=second_product)
+    await expect(tea_card).to_be_visible(timeout=15_000)
+    await tea_card.click()
+    await expect(run).to_be_visible(timeout=30_000)
+    await expect(expected).to_contain_text(second_product, timeout=15_000)
+    await scenario.step(
+        "Вторая строка открыта — работа переключена",
+        page,
+        screenshot_name="tsd-switch-other-line",
+        label_en="Second line opened — work switched",
+        details=(
+            "Тап по карточке захватил строку чая и открыл прогон — "
+            "без выхода в меню и лишних подтверждений. Физически "
+            "оператор добирает то, что рядом."
+        ),
+        details_en=(
+            "Tapping the card claimed the tea line and opened the "
+            "run — no menus, no extra confirmations. Physically the "
+            "operator picks whatever is closest."
+        ),
+    )
+
+    # --- Строка чая проведена физически: ячейка Б → товар → количество ---
+    await tsd_wait_step(page, "start")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "4")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await tsd_commit_click(page)
+
+    # --- Документ не закрыт: backend продолжает сессию оставшейся
+    # строкой кофе — очередь не нужна, следующее задание уже на экране ---
+    await expect(run).to_be_visible(timeout=30_000)
+    await expect(expected).to_contain_text(first_product, timeout=15_000)
+    await tsd_wait_step(page, "start")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "3")
+    await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
+    await tsd_commit(page)
+
+    # --- Обе строки проведены в порядке оператора — документ закрыт ---
+    assert await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_b["location_id"]) == Decimal("2")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("2")
+    moves = await stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
+    assert all(m["state"] == "done" for m in moves["moves"]), moves["moves"]
+
+    await scenario.step(
+        "Накладная закрыта в удобном оператору порядке",
+        page,
+        screenshot_name="tsd-switch-done",
+        label_en="Order closed in the operator's own order",
+        details=(
+            "**Демонстрация результата.** Чай проведён первым — "
+            "физически ближе; кофе добран после возврата через "
+            "«дайте работу». Остатки сошлись: ячейка Б 6 → 2, "
+            "ячейка А 5 → 2.\n\n"
+            "**Итог.** Крест из прогона — честное переключение: "
+            "захват возвращается очереди сразу, порядок обхода "
+            "решает оператор."
+        ),
+        details_en=(
+            "**Result demonstration.** The tea was posted first — "
+            "physically closer; the coffee was finished after "
+            "returning via «give me work». Stock matched: bin B "
+            "6 → 2, bin A 5 → 2.\n\n"
+            "**Summary.** Closing a run is a clean switch: the "
+            "claim returns to the queue instantly, and the walk "
+            "order is the operator's call."
         ),
     )

@@ -39,6 +39,7 @@ from core.lanes import publish_lane_run
 from core.request_scope import command_idempotency_key
 from core.tracing.attributes import ATTR_TENANT_COMPANY_ID
 from core.tracing.operation_span import traced_operation
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 
 def line_fits_resource(
@@ -289,6 +290,29 @@ class TaskService:
                 command_type=command_type,
             )
         await publish_lane_run(run, using=STOCK_DB)
+        # replay (дедуп идемпотентности) — не уведомляем повторно:
+        # lane-идемпотентность не дедупит отдельное notify-событие.
+        if not run.replayed and run.result.move_line_ids and assignee_user_id != actor_user_id:
+            await notify_user(
+                assignee_user_id,
+                Notification(
+                    type=NotificationType.STOCK_TASK_ASSIGNED,
+                    title="Новое задание на складе",
+                    message=f"Вам назначено заданий: {len(run.result.move_line_ids)}",
+                    title_i18n_key="stock:notifications.task_assigned_title",
+                    message_i18n_key="stock:notifications.task_assigned_message",
+                    message_i18n_vars={"count": len(run.result.move_line_ids)},
+                    service="stock",
+                    action_url="/stock/tsd",
+                    action_label="Открыть ТСД",
+                    action_label_i18n_key="stock:notifications.open_tsd",
+                    data={
+                        "company_id": company_id,
+                        "warehouse_id": warehouse_id,
+                        "move_line_ids": run.result.move_line_ids,
+                    },
+                ),
+            )
         return run.result
 
     async def release(

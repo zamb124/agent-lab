@@ -476,5 +476,10 @@
     "category_weight": "Вес",
     "category_length": "Длина",
     "category_volume": "Объём"
+  },
+  "notifications": {
+    "task_assigned_title": "Новое задание на складе",
+    "task_assigned_message": "Вам назначено заданий: {count}",
+    "open_tsd": "Открыть ТСД"
   }
 }
