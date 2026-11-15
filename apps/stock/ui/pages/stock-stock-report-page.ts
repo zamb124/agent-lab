@@ -146,7 +146,7 @@ export class StockStockReportPage extends PlatformPage {
         }));
         return html`
             <div class="toolbar">
-                <platform-searchable-combobox compact
+                <platform-searchable-combobox density="dense"
                     .label=${this.t('report.warehouse')}
                     .placeholder=${this.t('report.all_warehouses')}
                     .value=${this._warehouseId}
@@ -156,7 +156,7 @@ export class StockStockReportPage extends PlatformPage {
                         this._load();
                     }}
                 ></platform-searchable-combobox>
-                <platform-searchable-combobox compact
+                <platform-searchable-combobox density="dense"
                     .label=${this.t('report.product')}
                     .placeholder=${this.t('report.all_products')}
                     .value=${this._productId}

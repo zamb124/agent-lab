@@ -22,7 +22,7 @@ from tests.ui.e2e.stock_e2e_helpers import (
     tsd_seed_stock,
     tsd_seed_warehouse,
 )
-from tests.ui.harness import AppUI
+from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
 
@@ -288,7 +288,7 @@ async def test_stock_admin_lots(
     await expect(old_row).to_be_visible(timeout=20_000)
     await expect(new_row).to_be_visible(timeout=10_000)
     await expect(old_row.locator(".lot-badge")).to_contain_text(
-        "Скоро истекает", timeout=10_000
+        "Истекает", timeout=10_000
     )
     await expect(new_row.locator(".lot-badge")).to_contain_text(
         "В норме", timeout=10_000
@@ -314,34 +314,11 @@ async def test_stock_admin_lots(
     await lots_page.locator("platform-button", has_text="Создать").click()
     modal = page.locator("stock-entity-form-modal")
     await expect(modal).to_be_visible(timeout=10_000)
-    await modal.locator("platform-field").nth(0).evaluate(
-        """(el, pid) => {
-            el.value = pid;
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: pid }, bubbles: true, composed: true,
-            }));
-        }""",
-        product["product_id"],
-    )
-    await modal.locator("platform-field").nth(1).evaluate(
-        """(el, name) => {
-            el.value = name;
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: name }, bubbles: true, composed: true,
-            }));
-        }""",
-        f"LOT-NEW2-{unique_id[:6]}",
-    )
-    await modal.locator("platform-field").nth(2).evaluate(
-        """(el, d) => {
-            el.value = d;
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: d }, bubbles: true, composed: true,
-            }));
-        }""",
-        _expiry(30),
-    )
-    await modal.locator("platform-button", has_text="Сохранить").click()
+    fields = modal.locator("platform-field")
+    await ui_set_platform_field(fields.nth(0), product["product_id"])
+    await ui_set_platform_field(fields.nth(1), f"LOT-NEW2-{unique_id[:6]}")
+    await ui_set_platform_field(fields.nth(2), _expiry(30))
+    await modal.locator(".header-save-btn").click()
     new2_row = lots_page.locator("tr", has_text=f"LOT-NEW2-{unique_id[:6]}")
     await expect(new2_row).to_be_visible(timeout=20_000)
     lots = await stock_rest(page, "GET", f"/lots?product_id={product['product_id']}")
@@ -387,7 +364,7 @@ async def test_stock_admin_lots(
         "меняет поведение терминалов без программистов: политику "
         "резерва и недостачи, размещение, автопроводку, поток "
         "сканера и правила партий.\n\n"
-        "**Результат:** у типа «Приёмка» выключено заведение "
+        "**Результат:** у типа «Receipts» (приёмка) выключено заведение "
         "партий и задан префикс номеров — настройки сохранены "
         "и видны в таблице."
     ),
@@ -400,7 +377,7 @@ async def test_stock_admin_lots(
         "changes handheld behaviour without developers: "
         "reservation and backorder policies, putaway, "
         "auto-validation, scanner flow and lot rules.\n\n"
-        "**Result:** «Receipt» type has lot creation disabled "
+        "**Result:** «Receipts» type has lot creation disabled "
         "and a number prefix set — settings saved and visible "
         "in the table."
     ),
@@ -424,7 +401,7 @@ async def test_stock_admin_operation_types(
     op_page = page.locator("stock-op-types-page")
     await stock_e2e_pick_warehouse(op_page, f"Склад {unique_id[:4]}")
 
-    row = op_page.locator("tr", has_text="Приёмка").first
+    row = op_page.locator("tr", has_text="incoming").first
     await expect(row).to_be_visible(timeout=20_000)
     await scenario.step(
         "Откройте типы операций склада",
@@ -447,17 +424,9 @@ async def test_stock_admin_operation_types(
     await row.click()
     modal = page.locator("stock-entity-form-modal")
     await expect(modal).to_be_visible(timeout=10_000)
-    await modal.locator("platform-field").nth(1).evaluate(
-        """(el, v) => {
-            el.value = v;
-            el.dispatchEvent(new CustomEvent('change', {
-                detail: { value: v }, bubbles: true, composed: true,
-            }));
-        }""",
-        "IN-",
-    )
-    # create_lots (8-е поле по порядку) — boolean toggle off.
     fields = modal.locator("platform-field")
+    await ui_set_platform_field(fields.nth(1), "IN-")
+    # create_lots (8-е поле по порядку) — boolean toggle off.
     await fields.nth(7).evaluate(
         """(el) => {
             el.value = false;
@@ -466,7 +435,7 @@ async def test_stock_admin_operation_types(
             }));
         }"""
     )
-    await modal.locator("platform-button", has_text="Сохранить").click()
+    await modal.locator(".header-save-btn").click()
     await expect(modal).to_have_count(0, timeout=15_000)
 
     op_types = await stock_rest(
@@ -476,10 +445,10 @@ async def test_stock_admin_operation_types(
     assert incoming["name_prefix"] == "IN-"
     assert incoming["create_lots"] is False
     await scenario.step(
-        "Измените политики типа «Приёмка»",
+        "Измените политики типа «Receipts»",
         page,
         screenshot_name="op-type-saved",
-        label_en="Change the «Receipt» type policies",
+        label_en="Change the «Receipts» type policies",
         details=(
             "**Демонстрация результата.** В редакторе задан "
             "префикс номеров «IN-» и выключено заведение "

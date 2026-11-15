@@ -47,7 +47,7 @@ export class StockInventoryPage extends PlatformPage {
             .main { height: 100%; overflow-y: auto; padding: var(--space-6); }
             .hint { color: var(--text-tertiary); margin-top: var(--space-6); text-align: center; }
             .section { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-2) 0; }
-            platform-field { min-width: 110px; }
+            platform-field { min-width: 110px; --field-pill-compact-radius: var(--radius-full); }
         `,
     ];
 
@@ -154,7 +154,7 @@ export class StockInventoryPage extends PlatformPage {
         const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
         const due = this._dueItems();
         return html`
-            <platform-searchable-combobox compact
+            <platform-searchable-combobox density="dense"
                 .label=${this.t('report.warehouse')}
                 .value=${this._warehouseId}
                 .options=${whOptions}
@@ -207,7 +207,7 @@ export class StockInventoryPage extends PlatformPage {
                         <td class="num">${q.quantity}</td>
                         <td class="num">
                             <platform-field
-                                type="number" mode="edit"
+                                type="number" mode="edit" pill-density="dense"
                                 .value=${this._counts.get(q.quant_id) ?? (q.inventory_quantity !== null && q.inventory_quantity !== undefined ? String(q.inventory_quantity) : '')}
                                 data-count-input
                                 @change=${(e: CustomEvent) => {

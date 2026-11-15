@@ -118,7 +118,9 @@ async def stock_e2e_nav(page: Page, route_key: str, *, page_selector: str) -> No
 
 async def stock_e2e_pick_warehouse(page_el: Any, warehouse_name: str) -> None:
     """Выбор склада в toolbar-combobox settings-страницы."""
-    combo = page_el.locator(".toolbar platform-searchable-combobox")
+    combo = page_el.locator(
+        ".toolbar platform-searchable-combobox:has(input[title='Склад'])"
+    )
     input_el = combo.locator("input")
     await input_el.click()
     await input_el.fill("")

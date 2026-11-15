@@ -590,7 +590,7 @@ export class FlowsSessionsModal extends PlatformModal {
                     <div class="flows-sessions-filters-one-row">
                         <platform-searchable-combobox
                             class="flows-sessions-filter"
-                            compact
+                            density="compact"
                             .value=${this._filterUserId}
                             .options=${this._userFilterOptions()}
                             .label=${this.t('sessions_modal.filter_user')}
@@ -601,7 +601,7 @@ export class FlowsSessionsModal extends PlatformModal {
                         ></platform-searchable-combobox>
                         <platform-searchable-combobox
                             class="flows-sessions-filter"
-                            compact
+                            density="compact"
                             .value=${this._filterFlowId}
                             .options=${this._flowFilterOptions()}
                             .label=${this.t('sessions_modal.filter_flow')}

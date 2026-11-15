@@ -95,11 +95,17 @@ export class StockTsdRun extends PlatformElement {
     static override styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+            }
             .run {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
+                flex: 1;
             }
             .run-head {
                 display: flex;
@@ -351,7 +357,7 @@ export class StockTsdRun extends PlatformElement {
             .numpad button:active { background: var(--bg-secondary); }
             .numpad button.ok {
                 grid-column: span 3;
-                min-height: 72px;
+                min-height: 64px;
                 border: none;
                 background: var(--accent);
                 color: var(--text-inverse);
@@ -365,18 +371,13 @@ export class StockTsdRun extends PlatformElement {
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
-            .lot-input {
-                min-height: 56px;
-                padding: 0 var(--space-4);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-xl);
-                background: var(--bg-surface);
-                color: var(--text-primary);
-                font-size: var(--text-2xl);
-                font-weight: var(--font-semibold);
+            /* Панель партии: поля — pill 64px (touch-канон панели), как у .lot-ok. */
+            .lot-panel platform-field {
+                --field-pill-padding-y: 11px;
+                --field-pill-radius: var(--radius-xl);
+                --field-pill-input-size: var(--text-2xl);
+                --field-pill-input-weight: var(--font-semibold);
             }
-            .lot-input:focus { outline: none; border-color: var(--accent); }
-            .lot-date { font-size: var(--text-lg); }
             .lot-ok {
                 min-height: 64px;
                 border: none;
@@ -459,7 +460,15 @@ export class StockTsdRun extends PlatformElement {
                 color: var(--tsd-error);
             }
             /* Slide-to-commit: свайп бегунка вправо вместо тапа —
-               защита от случайной проводки перчаткой на ходу. */
+               защита от случайной проводки перчаткой на ходу. Док
+               прибит к нижней кромке scrollport над bottom-nav: кнопка
+               главного действия видна при любом скролле. */
+            .commit-dock {
+                position: sticky;
+                bottom: var(--app-content-bottom-padding-mobile, 0px);
+                margin-top: auto;
+                padding-top: var(--space-2);
+            }
             .commit-btn {
                 position: relative;
                 width: 100%;
@@ -495,6 +504,7 @@ export class StockTsdRun extends PlatformElement {
                 font-size: var(--tsd-text-title);
                 font-weight: var(--font-bold);
                 pointer-events: none;
+                white-space: nowrap;
             }
             .commit-hint platform-icon {
                 opacity: 0.25;
@@ -734,7 +744,7 @@ export class StockTsdRun extends PlatformElement {
                     <platform-icon name=${isSerial ? 'hash' : 'tag'} size="18"></platform-icon>
                     ${this.t(isSerial ? 'run.serial_title' : 'run.lot_title')}
                 </div>
-                <platform-field class="lot-input" type="text" mode="edit"
+                <platform-field class="lot-input" type="string" mode="edit"
                     .placeholder=${this.t(isSerial ? 'run.serial_placeholder' : 'run.lot_placeholder')}
                     .value=${this._lotName}
                     @change=${(e: CustomEvent) => { this._lotName = String(e.detail.value ?? ''); this.requestUpdate(); }}
@@ -1115,7 +1125,8 @@ export class StockTsdRun extends PlatformElement {
                     ${lines.map((line, index) => this._renderLine(line, index))}
                 </div>
             `}
-            <div class="commit-btn ${busy ? 'busy' : ''} ${this._sliding ? 'sliding' : ''} ${this._slideArmed ? 'armed' : ''}"
+            <div class="commit-dock">
+                <div class="commit-btn ${busy ? 'busy' : ''} ${this._sliding ? 'sliding' : ''} ${this._slideArmed ? 'armed' : ''}"
                 role="slider" tabindex="${busy ? -1 : 0}"
                 aria-label=${this.t('run.commit_slide')}
                 aria-valuemin="0" aria-valuemax="100"
@@ -1138,6 +1149,7 @@ export class StockTsdRun extends PlatformElement {
                     ${busy
                         ? html`<platform-spinner size="s"></platform-spinner>`
                         : html`<platform-icon name=${this._slideArmed ? 'check' : 'arrow-right'} size="30"></platform-icon>`}
+                </div>
                 </div>
             </div>
         `;

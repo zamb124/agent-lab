@@ -186,7 +186,7 @@ abstract class StockSettingsPageBase extends PlatformPage {
         if (!this.config.warehouseFilter) return '';
         return html`
             <div class="toolbar">
-                <platform-searchable-combobox compact
+                <platform-searchable-combobox density="dense"
                     .placeholder=${this.t('settings.warehouse')}
                     .value=${this._warehouseId}
                     .options=${[
@@ -891,7 +891,7 @@ export class StockLotsPage extends StockSettingsPageBase {
     protected override _renderToolbar(): TemplateResult {
         return html`
             <div class="toolbar">
-                <platform-searchable-combobox compact
+                <platform-searchable-combobox density="dense"
                     .placeholder=${this.t('lots.product')}
                     .value=${this._productId}
                     .options=${[
@@ -938,7 +938,7 @@ export class StockWavesPage extends StockSettingsPageBase {
             {
                 key: '_actions', labelKey: '',
                 render: (row) => row.state === 'draft' ? html`
-                    <platform-button size="sm" data-release
+                    <platform-button data-release
                         ?disabled=${this._releaseOp?.busy === true}
                         @click=${(e: Event) => {
                             e.stopPropagation();
@@ -1031,8 +1031,8 @@ export class StockWavesPage extends StockSettingsPageBase {
                             })}
                         </tbody></table>
                     </div></div>
-                    <div class="wave-create-bar">
-                        <platform-field type="string" mode="edit" compact
+                    <div class="control-row wave-create-bar">
+                        <platform-field type="string" mode="edit" pill-density="dense" class="grow"
                             .placeholder=${this.t('waves.name_placeholder')}
                             .value=${this._waveName}
                             @change=${(e: CustomEvent) => { this._waveName = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
@@ -1133,15 +1133,15 @@ export class StockDecisionsPage extends StockSettingsPageBase {
         const id = row.decision_id as string;
         const choice = this._applyChoice[id] ?? candidates[0];
         return html`
-            <div class="decision-apply" @click=${(e: Event) => e.stopPropagation()}>
-                <platform-field type="enum" mode="edit" compact
+            <div class="control-row decision-apply" @click=${(e: Event) => e.stopPropagation()}>
+                <platform-field type="enum" mode="edit" pill-density="dense"
                     .value=${choice}
                     .config=${{ values: candidates.map((c) => ({ value: c, label: this._locationName(c) })) }}
                     @change=${(e: CustomEvent) => {
                         this._applyChoice = { ...this._applyChoice, [id]: typeof e.detail.value === 'string' ? e.detail.value : candidates[0] };
                     }}
                 ></platform-field>
-                <platform-button size="sm" variant="primary" data-apply
+                <platform-button variant="primary" data-apply
                     ?disabled=${this._applyOp?.busy === true}
                     @click=${() => {
                         this._applyOp?.run({ move_id: row.move_id, location_id: this._applyChoice[id] ?? candidates[0] })
@@ -1157,7 +1157,7 @@ export class StockDecisionsPage extends StockSettingsPageBase {
         return html`
             ${super._renderToolbar()}
             <div class="toolbar">
-                <platform-searchable-combobox compact
+                <platform-searchable-combobox density="dense"
                     .placeholder=${this.t('decisions.status')}
                     .value=${this._statusFilter}
                     .options=${[

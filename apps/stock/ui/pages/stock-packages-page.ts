@@ -124,7 +124,7 @@ export class StockPackagesPage extends PlatformPage {
         const whOptions = this._warehouses.items.filter(isPlainRecord).map((w) => ({ value: w.warehouse_id as string, label: w.name as string }));
         const containers = this._containerItems().filter((c) => this._warehouseId === '' || c.warehouse_id === this._warehouseId);
         return html`
-            <platform-searchable-combobox compact
+            <platform-searchable-combobox density="dense"
                 .label=${this.t('report.warehouse')}
                 .value=${this._warehouseId}
                 .options=${[{ value: '', label: this.t('report.all_warehouses') }, ...whOptions]}
@@ -162,7 +162,7 @@ export class StockPackagesPage extends PlatformPage {
             </page-header>
             ${this._moveOpen ? html`
                 <div class="move-bar">
-                    <platform-searchable-combobox compact
+                    <platform-searchable-combobox density="dense"
                         .label=${this.t('packages.move_dest')}
                         .value=${this._moveDest}
                         .options=${locOptions}

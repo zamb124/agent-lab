@@ -19,7 +19,7 @@ export const stockPageStyles = css`
         box-sizing: border-box;
     }
 
-    /* Тулбар: все контролы — pill одной высоты (modal-search-field канон). */
+    /* Тулбар: все контролы — dense pill одной высоты (modal-search-field канон). */
     .toolbar {
         display: flex;
         gap: var(--space-2);
@@ -33,6 +33,8 @@ export const stockPageStyles = css`
     }
     .toolbar platform-searchable-combobox {
         --field-pill-compact-radius: var(--radius-full);
+        --field-pill-dense-padding-y: 2px;
+        --field-pill-dense-padding-x: 10px;
         min-width: 200px;
         max-width: 280px;
     }
@@ -118,27 +120,27 @@ export const stockPageStyles = css`
     .decision-applied { background: var(--success-bg, #dcfce7); color: var(--success-text, #166534); }
     .decision-rejected { background: var(--surface-2); color: var(--text-tertiary); }
 
-    .decision-apply {
+    /* Ряд «поле + действие»: dense-контролы — поле и кнопка одной
+       высоты (36px) и одного pill-радиуса. */
+    .control-row {
         display: flex;
         align-items: center;
-        gap: var(--space-2);
-    }
-    .decision-apply platform-field { min-width: 160px; }
-
-    .wave-create-bar {
-        display: flex;
-        align-items: flex-end;
         gap: var(--space-3);
-        margin-top: var(--space-3);
         flex-wrap: wrap;
     }
-    .wave-create-bar platform-field { flex: 1 1 240px; max-width: 360px; }
+    .control-row platform-field,
+    .control-row platform-searchable-combobox {
+        --field-pill-compact-radius: var(--radius-full);
+    }
+    .control-row platform-field.grow { flex: 1 1 240px; max-width: 360px; }
+    .control-row.wave-create-bar { margin-top: var(--space-3); }
+    .control-row.decision-apply platform-field { min-width: 160px; }
 
     @media (max-width: 767px) {
         .wrap { padding: var(--space-3); }
         .toolbar platform-modal-search-field { max-width: none; }
         .toolbar platform-searchable-combobox { max-width: none; flex: 1 1 100%; }
-        .decision-apply { flex-direction: column; align-items: stretch; }
-        .wave-create-bar platform-field { max-width: none; }
+        .control-row.decision-apply { flex-direction: column; align-items: stretch; }
+        .control-row platform-field.grow { max-width: none; }
     }
 `;

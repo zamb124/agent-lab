@@ -558,6 +558,7 @@ export const stockLotCreateOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/lots' },
+    onSuccess: (ctx) => { rerunLastRequest(ctx, stockLotsListOp); },
 });
 
 export const stockUomsListOp = createAsyncOp({

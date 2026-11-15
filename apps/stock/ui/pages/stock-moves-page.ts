@@ -101,19 +101,19 @@ export class StockMovesPage extends PlatformPage {
             <div class="wrap">
                 <page-header title=${this.t('moves.title')} dense></page-header>
                 <div class="toolbar">
-                    <platform-searchable-combobox compact
+                    <platform-searchable-combobox density="dense"
                         .label=${this.t('report.warehouse')}
                         .value=${str('warehouse_id')}
                         .options=${[{ value: '', label: this.t('report.all_warehouses') }, ...this._combo(this._warehouses.items, 'warehouse_id')]}
                         @change=${(e: CustomEvent) => this._apply({ warehouse_id: typeof e.detail.value === 'string' && e.detail.value !== '' ? e.detail.value : null })}
                     ></platform-searchable-combobox>
-                    <platform-searchable-combobox compact
+                    <platform-searchable-combobox density="dense"
                         .label=${this.t('moves.location')}
                         .value=${str('location_id')}
                         .options=${[{ value: '', label: '—' }, ...this._combo(this._locations.items, 'location_id')]}
                         @change=${(e: CustomEvent) => this._apply({ location_id: typeof e.detail.value === 'string' && e.detail.value !== '' ? e.detail.value : null })}
                     ></platform-searchable-combobox>
-                    <platform-searchable-combobox compact
+                    <platform-searchable-combobox density="dense"
                         .label=${this.t('report.product')}
                         .value=${str('product_id')}
                         .options=${[{ value: '', label: this.t('report.all_products') }, ...this._combo(this._products.items, 'product_id')]}

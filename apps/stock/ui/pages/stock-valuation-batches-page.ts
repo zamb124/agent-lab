@@ -226,7 +226,7 @@ export class StockValuationBatchesPage extends PlatformPage {
                         @change=${(e: CustomEvent) => this._onSearchInput(e)}
                     ></platform-modal-search-field>
                     <platform-searchable-combobox
-                        compact
+                        density="dense"
                         .value=${this._warehouseId}
                         .options=${this._warehouseOptions()}
                         .placeholder=${this.t('valuation.filter_warehouse')}

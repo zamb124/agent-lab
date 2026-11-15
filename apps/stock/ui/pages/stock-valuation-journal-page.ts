@@ -471,7 +471,7 @@ export class StockValuationJournalPage extends PlatformPage {
                         @change=${(e: CustomEvent) => this._onSearchInput(e)}
                     ></platform-modal-search-field>
                     <platform-searchable-combobox
-                        compact
+                        density="dense"
                         .value=${this._kind}
                         .options=${this._kindOptions()}
                         .placeholder=${this.t('valuation.filter_kind')}
@@ -482,7 +482,7 @@ export class StockValuationJournalPage extends PlatformPage {
                         }}
                     ></platform-searchable-combobox>
                     <platform-searchable-combobox
-                        compact
+                        density="dense"
                         .value=${this._warehouseId}
                         .options=${this._warehouseOptions()}
                         .placeholder=${this.t('valuation.filter_warehouse')}

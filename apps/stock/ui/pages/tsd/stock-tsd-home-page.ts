@@ -85,6 +85,7 @@ export class StockTsdHomePage extends PlatformPage {
     private _draining = false;
     private _drainCooldownUntil = 0;
     private _outboxOpen = false;
+    private _manualOpen = false;
     private readonly _cameraSupported = tsdCameraScanSupported();
 
     static override styles = [
@@ -633,6 +634,28 @@ export class StockTsdHomePage extends PlatformPage {
                 font-size: var(--tsd-text-body);
                 color: var(--text-secondary);
             }
+            /* Ручной ввод — скрытая строка: нужна редко (битая этикетка,
+               сломан сканер), место на экране занимает постоянно.
+               Тоггл приоткрывает её по требованию. */
+            .manual-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                min-height: 44px;
+                border: none;
+                border-radius: var(--radius-xl);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .manual-toggle:active {
+                background: var(--bg-secondary);
+                color: var(--text-secondary);
+            }
             .manual {
                 display: flex;
                 gap: var(--space-3);
@@ -674,6 +697,14 @@ export class StockTsdHomePage extends PlatformPage {
                 to { opacity: 0; }
             }
             platform-empty-state { margin-top: var(--space-4); }
+            /* Колонка run растягивается на высоту обёртки — док слайдера
+               коммита прижат к нижней кромке даже при коротком списке. */
+            stock-tsd-run {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
         `,
     ];
 
@@ -1472,61 +1503,83 @@ export class StockTsdHomePage extends PlatformPage {
         `;
     }
 
+    /** Ручной ввод — редкий инструмент: строка скрыта, тоггл открывает
+     *  и сразу даёт фокус — оператор печатает код без лишнего тапа. */
+    private _toggleManual(): void {
+        this._manualOpen = !this._manualOpen;
+        this.requestUpdate();
+        if (this._manualOpen) {
+            void this.updateComplete.then(() => {
+                this.renderRoot.querySelector<HTMLInputElement>('.manual-input')?.focus();
+            });
+        }
+    }
+
     private _renderReady(warehouseName: string, context: StockTsdContextState): TemplateResult {
         const session = this._sessionSel.value;
         const running = session.context !== null;
         return html`
-            <div class="head">
-                <div class="head-icon"><platform-icon name="building" size="26"></platform-icon></div>
-                <div>
-                    <h1>${warehouseName}</h1>
-                    <p class="sub">${this.t('home.warehouse_active')}</p>
+            ${running ? '' : html`
+                <div class="head">
+                    <div class="head-icon"><platform-icon name="building" size="26"></platform-icon></div>
+                    <div>
+                        <h1>${warehouseName}</h1>
+                        <p class="sub">${this.t('home.warehouse_active')}</p>
+                    </div>
+                    <button
+                        class="head-btn"
+                        title=${this.t('bottom_nav.profile')}
+                        aria-label=${this.t('bottom_nav.profile')}
+                        @click=${() => this.openBottomSheet('platform.service_switcher', null)}
+                    ><platform-icon name="user" size="22"></platform-icon></button>
                 </div>
-                <button
-                    class="head-btn"
-                    title=${this.t('bottom_nav.profile')}
-                    aria-label=${this.t('bottom_nav.profile')}
-                    @click=${() => this.openBottomSheet('platform.service_switcher', null)}
-                ><platform-icon name="user" size="22"></platform-icon></button>
-            </div>
-            ${this._renderContextChips(context)}
+                ${this._renderContextChips(context)}
+            `}
             ${this._renderOutbox()}
-            ${this._renderPulse()}
+            ${running ? '' : this._renderPulse()}
             ${this._renderPending()}
             ${running ? html`<stock-tsd-run></stock-tsd-run>` : html`
                 ${this._renderWork()}
                 ${this._renderSession()}
             `}
-            <div class="manual">
-                <input
-                    class="manual-input"
-                    type="text"
-                    inputmode="text"
-                    data-canon="search-as-you-type"
-                    autocomplete="off"
-                    placeholder=${this.t('home.manual_placeholder')}
-                    @keydown=${(e: KeyboardEvent) => {
-                        if (e.key === 'Enter') {
-                            this._scanInput?.submit((e.target as HTMLInputElement).value);
-                            (e.target as HTMLInputElement).value = '';
-                        }
-                    }}
-                >
-                <button
-                    class="manual-btn"
-                    ?disabled=${this._scanStep.busy}
-                    @click=${(e: Event) => {
-                        const input = (e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement;
-                        this._scanInput?.submit(input.value);
-                        input.value = '';
-                    }}
-                ><platform-icon name="qr-code" size="22"></platform-icon></button>
-                ${this._cameraSupported ? html`
-                    <button class="manual-btn" @click=${() => { this._cameraOpen = true; this.requestUpdate(); }}>
-                        <platform-icon name="image" size="22"></platform-icon>
-                    </button>
-                ` : ''}
-            </div>
+            <button class="manual-toggle"
+                aria-expanded=${this._manualOpen}
+                @click=${() => this._toggleManual()}>
+                <platform-icon name="qr-code" size="16"></platform-icon>
+                ${this.t('home.manual_open')}
+            </button>
+            ${this._manualOpen ? html`
+                <div class="manual">
+                    <input
+                        class="manual-input"
+                        type="text"
+                        inputmode="text"
+                        data-canon="search-as-you-type"
+                        autocomplete="off"
+                        placeholder=${this.t('home.manual_placeholder')}
+                        @keydown=${(e: KeyboardEvent) => {
+                            if (e.key === 'Enter') {
+                                this._scanInput?.submit((e.target as HTMLInputElement).value);
+                                (e.target as HTMLInputElement).value = '';
+                            }
+                        }}
+                    >
+                    <button
+                        class="manual-btn"
+                        ?disabled=${this._scanStep.busy}
+                        @click=${(e: Event) => {
+                            const input = (e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement;
+                            this._scanInput?.submit(input.value);
+                            input.value = '';
+                        }}
+                    ><platform-icon name="qr-code" size="22"></platform-icon></button>
+                    ${this._cameraSupported ? html`
+                        <button class="manual-btn" @click=${() => { this._cameraOpen = true; this.requestUpdate(); }}>
+                            <platform-icon name="image" size="22"></platform-icon>
+                        </button>
+                    ` : ''}
+                </div>
+            ` : ''}
             <stock-tsd-camera-scanner
                 ?active=${this._cameraOpen}
                 @tsd-scan=${(e: CustomEvent<{ code: string }>) => { this._cameraOpen = false; this._scanInput?.submit(e.detail.code); }}
