@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -58,10 +59,12 @@ from apps.stock.models.scan import (
     ScanResolution,
     ScanStepResult,
     scan_commit_ready,
+    scan_lot,
     scan_quantity,
     scan_step,
 )
 from apps.stock.services.barcode_service import BarcodeService
+from apps.stock.services.catalog_service import StockCatalogService
 from apps.stock.services.move_engine import StockMoveEngine
 from core.catalog.models import CatalogProduct, CatalogUom
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
@@ -98,6 +101,13 @@ _LOCATION_ENTITIES = frozenset(
 """Сущности скана, разворачивающиеся в строку ``stock_locations``."""
 
 
+def _to_datetime(value: date | None) -> datetime | None:
+    """Дата с этикетки → точка времени (конец дня UTC — «годен до»)."""
+    if value is None:
+        return None
+    return datetime.combine(value, time.max, tzinfo=timezone.utc)
+
+
 def _location_slots(ctx: ScanContext) -> frozenset[str]:
     """Id локаций, уже лежащие в слотах контекста."""
     return frozenset(
@@ -114,9 +124,11 @@ class ScanService:
         self,
         barcode_service: BarcodeService,
         move_engine: StockMoveEngine,
+        catalog_service: StockCatalogService,
     ) -> None:
         self._barcode: BarcodeService = barcode_service
         self._moves: StockMoveEngine = move_engine
+        self._catalog: StockCatalogService = catalog_service
 
     async def resolve(
         self, *, company_id: str, barcode: str
@@ -136,6 +148,8 @@ class ScanService:
             barcode=barcode,
             serial=parsed.serial,
             quantity=parsed.quantity or parsed.weight_kg,
+            lot_name=parsed.lot_name,
+            expiration_date=parsed.expiration_date,
         )
         if kind == ScanEntityKind.LOT:
             lot = await StockLot.by_id(company_id, result.entity_id)
@@ -462,6 +476,70 @@ class ScanService:
         """Числовой ввод количества на шаге ``quantity``."""
         return scan_quantity(context, quantity)
 
+    def lot(
+        self,
+        *,
+        context: ScanContext,
+        lot_name: str | None,
+        serial: str | None,
+        expiration_date: date | None,
+    ) -> ScanStepResult:
+        """Ручной ввод партии/серийника/срока годности с этикетки."""
+        return scan_lot(
+            context,
+            lot_name=lot_name,
+            serial=serial,
+            expiration_date=expiration_date,
+        )
+
+    async def _resolve_line_lots(
+        self,
+        *,
+        company_id: str,
+        drafts: list[ScanLineDraft],
+        operation_type: StockOperationType | None,
+    ) -> list[ScanLineDraft]:
+        """Имена партий/серийников из контекста → ``lot_id`` на строках.
+
+        Политика типа операции: ``create_lots`` разрешает завести
+        новую партию по имени/серийнику с этикетки, ``use_existing_lots``
+        — принять уже зарегистрированную. Без типа операции (perесчёт
+        без наряда) обе ветки разрешены: настройки нет — блокировать
+        физический факт нечем.
+        """
+        resolved: list[ScanLineDraft] = []
+        for draft in drafts:
+            name = draft.lot_name or draft.serial
+            if draft.lot_id is not None or name is None:
+                resolved.append(draft)
+                continue
+            lot = await StockLot.by_product_and_name(
+                company_id, draft.product_id, name
+            )
+            if lot is None:
+                if operation_type is not None and not operation_type.create_lots:
+                    raise PlatformConflictError(
+                        "Lot creation is not allowed by operation type",
+                        error_code="lot_create_denied",
+                    )
+                lot = await self._catalog.create_lot(
+                    company_id=company_id,
+                    product_id=draft.product_id,
+                    name=name,
+                    barcode=None,
+                    expiration_at=_to_datetime(draft.expiration_date),
+                )
+            elif (
+                operation_type is not None
+                and not operation_type.use_existing_lots
+            ):
+                raise PlatformConflictError(
+                    "Existing lots are not allowed by operation type",
+                    error_code="lot_use_existing_denied",
+                )
+            resolved.append(replace(draft, lot_id=lot.lot_id))
+        return resolved
+
     async def commit(
         self,
         *,
@@ -495,20 +573,30 @@ class ScanService:
                 "Move not found", error_code="move_not_found"
             )
         ship_all = context.flow == ScanFlow.SHIP
-        if ship_all:
-            # Отгрузка без пересканирования позиций — привилегия плеча
-            # «ship»: контекст приходит с клиента, право проверяем по
-            # типу операции, а не по заявлению контекста.
+        operation_type: StockOperationType | None = None
+        if ship_all or any(
+            draft.lot_id is None and (draft.lot_name or draft.serial)
+            for draft in context.lines
+        ):
             operation_type = (
                 await StockOperationType.by_id(company_id, move.operation_type_id)
                 if move.operation_type_id is not None
                 else None
             )
+        if ship_all:
+            # Отгрузка без пересканирования позиций — привилегия плеча
+            # «ship»: контекст приходит с клиента, право проверяем по
+            # типу операции, а не по заявлению контекста.
             if operation_type is None or operation_type.scan_flow != ScanFlow.SHIP:
                 raise PlatformConflictError(
                     "Move is not executable as a ship leg",
                     error_code="scan_ship_denied",
                 )
+        drafts = await self._resolve_line_lots(
+            company_id=company_id,
+            drafts=list(context.lines),
+            operation_type=operation_type,
+        )
         container_move: tuple[str, str] | None = None
         if context.container_id is not None and context.dest_id is not None:
             container_move = (context.container_id, context.dest_id)
@@ -531,7 +619,7 @@ class ScanService:
                 company_id=company_id,
                 move_id=move.move_id,
                 warehouse_id=move.warehouse_id,
-                drafts=list(context.lines),
+                drafts=drafts,
                 ship_all=ship_all,
                 container_move=container_move,
                 owner_entity_id=None,
@@ -580,9 +668,6 @@ class ScanService:
                     err.value if err is not None else ScanError.NOTHING_TO_COMMIT.value
                 ),
             )
-        by_product: dict[str, list[ScanLineDraft]] = {}
-        for draft in context.lines:
-            by_product.setdefault(draft.product_id, []).append(draft)
         op_types = await StockOperationType.list_for_warehouse_by_code_asc(
             company_id, warehouse_id
         )
@@ -593,6 +678,11 @@ class ScanService:
             raise PlatformNotFoundError(
                 "Operation type not found", error_code="operation_type_not_found"
             )
+        resolved_drafts = await self._resolve_line_lots(
+            company_id=company_id,
+            drafts=list(context.lines),
+            operation_type=operation_type,
+        )
         specs: list[StockMoveSpec] = []
         for product_id, product_drafts in by_product.items():
             product = await CatalogProduct.by_id(company_id, product_id)
@@ -709,12 +799,17 @@ class ScanService:
                 "Scan count has nothing to commit",
                 error_code=ScanError.NOTHING_TO_COMMIT.value,
             )
+        count_lines = await self._resolve_line_lots(
+            company_id=company_id,
+            drafts=list(context.lines),
+            operation_type=None,
+        )
 
         async def body(_scope: LaneScope) -> LaneOutcome[_QuantIds]:
             quant_ids: list[str] = []
             counted: set[tuple[str, str, str | None, str | None]] = set()
             count_location_ids = sorted(
-                {ln.location_id for ln in context.lines if ln.location_id}
+                {ln.location_id for ln in count_lines if ln.location_id}
             )
             count_locations = await StockLocation.found_in_company_by_ids(
                 company_id, count_location_ids

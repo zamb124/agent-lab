@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
@@ -90,6 +91,10 @@ class ScanResolution:
     quantity: Decimal | None = None
     packaging_id: str | None = None
     packaging_qty: Decimal | None = None
+    lot_name: str | None = None
+    """GS1 (10) — имя партии, когда код нёс её, но партия ещё не создана."""
+    expiration_date: date | None = None
+    """GS1 (17) — срок годности из этикетки."""
 
 
 @dataclass(frozen=True)
@@ -108,6 +113,10 @@ class ScanLineDraft:
     container_id: str | None = None
     packaging_id: str | None = None
     owner_entity_id: str | None = None
+    lot_name: str | None = None
+    """Имя партии для заведения на приёмке, когда ``lot_id`` ещё нет."""
+    expiration_date: date | None = None
+    """Срок годности новой партии (manual/GS1-ввод)."""
 
 
 class ScanError(StrEnum):
@@ -153,6 +162,9 @@ class ScanContext:
     container_id: str | None = None
     lines: tuple[ScanLineDraft, ...] = ()
     owner_entity_id: str | None = None
+    lot_name: str | None = None
+    """Введённое имя партии — заводится на коммите по политике типа операции."""
+    expiration_date: date | None = None
 
 
 # --- машина состояний --------------------------------------------------------
@@ -284,6 +296,8 @@ def _apply_resolution(
                 product_id=product_id,
                 lot_id=lot_id or ctx.lot_id,
                 serial=serial or ctx.serial,
+                lot_name=res.lot_name or ctx.lot_name,
+                expiration_date=res.expiration_date or ctx.expiration_date,
                 quantity=(
                     ctx.quantity
                     if ctx.flow == ScanFlow.COUNT and serial is None
@@ -332,6 +346,8 @@ def _emit_line(ctx: ScanContext) -> ScanContext:
         container_id=None,
         packaging_id=ctx.packaging_id,
         owner_entity_id=ctx.owner_entity_id,
+        lot_name=ctx.lot_name,
+        expiration_date=ctx.expiration_date,
     )
     return replace(
         ctx,
@@ -341,6 +357,8 @@ def _emit_line(ctx: ScanContext) -> ScanContext:
         serial=None,
         quantity=None,
         packaging_id=None,
+        lot_name=None,
+        expiration_date=None,
         step=ScanStep.REVIEW,
     )
 
@@ -478,6 +496,36 @@ def scan_quantity(ctx: ScanContext, quantity: Decimal) -> ScanStepResult:
         if ctx.flow != ScanFlow.SHIP:
             ctx2 = _emit_line(ctx2)
     return ScanStepResult(ctx2)
+
+
+def scan_lot(
+    ctx: ScanContext,
+    *,
+    lot_name: str | None,
+    serial: str | None,
+    expiration_date: date | None,
+) -> ScanStepResult:
+    """Ручной ввод партии/серийника/срока — поля не из штрихкода.
+
+    Допустимо, когда товар уже распознан (слот ``product_id`` занят) и
+    партия ещё не задана сканом: на приёмке партии могут не быть
+    нанесены на упаковку — оператор переписывает номер и срок с
+    бумажной этикетки. Заведение партии — на коммите, по политике
+    ``create_lots``/``use_existing_lots`` типа операции.
+    """
+    if ctx.product_id is None:
+        return ScanStepResult(ctx, ScanError.UNEXPECTED_STEP, "product")
+    name = lot_name or serial
+    if name is None or name.strip() == "":
+        return ScanStepResult(ctx, ScanError.ENTITY_MISMATCH, "lot_name")
+    return ScanStepResult(
+        replace(
+            ctx,
+            lot_name=name.strip(),
+            serial=serial or ctx.serial,
+            expiration_date=expiration_date or ctx.expiration_date,
+        )
+    )
 
 
 def scan_commit_ready(ctx: ScanContext) -> ScanError | None:
