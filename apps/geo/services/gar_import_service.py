@@ -224,14 +224,16 @@ def _parse_local(path: str, region_code: str) -> _ParsedArchive:
         return _parse_archive(archive, region_code)
 
 
-def _parse_remote(url: str, region_code: str) -> _ParsedArchive:
+def _parse_remote(
+    url: str, region_code: str, *, timeout: float
+) -> _ParsedArchive:
     """Разбор zip по HTTP Range: central directory + только members региона.
 
     Полный ``gar_xml.zip`` (~54 GiB) на диск не скачивается — remotezip читает
     каталог архива и байтовые диапазоны выбранных файлов. Это устраняет и
     расход PVC, и cgroup-OOM на dirty page cache при стриминге записи.
     """
-    with RemoteZip(url) as archive:
+    with RemoteZip(url, timeout=timeout) as archive:
         return _parse_archive(archive, region_code)
 
 
@@ -417,7 +419,12 @@ class GarImportService:
                 _parse_local, url.removeprefix("file://"), code
             )
         else:
-            parsed = await asyncio.to_thread(_parse_remote, url, code)
+            parsed = await asyncio.to_thread(
+                _parse_remote,
+                url,
+                code,
+                timeout=self._settings.gar_http_timeout_seconds,
+            )
         state, removed_guids = self._merge_state(region, parsed, mode=mode)
         return await self._match_and_apply(
             region=region,

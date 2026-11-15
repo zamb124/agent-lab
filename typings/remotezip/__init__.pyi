@@ -17,4 +17,5 @@ class RemoteZip(ZipFile):
         session: Session | None = None,
         fetcher: type[RemoteFetcher] | None = None,
         support_suffix_range: bool = True,
+        timeout: float | None = None,
     ) -> None: ...
