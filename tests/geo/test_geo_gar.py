@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import gc
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,9 +23,6 @@ from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
 from apps.geo.services.gar_import_service import (
     GarImportService,
     _iter_row_attrs,  # pyright: ignore[reportPrivateUsage]
-)
-from tests.profiling.resources import (
-    _rss_peak_mb,  # pyright: ignore[reportPrivateUsage]
 )
 
 _EMULATOR = "http://127.0.0.1:18101/WebServices/Public"
@@ -203,11 +201,13 @@ async def test_gar_broken_delta_chain_falls_back_to_full(
 
 
 def test_iter_row_attrs_bounded_memory(tmp_path: Path) -> None:
-    """Парсер не копит очищенные рядки в корне: полмиллиона строк — плоский RSS.
+    """Парсер не копит очищенные рядки в корне: живых объектов константно.
 
     Регрессия: ``element.clear()`` оставлял пустой узел в children корня —
     ~160B на строку × миллионы строк иерархии = гигабайты мёртвых объектов
-    и OOMKill geo-worker на полной выгрузке Москвы.
+    и OOMKill geo-worker на полной выгрузке Москвы. RSS-замер нестабилен
+    под нагрузкой соседних тестов — инвариант считается по живым объектам
+    GC внутри цикла: shells растут 1:1 со строками только при дефекте.
     """
     rows = 500_000
     member = tmp_path / "hier.xml"
@@ -218,10 +218,15 @@ def test_iter_row_attrs_bounded_memory(tmp_path: Path) -> None:
                 f'<ITEM ID="{i}" OBJECTID="{i}" PATH="1.{i}"/>'.encode()
             )
         _ = fh.write(b"</ITEMS>")
-    peak_before = _rss_peak_mb()
+    _ = gc.collect()
+    objects_before = len(gc.get_objects())
+    consumed = 0
     with member.open("rb") as stream:
-        assert sum(1 for _ in _iter_row_attrs(stream)) == rows
-    assert _rss_peak_mb() - peak_before < 64
+        for _attrs in _iter_row_attrs(stream):
+            consumed += 1
+            if consumed % 100_000 == 0:
+                assert len(gc.get_objects()) - objects_before < 50_000
+    assert consumed == rows
 
 
 async def test_gar_source_disabled_skips(service: GarImportService) -> None:

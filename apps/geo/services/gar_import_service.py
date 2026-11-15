@@ -31,7 +31,7 @@ import zipfile
 from collections.abc import Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import IO, ClassVar, Protocol
+from typing import IO, ClassVar, NamedTuple, Protocol
 from xml.etree.ElementTree import Element
 
 import defusedxml.ElementTree as _det
@@ -99,8 +99,12 @@ class _ApplyCounts(BaseModel):
     enqueued: int = 0
 
 
-class _HouseRow(BaseModel):
-    """Дом из ``AS_HOUSES``: стабильный ключ — ``OBJECTID``."""
+class _HouseRow(NamedTuple):
+    """Дом из ``AS_HOUSES``: стабильный ключ — ``OBJECTID``.
+
+    NamedTuple, не BaseModel: миллион+ строк Москвы — pydantic-объект
+    стоит ~400B против ~120B у tuple; разница — сотни MiB в пике.
+    """
 
     object_id: int
     guid: str
@@ -124,10 +128,16 @@ class _ParsedArchive(BaseModel):
 
 
 class _GarState(BaseModel):
-    """Персистентное состояние региона: контекст для инкрементальных дельт."""
+    """Персистентное состояние региона: контекст для инкрементальных дельт.
+
+    ``houses`` — ``object_id → guid``: единственное поле дома, нужное
+    состоянию (снятие enrich по guid при деактивации). Полные рядки
+    живут только в разбираемом архиве — хранить их в состоянии значит
+    удвоить постоянную память синка.
+    """
 
     addr_names: dict[int, str] = {}
-    houses: dict[int, _HouseRow] = {}
+    houses: dict[int, str] = {}
     paths: dict[int, str] = {}
 
 
@@ -236,6 +246,7 @@ def _parse_archive(archive: zipfile.ZipFile, region_code: str) -> _ParsedArchive
                 object_id = int(attrs["OBJECTID"])
                 if object_id in house_ids:
                     paths[object_id] = attrs.get("PATH", "")
+    del house_ids
     return _ParsedArchive(
         addr_names=addr_names, houses=houses, paths=paths, gone_houses=gone_houses
     )
@@ -478,25 +489,25 @@ class GarImportService:
         if mode == "full":
             state = _GarState(
                 addr_names=parsed.addr_names,
-                houses={house.object_id: house for house in parsed.houses},
+                houses={house.object_id: house.guid for house in parsed.houses},
                 paths=parsed.paths,
             )
             removed_guids = [
-                house.guid
-                for object_id, house in previous.houses.items()
-                if object_id not in state.houses and house.guid
+                guid
+                for object_id, guid in previous.houses.items()
+                if object_id not in state.houses and guid
             ]
         else:
             state = previous
             state.addr_names.update(parsed.addr_names)
             state.paths.update(parsed.paths)
             for house in parsed.houses:
-                state.houses[house.object_id] = house
+                state.houses[house.object_id] = house.guid
             removed_guids: list[str] = []
             for gone_id in parsed.gone_houses:
                 gone = state.houses.pop(gone_id, None)
-                if gone is not None and gone.guid:
-                    removed_guids.append(gone.guid)
+                if gone:
+                    removed_guids.append(gone)
                 _ = state.paths.pop(gone_id, None)
         state_path.parent.mkdir(parents=True, exist_ok=True)
         _ = state_path.write_text(state.model_dump_json())
