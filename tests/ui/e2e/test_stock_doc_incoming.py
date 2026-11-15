@@ -206,7 +206,7 @@ async def test_stock_incoming_receipt(
     layer_row = page.locator(
         "stock-valuation-journal-page table tbody tr", has_text=product_name
     ).first
-    await expect(layer_row).to_contain_text(re.compile(r"inbound", re.IGNORECASE))
+    await expect(layer_row).to_contain_text(re.compile(r"inbound|приход", re.IGNORECASE))
     await scenario.step(
         "Проверьте запись в оценке запасов",
         page,

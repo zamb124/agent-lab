@@ -60,7 +60,7 @@ async def test_admin_edit_audit_and_revert_address(
 ) -> None:
     page = ui_page_system
     await page.add_init_script(
-        "localStorage.setItem('pwa-banner-dismissed', 'true');"
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');"
     )
     await _open_addresses(page)
     await scenario.step(
@@ -125,7 +125,7 @@ async def test_admin_creates_and_hides_manual_address(ui_page_system: Page) -> N
     """Ручной адрес: create → виден в поиске → hide → пропал из выдачи."""
     page = ui_page_system
     await page.add_init_script(
-        "localStorage.setItem('pwa-banner-dismissed', 'true');"
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');"
     )
     await _open_addresses(page)
 

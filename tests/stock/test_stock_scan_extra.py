@@ -1771,3 +1771,125 @@ class TestScanOpenByLine:
         )
         assert first is not None
         assert first.move_line_id == line.move_line_id
+
+    async def test_first_executable_line_for_transfer_spans_moves(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Документ для оператора — накладная: после закрытия одного
+        move подсказка ведёт на строку соседнего move того же
+        трансфера (накладная разворачивает строки по продукту), а
+        когда открытых строк не осталось — подсказки нет."""
+        env = await _env(stock_di, unique_id)
+        product_b = await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"Widget-B {unique_id}",
+            sku=f"SKU-B-{unique_id}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.NONE,
+            is_storable=True,
+            category="general",
+        )
+        incoming = env.op_types[StockOperationCode.INCOMING]
+        receipt = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=incoming.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("5"),
+                    uom_id=env.uom_id,
+                    unit_price=Decimal("2"),
+                ),
+                StockMoveSpec(
+                    product_id=product_b.product_id,
+                    product_qty=Decimal("5"),
+                    uom_id=env.uom_id,
+                    unit_price=Decimal("2"),
+                ),
+            ],
+        )
+        _ = await env.di.move_engine.confirm_transfer(
+            company_id=env.company_id, transfer_id=receipt.transfer_id
+        )
+        _ = await env.di.move_engine.assign_transfer(
+            company_id=env.company_id, transfer_id=receipt.transfer_id
+        )
+        _ = await env.di.move_engine.validate_transfer(
+            company_id=env.company_id, transfer_id=receipt.transfer_id
+        )
+        outgoing = env.op_types[StockOperationCode.OUTGOING]
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=outgoing.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=None,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal("2"),
+                    uom_id=env.uom_id,
+                ),
+                StockMoveSpec(
+                    product_id=product_b.product_id,
+                    product_qty=Decimal("3"),
+                    uom_id=env.uom_id,
+                ),
+            ],
+        )
+        _ = await env.di.move_engine.confirm_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        _ = await env.di.move_engine.assign_transfer(
+            company_id=env.company_id, transfer_id=transfer.transfer_id
+        )
+        await _set_scan_flow(env, StockOperationCode.OUTGOING, ScanFlow.SHIP)
+        first = await env.di.scan_service.first_executable_line_for_transfer(
+            company_id=env.company_id,
+            transfer_id=transfer.transfer_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            user_id="op",
+        )
+        assert first is not None
+        posted = await env.di.scan_service.commit(
+            company_id=env.company_id,
+            move_id=first.move_id,
+            context=ScanContext(flow=ScanFlow.SHIP),
+            actor_user_id="op",
+        )
+        assert posted.state == StockMoveState.DONE
+        nxt = await env.di.scan_service.first_executable_line_for_transfer(
+            company_id=env.company_id,
+            transfer_id=transfer.transfer_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            user_id="op",
+        )
+        assert nxt is not None
+        assert nxt.move_id != first.move_id
+        posted = await env.di.scan_service.commit(
+            company_id=env.company_id,
+            move_id=nxt.move_id,
+            context=ScanContext(flow=ScanFlow.SHIP),
+            actor_user_id="op",
+        )
+        assert posted.state == StockMoveState.DONE
+        last = await env.di.scan_service.first_executable_line_for_transfer(
+            company_id=env.company_id,
+            transfer_id=transfer.transfer_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            user_id="op",
+        )
+        assert last is None

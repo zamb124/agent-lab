@@ -49,7 +49,7 @@ export const stockScanStepOp = createAsyncOp<StockScanStepResponse>({
     name: 'stock/scan_step',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/scan/step_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/scan/step' },
 });
@@ -58,7 +58,7 @@ export const stockScanQuantityOp = createAsyncOp<StockScanStepResponse>({
     name: 'stock/scan_quantity',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/scan/quantity_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/scan/quantity' },
 });
@@ -94,7 +94,7 @@ export const stockPutawaySuggestOp = createAsyncOp<StockPutawaySuggestResponse>(
     name: 'stock/putaway_suggest',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/putaway/suggest_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/putaway/suggest' },
 });
@@ -103,7 +103,7 @@ export const stockMoveLinesNextOp = createAsyncOp<StockMoveLineNextResponse>({
     name: 'stock/move_lines_next',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 10_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/move_lines/next_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/next' },
 });
@@ -112,7 +112,7 @@ export const stockMoveLinesReleaseOp = createAsyncOp<StockMoveLineClaimResult>({
     name: 'stock/move_lines_release',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 10_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/move_lines/release_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/release' },
 });
@@ -121,7 +121,7 @@ export const stockScanOpenOp = createAsyncOp<StockScanOpenResponse>({
     name: 'stock/scan_open',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/scan/open_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/scan/open' },
 });
@@ -139,7 +139,7 @@ export const stockMoveLinesExceptionOp = createAsyncOp<StockMoveLineExceptionRes
     name: 'stock/move_lines_exception',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/move_lines/report_exception_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/move-lines/report-exception' },
 });
@@ -343,7 +343,7 @@ export const stockResourceLoginOp = createAsyncOp<StockResource>({
     name: 'stock/resource_login',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/resources/login_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/resources/login' },
 });
@@ -352,7 +352,7 @@ export const stockResourcesLogoutOp = createAsyncOp<StockResourceLogoutResult>({
     name: 'stock/resources_logout',
     silent: true,
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     commandType: 'stock/resources/logout_requested',
     restMirror: { method: 'POST', path: '/stock/api/v1/resources/logout' },
 });

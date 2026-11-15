@@ -17,7 +17,7 @@ export const stockProductsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     extraReducer: (state, event) => state,
     extraEffect: (event, ctx): boolean => {
         if (
@@ -42,6 +42,7 @@ export const stockLocationsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
+    // /locations не пагинируется — payload без limit (extra="forbid").
     listQuery: (payload) => payload,
     extraReducer: (state, event) => {
         if (!isPlatformEventType(event, 'stock/container/moved')) return state;
@@ -62,8 +63,8 @@ export const stockWarehousesResource = createResourceCollection({
     idField: 'warehouse_id',
     operations: ['list'],
     transport: 'ws',
-    wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
+    wsTimeoutMs: 15_000,
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     extraReducer: (state, event) => state,
 });
 
@@ -74,7 +75,7 @@ export const stockTransfersResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     extraReducer: (state, event) => {
         if (!isPlatformEventType(event, 'stock/transfer/done')) return state;
         const index = state.items.findIndex((row) => row && row.transfer_id === event.payload.transfer_id);
@@ -93,7 +94,7 @@ export const stockQuantsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: (payload) => payload,
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     extraReducer: (state, event) => {
         if (!isPlatformEventType(event, 'stock/quant/changed')) return state;
         const payload = event.payload;
@@ -115,7 +116,7 @@ export const stockQueueResource: ResourceCollectionFactory<ResourceCollectionSli
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     restMirror: {
         list: { method: 'POST', path: '/stock/api/v1/move-lines/queue' },
     },
@@ -161,7 +162,7 @@ export const stockWavesResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    listQuery: () => ({}),
+    listQuery: (payload) => ({ limit: 500, ...payload }),
     restMirror: {
         list: { method: 'POST', path: '/stock/api/v1/waves/list' },
     },
@@ -205,7 +206,7 @@ export const stockProductCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.product_create_failed',
     commandType: 'stock/products/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/products' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockProductsResource); },
 });
@@ -225,7 +226,7 @@ export const stockCatalogProductUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.product_update_failed',
     commandType: 'stock/catalog_products/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/catalog-products/:product_id' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockProductsResource); },
 });
@@ -236,7 +237,7 @@ export const stockProductUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.product_update_failed',
     commandType: 'stock/products/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/products/:product_id' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockProductsResource); },
 });
@@ -247,7 +248,7 @@ export const stockLocationCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.location_create_failed',
     commandType: 'stock/locations/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/locations' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockLocationsResource); },
 });
@@ -258,7 +259,7 @@ export const stockLocationUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.location_update_failed',
     commandType: 'stock/locations/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/locations/:location_id' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockLocationsResource); },
 });
@@ -269,7 +270,7 @@ export const stockWarehouseCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.warehouse_create_failed',
     commandType: 'stock/warehouses/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/warehouses' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockWarehousesResource); },
 });
@@ -298,7 +299,7 @@ export const stockOperationTypeUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.operation_type_update_failed',
     commandType: 'stock/operation_types/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/operation-types/:operation_type_id' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockOperationTypesListOp); },
 });
@@ -309,7 +310,7 @@ export const stockTransferCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.transfer_create_failed',
     commandType: 'stock/transfers/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/transfers' },
 });
 
@@ -378,7 +379,7 @@ export const stockMoveLineUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.move_line_update_failed',
     commandType: 'stock/move_lines/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/move-lines/:move_line_id' },
 });
 
@@ -388,7 +389,7 @@ export const stockMoveApplyDecisionOp = createAsyncOp({
     errorToastKey: 'stock:toast.move_decision_apply_failed',
     commandType: 'stock/move/apply_decision_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/moves/apply-decision' },
 });
 
@@ -398,7 +399,7 @@ export const stockQuantInventorySetOp = createAsyncOp({
     errorToastKey: 'stock:toast.inventory_set_failed',
     commandType: 'stock/quants/inventory_set_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/quants/inventory-set' },
     onSuccess: (ctx) => {
         reloadLastList(ctx, stockQuantsResource);
@@ -526,7 +527,7 @@ export const stockLotCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.lot_create_failed',
     commandType: 'stock/lots/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/lots' },
 });
 
@@ -545,7 +546,7 @@ export const stockUomCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.uom_create_failed',
     commandType: 'stock/uoms/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/uoms' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockUomsListOp); },
 });
@@ -556,7 +557,7 @@ export const stockUomDeleteOp = createAsyncOp({
     errorToastKey: 'stock:toast.uom_delete_failed',
     commandType: 'stock/uoms/delete_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'DELETE', path: '/stock/api/v1/uoms/{uom_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockUomsListOp); },
 });
@@ -576,7 +577,7 @@ export const stockPackagingCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.packaging_create_failed',
     commandType: 'stock/packagings/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/packagings' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockPackagingsListOp); },
 });
@@ -587,7 +588,7 @@ export const stockPackagingDeleteOp = createAsyncOp({
     errorToastKey: 'stock:toast.packaging_delete_failed',
     commandType: 'stock/packagings/delete_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'DELETE', path: '/stock/api/v1/packagings/{packaging_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockPackagingsListOp); },
 });
@@ -627,7 +628,7 @@ export const stockContainerCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.container_create_failed',
     commandType: 'stock/containers/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/containers' },
     onSuccess: (ctx) => {
         rerunLastRequest(ctx, stockContainersListOp);
@@ -641,7 +642,7 @@ export const stockContainerMoveOp = createAsyncOp({
     errorToastKey: 'stock:toast.container_move_failed',
     commandType: 'stock/containers/move_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/containers/{container_id}/move' },
     onSuccess: (ctx) => {
         rerunLastRequest(ctx, stockContainersListOp);
@@ -674,7 +675,7 @@ export const stockStorageTypeCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.storage_type_create_failed',
     commandType: 'stock/storage_types/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/storage-types' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockStorageTypesListOp); },
 });
@@ -685,7 +686,7 @@ export const stockStorageTypeUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.storage_type_update_failed',
     commandType: 'stock/storage_types/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/storage-types/{storage_type_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockStorageTypesListOp); },
 });
@@ -705,7 +706,7 @@ export const stockContainerTypeCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.container_type_create_failed',
     commandType: 'stock/container_types/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/container-types' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockContainerTypesListOp); },
 });
@@ -716,7 +717,7 @@ export const stockContainerTypeUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.container_type_update_failed',
     commandType: 'stock/container_types/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/container-types/{container_type_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockContainerTypesListOp); },
 });
@@ -736,7 +737,7 @@ export const stockResourceTypeCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.resource_type_create_failed',
     commandType: 'stock/resource_types/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/resource-types' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockResourceTypesListOp); },
 });
@@ -747,7 +748,7 @@ export const stockResourceTypeUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.resource_type_update_failed',
     commandType: 'stock/resource_types/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/resource-types/{resource_type_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockResourceTypesListOp); },
 });
@@ -767,7 +768,7 @@ export const stockResourceCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.resource_create_failed',
     commandType: 'stock/resources/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/resources' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockResourcesListOp); },
 });
@@ -778,7 +779,7 @@ export const stockResourceUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.resource_update_failed',
     commandType: 'stock/resources/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/resources/{resource_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockResourcesListOp); },
 });
@@ -798,7 +799,7 @@ export const stockPutawayRuleCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.putaway_rule_create_failed',
     commandType: 'stock/putaway_rules/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/putaway-rules' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockPutawayRulesListOp); },
 });
@@ -809,7 +810,7 @@ export const stockPutawayRuleUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.putaway_rule_update_failed',
     commandType: 'stock/putaway_rules/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/putaway-rules/{rule_id}' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockPutawayRulesListOp); },
 });
@@ -820,7 +821,7 @@ export const stockPutawayRuleDeleteOp = createAsyncOp({
     errorToastKey: 'stock:toast.putaway_rule_delete_failed',
     commandType: 'stock/putaway_rules/delete_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/putaway-rules/{rule_id}/delete' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockPutawayRulesListOp); },
 });
@@ -840,7 +841,7 @@ export const stockReorderRuleCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.reorder_rule_create_failed',
     commandType: 'stock/reorder_rules/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/reorder-rules' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockReorderRulesListOp); },
 });
@@ -851,7 +852,7 @@ export const stockReorderRuleUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.reorder_rule_update_failed',
     commandType: 'stock/reorder_rules/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/reorder-rules/{rule_id}/active' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockReorderRulesListOp); },
 });
@@ -871,7 +872,7 @@ export const stockRouteCreateOp = createAsyncOp({
     errorToastKey: 'stock:toast.route_create_failed',
     commandType: 'stock/routes/create_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'POST', path: '/stock/api/v1/routes' },
     onSuccess: (ctx) => { rerunLastRequest(ctx, stockRoutesListOp); },
 });
@@ -882,7 +883,7 @@ export const stockWarehouseUpdateOp = createAsyncOp({
     errorToastKey: 'stock:toast.warehouse_update_failed',
     commandType: 'stock/warehouses/update_requested',
     transport: 'ws',
-    wsTimeoutMs: 8_000,
+    wsTimeoutMs: 15_000,
     restMirror: { method: 'PATCH', path: '/stock/api/v1/warehouses/{warehouse_id}' },
     onSuccess: (ctx) => { reloadLastList(ctx, stockWarehousesResource); },
 });
@@ -903,7 +904,7 @@ export const stockLocationCreateForm = createForm({
     },
     initial: {
         warehouse_id: '', name: '', usage: 'bin', parent_id: null,
-        barcode: '', pick_sequence: 0, level: 0,
+        barcode: '', pick_sequence: 0, level: 1,
         allow_negative: false, storage_type_id: null, container_type_id: null,
     },
     submitEvent: stockLocationCreateOp.events.REQUESTED,
@@ -915,7 +916,7 @@ export const stockLocationCreateForm = createForm({
         parent_id: typeof draft.parent_id === 'string' && draft.parent_id !== '' ? draft.parent_id : null,
         barcode: typeof draft.barcode === 'string' && draft.barcode !== '' ? draft.barcode : null,
         pick_sequence: Number(draft.pick_sequence) || 0,
-        level: Number(draft.level) || 0,
+        level: Number(draft.level) || 1,
         allow_negative: draft.allow_negative === true,
         storage_type_id: typeof draft.storage_type_id === 'string' && draft.storage_type_id !== '' ? draft.storage_type_id : null,
         container_type_id: draft.usage === 'container' && typeof draft.container_type_id === 'string' && draft.container_type_id !== '' ? draft.container_type_id : null,

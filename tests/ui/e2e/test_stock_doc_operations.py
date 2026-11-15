@@ -15,22 +15,12 @@ from tests.ui.e2e.stock_e2e_helpers import (
     stock_e2e_nav,
     stock_e2e_op,
     stock_e2e_open,
+    stock_e2e_pick_warehouse,
 )
 from tests.ui.harness import AppUI, ui_set_platform_field
 from tests.ui.scenario_doc import ScenarioRecorder
 
 _DESKTOP = ViewportSize(width=1440, height=900)
-
-
-async def _pick_warehouse(page_el: Any, warehouse_name: str) -> None:
-    """Выбор склада в toolbar-combobox settings-страницы."""
-    combo = page_el.locator(".toolbar platform-searchable-combobox")
-    input_el = combo.locator("input")
-    await input_el.click()
-    await input_el.fill("")
-    option = combo.locator("li.item").filter(has_text=warehouse_name)
-    await expect(option.first).to_be_visible(timeout=15_000)
-    await option.first.click()
 
 
 async def _ctx(page: Page, unique_id: str) -> dict[str, str]:
@@ -652,7 +642,7 @@ async def test_settings_warehouse(
         page, 'stock_storage_types', page_selector="stock-storage-types-page"
     )
     st_page = page.locator("stock-storage-types-page")
-    await _pick_warehouse(st_page, f"Склад-филиал {unique_id[:4]}")
+    await stock_e2e_pick_warehouse(st_page, f"Склад-филиал {unique_id[:4]}")
     await st_page.locator("page-header platform-button[data-create]").first.locator("button").click()
     st_form = page.locator("stock-entity-form-modal")
     await expect(st_form.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -921,7 +911,7 @@ async def test_settings_catalogs(
         page, 'stock_resources', page_selector="stock-resources-page"
     )
     res_page = page.locator("stock-resources-page")
-    await _pick_warehouse(res_page, f"Склад {unique_id[:4]}")
+    await stock_e2e_pick_warehouse(res_page, f"Склад {unique_id[:4]}")
     await res_page.locator(".section platform-button").locator("button").click()
     type_modal = page.locator("stock-entity-form-modal")
     await expect(type_modal.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -998,7 +988,7 @@ async def test_settings_catalogs(
         page, 'stock_putaway_rules', page_selector="stock-putaway-rules-page"
     )
     putaway_page = page.locator("stock-putaway-rules-page")
-    await _pick_warehouse(putaway_page, f"Склад {unique_id[:4]}")
+    await stock_e2e_pick_warehouse(putaway_page, f"Склад {unique_id[:4]}")
     await putaway_page.locator("page-header platform-button[data-create]").locator("button").click()
     put_modal = page.locator("stock-entity-form-modal")
     await expect(put_modal.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -1044,7 +1034,7 @@ async def test_settings_catalogs(
         page, 'stock_reorder_rules', page_selector="stock-reorder-rules-page"
     )
     reorder_page = page.locator("stock-reorder-rules-page")
-    await _pick_warehouse(reorder_page, f"Склад {unique_id[:4]}")
+    await stock_e2e_pick_warehouse(reorder_page, f"Склад {unique_id[:4]}")
     await reorder_page.locator("page-header platform-button[data-create]").locator("button").click()
     re_modal = page.locator("stock-entity-form-modal")
     await expect(re_modal.locator("platform-field").first).to_be_visible(timeout=15_000)
@@ -1085,6 +1075,10 @@ async def test_settings_catalogs(
     batches_page = page.locator("stock-valuation-batches-page")
     batch_row = batches_page.locator("tbody tr").filter(
         has_text=f"Кофе зерновой {unique_id[:4]}"
+    )
+    await ui_set_platform_field(
+        batches_page.locator("[data-valuation-search] platform-field"),
+        f"Кофе зерновой {unique_id[:4]}",
     )
     await expect(batch_row.first).to_be_visible(timeout=15_000)
     await scenario.step(

@@ -14,7 +14,7 @@ from tests.ui.auth_worker_fixtures import (
     create_ui_e2e_owner_token,
 )
 from tests.ui.browser_auth import add_auth_token_cookie
-from tests.ui.centrifugo_ws_bridge import install_centrifugo_ws_bridge
+from tests.ui.centrifugo_ws_proxy import ensure_centrifugo_ws_proxy
 from tests.ui.click_highlight import install_click_highlight_on_context
 from tests.ui.e2e_worker import publish_ui_e2e_worker_env, ui_e2e_scope_headers
 from tests.ui.harness import AppUI
@@ -27,40 +27,13 @@ _FORCE_LIGHT_THEME_INIT_SCRIPT = """
 (() => {
     try {
         window.localStorage.setItem('platform:core:theme', 'light');
-        window.localStorage.setItem('pwa-banner-dismissed', 'true');
+        // Ключ совпадает с DISMISS_KEY pwa-install-banner — баннер не показывается.
+        window.localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');
     } catch (_) {}
     const root = document.documentElement;
     if (root) {
         root.removeAttribute('data-platform-theme-lock');
         root.setAttribute('data-theme', 'light');
-    }
-    // E2E: баннер живёт в shadow DOM PlatformApp — document CSS его не скрывает.
-    const dismissPwaInTree = (root) => {
-        if (!root || typeof root.querySelectorAll !== 'function') return;
-        for (const banner of root.querySelectorAll('pwa-install-banner')) {
-            banner._dismissed = true;
-            banner.removeAttribute('visible');
-            banner.style.setProperty('display', 'none', 'important');
-            banner.style.setProperty('pointer-events', 'none', 'important');
-            if (typeof banner.requestUpdate === 'function') banner.requestUpdate();
-        }
-        for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) dismissPwaInTree(el.shadowRoot);
-        }
-    };
-    const sweepPwa = () => dismissPwaInTree(document);
-    const startObserver = () => {
-        const root = document.documentElement;
-        if (!root) return;
-        sweepPwa();
-        const mo = new MutationObserver(sweepPwa);
-        mo.observe(root, { childList: true, subtree: true });
-    };
-    sweepPwa();
-    if (document.documentElement) {
-        startObserver();
-    } else if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startObserver, { once: true });
     }
 })();
 """
@@ -108,11 +81,17 @@ async def _browser_session() -> Browser:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=True,
-            # Fake media: Sync/LiveKit-звонки в E2E реально подключаются —
-            # без флагов getUserMedia висит на permission-prompt в headless.
+            channel="chromium",
             args=[
+                # Fake media: Sync/LiveKit-звонки в E2E реально подключаются —
+                # без флагов getUserMedia висит на permission-prompt в headless.
                 "--use-fake-device-for-media-stream",
                 "--use-fake-ui-for-media-stream",
+                # CDPScreenshotNewSurface создаёт IOSurface+CVDisplayLink на
+                # каждый page.screenshot — на macOS после нескольких снимков
+                # display-ресурсы исчерпываются, браузер чисто завершается,
+                # драйвер уходит, а ожидающие вызовы к странице висят вечно.
+                "--disable-features=CDPScreenshotNewSurface",
             ],
         )
         yield browser
@@ -196,7 +175,7 @@ async def _new_browser_context(
         # X-Test-Scope: иначе CORS preflight на embed API падает до Allow-Headers.
         context_kwargs["extra_http_headers"] = ui_e2e_scope_headers()
     context = await browser.new_context(**context_kwargs)
-    await install_centrifugo_ws_bridge(context)
+    await ensure_centrifugo_ws_proxy()
     await context.add_init_script(_FORCE_LIGHT_THEME_INIT_SCRIPT)
     # Office share / copy link; без grant headless clipboard.writeText падает.
     # camera/microphone — звонки Sync (fake device подключён на уровне браузера).
@@ -386,22 +365,33 @@ async def stock_ui(
     контрактом, иначе ``warehouses/create`` отвечает ``company_not_initialized``.
     """
     _ = stock_service, _ui_e2e_company_resources
-    from httpx2 import AsyncClient
+    import asyncio
+
+    from httpx2 import AsyncClient, ConnectError
 
     from core.internal_context_headers import build_internal_context_headers
     from tests.ui.e2e_worker import ui_e2e_company_id, ui_e2e_worker_id
 
     company_id = ui_e2e_company_id()
+    headers = build_internal_context_headers(
+        company_id=company_id,
+        user_id=f"ui_owner_{ui_e2e_worker_id()}",
+    )
+    # Под -n4 сток-сервис может временно не принимать соединения на пике
+    # (backlog сокета, старт воркеров) — init идемпотентен, повторяем.
+    resp = None
     async with AsyncClient(base_url="http://localhost:9026", timeout=30.0) as client:
-        resp = await client.post(
-            "/stock/api/v1/internal/company/init",
-            json={"company_id": company_id},
-            headers=build_internal_context_headers(
-                company_id=company_id,
-                user_id=f"ui_owner_{ui_e2e_worker_id()}",
-            ),
-        )
-    assert resp.status_code == 200, resp.text
+        for _ in range(3):
+            try:
+                resp = await client.post(
+                    "/stock/api/v1/internal/company/init",
+                    json={"company_id": company_id},
+                    headers=headers,
+                )
+                break
+            except ConnectError:
+                await asyncio.sleep(1)
+    assert resp is not None and resp.status_code == 200, resp.text if resp else "connect"
     return AppUI(SERVICE_UI_REGISTRY["stock"])
 
 

@@ -26,6 +26,7 @@ import type {
 } from '@platform/lib/events/wire/stock.gen.js';
 import type { StockTsdContextState, StockTsdSessionState } from '../../events/resources/stock-tsd.resource.js';
 import { tsdFormatQty, tsdVirtualLocationKey } from './tsd-format.js';
+import { tsdOpRetry, tsdScanTransition } from './scan/tsd-scan-lock.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
 
@@ -455,11 +456,15 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
 
     private async _openDocument(): Promise<void> {
         const warehouseId = this._contextSel.value.warehouse_id;
-        const opened: StockScanOpenResponse | null = await this._scanOpen.run({
-            warehouse_id: warehouseId,
-            move_id: null,
-            transfer_id: this._entityId,
-        });
+        // Открытие документа переписывает session — скан посреди open
+        // обязан ждать (барьер), а таймаут повторяем: claim идемпотентен.
+        const opened: StockScanOpenResponse | null = await tsdScanTransition(
+            () => tsdOpRetry(() => this._scanOpen.run({
+                warehouse_id: warehouseId,
+                move_id: null,
+                transfer_id: this._entityId,
+            })),
+        );
         if (opened === null) return;
         this._session.runOpened({
             context: opened.context,
@@ -471,12 +476,12 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
 
     private async _bindResource(): Promise<void> {
         const warehouseId = this._contextSel.value.warehouse_id;
-        const resource = await this._resourceLogin.run({
+        const resource = await tsdOpRetry(() => this._resourceLogin.run({
             warehouse_id: warehouseId,
             barcode: this._barcode,
             resource_id: null,
             idempotency_key: null,
-        });
+        }));
         if (resource === null) return;
         this._resource = resource;
         this._context.setResource({ resource_id: resource.resource_id, resource_code: resource.code });

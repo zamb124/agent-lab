@@ -114,7 +114,7 @@ async def test_route_lab_builds_route_and_switches_mode(
     ui_page_system: Page,
 ) -> None:
     page = ui_page_system
-    await page.add_init_script("localStorage.setItem('pwa-banner-dismissed', 'true');")
+    await page.add_init_script("localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');")
     await _open_route_lab(page)
 
     # Чипы режимов: 4 кнопки, car активен по умолчанию.
@@ -192,7 +192,7 @@ async def test_route_lab_matrix_and_order(
     ui_page_system: Page,
 ) -> None:
     page = ui_page_system
-    await page.add_init_script("localStorage.setItem('pwa-banner-dismissed', 'true');")
+    await page.add_init_script("localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');")
     await _open_route_lab(page)
 
     _ = await page.locator("platform-map").first.evaluate(

@@ -23,6 +23,7 @@ import type {
     TsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
 import { TsdScanInput } from './scan/scan-input.js';
+import { tsdOpRetry, tsdScanIdle, tsdScanTransition } from './scan/tsd-scan-lock.js';
 import { tsdFormatQty, tsdLocationName } from './tsd-format.js';
 import { tsdScanFeedback } from './scan/scan-feedback.js';
 import { tsdCameraScanSupported } from './scan/scan-camera.js';
@@ -32,6 +33,7 @@ import './tsd-entity-sheet.js';
 import './tsd-exception-sheet.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
 
 const OUTBOX_OP_LABEL: Record<string, string> = {
@@ -676,7 +678,10 @@ export class StockTsdHomePage extends PlatformPage {
 
     constructor() {
         super();
-        this._warehouses = this.useResource('stock/warehouses', { autoload: true });
+        this._warehouses = this.useResource('stock/warehouses', {
+            autoload: true,
+            autoloadQuery: { limit: 500 },
+        });
         this._context = this.useSlice('stock/tsd_context');
         this._contextSel = this.select((s) => s.stockTsdContext as StockTsdContextState);
         this._scanStep = this.useOp('stock/scan_step');
@@ -861,13 +866,13 @@ export class StockTsdHomePage extends PlatformPage {
     private async _giveWork(): Promise<void> {
         const context = this._contextSel.value;
         try {
-            const response = await this._next.run({
+            const response = await tsdOpRetry(() => this._next.run({
                 warehouse_id: context.warehouse_id,
                 resource_id: context.resource_id === '' ? undefined : context.resource_id,
                 zone_location_id: context.zone_location_id === '' ? undefined : context.zone_location_id,
                 wave_id: context.wave_id === '' ? undefined : context.wave_id,
                 claim: true,
-            });
+            }));
             if (response === null) {
                 throw new Error('stock/move_lines_next: empty response');
             }
@@ -886,12 +891,12 @@ export class StockTsdHomePage extends PlatformPage {
     private async _openLine(line: StockMoveLine): Promise<void> {
         const context = this._contextSel.value;
         try {
-            const opened = await this._scanOpen.run({
+            const opened = await tsdScanTransition(() => tsdOpRetry(() => this._scanOpen.run({
                 warehouse_id: context.warehouse_id,
                 move_id: line.move_id,
                 transfer_id: null,
                 move_line_id: line.move_line_id,
-            });
+            })));
             if (opened === null) {
                 throw new Error('stock/scan_open: empty response');
             }
@@ -911,11 +916,13 @@ export class StockTsdHomePage extends PlatformPage {
     private async _releaseLine(line: StockMoveLine): Promise<void> {
         const context = this._contextSel.value;
         try {
-            await this._release.run({
+            // Отпускание захвата — идемпотентная мутация (повторный
+            // release уже отпущенной строки — серверный no-op).
+            await tsdOpRetry(() => this._release.run({
                 warehouse_id: context.warehouse_id,
                 move_line_ids: [line.move_line_id],
                 idempotency_key: null,
-            });
+            }));
             this._refreshQueue();
         } catch {
             this.toast('home.release_failed', { type: 'error' });
@@ -964,6 +971,10 @@ export class StockTsdHomePage extends PlatformPage {
     }
 
     private async _handleScan(code: string): Promise<void> {
+        // Скан, пришедший посреди коммита/продолжения документа, ждёт
+        // конца перехода — иначе уехал бы в scan_step со старым
+        // контекстом завершённой сессии.
+        await tsdScanIdle();
         const warehouseId = this._contextSel.value.warehouse_id;
         if (warehouseId === '') {
             // Скан без склада — не «ошибка сканера»: подсказываем
@@ -990,12 +1001,14 @@ export class StockTsdHomePage extends PlatformPage {
         }
         const context = session.context ?? { flow: 'inquiry' };
         try {
-            const response = await this._scanStep.run({
+            // scan_step — чистая функция контекста без записей на
+            // backend: повтор после таймаута даёт тот же исход.
+            const response = await tsdOpRetry(() => this._scanStep.run({
                 warehouse_id: warehouseId,
                 context,
                 barcode: code,
                 move_id: session.move_id === '' ? null : session.move_id,
-            });
+            }));
             if (response === null) {
                 throw new Error('stock/scan_step: empty response');
             }
@@ -1047,12 +1060,12 @@ export class StockTsdHomePage extends PlatformPage {
 
     private async _bindResource(code: string, warehouseId: string): Promise<void> {
         try {
-            const resource = await this._resourceLogin.run({
+            const resource = await tsdOpRetry(() => this._resourceLogin.run({
                 warehouse_id: warehouseId,
                 barcode: code,
                 resource_id: null,
                 idempotency_key: null,
-            });
+            }));
             if (resource === null) {
                 throw new Error('stock/resource_login: empty response');
             }
@@ -1088,6 +1101,19 @@ export class StockTsdHomePage extends PlatformPage {
             return html`<div class="center"><platform-spinner size="l"></platform-spinner></div>`;
         }
         if (warehouses.length === 0) {
+            // Отказ загрузки (сеть/таймаут) — не «складов нет»: оператору
+            // показываем ошибку и повтор, иначе он решит, что склад не завели.
+            if (this._warehouses.error !== null) {
+                return html`<platform-empty-state
+                    icon="building"
+                    .title=${this.t('home.warehouses_load_failed')}
+                    .hint=${this._warehouses.error}
+                >
+                    <platform-button
+                        @click=${() => this._warehouses.load(this._warehouses.autoloadQuery)}
+                    >${this.t('home.retry')}</platform-button>
+                </platform-empty-state>`;
+            }
             return html`<platform-empty-state
                 icon="building"
                 .title=${this.t('home.no_warehouses')}
@@ -1196,10 +1222,10 @@ export class StockTsdHomePage extends PlatformPage {
         // подтверждённого logout: иначе ресурс остался бы занят,
         // а оператор видел бы его свободным.
         try {
-            await this._resourceLogout.run({
+            await tsdOpRetry(() => this._resourceLogout.run({
                 warehouse_id: this._contextSel.value.warehouse_id,
                 idempotency_key: null,
-            });
+            }));
             this._context.clearBinding({ kind: 'resource' });
         } catch {
             this._session.scanRejected({ barcode: '', hint: this.t('home.resource_unbind_failed') });

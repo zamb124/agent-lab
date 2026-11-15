@@ -9,7 +9,7 @@ from playwright.async_api import Page
 # Обходит light + shadow: document.querySelectorAll не видит host внутри shadow.
 _DISMISS_PWA_JS = """
 () => {
-    localStorage.setItem('pwa-banner-dismissed', 'true');
+    localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');
     const dismissOne = (banner) => {
         banner._dismissed = true;
         banner.removeAttribute('visible');

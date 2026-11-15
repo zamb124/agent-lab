@@ -1231,7 +1231,7 @@ async def flows_open_editor(
     # Дефолт E2E — канва; Agent Focus — layout="agent" или switch без reload.
     await page.add_init_script(
         f"""() => {{
-            localStorage.setItem('pwa-banner-dismissed', 'true');
+            localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');
             localStorage.setItem({layout_key!r}, {layout!r});
             // Стабильные node_id в scenario (remote_partner, tracker, …) шарят prefs панели
             // между тестами в одном browser context — collapsed:true глушит editor slot.
@@ -2538,7 +2538,7 @@ async def flows_open_preview_share_modal(page: Page) -> Locator:
 
 
 async def flows_open_integrations_modal_from_home(page: Page, flows_ui: AppUI) -> Locator:
-    await page.add_init_script("() => localStorage.setItem('pwa-banner-dismissed', 'true')")
+    await page.add_init_script("() => localStorage.setItem('platform:core:pwa_banner_dismissed', 'true')")
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     home = page.locator("flows-home-page").first
     await expect(home).to_be_visible(timeout=30_000)

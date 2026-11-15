@@ -222,6 +222,38 @@ class ScanService:
             executable = [line for line in executable if line.kind in kinds]
         return executable[0] if executable else None
 
+    async def first_executable_line_for_transfer(
+        self,
+        *,
+        company_id: str,
+        transfer_id: str,
+        warehouse_id: str,
+        user_id: str,
+        kinds: frozenset[StockMoveLineKind] | None = None,
+    ) -> StockMoveLine | None:
+        """Первая исполнимая строка накладной по всем её move'ам склада.
+
+        Накладная — это «документ» с точки зрения оператора: после
+        закрытия строки одного move подсказка обязана вести на
+        следующую строку документа, даже если она живёт в другом
+        move (строки разворачиваются по продукту). Порядок обхода —
+        ``sequence → created_at``, как в очереди заданий.
+        """
+        moves = [
+            m
+            for m in await StockMove.list_for_transfer_by_created_at_asc(
+                company_id, transfer_id
+            )
+            if m.warehouse_id == warehouse_id
+        ]
+        open_lines = await StockMoveLine.list_open_for_moves_by_sequence_created_at_asc(
+            company_id, [m.move_id for m in moves]
+        )
+        executable = self._executable_lines(open_lines, user_id)
+        if kinds is not None:
+            executable = [line for line in executable if line.kind in kinds]
+        return executable[0] if executable else None
+
     async def open_session(
         self,
         *,
@@ -281,27 +313,21 @@ class ScanService:
                     "Move not found", error_code="move_not_found"
                 )
         elif transfer_id is not None:
-            move = None
             # Работу выбираем по первой исполнимой строке в порядке
             # обхода очереди (sequence → created_at): move'ы накладной
             # рождаются пачкой с одним created_at, сортировка по нему
             # недетерминирована.
-            moves = [
-                m
-                for m in await StockMove.list_for_transfer_by_created_at_asc(
-                    company_id, transfer_id
-                )
-                if m.warehouse_id == warehouse_id
-            ]
-            open_lines = await StockMoveLine.list_open_for_moves_by_sequence_created_at_asc(
-                company_id, [m.move_id for m in moves]
+            serving = await self.first_executable_line_for_transfer(
+                company_id=company_id,
+                transfer_id=transfer_id,
+                warehouse_id=warehouse_id,
+                user_id=user_id,
             )
-            executable = self._executable_lines(open_lines, user_id)
-            if executable:
-                serving = executable[0]
-                move = next(
-                    m for m in moves if m.move_id == serving.move_id
-                )
+            move = (
+                await StockMove.by_id(company_id, serving.move_id)
+                if serving is not None
+                else None
+            )
             if move is None:
                 raise PlatformNotFoundError(
                     "No open work on document", error_code="document_no_work"

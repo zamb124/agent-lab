@@ -73,10 +73,12 @@
         "release_failed": "Failed to release the task",
         "resource_bind_failed": "Failed to bind equipment — is it free?",
         "resource_unbind_failed": "Couldn't release equipment — try again",
+        "retry": "Retry",
         "scan_failed": "Scan failed",
         "scan_no_warehouse": "Select a warehouse first",
         "scan_sheet_busy": "Finish the problem report first",
         "warehouse_active": "Warehouse selected",
+        "warehouses_load_failed": "Could not load warehouses",
         "wave_all": "All work (no wave)",
         "wave_empty": "No released waves",
         "zone_not_location": "That is not a location — zone not set"
@@ -126,6 +128,7 @@
         "commit_done": "Task committed",
         "commit_failed": "Commit failed — try again",
         "commit_plain": "Commit",
+        "commit_slide": "Slide to commit",
         "exit": "Exit",
         "expected_hint": "Assignment — scan it to keep moving",
         "flow_container_move": "Container move",
@@ -158,7 +161,6 @@
         "suggest_reason_nearest": "nearest",
         "suggest_reason_rule_match": "by putaway rule",
         "suggest_reason_same_product": "same product already there",
-        "suggest_title": "Put away to:",
-        "commit_slide": "Slide to commit"
+        "suggest_title": "Put away to:"
     }
 }

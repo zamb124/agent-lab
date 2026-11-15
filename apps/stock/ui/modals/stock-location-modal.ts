@@ -96,7 +96,7 @@ export class StockLocationModal extends PlatformFormModal {
                 warehouse_id: warehouseId,
                 parent_id: this.parentId !== '' ? this.parentId : null,
                 name: '', usage: 'bin', barcode: '',
-                pick_sequence: 0, level: 0,
+                pick_sequence: 0, level: 1,
                 allow_negative: false, storage_type_id: null, container_type_id: null,
             });
             this.useEvent(this._createOp.op.events.SUCCEEDED, () => { this.closeAfterSave(); });

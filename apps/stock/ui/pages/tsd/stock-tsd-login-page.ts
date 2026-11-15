@@ -14,6 +14,7 @@ import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import { TsdScanInput } from './scan/scan-input.js';
 import { tsdScanFeedback } from './scan/scan-feedback.js';
 import { tsdCameraScanSupported } from './scan/scan-camera.js';
+import { tsdOpRetry } from './scan/tsd-scan-lock.js';
 import './scan/scan-camera.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
@@ -131,7 +132,7 @@ export class StockTsdLoginPage extends PlatformPage {
         this._error = '';
         this.requestUpdate();
         try {
-            const result = await this._login.run({ code });
+            const result = await tsdOpRetry(() => this._login.run({ code }));
             if (result === null) throw new Error('stock/operator_login: empty response');
             tsdScanFeedback('ok');
             window.location.reload();

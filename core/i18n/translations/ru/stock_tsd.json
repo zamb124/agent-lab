@@ -73,10 +73,12 @@
         "release_failed": "Не удалось отпустить задание",
         "resource_bind_failed": "Не удалось привязать технику — свободна ли она?",
         "resource_unbind_failed": "Не удалось отцепить технику — попробуйте ещё раз",
+        "retry": "Повторить",
         "scan_failed": "Не удалось обработать скан",
         "scan_no_warehouse": "Сначала выберите склад",
         "scan_sheet_busy": "Сначала завершите отчёт о проблеме",
         "warehouse_active": "Склад выбран",
+        "warehouses_load_failed": "Не удалось загрузить склады",
         "wave_all": "Вся работа (без волны)",
         "wave_empty": "Нет выпущенных волн",
         "zone_not_location": "Это не ячейка склада — зона не установлена"
@@ -126,6 +128,7 @@
         "commit_done": "Задание проведено",
         "commit_failed": "Проводка не прошла — повторите",
         "commit_plain": "Провести",
+        "commit_slide": "Смахните для проводки",
         "exit": "Завершить",
         "expected_hint": "Задание — отсканируйте его, чтобы двигаться дальше",
         "flow_container_move": "Перенос контейнера",
@@ -158,7 +161,6 @@
         "suggest_reason_nearest": "ближайшая",
         "suggest_reason_rule_match": "по правилу размещения",
         "suggest_reason_same_product": "там уже лежит этот товар",
-        "suggest_title": "Куда положить:",
-        "commit_slide": "Смахните для проводки"
+        "suggest_title": "Куда положить:"
     }
 }

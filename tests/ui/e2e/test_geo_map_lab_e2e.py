@@ -127,7 +127,7 @@ async def test_geo_map_lab_tour(
     page = ui_page_system
     await page.set_viewport_size(_DESKTOP)
     _ = await page.add_init_script(
-        "localStorage.setItem('pwa-banner-dismissed', 'true');"
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');"
     )
     await _open_map_lab(page)
 

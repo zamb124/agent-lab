@@ -31,6 +31,7 @@ import type {
     StockTsdSessionState,
 } from '../../events/resources/stock-tsd.resource.js';
 import { formatPlatformError } from '@platform/lib/utils/platform-error-message.js';
+import { tsdOpRetry, tsdScanTransition } from './scan/tsd-scan-lock.js';
 import {
     tsdFormatQty,
     tsdLocationName,
@@ -234,7 +235,20 @@ export class StockTsdRun extends PlatformElement {
                 background: var(--accent-subtle);
                 text-align: center;
             }
-            .step-banner.review { border-style: solid; border-color: var(--tsd-ok); background: var(--tsd-ok-subtle); }
+            /* Review — компактная строка: крупный баннер нужен на шаге
+               сканирования (цель на расстоянии руки), на подтверждении
+               он вытеснял бы слайдер за нижнюю кромку экрана. */
+            .step-banner.review {
+                flex-direction: row;
+                justify-content: flex-start;
+                text-align: left;
+                padding: var(--space-3) var(--space-4);
+                border-style: solid;
+                border-color: var(--tsd-ok);
+                background: var(--tsd-ok-subtle);
+            }
+            .step-banner.review .step-icon { width: 44px; height: 44px; flex-shrink: 0; }
+            .step-banner.review .step-title { font-size: var(--text-lg); }
             .step-banner.error { border-color: var(--tsd-error); background: var(--tsd-error-subtle); }
             .step-icon {
                 display: flex;
@@ -595,12 +609,14 @@ export class StockTsdRun extends PlatformElement {
         const context = session.context;
         // «Посчитал — пусто»: ноль — валидный факт только в пересчёте.
         if (value < 0 || (value === 0 && context.flow !== 'count')) return;
-        void this._quantity.run({
+        // Установка количества — драфтовая мутация: повтор ставит то же
+        // значение в тот же шаг, двойного эффекта нет.
+        void tsdOpRetry(() => this._quantity.run({
             warehouse_id: this._warehouseId(),
             context,
             quantity: value,
             move_id: session.move_id === '' ? null : session.move_id,
-        }).then((response) => {
+        })).then((response) => {
             if (response === null) throw new Error('stock/scan_quantity: empty response');
             this._session.stepApplied({
                 context: response.context,
@@ -708,13 +724,14 @@ export class StockTsdRun extends PlatformElement {
             this._suggestItems = [];
             return;
         }
-        void this._putawaySuggest.run({
+        // Чтение подсказки — идемпотентно, таймаут повторяем прозрачно.
+        void tsdOpRetry(() => this._putawaySuggest.run({
             warehouse_id: this._warehouseId(),
             product_id: context.product_id,
             product_qty: null,
             location_dest_id: null,
             limit: 3,
-        }).then((response) => {
+        })).then((response) => {
             this._suggestItems = (response?.items ?? []).filter((item) => item.allowed);
             this.requestUpdate();
         });
@@ -830,12 +847,14 @@ export class StockTsdRun extends PlatformElement {
             enqueue();
             return;
         }
-        void plan.ctl.run(plan.payload).then((result) => {
+        // Коммиты идемпотентны по idempotency_key — таймаут первой
+        // попытки повторяем тем же ключом, двойной проводки не будет.
+        void tsdScanTransition(() => tsdOpRetry(() => plan.ctl.run(plan.payload))).then((result) => {
             if (result !== null) {
                 this.toast('run.commit_done', { type: 'success' });
                 const nextLineId = _commitNextLineId(result);
                 if (session.move_id !== '' && nextLineId !== null) {
-                    void this._continueDoc(session.move_id, nextLineId);
+                    void this._continueDoc(nextLineId);
                     return;
                 }
                 this._session.sessionCleared(null);
@@ -855,14 +874,17 @@ export class StockTsdRun extends PlatformElement {
      *  подсказал следующую исполнимую строку — переоткрываем сессию
      *  на ней (захват + контекст через канонический scan_open), не
      *  выбрасывая оператора в общую очередь между ячейками. */
-    private async _continueDoc(moveId: string, moveLineId: string): Promise<void> {
+    private async _continueDoc(moveLineId: string): Promise<void> {
         try {
-            const opened = await this._scanOpen.run({
+            // Следующая строка документа может жить в другом move
+            // (строки разворачиваются по продукту) — строка сама
+            // определяет move, подсказанный id не нужен.
+            const opened = await tsdScanTransition(() => tsdOpRetry(() => this._scanOpen.run({
                 warehouse_id: this._warehouseId(),
-                move_id: moveId,
+                move_id: null,
                 transfer_id: null,
                 move_line_id: moveLineId,
-            });
+            })));
             if (opened === null) throw new Error('stock/scan_open: empty response');
             this._session.runOpened({
                 context: opened.context,
@@ -886,11 +908,11 @@ export class StockTsdRun extends PlatformElement {
         const lineId = session.expected?.move_line_id;
         const warehouseId = this._contextSel.value.warehouse_id;
         if (session.move_id !== '' && lineId !== null && lineId !== undefined && warehouseId !== '') {
-            void this._release.run({
+            void tsdOpRetry(() => this._release.run({
                 warehouse_id: warehouseId,
                 move_line_ids: [lineId],
                 idempotency_key: null,
-            }).catch(() => undefined);
+            })).catch(() => undefined);
         }
         this._session.sessionCleared(null);
     }
@@ -1025,7 +1047,7 @@ export class StockTsdRun extends PlatformElement {
                 ${this._renderExpected(session)}
                 <div class="step-banner ${review ? 'review' : ''} ${errored ? 'error' : ''}">
                     <div class="step-icon">
-                        <platform-icon name=${review ? 'check' : 'qr-code'} size="34"></platform-icon>
+                        <platform-icon name=${review ? 'check' : 'qr-code'} size=${review ? '24' : '34'}></platform-icon>
                     </div>
                     <p class="step-title">${this.t(`run.banner_${step}`)}</p>
                     ${session.error !== null && session.error !== undefined

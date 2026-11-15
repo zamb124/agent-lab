@@ -1751,6 +1751,7 @@ async def _scan_expected(
     move_id: str | None,
     user_id: str,
     flow: ScanFlow | None = None,
+    transfer_id: str | None = None,
 ) -> StockScanExpected | None:
     """Подсказка экрану из первой исполнимой строки документа.
 
@@ -1758,22 +1759,36 @@ async def _scan_expected(
     строку, захваченную другим (``move_line_claimed`` на коммите).
     ``flow`` сужает подсказку до работы открытой сессии — на смешанном
     движении экран пересчёта не показывает отборочную строку.
+    ``transfer_id`` расширяет подсказку до всей накладной: «документ»
+    для оператора — transfer целиком, а не один его move, поэтому после
+    закрытия строки одного продукта маршрут ведёт на следующий.
     """
-    if move_id is None:
+    if move_id is None and transfer_id is None:
         return None
-    move = await StockMove.by_id(company_id, move_id)
-    if move is None or move.warehouse_id != warehouse_id:
-        raise PlatformNotFoundError(
-            "Move not found", error_code="move_not_found"
+    if move_id is not None:
+        move = await StockMove.by_id(company_id, move_id)
+        if move is None or move.warehouse_id != warehouse_id:
+            raise PlatformNotFoundError(
+                "Move not found", error_code="move_not_found"
+            )
+    kinds = None if flow is None else di.scan_service.kinds_of_flow(flow)
+    if transfer_id is not None:
+        first = await di.scan_service.first_executable_line_for_transfer(
+            company_id=company_id,
+            transfer_id=transfer_id,
+            warehouse_id=warehouse_id,
+            user_id=user_id,
+            kinds=kinds,
         )
-    first = await di.scan_service.first_executable_line(
-        company_id=company_id,
-        move_id=move_id,
-        user_id=user_id,
-        kinds=(
-            None if flow is None else di.scan_service.kinds_of_flow(flow)
-        ),
-    )
+    elif move_id is not None:
+        first = await di.scan_service.first_executable_line(
+            company_id=company_id,
+            move_id=move_id,
+            user_id=user_id,
+            kinds=kinds,
+        )
+    else:
+        first = None
     if first is None:
         return None
     return StockScanExpected(
@@ -1922,6 +1937,7 @@ async def op_scan_commit(
         expected=await _scan_expected(
             di, scope.company_id, warehouse_id, payload.move_id,
             scope.user_id, payload.context.flow,
+            transfer_id=posted.transfer_id,
         ),
     )
 

@@ -22,6 +22,7 @@ import {
     tsdOutboxItem,
 } from '../../events/resources/stock-tsd.resource.js';
 import type { StockTsdContextState } from '../../events/resources/stock-tsd.resource.js';
+import { tsdOpRetry } from './scan/tsd-scan-lock.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
 
@@ -340,14 +341,14 @@ export class StockTsdExceptionSheet extends PlatformBottomSheet {
             this._requestClose();
             return;
         }
-        const result = await this._exception.run({
+        const result = await tsdOpRetry(() => this._exception.run({
             warehouse_id: warehouseId,
             move_line_id: this.move_line_id,
             shortage: this._qty,
             reason: this._reason,
             file_ids: fileIds,
             idempotency_key: this._reportKey,
-        });
+        }));
         if (result === null) return;
         for (const photo of this._photos) URL.revokeObjectURL(photo.preview);
         this._session.sessionCleared(null);

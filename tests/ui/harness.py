@@ -90,29 +90,44 @@ async def ui_click_and_wait_bus_op(
         }""",
         marker,
     )
-    await button.click()
     succeeded = f"{op_name}/succeeded"
     failed = f"{op_name}/failed"
-    result: str | None = None
-    try:
-        handle = await page.wait_for_function(
-            """([m, ok, bad]) => {
-                const types = window[m] || [];
-                if (types.includes(bad)) return 'failed';
-                return types.includes(ok) ? 'ok' : false;
-            }""",
-            arg=[marker, succeeded, failed],
-            timeout=timeout_ms,
-        )
-        result = await handle.json_value()
-    except PlaywrightTimeoutError as exc:
-        seen = await page.evaluate(f"window[{marker!r}] || []")
-        raise AssertionError(
-            f"Клик не привёл к {succeeded}: событий на bus нет — {seen}"
-        ) from exc
-    if result == 'failed':
-        seen = await page.evaluate(f"window[{marker!r}] || []")
-        raise AssertionError(f"Операция завершилась {failed}: события bus — {seen}")
+    for _attempt in range(2):
+        await button.click()
+        result: str | None = None
+        try:
+            handle = await page.wait_for_function(
+                """([m, ok, bad]) => {
+                    const types = window[m] || [];
+                    if (types.includes(bad)) return 'failed';
+                    return types.includes(ok) ? 'ok' : false;
+                }""",
+                arg=[marker, succeeded, failed],
+                timeout=timeout_ms,
+            )
+            result = await handle.json_value()
+        except PlaywrightTimeoutError as exc:
+            seen = await page.evaluate(f"window[{marker!r}] || []")
+            raise AssertionError(
+                f"Клик не привёл к {succeeded}: событий на bus нет — {seen}"
+            ) from exc
+        if result == 'failed':
+            seen = await page.evaluate(f"window[{marker!r}] || []")
+            # Транспортный отказ (ws_disconnected/timeout) — команда могла
+            # не дойти; физически оператор жмёт кнопку ещё раз, когда
+            # соединение вернулось. Доменная ошибка повтору не подлежит.
+            transport_failed = any(
+                "ws_disconnected" in item or '"timeout"' in item
+                for item in seen
+                if isinstance(item, str) and item.startswith("detail:")
+            )
+            if transport_failed and _attempt == 0:
+                # Старый failed в маркере сработает мгновенно — чистим.
+                await page.evaluate(f"window[{marker!r}] = []")
+                await ui_wait_ws_open(page)
+                continue
+            raise AssertionError(f"Операция завершилась {failed}: события bus — {seen}")
+        return
 
 
 async def ui_wait_ws_open(page: Page, *, timeout_ms: int = 30_000) -> None:

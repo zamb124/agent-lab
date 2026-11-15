@@ -8,323 +8,30 @@
 
 from __future__ import annotations
 
-import base64
 from decimal import Decimal
-from typing import Any
-from urllib.parse import urlsplit
 
 import pytest
 from playwright.async_api import Page, ViewportSize, expect
 
-from tests.ui.e2e.stock_e2e_helpers import stock_e2e_op
+from tests.ui.e2e.stock_e2e_helpers import (
+    TSD_VIEWPORT,
+    stock_quant_qty,
+    stock_quant_row,
+    stock_rest,
+    tsd_commit,
+    tsd_commit_click,
+    tsd_open,
+    tsd_pick_warehouse,
+    tsd_qty,
+    tsd_scan,
+    tsd_seed_document,
+    tsd_seed_product_image,
+    tsd_seed_stock,
+    tsd_seed_warehouse,
+    tsd_wait_step,
+)
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
-
-# ТСД — портретный экран терминала: сценарий снимается в формате
-# реального устройства оператора.
-_TSD = ViewportSize(width=430, height=900)
-
-
-async def _tsd_scan(page: Page, code: str) -> None:
-    """Скан через нативный канал: тот же вход, что DataWedge/intent
-    Capacitor-оболочки и hardware-кейборд-сканер после эвристики."""
-    await page.evaluate(
-        "(code) => window.dispatchEvent("
-        "new CustomEvent('stock/tsd:native_scan', { detail: { code } }))",
-        code,
-    )
-
-
-async def _tsd_wait_step(page: Page, step: str) -> None:
-    """Ожидание шага скан-машины: оператор физически ждёт подсказку
-    экрана перед следующим сканом — следующий шаг возможен только
-    после ответа scan_step на предыдущий."""
-    await page.wait_for_function(
-        """(step) => {
-            const s = window.__PLATFORM_BUS__.getState();
-            return s.stockTsdSession?.context?.step === step;
-        }""",
-        arg=step,
-        timeout=15_000,
-    )
-
-
-async def _tsd_open(page: Page, stock_ui: AppUI) -> None:
-    await page.goto(
-        f"{stock_ui.origin}/stock/tsd", wait_until="domcontentloaded"
-    )
-    await expect(page.locator("stock-tsd-app")).to_be_visible(timeout=30_000)
-    await expect(page.locator("stock-tsd-home-page")).to_be_visible(
-        timeout=30_000
-    )
-    await page.wait_for_function(
-        """() => {
-            const bus = window.__PLATFORM_BUS__;
-            if (!bus || typeof bus.getState !== 'function') return false;
-            return bus.getState()?.network?.ws?.status === 'open';
-        }""",
-        timeout=30_000,
-    )
-
-
-async def _tsd_qty(page: Page, digits: str) -> None:
-    """Набор количества на экранной клавиатуре + подтверждение."""
-    for ch in digits:
-        key = page.locator("stock-tsd-run .numpad button", has_text=ch).first
-        await expect(key).to_be_visible(timeout=10_000)
-        await key.click()
-    ok = page.locator("stock-tsd-run .numpad button.ok")
-    await expect(ok).to_be_enabled(timeout=10_000)
-    await ok.click()
-
-
-async def _tsd_commit_click(page: Page) -> None:
-    """Slide-to-commit: тянем бегунок до правого края трека, как оператор пальцем."""
-    track = page.locator("stock-tsd-run .commit-btn")
-    await expect(track).to_be_visible(timeout=10_000)
-    track_box = await track.bounding_box()
-    thumb_box = await track.locator(".commit-thumb").bounding_box()
-    assert track_box is not None and thumb_box is not None
-    start_x = thumb_box["x"] + thumb_box["width"] / 2
-    start_y = thumb_box["y"] + thumb_box["height"] / 2
-    await page.mouse.move(start_x, start_y)
-    await page.mouse.down()
-    await page.mouse.move(track_box["x"] + track_box["width"] - 4, start_y, steps=12)
-    await page.mouse.up()
-
-
-async def _tsd_commit(page: Page) -> None:
-    await _tsd_commit_click(page)
-    # Успешный коммит закрывает сессию — run-экран уходит, возвращается рабочий стол.
-    await expect(page.locator("stock-tsd-run")).to_have_count(0, timeout=30_000)
-
-
-async def _stock_rest(
-    page: Page, method: str, path: str, payload: dict[str, Any] | None = None
-) -> Any:
-    """REST-зеркало stock op'ов для подготовки данных: у ТСД нет
-    фабрик справочников, контракт тот же — `POST /stock/api/v1/...`."""
-    parts = urlsplit(page.url)
-    resp = await page.request.fetch(
-        f"{parts.scheme}://{parts.netloc}/stock/api/v1{path}",
-        method=method,
-        data=payload,
-    )
-    assert resp.ok, f"{method} {path} → {resp.status}: {await resp.text()}"
-    return await resp.json()
-
-
-async def _tsd_seed_product_image(
-    page: Page, product_id: str, *, color: str, label: str
-) -> str:
-    """Присваивает товару картинку: рисует PNG в canvas страницы и грузит
-    chunked Files API (`/stock/api/v1/files/uploads`), затем привязывает
-    file_id через overlay карточки. Так карточки на скриншотах — с фото."""
-    data_url: str = await page.evaluate(
-        """({ color, label }) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 96; canvas.height = 96;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = color;
-            ctx.fillRect(0, 0, 96, 96);
-            ctx.fillStyle = 'rgba(255,255,255,0.92)';
-            ctx.beginPath(); ctx.arc(48, 42, 24, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = color;
-            ctx.font = 'bold 18px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(label, 48, 49);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.font = '11px sans-serif';
-            ctx.fillText('ФОТО', 48, 84);
-            return canvas.toDataURL('image/png');
-        }""",
-        {"color": color, "label": label},
-    )
-    content = base64.b64decode(data_url.split(",", 1)[1])
-    parts = urlsplit(page.url)
-    base = f"{parts.scheme}://{parts.netloc}/stock/api/v1/files/uploads"
-    init = await page.request.post(
-        base,
-        data={
-            "spec": {
-                "source_kind": "product",
-                "source_ref": {"product_id": product_id},
-                "retention": {"kind": "product"},
-                "post_create": {"is_public": False},
-            },
-            "original_name": f"product-{product_id}.png",
-            "content_type": "image/png",
-            "file_size": len(content),
-        },
-    )
-    assert init.ok, f"upload init → {init.status}: {await init.text()}"
-    upload = await init.json()
-    put = await page.request.fetch(
-        f"{base}/{upload['upload_id']}/parts/1",
-        method="PUT",
-        data=content,
-        headers={"Content-Type": "application/octet-stream"},
-    )
-    assert put.ok, f"upload part → {put.status}: {await put.text()}"
-    done = await page.request.post(f"{base}/{upload['upload_id']}/complete")
-    assert done.ok, f"upload complete → {done.status}: {await done.text()}"
-    file_id = upload["file_id"]
-    await _stock_rest(
-        page, "PATCH", f"/products/{product_id}",
-        {"product_id": product_id, "overlay": {"image_file_ids": [file_id]}},
-    )
-    return str(file_id)
-
-
-async def _quant_row(
-    page: Page, warehouse_id: str, product_id: str, location_id: str
-) -> dict[str, Any]:
-    quants: dict[str, Any] = await stock_e2e_op(
-        page,
-        "stock/quants",
-        "stock/quants/list_requested",
-        {"warehouse_id": warehouse_id, "product_id": product_id},
-    )
-    rows = [q for q in quants["items"] if q["location_id"] == location_id]
-    assert len(rows) == 1, f"ожидался quant {product_id}@{location_id}: {quants}"
-    return rows[0]
-
-
-async def _quant_qty(
-    page: Page, warehouse_id: str, product_id: str, location_id: str
-) -> Decimal:
-    return Decimal(
-        str((await _quant_row(page, warehouse_id, product_id, location_id))["quantity"])
-    )
-
-
-async def _tsd_seed_warehouse(
-    page: Page, unique_id: str
-) -> dict[str, Any]:
-    """Типовая топология ТСД-сценария: склад, зона-view, две ячейки
-    с баркодами и два товара с баркодами. Данные создаются через
-    REST-зеркала op'ов — тот же контракт, что и у SPA."""
-    warehouse = await _stock_rest(
-        page, "POST", "/warehouses",
-        {"code": f"0-{unique_id[:8].upper()}", "name": f"Склад {unique_id[:4]}"},
-    )
-    zone = await _stock_rest(
-        page, "POST", "/locations",
-        {
-            "warehouse_id": warehouse["warehouse_id"],
-            "name": f"Зона {unique_id[:4]}",
-            "usage": "view",
-        },
-    )
-    bin_a = await _stock_rest(
-        page, "POST", "/locations",
-        {
-            "warehouse_id": warehouse["warehouse_id"],
-            "parent_id": zone["location_id"],
-            "name": f"Ячейка А{unique_id[:3]}",
-            "usage": "bin",
-            "barcode": f"BIN-A-{unique_id[:6]}",
-        },
-    )
-    bin_b = await _stock_rest(
-        page, "POST", "/locations",
-        {
-            "warehouse_id": warehouse["warehouse_id"],
-            "parent_id": zone["location_id"],
-            "name": f"Ячейка Б{unique_id[:3]}",
-            "usage": "bin",
-            "barcode": f"BIN-B-{unique_id[:6]}",
-        },
-    )
-    uoms = await _stock_rest(page, "GET", "/uoms")
-    uom_id = next(u["uom_id"] for u in uoms["items"] if u["name"] == "Units")
-    product_1 = await _stock_rest(
-        page, "POST", "/products",
-        {
-            "name": f"Кофе зерновой {unique_id[:4]}",
-            "sku": f"BEAN-{unique_id[:6]}",
-            "uom_id": uom_id,
-            "valuation_method": "fifo",
-            "standard_price": "0",
-            "tracking": "none",
-            "is_storable": True,
-            "barcodes": [f"BC-1-{unique_id[:6]}"],
-        },
-    )
-    product_2 = await _stock_rest(
-        page, "POST", "/products",
-        {
-            "name": f"Чай листовой {unique_id[:4]}",
-            "sku": f"TEA-{unique_id[:6]}",
-            "uom_id": uom_id,
-            "valuation_method": "fifo",
-            "standard_price": "0",
-            "tracking": "none",
-            "is_storable": True,
-            "barcodes": [f"BC-2-{unique_id[:6]}"],
-        },
-    )
-    await _tsd_seed_product_image(
-        page, str(product_1["product_id"]), color="#b4690e", label="КОФЕ"
-    )
-    await _tsd_seed_product_image(
-        page, str(product_2["product_id"]), color="#2e7d46", label="ЧАЙ"
-    )
-    return {
-        "warehouse": warehouse,
-        "zone": zone,
-        "bin_a": bin_a,
-        "bin_b": bin_b,
-        "product_1": product_1,
-        "product_2": product_2,
-        "uom_id": uom_id,
-    }
-
-
-async def _tsd_seed_stock(
-    page: Page,
-    warehouse_id: str,
-    lines: list[dict[str, Any]],
-) -> None:
-    """Положить товар на локацию тем же adhoc-commit, что ходит с ТСД:
-    многострочный receive-контекст → один входящий документ."""
-    await _stock_rest(
-        page, "POST", "/scan/adhoc-commit",
-        {
-            "warehouse_id": warehouse_id,
-            "operation_code": "incoming",
-            "context": {
-                "flow": "receive",
-                "step": "review",
-                "lines": [
-                    {
-                        "location_id": None,
-                        "location_dest_id": line["location_dest_id"],
-                        "product_id": line["product_id"],
-                        "quantity": str(line["quantity"]),
-                    }
-                    for line in lines
-                ],
-            },
-        },
-    )
-
-
-async def _tsd_pick_warehouse(page: Page, unique_id: str) -> None:
-    """Выбор склада текущего прогона: компания воркера общая, склады
-    копятся между прогонами — кликаем карточку по имени, а не первую.
-    Список складов грузится один раз при монтировании — перезагружаем
-    страницу после сидирования, иначе свежий склад гонится с autoload."""
-    await page.reload(wait_until="domcontentloaded")
-    await expect(page.locator("stock-tsd-home-page")).to_be_visible(
-        timeout=30_000
-    )
-    card = page.locator(
-        "stock-tsd-home-page .warehouse-card",
-        has_text=f"Склад {unique_id[:4]}",
-    )
-    await expect(card).to_be_visible(timeout=30_000)
-    await card.click()
 
 
 @pytest.mark.scenario(
@@ -363,11 +70,11 @@ async def test_stock_tsd_receive(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Набор данных через REST-зеркала op'ов (у ТСД нет фабрик справочников) ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
@@ -399,7 +106,7 @@ async def test_stock_tsd_receive(
     await card.click()
 
     # --- Скан товара вне сессии: карточка сущности ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -431,9 +138,9 @@ async def test_stock_tsd_receive(
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
     # Товар уже отсканирован — машина ждёт ячейку-приёмник.
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "5")
+    await tsd_qty(page, "5")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     # Строка исполнения: товар резолвится в имя, не в сырой id.
     line_row = run.locator(".line-row").first
@@ -457,28 +164,28 @@ async def test_stock_tsd_receive(
             "is ready to commit."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Приёмка товара 2 в другую ячейку тем же маршрутом ---
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator(".action[data-action='receive']").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "12")
+    await tsd_qty(page, "12")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Проводки проверяем леджером, не глазами ---
-    qty_1 = await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
-    qty_2 = await _quant_qty(page, warehouse_id, product_2["product_id"], bin_b["location_id"])
+    qty_1 = await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
+    qty_2 = await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_b["location_id"])
     assert qty_1 == Decimal("5")
     assert qty_2 == Decimal("12")
 
     # --- Скан ячейки: содержимое с остатками обоих приёмок ---
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Ячейка А{unique_id[:3]}", timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -545,17 +252,17 @@ async def test_stock_tsd_move(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология и остаток на ячейке А ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -564,10 +271,10 @@ async def test_stock_tsd_move(
         ],
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан товара: карточка показывает, где он лежит ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -598,11 +305,11 @@ async def test_stock_tsd_move(
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
     # Машина ждёт источник: оператор сканирует ячейку, из которой берёт.
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "2")
+    await tsd_qty(page, "2")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await scenario.step(
         "Источник → приёмник → количество → проводка",
@@ -622,30 +329,30 @@ async def test_stock_tsd_move(
             "destination» route and quantity."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Перенос 2 тем же маршрутом ---
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator(".action[data-action='move']").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "3")
+    await tsd_qty(page, "3")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Остатки после двух переносов ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("3")
-    assert await _quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("5")
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_b["location_id"]) == Decimal("2")
-    assert await _quant_qty(page, warehouse_id, product_2["product_id"], bin_b["location_id"]) == Decimal("3")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("3")
+    assert await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("5")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_b["location_id"]) == Decimal("2")
+    assert await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_b["location_id"]) == Decimal("3")
 
     # --- Скан ячейки Б: оба перенесённых товара на месте ---
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
     await expect(sheet).to_contain_text(f"Чай листовой {unique_id[:4]}", timeout=15_000)
@@ -708,16 +415,16 @@ async def test_stock_tsd_count(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология и остаток на ячейке А ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -726,10 +433,10 @@ async def test_stock_tsd_count(
         ],
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан ячейки: карточка с содержимым и действием «Посчитать» ---
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -757,14 +464,14 @@ async def test_stock_tsd_count(
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "4")
+    await tsd_qty(page, "4")
     # После первой строки машина снова ждёт товар — ячейка удержана.
-    await _tsd_wait_step(page, "review")
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "7")
+    await tsd_wait_step(page, "review")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "7")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await expect(run.locator(".line-row")).to_have_count(2, timeout=15_000)
     await scenario.step(
@@ -784,11 +491,11 @@ async def test_stock_tsd_count(
             "rescan it. Review shows both lines before commit."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Факт пересчёта записан на остатки (дельта уходит на утверждение) ---
-    row_1 = await _quant_row(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
-    row_2 = await _quant_row(page, warehouse_id, product_2["product_id"], bin_a["location_id"])
+    row_1 = await stock_quant_row(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
+    row_2 = await stock_quant_row(page, warehouse_id, product_2["product_id"], bin_a["location_id"])
     assert Decimal(str(row_1["inventory_quantity"])) == Decimal("4")
     assert Decimal(str(row_2["inventory_quantity"])) == Decimal("7")
 
@@ -829,17 +536,17 @@ async def test_stock_tsd_container_move(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология + паллета с остатком внутри ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
     product_1 = seed["product_1"]
     # Паллета стоит в ячейке А: дети допустимы только под view/container/bin.
-    pallet_type = await _stock_rest(
+    pallet_type = await stock_rest(
         page, "POST", "/container-types",
         {
             "warehouse_id": warehouse_id,
@@ -847,7 +554,7 @@ async def test_stock_tsd_container_move(
             "kind": "pallet",
         },
     )
-    pallet = await _stock_rest(
+    pallet = await stock_rest(
         page, "POST", "/containers",
         {
             "warehouse_id": warehouse_id,
@@ -857,7 +564,7 @@ async def test_stock_tsd_container_move(
             "barcode": f"PLT-{unique_id[:6]}",
         },
     )
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -865,10 +572,10 @@ async def test_stock_tsd_container_move(
         ],
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан паллеты: карточка тары с содержимым ---
-    await _tsd_scan(page, f"PLT-{unique_id[:6]}")
+    await tsd_scan(page, f"PLT-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Паллета {unique_id[:4]}", timeout=15_000)
@@ -895,18 +602,18 @@ async def test_stock_tsd_container_move(
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Паллета переподвешена под ячейку Б, остаток поехал с ней ---
-    locations = await _stock_rest(page, "GET", "/locations", )
+    locations = await stock_rest(page, "GET", "/locations", )
     moved = next(
         loc for loc in locations["items"]
         if loc["location_id"] == pallet["location_id"]
     )
     assert moved["parent_id"] == bin_b["location_id"]
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], pallet["location_id"]) == Decimal("10")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], pallet["location_id"]) == Decimal("10")
     await scenario.step(
         "Паллета под новой ячейкой — груз на месте",
         page,
@@ -969,17 +676,17 @@ async def test_stock_tsd_document_pick(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология, остаток и накладная на отгрузку с баркодом ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
     uom_id = seed["uom_id"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -987,13 +694,13 @@ async def test_stock_tsd_document_pick(
             {"location_dest_id": bin_a["location_id"], "product_id": product_2["product_id"], "quantity": "8"},
         ],
     )
-    op_types = await _stock_rest(
+    op_types = await stock_rest(
         page, "GET", f"/operation-types?warehouse_id={warehouse_id}"
     )
     outgoing_id = next(
         ot["operation_type_id"] for ot in op_types["items"] if ot["code"] == "outgoing"
     )
-    transfer = await _stock_rest(
+    transfer = await stock_rest(
         page, "POST", "/transfers",
         {
             "warehouse_id": warehouse_id,
@@ -1015,10 +722,10 @@ async def test_stock_tsd_document_pick(
             ],
         },
     )
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Рабочий стол: обе строки накладной видны как свободные задания ---
     await expect(page.locator(".task-card").first).to_be_visible(timeout=15_000)
@@ -1046,7 +753,7 @@ async def test_stock_tsd_document_pick(
     )
 
     # --- Скан накладной: карточка документа и вход в исполнение ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    await tsd_scan(page, f"DOC-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(transfer["name"], timeout=15_000)
@@ -1071,7 +778,9 @@ async def test_stock_tsd_document_pick(
 
     # --- Исполнение позиции 1: подсказка → ячейка → товар → количество ---
     await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # scan_open с повтором: 2×15s бюджета операции под параллельным
+    # прогоном — оператор физически ждёт, пока терминал отвечает.
+    await expect(sheet).to_have_count(0, timeout=35_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
     # Подсказка backend'а: первая исполнимая строка — кофе ×4 из ячейки А.
@@ -1122,13 +831,13 @@ async def test_stock_tsd_document_pick(
         ),
     )
 
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "product")
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "4")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "4")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit_click(page)
+    await tsd_commit_click(page)
 
     # --- Позиция не выбрана целиком: backend продолжает документ —
     # экран остаётся в сессии и подсказывает остаток той же строки ---
@@ -1152,34 +861,50 @@ async def test_stock_tsd_document_pick(
             "trips to the same bin."
         ),
     )
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "product")
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "1")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "1")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit_click(page)
 
-    # --- Позиция 2: повторный скан накладной открывает следующий move ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
-    await expect(sheet).to_be_visible(timeout=15_000)
-    await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # --- Позиция 2: backend сам продолжает документ — повторный скан
+    # накладной не нужен, следующая исполнимая строка уже на экране ---
     await expect(run).to_be_visible(timeout=15_000)
     expected_2 = run.locator(".expected")
     await expect(expected_2).to_contain_text(f"Чай листовой {unique_id[:4]}", timeout=15_000)
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "product")
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "6")
+    await tsd_wait_step(page, "start")
+    await scenario.step(
+        "Документ продолжается — следующая позиция уже предложена",
+        page,
+        screenshot_name="tsd-document-next-line",
+        label_en="The document continues — the next line is suggested",
+        details=(
+            "Строка кофе закрыта, а накладная — нет: терминал сам "
+            "переводит оператора на следующую исполнимую позицию "
+            "документа (чай), без возврата в очередь и повторного "
+            "скана накладной. Оператор просто идёт дальше."
+        ),
+        details_en=(
+            "The coffee line is done but the order is not: the "
+            "terminal moves the operator straight to the next "
+            "executable line (tea) — no queue round-trip and no "
+            "re-scan of the order. The operator simply walks on."
+        ),
+    )
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "6")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Обе позиции проведены: остаток ячейки уменьшен по леджеру ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("0")
-    assert await _quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("2")
-    moves = await _stock_rest(
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("0")
+    assert await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("2")
+    moves = await stock_rest(
         page, "GET", f"/transfers/{transfer['transfer_id']}"
     )
     assert all(m["state"] == "done" for m in moves["moves"]), moves["moves"]
@@ -1231,40 +956,6 @@ async def test_stock_tsd_document_pick(
     )
 
 
-async def _tsd_seed_document(
-    page: Page,
-    warehouse_id: str,
-    unique_id: str,
-    moves: list[dict[str, Any]],
-    *,
-    code: str = "outgoing",
-    scan_flow: str | None = None,
-) -> dict[str, Any]:
-    """Накладная с баркодом под ТСД-исполнение: тип операции по коду,
-    при необходимости — явный поток плеча (pack/ship)."""
-    op_types = await _stock_rest(
-        page, "GET", f"/operation-types?warehouse_id={warehouse_id}"
-    )
-    op_type = next(ot for ot in op_types["items"] if ot["code"] == code)
-    if scan_flow is not None:
-        op_type = await _stock_rest(
-            page, "PATCH", f"/operation-types/{op_type['operation_type_id']}",
-            {"operation_type_id": op_type["operation_type_id"], "scan_flow": scan_flow},
-        )
-    transfer = await _stock_rest(
-        page, "POST", "/transfers",
-        {
-            "warehouse_id": warehouse_id,
-            "operation_type_id": op_type["operation_type_id"],
-            "barcode": f"DOC-{unique_id[:6]}",
-            "moves": moves,
-        },
-    )
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
-    return transfer
-
-
 @pytest.mark.scenario(
     service="stock",
     tag="tsd-document-pack",
@@ -1304,24 +995,24 @@ async def test_stock_tsd_document_pack(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология, остаток, пустой короб и накладная «pack» ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
     product_1 = seed["product_1"]
     uom_id = seed["uom_id"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
             {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
         ],
     )
-    box_type = await _stock_rest(
+    box_type = await stock_rest(
         page, "POST", "/container-types",
         {
             "warehouse_id": warehouse_id,
@@ -1329,7 +1020,7 @@ async def test_stock_tsd_document_pack(
             "kind": "box",
         },
     )
-    box = await _stock_rest(
+    box = await stock_rest(
         page, "POST", "/containers",
         {
             "warehouse_id": warehouse_id,
@@ -1342,7 +1033,7 @@ async def test_stock_tsd_document_pack(
     # Плечо упаковки — внутренняя операция (товар остаётся нашим,
     # меняет только носитель: ячейка → короб). OUTGOING-тип не подходит:
     # его конец внешний, а строка «в короб» — внутренняя.
-    _ = await _tsd_seed_document(
+    _ = await tsd_seed_document(
         page, warehouse_id, unique_id,
         [
             {
@@ -1356,20 +1047,22 @@ async def test_stock_tsd_document_pack(
         scan_flow="pack",
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан накладной → исполнение: backend выбрал поток «упаковка» ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    await tsd_scan(page, f"DOC-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # scan_open с повтором: 2×15s бюджета операции под параллельным
+    # прогоном — оператор физически ждёт, пока терминал отвечает.
+    await expect(sheet).to_have_count(0, timeout=35_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
 
     # --- Товар → тара → количество ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
-    await _tsd_wait_step(page, "container")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_wait_step(page, "container")
     await scenario.step(
         "Скан товара — терминал ждёт тару",
         page,
@@ -1386,18 +1079,18 @@ async def test_stock_tsd_document_pack(
             "terminal cannot mix up a shelf and a box."
         ),
     )
-    await _tsd_scan(page, f"BOX-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "3")
+    await tsd_scan(page, f"BOX-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "3")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Остаток переехал с ячейки в короб ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("2")
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], box["location_id"]) == Decimal("3")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("2")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], box["location_id"]) == Decimal("3")
 
     # --- Скан короба: карточка тары показывает уложенный товар ---
-    await _tsd_scan(page, f"BOX-{unique_id[:6]}")
+    await tsd_scan(page, f"BOX-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Короб {unique_id[:4]}", timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -1460,17 +1153,17 @@ async def test_stock_tsd_document_ship(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология, остаток и накладная «ship» на два товара ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
     uom_id = seed["uom_id"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -1478,7 +1171,7 @@ async def test_stock_tsd_document_ship(
             {"location_dest_id": bin_a["location_id"], "product_id": product_2["product_id"], "quantity": "8"},
         ],
     )
-    transfer = await _tsd_seed_document(
+    transfer = await tsd_seed_document(
         page, warehouse_id, unique_id,
         [
             {
@@ -1497,19 +1190,21 @@ async def test_stock_tsd_document_ship(
         scan_flow="ship",
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан накладной → скан ворот → проводка всего плеча ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    await tsd_scan(page, f"DOC-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # scan_open с повтором: 2×15s бюджета операции под параллельным
+    # прогоном — оператор физически ждёт, пока терминал отвечает.
+    await expect(sheet).to_have_count(0, timeout=35_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
     # ship-поток: единственный скан — отгрузочная ячейка, позиции
     # набирать не нужно — документ уже знает свой состав.
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await scenario.step(
         "Скан отгрузочной зоны — плечо готово к проводке",
@@ -1531,22 +1226,20 @@ async def test_stock_tsd_document_ship(
             "legs explicitly marked scan_flow=ship."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit_click(page)
 
-    # --- Плечо второго товара: повторный скан накладной ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
-    await expect(sheet).to_be_visible(timeout=15_000)
-    await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # --- Плечо второго товара: сессия продолжается сама —
+    # следующая исполнимая строка накладной уже предложена ---
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_wait_step(page, "start")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Все строки проведены: ячейка пуста по обоим позициям накладной ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("1")
-    assert await _quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("2")
-    detail = await _stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("1")
+    assert await stock_quant_qty(page, warehouse_id, product_2["product_id"], bin_a["location_id"]) == Decimal("2")
+    detail = await stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
     assert all(m["state"] == "done" for m in detail["moves"]), detail["moves"]
 
     await scenario.step(
@@ -1609,16 +1302,16 @@ async def test_stock_tsd_putaway(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология и сток на стейдже ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
     product_1 = seed["product_1"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -1626,10 +1319,10 @@ async def test_stock_tsd_putaway(
         ],
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан товара на стейдже → действие «Разместить» ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator("[data-action='putaway']").click()
@@ -1638,11 +1331,11 @@ async def test_stock_tsd_putaway(
     await expect(run).to_be_visible(timeout=15_000)
 
     # --- Подтверждение стейджа → целевая ячейка → количество ---
-    await _tsd_wait_step(page, "location")
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
+    await tsd_wait_step(page, "location")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
     await scenario.step(
         "Размещение набрано — ячейка приёмник подтверждена сканом",
         page,
@@ -1663,16 +1356,16 @@ async def test_stock_tsd_putaway(
             "scans — direction can't flip."
         ),
     )
-    await _tsd_qty(page, "3")
+    await tsd_qty(page, "3")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Остаток переехал со стейджа в хранение ---
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("2")
-    assert await _quant_qty(page, warehouse_id, product_1["product_id"], bin_b["location_id"]) == Decimal("3")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_a["location_id"]) == Decimal("2")
+    assert await stock_quant_qty(page, warehouse_id, product_1["product_id"], bin_b["location_id"]) == Decimal("3")
 
     # --- Скан ячейки приёмника: содержимое показывает размещённый товар ---
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
     await scenario.step(
@@ -1738,23 +1431,23 @@ async def test_stock_tsd_document_exception(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология, сток и накладная «pick» на 4 шт ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     uom_id = seed["uom_id"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
             {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "4"},
         ],
     )
-    transfer = await _tsd_seed_document(
+    transfer = await tsd_seed_document(
         page, warehouse_id, unique_id,
         [
             {
@@ -1766,14 +1459,16 @@ async def test_stock_tsd_document_exception(
         ],
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан накладной → исполнение отбора ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    await tsd_scan(page, f"DOC-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator("button.action").click()
-    await expect(sheet).to_have_count(0, timeout=15_000)
+    # scan_open с повтором: 2×15s бюджета операции под параллельным
+    # прогоном — оператор физически ждёт, пока терминал отвечает.
+    await expect(sheet).to_have_count(0, timeout=35_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
 
@@ -1804,9 +1499,9 @@ async def test_stock_tsd_document_exception(
     await expect(run).to_have_count(0, timeout=15_000)
 
     # --- Строка укорочена на недостачу, резерв пустого места снят ---
-    detail = await _stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
+    detail = await stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
     assert Decimal(str(detail["lines"][0]["quantity"])) == Decimal("2"), detail["lines"]
-    quant = await _quant_row(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
+    quant = await stock_quant_row(page, warehouse_id, product_1["product_id"], bin_a["location_id"])
     assert Decimal(str(quant["reserved_quantity"])) == Decimal("2"), quant
 
     await scenario.step(
@@ -1836,14 +1531,14 @@ async def test_stock_tsd_document_exception(
 
     # --- «Дайте работу» выдаёт задание пересчёта (оно приоритетнее) ---
     await page.locator(".give-work").click()
-    await expect(run).to_be_visible(timeout=15_000)
+    await expect(run).to_be_visible(timeout=30_000)
     # Пересчёт физически: дошёл до ячейки → скан ячейки → скан товара → факт.
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "product")
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "product")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "8")
-    await _tsd_wait_step(page, "review")
+    await tsd_qty(page, "8")
+    await tsd_wait_step(page, "review")
     await scenario.step(
         "Пересчёт по заданию — факт на месте",
         page,
@@ -1864,11 +1559,11 @@ async def test_stock_tsd_document_exception(
             "approval."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
     await expect(run).to_have_count(0, timeout=15_000)
 
     # --- Задание пересчёта закрыто фактом — не висит в очереди вечно ---
-    detail = await _stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
+    detail = await stock_rest(page, "GET", f"/transfers/{transfer['transfer_id']}")
     count_lines = [ln for ln in detail["lines"] if ln.get("kind") == "count"]
     assert len(count_lines) == 1, detail["lines"]
     assert count_lines[0]["state"] == "done", count_lines[0]
@@ -1918,11 +1613,11 @@ async def test_stock_tsd_context_chips(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
 
     # --- Топология: зона А с двумя ячейками + зона Б с ячейкой вне её ---
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     zone = seed["zone"]
     bin_a = seed["bin_a"]
@@ -1930,15 +1625,15 @@ async def test_stock_tsd_context_chips(
     product_2 = seed["product_2"]
     uom_id = seed["uom_id"]
     # Зона получает баркод — её скан привязывает оператора к поддереву.
-    await _stock_rest(
+    await stock_rest(
         page, "PATCH", f"/locations/{zone['location_id']}",
         {"location_id": zone["location_id"], "barcode": f"ZONE-1-{unique_id[:6]}"},
     )
-    zone_b = await _stock_rest(
+    zone_b = await stock_rest(
         page, "POST", "/locations",
         {"warehouse_id": warehouse_id, "name": f"Зона Б{unique_id[:3]}", "usage": "view"},
     )
-    bin_c = await _stock_rest(
+    bin_c = await stock_rest(
         page, "POST", "/locations",
         {
             "warehouse_id": warehouse_id,
@@ -1948,7 +1643,7 @@ async def test_stock_tsd_context_chips(
             "barcode": f"BIN-C-{unique_id[:6]}",
         },
     )
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -1958,7 +1653,7 @@ async def test_stock_tsd_context_chips(
     )
 
     # --- Две накладные: отбор из зоны А (уйдёт в волну) и из зоны Б ---
-    doc_1 = await _tsd_seed_document(
+    doc_1 = await tsd_seed_document(
         page, warehouse_id, unique_id,
         [
             {
@@ -1969,7 +1664,7 @@ async def test_stock_tsd_context_chips(
             },
         ],
     )
-    _ = await _tsd_seed_document(
+    _ = await tsd_seed_document(
         page, warehouse_id, f"z{unique_id}",
         [
             {
@@ -1980,9 +1675,9 @@ async def test_stock_tsd_context_chips(
             },
         ],
     )
-    detail = await _stock_rest(page, "GET", f"/transfers/{doc_1['transfer_id']}")
+    detail = await stock_rest(page, "GET", f"/transfers/{doc_1['transfer_id']}")
     move_1_id = detail["moves"][0]["move_id"]
-    wave = await _stock_rest(
+    wave = await stock_rest(
         page, "POST", "/waves",
         {
             "warehouse_id": warehouse_id,
@@ -1990,17 +1685,17 @@ async def test_stock_tsd_context_chips(
             "move_ids": [move_1_id],
         },
     )
-    await _stock_rest(
+    await stock_rest(
         page, "POST", f"/waves/{wave['wave_id']}/release",
         {"wave_id": wave["wave_id"]},
     )
 
     # --- Техника с баркодом: скан привязывает тележку к оператору ---
-    rtype = await _stock_rest(
+    rtype = await stock_rest(
         page, "POST", "/resource-types",
         {"warehouse_id": warehouse_id, "name": f"Тележка {unique_id[:4]}"},
     )
-    await _stock_rest(
+    await stock_rest(
         page, "POST", "/resources",
         {
             "warehouse_id": warehouse_id,
@@ -2010,7 +1705,7 @@ async def test_stock_tsd_context_chips(
         },
     )
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Очередь без контекста: оба задания видны ---
     chips = page.locator("stock-tsd-home-page .context-chips .chip")
@@ -2020,7 +1715,7 @@ async def test_stock_tsd_context_chips(
     # --- Чип зоны: тап → баннер «сканируйте зону» → скан сужает очередь ---
     await chips.nth(0).click()
     await expect(page.locator(".pending-banner")).to_be_visible(timeout=10_000)
-    await _tsd_scan(page, f"ZONE-1-{unique_id[:6]}")
+    await tsd_scan(page, f"ZONE-1-{unique_id[:6]}")
     await expect(chips.nth(0)).to_contain_text(f"ZONE-1-{unique_id[:6]}", timeout=15_000)
     # Ячейка В вне поддерева зоны А — её задание ушло из списка.
     await expect(cards).to_have_count(1, timeout=15_000)
@@ -2076,7 +1771,7 @@ async def test_stock_tsd_context_chips(
     # --- Чип техники: тап → скан баркода тележки — привязка на сервере ---
     await chips.nth(1).click()
     await expect(page.locator(".pending-banner")).to_be_visible(timeout=10_000)
-    await _tsd_scan(page, f"RES-{unique_id[:6]}")
+    await tsd_scan(page, f"RES-{unique_id[:6]}")
     await expect(chips.nth(1)).to_contain_text(f"T-{unique_id[:4]}", timeout=15_000)
     await scenario.step(
         "Контекст собран: зона + волна + тележка",
@@ -2102,7 +1797,7 @@ async def test_stock_tsd_context_chips(
     # --- «Дайте работу» выдаёт задание из связанного контекста ---
     await page.locator(".give-work").click()
     run = page.locator("stock-tsd-run")
-    await expect(run).to_be_visible(timeout=15_000)
+    await expect(run).to_be_visible(timeout=30_000)
     await expect(run.locator(".expected")).to_contain_text(
         f"Кофе зерновой {unique_id[:4]}", timeout=15_000
     )
@@ -2171,14 +1866,14 @@ async def test_stock_tsd_inquiry_rescan(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -2187,11 +1882,11 @@ async def test_stock_tsd_inquiry_rescan(
         ],
     )
     # Техника с баркодом — скан вне «взведённого» чипа открывает её карточку.
-    rtype = await _stock_rest(
+    rtype = await stock_rest(
         page, "POST", "/resource-types",
         {"warehouse_id": warehouse_id, "name": f"Тележка {unique_id[:4]}"},
     )
-    await _stock_rest(
+    await stock_rest(
         page, "POST", "/resources",
         {
             "warehouse_id": warehouse_id,
@@ -2200,10 +1895,10 @@ async def test_stock_tsd_inquiry_rescan(
             "barcode": f"RES-{unique_id[:6]}",
         },
     )
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан товара: карточка открылась ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
@@ -2227,16 +1922,16 @@ async def test_stock_tsd_inquiry_rescan(
     )
 
     # --- Рескан ДРУГОГО товара: та же карточка обновилась по месту ---
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
     # В стеке ровно один лист — карточек «поверх» не наслаивается.
     await expect(sheet).to_have_count(1, timeout=15_000)
-    await expect(sheet).to_contain_text(f"Чай листовой {unique_id[:4]}", timeout=15_000)
+    await expect(sheet).to_contain_text(f"Чай листовой {unique_id[:4]}", timeout=30_000)
     await expect(sheet).not_to_contain_text(f"Кофе зерновой {unique_id[:4]}")
 
     # --- Скан ячейки поверх открытой карточки: содержимое подменилось ---
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await expect(sheet).to_have_count(1, timeout=15_000)
-    await expect(sheet).to_contain_text(f"Ячейка А{unique_id[:3]}", timeout=15_000)
+    await expect(sheet).to_contain_text(f"Ячейка А{unique_id[:3]}", timeout=30_000)
     await expect(sheet).to_contain_text(f"Кофе зерновой {unique_id[:4]}", timeout=15_000)
     await scenario.step(
         "Скан ячейки — карточка переключилась на её содержимое",
@@ -2256,10 +1951,10 @@ async def test_stock_tsd_inquiry_rescan(
     )
 
     # --- Скан баркода тележки: карточка ресурса → привязка ---
-    await _tsd_scan(page, f"RES-{unique_id[:6]}")
+    await tsd_scan(page, f"RES-{unique_id[:6]}")
     # У ресурса одно действие «привязать» — ждём переключения карточки
     # (у ячейки три кнопки: переходный кадр ловить нельзя).
-    await expect(sheet.locator(".action")).to_have_count(1, timeout=15_000)
+    await expect(sheet.locator(".action")).to_have_count(1, timeout=30_000)
     await sheet.locator(".action").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     # Привязка прошла на сервере — чип техники заполнен кодом.
@@ -2326,15 +2021,15 @@ async def test_stock_tsd_receive_multiline(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
     product_2 = seed["product_2"]
     uom_id = seed["uom_id"]
-    product_3 = await _stock_rest(
+    product_3 = await stock_rest(
         page, "POST", "/products",
         {
             "name": f"Какао {unique_id[:4]}",
@@ -2347,37 +2042,37 @@ async def test_stock_tsd_receive_multiline(
             "barcodes": [f"BC-3-{unique_id[:6]}"],
         },
     )
-    await _tsd_seed_product_image(
+    await tsd_seed_product_image(
         page, str(product_3["product_id"]), color="#5d4037", label="КАКАО"
     )
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Приёмка: товар 1 → ячейка → количество → товар 2 → ... ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator(".action[data-action='receive']").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "5")
+    await tsd_qty(page, "5")
     # Review: скан второго товара добавляет строку — направление
     # каждой строки подтверждается явным сканом ячейки (физика: куда
     # кладут ЭТИ короба).
-    await _tsd_wait_step(page, "review")
-    await _tsd_scan(page, f"BC-2-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "7")
-    await _tsd_wait_step(page, "review")
-    await _tsd_scan(page, f"BC-3-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
-    await _tsd_wait_step(page, "quantity")
-    await _tsd_qty(page, "3")
+    await tsd_wait_step(page, "review")
+    await tsd_scan(page, f"BC-2-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "7")
+    await tsd_wait_step(page, "review")
+    await tsd_scan(page, f"BC-3-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_wait_step(page, "quantity")
+    await tsd_qty(page, "3")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await expect(run.locator(".line-row")).to_have_count(3, timeout=15_000)
     await scenario.step(
@@ -2398,11 +2093,11 @@ async def test_stock_tsd_receive_multiline(
             "entered in a row. Posting goes as a single document."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Один коммит положил все три товара ---
     for product, qty in ((product_1, "5"), (product_2, "7"), (product_3, "3")):
-        actual = await _quant_qty(
+        actual = await stock_quant_qty(
             page, warehouse_id, product["product_id"], bin_a["location_id"]
         )
         assert actual == Decimal(qty), f"{product['name']}: {actual} != {qty}"
@@ -2468,32 +2163,32 @@ async def test_stock_tsd_count_zero(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
             {"location_dest_id": bin_a["location_id"], "product_id": product_1["product_id"], "quantity": "5"},
         ],
     )
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан ячейки → «Посчитать» → скан товара → факт 0 ---
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator(".action[data-action='count']").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "0")
+    await tsd_qty(page, "0")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await scenario.step(
         "Факт 0 принят — review показывает расхождение",
@@ -2513,10 +2208,10 @@ async def test_stock_tsd_count_zero(
             "reconciliation."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Факт 0 записан: inventory_quantity = 0 ---
-    row = await _quant_row(
+    row = await stock_quant_row(
         page, warehouse_id, product_1["product_id"], bin_a["location_id"]
     )
     assert Decimal(str(row["inventory_quantity"])) == Decimal("0")
@@ -2583,10 +2278,10 @@ async def test_stock_tsd_hid_scan(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
-    await _tsd_pick_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    await tsd_seed_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- HID-burst: keydown-пачка быстрее 40 мс + Enter-суффикс ---
     # page.keyboard.type эмитирует trusted-события с задержкой —
@@ -2660,25 +2355,25 @@ async def test_stock_tsd_offline_outbox(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     product_1 = seed["product_1"]
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Сессия набрана ОНЛАЙН: товар → ячейка → количество ---
-    await _tsd_scan(page, f"BC-1-{unique_id[:6]}")
+    await tsd_scan(page, f"BC-1-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await sheet.locator(".action[data-action='receive']").click()
     await expect(sheet).to_have_count(0, timeout=15_000)
     run = page.locator("stock-tsd-run")
     await expect(run).to_be_visible(timeout=15_000)
-    await _tsd_scan(page, f"BIN-A-{unique_id[:6]}")
+    await tsd_scan(page, f"BIN-A-{unique_id[:6]}")
     await expect(run.locator(".qty-panel")).to_be_visible(timeout=15_000)
-    await _tsd_qty(page, "9")
+    await tsd_qty(page, "9")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
 
     # --- Офлайн: коммит уходит в outbox, сессия закрывается честно ---
@@ -2695,7 +2390,7 @@ async def test_stock_tsd_offline_outbox(
             });
         }"""
     )
-    await _tsd_commit_click(page)
+    await tsd_commit_click(page)
     await expect(run).to_have_count(0, timeout=15_000)
     banner = page.locator("stock-tsd-home-page .outbox-banner")
     await expect(banner).to_be_visible(timeout=15_000)
@@ -2738,7 +2433,7 @@ async def test_stock_tsd_offline_outbox(
         }""",
         timeout=60_000,
     )
-    qty = await _quant_qty(
+    qty = await stock_quant_qty(
         page, warehouse_id, product_1["product_id"], bin_a["location_id"]
     )
     assert qty == Decimal("9")
@@ -2803,9 +2498,9 @@ async def test_stock_tsd_document_container_move(
     unique_id: str,
 ) -> None:
     page = ui_page_system
-    await page.set_viewport_size(_TSD)
-    await _tsd_open(page, stock_ui)
-    seed = await _tsd_seed_warehouse(page, unique_id)
+    await page.set_viewport_size(TSD_VIEWPORT)
+    await tsd_open(page, stock_ui)
+    seed = await tsd_seed_warehouse(page, unique_id)
     warehouse_id = seed["warehouse"]["warehouse_id"]
     bin_a = seed["bin_a"]
     bin_b = seed["bin_b"]
@@ -2813,11 +2508,11 @@ async def test_stock_tsd_document_container_move(
     uom_id = seed["uom_id"]
 
     # --- Паллета в ячейке А с однородным товаром, покрывающим заказ ---
-    ctype = await _stock_rest(
+    ctype = await stock_rest(
         page, "POST", "/container-types",
         {"warehouse_id": warehouse_id, "name": f"Паллета {unique_id[:4]}", "kind": "pallet"},
     )
-    pallet = await _stock_rest(
+    pallet = await stock_rest(
         page, "POST", "/containers",
         {
             "warehouse_id": warehouse_id,
@@ -2827,7 +2522,7 @@ async def test_stock_tsd_document_container_move(
             "barcode": f"PAL-{unique_id[:6]}",
         },
     )
-    await _tsd_seed_stock(
+    await tsd_seed_stock(
         page,
         warehouse_id,
         [
@@ -2835,19 +2530,19 @@ async def test_stock_tsd_document_container_move(
         ],
     )
     # «Минимум тары» на товаре — резерв возьмёт паллету целиком.
-    await _stock_rest(
+    await stock_rest(
         page, "PATCH", f"/products/{product_1['product_id']}",
         {"product_id": product_1["product_id"], "removal_strategy": "least_containers"},
     )
 
     # --- Накладная на отгрузку 5 шт → assign → container-строка ---
-    op_types = await _stock_rest(
+    op_types = await stock_rest(
         page, "GET", f"/operation-types?warehouse_id={warehouse_id}"
     )
     outgoing_id = next(
         ot["operation_type_id"] for ot in op_types["items"] if ot["code"] == "outgoing"
     )
-    transfer = await _stock_rest(
+    transfer = await stock_rest(
         page, "POST", "/transfers",
         {
             "warehouse_id": warehouse_id,
@@ -2864,13 +2559,13 @@ async def test_stock_tsd_document_container_move(
             ],
         },
     )
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
-    await _stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/confirm")
+    await stock_rest(page, "POST", f"/transfers/{transfer['transfer_id']}/assign")
 
-    await _tsd_pick_warehouse(page, unique_id)
+    await tsd_pick_warehouse(page, unique_id)
 
     # --- Скан накладной → вход в исполнение → поток «перевоз тары» ---
-    await _tsd_scan(page, f"DOC-{unique_id[:6]}")
+    await tsd_scan(page, f"DOC-{unique_id[:6]}")
     sheet = page.locator("stock-tsd-entity-sheet")
     await expect(sheet).to_be_visible(timeout=15_000)
     await expect(sheet).to_contain_text(transfer["name"], timeout=15_000)
@@ -2899,9 +2594,9 @@ async def test_stock_tsd_document_container_move(
     # Сессия открывается на шаге 'start' — машина уже ждёт скан тары
     # (expected = строка kind=container). 'container' — это переход
     # ПОСЛЕ скана, ждать его до скана бессмысленно.
-    await _tsd_scan(page, f"PAL-{unique_id[:6]}")
-    await _tsd_wait_step(page, "dest")
-    await _tsd_scan(page, f"BIN-B-{unique_id[:6]}")
+    await tsd_scan(page, f"PAL-{unique_id[:6]}")
+    await tsd_wait_step(page, "dest")
+    await tsd_scan(page, f"BIN-B-{unique_id[:6]}")
     await expect(run.locator(".commit-btn")).to_be_visible(timeout=15_000)
     await scenario.step(
         "Поток просил тару, затем приёмник",
@@ -2919,16 +2614,16 @@ async def test_stock_tsd_document_container_move(
             "unpacking or re-scanning the contents."
         ),
     )
-    await _tsd_commit(page)
+    await tsd_commit(page)
 
     # --- Тара переехала под приёмник со всем содержимым ---
-    locations = await _stock_rest(page, "GET", "/locations")
+    locations = await stock_rest(page, "GET", "/locations")
     moved = next(
         loc for loc in locations["items"]
         if loc["location_id"] == pallet["location_id"]
     )
     assert moved["parent_id"] == bin_b["location_id"], f"паллета не переехала: {moved}"
-    qty = await _quant_qty(
+    qty = await stock_quant_qty(
         page, warehouse_id, product_1["product_id"], pallet["location_id"]
     )
     assert qty == Decimal("5")

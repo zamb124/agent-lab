@@ -104,7 +104,7 @@ async def test_user_opens_direct_dm_from_member_list(
     await ui_page_system.add_init_script(
         """() => {
             localStorage.removeItem('platform:crm:last_namespace_by_company');
-            localStorage.setItem('pwa-banner-dismissed', 'true');
+            localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');
         }"""
     )
     await sync_ui.open(ui_page_system)

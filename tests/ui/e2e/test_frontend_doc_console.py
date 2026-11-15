@@ -2330,7 +2330,7 @@ async def test_frontend_services_hub(
     )
 
     # Лончер строит dev-URL (порт 8021); тест-стек слушает worktracker на 9021.
-    # Мост dev-порта на порт стека — тот же приём, что у centrifugo_ws_bridge для WS.
+    # Мост dev-порта на порт стека — тот же приём, что у centrifugo_ws_proxy для WS.
     await page.context.route(
         re.compile(r"://[^/]+:8021/"),
         lambda route: route.fulfill(

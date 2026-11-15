@@ -18,7 +18,7 @@ import pytest_asyncio
 from playwright.async_api import Browser, BrowserContext, Page, ViewportSize, expect
 
 from tests.ui.browser_auth import add_auth_token_cookie
-from tests.ui.centrifugo_ws_bridge import install_centrifugo_ws_bridge
+from tests.ui.centrifugo_ws_proxy import ensure_centrifugo_ws_proxy
 from tests.ui.e2e_worker import ui_e2e_company_id, ui_e2e_test_scope
 from tests.ui.shots import seed_content
 
@@ -50,7 +50,7 @@ async def _new_shot_context(
         locale="ru",
         reduced_motion="reduce" if reduced_motion else "no-preference",
     )
-    await install_centrifugo_ws_bridge(context)
+    await ensure_centrifugo_ws_proxy()
     if token is not None:
         await add_auth_token_cookie(context, token)
 

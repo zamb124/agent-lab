@@ -36,16 +36,22 @@ The document wants 5, the operator carried 4: after the commit the session does 
 
 ![Partial commit — the terminal suggests the remainder](stock-tsd-document-pick--05-tsd-document-continuation.png)
 
-## Step 6. Order closed — stock matches the document
+## Step 6. The document continues — the next line is suggested
+
+The coffee line is done but the order is not: the terminal moves the operator straight to the next executable line (tea) — no queue round-trip and no re-scan of the order. The operator simply walks on.
+
+![The document continues — the next line is suggested](stock-tsd-document-pick--06-tsd-document-next-line.png)
+
+## Step 7. Order closed — stock matches the document
 
 **Result demonstration.** Both order lines were posted to the ledger: coffee 5 → 0, tea 8 → 2 — exactly per the document specs.
 
 **Summary.** Document work: scan the order → «Start» → line hint → bin → product → qty → commit.
 
-![Order closed — stock matches the document](stock-tsd-document-pick--06-tsd-document-done.png)
+![Order closed — stock matches the document](stock-tsd-document-pick--07-tsd-document-done.png)
 
-## Step 7. The same terminal on a laptop
+## Step 8. The same terminal on a laptop
 
 The PWA is one bundle for all screens: on desktop the work screen is centered and does not stretch — the queue, shift stats and scan field keep the same layout as on the handheld.
 
-![The same terminal on a laptop](stock-tsd-document-pick--07-tsd-document-desktop.png)
+![The same terminal on a laptop](stock-tsd-document-pick--08-tsd-document-desktop.png)

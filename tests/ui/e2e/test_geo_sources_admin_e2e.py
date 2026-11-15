@@ -66,7 +66,7 @@ async def test_sources_hub_and_region_crud(
 ) -> None:
     page = ui_page_system
     await page.add_init_script(
-        "localStorage.setItem('pwa-banner-dismissed', 'true');"
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');"
     )
     await _open_sources(page)
     cards = page.locator("geo-sources-page .card")
@@ -152,7 +152,7 @@ async def test_map_feature_admin_close_road(ui_page_system: Page) -> None:
     """Карточка дороги на map-lab → «Закрыть дорогу» → модалка → override."""
     page = ui_page_system
     await page.add_init_script(
-        "localStorage.setItem('pwa-banner-dismissed', 'true');"
+        "localStorage.setItem('platform:core:pwa_banner_dismissed', 'true');"
     )
     await _open_map_lab(page)
     main_map = page.locator("platform-map.main-map")
