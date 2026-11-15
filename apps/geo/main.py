@@ -2,7 +2,7 @@
 Geo Service — гео-движок платформы.
 
 Порт: 8028
-БД: platform_geo (PostGIS + pgRouting: адреса, дорожный граф)
+БД: platform_geo (PostGIS: адреса, дорожный граф)
 
 SPA — отладочный интерфейс канонических слоёв: карта (`<platform-map>` +
 панель слоёв), реестр покрытия, маршрутная лаборатория.
@@ -28,7 +28,7 @@ app = create_service_app(
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[get_api_router()],
     title="Geo Service",
-    description="Адресный справочник, зоны и роутинг платформы (PostGIS/pgRouting)",
+    description="Адресный справочник, зоны и роутинг платформы (PostGIS + in-memory граф)",
     api_version="v1",
 )
 

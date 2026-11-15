@@ -1,5 +1,5 @@
 ---
-description: "Geo (apps/geo) — платформенный гео-движок: адреса, зоны, маршруты, матрица, TSP, изохроны на PostGIS+pgRouting. Читать при правке apps/geo, GeoClient и интеграции карт/адресов/ETA"
+description: "Geo (apps/geo) — платформенный гео-движок: адреса, зоны, маршруты, матрица, TSP, изохроны на PostGIS + in-memory CSR-графе. Читать при правке apps/geo, GeoClient и интеграции карт/адресов/ETA"
 globs:
   - "apps/geo/**"
   - "core/clients/geo_client.py"
@@ -29,7 +29,18 @@ alwaysApply: false
 
 ### Режимы маршрута
 
-`RouteMode = car | foot | bike | scooter` (`apps/geo/models/api.py`). Колонки стоимости — `_MODE_COLUMNS` в `GeoRoutingService`; snap к ближайшему **проходимому для режима** ребру (`-1` исключается). `car` — только моторный граф; `foot` — всё кроме motor-классов без `foot=yes`; `bike`/`scooter` — гибрид: и проезжая часть (кроме motor-классов без `bicycle=yes`), и path/footway/pedestrian/steps — dijkstra выбирает быстрейшее, пробок нет. `bicycle=dismount` — ребро проходимо со скоростью пешехода. Скорости и access-правила — `GeoSettings` (`*_speeds`, `foot_speed_overrides`, `light_*_fallback_kmh`) и `_mode_costs` в `OsmImportService`: теги `access`/`bicycle`/`foot`/`motor_vehicle`/`oneway:*`/`cycleway=opposite`/`junction=roundabout`/`motorroad`.
+`RouteMode = car | foot | bike | scooter` (`apps/geo/models/api.py`). Колонки стоимости — `MODE_COLUMNS` в `apps/geo/services/routing/builder.py`; snap к ближайшему **проходимому для режима** ребру (`-1` исключается). `car` — только моторный граф; `foot` — всё кроме motor-классов без `foot=yes`; `bike`/`scooter` — гибрид: и проезжая часть (кроме motor-классов без `bicycle=yes`), и path/footway/pedestrian/steps — dijkstra выбирает быстрейшее, пробок нет. `bicycle=dismount` — ребро проходимо со скоростью пешехода. Скорости и access-правила — `GeoSettings` (`*_speeds`, `foot_speed_overrides`, `light_*_fallback_kmh`) и `_mode_costs` в `OsmImportService`: теги `access`/`bicycle`/`foot`/`motor_vehicle`/`oneway:*`/`cycleway=opposite`/`junction=roundabout`/`motorroad`.
+
+### Роутинг — in-memory граф
+
+`GeoRoutingService` (`apps/geo/services/geo_routing_service.py`) + `GeoRoutingEngine` (`apps/geo/services/routing/engine.py`): стоимости и путь считает CSR-граф в памяти процесса (`scipy.sparse.csgraph.dijkstra`), Postgres — snap точек и сборка геометрии ответа. pgRouting не используется: расширение в базе остаётся только историей миграций.
+
+- `routing/builder.py::build_mode_graphs(mode, generation)` — сборка `ModeGraphs` из `geo_road_edges`/`geo_barriers`/`geo_traffic_signals`/`geo_turn_restrictions` поколения: три CSR на режим — `plain_time`/`plain_dist` (нода-граф для matrix/isochrone/optimal_order) и `full_time` (edge-state gadgets для `calculate`).
+- Gadget — развёртка вершины с переходной семантикой в полуузлы `vin`/`vout` с переходами-штрафами: барьер режима и запрещённый поворот — `FORBIDDEN` (1e12, паритет TRSP cost), светофор — `signal_delay_s[mode]`, u-turn по тому же ребру — 0. Вершины в развёртку берутся только из barriers/signals/via-узлов car-рестрикций; `only_*` применяется к въездам с `from_way`.
+- `GeoRoutingEngine` — DI-компонент: кэш графов по режимам, ленивая пересборка под `asyncio.Lock` при смене `GeoImportState.current_generation`; `invalidate()` зовётся `GeoAdminService` после `suppress_feature`/`close_way` — следующий запрос пересобирает граф.
+- `calculate` — TRSP-паритет: виртуальные входы с долей крайнего ребра (`fraction`), 4 кандидата (2 выезда × 2 въезда), путь по `full_time`, плечи → `ST_LineSubstring`-сборка геометрии и `distance_m` одним запросом; `arrival_side` — из касательной snap-точки.
+- `matrix` — `dijkstraCostMatrix`-паритет по `plain_*` (без рестрикций, как было в pgr), две метрики параллельно; `optimal_order` — детерминированный NN+2-opt поверх матрицы, плечи через `calculate`; `isochrone` — `drivingDistance`-паритет: dijkstra с `limit` → `node_id` → `ST_ConcaveHull`.
+- Скаляры из `ndarray` — только `memoryview`/`bisect` (numpy-стабы отдают `Any` на скалярной индексации); граница `execute_raw` — `dict[str, SqlParameterValue | list[SqlParameterValue]]`.
 
 ### Импорт и обновления
 
@@ -63,10 +74,10 @@ alwaysApply: false
 - `geo/addresses/in_zone` — точный список адресов внутри GeoJSON-полигона: `ST_Covers` (граница считается внутри), `q`+`limit`/`offset`, `GeoAddressListResponse`.
 - `geo/addresses/suggest` — автокомплит (pg_trgm), опционально внутри зоны; `lat`/`lng` — bias близости (KNN-ранжирование по `geom`), хиты несут `distance_m`.
 - `geo/addresses/nearest` — KNN ближайшие адреса к точке; `GeoAddressHit.distance_m` — расстояние до запрошенной точки (обратный геокод пина карты).
-- `geo/route/calculate` — dijkstra: `distance_m`, `duration_s`, геометрия LineString.
-- `geo/route/matrix` — N×M `durations_s`.
-- `geo/route/optimal_order` — `pgr_TSP` порядок точек.
-- `geo/route/isochrone` — `pgr_drivingDistance` → concave hull «зона за N минут».
+- `geo/route/calculate` — dijkstra по in-memory графу: `distance_m`, `duration_s`, геометрия LineString, `arrival_side`.
+- `geo/route/matrix` — N×M `durations_s` и `distances_m`.
+- `geo/route/optimal_order` — порядок точек NN+2-opt поверх матрицы движка.
+- `geo/route/isochrone` — dijkstra с cutoff → concave hull «зона за N минут».
 - `geo/import/status` — состояние последнего синка. `geo/import/run` `{source}` — on-demand постановка тика (`require_company_admin`); имя → spec в `IMPORT_RUN_SPECS` (operations.py): все seed-источники кроме `manual` + служебные цели `enrich` (дрейн очереди обогащения) и `tiles` (синк basemap PMTiles); неизвестное имя — `geo_import_source_unknown`.
 - Админ-правки (`GeoAdminService`, `require_company_admin`): `geo/addresses/create|update|remove|override_revert` (manual-адреса в `generation=0`, патчи/тумбстоуны через `GeoAddressOverride`), `geo/overrides/list` (сводный аудит `GeoOverrideItem`: kind `patch|tombstone|edge_mask`), `geo/features/suppress|unsuppress` (тумбстоуны barrier/signal/restriction/edge), `geo/edges/close|open` (cost-маска `GeoEdgeOverride` → ребро `-1` для всех режимов). Ошибки: `geo_address_not_found`, `geo_override_not_found`, `geo_suppression_not_found`, `geo_edge_override_not_found`.
 - Покрытие и наблюдаемость: `geo/regions/*` (CRUD регионов импорта), `geo/sources` (реестр `SEED_SOURCES`), `geo/stats` (`geo_stats` по источнику/региону/сущности), `geo/cursors` (`geo_source_cursors` — возобновляемые позиции тиков), `geo/enrich/list` (очередь обогащения + pending).

@@ -1123,7 +1123,7 @@ groups:
       model:
         # CronJob seo-report (*/1h) пишет seo.report_failed в stdout —
         # Loki лейбл service=seo-report берётся из pod label app.
-        expr: sum(count_over_time({namespace="platform", service="seo-report"} | json | message=~"seo[.]report_failed" [2.5h]))
+        expr: sum(count_over_time({namespace="platform", service="seo-report"} | json | message=~"seo[.]report_failed" [150m]))
         refId: A
     - refId: B
       relativeTimeRange:

@@ -20,6 +20,8 @@ from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.services.geo_admin_service import GeoAdminService
 from apps.geo.services.geo_coverage_service import GeoCoverageService
 from apps.geo.services.osm_import_service import OsmImportService
+from apps.geo.services.routing.engine import GeoRoutingEngine
+from core.types import SqlParameterValue
 
 _GEN = 990_000_001
 _NEW_GEN = 990_000_002
@@ -31,7 +33,7 @@ pytestmark = pytest.mark.xdist_group("geo")
 @pytest.fixture(autouse=True)
 def _test_generation(monkeypatch: pytest.MonkeyPatch):
     """Сервисы читают тестовое поколение, глобальная строка не трогается."""
-    async def _gen(cls) -> int:  # noqa: ANN001 — сигнатуру диктует classmethod
+    async def _gen(_cls: type[GeoImportState]) -> int:
         return _GEN
 
     monkeypatch.setattr(GeoImportState, "active_generation", classmethod(_gen))
@@ -74,11 +76,12 @@ async def _clean_overlays():
 
 @pytest.fixture
 async def admin() -> GeoAdminService:
-    return GeoAdminService(GeoSettings())
+    settings = GeoSettings()
+    return GeoAdminService(settings, GeoRoutingEngine(settings))
 
 
 @pytest.fixture
-async def osm_addr():
+async def osm_addr() -> tuple[str, int]:
     """Одна OSM-строка адреса в активном поколении."""
     _ = await execute_raw(
         """
@@ -123,15 +126,15 @@ async def test_manual_address_create_update_remove(admin: GeoAdminService) -> No
     await admin.remove_address(
         osm_type="manual", osm_id=hit.osm_id, reason="тест", user_id=_USER
     )
-    rows = await execute_raw(
+    rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT count(*) AS c FROM geo_addresses WHERE osm_type = 'manual'",
         using="geo",
     )
-    assert int(rows[0]["c"]) == 0
+    assert int(str(rows[0]["c"])) == 0
 
 
 async def test_osm_update_writes_override_and_patches_live(
-    admin: GeoAdminService, osm_addr
+    admin: GeoAdminService, osm_addr: tuple[str, int]
 ) -> None:
     """Правка OSM-строки: override с before-снапшотом + живой патч."""
     osm_type, osm_id = osm_addr
@@ -157,19 +160,19 @@ async def test_osm_update_writes_override_and_patches_live(
 
 
 async def test_osm_remove_is_tombstone_and_revert_restores(
-    admin: GeoAdminService, osm_addr
+    admin: GeoAdminService, osm_addr: tuple[str, int]
 ) -> None:
     """Тумбстоун скрывает адрес; откат восстанавливает его по before."""
     osm_type, osm_id = osm_addr
     await admin.remove_address(
         osm_type=osm_type, osm_id=osm_id, reason="ошибочный", user_id=_USER
     )
-    rows = await execute_raw(
+    rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT count(*) AS c FROM geo_addresses WHERE osm_id = $1",
         [osm_id],
         using="geo",
     )
-    assert int(rows[0]["c"]) == 0
+    assert int(str(rows[0]["c"])) == 0
 
     restored = await admin.revert_override(osm_type=osm_type, osm_id=osm_id)
     assert restored is not None
@@ -180,11 +183,11 @@ async def test_osm_remove_is_tombstone_and_revert_restores(
 
 
 async def test_overrides_survive_generation_swap(
-    admin: GeoAdminService, osm_addr
+    admin: GeoAdminService, osm_addr: tuple[str, int]
 ) -> None:
     """Ключевой инвариант: правка и тумбстоун переживают реимпорт поколения."""
     osm_type, osm_id = osm_addr
-    await admin.update_address(
+    _ = await admin.update_address(
         GeoAddressUpdateRequest(
             osm_type=osm_type, osm_id=osm_id, housenumber="1Б"
         ),
@@ -223,21 +226,21 @@ async def test_overrides_survive_generation_swap(
         using="geo",
     )
     importer = OsmImportService(GeoSettings(), GeoCoverageService(GeoSettings()))
-    await importer._apply_overlays(_NEW_GEN)  # noqa: SLF001 — проверяем сам шаг
+    await importer._apply_overlays(_NEW_GEN)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage] — проверяем сам шаг
 
-    rows = await execute_raw(
+    rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT osm_id, housenumber FROM geo_addresses"
-        " WHERE generation = $1 AND osm_id IN (9001, 9002) ORDER BY osm_id",
+        + " WHERE generation = $1 AND osm_id IN (9001, 9002) ORDER BY osm_id",
         [_NEW_GEN],
         using="geo",
     )
     assert len(rows) == 1
-    assert int(rows[0]["osm_id"]) == 9001
+    assert int(str(rows[0]["osm_id"])) == 9001
     assert rows[0]["housenumber"] == "1Б"
 
 
 async def test_enrich_applies_on_reimport_but_override_wins(
-    admin: GeoAdminService, osm_addr
+    osm_addr: tuple[str, int]
 ) -> None:
     """Приоритет: enrich-атрибуты источника → патч админа поверх."""
     from apps.geo.models.geo_address_enrich import GeoAddressEnrich
@@ -265,11 +268,11 @@ async def test_enrich_applies_on_reimport_but_override_wins(
         using="geo",
     )
     importer = OsmImportService(GeoSettings(), GeoCoverageService(GeoSettings()))
-    await importer._apply_overlays(_NEW_GEN)  # noqa: SLF001
+    await importer._apply_overlays(_NEW_GEN)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
-    rows = await execute_raw(
+    rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT gar_guid, canonical_name, housenumber FROM geo_addresses"
-        " WHERE generation = $1 AND osm_id = 9001",
+        + " WHERE generation = $1 AND osm_id = 9001",
         [_NEW_GEN],
         using="geo",
     )
@@ -297,15 +300,15 @@ async def test_edge_close_open_and_suppression(admin: GeoAdminService) -> None:
     await admin.close_way(
         osm_way_id=777, modes=["car", "bike"], reason="ремонт", user_id=_USER
     )
-    rows = await execute_raw(
+    rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT car_cost, bike_cost, foot_cost FROM geo_road_edges"
-        " WHERE osm_way_id = 777 AND generation = $1",
+        + " WHERE osm_way_id = 777 AND generation = $1",
         [_GEN],
         using="geo",
     )
-    assert int(rows[0]["car_cost"]) == -1
-    assert int(rows[0]["bike_cost"]) == -1
-    assert int(rows[0]["foot_cost"]) == 90
+    assert float(str(rows[0]["car_cost"])) == -1
+    assert float(str(rows[0]["bike_cost"])) == -1
+    assert float(str(rows[0]["foot_cost"])) == 90
 
     await admin.open_way(osm_way_id=777)
     from apps.geo.models.geo_edge_override import GeoEdgeOverride
@@ -327,11 +330,11 @@ async def test_edge_close_open_and_suppression(admin: GeoAdminService) -> None:
     await admin.suppress_feature(
         entity="barrier", osm_id=555, reason="лишний", user_id=_USER
     )
-    rows = await execute_raw(
+    barrier_rows: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT count(*) AS c FROM geo_barriers"
-        " WHERE osm_node_id = 555 AND generation = $1",
+        + " WHERE osm_node_id = 555 AND generation = $1",
         [_GEN],
         using="geo",
     )
-    assert int(rows[0]["c"]) == 0
+    assert int(str(barrier_rows[0]["c"])) == 0
     await admin.unsuppress_feature(entity="barrier", osm_id=555)

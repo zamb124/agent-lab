@@ -23,6 +23,8 @@ from apps.geo.services.geo_address_service import GeoAddressService
 from apps.geo.services.geo_coverage_service import GeoCoverageService
 from apps.geo.services.geo_routing_service import GeoRoutingError, GeoRoutingService
 from apps.geo.services.osm_import_service import OsmImportService
+from apps.geo.services.routing.engine import GeoRoutingEngine
+from core.types import SqlParameterValue
 
 _GEN = 990_000_001
 _FIXTURE = Path(__file__).parent / "fixtures" / "micro.osm"
@@ -83,7 +85,7 @@ _ZONE = json.dumps(
 @pytest.fixture(autouse=True)
 def _test_generation(monkeypatch: pytest.MonkeyPatch):
     """Сервисы читают тестовое поколение, глобальная строка не трогается."""
-    async def _gen(cls) -> int:  # noqa: ANN001 — сигнатуру диктует classmethod
+    async def _gen(_cls: type[GeoImportState]) -> int:
         return _GEN
 
     monkeypatch.setattr(GeoImportState, "active_generation", classmethod(_gen))
@@ -101,8 +103,8 @@ async def _clean_coverage_registry() -> None:
         _ = await execute_raw(f"DELETE FROM {table}", using="geo")
 
 
-@pytest.fixture(scope="module")
-async def geo_seed():
+@pytest.fixture(scope="module", autouse=True)
+async def _geo_seed():
     """Поколение _GEN: детерминированный граф и справочник адресов."""
     for table in (
         "geo_road_edges",
@@ -170,11 +172,12 @@ def addresses() -> GeoAddressService:
 
 @pytest.fixture
 def routing() -> GeoRoutingService:
-    return GeoRoutingService(GeoSettings())
+    settings = GeoSettings()
+    return GeoRoutingService(settings, GeoRoutingEngine(settings))
 
 
 async def test_addresses_in_zone_exact_list(
-    geo_seed, addresses: GeoAddressService
+    addresses: GeoAddressService
 ) -> None:
     """ST_Covers: 3 внутри + 1 на границе; Арбат снаружи не попадает."""
     result = await addresses.addresses_in_zone_by_name_asc(
@@ -191,7 +194,7 @@ async def test_addresses_in_zone_exact_list(
 
 
 async def test_addresses_in_zone_query_and_page(
-    geo_seed, addresses: GeoAddressService
+    addresses: GeoAddressService
 ) -> None:
     """Фильтр q и пагинация: total — полный счёт, items — страница."""
     page = await addresses.addresses_in_zone_by_name_asc(
@@ -202,7 +205,7 @@ async def test_addresses_in_zone_query_and_page(
     assert all("Тверская" in a.display_name for a in page.items)
 
 
-async def test_suggest(geo_seed, addresses: GeoAddressService) -> None:
+async def test_suggest(addresses: GeoAddressService) -> None:
     hits = await addresses.suggest_by_score_desc(
         query="Тверская", zone_geojson=None, lat=None, lng=None, limit=5
     )
@@ -213,7 +216,7 @@ async def test_suggest(geo_seed, addresses: GeoAddressService) -> None:
     ]
 
 
-async def test_nearest(geo_seed, addresses: GeoAddressService) -> None:
+async def test_nearest(addresses: GeoAddressService) -> None:
     hits = await addresses.nearest_by_distance(lat=55.75010, lng=37.61732, limit=1)
     assert len(hits) == 1
     assert hits[0].display_name == "Тверская улица, 1"
@@ -222,17 +225,17 @@ async def test_nearest(geo_seed, addresses: GeoAddressService) -> None:
 
 
 async def test_nearest_distance_m_grows(
-    geo_seed, addresses: GeoAddressService
+    addresses: GeoAddressService
 ) -> None:
     """KNN-раскладка: distance_m монотонно растёт по мере удаления хитов."""
     hits = await addresses.nearest_by_distance(lat=55.75010, lng=37.61732, limit=3)
     distances = [h.distance_m for h in hits]
     assert all(d is not None for d in distances)
-    assert distances == sorted(distances)
+    assert distances == sorted(d for d in distances if d is not None)
 
 
 async def test_suggest_bias_by_distance(
-    geo_seed, addresses: GeoAddressService
+    addresses: GeoAddressService
 ) -> None:
     """При равном pg_trgm-скоре lat/lng-тай-брейк поднимает ближний адрес."""
     hits = await addresses.suggest_by_score_desc(
@@ -241,7 +244,7 @@ async def test_suggest_bias_by_distance(
     assert hits[0].display_name == "Тверская улица, 7"
 
 
-async def test_route_modes_differ(geo_seed, routing: GeoRoutingService) -> None:
+async def test_route_modes_differ(routing: GeoRoutingService) -> None:
     """Один маршрут A→C: car быстрее bike, scooter едет по гибридному графу."""
     car = await routing.calculate(
         from_lat=55.75000, from_lng=37.61700, to_lat=55.75000, to_lng=37.61900, mode="car"
@@ -262,7 +265,7 @@ async def test_route_modes_differ(geo_seed, routing: GeoRoutingService) -> None:
     assert car.geometry is not None and car.geometry["type"] == "LineString"
 
 
-async def test_oneway_reverse_goes_around(geo_seed, routing: GeoRoutingService) -> None:
+async def test_oneway_reverse_goes_around(routing: GeoRoutingService) -> None:
     """C→B против oneway: объезд C-F-E-B (30s), не реверс запрещённого ребра."""
     route = await routing.calculate(
         from_lat=55.75000, from_lng=37.61900, to_lat=55.75000, to_lng=37.61800, mode="car"
@@ -270,7 +273,7 @@ async def test_oneway_reverse_goes_around(geo_seed, routing: GeoRoutingService) 
     assert route.duration_s == pytest.approx(30.0)
 
 
-async def test_foot_uses_footway_shortcut(geo_seed, routing: GeoRoutingService) -> None:
+async def test_foot_uses_footway_shortcut(routing: GeoRoutingService) -> None:
     """footway-параллель residential: foot режим выбирает короткий тротуар."""
     route = await routing.calculate(
         from_lat=55.75100, from_lng=37.61700, to_lat=55.75100, to_lng=37.61800, mode="foot"
@@ -278,21 +281,21 @@ async def test_foot_uses_footway_shortcut(geo_seed, routing: GeoRoutingService) 
     assert route.duration_s == pytest.approx(60.0)
 
 
-async def test_mode_aware_snap(geo_seed, routing: GeoRoutingService) -> None:
+async def test_mode_aware_snap(routing: GeoRoutingService) -> None:
     """Car снапится к motorway; foot игнорирует его, а до пешего графа >3км → too far."""
     car = await routing.calculate(
         from_lat=55.79000, from_lng=37.61700, to_lat=55.79000, to_lng=37.61900, mode="car"
     )
     assert car.duration_s == pytest.approx(12.0)
     with pytest.raises(GeoRoutingError) as exc:
-        await routing.calculate(
+        _ = await routing.calculate(
             from_lat=55.79000, from_lng=37.61700, to_lat=55.79000, to_lng=37.61900, mode="foot"
         )
     assert exc.value.code == "point_too_far_from_road"
 
 
 async def test_car_route_honors_no_turn_restriction(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """no_*: прямой заезд запрещён — TRSP объезжает (40s против 20s).
 
@@ -331,7 +334,7 @@ async def test_car_route_honors_no_turn_restriction(
 
 
 async def test_car_route_honors_only_turn_restriction(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """only_*: единственный разрешённый выезд — на way6 (2→5)."""
     _ = await execute_raw(
@@ -360,7 +363,7 @@ async def test_car_route_honors_only_turn_restriction(
 
 
 async def test_car_route_detours_blocked_barrier(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Барьер на узле 2 блокирует car-транзит: прямой 1→2→3 под запретом,
     объезд 1→4→5→6→3 = 40s. Foot барьер не держит — 180s по прямой."""
@@ -395,7 +398,7 @@ async def test_car_route_detours_blocked_barrier(
 
 
 async def test_gate_blocks_all_modes(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """gate на узле 5 закрыт всем: car 1→6 идёт через 3 (30s),
     foot — тем же объездом по residential (270s)."""
@@ -430,7 +433,7 @@ async def test_gate_blocks_all_modes(
 
 
 async def test_fractional_snap_mid_edge_start(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Старт в середине ребра 1→2 (fraction 0.5): плаваем 5s, не 10s
     от вершины; геометрия начинается ровно в точке привязки."""
@@ -450,7 +453,7 @@ async def test_fractional_snap_mid_edge_start(
 
 
 async def test_fractional_snap_same_edge(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Обе точки на одном ребре: проезд доли (0.25→0.75) = 5s, без заезда в вершину."""
     route = await routing.calculate(
@@ -462,7 +465,7 @@ async def test_fractional_snap_same_edge(
 
 
 async def test_fractional_snap_reverse_on_same_edge(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Назад по тому же ребру (0.75→0.25): foot идёт по reverse_cost=90."""
     route = await routing.calculate(
@@ -473,7 +476,7 @@ async def test_fractional_snap_reverse_on_same_edge(
 
 
 async def test_arrival_side_left_and_right(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Едем 1→2 на восток: точка севернее ребра — слева, южнее — справа.
 
@@ -492,7 +495,7 @@ async def test_arrival_side_left_and_right(
 
 
 async def test_traffic_signal_adds_delay(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Светофор на узле 2: транзит car 1→2→3 дорожает на signal_delay_s.car
     (20s + 15s = 35s); foot-штраф 0 — 180s без изменений."""
@@ -525,17 +528,17 @@ async def test_traffic_signal_adds_delay(
 
 
 async def test_route_not_found_is_domain_error(
-    geo_seed, routing: GeoRoutingService
+    routing: GeoRoutingService
 ) -> None:
     """Точка вне графа (>snap_max от любого ребра) — point_too_far, не молчание."""
     with pytest.raises(GeoRoutingError) as exc:
-        await routing.calculate(
+        _ = await routing.calculate(
             from_lat=55.90000, from_lng=37.00000, to_lat=55.90010, to_lng=37.00010, mode="car"
         )
     assert exc.value.code == "point_too_far_from_road"
 
 
-async def test_matrix(geo_seed, routing: GeoRoutingService) -> None:
+async def test_matrix(routing: GeoRoutingService) -> None:
     matrix = await routing.matrix(
         sources=[(55.75000, 37.61700), (55.75000, 37.61800)],
         targets=[(55.75000, 37.61700), (55.75000, 37.61900)],
@@ -545,7 +548,7 @@ async def test_matrix(geo_seed, routing: GeoRoutingService) -> None:
     assert matrix.distances_m[0][0] == 0.0
 
 
-async def test_optimal_order(geo_seed, routing: GeoRoutingService) -> None:
+async def test_optimal_order(routing: GeoRoutingService) -> None:
     order = await routing.optimal_order(
         start=(55.75000, 37.61700),
         points=[(55.75100, 37.61700), (55.75000, 37.61900), (55.75100, 37.61800)],
@@ -557,7 +560,7 @@ async def test_optimal_order(geo_seed, routing: GeoRoutingService) -> None:
     assert order.total_duration_s > 0
 
 
-async def test_isochrone(geo_seed, routing: GeoRoutingService) -> None:
+async def test_isochrone(routing: GeoRoutingService) -> None:
     iso = await routing.isochrone(lat=55.75000, lng=37.61700, minutes=3, mode="car")
     assert iso.reachable_vertices >= 4
     assert iso.polygon is not None
@@ -598,8 +601,8 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     # mode-стоимости импортёра на реальных тегах
     edges = await execute_raw(
         "SELECT highway, oneway, car_cost, car_reverse_cost, foot_cost,"
-        " foot_reverse_cost, bike_cost, bike_reverse_cost, scooter_cost"
-        " FROM geo_road_edges WHERE generation = $1 AND osm_way_id = $2",
+        + " foot_reverse_cost, bike_cost, bike_reverse_cost, scooter_cost"
+        + " FROM geo_road_edges WHERE generation = $1 AND osm_way_id = $2",
         [gen, 11],  # oneway residential
         using="geo",
     )
@@ -608,7 +611,7 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     assert edges[0]["foot_reverse_cost"] > 0  # пешеходу oneway не закон
     motor = await execute_raw(
         "SELECT car_cost, foot_cost, bike_cost, scooter_cost FROM geo_road_edges"
-        " WHERE generation = $1 AND highway = 'motorway'",
+        + " WHERE generation = $1 AND highway = 'motorway'",
         [gen],
         using="geo",
     )
@@ -618,7 +621,7 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     assert motor[0]["scooter_cost"] == -1
     footway = await execute_raw(
         "SELECT car_cost, foot_cost FROM geo_road_edges"
-        " WHERE generation = $1 AND highway = 'footway'",
+        + " WHERE generation = $1 AND highway = 'footway'",
         [gen],
         using="geo",
     )
@@ -626,24 +629,28 @@ async def test_import_osm_fixture_and_generation_swap() -> None:
     assert footway[0]["foot_cost"] > 0
     # maxspeed=20 на way 10 ниже residential-дефолта 25км/ч:
     # car_cost = length / (20/3.6); way 12 без лимита — по дефолту.
-    limited = await execute_raw(
+    limited: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT length_m, car_cost FROM geo_road_edges"
-        " WHERE generation = $1 AND osm_way_id = 10",
+        + " WHERE generation = $1 AND osm_way_id = 10",
         [gen],
         using="geo",
     )
     assert limited
     for e in limited:
-        assert e["car_cost"] == pytest.approx(e["length_m"] * 3.6 / 20.0)
-    plain = await execute_raw(
+        assert float(str(e["car_cost"])) == pytest.approx(
+            float(str(e["length_m"])) * 3.6 / 20.0
+        )
+    plain: list[dict[str, SqlParameterValue]] = await execute_raw(
         "SELECT length_m, car_cost FROM geo_road_edges"
-        " WHERE generation = $1 AND osm_way_id = 12",
+        + " WHERE generation = $1 AND osm_way_id = 12",
         [gen],
         using="geo",
     )
     assert plain
     for e in plain:
-        assert e["car_cost"] == pytest.approx(e["length_m"] * 3.6 / 25.0)
+        assert float(str(e["car_cost"])) == pytest.approx(
+            float(str(e["length_m"])) * 3.6 / 25.0
+        )
 
 
 async def test_import_rerun_is_idempotent() -> None:

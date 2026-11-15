@@ -16,6 +16,7 @@ from apps.geo.services.nspd_crawl_service import NspdCrawlService
 from apps.geo.services.osm_diff_service import OsmDiffService
 from apps.geo.services.osm_import_service import OsmImportService
 from apps.geo.services.overture_import_service import OvertureImportService
+from apps.geo.services.routing.engine import GeoRoutingEngine
 from core.di import http_di, task_di
 from core.di.platform import PlatformDi
 
@@ -27,6 +28,7 @@ class GeoDi(PlatformDi):
     geo_coverage_service: GeoCoverageService
     geo_enrich_service: GeoEnrichService
     geo_layer_service: GeoLayerService
+    geo_routing_engine: GeoRoutingEngine
     geo_routing_service: GeoRoutingService
     geo_tiles_service: GeoTilesService
     datamos_import_service: DataMosImportService

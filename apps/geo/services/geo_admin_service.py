@@ -35,6 +35,7 @@ from apps.geo.models.geo_edge_override import GeoEdgeOverride
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.models.geo_stats import GeoStats
 from apps.geo.models.geo_suppression import GeoSuppression
+from apps.geo.services.routing.engine import GeoRoutingEngine
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.types import JsonObject, JsonScalar, JsonValue, SqlParameterValue
 
@@ -76,8 +77,9 @@ def _json_scalar(value: JsonValue | None, field: str) -> JsonScalar:
 class GeoAdminService:
     """Правки админа к геоданным: оверлеи + мгновенное применение к живому."""
 
-    def __init__(self, settings: GeoSettings) -> None:
+    def __init__(self, settings: GeoSettings, engine: GeoRoutingEngine) -> None:
         self._settings: GeoSettings = settings
+        self._engine: GeoRoutingEngine = engine
 
     async def create_address(
         self,
@@ -241,6 +243,7 @@ class GeoAdminService:
             [generation, osm_id],
             using="geo",
         )
+        self._engine.invalidate()
 
     async def unsuppress_feature(self, *, entity: str, osm_id: int) -> None:
         """Снятие тумбстоуна; объект вернётся со следующим поколением."""
@@ -280,6 +283,7 @@ class GeoAdminService:
             [generation, osm_way_id],
             using="geo",
         )
+        self._engine.invalidate()
 
     async def open_way(self, *, osm_way_id: int) -> None:
         """Снятие закрытия way; стоимости вернутся со следующим импортом."""
