@@ -19,7 +19,13 @@ from apps.geo.models.geo_enrich_item import GeoEnrichItem, GeoEnrichStatus
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.models.geo_source import GeoSource, GeoSourceKind
 from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
-from apps.geo.services.gar_import_service import GarImportService
+from apps.geo.services.gar_import_service import (
+    GarImportService,
+    _iter_row_attrs,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.profiling.resources import (
+    _rss_peak_mb,  # pyright: ignore[reportPrivateUsage]
+)
 
 _EMULATOR = "http://127.0.0.1:18101/WebServices/Public"
 _GEN = 990_000_010
@@ -32,7 +38,7 @@ pytestmark = pytest.mark.xdist_group("geo")
 def _test_generation(monkeypatch: pytest.MonkeyPatch):
     """Сервисы читают тестовое поколение, глобальная строка не трогается."""
 
-    async def _gen(cls) -> int:  # noqa: ANN001 — сигнатуру диктует classmethod
+    async def _gen(_cls: type[GeoImportState]) -> int:
         return _GEN
 
     monkeypatch.setattr(GeoImportState, "active_generation", classmethod(_gen))
@@ -194,6 +200,28 @@ async def test_gar_broken_delta_chain_falls_back_to_full(
     )
     result = await service.run_sync()
     assert result.regions[_REGION].mode == "full"
+
+
+def test_iter_row_attrs_bounded_memory(tmp_path: Path) -> None:
+    """Парсер не копит очищенные рядки в корне: полмиллиона строк — плоский RSS.
+
+    Регрессия: ``element.clear()`` оставлял пустой узел в children корня —
+    ~160B на строку × миллионы строк иерархии = гигабайты мёртвых объектов
+    и OOMKill geo-worker на полной выгрузке Москвы.
+    """
+    rows = 500_000
+    member = tmp_path / "hier.xml"
+    with member.open("wb") as fh:
+        _ = fh.write(b"<ITEMS>")
+        for i in range(rows):
+            _ = fh.write(
+                f'<ITEM ID="{i}" OBJECTID="{i}" PATH="1.{i}"/>'.encode()
+            )
+        _ = fh.write(b"</ITEMS>")
+    peak_before = _rss_peak_mb()
+    with member.open("rb") as stream:
+        assert sum(1 for _ in _iter_row_attrs(stream)) == rows
+    assert _rss_peak_mb() - peak_before < 64
 
 
 async def test_gar_source_disabled_skips(service: GarImportService) -> None:

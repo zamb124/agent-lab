@@ -142,13 +142,36 @@ class _DefusedElementTree(Protocol):
 _DET = module_sdk(_det, _DefusedElementTree)
 
 
+_ROOT_CLEAR_BATCH = 4096
+
+
 def _iter_row_attrs(stream: IO[bytes]) -> Iterator[dict[str, str]]:
-    """Строки XML-таблицы ГАР: каждый элемент с атрибутом ``OBJECTID``."""
-    for _event, element in _DET.iterparse(stream, events=("end",)):
+    """Строки XML-таблицы ГАР: каждый элемент с атрибутом ``OBJECTID``.
+
+    ``element.clear()`` освобождает содержимое рядки, но пустой узел
+    остаётся в списке детей корня — на десятках миллионов строк ГАР
+    это гигабайты мёртвых объектов и OOMKill воркера. Корень (первый
+    ``start``-элемент потока) очищается батчами: память парсера
+    константна на файле любого размера.
+    """
+    iterator = _DET.iterparse(stream, events=("start", "end"))
+    first = next(iterator, None)
+    if first is None:
+        return
+    _event, root = first
+    since_clear = 0
+    for event, element in iterator:
+        if event != "end":
+            continue
         attrs = element.attrib
         if "OBJECTID" in attrs:
             yield dict(attrs)
         element.clear()
+        since_clear += 1
+        if since_clear >= _ROOT_CLEAR_BATCH:
+            root.clear()
+            since_clear = 0
+    root.clear()
 
 
 def _active(attrs: dict[str, str]) -> bool:
