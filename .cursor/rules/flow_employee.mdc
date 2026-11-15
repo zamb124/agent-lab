@@ -31,8 +31,8 @@ alwaysApply: false
 
 ## Интеграции
 
-- Sync: будит только `sync/message/created` в DM (`ChannelType.DIRECT`) или с @mention сотрудника (`context_id = sync:{channel_id}`); группа без @mention не будит; ответ в канал — только builtins `sync_*`/`team_*` под JWT сотрудника; HTTP и задачи TaskIQ из Sync во flows не идут → `sync.mdc`.
-- Worktracker: `worktracker/work_item/assigned` на сотрудника (`context_id = work_item:{work_item_id}`) → write-back `WorkItemLink(flow_session)` + системный комментарий; `notify_user` получают только люди → `worktracker.mdc`.
+- Sync: будит только `sync/message/created` в DM (`ChannelType.DIRECT`) или с @mention сотрудника (`context_id = sync:{channel_id}`); блоки `file/image`, `file/document`, `file/audio`, `file/video` inbox кладёт в `files` сессии без отбора; группа без @mention не будит; ответ в канал — только builtins `sync_*`/`team_*` под JWT сотрудника; HTTP и задачи TaskIQ из Sync во flows не идут → `sync.mdc`.
+- Worktracker: `worktracker/work_item/assigned` на сотрудника (`context_id = work_item:{work_item_id}`) → `WorkItem.attachments` в `files` сессии без отбора, write-back `WorkItemLink(flow_session)` + системный комментарий; какие файлы читать, решает граф; `notify_user` получают только люди → `worktracker.mdc`.
 - Почта: при company mail connection (кроме `system`) — `mail_service.get_or_create_user_binding`; при отключении — `unbind_company_user_mailboxes` (личные ящики не трогаются) → `mail.mdc`.
 
 ## UI

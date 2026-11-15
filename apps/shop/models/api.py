@@ -7,6 +7,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_validator
 
 from apps.shop.models.enums import (
+    MenuImportStatus,
     ShopDeliveryType,
     ShopFeedbackChip,
     ShopKind,
@@ -293,6 +294,8 @@ class ShopProductResponse(StrictBaseModel):
     image_file_ids: list[str]
     sources: dict[str, str]
     nutrition: ShopNutrition
+    ingredients: list[str] = Field(default_factory=list)
+    allergens: list[str] = Field(default_factory=list)
     is_available: bool
     is_archived: bool
     sort: int
@@ -309,6 +312,8 @@ class ShopProductCreateRequest(StrictBaseModel):
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
     nutrition: ShopNutrition = Field(default_factory=ShopNutrition)
+    ingredients: list[str] = Field(default_factory=list)
+    allergens: list[str] = Field(default_factory=list)
 
 
 class ShopProductUpdateRequest(StrictBaseModel):
@@ -320,6 +325,8 @@ class ShopProductUpdateRequest(StrictBaseModel):
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
     nutrition: ShopNutrition | None = None
+    ingredients: list[str] | None = None
+    allergens: list[str] | None = None
     is_available: bool | None = None
     sort: int | None = None
 
@@ -338,6 +345,62 @@ class ShopProductsImportRequest(StrictBaseModel):
 
 class ShopProductsImportResponse(StrictBaseModel):
     created: int
+
+
+class MenuImportItem(StrictBaseModel):
+    """Строка черновика импорта уже в витринных единицах."""
+
+    item_id: str
+    section_name: str = ""
+    name: str
+    description: str = ""
+    price_minor: int = Field(ge=0)
+    portion: str = ""
+    nutrition: ShopNutrition = Field(default_factory=ShopNutrition)
+    nutrition_is_per_100g: bool = False
+    ingredients: list[str] = Field(default_factory=list)
+    allergens: list[str] = Field(default_factory=list)
+    photo_file_id: str | None = None
+    matched_product_id: str | None = None
+
+
+class MenuImportDraft(StrictBaseModel):
+    """Текущий черновик импорта одного магазина."""
+
+    shop_id: str
+    status: MenuImportStatus
+    failure_reason: str = ""
+    items: list[MenuImportItem] = Field(default_factory=list)
+
+
+class MenuImportStartRequest(StrictBaseModel):
+    file_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class MenuImportItemUpdate(StrictBaseModel):
+    item_id: str
+    section_name: str
+    name: str = Field(min_length=1, max_length=300)
+    description: str = ""
+    price_minor: int = Field(ge=0)
+    portion: str = Field(default="", max_length=50)
+    nutrition: ShopNutrition = Field(default_factory=ShopNutrition)
+    nutrition_is_per_100g: bool = False
+    ingredients: list[str] = Field(default_factory=list)
+    allergens: list[str] = Field(default_factory=list)
+    photo_file_id: str | None = None
+
+
+class MenuImportPublishRequest(StrictBaseModel):
+    """Пустой ``item_ids`` публикует все строки черновика."""
+
+    item_ids: list[str] = Field(default_factory=list)
+
+
+class MenuImportDiscardRequest(StrictBaseModel):
+    """Пустой ``item_id`` выбрасывает весь черновик."""
+
+    item_id: str | None = None
 
 
 class ShopProductsReorderRequest(StrictBaseModel):

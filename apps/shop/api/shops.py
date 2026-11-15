@@ -9,6 +9,11 @@ from fastapi import APIRouter, Query
 from apps.shop.di import Di
 from apps.shop.models import ShopDomain
 from apps.shop.models.api import (
+    MenuImportDiscardRequest,
+    MenuImportDraft,
+    MenuImportItemUpdate,
+    MenuImportPublishRequest,
+    MenuImportStartRequest,
     ShopAiBriefRequest,
     ShopAiCallResponse,
     ShopAiDescribeRequest,
@@ -80,6 +85,11 @@ from apps.shop.realtime.operations import (
     ShopIdPayload,
     ShopLoyaltyProgramPayload,
     ShopLoyaltyProgramSetPayload,
+    ShopMenuImportDiscardPayload,
+    ShopMenuImportPublishPayload,
+    ShopMenuImportShopPayload,
+    ShopMenuImportStartPayload,
+    ShopMenuImportUpdatePayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
     ShopModifierGroupUpdatePayload,
@@ -134,6 +144,11 @@ from apps.shop.realtime.operations import (
     op_domains_remove,
     op_loyalty_program_get,
     op_loyalty_program_set,
+    op_menu_import_discard,
+    op_menu_import_get,
+    op_menu_import_publish,
+    op_menu_import_start,
+    op_menu_import_update_item,
     op_modifier_groups_create,
     op_modifier_groups_list,
     op_modifier_groups_remove,
@@ -408,6 +423,61 @@ async def import_products(
         ShopProductsImportPayload.model_validate(
             {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/menu-import", response_model=MenuImportDraft)
+async def menu_import_start(
+    shop_id: str, body: MenuImportStartRequest, di: Di
+) -> MenuImportDraft:
+    return await op_menu_import_start(
+        ShopMenuImportStartPayload(shop_id=shop_id, file_ids=body.file_ids),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/{shop_id}/menu-import", response_model=MenuImportDraft)
+async def menu_import_get(shop_id: str, di: Di) -> MenuImportDraft:
+    return await op_menu_import_get(
+        ShopMenuImportShopPayload(shop_id=shop_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/menu-import/items", response_model=MenuImportDraft)
+async def menu_import_update_item(
+    shop_id: str, body: MenuImportItemUpdate, di: Di
+) -> MenuImportDraft:
+    return await op_menu_import_update_item(
+        ShopMenuImportUpdatePayload.model_validate(
+            {"shop_id": shop_id, **body.model_dump()}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/menu-import/publish", response_model=MenuImportDraft)
+async def menu_import_publish(
+    shop_id: str, body: MenuImportPublishRequest, di: Di
+) -> MenuImportDraft:
+    return await op_menu_import_publish(
+        ShopMenuImportPublishPayload(shop_id=shop_id, item_ids=body.item_ids),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/menu-import/discard", response_model=MenuImportDraft)
+async def menu_import_discard(
+    shop_id: str, body: MenuImportDiscardRequest, di: Di
+) -> MenuImportDraft:
+    return await op_menu_import_discard(
+        ShopMenuImportDiscardPayload(shop_id=shop_id, item_id=body.item_id),
         user=require_context().user,
         di=di,
     )

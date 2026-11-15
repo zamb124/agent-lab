@@ -1,6 +1,6 @@
 flow_id: shop_menu_agent
 name: Shop Menu Agent
-description: 'Разбор меню в JSON с crop фото. Чат/WorkItem import: read_file forced_lane=vision (страница как фото + page_summarizations/schema) → images.edit crop → materialize.'
+description: 'Разбор меню в JSON. Фото и PDF — read_file forced_lane=vision и crop. CSV, Excel и Word — read_file forced_lane=text, photo=null. JSON в state.response. WorkItem не меняет.'
 tags:
 - shop
 - menu
@@ -13,39 +13,37 @@ employee:
   display_name: Shop Menu Agent
   curator_user_ids:
   - $company_owner
-entry: route_entry
+entry: chat_prepare
 nodes:
-  route_entry:
-    type: code
-    name: Route chat or WorkItem
-    language: python
-    entrypoint: run
-    code: |
-      WORK_ITEM_CONTEXT_PREFIX = "work_item:"
-
-
-      async def run(args, state):
-          context_id = state.get("context_id")
-          if isinstance(context_id, str) and context_id.startswith(WORK_ITEM_CONTEXT_PREFIX):
-              state["entry_route"] = "work"
-          else:
-              state["entry_route"] = "chat"
-          return state
   chat_prepare:
     type: code
-    name: Prepare chat menu input
+    name: Prepare menu files
     language: python
     entrypoint: run
     code: |
       import json
 
 
-      def _is_vision_ref(ref):
+      _TEXT_TYPES = {
+          "text/csv",
+          "text/tab-separated-values",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }
+
+
+      def _is_menu_ref(ref):
           file_id = ref.get("file_id")
           content_type = ref.get("content_type")
           if not isinstance(file_id, str) or not isinstance(content_type, str):
               return False
-          return content_type.startswith("image/") or content_type == "application/pdf"
+          return (
+              content_type.startswith("image/")
+              or content_type == "application/pdf"
+              or content_type in _TEXT_TYPES
+          )
 
 
       async def run(args, state):
@@ -54,90 +52,24 @@ nodes:
               files = []
           if not isinstance(files, list):
               raise TypeError("shop_menu_agent: state.files must be a list")
-          vision_files = [ref for ref in files if isinstance(ref, dict) and _is_vision_ref(ref)]
-          state["files"] = vision_files
-          content = state.get("content")
-          has_text = isinstance(content, str) and content.strip() != ""
-          if len(vision_files) > 0:
-              state["chat_route"] = "files"
-          elif has_text:
-              state["chat_route"] = "text"
+          menu_files = [ref for ref in files if isinstance(ref, dict) and _is_menu_ref(ref)]
+          state["files"] = menu_files
+          if len(menu_files) > 0:
+              state["file_route"] = "files"
           else:
               state["response"] = json.dumps(
                   {
                       "sections": [],
-                      "failure_reason": "Пришлите текст меню или фото/PDF вложения.",
+                      "failure_reason": "Пришлите фото, PDF, Word, Excel или CSV меню.",
                   },
                   ensure_ascii=False,
                   indent=2,
               )
-              state["chat_route"] = "empty"
-          return state
-  load_job:
-    type: code
-    name: Load import WorkItem
-    language: python
-    entrypoint: run
-    code: |
-      WORK_ITEM_CONTEXT_PREFIX = "work_item:"
-
-
-      def _variable(variables, key):
-          entry = variables.get(key)
-          if entry is None:
-              return None
-          if not isinstance(entry, dict):
-              raise TypeError(f"shop_menu_agent: WorkItem variable {key} must be an object")
-          return entry.get("value")
-
-
-      def _is_vision_ref(ref):
-          file_id = ref.get("file_id")
-          content_type = ref.get("content_type")
-          if not isinstance(file_id, str) or not isinstance(content_type, str):
-              return False
-          return content_type.startswith("image/") or content_type == "application/pdf"
-
-
-      async def run(args, state):
-          context_id = state["context_id"]
-          if not isinstance(context_id, str) or not context_id.startswith(WORK_ITEM_CONTEXT_PREFIX):
-              raise ValueError(
-                  "shop_menu_agent: context_id must be work_item:<work_item_id> from the employee inbox"
-              )
-          work_item_id = context_id[len(WORK_ITEM_CONTEXT_PREFIX) :]
-          item = await tools.work_item_get(work_item_id=work_item_id)
-          variables = item["variables"]
-          mode = _variable(variables, "mode")
-          if mode != "import":
-              raise ValueError(f"shop_menu_agent: unsupported WorkItem mode {mode!r}; only import")
-          shop_id = _variable(variables, "shop_id")
-          if not isinstance(shop_id, str) or shop_id == "":
-              raise ValueError("shop_menu_agent: WorkItem variable shop_id is required")
-          attachments = item["attachments"]
-          vision_files = [ref for ref in attachments if _is_vision_ref(ref)]
-          attachment_file_ids = [
-              ref["file_id"] for ref in attachments if isinstance(ref.get("file_id"), str)
-          ]
-          state["shop_job"] = {
-              "work_item_id": work_item_id,
-              "mode": mode,
-              "shop_id": shop_id,
-              "menu_name": _variable(variables, "menu_name"),
-              "brief": _variable(variables, "brief"),
-              "attachment_file_ids": attachment_file_ids,
-          }
-          state["files"] = vision_files
-          state["failure_reason"] = ""
-          if len(vision_files) == 0:
-              state["failure_reason"] = "Нет изображений или PDF меню во вложениях задачи."
-              state["job_route"] = "failed"
-          else:
-              state["job_route"] = "import"
+              state["file_route"] = "empty"
           return state
   extract_menu:
     type: code
-    name: Extract menu via read_file vision summarization
+    name: Extract menu via read_file summarization
     incoming_policy: any
     language: python
     entrypoint: run
@@ -255,12 +187,32 @@ nodes:
         "additionalProperties": false
       }""")
 
-      EXTRACT_FOCUS_TEMPLATE = """\
+      _TEXT_TYPES = {
+          "text/csv",
+          "text/tab-separated-values",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }
+
+      VISION_FOCUS_TEMPLATE = """\
       This page is read as a photo (forced_lane=vision): use the page image plus OCR/text.
       Extract menu sections and dishes from this page only.
+      Partner-cabinet columns, when present: название, описание, состав, цена, вес or выход, категория, КБЖУ.
       If a dish has a FOOD PHOTOGRAPH on this page, set photo to {"file_id": "FILE_ID", "page": n}
       where n is the 0-based page index from ===PAGE n===. Do NOT return bbox coordinates.
       If there is no food photograph for the dish on this page, set photo to null — never invent a photo.
+      Prices -> price_minor in kopecks (350 -> 35000). Invent nothing. Skip covers, TOC, loyalty, banquets without dish rows.
+      FILE_ID=__FILE_ID__
+      USER_CONTEXT=__USER_CONTEXT__
+      """
+
+      TEXT_FOCUS_TEMPLATE = """\
+      This page is a table or document (CSV, Excel or Word), not a photograph.
+      Extract menu sections and dishes from this page only.
+      Map partner-cabinet columns when present: название, описание, состав, цена, вес or выход, категория, КБЖУ (calories, proteins, fats, carbs per 100 g).
+      Set photo to null. Do not invent a photograph.
       Prices -> price_minor in kopecks (350 -> 35000). Invent nothing. Skip covers, TOC, loyalty, banquets without dish rows.
       FILE_ID=__FILE_ID__
       USER_CONTEXT=__USER_CONTEXT__
@@ -295,13 +247,14 @@ nodes:
           return None
 
 
-      def _normalize_photo(raw, *, file_id, page):
-          if raw is None:
+      def _normalize_photo(raw, *, file_id, page, page_photo):
+          # Таблица и Word не содержат фото страницы: null остаётся null.
+          if not page_photo:
               return None
-          if not isinstance(raw, dict):
-              return None
-          # Any non-null photo object from the page summarizer means a food photo exists
-          # on this source page — NanoBanana crops that page later (no bbox).
+          # Structured summary не шлёт картинку страницы, если OCR уже дал текст.
+          # null от модели значит «фото не видно в тексте», не «на странице нет фото».
+          if raw is None or not isinstance(raw, dict):
+              return {"file_id": file_id, "page": page}
           photo_file_id = raw.get("file_id")
           if not isinstance(photo_file_id, str) or photo_file_id.strip() == "":
               photo_file_id = file_id
@@ -325,7 +278,7 @@ nodes:
           return None
 
 
-      def _normalize_item(raw, *, file_id, page):
+      def _normalize_item(raw, *, file_id, page, page_photo):
           if not isinstance(raw, dict):
               return None
           name = raw.get("name")
@@ -381,11 +334,13 @@ nodes:
               "ingredients": ingredients,
               "nutrition": nutrition,
               "allergens": clean_allergens,
-              "photo": _normalize_photo(raw.get("photo"), file_id=file_id, page=page),
+              "photo": _normalize_photo(
+                  raw.get("photo"), file_id=file_id, page=page, page_photo=page_photo
+              ),
           }
 
 
-      def _merge_page(sections_by_name, order, payload, *, file_id, page):
+      def _merge_page(sections_by_name, order, payload, *, file_id, page, page_photo):
           sections = payload.get("sections")
           if not isinstance(sections, list):
               return
@@ -402,7 +357,9 @@ nodes:
                   continue
               normalized = []
               for item in items_raw:
-                  norm = _normalize_item(item, file_id=file_id, page=page)
+                  norm = _normalize_item(
+                      item, file_id=file_id, page=page, page_photo=page_photo
+                  )
                   if norm is not None:
                       normalized.append(norm)
               if len(normalized) == 0:
@@ -418,7 +375,7 @@ nodes:
           if files is None:
               files = []
           if not isinstance(files, list) or len(files) == 0:
-              raise ValueError("shop_menu_agent: extract_menu requires vision files in state.files")
+              raise ValueError("shop_menu_agent: extract_menu requires menu files in state.files")
           content = state.get("content")
           if isinstance(content, str) and content.strip() != "":
               user_context = content.strip()
@@ -437,13 +394,16 @@ nodes:
                   continue
               if isinstance(content_type, str) and content_type.startswith("image/") and "#" in original_name:
                   continue
-              if not (
-                  isinstance(content_type, str)
-                  and (content_type.startswith("image/") or content_type == "application/pdf")
-              ):
+              if not isinstance(content_type, str):
                   continue
+              page_photo = (
+                  content_type.startswith("image/") or content_type == "application/pdf"
+              )
+              if not page_photo and content_type not in _TEXT_TYPES:
+                  continue
+              focus_template = VISION_FOCUS_TEMPLATE if page_photo else TEXT_FOCUS_TEMPLATE
               focus = (
-                  EXTRACT_FOCUS_TEMPLATE
+                  focus_template
                   .replace("__FILE_ID__", file_id)
                   .replace("__USER_CONTEXT__", user_context)
               )
@@ -451,7 +411,7 @@ nodes:
                   names=[original_name],
                   page_start=0,
                   page_end=-1,
-                  forced_lane="vision",
+                  forced_lane="vision" if page_photo else "text",
                   page_summarizations=True,
                   summarization_prompt=focus,
                   summarization_schema=PAGE_SCHEMA,
@@ -488,7 +448,14 @@ nodes:
                       reason = payload.get("failure_reason")
                       if isinstance(reason, str) and reason.strip() != "":
                           page_failures.append(reason.strip())
-                      _merge_page(sections_by_name, order, payload, file_id=file_id, page=page)
+                      _merge_page(
+                          sections_by_name,
+                          order,
+                          payload,
+                          file_id=file_id,
+                          page=page,
+                          page_photo=page_photo,
+                      )
           sections = [{"name": name, "items": sections_by_name[name]} for name in order]
           state["menu_sections"] = sections
           if len(sections) == 0:
@@ -507,28 +474,11 @@ nodes:
                   state["failure_reason"] = "Не удалось распознать блюда во вложениях."
           else:
               state["failure_reason"] = ""
-          entry_route = state.get("entry_route")
           if state["failure_reason"] == "":
               state["extract_route"] = "ok"
-          elif entry_route == "work":
-              state["extract_route"] = "work_fail"
           else:
-              state["extract_route"] = "chat_fail"
+              state["extract_route"] = "fail"
           return state
-  parse_text:
-    type: llm_node
-    name: Parse text menu to JSON
-    prompt: prompts/parse_text.md
-    llm:
-      model: auto
-      temperature: 0.1
-      provider: linnex_llm
-    tools: []
-    structured_output: true
-    output_schema_file: schemas/import_plan.output_schema.json
-    output_mapping:
-      sections: menu_sections
-      failure_reason: failure_reason
   materialize_dish_photos:
     type: code
     name: Crop dish photos (images.edit)
@@ -673,9 +623,9 @@ nodes:
               indent=2,
           )
           return state
-  format_chat_failure:
+  format_failure:
     type: code
-    name: Format chat failure
+    name: Format import failure
     incoming_policy: any
     language: python
     entrypoint: run
@@ -698,92 +648,21 @@ nodes:
               indent=2,
           )
           return state
-  apply_menu:
-    type: code
-    name: Complete import WorkItem
-    language: python
-    entrypoint: run
-    code: |
-      async def run(args, state):
-          job = state["shop_job"]
-          response = state["response"]
-          if not isinstance(response, str) or response.strip() == "":
-              raise ValueError("shop_menu_agent: response JSON is required after materialize")
-          await tools.work_item_complete(
-              work_item_id=job["work_item_id"],
-              terminal_state="completed",
-              resolution_text=response,
-          )
-          return state
-  fail_job:
-    type: code
-    name: Fail WorkItem
-    incoming_policy: any
-    language: python
-    entrypoint: run
-    code: |
-      async def run(args, state):
-          job = state["shop_job"]
-          reason = state["failure_reason"]
-          if not isinstance(reason, str) or reason.strip() == "":
-              raise ValueError("shop_menu_agent: failure_reason is required to fail the WorkItem")
-          await tools.work_item_complete(
-              work_item_id=job["work_item_id"],
-              terminal_state="failed",
-              resolution_text=reason.strip(),
-          )
-          state["response"] = reason.strip()
-          return state
 edges:
-- from_node: route_entry
-  to_node: chat_prepare
-  condition:
-    type: simple
-    variable: entry_route
-    operator: ==
-    value: chat
-- from_node: route_entry
-  to_node: load_job
-  condition:
-    type: simple
-    variable: entry_route
-    operator: ==
-    value: work
 - from_node: chat_prepare
   to_node: extract_menu
   condition:
     type: simple
-    variable: chat_route
+    variable: file_route
     operator: ==
     value: files
-- from_node: chat_prepare
-  to_node: parse_text
-  condition:
-    type: simple
-    variable: chat_route
-    operator: ==
-    value: text
 - from_node: chat_prepare
   to_node: null
   condition:
     type: simple
-    variable: chat_route
+    variable: file_route
     operator: ==
     value: empty
-- from_node: load_job
-  to_node: fail_job
-  condition:
-    type: simple
-    variable: job_route
-    operator: ==
-    value: failed
-- from_node: load_job
-  to_node: extract_menu
-  condition:
-    type: simple
-    variable: job_route
-    operator: ==
-    value: import
 - from_node: extract_menu
   to_node: materialize_dish_photos
   condition:
@@ -792,38 +671,10 @@ edges:
     operator: ==
     value: ok
 - from_node: extract_menu
-  to_node: format_chat_failure
+  to_node: format_failure
   condition:
     type: simple
     variable: extract_route
     operator: ==
-    value: chat_fail
-- from_node: extract_menu
-  to_node: fail_job
-  condition:
-    type: simple
-    variable: extract_route
-    operator: ==
-    value: work_fail
-- from_node: parse_text
-  to_node: materialize_dish_photos
-  condition:
-    type: simple
-    variable: failure_reason
-    operator: ==
-    value: ''
-- from_node: parse_text
-  to_node: format_chat_failure
-  condition:
-    type: simple
-    variable: failure_reason
-    operator: '!='
-    value: ''
-- from_node: materialize_dish_photos
-  to_node: apply_menu
-  condition:
-    type: simple
-    variable: entry_route
-    operator: ==
-    value: work
+    value: fail
 branches: {}

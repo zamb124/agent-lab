@@ -44,7 +44,7 @@ class EvaluationCase(CompanyScopedModel):
     created_at: datetime = DbField()
     updated_at: datetime = DbField()
     company_id: str = DbField(default="", db_index=True)
-    description: str = DbField(default="")
+    description: str = DbField(default="", db_type="TEXT")
     target: EvaluationTargetFlow | EvaluationTargetNode = DbField(
         default_factory=lambda: EvaluationTargetFlow(type="flow"),
         db_type="JSONB",

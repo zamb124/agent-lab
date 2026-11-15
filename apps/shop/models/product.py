@@ -5,7 +5,7 @@
 живут в каталоге, витринные переопределения — в
 ``catalog_product_overrides`` scope ``shop:<shop_id>`` → ``shop``.
 Здесь только витринная политика: цена, порция, метки, КБЖУ,
-доступность, сортировка и раздел. Все публичные ссылки (заказы,
+состав, аллергены, доступность, сортировка и раздел. Все публичные ссылки (заказы,
 полки, избранное, модификаторы, подписки) держат ``product_id``.
 """
 
@@ -50,6 +50,10 @@ class ShopProduct(PlatformModel):
     badges: list[str] = DbField(default_factory=list, db_type="JSONB")
     price_minor: int = DbField(ge=0)
     nutrition: dict[str, float] = DbField(default_factory=dict, db_type="JSONB")
+    ingredients: list[str] = DbField(default_factory=list, db_type="JSONB")
+    """Состав блюда, как его показывает карточка витрины."""
+    allergens: list[str] = DbField(default_factory=list, db_type="JSONB")
+    """Коды аллергенов из ``SHOP_ALLERGENS``."""
     is_available: bool = DbField(default=True)
     sort: int = DbField(default=0)
     created_at: datetime = DbField()

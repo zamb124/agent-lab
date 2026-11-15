@@ -10,6 +10,7 @@ from typing import Any
 
 from httpx2 import AsyncClient
 
+from apps.shop.di import ShopDi
 from tests.fixtures.shop import API_PREFIX
 
 _SHOPS = f"{API_PREFIX}/shops"
@@ -581,3 +582,123 @@ class TestCatalog:
             json={"items": []},
         )
         assert resp.status_code == 422
+
+
+class TestMenuImportDraft:
+    async def test_publish_updates_match_and_creates_new(
+        self, shop_client: AsyncClient, shop_di: ShopDi, unique_id: str
+    ) -> None:
+        """Черновик из секций агента: совпавшее имя обновляет листинг, новое создаёт."""
+        from apps.shop.models.shop import Shop
+
+        shop = await _make_shop(shop_client, f"mimp-{unique_id[:8]}")
+        existing = await _make_product(shop_client, shop["shop_id"], "Борщ", 10000)
+        assert existing["ingredients"] == []
+        assert existing["allergens"] == []
+        stored = await Shop.get(shop["shop_id"])
+        assert stored is not None
+        compote_name = f"Компот {unique_id[:6]}"
+        draft = await shop_di.menu_import_service.store_agent_payload(
+            stored.company_id,
+            shop["shop_id"],
+            {
+                "failure_reason": "",
+                "sections": [
+                    {
+                        "name": "Горячее",
+                        "items": [
+                            {
+                                "name": "Борщ",
+                                "description": "Со сметаной",
+                                "price_minor": 35000,
+                                "measure": 300,
+                                "measure_unit": "g",
+                                "ingredients": ["свекла", "сметана"],
+                                "nutrition": {
+                                    "calories_kcal": 100,
+                                    "proteins_g": 4,
+                                    "fats_g": 5,
+                                    "carbs_g": 6,
+                                },
+                                "allergens": ["dairy"],
+                                "photo": None,
+                            }
+                        ],
+                    },
+                    {
+                        "name": "Напитки",
+                        "items": [
+                            {
+                                "name": compote_name,
+                                "description": "Из сухофруктов",
+                                "price_minor": 12000,
+                                "measure": 200,
+                                "measure_unit": "ml",
+                                "ingredients": ["сухофрукты"],
+                                "nutrition": {
+                                    "calories_kcal": 50,
+                                    "proteins_g": 0,
+                                    "fats_g": 0,
+                                    "carbs_g": 12,
+                                },
+                                "allergens": [],
+                                "photo": None,
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+        borscht = next(item for item in draft.items if item.name == "Борщ")
+        compote = next(item for item in draft.items if item.name == compote_name)
+        assert borscht.matched_product_id == existing["product_id"]
+        assert borscht.portion == "300 г"
+        assert borscht.nutrition_is_per_100g is False
+        assert borscht.nutrition.kcal == 300
+        assert compote.matched_product_id is None
+        assert compote.portion == "200 мл"
+        assert compote.nutrition_is_per_100g is True
+        assert compote.nutrition.kcal == 50
+
+        updated = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menu-import/items",
+            json={
+                "item_id": compote.item_id,
+                "section_name": compote.section_name,
+                "name": compote.name,
+                "description": compote.description,
+                "price_minor": 15000,
+                "portion": compote.portion,
+                "nutrition": compote.nutrition.model_dump(),
+                "nutrition_is_per_100g": False,
+                "ingredients": compote.ingredients,
+                "allergens": [],
+                "photo_file_id": None,
+            },
+        )
+        assert updated.status_code == 200, updated.text
+
+        published = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/menu-import/publish",
+            json={"item_ids": []},
+        )
+        assert published.status_code == 200, published.text
+        assert published.json()["items"] == []
+
+        listed = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")
+        assert listed.status_code == 200
+        by_name = {item["name"]: item for item in listed.json()["items"]}
+        assert by_name["Борщ"]["product_id"] == existing["product_id"]
+        assert by_name["Борщ"]["price_minor"] == 35000
+        assert by_name["Борщ"]["portion"] == "300 г"
+        assert by_name["Борщ"]["description"] == "Со сметаной"
+        assert by_name["Борщ"]["ingredients"] == ["свекла", "сметана"]
+        assert by_name["Борщ"]["allergens"] == ["dairy"]
+        assert by_name["Борщ"]["nutrition"]["kcal"] == 300
+        created = by_name[compote_name]
+        assert created["price_minor"] == 15000
+        assert created["portion"] == "200 мл"
+        assert created["ingredients"] == ["сухофрукты"]
+        categories = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")
+        names = {item["name"] for item in categories.json()["items"]}
+        assert {"Горячее", "Напитки"} <= names

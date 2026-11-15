@@ -87,6 +87,7 @@ async def test_dispatch_to_employee_inbox_succeeds(
             channel_id=f"chan_{unique_id}",
             message_id=f"msg_{unique_id}",
             text="employee, please help",
+            files=[],
         )
         assert dispatched is True
         # провижн сделал сотрудника обычным участником-User

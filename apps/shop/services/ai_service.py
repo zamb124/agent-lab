@@ -24,7 +24,11 @@ from core.a2a.pending_call import PendingCallStatus, PlatformA2APendingCall
 from core.a2a.submit import A2ACallPending, a2a_resume_nonce, submit_a2a_call
 from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.config import get_settings
-from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
+from core.errors.boundary import (
+    PlatformBoundaryError,
+    PlatformNotFoundError,
+    PlatformUnavailableError,
+)
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
@@ -36,6 +40,7 @@ logger = get_logger(__name__)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _FLOW_ID = "shop"
+_MENU_AGENT_FLOW_ID = "shop_menu_agent"
 _BRANCH_DESCRIBE = "describe"
 _BRANCH_DESCRIBE_PHOTO = "describe_photo"
 _BRANCH_SUGGEST_OPTIONS = "suggest_options"
@@ -63,6 +68,7 @@ class ShopAiService:
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
+        flow_id: str = _FLOW_ID,
     ) -> A2ATaskResult:
         """Вызов ветки flow ``shop`` без синхронного ожидания.
 
@@ -105,7 +111,7 @@ class ShopAiService:
             service="shop",
             company_id=company_id,
             user_id=user_id,
-            base_url=f"{flows_base_url}/flows/api/v1/{_FLOW_ID}",
+            base_url=f"{flows_base_url}/flows/api/v1/{flow_id}",
             content=content,
             branch_id=branch_id,
             continuation=TASK_A2A_CALL_FINISHED,
@@ -182,6 +188,7 @@ class ShopAiService:
         content: str,
         variables: JsonObject,
         parts: list[JsonObject] | None = None,
+        flow_id: str = _FLOW_ID,
     ) -> JsonObject:
         """Вызов ветки flow и извлечение structured output: data-парты artifacts/history, затем JSON из текста."""
         response = await self._flow_task(
@@ -191,6 +198,7 @@ class ShopAiService:
             content=content,
             variables=variables,
             parts=parts,
+            flow_id=flow_id,
         )
 
         def _data_from_parts(parts_raw: JsonValue) -> list[JsonObject]:
@@ -236,7 +244,7 @@ class ShopAiService:
             "ai returned no structured payload", error_code="ai_empty_result"
         )
 
-    async def _read_file_part(self, file_id: str) -> JsonObject:
+    async def _read_file_part(self, file_id: str, *, filename: str | None = None) -> JsonObject:
         """Байты файла как A2A Part.raw (base64 на проводе) для передачи в flow."""
         record = await FileRecord.get(file_id)
         if record is None:
@@ -250,7 +258,7 @@ class ShopAiService:
         return {
             "raw": base64.b64encode(data).decode("ascii"),
             "mediaType": record.content_type,
-            "filename": file_id,
+            "filename": file_id if filename is None else filename,
         }
 
     async def describe_product(
@@ -385,6 +393,32 @@ class ShopAiService:
         if not isinstance(items_raw, list) or not items_raw:
             raise PlatformNotFoundError("ai returned empty items", error_code="ai_empty_result")
         return TypeAdapter(list[ShopAiMenuItem]).validate_python(items_raw)[:500]
+
+    async def parse_menu_files(
+        self, *, company_id: str, user_id: str, file_ids: list[str]
+    ) -> JsonObject:
+        """Разбор файлов меню агентом ``shop_menu_agent``. Ответ — JSON секций."""
+        if not file_ids:
+            raise PlatformBoundaryError(
+                "menu import requires files", error_code="menu_import_empty"
+            )
+        parts: list[JsonObject] = []
+        for file_id in file_ids:
+            record = await FileRecord.get(file_id)
+            if record is None:
+                raise PlatformNotFoundError("file not found", error_code="file_not_found")
+            parts.append(
+                await self._read_file_part(file_id, filename=record.original_name)
+            )
+        return await self._flow_json(
+            "default",
+            company_id=company_id,
+            user_id=user_id,
+            content="Extract the menu from the attachments",
+            variables={},
+            parts=parts,
+            flow_id=_MENU_AGENT_FLOW_ID,
+        )
 
     async def describe_shop(
         self,

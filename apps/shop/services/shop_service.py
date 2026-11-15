@@ -41,7 +41,7 @@ from apps.shop.models.api import (
 )
 from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
 from apps.shop.models.common import DOMAIN_PATTERN, SLUG_PATTERN, new_id
-from apps.shop.models.enums import PromoStacking
+from apps.shop.models.enums import SHOP_ALLERGENS, PromoStacking
 from core.catalog.contracts import CatalogOverlay, CatalogScope, ResolvedProduct
 from core.catalog.models import CatalogProductOverride, CatalogUom
 from core.catalog.service import CatalogService
@@ -59,6 +59,49 @@ class _Keep:
 
 
 _KEEP = _Keep()
+
+
+_INGREDIENT_MAX = 40
+_INGREDIENT_LEN = 120
+
+
+def _string_patch(raw: JsonValue, *, code: str) -> list[str]:
+    if not isinstance(raw, list):
+        raise PlatformBoundaryError("list is invalid", error_code=code)
+    items: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise PlatformBoundaryError("list is invalid", error_code=code)
+        items.append(item)
+    return items
+
+
+def clean_shop_ingredients(items: list[str]) -> list[str]:
+    """Непустые строки состава. Пустые отбрасываются. Сверх лимита — ошибка."""
+    cleaned: list[str] = []
+    for item in items:
+        text = item.strip()
+        if text == "":
+            continue
+        if len(text) > _INGREDIENT_LEN or len(cleaned) >= _INGREDIENT_MAX:
+            raise PlatformBoundaryError(
+                "Ingredient list is invalid", error_code="ingredient_invalid"
+            )
+        cleaned.append(text)
+    return cleaned
+
+
+def clean_shop_allergens(items: list[str]) -> list[str]:
+    """Коды ``SHOP_ALLERGENS`` без повторов. Чужой код — ошибка."""
+    cleaned: list[str] = []
+    for item in items:
+        if item not in SHOP_ALLERGENS:
+            raise PlatformBoundaryError(
+                "Allergen code is invalid", error_code="allergen_invalid"
+            )
+        if item not in cleaned:
+            cleaned.append(item)
+    return cleaned
 
 
 def shop_scopes(shop_id: str) -> list[CatalogScope]:
@@ -83,6 +126,8 @@ def _listing_response(
         image_file_ids=list(resolved.image_file_ids),
         sources=dict(resolved.sources),
         nutrition=ShopNutrition.model_validate(row.nutrition or {}),
+        ingredients=list(row.ingredients),
+        allergens=list(row.allergens),
         is_available=row.is_available,
         is_archived=resolved.product.is_archived,
         sort=row.sort,
@@ -494,6 +539,8 @@ class ShopService:
             badges=self._validate_product_badges(shop, payload.badges),
             price_minor=payload.price_minor,
             nutrition=payload.nutrition.model_dump(exclude_none=True),
+            ingredients=clean_shop_ingredients(payload.ingredients),
+            allergens=clean_shop_allergens(payload.allergens),
             sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),
             created_at=now,
             updated_at=now,
@@ -578,6 +625,14 @@ class ShopService:
             patch["nutrition"] = {k: v for k, v in nutrition.items() if v is not None}
         if "badges" in patch:
             patch["badges"] = self._validate_product_badges(shop, payload.badges or [])
+        if "ingredients" in patch:
+            patch["ingredients"] = clean_shop_ingredients(
+                _string_patch(patch["ingredients"], code="ingredient_invalid")
+            )
+        if "allergens" in patch:
+            patch["allergens"] = clean_shop_allergens(
+                _string_patch(patch["allergens"], code="allergen_invalid")
+            )
         if "category_id" in patch and patch["category_id"] != product.category_id:
             category_patch = patch["category_id"]
             if category_patch is not None:

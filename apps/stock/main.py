@@ -32,12 +32,7 @@ app = create_service_app(
     api_version="v1",
 )
 
-mount_service_spa(
-    app,
-    public_segment="stock",
-    ui_dir=Path(__file__).parent / "ui",
-    spa_pages={"tsd": "tsd.html"},
-)
+mount_service_spa(app, public_segment="stock", ui_dir=Path(__file__).parent / "ui")
 
 
 if __name__ == "__main__":

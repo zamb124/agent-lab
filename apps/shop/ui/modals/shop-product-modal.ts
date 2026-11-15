@@ -34,6 +34,11 @@ interface NutritionValue {
     carb_g?: number;
 }
 
+const ALLERGEN_CODES = [
+    'gluten', 'dairy', 'egg', 'fish', 'shellfish', 'nuts', 'peanuts',
+    'soy', 'sesame', 'mustard', 'celery', 'lupin', 'molluscs', 'sulphites',
+] as const;
+
 export interface ProductDraft {
     product_id?: string;
     name: string;
@@ -43,6 +48,8 @@ export interface ProductDraft {
     badges: string[];
     photo_file_id: string | null;
     nutrition: NutritionValue;
+    ingredients: string[];
+    allergens: string[];
     is_available: boolean;
     sources: Record<string, string>;
 }
@@ -84,6 +91,8 @@ export class ShopProductModal extends PlatformModal {
     declare _fat: string;
     declare _carb: string;
     declare _isAvailable: boolean;
+    declare _ingredients: string[];
+    declare _allergens: string[];
     declare _resetFields: string[];
 
     static override properties = {
@@ -108,6 +117,8 @@ export class ShopProductModal extends PlatformModal {
         _fat: { state: true },
         _carb: { state: true },
         _isAvailable: { state: true },
+        _ingredients: { state: true },
+        _allergens: { state: true },
         _resetFields: { state: true },
     };
 
@@ -170,6 +181,8 @@ export class ShopProductModal extends PlatformModal {
         this._fat = '';
         this._carb = '';
         this._isAvailable = true;
+        this._ingredients = [];
+        this._allergens = [];
         this._resetFields = [];
         this._createOp = this.useOp('shop/product_create');
         this._updateOp = this.useOp('shop/product_update');
@@ -212,6 +225,8 @@ export class ShopProductModal extends PlatformModal {
             this._fat = n.fat_g !== undefined ? String(n.fat_g) : '';
             this._carb = n.carb_g !== undefined ? String(n.carb_g) : '';
             this._isAvailable = p.is_available;
+            this._ingredients = [...p.ingredients];
+            this._allergens = [...p.allergens];
         }
     }
 
@@ -266,6 +281,32 @@ export class ShopProductModal extends PlatformModal {
         return unsafeHTML(`<svg viewBox="0 -960 960 960"><path d="${path}"/></svg>`);
     }
 
+    private _allergenLabel(code: string): string {
+        switch (code) {
+            case 'gluten': return this.t('menu.allergen_gluten');
+            case 'dairy': return this.t('menu.allergen_dairy');
+            case 'egg': return this.t('menu.allergen_egg');
+            case 'fish': return this.t('menu.allergen_fish');
+            case 'shellfish': return this.t('menu.allergen_shellfish');
+            case 'nuts': return this.t('menu.allergen_nuts');
+            case 'peanuts': return this.t('menu.allergen_peanuts');
+            case 'soy': return this.t('menu.allergen_soy');
+            case 'sesame': return this.t('menu.allergen_sesame');
+            case 'mustard': return this.t('menu.allergen_mustard');
+            case 'celery': return this.t('menu.allergen_celery');
+            case 'lupin': return this.t('menu.allergen_lupin');
+            case 'molluscs': return this.t('menu.allergen_molluscs');
+            case 'sulphites': return this.t('menu.allergen_sulphites');
+            default: throw new Error(`ShopProductModal: unknown allergen ${code}`);
+        }
+    }
+
+    private _toggleAllergen(code: string) {
+        this._allergens = this._allergens.includes(code)
+            ? this._allergens.filter((item) => item !== code)
+            : [...this._allergens, code];
+    }
+
     private _toggleBadge(key: string) {
         this._badges = this._badges.includes(key)
             ? this._badges.filter((b) => b !== key)
@@ -299,6 +340,12 @@ export class ShopProductModal extends PlatformModal {
             const nutrition = this._nutrition();
             if (JSON.stringify(nutrition) !== JSON.stringify(p.nutrition)) payload.nutrition = nutrition;
             if (this._isAvailable !== p.is_available) payload.is_available = this._isAvailable;
+            if (JSON.stringify(this._ingredients) !== JSON.stringify(p.ingredients)) {
+                payload.ingredients = this._ingredients;
+            }
+            if (JSON.stringify(this._allergens) !== JSON.stringify(p.allergens)) {
+                payload.allergens = this._allergens;
+            }
             if (Object.keys(payload).length > 2) ok = (await this._updateOp.run(payload)) !== null;
         } else {
             ok = (await this._createOp.run({
@@ -312,6 +359,8 @@ export class ShopProductModal extends PlatformModal {
                 price_minor: price,
                 photo_file_id: this._photoFileId === '' ? null : this._photoFileId,
                 nutrition: this._nutrition(),
+                ingredients: this._ingredients,
+                allergens: this._allergens,
             })) !== null;
         }
         if (!ok) return;
@@ -442,6 +491,21 @@ export class ShopProductModal extends PlatformModal {
                           <button type="button" class="bchip ${this._badges.includes(b.key) ? 'on' : ''}"
                               @click=${() => this._toggleBadge(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`)}</div>`
                     : nothing}
+                <platform-field type="array" mode="edit" label=${this.t('menu.field_ingredients')}
+                    .value=${this._ingredients}
+                    .config=${{ preserve_case: true }}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => {
+                        const value = e.detail.value;
+                        this._ingredients = Array.isArray(value)
+                            ? value.filter((item): item is string => typeof item === 'string')
+                            : [];
+                    }}></platform-field>
+                <div class="sec-title">${this.t('menu.field_allergens')}</div>
+                <div class="badges">
+                    ${ALLERGEN_CODES.map((code) => html`
+                        <button type="button" class="bchip ${this._allergens.includes(code) ? 'on' : ''}"
+                            @click=${() => this._toggleAllergen(code)}>${this._allergenLabel(code)}</button>`)}
+                </div>
                 ${this.nutritionEnabled
                     ? html`
                         <div class="sec-title">${this.t('menu.nutrition_title')}</div>

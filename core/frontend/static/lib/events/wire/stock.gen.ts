@@ -617,6 +617,16 @@ export interface StockDecision {
 export type StockDecisionStatus = "suggested" | "applied" | "rejected";
 
 /**
+ * Решения рефлексов склада — диспетчерский журнал выборов адреса.
+ */
+export interface StockDecisionsListPayload {
+    "warehouse_id": string;
+    "status"?: StockDecisionStatus | null | undefined;
+    "limit"?: number | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * StockItemsResponse[CatalogPackagingView]
  */
 export interface StockItemsResponse_CatalogPackagingView_ {
@@ -637,6 +647,14 @@ export interface StockItemsResponse_CatalogUom_ {
  */
 export interface StockItemsResponse_StockContainerType_ {
     "items": StockContainerType[];
+    [key: string]: unknown;
+}
+
+/**
+ * StockItemsResponse[StockDecision]
+ */
+export interface StockItemsResponse_StockDecision_ {
+    "items": StockDecision[];
     [key: string]: unknown;
 }
 
@@ -1287,6 +1305,12 @@ export interface StockOperationTypeUpdatePayload {
     "putaway_flow_id"?: string | null | undefined;
     "auto_validate"?: boolean | null | undefined;
     "scan_flow"?: "pack" | "ship" | "default" | null | undefined;
+    "default_source_location_id"?: string | null | undefined;
+    "default_dest_location_id"?: string | null | undefined;
+    "name_prefix"?: string | null | undefined;
+    "create_lots"?: boolean | null | undefined;
+    "use_existing_lots"?: boolean | null | undefined;
+    "return_operation_type_id"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -2740,6 +2764,7 @@ export interface StockCommandMap {
     "stock/containers/item_requested": { payload: StockContainerIdPayload; result: StockContainerContentsResponse },
     "stock/containers/list_requested": { payload: StockContainersListPayload; result: StockItemsResponse_StockLocation_ },
     "stock/containers/move_requested": { payload: StockContainerMovePayload; result: StockLocation },
+    "stock/decisions/list_requested": { payload: StockDecisionsListPayload; result: StockItemsResponse_StockDecision_ },
     "stock/locations/count_due_requested": { payload: StockLocationsCountDuePayload; result: StockItemsResponse_StockLocation_ },
     "stock/locations/create_requested": { payload: StockLocationCreatePayload; result: StockLocation },
     "stock/locations/item_requested": { payload: StockLocationIdPayload; result: StockLocation },
@@ -2875,6 +2900,9 @@ export interface StockEventMap {
     "stock/containers/move_failed": PlatformCommandEventPayload,
     "stock/containers/move_requested": PlatformCommandEventPayload,
     "stock/containers/move_succeeded": PlatformCommandEventPayload,
+    "stock/decisions/list_failed": PlatformCommandEventPayload,
+    "stock/decisions/list_requested": PlatformCommandEventPayload,
+    "stock/decisions/list_succeeded": PlatformCommandEventPayload,
     "stock/locations/count_due_failed": PlatformCommandEventPayload,
     "stock/locations/count_due_requested": PlatformCommandEventPayload,
     "stock/locations/count_due_succeeded": PlatformCommandEventPayload,

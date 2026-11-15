@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from apps.shop.models.enums import ShopDeliveryType, ShopOrderStatus, ShopStatus
+from apps.shop.models.enums import (
+    MenuImportStatus,
+    ShopDeliveryType,
+    ShopOrderStatus,
+    ShopStatus,
+)
 from core.events import (
     publish_domain_event,
     publish_event_to_company,
@@ -24,6 +29,7 @@ SHOP_CATALOG_CHANGED = "shop/catalog/changed"
 SHOP_ORDER_CREATED = "shop/order/created"
 SHOP_ORDER_STATUS_CHANGED = "shop/order/status_changed"
 SHOP_AI_CALL_FINISHED = "shop/ai_call/finished"
+SHOP_MENU_IMPORT_UPDATED = "shop/menu_import/updated"
 
 
 class ShopShopEventPayload(BaseModel):
@@ -52,6 +58,13 @@ class ShopOrderEventPayload(BaseModel):
     delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
     total_minor: int
     currency: str
+
+
+class ShopMenuImportUpdatedEventPayload(BaseModel):
+    """Payload `shop/menu_import/updated` — черновик импорта записан заново."""
+
+    shop_id: str
+    status: MenuImportStatus
 
 
 class ShopAiCallFinishedEventPayload(BaseModel):
@@ -101,6 +114,11 @@ register_platform_event(
     ShopAiCallFinishedEventPayload,
     description="Завершился AI-вызов магазина: результат или ошибка по call_id.",
 )
+register_platform_event(
+    SHOP_MENU_IMPORT_UPDATED,
+    ShopMenuImportUpdatedEventPayload,
+    description="Черновик импорта меню магазина записан: parsing, ready или failed.",
+)
 
 
 async def publish_shop_event(
@@ -139,6 +157,19 @@ async def publish_shop_ai_call_finished(
         company_id=company_id,
         type=SHOP_AI_CALL_FINISHED,
         payload=payload.model_dump(mode="json"),
+    )
+
+
+async def publish_shop_menu_import_updated(
+    *, company_id: str, shop_id: str, status: MenuImportStatus
+) -> None:
+    """Черновик импорта изменился: панель меню перечитывает его."""
+    await publish_event_to_company(
+        company_id=company_id,
+        type=SHOP_MENU_IMPORT_UPDATED,
+        payload=ShopMenuImportUpdatedEventPayload(
+            shop_id=shop_id, status=status
+        ).model_dump(mode="json"),
     )
 
 
@@ -197,6 +228,7 @@ async def publish_shop_order_event(
 __all__ = [
     "SHOP_AI_CALL_FINISHED",
     "SHOP_CATALOG_CHANGED",
+    "SHOP_MENU_IMPORT_UPDATED",
     "SHOP_ORDER_CREATED",
     "SHOP_ORDER_STATUS_CHANGED",
     "SHOP_SHOP_CREATED",
@@ -204,10 +236,12 @@ __all__ = [
     "SHOP_SHOP_UPDATED",
     "ShopAiCallFinishedEventPayload",
     "ShopCatalogChangedEventPayload",
+    "ShopMenuImportUpdatedEventPayload",
     "ShopOrderEventPayload",
     "ShopShopEventPayload",
     "publish_shop_ai_call_finished",
     "publish_shop_catalog_changed",
     "publish_shop_event",
+    "publish_shop_menu_import_updated",
     "publish_shop_order_event",
 ]

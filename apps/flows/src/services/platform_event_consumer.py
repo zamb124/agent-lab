@@ -27,6 +27,7 @@ from apps.flows.src.triggers.handlers.platform_event import (
 from core.authz.service import AuthzService
 from core.clients.redis_client import RedisClient
 from core.events import PlatformEvent, PlatformEventGroupConsumer
+from core.files.file_ref import FileRef
 from core.identity.flow_employee import is_flow_employee_user_id
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
@@ -46,6 +47,53 @@ _ = FLOWS_HITL_TURN_APPENDED
 FLOWS_PLATFORM_EVENTS_GROUP = "flows"
 
 SYNC_MESSAGE_CREATED = "sync/message/created"
+
+_SYNC_FILE_CONTENT_TYPES = frozenset(
+    {"file/image", "file/document", "file/audio", "file/video"}
+)
+
+
+def _file_ref_from_attachment(data: JsonObject, *, context: str) -> FileRef:
+    file_id = data.get("file_id")
+    original_name = data.get("original_name")
+    content_type = data.get("content_type")
+    file_size = data.get("file_size")
+    if not isinstance(file_id, str) or file_id == "":
+        raise ValueError(f"{context}: file_id must be a non-empty string")
+    if not isinstance(original_name, str) or original_name == "":
+        raise ValueError(f"{context}: original_name must be a non-empty string")
+    if not isinstance(content_type, str) or content_type == "":
+        raise ValueError(f"{context}: content_type must be a non-empty string")
+    if isinstance(file_size, bool) or not isinstance(file_size, int) or file_size < 0:
+        raise ValueError(f"{context}: file_size must be a non-negative integer")
+    return FileRef(
+        file_id=file_id,
+        original_name=original_name,
+        content_type=content_type,
+        file_size=file_size,
+    )
+
+
+def _sync_message_files(payload: JsonObject) -> list[FileRef]:
+    """Вложения file/* сообщения. Отбор по типу делает граф сотрудника."""
+    contents_raw = payload.get("contents")
+    if contents_raw is None:
+        return []
+    if not isinstance(contents_raw, list):
+        raise TypeError("sync/message/created contents must be a list")
+    refs: list[FileRef] = []
+    for index, content_raw in enumerate(contents_raw):
+        if not isinstance(content_raw, dict):
+            raise TypeError(f"sync/message/created contents[{index}] must be an object")
+        if content_raw.get("type") not in _SYNC_FILE_CONTENT_TYPES:
+            continue
+        data = content_raw.get("data")
+        if not isinstance(data, dict):
+            raise TypeError(f"sync/message/created contents[{index}].data must be an object")
+        refs.append(
+            _file_ref_from_attachment(data, context=f"sync/message/created contents[{index}]")
+        )
+    return refs
 
 
 def _sync_message_text(payload: JsonObject) -> str:
@@ -199,6 +247,7 @@ class PlatformEventConsumerService:
                     channel_id=channel_id,
                     message_id=message_id,
                     text=text,
+                    files=_sync_message_files(payload),
                 )
             except Exception as exc:
                 logger.error(

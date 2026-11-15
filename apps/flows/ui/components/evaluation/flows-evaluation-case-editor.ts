@@ -933,12 +933,13 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             turns.push({ input, checks: [check] });
         }
         const tags = (this._tags.split(',')).map((item: string) => item.trim()).filter((item: string) => item.length > 0);
+        const storedState = isPlainRecord(this.testCase) ? this.testCase.initial_state : null;
         const body = {
             name,
             description: this._description,
             branch_ids: '*',
             target: { type: 'flow' },
-            initial_state: null,
+            initial_state: isPlainRecord(storedState) ? storedState : null,
             turns,
             max_turns: numberValue(this.testCase, 'max_turns', Math.max(10, turns.length)),
             timeout_seconds: numberValue(this.testCase, 'timeout_seconds', 300),

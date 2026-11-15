@@ -5,6 +5,34 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import assert_never
 
+SHOP_ALLERGENS: frozenset[str] = frozenset(
+    {
+        "gluten",
+        "dairy",
+        "egg",
+        "fish",
+        "shellfish",
+        "nuts",
+        "peanuts",
+        "soy",
+        "sesame",
+        "mustard",
+        "celery",
+        "lupin",
+        "molluscs",
+        "sulphites",
+    }
+)
+"""Коды аллергенов блюда. Тот же набор, что в схеме shop_menu_agent."""
+
+
+class MenuImportStatus(StrEnum):
+    """Состояние черновика импорта меню в Redis."""
+
+    PARSING = "parsing"
+    READY = "ready"
+    FAILED = "failed"
+
 
 class ShopKind(StrEnum):
     """Вид заведения: влияет на шаблон витрины и фильтры агрегатора."""

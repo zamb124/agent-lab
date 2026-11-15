@@ -350,6 +350,8 @@ class StorefrontService:
                         else None
                     ),
                     "nutrition": dict(p.nutrition),
+                    "ingredients": list(p.ingredients),
+                    "allergens": list(p.allergens),
                     "is_available": p.is_available,
                     "modifier_groups": [
                         {

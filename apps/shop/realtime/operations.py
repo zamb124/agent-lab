@@ -28,6 +28,11 @@ from apps.shop.models import (
     order_status_label,
 )
 from apps.shop.models.api import (
+    MenuImportDiscardRequest,
+    MenuImportDraft,
+    MenuImportItemUpdate,
+    MenuImportPublishRequest,
+    MenuImportStartRequest,
     ShopAiCallResponse,
     ShopBadgeIconsResponse,
     ShopBadgeResponse,
@@ -437,6 +442,26 @@ class ShopAiSuggestOptionsPayload(StrictBaseModel):
 class ShopAiParseMenuPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     text: str = Field(min_length=3, max_length=50_000)
+
+
+class ShopMenuImportStartPayload(MenuImportStartRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuImportShopPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuImportUpdatePayload(MenuImportItemUpdate):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuImportPublishPayload(MenuImportPublishRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopMenuImportDiscardPayload(MenuImportDiscardRequest):
+    shop_id: str = Field(min_length=1)
 
 
 class ShopAiShopPayload(StrictBaseModel):
@@ -1640,6 +1665,100 @@ async def op_ai_parse_menu(
         shop_id=payload.shop_id,
         kwargs={"text": payload.text},
     )
+
+
+async def op_menu_import_start(
+    payload: ShopMenuImportStartPayload, *, user: User, di: Di
+) -> MenuImportDraft:
+    """Кладёт черновик в parsing и ставит разбор файлов агентом shop_menu_agent."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    draft = await di.menu_import_service.begin(scope.company_id, payload.shop_id)
+    _ = await enqueue(
+        SHOP_AI_CALL,
+        verb="import_menu",
+        call_id=new_id("aicall"),
+        company_id=scope.company_id,
+        user_id=scope.user_id,
+        shop_id=payload.shop_id,
+        kwargs={"file_ids": payload.file_ids},
+    )
+    return draft
+
+
+async def op_menu_import_get(
+    payload: ShopMenuImportShopPayload, *, user: User, di: Di
+) -> MenuImportDraft:
+    """Текущий черновик импорта магазина."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        return await di.menu_import_service.get_draft(scope.company_id, payload.shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+
+
+async def op_menu_import_update_item(
+    payload: ShopMenuImportUpdatePayload, *, user: User, di: Di
+) -> MenuImportDraft:
+    """Правка строки черновика. Совпадение имени пересчитывается."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        return await di.menu_import_service.update_item(
+            scope.company_id, payload.shop_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+
+
+async def op_menu_import_publish(
+    payload: ShopMenuImportPublishPayload, *, user: User, di: Di
+) -> MenuImportDraft:
+    """Публикует строки черновика в меню и пересобирает витрину."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        draft, product_ids = await di.menu_import_service.publish(
+            scope.company_id, payload.shop_id, payload.item_ids
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    for product_id in product_ids:
+        await publish_catalog_product_facet_changed(
+            product_id,
+            scope.company_id,
+            facet="shop",
+            instance_id=payload.shop_id,
+        )
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    return draft
+
+
+async def op_menu_import_discard(
+    payload: ShopMenuImportDiscardPayload, *, user: User, di: Di
+) -> MenuImportDraft:
+    """Убирает строку или весь черновик."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        return await di.menu_import_service.discard(
+            scope.company_id, payload.shop_id, payload.item_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
 
 
 async def op_ai_describe_shop(

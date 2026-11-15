@@ -51,6 +51,7 @@ async def test_sync_message_enqueues(app, client, di, unique_id, system_user_id)
         channel_id="chan1",
         message_id="m1",
         text="hello employee",
+        files=[],
     )
     assert dispatched is True
 
@@ -145,6 +146,7 @@ async def test_not_flow_employee_ignored(app, di, unique_id, system_user_id):
         channel_id="c",
         message_id="m",
         text="t",
+        files=[],
     )
     assert dispatched is False
     await User.delete_by_id(plain_id)
@@ -160,4 +162,5 @@ async def test_unknown_employee_errors(app, di, unique_id, system_user_id):
             channel_id="c",
             message_id="m",
             text="t",
+            files=[],
         )

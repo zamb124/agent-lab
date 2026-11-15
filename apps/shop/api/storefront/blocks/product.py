@@ -108,6 +108,14 @@ function nutriSum(p,sel){const base=p.nutrition||{};
     if(o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}};
   walk(p.modifier_groups||[]);
   return sum;}
+const ALLERGEN_LABEL={gluten:'глютен',dairy:'молоко',egg:'яйца',fish:'рыба',shellfish:'ракообразные',nuts:'орехи',peanuts:'арахис',soy:'соя',sesame:'кунжут',mustard:'горчица',celery:'сельдерей',lupin:'люпин',molluscs:'моллюски',sulphites:'сульфиты'};
+function compositionHtml(p){
+  const parts=[];
+  const ings=(p.ingredients||[]).filter(x=>typeof x==='string'&&x);
+  if(ings.length)parts.push(`<p class="pdesc">Состав: ${esc(ings.join(', '))}</p>`);
+  const als=(p.allergens||[]).map(code=>ALLERGEN_LABEL[code]||'').filter(Boolean);
+  if(als.length)parts.push(`<p class="pdesc">Аллергены: ${esc(als.join(', '))}</p>`);
+  return parts.join('');}
 function nutriHtml(p,sel){
   if(!(S.features||{}).nutrition)return'';
   const n=nutriSum(p,sel);
@@ -122,6 +130,7 @@ function renderCust(){if(!cust)return;const p=byId(cust.pid);if(!p)return;
     (FAV_ON?`<button class="pshare pfav${FAVS.has(p.id)?' on':''}" data-fav="${p.id}" onclick="toggleFav('${p.id}')" aria-label="В избранное">${ic('heart')}</button>`:'')+
     `${photo(p.photo_file_id,'phero','lg')}<h2>${esc(p.name)}${tags(p)}${portionOf(p)}</h2>`+
     `${p.description?`<p class="pdesc">${esc(p.description)}</p>`:''}`+
+    compositionHtml(p)+
     nutriHtml(p,cust.sel)+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
     (unavailable

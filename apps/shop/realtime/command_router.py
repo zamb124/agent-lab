@@ -32,6 +32,11 @@ from apps.shop.realtime.operations import (
     ShopIdPayload,
     ShopLoyaltyProgramPayload,
     ShopLoyaltyProgramSetPayload,
+    ShopMenuImportDiscardPayload,
+    ShopMenuImportPublishPayload,
+    ShopMenuImportShopPayload,
+    ShopMenuImportStartPayload,
+    ShopMenuImportUpdatePayload,
     ShopModifierGroupCreatePayload,
     ShopModifierGroupIdPayload,
     ShopModifierGroupUpdatePayload,
@@ -93,6 +98,11 @@ from apps.shop.realtime.operations import (
     op_domains_remove,
     op_loyalty_program_get,
     op_loyalty_program_set,
+    op_menu_import_discard,
+    op_menu_import_get,
+    op_menu_import_publish,
+    op_menu_import_start,
+    op_menu_import_update_item,
     op_modifier_groups_create,
     op_modifier_groups_list,
     op_modifier_groups_remove,
@@ -355,5 +365,20 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/ai/autofill_requested": Operation(payload_model=ShopIdPayload, fn=op_ai_autofill),
     "shop/ai/parse_menu_requested": Operation(
         payload_model=ShopAiParseMenuPayload, fn=op_ai_parse_menu
+    ),
+    "shop/menu_import/start_requested": Operation(
+        payload_model=ShopMenuImportStartPayload, fn=op_menu_import_start
+    ),
+    "shop/menu_import/get_requested": Operation(
+        payload_model=ShopMenuImportShopPayload, fn=op_menu_import_get
+    ),
+    "shop/menu_import/update_item_requested": Operation(
+        payload_model=ShopMenuImportUpdatePayload, fn=op_menu_import_update_item
+    ),
+    "shop/menu_import/publish_requested": Operation(
+        payload_model=ShopMenuImportPublishPayload, fn=op_menu_import_publish
+    ),
+    "shop/menu_import/discard_requested": Operation(
+        payload_model=ShopMenuImportDiscardPayload, fn=op_menu_import_discard
     ),
 }

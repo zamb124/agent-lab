@@ -323,6 +323,64 @@ export const shopProductUpdateOp = createAsyncOp({
     restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/products/{product_id}' },
 });
 
+export const shopMenuImportStartOp = createAsyncOp({
+    name: 'shop/menu_import_start',
+    silent: true,
+    commandType: 'shop/menu_import/start_requested',
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-import' },
+});
+
+export const shopMenuImportGetOp = createAsyncOp({
+    name: 'shop/menu_import_get',
+    silent: true,
+    commandType: 'shop/menu_import/get_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/menu-import' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (!isPlatformEventType(event, 'shop/menu_import/updated')) {
+            return false;
+        }
+        const pushedShopId = event.payload.shop_id;
+        return rerunLastRequest(ctx, shopMenuImportGetOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && payload.shop_id === pushedShopId,
+        });
+    },
+});
+
+export const shopMenuImportUpdateOp = createAsyncOp({
+    name: 'shop/menu_import_update',
+    silent: true,
+    commandType: 'shop/menu_import/update_item_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-import/items' },
+});
+
+export const shopMenuImportPublishOp = createAsyncOp({
+    name: 'shop/menu_import_publish',
+    successToastKey: 'shop:toast.menu_import_published',
+    errorToastKey: 'shop:toast.menu_import_failed',
+    commandType: 'shop/menu_import/publish_requested',
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-import/publish' },
+});
+
+export const shopMenuImportDiscardOp = createAsyncOp({
+    name: 'shop/menu_import_discard',
+    successToastKey: 'shop:toast.menu_import_discarded',
+    errorToastKey: 'shop:toast.menu_import_failed',
+    commandType: 'shop/menu_import/discard_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/menu-import/discard' },
+});
+
 export const shopProductsImportOp = createAsyncOp({
     name: 'shop/products_import',
     successToastKey: 'shop:toast.products_imported',
@@ -880,6 +938,11 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/product_update': typeof shopProductUpdateOp;
         'shop/product_remove': typeof shopProductRemoveOp;
         'shop/products_reorder': typeof shopProductsReorderOp;
+        'shop/menu_import_start': typeof shopMenuImportStartOp;
+        'shop/menu_import_get': typeof shopMenuImportGetOp;
+        'shop/menu_import_update': typeof shopMenuImportUpdateOp;
+        'shop/menu_import_publish': typeof shopMenuImportPublishOp;
+        'shop/menu_import_discard': typeof shopMenuImportDiscardOp;
         'shop/products_import': typeof shopProductsImportOp;
         'shop/orders_list': typeof shopOrdersListOp;
         'shop/order_set_status': typeof shopOrderSetStatusOp;

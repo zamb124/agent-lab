@@ -21,6 +21,7 @@ from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
+from core.files.file_ref import FileRef
 from core.identity.flow_employee import is_flow_employee, require_flow_employee_flow_id
 from core.logging import get_logger
 from core.models.identity_models import Company, User
@@ -52,6 +53,7 @@ class EmployeeInboxService:
         channel_id: str,
         message_id: str,
         text: str,
+        files: list[FileRef],
     ) -> bool:
         """Входящее сообщение sync (mention или DM) сотруднику-агенту."""
         return await self._dispatch(
@@ -61,6 +63,7 @@ class EmployeeInboxService:
             source="sync_message",
             context_id=f"sync:{channel_id}",
             text=text,
+            files=files,
             metadata={
                 "employee_inbox_source": "sync_message",
                 "channel_id": channel_id,
@@ -80,6 +83,7 @@ class EmployeeInboxService:
     ) -> bool:
         """Назначение задачи worktracker сотруднику-агенту + write-back в задачу."""
         context_id = f"work_item:{work_item_id}"
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         try:
             dispatched = await self._dispatch(
                 company_id=company_id,
@@ -88,6 +92,7 @@ class EmployeeInboxService:
                 source="work_item_assigned",
                 context_id=context_id,
                 text=text,
+                files=list(item.attachments),
                 branch_id=branch_id,
                 metadata={
                     "employee_inbox_source": "work_item_assigned",
@@ -134,6 +139,7 @@ class EmployeeInboxService:
         source: str,
         context_id: str,
         text: str,
+        files: list[FileRef],
         metadata: JsonObject,
         branch_id: str = "default",
     ) -> bool:
@@ -199,7 +205,7 @@ class EmployeeInboxService:
                 context_id=context_id,
                 metadata=metadata,
                 is_resume=False,
-                files=[],
+                files=[ref.to_json_object() for ref in files],
                 context_data=execution.context.to_dict(),
                 trace_context=None,
                 background_kind="employee_inbox",

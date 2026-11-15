@@ -145,6 +145,41 @@ export interface ListResponse_ShopTableResponse_ {
 }
 
 /**
+ * Текущий черновик импорта одного магазина.
+ */
+export interface MenuImportDraft {
+    "shop_id": string;
+    "status": MenuImportStatus;
+    "failure_reason"?: string | undefined;
+    "items"?: MenuImportItem[] | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Строка черновика импорта уже в витринных единицах.
+ */
+export interface MenuImportItem {
+    "item_id": string;
+    "section_name"?: string | undefined;
+    "name": string;
+    "description"?: string | undefined;
+    "price_minor": number;
+    "portion"?: string | undefined;
+    "nutrition"?: ShopNutrition | undefined;
+    "nutrition_is_per_100g"?: boolean | undefined;
+    "ingredients"?: string[] | undefined;
+    "allergens"?: string[] | undefined;
+    "photo_file_id"?: string | null | undefined;
+    "matched_product_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
+ * Состояние черновика импорта меню в Redis.
+ */
+export type MenuImportStatus = "parsing" | "ready" | "failed";
+
+/**
  * OffsetPage[ShopMyOrderListItemResponse]
  */
 export interface OffsetPage_ShopMyOrderListItemResponse_ {
@@ -628,6 +663,69 @@ export interface ShopLoyaltyProgramSetPayload {
  * Тип награды программы лояльности за ``orders_goal`` выполненных заказов.
  */
 export type ShopLoyaltyRewardKind = "discount_minor" | "discount_percent";
+
+/**
+ * ShopMenuImportDiscardPayload
+ */
+export interface ShopMenuImportDiscardPayload {
+    "item_id"?: string | null | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportPublishPayload
+ */
+export interface ShopMenuImportPublishPayload {
+    "item_ids"?: string[] | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportShopPayload
+ */
+export interface ShopMenuImportShopPayload {
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportStartPayload
+ */
+export interface ShopMenuImportStartPayload {
+    "file_ids": string[];
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * ShopMenuImportUpdatePayload
+ */
+export interface ShopMenuImportUpdatePayload {
+    "item_id": string;
+    "section_name": string;
+    "name": string;
+    "description"?: string | undefined;
+    "price_minor": number;
+    "portion"?: string | undefined;
+    "nutrition"?: ShopNutrition | undefined;
+    "nutrition_is_per_100g"?: boolean | undefined;
+    "ingredients"?: string[] | undefined;
+    "allergens"?: string[] | undefined;
+    "photo_file_id"?: string | null | undefined;
+    "shop_id": string;
+    [key: string]: unknown;
+}
+
+/**
+ * Payload `shop/menu_import/updated` — черновик импорта записан заново.
+ */
+export interface ShopMenuImportUpdatedEventPayload {
+    "shop_id": string;
+    "status": MenuImportStatus;
+    [key: string]: unknown;
+}
 
 /**
  * ShopModifierGroupCreatePayload
@@ -1176,6 +1274,8 @@ export interface ShopProductCreatePayload {
     "price_minor": number;
     "photo_file_id"?: string | null | undefined;
     "nutrition"?: ShopNutrition | undefined;
+    "ingredients"?: string[] | undefined;
+    "allergens"?: string[] | undefined;
     "shop_id": string;
     [key: string]: unknown;
 }
@@ -1243,6 +1343,8 @@ export interface ShopProductResponse {
     "image_file_ids": string[];
     "sources": Record<string, string>;
     "nutrition": ShopNutrition;
+    "ingredients"?: string[] | undefined;
+    "allergens"?: string[] | undefined;
     "is_available": boolean;
     "is_archived": boolean;
     "sort": number;
@@ -1261,6 +1363,8 @@ export interface ShopProductUpdatePayload {
     "price_minor"?: number | null | undefined;
     "photo_file_id"?: string | null | undefined;
     "nutrition"?: ShopNutrition | null | undefined;
+    "ingredients"?: string[] | null | undefined;
+    "allergens"?: string[] | null | undefined;
     "is_available"?: boolean | null | undefined;
     "sort"?: number | null | undefined;
     "shop_id": string;
@@ -1686,6 +1790,11 @@ export interface ShopCommandMap {
     "shop/domains/remove_requested": { payload: ShopDomainIdPayload; result: EmptyPayload },
     "shop/loyalty/program_get_requested": { payload: ShopLoyaltyProgramPayload; result: ShopLoyaltyProgramResponse },
     "shop/loyalty/program_set_requested": { payload: ShopLoyaltyProgramSetPayload; result: ShopLoyaltyProgramResponse },
+    "shop/menu_import/discard_requested": { payload: ShopMenuImportDiscardPayload; result: MenuImportDraft },
+    "shop/menu_import/get_requested": { payload: ShopMenuImportShopPayload; result: MenuImportDraft },
+    "shop/menu_import/publish_requested": { payload: ShopMenuImportPublishPayload; result: MenuImportDraft },
+    "shop/menu_import/start_requested": { payload: ShopMenuImportStartPayload; result: MenuImportDraft },
+    "shop/menu_import/update_item_requested": { payload: ShopMenuImportUpdatePayload; result: MenuImportDraft },
     "shop/modifiers/groups/create_requested": { payload: ShopModifierGroupCreatePayload; result: ShopModifierGroupResponse },
     "shop/modifiers/groups/list_requested": { payload: ShopIdPayload; result: ShopModifierGroupsResponse },
     "shop/modifiers/groups/remove_requested": { payload: ShopModifierGroupIdPayload; result: EmptyPayload },
@@ -1835,6 +1944,22 @@ export interface ShopEventMap {
     "shop/loyalty/program_set_failed": PlatformCommandEventPayload,
     "shop/loyalty/program_set_requested": PlatformCommandEventPayload,
     "shop/loyalty/program_set_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/discard_failed": PlatformCommandEventPayload,
+    "shop/menu_import/discard_requested": PlatformCommandEventPayload,
+    "shop/menu_import/discard_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/get_failed": PlatformCommandEventPayload,
+    "shop/menu_import/get_requested": PlatformCommandEventPayload,
+    "shop/menu_import/get_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/publish_failed": PlatformCommandEventPayload,
+    "shop/menu_import/publish_requested": PlatformCommandEventPayload,
+    "shop/menu_import/publish_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/start_failed": PlatformCommandEventPayload,
+    "shop/menu_import/start_requested": PlatformCommandEventPayload,
+    "shop/menu_import/start_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/update_item_failed": PlatformCommandEventPayload,
+    "shop/menu_import/update_item_requested": PlatformCommandEventPayload,
+    "shop/menu_import/update_item_succeeded": PlatformCommandEventPayload,
+    "shop/menu_import/updated": ShopMenuImportUpdatedEventPayload,
     "shop/modifiers/groups/create_failed": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_requested": PlatformCommandEventPayload,
     "shop/modifiers/groups/create_succeeded": PlatformCommandEventPayload,

@@ -52,7 +52,7 @@ flows:
 
   - id: shop_menu_agent
     public: true
-    description: "Разбор меню в JSON (чат: текст или фото/PDF; WorkItem import) с crop фото через read_file summarization"
+    description: "Разбор меню из фото, PDF, Word, Excel и CSV в JSON через read_file summarization; crop только у фото страницы"
 
   # Telegram Demo
   - id: telegram_demo

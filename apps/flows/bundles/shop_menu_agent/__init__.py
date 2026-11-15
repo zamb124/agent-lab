@@ -1,1 +1,1 @@
-"""Пакет flow shop_menu_agent: чат/WorkItem import меню → JSON + crop фото."""
+"""Пакет flow shop_menu_agent: фото, PDF, Word, Excel и CSV меню → JSON в ответе сессии."""

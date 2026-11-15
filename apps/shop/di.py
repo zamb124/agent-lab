@@ -8,6 +8,7 @@ from apps.shop.services.ai_service import ShopAiService
 from apps.shop.services.domain_service import DomainService
 from apps.shop.services.feed_service import FeedService
 from apps.shop.services.loyalty_service import LoyaltyService
+from apps.shop.services.menu_import_service import MenuImportService
 from apps.shop.services.notification_service import NotificationService
 from apps.shop.services.order_events_service import OrderEventsService
 from apps.shop.services.order_service import ShopOrderService
@@ -28,6 +29,7 @@ class ShopDi(PlatformDi):
     domain_service: DomainService
     aggregate_service: AggregateService
     ai_service: ShopAiService
+    menu_import_service: MenuImportService
     seed_service: ShopSeedService
     feed_service: FeedService
     loyalty_service: LoyaltyService

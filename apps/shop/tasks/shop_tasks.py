@@ -238,6 +238,18 @@ def _req_str(kwargs: JsonObject, key: str) -> str:
     return value
 
 
+def _req_str_list(kwargs: JsonObject, key: str) -> list[str]:
+    value = kwargs.get(key)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"shop_ai_call: kwargs.{key} must be a non-empty list of str")
+    items: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or item == "":
+            raise ValueError(f"shop_ai_call: kwargs.{key} must be a non-empty list of str")
+        items.append(item)
+    return items
+
+
 def _opt_str(kwargs: JsonObject, key: str) -> str | None:
     value = kwargs.get(key)
     if value is None:
@@ -346,6 +358,29 @@ async def shop_ai_call(
                         item.model_dump(mode="json") for item in items
                     ]
                 }
+            case "import_menu":
+                file_ids = _req_str_list(kwargs, "file_ids")
+                try:
+                    agent_payload = await svc.parse_menu_files(
+                        company_id=company_id,
+                        user_id=user_id,
+                        file_ids=file_ids,
+                    )
+                except A2ACallPending:
+                    raise
+                except Exception as exc:
+                    _ = await di.menu_import_service.mark_failed(
+                        company_id,
+                        shop_id,
+                        exc.error_code
+                        if isinstance(exc, PlatformBoundaryError) and exc.error_code
+                        else str(exc),
+                    )
+                    raise
+                draft = await di.menu_import_service.store_agent_payload(
+                    company_id, shop_id, agent_payload
+                )
+                result = draft.model_dump(mode="json")
             case "describe_shop":
                 result = {
                     "text": await svc.describe_shop(

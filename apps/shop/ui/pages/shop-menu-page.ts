@@ -44,6 +44,8 @@ interface ProductRow {
     price_minor: number;
     photo_file_id: string | null;
     nutrition: { kcal?: number; protein_g?: number; fat_g?: number; carb_g?: number };
+    ingredients: string[];
+    allergens: string[];
     is_available: boolean;
     is_archived: boolean;
     portion: string;
@@ -57,6 +59,101 @@ interface ShopBadgeDef {
     label: string;
     icon: string;
     icon_path: string;
+}
+
+const IMPORT_ALLERGENS = [
+    'gluten', 'dairy', 'egg', 'fish', 'shellfish', 'nuts', 'peanuts',
+    'soy', 'sesame', 'mustard', 'celery', 'lupin', 'molluscs', 'sulphites',
+] as const;
+
+interface MenuImportNutrition {
+    kcal?: number;
+    protein_g?: number;
+    fat_g?: number;
+    carb_g?: number;
+}
+
+interface MenuImportItemRow {
+    item_id: string;
+    section_name: string;
+    name: string;
+    description: string;
+    price_minor: number;
+    portion: string;
+    nutrition: MenuImportNutrition;
+    nutrition_is_per_100g: boolean;
+    ingredients: string[];
+    allergens: string[];
+    photo_file_id: string | null;
+    matched_product_id: string | null;
+}
+
+interface MenuImportDraftRow {
+    shop_id: string;
+    status: 'parsing' | 'ready' | 'failed';
+    failure_reason: string;
+    items: MenuImportItemRow[];
+}
+
+function _eventString(event: CustomEvent<{ value?: unknown }>): string {
+    const value = event.detail.value;
+    return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+}
+
+function _stringList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === 'string');
+}
+
+function _nutrition(value: unknown): MenuImportNutrition {
+    if (typeof value !== 'object' || value === null) return {};
+    const raw = value as Record<string, unknown>;
+    const nutrition: MenuImportNutrition = {};
+    for (const key of ['kcal', 'protein_g', 'fat_g', 'carb_g'] as const) {
+        const number = raw[key];
+        if (typeof number === 'number') nutrition[key] = number;
+    }
+    return nutrition;
+}
+
+function _menuImportItem(value: unknown): MenuImportItemRow | null {
+    if (typeof value !== 'object' || value === null) return null;
+    const raw = value as Record<string, unknown>;
+    if (typeof raw.item_id !== 'string' || typeof raw.name !== 'string') return null;
+    if (typeof raw.price_minor !== 'number') return null;
+    return {
+        item_id: raw.item_id,
+        section_name: typeof raw.section_name === 'string' ? raw.section_name : '',
+        name: raw.name,
+        description: typeof raw.description === 'string' ? raw.description : '',
+        price_minor: raw.price_minor,
+        portion: typeof raw.portion === 'string' ? raw.portion : '',
+        nutrition: _nutrition(raw.nutrition),
+        nutrition_is_per_100g: raw.nutrition_is_per_100g === true,
+        ingredients: _stringList(raw.ingredients),
+        allergens: _stringList(raw.allergens),
+        photo_file_id: typeof raw.photo_file_id === 'string' ? raw.photo_file_id : null,
+        matched_product_id: typeof raw.matched_product_id === 'string' ? raw.matched_product_id : null,
+    };
+}
+
+function _menuImportDraft(value: unknown): MenuImportDraftRow | null {
+    if (typeof value !== 'object' || value === null) return null;
+    const raw = value as Record<string, unknown>;
+    if (raw.status !== 'parsing' && raw.status !== 'ready' && raw.status !== 'failed') return null;
+    if (typeof raw.shop_id !== 'string' || !Array.isArray(raw.items)) return null;
+    const items: MenuImportItemRow[] = [];
+    for (const item of raw.items) {
+        const parsed = _menuImportItem(item);
+        if (parsed === null) return null;
+        items.push(parsed);
+    }
+    return {
+        shop_id: raw.shop_id,
+        status: raw.status,
+        failure_reason: typeof raw.failure_reason === 'string' ? raw.failure_reason : '',
+        items,
+    };
 }
 
 interface ShopRow extends ShopHeadRow {
@@ -81,8 +178,11 @@ export class ShopMenuPage extends PlatformPage {
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
     private _productReorderOp: OpController;
-    private _importOp: OpController;
-    private _aiParseOp: OpController;
+    private _importGetOp: OpController;
+    private _importStartOp: OpController;
+    private _importUpdateOp: OpController;
+    private _importPublishOp: OpController;
+    private _importDiscardOp: OpController;
     private _aiDescribeBatchOp: OpController;
     private _aiEnhanceOp: OpController;
     private _aiGenerateOp: OpController;
@@ -96,8 +196,6 @@ export class ShopMenuPage extends PlatformPage {
     declare _activeCategory: string | null;
     declare _expandedIds: string[];
     declare _importOpen: boolean;
-    declare _importText: string;
-    declare _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -108,8 +206,6 @@ export class ShopMenuPage extends PlatformPage {
         _activeCategory: { state: true },
         _expandedIds: { state: true },
         _importOpen: { state: true },
-        _importText: { state: true },
-        _aiItems: { state: true },
     };
 
     static override styles = [
@@ -223,6 +319,56 @@ export class ShopMenuPage extends PlatformPage {
             .import-stats { display: flex; gap: var(--space-4); font-size: var(--text-sm); }
             .import-stats .ok { color: var(--success); }
             .import-stats .bad { color: var(--warning); }
+            .import-groups { display: flex; flex-direction: column; gap: var(--space-5); }
+            .import-groups > section { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+            .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+            .import-heading {
+                font-size: var(--text-lg); font-weight: var(--font-semibold);
+                color: var(--text-primary); line-height: 1.3;
+            }
+            .import-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: var(--space-3);
+            }
+            .import-card {
+                display: flex; flex-direction: column; min-width: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-surface);
+                overflow: hidden;
+            }
+            .import-photo {
+                position: relative; width: 100%; aspect-ratio: 16 / 10;
+                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+            }
+            .import-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+            .import-photo-empty {
+                position: absolute; inset: 0;
+                display: flex; align-items: center; justify-content: center;
+                color: var(--text-tertiary);
+            }
+            .import-flag {
+                position: absolute; top: var(--space-2); left: var(--space-2);
+                padding: 2px var(--space-2); border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+                color: var(--success); font-size: var(--text-xs); font-weight: var(--font-semibold);
+            }
+            .import-body {
+                display: flex; flex-direction: column; gap: var(--space-3);
+                padding: var(--space-3); min-width: 0;
+            }
+            .import-body platform-field { display: block; width: 100%; min-width: 0; }
+            .import-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-2); }
+            .import-nutri { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
+            .import-note { color: var(--warning); font-size: var(--text-xs); line-height: 1.4; }
+            .import-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+            button.bchip { cursor: pointer; font: inherit; }
+            button.bchip.on {
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 12%, transparent);
+                color: var(--accent);
+            }
             .panel-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
 
             platform-empty-state { margin-top: var(--space-8); }
@@ -247,8 +393,6 @@ export class ShopMenuPage extends PlatformPage {
         this._activeCategory = null;
         this._expandedIds = [];
         this._importOpen = false;
-        this._importText = '';
-        this._aiItems = null;
         this._shops = this.useResource('shop/shops');
         this._shopUpdateOp = this.useOp('shop/shop_update');
         this._badgeIconsOp = this.useOp('shop/badge_icons_list');
@@ -261,8 +405,11 @@ export class ShopMenuPage extends PlatformPage {
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
         this._productReorderOp = this.useOp('shop/products_reorder');
-        this._importOp = this.useOp('shop/products_import');
-        this._aiParseOp = this.useOp('shop/ai_parse_menu');
+        this._importGetOp = this.useOp('shop/menu_import_get');
+        this._importStartOp = this.useOp('shop/menu_import_start');
+        this._importUpdateOp = this.useOp('shop/menu_import_update');
+        this._importPublishOp = this.useOp('shop/menu_import_publish');
+        this._importDiscardOp = this.useOp('shop/menu_import_discard');
         this._aiDescribeBatchOp = this.useOp('shop/ai_describe_batch');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
         this._aiGenerateOp = this.useOp('shop/ai_generate_photo');
@@ -495,6 +642,8 @@ export class ShopMenuPage extends PlatformPage {
             badges: [...product.badges],
             photo_file_id: product.photo_file_id,
             nutrition: { ...product.nutrition },
+            ingredients: [...product.ingredients],
+            allergens: [...product.allergens],
             is_available: product.is_available,
             sources: { ...product.sources },
         };
@@ -570,65 +719,277 @@ export class ShopMenuPage extends PlatformPage {
         await this._reload();
     }
 
-    private _parseImport(): { items: Array<{ name: string; description: string; price_minor: number }>; invalid: number } {
-        const items: Array<{ name: string; description: string; price_minor: number }> = [];
-        let invalid = 0;
-        for (const raw of this._importText.split('\n')) {
-            const line = raw.trim();
-            if (line === '') continue;
-            const parts = line.split(';').map((p) => p.trim());
-            const name = parts[0] ?? '';
-            const priceText = (parts[1] ?? '').replace(/[^\d.,-]/g, '').replace(',', '.');
-            const price = parts.length >= 2 ? Math.round(parseFloat(priceText) * 100) : NaN;
-            if (name === '' || !Number.isFinite(price) || price < 0) {
-                invalid += 1;
-                continue;
-            }
-            items.push({ name, description: parts.slice(2).join('; '), price_minor: price });
-        }
-        return { items, invalid };
-    }
-
     private async _runAiBatch() {
         const missing = this._products.filter((p) => !p.description?.trim()).length;
         if (missing === 0) return;
         await this._aiDescribeBatchOp.run({ shop_id: this.shopId });
     }
 
-    private async _runAiParse() {
-        const text = this._importText.trim();
-        if (text.length < 3) return;
-        const result = await this._aiParseOp.run({ shop_id: this.shopId, text });
-        if (result !== null && typeof result === 'object' && 'items' in (result as Record<string, unknown>)) {
-            const items = (result as { items?: unknown }).items;
-            if (Array.isArray(items)) {
-                this._aiItems = items
-                    .filter((item): item is { name: string; description: string; portion: string; price_minor: number; category?: string } =>
-                        typeof item === 'object' && item !== null && 'name' in item && 'price_minor' in item)
-                    .map((item) => ({
-                        name: String(item.name),
-                        description: typeof item.description === 'string' ? item.description : '',
-                        portion: typeof item.portion === 'string' ? item.portion : '',
-                        price_minor: Number(item.price_minor),
-                    }));
-            }
+    private _importDraft(): MenuImportDraftRow | null {
+        return _menuImportDraft(this._importGetOp.lastResult);
+    }
+
+    private async _toggleImport() {
+        this._importOpen = !this._importOpen;
+        if (this._importOpen) {
+            await this._importGetOp.run({ shop_id: this.shopId });
         }
     }
 
-    private async _runImport() {
-        const items = this._aiItems ?? this._parseImport().items;
-        if (items.length === 0) return;
-        const result = await this._importOp.run({
+    private async _refreshImport() {
+        await this._importGetOp.run({ shop_id: this.shopId });
+    }
+
+    private async _startImport(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const selected = input.files;
+        if (selected === null || selected.length === 0) return;
+        const fileIds: string[] = [];
+        for (const file of Array.from(selected)) {
+            const uploaded = await this._uploadOp.run({
+                file,
+                spec: buildShopProductFileCreateSpecJson({ shopId: this.shopId }),
+            });
+            if (uploaded === null || typeof uploaded !== 'object' || !('file_id' in uploaded)) {
+                input.value = '';
+                return;
+            }
+            const fileId = (uploaded as { file_id?: unknown }).file_id;
+            if (typeof fileId !== 'string' || fileId === '') {
+                input.value = '';
+                return;
+            }
+            fileIds.push(fileId);
+        }
+        input.value = '';
+        const started = await this._importStartOp.run({ shop_id: this.shopId, file_ids: fileIds });
+        if (started !== null) await this._refreshImport();
+    }
+
+    private async _saveImportItem(item: MenuImportItemRow, patch: Partial<MenuImportItemRow>) {
+        const next: MenuImportItemRow = { ...item, ...patch };
+        const saved = await this._importUpdateOp.run({
             shop_id: this.shopId,
-            category_id: this._activeCategory,
-            items,
+            item_id: next.item_id,
+            section_name: next.section_name,
+            name: next.name,
+            description: next.description,
+            price_minor: next.price_minor,
+            portion: next.portion,
+            nutrition: next.nutrition,
+            nutrition_is_per_100g: next.nutrition_is_per_100g,
+            ingredients: next.ingredients,
+            allergens: next.allergens,
+            photo_file_id: next.photo_file_id,
         });
-        if (result !== null) {
-            this._importText = '';
-            this._aiItems = null;
-            this._importOpen = false;
+        if (saved !== null) await this._refreshImport();
+    }
+
+    private async _publishImport(itemIds: string[]) {
+        const published = await this._importPublishOp.run({
+            shop_id: this.shopId,
+            item_ids: itemIds,
+        });
+        if (published !== null) {
+            await this._refreshImport();
             await this._reload();
         }
+    }
+
+    private async _discardImport(itemId: string | null) {
+        const discarded = await this._importDiscardOp.run({
+            shop_id: this.shopId,
+            item_id: itemId,
+        });
+        if (discarded !== null) await this._refreshImport();
+    }
+
+    private _allergenLabel(code: string): string {
+        switch (code) {
+            case 'gluten': return this.t('menu.allergen_gluten');
+            case 'dairy': return this.t('menu.allergen_dairy');
+            case 'egg': return this.t('menu.allergen_egg');
+            case 'fish': return this.t('menu.allergen_fish');
+            case 'shellfish': return this.t('menu.allergen_shellfish');
+            case 'nuts': return this.t('menu.allergen_nuts');
+            case 'peanuts': return this.t('menu.allergen_peanuts');
+            case 'soy': return this.t('menu.allergen_soy');
+            case 'sesame': return this.t('menu.allergen_sesame');
+            case 'mustard': return this.t('menu.allergen_mustard');
+            case 'celery': return this.t('menu.allergen_celery');
+            case 'lupin': return this.t('menu.allergen_lupin');
+            case 'molluscs': return this.t('menu.allergen_molluscs');
+            case 'sulphites': return this.t('menu.allergen_sulphites');
+            default: throw new Error(`ShopMenuPage: unknown allergen ${code}`);
+        }
+    }
+
+    private _importGroups(items: MenuImportItemRow[]): Array<{ name: string; items: MenuImportItemRow[] }> {
+        const names: string[] = [];
+        const byName = new Map<string, MenuImportItemRow[]>();
+        for (const item of items) {
+            const bucket = byName.get(item.section_name);
+            if (bucket === undefined) {
+                names.push(item.section_name);
+                byName.set(item.section_name, [item]);
+            } else {
+                bucket.push(item);
+            }
+        }
+        return names.map((name) => {
+            const grouped = byName.get(name);
+            if (grouped === undefined) {
+                throw new Error(`ShopMenuPage: import section ${name} disappeared`);
+            }
+            return { name, items: grouped };
+        });
+    }
+
+    private _renderImportItem(item: MenuImportItemRow) {
+        const price = (item.price_minor / 100).toString();
+        const nutrition = item.nutrition;
+        return html`
+            <article class="import-card">
+                <div class="import-photo">
+                    ${item.photo_file_id !== null
+                        ? html`<img src="/shop/api/v1/files/download/${item.photo_file_id}?v=lg" alt="">`
+                        : html`<span class="import-photo-empty"><platform-icon name="image" size="28"></platform-icon></span>`}
+                    ${item.matched_product_id !== null
+                        ? html`<span class="import-flag">${this.t('menu.import_already')}</span>`
+                        : nothing}
+                </div>
+                <div class="import-body">
+                    <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('menu.field_name')} .value=${item.name}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                            const name = _eventString(event);
+                            if (name !== '') void this._saveImportItem(item, { name });
+                        }}></platform-field>
+                    <div class="import-pair">
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.field_price')} .value=${price}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                const major = parseFloat(_eventString(event).replace(',', '.'));
+                                if (!Number.isFinite(major) || major < 0) return;
+                                void this._saveImportItem(item, { price_minor: Math.round(major * 100) });
+                            }}></platform-field>
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('menu.field_portion')} .value=${item.portion}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                void this._saveImportItem(item, { portion: _eventString(event) });
+                            }}></platform-field>
+                    </div>
+                    <platform-field type="text" mode="edit" pill-density="compact" label=${this.t('menu.field_description')} .value=${item.description}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                            void this._saveImportItem(item, { description: _eventString(event) });
+                        }}></platform-field>
+                    <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('menu.import_section')} .value=${item.section_name}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                            void this._saveImportItem(item, { section_name: _eventString(event) });
+                        }}></platform-field>
+                    <platform-field type="array" mode="edit" pill-density="compact" label=${this.t('menu.field_ingredients')}
+                        .value=${item.ingredients}
+                        .config=${{ preserve_case: true }}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                            const value = event.detail.value;
+                            const ingredients = Array.isArray(value)
+                                ? value.filter((entry): entry is string => typeof entry === 'string')
+                                : [];
+                            void this._saveImportItem(item, { ingredients });
+                        }}></platform-field>
+                    <div class="sec-title">${this.t('menu.field_allergens')}</div>
+                    <div class="badges">
+                        ${IMPORT_ALLERGENS.map((code) => html`
+                            <button type="button" class="bchip ${item.allergens.includes(code) ? 'on' : ''}"
+                                @click=${() => {
+                                    const allergens = item.allergens.includes(code)
+                                        ? item.allergens.filter((entry) => entry !== code)
+                                        : [...item.allergens, code];
+                                    void this._saveImportItem(item, { allergens });
+                                }}>${this._allergenLabel(code)}</button>`)}
+                    </div>
+                    <div class="sec-title">${this.t('menu.nutrition_title')}</div>
+                    ${item.nutrition_is_per_100g
+                        ? html`<div class="import-note">${this.t('menu.import_nutrition_per_100')}</div>`
+                        : nothing}
+                    <div class="import-nutri">
+                        ${(['kcal', 'protein_g', 'fat_g', 'carb_g'] as const).map((key) => html`
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this._nutriLabel(key)}
+                                .value=${nutrition[key] === undefined ? '' : String(nutrition[key])}
+                                @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                    const raw = _eventString(event);
+                                    const next = { ...nutrition };
+                                    if (raw.trim() === '') {
+                                        delete next[key];
+                                    } else {
+                                        const number = parseFloat(raw.replace(',', '.'));
+                                        if (!Number.isFinite(number) || number < 0) return;
+                                        next[key] = number;
+                                    }
+                                    void this._saveImportItem(item, {
+                                        nutrition: next,
+                                        nutrition_is_per_100g: false,
+                                    });
+                                }}></platform-field>`)}
+                    </div>
+                    <div class="import-actions">
+                        <platform-button size="sm" variant="primary" ?loading=${this._importPublishOp.busy}
+                            @click=${() => this._publishImport([item.item_id])}>${this.t('menu.import_publish_one')}</platform-button>
+                        <platform-button size="sm" variant="secondary" ?loading=${this._importDiscardOp.busy}
+                            @click=${() => this._discardImport(item.item_id)}>${this.t('menu.import_discard')}</platform-button>
+                    </div>
+                </div>
+            </article>`;
+    }
+
+    private _nutriLabel(key: 'kcal' | 'protein_g' | 'fat_g' | 'carb_g'): string {
+        switch (key) {
+            case 'kcal': return this.t('menu.nutri_kcal');
+            case 'protein_g': return this.t('menu.nutri_protein');
+            case 'fat_g': return this.t('menu.nutri_fat');
+            case 'carb_g': return this.t('menu.nutri_carb');
+        }
+    }
+
+    private _renderImportPanel() {
+        const draft = this._importDraft();
+        const parsing = draft !== null && draft.status === 'parsing';
+        const failed = draft !== null && draft.status === 'failed';
+        return html`
+            <div class="panel">
+                <div class="panel-title">${this.t('menu.import_button')}</div>
+                <div class="panel-hint">${this.t('menu.import_capabilities')}</div>
+                <div class="panel-actions">
+                    <platform-button size="sm" variant="accent" ?loading=${this._uploadOp.busy || this._importStartOp.busy || parsing}
+                        @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#menu-import-files')?.click()}>
+                        ${this.t('menu.import_start')}
+                    </platform-button>
+                    <input id="menu-import-files" type="file" multiple
+                        accept="image/*,application/pdf,.csv,.tsv,.xls,.xlsx,.doc,.docx"
+                        style="display:none" @change=${(event: Event) => this._startImport(event)}>
+                    ${draft !== null && draft.items.length > 0 ? html`
+                        <platform-button size="sm" variant="primary" ?loading=${this._importPublishOp.busy}
+                            @click=${() => this._publishImport([])}>${this.t('menu.import_publish_all')} · ${draft.items.length}</platform-button>
+                        <platform-button size="sm" variant="secondary" ?loading=${this._importDiscardOp.busy}
+                            @click=${() => this._discardImport(null)}>${this.t('menu.import_discard_all')}</platform-button>
+                    ` : nothing}
+                    <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = false; }}>${this.t('menu.import_close')}</platform-button>
+                </div>
+                ${parsing ? html`<div class="panel-hint">${this.t('menu.import_parsing')}</div>` : nothing}
+                ${failed ? html`<div class="panel-hint">${draft.failure_reason === 'menu_unreadable' ? this.t('menu.import_failed') : draft.failure_reason}</div>` : nothing}
+                ${draft !== null && draft.status === 'ready' && draft.items.length === 0
+                    ? html`<div class="panel-hint">${this.t('menu.import_empty_draft')}</div>`
+                    : nothing}
+                ${draft !== null ? html`
+                    <div class="import-groups">
+                        ${this._importGroups(draft.items).map((group) => html`
+                            <section>
+                                <div class="import-heading">${group.name.trim() === '' ? this.t('menu.import_untitled_section') : group.name}</div>
+                                <div class="import-grid">
+                                    ${group.items.map((item) => this._renderImportItem(item))}
+                                </div>
+                            </section>
+                        `)}
+                    </div>
+                ` : nothing}
+            </div>`;
     }
 
     private _openModifiers(product: ProductRow) {
@@ -737,8 +1098,6 @@ export class ShopMenuPage extends PlatformPage {
             ? this._products
             : this._products.filter((p) => p.category_id !== null && subtree.has(p.category_id));
         const busy = this._categoriesOp.busy || this._productsOp.busy;
-        const parsed = this._importOpen ? this._parseImport() : { items: [], invalid: 0 };
-        const importItems = this._aiItems ?? parsed.items;
         const missingDesc = this._products.filter((p) => !p.description?.trim()).length;
         return html`
             <div class="wrap">
@@ -757,7 +1116,7 @@ export class ShopMenuPage extends PlatformPage {
                         <platform-button size="sm" variant="secondary" @click=${() => this._openBadgeEditor()}>
                             <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
                         </platform-button>
-                        <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = !this._importOpen; }}>
+                        <platform-button size="sm" variant="secondary" @click=${() => this._toggleImport()}>
                             <platform-icon name="import" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
                         <platform-button size="sm" variant="primary" @click=${() => this._openProductModal()}>
@@ -765,38 +1124,7 @@ export class ShopMenuPage extends PlatformPage {
                         </platform-button>
                     </div>
                 </shop-page-head>
-                ${this._importOpen ? html`
-                    <div class="panel">
-                        <div class="panel-title">${this.t('menu.import_title')}</div>
-                        <div class="panel-hint">${this.t('menu.import_hint')}</div>
-                        <platform-field
-                            type="text"
-                            mode="edit"
-                            label=${this.t('menu.import_placeholder')}
-                            .value=${this._importText}
-                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
-                                this._importText = typeof event.detail.value === 'string' ? event.detail.value : '';
-                                this._aiItems = null;
-                            }}
-                        ></platform-field>
-                        <div class="import-stats">
-                            <span class="ok">${this.t('menu.import_preview')} ${importItems.length}${this._aiItems !== null ? html` · ${this.t('menu.import_ai_ready')}` : nothing}</span>
-                            ${parsed.invalid > 0 && this._aiItems === null ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : nothing}
-                        </div>
-                        <div class="panel-actions">
-                            <platform-button size="sm" variant="accent" ?loading=${this._aiParseOp.busy}
-                                ?disabled=${this._importText.trim().length < 3}
-                                title=${this.t('menu.import_ai_hint')}
-                                @click=${() => this._runAiParse()}
-                            ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
-                            <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
-                            <platform-button size="sm" variant="primary" ?loading=${this._importOp.busy}
-                                ?disabled=${importItems.length === 0}
-                                @click=${() => this._runImport()}
-                            >${this.t('menu.import_run')} · ${importItems.length}</platform-button>
-                        </div>
-                    </div>
-                ` : nothing}
+                ${this._importOpen ? this._renderImportPanel() : nothing}
                 ${this._badgeEditorOpen ? html`
                     <div class="panel">
                         <div class="panel-title">${this.t('menu.badges_title')}</div>
