@@ -63,6 +63,15 @@ export const stockScanQuantityOp = createAsyncOp<StockScanStepResponse>({
     restMirror: { method: 'POST', path: '/stock/api/v1/scan/quantity' },
 });
 
+export const stockScanLotOp = createAsyncOp<StockScanStepResponse>({
+    name: 'stock/scan_lot',
+    silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'stock/scan/lot_requested',
+    restMirror: { method: 'POST', path: '/stock/api/v1/scan/lot' },
+});
+
 export const stockScanCommitOp = createAsyncOp<StockScanCommitResponse>({
     name: 'stock/scan_commit',
     silent: true,
@@ -185,6 +194,24 @@ function _requireScanContext(payload: Record<string, unknown>, action: string): 
     return context as unknown as ScanContext;
 }
 
+// Состояние сессии живёт в контексте, который терминал эхом возвращает
+// с каждой командой: ответ scan_step, отправленный до завершения
+// параллельного lot/qty-подтверждения, прилетает со старым хвостом lines
+// и при замене контекста теряет уже записанную строку. lines по домену
+// append-only (сократить их может только локальный lineRemoved на review),
+// поэтому входящий контекст со строгим префиксом текущих lines — устаревшее
+// эхо: переносим актуальные lines на остальной ответ, остальное — из него.
+function _mergeScanContext(prev: ScanContext | null, next: ScanContext): ScanContext {
+    if (prev === null) return next;
+    const prevLines = Array.isArray(prev.lines) ? prev.lines : [];
+    const nextLines = Array.isArray(next.lines) ? next.lines : [];
+    if (nextLines.length >= prevLines.length) return next;
+    const isStaleEcho = nextLines.every(
+        (line, idx) => JSON.stringify(line) === JSON.stringify(prevLines[idx]),
+    );
+    return isStaleEcho ? { ...next, lines: prevLines } : next;
+}
+
 export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
     stepApplied: string;
     scanRejected: string;
@@ -230,7 +257,7 @@ export const stockTsdSessionSlice = createSlice<StockTsdSessionState, {
             if (!isPlainRecord(payload)) {
                 throw new Error('stock/tsd_session.stepApplied: payload required');
             }
-            const context = _requireScanContext(payload, 'stepApplied');
+            const context = _mergeScanContext(state.context, _requireScanContext(payload, 'stepApplied'));
             const resolution = isPlainRecord(payload.resolution) ? (payload.resolution as unknown as ScanResolution) : null;
             const barcode = typeof payload.barcode === 'string' ? payload.barcode : '';
             const error = typeof payload.error === 'string' ? payload.error : null;
@@ -698,6 +725,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'stock/location_item': typeof stockLocationItemOp;
         'stock/scan_step': typeof stockScanStepOp;
         'stock/scan_quantity': typeof stockScanQuantityOp;
+        'stock/scan_lot': typeof stockScanLotOp;
         'stock/scan_commit': typeof stockScanCommitOp;
         'stock/scan_count_commit': typeof stockScanCountCommitOp;
         'stock/scan_adhoc_commit': typeof stockScanAdhocCommitOp;

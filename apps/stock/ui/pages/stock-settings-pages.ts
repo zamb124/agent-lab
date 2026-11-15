@@ -38,7 +38,7 @@ interface Column {
 interface FormField {
     key: string;
     labelKey: string;
-    type?: 'string' | 'number' | 'boolean' | 'enum';
+    type?: 'string' | 'number' | 'boolean' | 'enum' | 'date';
     required?: boolean;
     options?: () => { value: string; label: string }[];
 }
@@ -76,10 +76,10 @@ abstract class StockSettingsPageBase extends PlatformPage {
     ];
 
     protected abstract config: EntityConfig;
-    private _list!: OpController | null;
+    protected _list!: OpController | null;
     private _createOp!: OpController | null;
     protected _updateOp!: OpController | null;
-    private _listResource: ResourceController | null = null;
+    protected _listResource: ResourceController | null = null;
     protected _warehouses!: ResourceController;
 
     constructor() {
@@ -314,52 +314,9 @@ export class StockWarehousesPage extends StockSettingsPageBase {
         }),
     };
 
-    private _opTypes!: OpController;
-    private _opTypeUpdate!: OpController;
-    declare private _opWarehouseId: string;
-    static override properties = { ...StockSettingsPageBase.properties, _opWarehouseId: { state: true } };
-
     constructor() {
         super();
-        this._opWarehouseId = '';
         this.init();
-    }
-
-    override connectedCallback(): void {
-        this._opTypes = this.useOp('stock/operation_types_list');
-        this._opTypeUpdate = this.useOp('stock/operation_type_update');
-        super.connectedCallback();
-    }
-
-    protected override renderExtra(): TemplateResult {
-        const result = this._opTypes.lastResult;
-        const items = isPlainRecord(result) && Array.isArray(result.items) ? result.items.filter(isPlainRecord) : [];
-        return html`
-            ${this._renderSection('settings.operation_types')}
-            <div class="toolbar">
-                <platform-searchable-combobox compact
-                    .placeholder=${this.t('settings.warehouse')}
-                    .value=${this._opWarehouseId}
-                    .options=${this._warehouseOptions()}
-                    @change=${(e: CustomEvent) => {
-                        this._opWarehouseId = typeof e.detail.value === 'string' ? e.detail.value : '';
-                        if (this._opWarehouseId !== '') this._opTypes.run({ warehouse_id: this._opWarehouseId });
-                    }}
-                ></platform-searchable-combobox>
-            </div>
-            ${this._opWarehouseId === '' ? '' : this._renderTable([
-                { key: 'name', labelKey: 'settings.name' },
-                { key: 'code', labelKey: 'settings.code' },
-                {
-                    key: 'auto_validate', labelKey: 'settings.auto_validate',
-                    render: (row) => toggleCell(row, 'operation_type_id', this._opTypeUpdate, 'auto_validate'),
-                },
-                {
-                    key: 'scan_flow', labelKey: 'settings.scan_flow',
-                    render: (row) => scanFlowCell(this, row, this._opTypeUpdate),
-                },
-            ], items)}
-        `;
     }
 }
 customElements.define('stock-warehouses-page', StockWarehousesPage);
@@ -720,3 +677,502 @@ export class StockRoutesPage extends StockSettingsPageBase {
     constructor() { super(); this.init(); }
 }
 customElements.define('stock-routes-page', StockRoutesPage);
+
+/* --- Типы операций (полный редактор) -------------------------------------- */
+
+export class StockOperationTypesPage extends StockSettingsPageBase {
+    static override properties = {
+        ...StockSettingsPageBase.properties,
+    };
+    private _locations!: ResourceController;
+
+    protected config: EntityConfig = {
+        titleKey: 'settings.op_types_title',
+        subtitleKey: 'settings.op_types_subtitle',
+        listOp: 'stock/operation_types_list', updateOp: 'stock/operation_type_update',
+        idField: 'operation_type_id', warehouseFilter: true, warehouseRequired: true,
+        columns: [
+            { key: 'name', labelKey: 'settings.name' },
+            { key: 'code', labelKey: 'settings.code' },
+            { key: 'reservation_policy', labelKey: 'settings.reservation_policy' },
+            { key: 'backorder_policy', labelKey: 'settings.backorder_policy' },
+            { key: 'putaway_mode', labelKey: 'settings.putaway_mode' },
+            {
+                key: 'auto_validate', labelKey: 'settings.auto_validate',
+                render: (row) => toggleCell(row, 'operation_type_id', this._updateOp, 'auto_validate'),
+            },
+            {
+                key: 'scan_flow', labelKey: 'settings.scan_flow',
+                render: (row) => scanFlowCell(this, row, this._updateOp),
+            },
+        ],
+        onRowClick: (row) => this._openEdit(row),
+    };
+
+    constructor() { super(); this.init(); }
+
+    override connectedCallback(): void {
+        this._locations = this.useResource('stock/locations', { autoload: true });
+        super.connectedCallback();
+    }
+
+    private _locationOptions(): { value: string; label: string }[] {
+        const wh = this.warehouseId();
+        return [
+            { value: '', label: this.t('settings.none') },
+            ...this._locations.items.filter(isPlainRecord)
+                .filter((l) => wh === '' || l.warehouse_id === wh)
+                .map((l) => ({ value: l.location_id as string, label: (typeof l.name === 'string' && l.name !== '' ? l.name : l.code) as string })),
+        ];
+    }
+
+    private _opTypeSelfOptions(currentId: string): { value: string; label: string }[] {
+        return [
+            { value: '', label: this.t('settings.none') },
+            ...this.items()
+                .filter((r) => r.operation_type_id !== currentId)
+                .map((r) => ({ value: r.operation_type_id as string, label: r.name as string })),
+        ];
+    }
+
+    private _openEdit(row: PlainRow): void {
+        const id = row.operation_type_id as string;
+        const enumOpts = (key: string, values: string[]) => values.map((v) => ({ value: v, label: this.t(`settings.${key}_${v}`) }));
+        const fields: StockEntityFormField[] = [
+            { key: 'name', label: this.t('settings.name'), type: 'string', required: true },
+            { key: 'name_prefix', label: this.t('settings.name_prefix'), type: 'string' },
+            { key: 'reservation_policy', label: this.t('settings.reservation_policy'), type: 'enum', options: enumOpts('reservation', ['manual', 'at_confirm']) },
+            { key: 'backorder_policy', label: this.t('settings.backorder_policy'), type: 'enum', options: enumOpts('backorder', ['always', 'never', 'ask']) },
+            { key: 'putaway_mode', label: this.t('settings.putaway_mode'), type: 'enum', options: enumOpts('putaway_mode', ['rule', 'inline', 'shadow']) },
+            { key: 'putaway_flow_id', label: this.t('settings.putaway_flow_id'), type: 'string' },
+            { key: 'auto_validate', label: this.t('settings.auto_validate'), type: 'boolean' },
+            { key: 'create_lots', label: this.t('settings.create_lots'), type: 'boolean' },
+            { key: 'use_existing_lots', label: this.t('settings.use_existing_lots'), type: 'boolean' },
+            { key: 'scan_flow', label: this.t('settings.scan_flow'), type: 'enum', options: [
+                { value: 'default', label: this.t('settings.scan_flow_default') },
+                { value: 'pack', label: this.t('settings.scan_flow_pack') },
+                { value: 'ship', label: this.t('settings.scan_flow_ship') },
+            ] },
+            { key: 'return_operation_type_id', label: this.t('settings.return_op_type'), type: 'enum', options: this._opTypeSelfOptions(id) },
+            { key: 'default_source_location_id', label: this.t('settings.default_source'), type: 'enum', options: this._locationOptions() },
+            { key: 'default_dest_location_id', label: this.t('settings.default_dest'), type: 'enum', options: this._locationOptions() },
+        ];
+        this.openModal(StockEntityFormModal, {
+            modalTitle: `${this.t('settings.edit')} · ${row.name ?? ''}`,
+            fields,
+            submitOp: 'stock/operation_type_update',
+            initialDraft: {
+                name: row.name ?? '',
+                name_prefix: row.name_prefix ?? '',
+                reservation_policy: row.reservation_policy ?? 'manual',
+                backorder_policy: row.backorder_policy ?? 'always',
+                putaway_mode: row.putaway_mode ?? 'rule',
+                putaway_flow_id: row.putaway_flow_id ?? '',
+                auto_validate: row.auto_validate === true,
+                create_lots: row.create_lots !== false,
+                use_existing_lots: row.use_existing_lots !== false,
+                scan_flow: typeof row.scan_flow === 'string' && row.scan_flow !== '' ? row.scan_flow : 'default',
+                return_operation_type_id: row.return_operation_type_id ?? '',
+                default_source_location_id: row.default_source_location_id ?? '',
+                default_dest_location_id: row.default_dest_location_id ?? '',
+            },
+            buildPayload: (d: PlainRow) => ({
+                operation_type_id: id,
+                name: d.name,
+                name_prefix: typeof d.name_prefix === 'string' ? d.name_prefix : '',
+                reservation_policy: d.reservation_policy,
+                backorder_policy: d.backorder_policy,
+                putaway_mode: d.putaway_mode,
+                putaway_flow_id: typeof d.putaway_flow_id === 'string' && d.putaway_flow_id !== '' ? d.putaway_flow_id : null,
+                auto_validate: d.auto_validate === true,
+                create_lots: d.create_lots === true,
+                use_existing_lots: d.use_existing_lots === true,
+                scan_flow: d.scan_flow,
+                return_operation_type_id: typeof d.return_operation_type_id === 'string' ? d.return_operation_type_id : '',
+                default_source_location_id: typeof d.default_source_location_id === 'string' ? d.default_source_location_id : '',
+                default_dest_location_id: typeof d.default_dest_location_id === 'string' ? d.default_dest_location_id : '',
+            }),
+        });
+    }
+}
+customElements.define('stock-op-types-page', StockOperationTypesPage);
+
+/* --- Партии / сроки годности (FEFO) --------------------------------------- */
+
+export class StockLotsPage extends StockSettingsPageBase {
+    static override properties = {
+        ...StockSettingsPageBase.properties,
+        _productId: { state: true },
+    };
+    declare private _productId: string;
+    private _products!: ResourceController;
+
+    protected config: EntityConfig = {
+        titleKey: 'lots.title',
+        subtitleKey: 'lots.subtitle',
+        listOp: 'stock/lots_list', createOp: 'stock/lot_create',
+        idField: 'lot_id', warehouseFilter: false,
+        listQuery: () => (this._productId !== '' ? { product_id: this._productId } : {}),
+        columns: [
+            { key: 'name', labelKey: 'lots.name' },
+            {
+                key: 'product_id', labelKey: 'lots.product',
+                render: (row) => this._productName(row.product_id),
+            },
+            { key: 'expiration_at', labelKey: 'lots.expiration', render: (row) => this._dateCell(row, 'expiration_at') },
+            { key: 'best_before_at', labelKey: 'lots.best_before', render: (row) => this._dateCell(row, 'best_before_at') },
+            { key: 'removal_at', labelKey: 'lots.removal', render: (row) => this._dateCell(row, 'removal_at') },
+            { key: 'alert_at', labelKey: 'lots.alert', render: (row) => this._dateCell(row, 'alert_at') },
+            {
+                key: '_fefo', labelKey: 'lots.fefo',
+                render: (row) => this._fefoBadge(row),
+            },
+        ],
+        formFields: [
+            { key: 'product_id', labelKey: 'lots.product', type: 'enum', required: true, options: () => this._productOptions() },
+            { key: 'name', labelKey: 'lots.name', required: true },
+            { key: 'expiration_at', labelKey: 'lots.expiration', type: 'date' },
+            { key: 'barcode', labelKey: 'lots.barcode' },
+        ],
+        buildCreatePayload: (d) => ({
+            product_id: d.product_id,
+            name: d.name,
+            barcode: typeof d.barcode === 'string' && d.barcode !== '' ? d.barcode : null,
+            expiration_at: typeof d.expiration_at === 'string' && d.expiration_at !== '' ? d.expiration_at : null,
+        }),
+    };
+
+    constructor() {
+        super();
+        this._productId = '';
+        this.init();
+    }
+
+    override connectedCallback(): void {
+        this._products = this.useResource('stock/products', { autoload: true });
+        super.connectedCallback();
+    }
+
+    private _productName(productId: unknown): string {
+        const p = this._products?.items.filter(isPlainRecord).find((r) => r.product_id === productId);
+        return typeof p?.name === 'string' && p.name !== '' ? p.name : String(productId ?? '—');
+    }
+
+    private _productOptions(): { value: string; label: string }[] {
+        return this._products.items.filter(isPlainRecord)
+            .filter((p) => p.tracking !== 'none')
+            .map((p) => ({ value: p.product_id as string, label: p.name as string }));
+    }
+
+    private _dateCell(row: PlainRow, key: string): TemplateResult | string {
+        const v = row[key];
+        if (typeof v !== 'string' || v === '') return '—';
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return '—';
+        const expired = d.getTime() < Date.now();
+        const soon = !expired && d.getTime() - Date.now() < 7 * 86_400_000;
+        return html`<span class=${expired ? 'date-expired' : soon ? 'date-soon' : ''}>${v.slice(0, 10)}</span>`;
+    }
+
+    private _fefoBadge(row: PlainRow): TemplateResult | string {
+        const exp = row.expiration_at;
+        if (typeof exp !== 'string' || exp === '') return '—';
+        const t = new Date(exp).getTime();
+        if (Number.isNaN(t)) return '—';
+        if (t < Date.now()) return html`<span class="lot-badge expired">${this.t('lots.expired')}</span>`;
+        const removal = row.removal_at;
+        if (typeof removal === 'string' && removal !== '' && new Date(removal).getTime() < Date.now()) {
+            return html`<span class="lot-badge blocked">${this.t('lots.blocked')}</span>`;
+        }
+        if (t - Date.now() < 7 * 86_400_000) return html`<span class="lot-badge soon">${this.t('lots.expiring_soon')}</span>`;
+        return html`<span class="lot-badge ok">${this.t('lots.ok')}</span>`;
+    }
+
+    protected override _renderToolbar(): TemplateResult {
+        return html`
+            <div class="toolbar">
+                <platform-searchable-combobox compact
+                    .placeholder=${this.t('lots.product')}
+                    .value=${this._productId}
+                    .options=${[
+                        { value: '', label: this.t('lots.all_products') },
+                        ...this._productOptions(),
+                    ]}
+                    @change=${(e: CustomEvent) => {
+                        this._productId = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.reload();
+                    }}
+                ></platform-searchable-combobox>
+            </div>
+        `;
+    }
+}
+customElements.define('stock-lots-page', StockLotsPage);
+
+/* --- Волны сборки ---------------------------------------------------------- */
+
+export class StockWavesPage extends StockSettingsPageBase {
+    static override properties = {
+        ...StockSettingsPageBase.properties,
+        _selected: { state: true },
+        _waveName: { state: true },
+    };
+    declare private _selected: Set<string>;
+    declare private _waveName: string;
+    private _queue!: ResourceController;
+    private _releaseOp!: OpController | null;
+    private _waveCreateOp!: OpController | null;
+
+    protected config: EntityConfig = {
+        titleKey: 'waves.title',
+        subtitleKey: 'waves.subtitle',
+        listResource: 'stock/waves',
+        idField: 'wave_id', warehouseFilter: true, warehouseRequired: true,
+        columns: [
+            { key: 'name', labelKey: 'settings.name' },
+            { key: 'state', labelKey: 'waves.state', render: (row) => this._stateBadge(row) },
+            { key: 'line_count', labelKey: 'waves.lines', num: true },
+            { key: 'priority', labelKey: 'waves.priority', num: true },
+            { key: 'released_at', labelKey: 'waves.released', render: (row) => txt(row, 'released_at').slice(0, 16).replace('T', ' ') },
+            { key: 'done_at', labelKey: 'waves.done', render: (row) => txt(row, 'done_at').slice(0, 16).replace('T', ' ') },
+            {
+                key: '_actions', labelKey: '',
+                render: (row) => row.state === 'draft' ? html`
+                    <platform-button size="sm" data-release
+                        ?disabled=${this._releaseOp?.busy === true}
+                        @click=${(e: Event) => {
+                            e.stopPropagation();
+                            this._releaseOp?.run({ wave_id: row.wave_id }).then(() => this.reload());
+                        }}>
+                        ${this.t('waves.release')}
+                    </platform-button>
+                ` : '',
+            },
+        ],
+    };
+
+    constructor() {
+        super();
+        this._selected = new Set();
+        this._waveName = '';
+        this.init();
+    }
+
+    override connectedCallback(): void {
+        this._queue = this.useResource('stock/queue');
+        this._releaseOp = this.useOp('stock/wave_release');
+        this._waveCreateOp = this.useOp('stock/wave_create');
+        super.connectedCallback();
+    }
+
+    protected override reload() {
+        const wh = this.warehouseId();
+        if (wh === '') return;
+        this._listResource?.load({ warehouse_id: wh, limit: 200 });
+        this._queue?.load({ warehouse_id: wh, limit: 500 });
+    }
+
+    private _openLines(): PlainRow[] {
+        return this._queue?.items.filter(isPlainRecord).filter((r) => r.assigned_user_id == null && r.wave_id == null) ?? [];
+    }
+
+    private _stateBadge(row: PlainRow): TemplateResult {
+        const state = typeof row.state === 'string' ? row.state : 'draft';
+        return html`<span class="wave-state wave-state-${state}">${this.t(`waves.state_${state}`)}</span>`;
+    }
+
+    private _toggleLine(id: string, checked: boolean): void {
+        const next = new Set(this._selected);
+        if (checked) next.add(id); else next.delete(id);
+        this._selected = next;
+    }
+
+    private _createWave(): void {
+        const wh = this.warehouseId();
+        if (wh === '' || this._selected.size === 0) return;
+        this._waveCreateOp?.run({
+            warehouse_id: wh,
+            name: this._waveName !== '' ? this._waveName : null,
+            move_line_ids: [...this._selected],
+        }).then(() => {
+            this._selected = new Set();
+            this._waveName = '';
+            this.reload();
+        });
+    }
+
+    protected override renderExtra(): TemplateResult {
+        const lines = this._openLines();
+        return html`
+            ${this._renderSection('waves.open_lines')}
+            ${lines.length === 0
+                ? html`<platform-empty-state .message=${this.t('waves.no_open_lines')}></platform-empty-state>`
+                : html`
+                    <div class="table-card"><div class="scroll">
+                        <table><thead><tr>
+                            <th></th>
+                            <th>${this.t('waves.col_product')}</th>
+                            <th>${this.t('waves.col_source')}</th>
+                            <th>${this.t('waves.col_dest')}</th>
+                            <th class="num">${this.t('waves.col_qty')}</th>
+                        </tr></thead><tbody>
+                            ${lines.map((row) => {
+                                const id = row.move_line_id as string;
+                                return html`
+                                <tr>
+                                    <td><input type="checkbox" data-line=${id}
+                                        .checked=${this._selected.has(id)}
+                                        @change=${(e: Event) => this._toggleLine(id, (e.target as HTMLInputElement).checked)} /></td>
+                                    <td>${txt(row, 'product_name') !== '—' ? txt(row, 'product_name') : txt(row, 'product_id')}</td>
+                                    <td>${txt(row, 'source_location_name') !== '—' ? txt(row, 'source_location_name') : txt(row, 'source_location_id')}</td>
+                                    <td>${txt(row, 'dest_location_name') !== '—' ? txt(row, 'dest_location_name') : txt(row, 'dest_location_id')}</td>
+                                    <td class="num">${row.qty_open ?? row.quantity ?? '—'}</td>
+                                </tr>`;
+                            })}
+                        </tbody></table>
+                    </div></div>
+                    <div class="wave-create-bar">
+                        <platform-field type="string" mode="edit" compact
+                            .placeholder=${this.t('waves.name_placeholder')}
+                            .value=${this._waveName}
+                            @change=${(e: CustomEvent) => { this._waveName = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                        ></platform-field>
+                        <platform-button variant="primary" data-create-wave
+                            ?disabled=${this._selected.size === 0 || this._waveCreateOp?.busy === true}
+                            @click=${() => this._createWave()}>
+                            ${this.t('waves.create_from_selected')} (${this._selected.size})
+                        </platform-button>
+                    </div>
+                `}
+        `;
+    }
+}
+customElements.define('stock-waves-page', StockWavesPage);
+
+/* --- Рефлекс-решения -------------------------------------------------------- */
+
+export class StockDecisionsPage extends StockSettingsPageBase {
+    static override properties = {
+        ...StockSettingsPageBase.properties,
+        _statusFilter: { state: true },
+        _applyChoice: { state: true },
+    };
+    declare private _statusFilter: string;
+    declare private _applyChoice: Record<string, string>;
+    private _applyOp!: OpController | null;
+    private _locations!: ResourceController;
+
+    protected config: EntityConfig = {
+        titleKey: 'decisions.title',
+        subtitleKey: 'decisions.subtitle',
+        listOp: 'stock/decisions_list',
+        idField: 'decision_id', warehouseFilter: true, warehouseRequired: true,
+        columns: [
+            { key: 'created_at', labelKey: 'decisions.created', render: (row) => txt(row, 'created_at').slice(0, 16).replace('T', ' ') },
+            { key: 'reflex_point', labelKey: 'decisions.point' },
+            { key: 'mode', labelKey: 'decisions.mode' },
+            {
+                key: 'status', labelKey: 'decisions.status',
+                render: (row) => {
+                    const s = typeof row.status === 'string' ? row.status : 'suggested';
+                    return html`<span class="decision-status decision-${s}">${this.t(`decisions.status_${s}`)}</span>`;
+                },
+            },
+            {
+                key: 'candidate_location_ids', labelKey: 'decisions.candidates',
+                render: (row) => this._candidateNames(row),
+            },
+            {
+                key: 'chosen_location_id', labelKey: 'decisions.chosen',
+                render: (row) => this._locationName(row.chosen_location_id),
+            },
+            {
+                key: '_apply', labelKey: '',
+                render: (row) => this._applyCell(row),
+            },
+        ],
+    };
+
+    constructor() {
+        super();
+        this._statusFilter = '';
+        this._applyChoice = {};
+        this.init();
+    }
+
+    override connectedCallback(): void {
+        this._applyOp = this.useOp('stock/move_apply_decision');
+        this._locations = this.useResource('stock/locations', { autoload: true });
+        super.connectedCallback();
+    }
+
+    protected override reload() {
+        const wh = this.warehouseId();
+        if (wh === '') return;
+        const q: PlainRow = { warehouse_id: wh };
+        if (this._statusFilter !== '') q.status = this._statusFilter;
+        this._list?.run(q);
+    }
+
+    private _locationName(id: unknown): string {
+        if (typeof id !== 'string' || id === '') return '—';
+        const loc = this._locations?.items.filter(isPlainRecord).find((l) => l.location_id === id);
+        return (typeof loc?.name === 'string' && loc.name !== '' ? loc.name : loc?.code ?? id) as string;
+    }
+
+    private _candidateNames(row: PlainRow): string {
+        const ids = Array.isArray(row.candidate_location_ids) ? row.candidate_location_ids : [];
+        if (ids.length === 0) return '—';
+        return ids.map((id) => this._locationName(id)).join(', ');
+    }
+
+    private _applyCell(row: PlainRow): TemplateResult | '' {
+        if (row.status !== 'suggested' || typeof row.move_id !== 'string' || row.move_id === '') return '';
+        const candidates = Array.isArray(row.candidate_location_ids) ? row.candidate_location_ids.filter((c): c is string => typeof c === 'string') : [];
+        if (candidates.length === 0) return '';
+        const id = row.decision_id as string;
+        const choice = this._applyChoice[id] ?? candidates[0];
+        return html`
+            <div class="decision-apply" @click=${(e: Event) => e.stopPropagation()}>
+                <platform-field type="enum" mode="edit" compact
+                    .value=${choice}
+                    .config=${{ values: candidates.map((c) => ({ value: c, label: this._locationName(c) })) }}
+                    @change=${(e: CustomEvent) => {
+                        this._applyChoice = { ...this._applyChoice, [id]: typeof e.detail.value === 'string' ? e.detail.value : candidates[0] };
+                    }}
+                ></platform-field>
+                <platform-button size="sm" variant="primary" data-apply
+                    ?disabled=${this._applyOp?.busy === true}
+                    @click=${() => {
+                        this._applyOp?.run({ move_id: row.move_id, location_id: this._applyChoice[id] ?? candidates[0] })
+                            .then(() => this.reload());
+                    }}>
+                    ${this.t('decisions.apply')}
+                </platform-button>
+            </div>
+        `;
+    }
+
+    protected override _renderToolbar(): TemplateResult {
+        return html`
+            ${super._renderToolbar()}
+            <div class="toolbar">
+                <platform-searchable-combobox compact
+                    .placeholder=${this.t('decisions.status')}
+                    .value=${this._statusFilter}
+                    .options=${[
+                        { value: '', label: this.t('decisions.all_statuses') },
+                        { value: 'suggested', label: this.t('decisions.status_suggested') },
+                        { value: 'applied', label: this.t('decisions.status_applied') },
+                        { value: 'rejected', label: this.t('decisions.status_rejected') },
+                    ]}
+                    @change=${(e: CustomEvent) => {
+                        this._statusFilter = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.reload();
+                    }}
+                ></platform-searchable-combobox>
+            </div>
+        `;
+    }
+}
+customElements.define('stock-decisions-page', StockDecisionsPage);

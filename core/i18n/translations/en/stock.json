@@ -20,7 +20,11 @@
     "stock_putaway_rules": "Putaway rules",
     "stock_reorder_rules": "Reorder rules",
     "stock_routes": "Routes",
-    "stock_uoms": "Units of measure"
+    "stock_uoms": "Units of measure",
+    "stock_waves": "Pick waves",
+    "stock_op_types": "Operation types",
+    "stock_decisions": "Putaway decisions",
+    "stock_lots": "Lots & expiry"
   },
   "bottom_nav": {
     "home": "Stock",
@@ -52,7 +56,12 @@
       "stock_putaway_rules": "Putaway rules",
       "stock_reorder_rules": "Reorder rules",
       "stock_routes": "Routes",
-      "stock_uoms": "Units of measure"
+      "stock_uoms": "Units of measure",
+      "stock_waves": "Waves",
+      "stock_lots": "Lots & expiry",
+      "stock_op_types": "Operation types",
+      "stock_decisions": "Putaway decisions",
+      "stock_transfers_list": "Transfers"
     }
   },
   "home": {
@@ -71,7 +80,8 @@
     "confirm": "Confirm",
     "assign": "Reserve",
     "validate": "Validate",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "return": "Return"
   },
   "products": {
     "title": "Products",
@@ -270,7 +280,11 @@
     "packaging_created": "Packaging created",
     "packaging_create_failed": "Failed to create packaging",
     "packaging_deleted": "Packaging deleted",
-    "packaging_delete_failed": "Failed to delete packaging"
+    "packaging_delete_failed": "Failed to delete packaging",
+    "wave_created": "Wave created",
+    "wave_create_failed": "Failed to create wave",
+    "wave_released": "Wave released",
+    "wave_release_failed": "Failed to release wave"
   },
   "explorer": {
     "search_placeholder": "Search bin, zone or barcode…",
@@ -448,7 +462,26 @@
     "routes_subtitle": "Goods movement routes across the warehouse",
     "handles_loose": "Handles loose goods",
     "max_level": "Max level",
-    "max_load_weight": "Max load weight"
+    "max_load_weight": "Max load weight",
+    "op_types_title": "Operation types",
+    "op_types_subtitle": "Document policies: reservation, backorder, putaway, lots, TSD flow",
+    "none": "— not set —",
+    "name_prefix": "Number prefix",
+    "putaway_mode": "Putaway",
+    "putaway_flow_id": "Putaway flow",
+    "create_lots": "Create lots",
+    "use_existing_lots": "Existing lots",
+    "return_op_type": "Return type",
+    "default_source": "Source bin",
+    "default_dest": "Destination bin",
+    "reservation_manual": "Manual",
+    "reservation_at_confirm": "At confirm",
+    "backorder_always": "Backorder",
+    "backorder_never": "Forbidden",
+    "backorder_ask": "Ask",
+    "putaway_mode_rule": "By rules",
+    "putaway_mode_inline": "Platform flow",
+    "putaway_mode_shadow": "Shadow (hint)"
   },
   "modal": {
     "location_create": "New location",
@@ -481,5 +514,58 @@
     "task_assigned_title": "New warehouse task",
     "task_assigned_message": "Tasks assigned to you: {count}",
     "open_tsd": "Open TSD"
+  },
+  "lots": {
+    "title": "Lots & expiry",
+    "subtitle": "Lot registry: FEFO dates, expiry, removal blocks",
+    "name": "Lot",
+    "product": "Product",
+    "expiration": "Expires",
+    "best_before": "Best before",
+    "removal": "Remove by",
+    "alert": "Alert",
+    "fefo": "Status",
+    "expired": "Expired",
+    "blocked": "To remove",
+    "expiring_soon": "Expiring",
+    "ok": "OK",
+    "barcode": "Barcode",
+    "all_products": "All products"
+  },
+  "waves": {
+    "title": "Pick waves",
+    "subtitle": "Batch task lines into runs — release, progress",
+    "state": "State",
+    "state_draft": "Draft",
+    "state_released": "Released",
+    "state_done": "Done",
+    "lines": "Lines",
+    "priority": "Priority",
+    "released": "Released",
+    "done": "Done",
+    "release": "Release",
+    "open_lines": "Open task lines",
+    "no_open_lines": "No free lines — all picked or assigned",
+    "col_product": "Product",
+    "col_source": "From",
+    "col_dest": "To",
+    "col_qty": "Qty",
+    "name_placeholder": "Wave name (optional)",
+    "create_from_selected": "Create wave"
+  },
+  "decisions": {
+    "title": "Putaway decisions",
+    "subtitle": "Reflex location choices journal — confirm suggested bins",
+    "created": "Created",
+    "point": "Point",
+    "mode": "Mode",
+    "status": "Status",
+    "status_suggested": "Suggested",
+    "status_applied": "Applied",
+    "status_rejected": "Rejected",
+    "all_statuses": "All statuses",
+    "candidates": "Candidates",
+    "chosen": "Chosen",
+    "apply": "Apply"
   }
 }

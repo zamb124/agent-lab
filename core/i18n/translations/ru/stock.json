@@ -20,7 +20,11 @@
     "stock_putaway_rules": "Правила размещения",
     "stock_reorder_rules": "Правила пополнения",
     "stock_routes": "Маршруты",
-    "stock_uoms": "Единицы измерения"
+    "stock_uoms": "Единицы измерения",
+    "stock_waves": "Волны сборки",
+    "stock_op_types": "Типы операций",
+    "stock_decisions": "Решения размещения",
+    "stock_lots": "Партии и сроки"
   },
   "bottom_nav": {
     "home": "Склад",
@@ -52,7 +56,12 @@
       "stock_putaway_rules": "Размещение",
       "stock_reorder_rules": "Пополнение",
       "stock_routes": "Маршруты",
-      "stock_uoms": "Единицы измерения"
+      "stock_uoms": "Единицы измерения",
+      "stock_waves": "Волны",
+      "stock_lots": "Партии и сроки",
+      "stock_op_types": "Типы операций",
+      "stock_decisions": "Решения размещения",
+      "stock_transfers_list": "Накладные"
     }
   },
   "home": {
@@ -71,7 +80,8 @@
     "confirm": "Подтвердить",
     "assign": "Зарезервировать",
     "validate": "Провести",
-    "cancel": "Отменить"
+    "cancel": "Отменить",
+    "return": "Возврат"
   },
   "products": {
     "title": "Продукты",
@@ -270,7 +280,11 @@
     "packaging_created": "Упаковка создана",
     "packaging_create_failed": "Не удалось создать упаковку",
     "packaging_deleted": "Упаковка удалена",
-    "packaging_delete_failed": "Не удалось удалить упаковку"
+    "packaging_delete_failed": "Не удалось удалить упаковку",
+    "wave_created": "Волна создана",
+    "wave_create_failed": "Не удалось создать волну",
+    "wave_released": "Волна выпущена",
+    "wave_release_failed": "Не удалось выпустить волну"
   },
   "explorer": {
     "search_placeholder": "Поиск ячейки, зоны или штрихкода…",
@@ -448,7 +462,26 @@
     "routes_subtitle": "Маршруты движения товара по складу",
     "handles_loose": "Штучный товар",
     "max_level": "Макс. уровень",
-    "max_load_weight": "Макс. вес нагрузки"
+    "max_load_weight": "Макс. вес нагрузки",
+    "op_types_title": "Типы операций",
+    "op_types_subtitle": "Политики накладных: резерв, доказка, размещение, партии, поток ТСД",
+    "none": "— не задано —",
+    "name_prefix": "Префикс номеров",
+    "putaway_mode": "Размещение",
+    "putaway_flow_id": "Flow размещения",
+    "create_lots": "Создавать партии",
+    "use_existing_lots": "Существующие партии",
+    "return_op_type": "Тип возврата",
+    "default_source": "Ячейка-источник",
+    "default_dest": "Ячейка назначения",
+    "reservation_manual": "Вручную",
+    "reservation_at_confirm": "При подтверждении",
+    "backorder_always": "Доказка",
+    "backorder_never": "Запрет",
+    "backorder_ask": "Спросить",
+    "putaway_mode_rule": "По правилам",
+    "putaway_mode_inline": "Flow платформы",
+    "putaway_mode_shadow": "Тень (подсказка)"
   },
   "modal": {
     "location_create": "Новая локация",
@@ -481,5 +514,58 @@
     "task_assigned_title": "Новое задание на складе",
     "task_assigned_message": "Вам назначено заданий: {count}",
     "open_tsd": "Открыть ТСД"
+  },
+  "lots": {
+    "title": "Партии и сроки годности",
+    "subtitle": "Реестр партий: FEFO-даты, просрочка, блокировки",
+    "name": "Партия",
+    "product": "Товар",
+    "expiration": "Годен до",
+    "best_before": "Лучше до",
+    "removal": "Убрать до",
+    "alert": "Алерт",
+    "fefo": "Статус",
+    "expired": "Просрочена",
+    "blocked": "К удалению",
+    "expiring_soon": "Истекает",
+    "ok": "В норме",
+    "barcode": "Штрихкод",
+    "all_products": "Все товары"
+  },
+  "waves": {
+    "title": "Волны сборки",
+    "subtitle": "Группировка строк заданий в рейсы — выпуск волны, прогресс",
+    "state": "Состояние",
+    "state_draft": "Черновик",
+    "state_released": "Выпущена",
+    "state_done": "Завершена",
+    "lines": "Строк",
+    "priority": "Приоритет",
+    "released": "Выпущена",
+    "done": "Завершена",
+    "release": "Выпустить",
+    "open_lines": "Открытые строки заданий",
+    "no_open_lines": "Нет свободных строк — всё разобрано или назначено",
+    "col_product": "Товар",
+    "col_source": "Откуда",
+    "col_dest": "Куда",
+    "col_qty": "Кол-во",
+    "name_placeholder": "Имя волны (необязательно)",
+    "create_from_selected": "Сформировать волну"
+  },
+  "decisions": {
+    "title": "Решения размещения",
+    "subtitle": "Журнал выборов адреса рефлексом — подтверждение предложенных ячеек",
+    "created": "Создано",
+    "point": "Точка",
+    "mode": "Режим",
+    "status": "Статус",
+    "status_suggested": "Предложено",
+    "status_applied": "Применено",
+    "status_rejected": "Отклонено",
+    "all_statuses": "Все статусы",
+    "candidates": "Кандидаты",
+    "chosen": "Выбрано",
+    "apply": "Применить"
   }
 }

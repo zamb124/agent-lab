@@ -299,6 +299,12 @@ class WarehouseService:
         putaway_flow_id: str | None,
         auto_validate: bool | None,
         scan_flow: ScanFlow | Literal["default"] | None,
+        default_source_location_id: str | None = None,
+        default_dest_location_id: str | None = None,
+        name_prefix: str | None = None,
+        create_lots: bool | None = None,
+        use_existing_lots: bool | None = None,
+        return_operation_type_id: str | None = None,
     ) -> StockOperationType:
         """Настроить политику вида накладной.
 
@@ -333,6 +339,18 @@ class WarehouseService:
             op.scan_flow = None
         elif scan_flow is not None:
             op.scan_flow = scan_flow
+        if default_source_location_id is not None:
+            op.default_source_location_id = default_source_location_id or None
+        if default_dest_location_id is not None:
+            op.default_dest_location_id = default_dest_location_id or None
+        if name_prefix is not None:
+            op.name_prefix = name_prefix or None
+        if create_lots is not None:
+            op.create_lots = create_lots
+        if use_existing_lots is not None:
+            op.use_existing_lots = use_existing_lots
+        if return_operation_type_id is not None:
+            op.return_operation_type_id = return_operation_type_id or None
         if op.putaway_mode == ReflexMode.INLINE and op.putaway_flow_id is None:
             raise _conflict(
                 "Inline putaway requires putaway_flow_id", "putaway_flow_missing"

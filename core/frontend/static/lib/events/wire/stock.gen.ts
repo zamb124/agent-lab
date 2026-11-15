@@ -324,6 +324,8 @@ export interface ScanContext {
     "container_id"?: string | null | undefined;
     "lines"?: ScanLineDraft[] | undefined;
     "owner_entity_id"?: string | null | undefined;
+    "lot_name"?: string | null | undefined;
+    "expiration_date"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -352,6 +354,8 @@ export interface ScanLineDraft {
     "container_id"?: string | null | undefined;
     "packaging_id"?: string | null | undefined;
     "owner_entity_id"?: string | null | undefined;
+    "lot_name"?: string | null | undefined;
+    "expiration_date"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -372,6 +376,8 @@ export interface ScanResolution {
     "quantity"?: number | string | null | undefined;
     "packaging_id"?: string | null | undefined;
     "packaging_qty"?: number | string | null | undefined;
+    "lot_name"?: string | null | undefined;
+    "expiration_date"?: string | null | undefined;
     [key: string]: unknown;
 }
 
@@ -2053,6 +2059,23 @@ export interface StockScanExpected {
 }
 
 /**
+ * Ручной ввод партии/серийника/срока с бумажной этикетки.
+ * 
+ * Поля не из штрихкода: поставщик привёз короб без GS1 — оператор
+ * переписывает номер партии и «годен до» вручную. ``serial`` —
+ * серийный номер для ``tracking=serial`` товара.
+ */
+export interface StockScanLotPayload {
+    "warehouse_id": string;
+    "context": ScanContext;
+    "lot_name"?: string | null | undefined;
+    "serial"?: string | null | undefined;
+    "expiration_date"?: string | null | undefined;
+    "move_id"?: string | null | undefined;
+    [key: string]: unknown;
+}
+
+/**
  * Открыть скан-сессию по документу — backend выбирает поток.
  */
 export interface StockScanOpenPayload {
@@ -2768,6 +2791,7 @@ export interface StockCommandMap {
     "stock/scan/adhoc_commit_requested": { payload: StockScanAdhocCommitPayload; result: StockTransfer },
     "stock/scan/commit_requested": { payload: StockScanCommitPayload; result: StockScanCommitResponse },
     "stock/scan/count_commit_requested": { payload: StockScanCountCommitPayload; result: StockScanCountCommitResponse },
+    "stock/scan/lot_requested": { payload: StockScanLotPayload; result: StockScanStepResponse },
     "stock/scan/open_requested": { payload: StockScanOpenPayload; result: StockScanOpenResponse },
     "stock/scan/quantity_requested": { payload: StockScanQuantityPayload; result: StockScanStepResponse },
     "stock/scan/step_requested": { payload: StockScanStepPayload; result: StockScanStepResponse },
@@ -3008,6 +3032,9 @@ export interface StockEventMap {
     "stock/scan/count_commit_failed": PlatformCommandEventPayload,
     "stock/scan/count_commit_requested": PlatformCommandEventPayload,
     "stock/scan/count_commit_succeeded": PlatformCommandEventPayload,
+    "stock/scan/lot_failed": PlatformCommandEventPayload,
+    "stock/scan/lot_requested": PlatformCommandEventPayload,
+    "stock/scan/lot_succeeded": PlatformCommandEventPayload,
     "stock/scan/open_failed": PlatformCommandEventPayload,
     "stock/scan/open_requested": PlatformCommandEventPayload,
     "stock/scan/open_succeeded": PlatformCommandEventPayload,

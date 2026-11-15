@@ -180,6 +180,35 @@ export const stockWavesResource = createResourceCollection({
     },
 });
 
+export const stockWaveCreateOp = createAsyncOp({
+    name: 'stock/wave_create',
+    successToastKey: 'stock:toast.wave_created',
+    errorToastKey: 'stock:toast.wave_create_failed',
+    commandType: 'stock/waves/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/stock/api/v1/waves' },
+});
+
+export const stockWaveReleaseOp = createAsyncOp({
+    name: 'stock/wave_release',
+    successToastKey: 'stock:toast.wave_released',
+    errorToastKey: 'stock:toast.wave_release_failed',
+    commandType: 'stock/waves/release_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/stock/api/v1/waves/:wave_id/release' },
+});
+
+export const stockDecisionsListOp = createAsyncOp({
+    name: 'stock/decisions_list',
+    silent: true,
+    commandType: 'stock/decisions/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/stock/api/v1/decisions/list' },
+});
+
 export const stockValuationLayersListOp = createAsyncOp({
     name: 'stock/valuation_layers_list',
     silent: true,
@@ -993,6 +1022,9 @@ declare module '@platform/lib/events/factory-registry.js' {
         'stock/barcode_resolve': typeof stockBarcodeResolveOp;
         'stock/lots_list': typeof stockLotsListOp;
         'stock/lot_create': typeof stockLotCreateOp;
+        'stock/wave_create': typeof stockWaveCreateOp;
+        'stock/wave_release': typeof stockWaveReleaseOp;
+        'stock/decisions_list': typeof stockDecisionsListOp;
         'stock/uoms_list': typeof stockUomsListOp;
         'stock/uom_create': typeof stockUomCreateOp;
         'stock/uom_delete': typeof stockUomDeleteOp;

@@ -1292,7 +1292,11 @@ class StockMove(PlatformModel):
                         or cand.quantity <= STOCK_ZERO
                     ):
                         continue
-                    if draft.lot_id is not None and cand.lot_id != draft.lot_id:
+                    if (
+                        draft.lot_id is not None
+                        and cand.lot_id is not None
+                        and cand.lot_id != draft.lot_id
+                    ):
                         continue
                     if (
                         cand.assigned_user_id is not None
@@ -1329,7 +1333,7 @@ class StockMove(PlatformModel):
                         consumed_line_ids.append(cand.move_line_id)
                     _ = await add_line(
                         kind=StockMoveLineKind.QUANTITY,
-                        lot_id=cand.lot_id,
+                        lot_id=cand.lot_id or draft.lot_id,
                         quantity=take,
                         done_quantity=take,
                         location_id=src_id,

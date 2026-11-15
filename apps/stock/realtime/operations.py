@@ -43,6 +43,7 @@ from apps.stock.models.api import (
     StockContainerTypeCreatePayload,
     StockContainerTypesListPayload,
     StockContainerTypeUpdatePayload,
+    StockDecisionsListPayload,
     StockItemsResponse,
     StockLocationCreatePayload,
     StockLocationIdPayload,
@@ -104,6 +105,7 @@ from apps.stock.models.api import (
     StockScanCountCommitPayload,
     StockScanCountCommitResponse,
     StockScanExpected,
+    StockScanLotPayload,
     StockScanOpenPayload,
     StockScanOpenResponse,
     StockScanQuantityPayload,
@@ -453,6 +455,12 @@ async def op_operation_types_update(
         putaway_flow_id=payload.putaway_flow_id,
         auto_validate=payload.auto_validate,
         scan_flow=payload.scan_flow,
+        default_source_location_id=payload.default_source_location_id,
+        default_dest_location_id=payload.default_dest_location_id,
+        name_prefix=payload.name_prefix,
+        create_lots=payload.create_lots,
+        use_existing_lots=payload.use_existing_lots,
+        return_operation_type_id=payload.return_operation_type_id,
     )
 
 
@@ -826,6 +834,22 @@ async def op_move_apply_decision(
         actor_user_id=scope.user_id,
         command_type="stock/move/apply_decision_requested",
     )
+
+
+async def op_decisions_list(
+    payload: StockDecisionsListPayload, *, user: User, di: Di
+) -> StockItemsResponse[StockDecision]:
+    """Журнал рефлекс-решений склада — аудит выборов адреса."""
+    _ = user
+    scope = require_company()
+    await _warehouse_viewer(di, scope, payload.warehouse_id)
+    items = await di.placement_service.list_decisions(
+        company_id=scope.company_id,
+        warehouse_id=payload.warehouse_id,
+        status=payload.status,
+        limit=payload.limit,
+    )
+    return StockItemsResponse(items=items)
 
 
 # --- Остатки / инвентаризация ---
@@ -1897,6 +1921,30 @@ async def op_scan_quantity(
     await _warehouse_editor(di, scope, payload.warehouse_id)
     result = di.scan_service.quantity(
         context=payload.context, quantity=payload.quantity
+    )
+    return StockScanStepResponse(
+        context=result.context,
+        error=result.error.value if result.error is not None else None,
+        hint=result.hint,
+        expected=await _scan_expected(
+            di, scope.company_id, payload.warehouse_id, payload.move_id,
+            scope.user_id, result.context.flow,
+        ),
+    )
+
+
+async def op_scan_lot(
+    payload: StockScanLotPayload, *, user: User, di: Di
+) -> StockScanStepResponse:
+    """Ручной ввод партии/серийника/срока — этикетка без штрихкода."""
+    _ = user
+    scope = require_company()
+    await _warehouse_editor(di, scope, payload.warehouse_id)
+    result = di.scan_service.lot(
+        context=payload.context,
+        lot_name=payload.lot_name,
+        serial=payload.serial,
+        expiration_date=payload.expiration_date,
     )
     return StockScanStepResponse(
         context=result.context,

@@ -6,7 +6,7 @@ Oxyde напрямую либо композитные `*Detail`/`*Response` и�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Generic, Literal, TypeVar
 
@@ -20,6 +20,7 @@ from apps.stock.models.enums import (
     StockBarcodeEntityType,
     StockContainerKind,
     StockContainerPolicy,
+    StockDecisionStatus,
     StockLayoutPreset,
     StockLocationUsage,
     StockMoveState,
@@ -242,6 +243,15 @@ class StockOperationTypeUpdatePayload(StrictBaseModel):
     """Поток ТСД для плеча маршрута: ``pack``/``ship`` — явная семантика;
     ``"default"`` — вернуть вывод из ``code`` (поле → NULL); ``None`` —
     не трогать."""
+    default_source_location_id: str | None = None
+    """``""`` — сбросить в NULL; ``None`` — не трогать."""
+    default_dest_location_id: str | None = None
+    name_prefix: str | None = Field(default=None, max_length=32)
+    """``""`` — сбросить в NULL; ``None`` — не трогать."""
+    create_lots: bool | None = None
+    use_existing_lots: bool | None = None
+    return_operation_type_id: str | None = None
+    """``""`` — сбросить в NULL; ``None`` — не трогать."""
 
 
 # --- Transfers / moves ---
@@ -724,6 +734,22 @@ class StockScanQuantityPayload(StrictBaseModel):
     move_id: str | None = None
 
 
+class StockScanLotPayload(StrictBaseModel):
+    """Ручной ввод партии/серийника/срока с бумажной этикетки.
+
+    Поля не из штрихкода: поставщик привёз короб без GS1 — оператор
+    переписывает номер партии и «годен до» вручную. ``serial`` —
+    серийный номер для ``tracking=serial`` товара.
+    """
+
+    warehouse_id: str
+    context: ScanContext
+    lot_name: str | None = Field(default=None, max_length=128)
+    serial: str | None = Field(default=None, max_length=128)
+    expiration_date: date | None = None
+    move_id: str | None = None
+
+
 class StockScanExpected(StrictBaseModel):
     """Что экран должен подсветить оператору на текущем шаге.
 
@@ -872,6 +898,14 @@ class StockWavesListPayload(StrictBaseModel):
     state: StockWaveState | None = None
     limit: int = Field(default=100, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
+
+
+class StockDecisionsListPayload(StrictBaseModel):
+    """Решения рефлексов склада — диспетчерский журнал выборов адреса."""
+
+    warehouse_id: str
+    status: StockDecisionStatus | None = None
+    limit: int = Field(default=200, ge=1, le=1000)
 
 
 class StockWaveCreatePayload(StrictBaseModel):

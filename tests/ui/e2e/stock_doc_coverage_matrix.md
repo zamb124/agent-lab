@@ -24,6 +24,10 @@
 | `stock-*-settings` | Справочники: склады, типы хранения/тары, ресурсы, правила |
 | `stock-valuation-journal-page` | Журнал слоёв оценки: приходы и списания |
 | `stock-valuation-batches-page` | Партии запасов (FIFO-слои) по товарам |
+| `stock-waves-page` | Волны сборки: свободные строки отбора → волна → выпуск |
+| `stock-lots-page` | Партии и сроки годности склада: FEFO-статусы, форма партии |
+| `stock-op-types-page` | Типы операций: политики резерва, недостачи, партий, префиксы |
+| `stock-decisions-page` | Журнал рефлекс-решений размещения с фильтром статуса |
 
 ## Блоки и инструкции
 
@@ -42,6 +46,7 @@
 | 3 | `moves-journal` | Журнал движений строками товара | `test_stock_doc_operations.py` | ✅ |
 | 3 | `packages-containers` | Тара: содержимое и перемещение | `test_stock_doc_operations.py` | ✅ |
 | 3 | `inventory-count` | Инвентаризация: факт vs учёт | `test_stock_doc_operations.py` | ✅ |
+| 2 | `stock-admin-lots` | Партии и сроки годности: FEFO-карта склада | `test_stock_admin_new_pages.py` | 🚧 |
 
 ### products — Товары
 
@@ -57,6 +62,7 @@
 | 2 | `receive-stock` | Приход товара на склад от поставщика | — | ⛔ дубль `stock-incoming` |
 | 2 | `transfer-between-locations` | Перемещение между складами | `test_stock_doc_transfers.py` | ✅ |
 | 3 | `transfers-journal` | Журнал движений, детали проводки | `test_stock_doc_transfers.py` | ✅ |
+| 2 | `stock-admin-waves` | Волны сборки: строки заказов → волна → выпуск | `test_stock_admin_new_pages.py` | 🚧 |
 
 ### valuation — Оценка запасов
 
@@ -71,10 +77,12 @@
 | 2 | `settings-warehouse` | Склады, типы хранения, тара | `test_stock_doc_operations.py` | ✅ |
 | 2 | `settings-uoms` | Единицы измерения и упаковки | `test_stock_doc_operations.py` | ✅ |
 | 2 | `settings-catalogs` | Ресурсы/техника, правила размещения и пополнения, маршруты, партии | `test_stock_doc_operations.py` | ✅ |
+| 2 | `stock-admin-operation-types` | Типы операций: полный редактор политик | `test_stock_admin_new_pages.py` | 🚧 |
+| 3 | `stock-admin-decisions` | Рефлекс-решения: аудит размещений | `test_stock_admin_new_pages.py` | 🚧 |
 
 ### tsd — ТСД-сканер
 
-Все сценарии — `test_stock_tsd_terminal.py` (16 тестов, `-n4` зелёные).
+Сценарии — `test_stock_tsd_terminal.py` (18 тестов) и `test_stock_tsd_lots_returns.py` (4 теста).
 
 | Уровень | doc_slug | Инструкция | Тест | Статус |
 |---|---|---|---|---|
@@ -93,7 +101,19 @@
 | 2 | `tsd-inquiry` | Справочный скан: товар и остатки | `test_stock_tsd_inquiry_rescan` | ✅ |
 | 2 | `tsd-context-chips` | Контекст-чипы: оператор, ресурс, документ | `test_stock_tsd_context_chips` | ✅ |
 | 3 | `tsd-offline-outbox` | Офлайн-очередь исполнения | `test_stock_tsd_offline_outbox` | ✅ |
+| 2 | `stock-tsd-hid-scan` | HID-сканер: клавиатурный ввод = скан | `test_stock_tsd_hid_scan` | ✅ |
+| 2 | `stock-tsd-task-switch` | Переключение между заданиями | `test_stock_tsd_task_switch` | ✅ |
+| 2 | `stock-tsd-receive-lots` | Приёмка партии: номер и срок годности | `test_stock_tsd_lots_returns.py` | ✅ |
+| 2 | `stock-tsd-serials` | Приёмка серийников: скан = 1 шт | `test_stock_tsd_lots_returns.py` | ✅ |
+| 2 | `stock-tsd-fefo-pick` | Отбор партий по FEFO | `test_stock_tsd_lots_returns.py` | ✅ |
+| 2 | `stock-tsd-return` | Возврат от покупателя с карточки накладной | `test_stock_tsd_lots_returns.py` | ✅ |
 | 1 | `tsd-scanner` | Общая инструкция входа и скана | — | ⛔ покрыто набором выше |
+
+### full-lifecycle — Полный цикл склада
+
+| Уровень | doc_slug | Инструкция | Тест | Статус |
+|---|---|---|---|---|
+| 3 | `stock-full-lifecycle` | Настройка администратором → смена на ТСД | `test_stock_full_lifecycle.py` | ✅ |
 
 ## Долг и заметки
 

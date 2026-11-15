@@ -16,17 +16,20 @@
   несёт товар и кратность, ресурс для скан-потоков — UNKNOWN.
 """
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
 
 from apps.stock.models import (
     StockLocation,
+    StockLot,
     StockMove,
     StockMoveLineState,
     StockMoveState,
     StockOperationCode,
     StockQuant,
+    StockTransferState,
     ValuationMethod,
 )
 from apps.stock.models.common import STOCK_ZERO, StockMoveSpec, new_id
@@ -48,6 +51,7 @@ from apps.stock.models.scan import (
     ScanResolution,
     ScanStep,
     scan_commit_ready,
+    scan_lot,
     scan_quantity,
     scan_step,
 )
@@ -70,6 +74,8 @@ def _res(
     lot_id: str | None = None,
     serial: str | None = None,
     quantity: Decimal | None = None,
+    lot_name: str | None = None,
+    expiration_date: date | None = None,
 ) -> ScanResolution:
     return ScanResolution(
         entity_kind=kind,
@@ -79,6 +85,8 @@ def _res(
         lot_id=lot_id,
         serial=serial,
         quantity=quantity,
+        lot_name=lot_name,
+        expiration_date=expiration_date,
     )
 
 
@@ -204,6 +212,59 @@ class TestScanMachineEdges:
         assert r.error is None
         assert r.context.product_id == "prod-9"
         assert r.context.serial == "SN-9"
+
+    def test_gs1_lot_fields_merge_on_product_scan(self) -> None:
+        """GS1-этикетка с AI(10)/(17): имя партии и срок доезжают
+        в контекст до коммита — партия заводится на проводке."""
+        ctx = ScanContext(flow=ScanFlow.RECEIVE)
+        r = scan_step(
+            ctx,
+            _res(
+                ScanEntityKind.PRODUCT,
+                "p1",
+                lot_name="LOT-77",
+                expiration_date=date(2027, 3, 1),
+            ),
+        )
+        assert r.error is None
+        assert r.context.lot_name == "LOT-77"
+        assert r.context.expiration_date == date(2027, 3, 1)
+
+    def test_scan_lot_manual_input(self) -> None:
+        """Ручной ввод партии с бумажной этикетки: доезжает до строки
+        исполнения; без товара и пустой номер — отказ машины."""
+        ctx = ScanContext(flow=ScanFlow.RECEIVE)
+        r = scan_lot(ctx, lot_name="L1", serial=None, expiration_date=None)
+        assert r.error == ScanError.UNEXPECTED_STEP
+        r = scan_step(ctx, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_lot(r.context, lot_name="  ", serial=None, expiration_date=None)
+        assert r.error == ScanError.ENTITY_MISMATCH
+        r = scan_lot(
+            r.context,
+            lot_name="LOT-5",
+            serial=None,
+            expiration_date=date(2027, 1, 15),
+        )
+        assert r.error is None
+        assert r.context.lot_name == "LOT-5"
+        assert r.context.expiration_date == date(2027, 1, 15)
+        r = scan_step(r.context, _res(ScanEntityKind.LOCATION, "bin-1"))
+        r = scan_quantity(r.context, Decimal("3"))
+        assert r.error is None
+        assert len(r.context.lines) == 1
+        assert r.context.lines[0].lot_name == "LOT-5"
+        assert r.context.lines[0].expiration_date == date(2027, 1, 15)
+
+    def test_scan_lot_serial_input(self) -> None:
+        """Серийник вручную: имя серийника и есть имя партии."""
+        ctx = ScanContext(flow=ScanFlow.RECEIVE)
+        r = scan_step(ctx, _res(ScanEntityKind.PRODUCT, "p1"))
+        r = scan_lot(
+            r.context, lot_name=None, serial="SN-42", expiration_date=None
+        )
+        assert r.error is None
+        assert r.context.serial == "SN-42"
+        assert r.context.lot_name == "SN-42"
 
     def test_putaway_flow_sequence(self) -> None:
         """Putaway: товар → исходная тара/ячейка → приёмник → кол-во."""
@@ -1893,3 +1954,229 @@ class TestScanOpenByLine:
             user_id="op",
         )
         assert last is None
+
+
+class TestScanLotPolicies:
+    """Политики create_lots/use_existing_lots типа операции в _resolve_line_lots."""
+
+    async def _lot_product(self, env: StockEnv, unique: str):
+        return await env.di.stock_catalog_service.create_product(
+            company_id=env.company_id,
+            name=f"Dairy {unique}",
+            sku=f"SKU-L-{unique}",
+            uom_id=env.uom_id,
+            valuation_method=ValuationMethod.FIFO,
+            standard_price=Decimal("0"),
+            tracking=StockTracking.LOT,
+            is_storable=True,
+            category="general",
+            use_expiration=True,
+            expiration_days=30,
+            removal_days=5,
+        )
+
+    def _ctx(self, product_id: str, dest: str, **kwargs) -> ScanContext:
+        return ScanContext(
+            flow=ScanFlow.RECEIVE,
+            lines=(
+                ScanLineDraft(
+                    location_id=None,
+                    location_dest_id=dest,
+                    product_id=product_id,
+                    quantity=Decimal("3"),
+                    **kwargs,
+                ),
+            ),
+        )
+
+    async def _set_lot_policies(
+        self, env: StockEnv, *, create: bool | None, use_existing: bool | None
+    ) -> None:
+        op = env.op_types[StockOperationCode.INCOMING]
+        _ = await env.di.warehouse_service.update_operation_type(
+            company_id=env.company_id,
+            operation_type_id=op.operation_type_id,
+            name=None,
+            reservation_policy=None,
+            backorder_policy=None,
+            putaway_mode=None,
+            putaway_flow_id=None,
+            auto_validate=None,
+            scan_flow=None,
+            create_lots=create,
+            use_existing_lots=use_existing,
+        )
+        env.op_types[StockOperationCode.INCOMING] = next(
+            t for t in await env.di.warehouse_service.list_operation_types(
+                company_id=env.company_id, warehouse_id=env.warehouse.warehouse_id
+            ) if t.operation_type_id == op.operation_type_id
+        )
+
+    async def test_new_lot_created_with_expiration(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        product = await self._lot_product(env, unique_id)
+        ctx = self._ctx(
+            product.product_id,
+            env.warehouse.stock_location_id,
+            lot_name="LOT-NEW-1",
+            expiration_date=date(2030, 6, 1),
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            actor_user_id="op",
+        )
+        assert transfer.state == StockTransferState.DONE
+        lot = await StockLot.by_product_and_name(
+            env.company_id, product.product_id, "LOT-NEW-1"
+        )
+        assert lot is not None
+        assert lot.expiration_at is not None
+        assert lot.expiration_at.date() == date(2030, 6, 1)
+        # FEFO-производные: removal_days=5 сдвигает «убрать до» раньше срока.
+        assert lot.removal_at is not None
+        assert lot.removal_at.date() == date(2030, 5, 27)
+
+    async def test_lot_create_denied_by_policy(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        product = await self._lot_product(env, unique_id)
+        await self._set_lot_policies(env, create=False, use_existing=None)
+        ctx = self._ctx(
+            product.product_id,
+            env.warehouse.stock_location_id,
+            lot_name="LOT-FORBIDDEN",
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.commit_adhoc(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                operation_code=StockOperationCode.INCOMING,
+                context=ctx,
+                actor_user_id="op",
+            )
+        assert exc.value.error_code == "lot_create_denied"
+
+    async def test_existing_lot_rejected_by_policy(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        product = await self._lot_product(env, unique_id)
+        _ = await env.di.stock_catalog_service.create_lot(
+            company_id=env.company_id,
+            product_id=product.product_id,
+            name="LOT-EX",
+            barcode=None,
+            expiration_at=None,
+        )
+        await self._set_lot_policies(env, create=None, use_existing=False)
+        ctx = self._ctx(
+            product.product_id,
+            env.warehouse.stock_location_id,
+            lot_name="LOT-EX",
+        )
+        with pytest.raises(PlatformConflictError) as exc:
+            _ = await env.di.scan_service.commit_adhoc(
+                company_id=env.company_id,
+                warehouse_id=env.warehouse.warehouse_id,
+                operation_code=StockOperationCode.INCOMING,
+                context=ctx,
+                actor_user_id="op",
+            )
+        assert exc.value.error_code == "lot_use_existing_denied"
+
+    async def test_existing_lot_reused_no_duplicate(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _env(stock_di, unique_id)
+        product = await self._lot_product(env, unique_id)
+        lot = await env.di.stock_catalog_service.create_lot(
+            company_id=env.company_id,
+            product_id=product.product_id,
+            name="LOT-REUSE",
+            barcode=None,
+            expiration_at=None,
+        )
+        ctx = self._ctx(
+            product.product_id,
+            env.warehouse.stock_location_id,
+            lot_name="LOT-REUSE",
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            actor_user_id="op",
+        )
+        assert transfer.state == StockTransferState.DONE
+        lots = await StockLot.objects.filter(
+            company_id=env.company_id, product_id=product.product_id
+        ).all()
+        assert len(lots) == 1
+        assert lots[0].lot_id == lot.lot_id
+        quant = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=product.product_id,
+            location_id=env.warehouse.stock_location_id,
+        ).first()
+        assert quant is not None
+        assert quant.quantity == Decimal("3")
+
+    async def test_adhoc_bin_dest_no_stale_reservation(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Приёмка партии в ячейку (не в корень stock): обещание поставщика
+        поглощается сплитом — открытых строк без партии не остаётся."""
+        env = await _env(stock_di, unique_id)
+        product = await self._lot_product(env, unique_id)
+        zone = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            parent_id=None,
+            name="Zone",
+            usage=StockLocationUsage.VIEW,
+            barcode="ZONE-1",
+        )
+        bin_a = await env.di.topology_service.create_location(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            parent_id=zone.location_id,
+            name="Bin A",
+            usage=StockLocationUsage.BIN,
+            barcode="BIN-A-1",
+        )
+        ctx = self._ctx(
+            product.product_id,
+            bin_a.location_id,
+            lot_name="LOT-BIN-1",
+            expiration_date=date(2027, 1, 15),
+        )
+        transfer = await env.di.scan_service.commit_adhoc(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_code=StockOperationCode.INCOMING,
+            context=ctx,
+            actor_user_id="op",
+        )
+        assert transfer.state == StockTransferState.DONE
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
+            env.company_id, transfer.transfer_id
+        )
+        for move in moves:
+            open_lines = await StockMoveLine.list_open_for_move_by_created_at_asc(
+                env.company_id, move.move_id
+            )
+            assert open_lines == []
+        quant = await StockQuant.objects.filter(
+            company_id=env.company_id,
+            product_id=product.product_id,
+            location_id=bin_a.location_id,
+        ).first()
+        assert quant is not None
+        assert quant.quantity == Decimal("3")

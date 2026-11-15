@@ -882,6 +882,19 @@ class PlacementService:
         await publish_lane_run(run, using=STOCK_DB)
         return run.result
 
+    async def list_decisions(
+        self,
+        *,
+        company_id: str,
+        warehouse_id: str,
+        status: StockDecisionStatus | None,
+        limit: int,
+    ) -> list[StockDecision]:
+        """Решения рефлексов склада для диспетчерского журнала."""
+        return await StockDecision.list_by_created_at_desc_for_warehouse(
+            company_id, warehouse_id, status=status, limit=limit
+        )
+
     # --- Removal: откуда снять при отборе ---
 
     async def resolve_for_move(self, *, company_id: str, move: StockMove) -> StockRemovalStrategy:

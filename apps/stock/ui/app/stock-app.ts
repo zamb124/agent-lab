@@ -14,6 +14,8 @@ import {
     stockLocationsResource,
     stockWarehousesResource,
     stockTransfersResource,
+    stockWavesResource,
+    stockQueueResource,
     stockQuantsResource,
     stockValuationLayersListOp,
     stockValuationReportOp,
@@ -46,6 +48,9 @@ import {
     stockBarcodeResolveOp,
     stockLotsListOp,
     stockLotCreateOp,
+    stockWaveCreateOp,
+    stockWaveReleaseOp,
+    stockDecisionsListOp,
     stockUomsListOp,
     stockUomCreateOp,
     stockUomDeleteOp,
@@ -116,7 +121,11 @@ const STOCK_ROUTES = [
     { key: 'stock_packages',  path: 'locations/packages',  parent: 'stock_locations', titleKey: 'routes.stock_packages' },
     { key: 'stock_inventory', path: 'locations/inventory', parent: 'stock_locations', titleKey: 'routes.stock_inventory' },
     { key: 'stock_location',  path: 'locations/:locationId', parent: 'stock_locations', titleKey: 'routes.stock_location' },
+    { key: 'stock_waves',     path: 'transfers/waves',     parent: 'stock_transfers', titleKey: 'routes.stock_waves' },
     { key: 'stock_warehouses', path: 'settings/warehouses', parent: 'stock_home', titleKey: 'routes.stock_warehouses' },
+    { key: 'stock_op_types',  path: 'settings/operation-types', parent: 'stock_home', titleKey: 'routes.stock_op_types' },
+    { key: 'stock_decisions', path: 'settings/decisions',  parent: 'stock_home', titleKey: 'routes.stock_decisions' },
+    { key: 'stock_lots',      path: 'locations/lots',      parent: 'stock_locations', titleKey: 'routes.stock_lots' },
     { key: 'stock_storage_types', path: 'settings/storage-types', parent: 'stock_home', titleKey: 'routes.stock_storage_types' },
     { key: 'stock_container_types', path: 'settings/container-types', parent: 'stock_home', titleKey: 'routes.stock_container_types' },
     { key: 'stock_resources', path: 'settings/resources',  parent: 'stock_home', titleKey: 'routes.stock_resources' },
@@ -150,6 +159,8 @@ export class StockApp extends PlatformApp {
         stockLocationsResource,
         stockWarehousesResource,
         stockTransfersResource,
+        stockWavesResource,
+        stockQueueResource,
         stockQuantsResource,
         stockValuationLayersListOp,
         stockValuationReportOp,
@@ -182,6 +193,9 @@ export class StockApp extends PlatformApp {
         stockBarcodeResolveOp,
         stockLotsListOp,
         stockLotCreateOp,
+        stockWaveCreateOp,
+        stockWaveReleaseOp,
+        stockDecisionsListOp,
         stockUomsListOp,
         stockUomCreateOp,
         stockUomDeleteOp,
@@ -308,6 +322,14 @@ export class StockApp extends PlatformApp {
                 return html`<stock-packages-page></stock-packages-page>`;
             case 'stock_inventory':
                 return html`<stock-inventory-page></stock-inventory-page>`;
+            case 'stock_waves':
+                return html`<stock-waves-page></stock-waves-page>`;
+            case 'stock_op_types':
+                return html`<stock-op-types-page></stock-op-types-page>`;
+            case 'stock_decisions':
+                return html`<stock-decisions-page></stock-decisions-page>`;
+            case 'stock_lots':
+                return html`<stock-lots-page></stock-lots-page>`;
             case 'stock_warehouses':
                 return html`<stock-warehouses-page></stock-warehouses-page>`;
             case 'stock_storage_types':

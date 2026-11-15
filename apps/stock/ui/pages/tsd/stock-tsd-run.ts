@@ -31,6 +31,7 @@ import type {
     StockTsdSessionState,
 } from '../../events/resources/stock-tsd.resource.js';
 import { formatPlatformError } from '@platform/lib/utils/platform-error-message.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { tsdOpRetry, tsdScanTransition } from './scan/tsd-scan-lock.js';
 import {
     tsdFormatQty,
@@ -41,6 +42,7 @@ import {
 } from './tsd-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const ADHOC_OPERATION_CODE: Partial<Record<ScanFlow, StockOperationCode>> = {
     receive: 'incoming',
@@ -70,6 +72,7 @@ export class StockTsdRun extends PlatformElement {
     private _products: ControllerFor<'stock/products'>;
     private _locations: ControllerFor<'stock/locations'>;
     private _quantity: ControllerFor<'stock/scan_quantity'>;
+    private _lotOp: ControllerFor<'stock/scan_lot'>;
     private _scanOpen: ControllerFor<'stock/scan_open'>;
     private _commit: ControllerFor<'stock/scan_commit'>;
     private _countCommit: ControllerFor<'stock/scan_count_commit'>;
@@ -86,6 +89,8 @@ export class StockTsdRun extends PlatformElement {
     private _suggestedFor = '';
     private _suggestItems: StockPutawaySuggestionItem[] = [];
     private _qtyInput = '';
+    private _lotName = '';
+    private _lotExp = '';
 
     static override styles = [
         PlatformElement.styles,
@@ -352,6 +357,37 @@ export class StockTsdRun extends PlatformElement {
                 color: var(--text-inverse);
                 font-size: var(--tsd-text-title);
             }
+            .lot-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--tsd-text-title);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .lot-input {
+                min-height: 56px;
+                padding: 0 var(--space-4);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-xl);
+                background: var(--bg-surface);
+                color: var(--text-primary);
+                font-size: var(--text-2xl);
+                font-weight: var(--font-semibold);
+            }
+            .lot-input:focus { outline: none; border-color: var(--accent); }
+            .lot-date { font-size: var(--text-lg); }
+            .lot-ok {
+                min-height: 64px;
+                border: none;
+                border-radius: var(--radius-xl);
+                background: var(--accent);
+                color: var(--text-inverse);
+                font-size: var(--tsd-text-title);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+            .lot-ok:disabled { opacity: 0.5; }
             .lines {
                 display: flex;
                 flex-direction: column;
@@ -503,6 +539,7 @@ export class StockTsdRun extends PlatformElement {
         this._products = this.useResource('stock/products');
         this._locations = this.useResource('stock/locations');
         this._quantity = this.useOp('stock/scan_quantity');
+        this._lotOp = this.useOp('stock/scan_lot');
         this._scanOpen = this.useOp('stock/scan_open');
         this._commit = this.useOp('stock/scan_commit');
         this._countCommit = this.useOp('stock/scan_count_commit');
@@ -589,6 +626,10 @@ export class StockTsdRun extends PlatformElement {
         if (context.product_id !== null && context.product_id !== undefined) {
             slots.push(this._slot('package', this._productName(context.product_id)));
         }
+        const lotLabel = context.lot_name ?? context.lot_id ?? null;
+        if (lotLabel !== null) {
+            slots.push(this._slot('tag', lotLabel));
+        }
         if (context.quantity !== null && context.quantity !== undefined) {
             slots.push(this._slot('hash', `×${tsdFormatQty(context.quantity)}`));
         }
@@ -603,9 +644,10 @@ export class StockTsdRun extends PlatformElement {
     }
 
     private _qtyConfirm(): void {
-        const value = Number(this._qtyInput);
+        const input = this._qtyInput;
+        const value = Number(input);
         const session = this._sessionSel.value;
-        if (this._qtyInput === '' || !Number.isFinite(value) || session.context === null) return;
+        if (input === '' || !Number.isFinite(value) || session.context === null || this._quantity.busy) return;
         const context = session.context;
         // «Посчитал — пусто»: ноль — валидный факт только в пересчёте.
         if (value < 0 || (value === 0 && context.flow !== 'count')) return;
@@ -626,7 +668,8 @@ export class StockTsdRun extends PlatformElement {
                 hint: response.hint ?? '',
                 expected: response.expected ?? null,
             });
-            this._qtyInput = '';
+            // Сброс только если за время запроса не ввели новое число.
+            if (this._qtyInput === input) this._qtyInput = '';
         });
     }
 
@@ -638,9 +681,24 @@ export class StockTsdRun extends PlatformElement {
         return warehouseId;
     }
 
+    private _productTracking(productId: string | null | undefined): string {
+        if (productId === null || productId === undefined) return 'none';
+        const row = this._products.items.find(
+            (r) => isPlainRecord(r) && r['product_id'] === productId
+        );
+        const tracking = isPlainRecord(row) ? row['tracking'] : null;
+        return typeof tracking === 'string' ? tracking : 'none';
+    }
+
     private _renderQuantity(session: StockTsdSessionState): TemplateResult | string {
         const context = session.context;
         if (context === null || context.step !== 'quantity') return '';
+        const tracking = this._productTracking(context.product_id);
+        const lotPending = (tracking === 'lot' || tracking === 'serial')
+            && (context.lot_id === null || context.lot_id === undefined)
+            && (context.lot_name === null || context.lot_name === undefined)
+            && (context.serial === null || context.serial === undefined);
+        if (lotPending) return this._renderLotPanel(session, tracking);
         const expectedQty = session.expected !== null ? session.expected.quantity : null;
         return html`
             <div class="qty-panel">
@@ -665,6 +723,77 @@ export class StockTsdRun extends PlatformElement {
         `;
     }
 
+    /** Партия/серийник с бумажной этикетки — когда кода на упаковке нет.
+     * Минимум полей: номер + «годен до» для партии, один номер для
+     * серийника; серийник сам вводит количество (одна штука). */
+    private _renderLotPanel(session: StockTsdSessionState, tracking: string): TemplateResult {
+        const isSerial = tracking === 'serial';
+        return html`
+            <div class="qty-panel lot-panel">
+                <div class="lot-title">
+                    <platform-icon name=${isSerial ? 'hash' : 'tag'} size="18"></platform-icon>
+                    ${this.t(isSerial ? 'run.serial_title' : 'run.lot_title')}
+                </div>
+                <platform-field class="lot-input" type="text" mode="edit"
+                    .placeholder=${this.t(isSerial ? 'run.serial_placeholder' : 'run.lot_placeholder')}
+                    .value=${this._lotName}
+                    @change=${(e: CustomEvent) => { this._lotName = String(e.detail.value ?? ''); this.requestUpdate(); }}
+                ></platform-field>
+                ${isSerial ? '' : html`
+                    <platform-field class="lot-input lot-date" type="date" mode="edit"
+                        .placeholder=${this.t('run.lot_expiry')}
+                        .value=${this._lotExp}
+                        @change=${(e: CustomEvent) => { this._lotExp = String(e.detail.value ?? ''); this.requestUpdate(); }}
+                    ></platform-field>
+                `}
+                <button class="lot-ok" ?disabled=${this._lotOp.busy || this._lotName.trim() === ''}
+                    @click=${() => this._lotConfirm(session, isSerial)}>
+                    ${this._lotOp.busy ? html`<platform-spinner size="s"></platform-spinner>` : this.t('run.lot_ok')}
+                </button>
+            </div>
+        `;
+    }
+
+    private _lotConfirm(session: StockTsdSessionState, isSerial: boolean): void {
+        const context = session.context;
+        const name = this._lotName.trim();
+        // Re-entry под ретрай-кликом/двойным тапом: REQUESTED уже в
+        // полёте — второй создаст лишнюю команду и уйдёт в очередь
+        // без терминала, оставив op висеть в busy.
+        if (context === null || name === '' || this._lotOp.busy) return;
+        // Драфтовая мутация контекста: повтор ставит те же значения.
+        void tsdOpRetry(() => this._lotOp.run({
+            warehouse_id: this._warehouseId(),
+            context,
+            lot_name: isSerial ? null : name,
+            serial: isSerial ? name : null,
+            expiration_date: !isSerial && this._lotExp !== '' ? this._lotExp : null,
+            move_id: session.move_id === '' ? null : session.move_id,
+        })).then((response) => {
+            if (response === null) throw new Error('stock/scan_lot: empty response');
+            this._session.stepApplied({
+                context: response.context,
+                resolution: null,
+                barcode: '',
+                error: response.error ?? null,
+                hint: response.hint ?? '',
+                expected: response.expected ?? null,
+            });
+            // Поле сбрасываем только если оператор не ввёл следующий
+            // номер, пока летел ответ — иначе затираем его ввод.
+            if (this._lotName.trim() === name) {
+                this._lotName = '';
+                this._lotExp = '';
+            }
+            // Серийник — это физически одна штука: количество не
+            // спрашиваем, сразу фиксируем единицу на том же экране.
+            if (isSerial && response.error == null) {
+                this._qtyInput = '1';
+                this._qtyConfirm();
+            }
+        });
+    }
+
     private _qtyKey(key: string): void {
         if (key === '⌫') {
             this._qtyInput = this._qtyInput.slice(0, -1);
@@ -679,6 +808,7 @@ export class StockTsdRun extends PlatformElement {
     private _renderLine(line: ScanLineDraft, index: number): TemplateResult {
         const productId = line.product_id ?? '';
         const serial = line.serial ?? '';
+        const track = serial !== '' ? serial : (line.lot_name ?? '');
         const source = line.location_id !== null && line.location_id !== undefined
             ? this._locationShortName(line.location_id) : '';
         const dest = line.location_dest_id !== null && line.location_dest_id !== undefined
@@ -689,7 +819,7 @@ export class StockTsdRun extends PlatformElement {
                 ${imgUrl !== null ? html`<img class="line-img" src=${imgUrl} alt="">` : ''}
                 <span class="line-product">
                     ${this._productName(productId)}
-                    ${serial !== '' ? html`<span class="line-track">${serial}</span>` : ''}
+                    ${track !== '' ? html`<span class="line-track">${track}</span>` : ''}
                 </span>
                 <span class="line-route">
                     ${source !== '' ? html`<span class="line-loc">${source}</span>` : ''}

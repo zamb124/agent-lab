@@ -23,7 +23,12 @@
     "reserved": "резерв {qty}",
     "resource_bound": "Техника {code} привязана",
     "stock_empty": "Остатков нет",
-    "stock_title": "Остатки"
+    "stock_title": "Остатки",
+    "lot_name": "Партия",
+    "lot_expiration": "Годен до",
+    "lot_expired": "просрочена",
+    "lot_best_before": "Лучше до",
+    "action_return": "Оформить возврат"
   },
   "exc": {
     "photo_add": "Фото",
@@ -143,6 +148,12 @@
     "flow_ship": "Отгрузка",
     "line_remove": "Удалить строку",
     "problem": "Проблема",
+    "lot_expiry": "Годен до",
+    "lot_ok": "Подтвердить",
+    "lot_placeholder": "Номер партии",
+    "lot_title": "Партия",
+    "serial_placeholder": "Серийный номер",
+    "serial_title": "Серийник",
     "qty_empty": "0",
     "qty_fill": "Подставить {qty}",
     "qty_ok": "Подтвердить количество",

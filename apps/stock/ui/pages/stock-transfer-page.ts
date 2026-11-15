@@ -37,6 +37,7 @@ export class StockTransferPage extends PlatformPage {
     private _assign: OpController;
     private _validate: OpController;
     private _cancel: OpController;
+    private _return: OpController;
     private _products: ResourceController;
     private _locations: ResourceController;
 
@@ -63,6 +64,7 @@ export class StockTransferPage extends PlatformPage {
         this._assign = this.useOp('stock/transfer_assign');
         this._validate = this.useOp('stock/transfer_validate');
         this._cancel = this.useOp('stock/transfer_cancel');
+        this._return = this.useOp('stock/transfer_return');
         this._products = this.useResource('stock/products', { autoload: true });
         this._locations = this.useResource('stock/locations', { autoload: true });
     }
@@ -107,6 +109,14 @@ export class StockTransferPage extends PlatformPage {
         await this._reload();
     }
 
+    private async _createReturn(event: Event): Promise<void> {
+        event.preventDefault();
+        const created = await this._return.run({ transfer_id: this.transferId });
+        if (isPlainRecord(created) && typeof created.transfer_id === 'string') {
+            this.navigate('stock_transfer', { transferId: created.transfer_id });
+        }
+    }
+
     override render() {
         const detail = this._detail;
         if (!detail || !detail.transfer) {
@@ -126,6 +136,12 @@ export class StockTransferPage extends PlatformPage {
                     <platform-button slot="actions" variant="secondary" density="compact" @click=${(e: Event) => this._act(this._assign, e)}>${this.t('transfer.assign')}</platform-button>
                     <platform-button slot="actions" variant="primary" density="compact" @click=${(e: Event) => this._act(this._validate, e)}>${this.t('transfer.validate')}</platform-button>
                     <platform-button slot="actions" variant="secondary" density="compact" @click=${(e: Event) => this._act(this._cancel, e)}>${this.t('transfer.cancel')}</platform-button>
+                    ${transfer.state === 'done' ? html`
+                        <platform-button slot="actions" variant="secondary" density="compact" data-return
+                            @click=${(e: Event) => void this._createReturn(e)}>
+                            ${this.t('transfer.return')}
+                        </platform-button>
+                    ` : ''}
                 </page-header>
                 <div class="table-card"><div class="scroll"><table>
                     <thead><tr>

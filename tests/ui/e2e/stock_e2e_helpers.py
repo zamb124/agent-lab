@@ -217,6 +217,35 @@ async def tsd_open(page: Page, stock_ui: AppUI) -> None:
         pass
 
 
+async def tsd_set_platform_field(field: Any, value: str) -> None:
+    """Ввод в ``<platform-field>``: заполнить видимый input и
+    вызвать ``change`` с ``detail.value`` — тот же контракт, что
+    генерирует пользовательский ввод (элемент слушает внешний change).
+    Панель может пересоздаться Lit-рендером между локатором и evaluate —
+    тогда change уходит в отсоединённый узел и теряется: повторяем,
+    пока событие не уйдёт из подключённого элемента."""
+    for _ in range(5):
+        await expect(field).to_be_visible(timeout=10_000)
+        editable = field.locator("input:visible, textarea:visible").first
+        if await editable.count() > 0:
+            await editable.fill(value)
+        landed = await field.evaluate(
+            """(el, value) => {
+                if (!el.isConnected) return false;
+                el.value = value;
+                if (typeof el.requestUpdate === 'function') el.requestUpdate();
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: { value }, bubbles: true, composed: true,
+                }));
+                return el.isConnected;
+            }""",
+            value,
+        )
+        if landed:
+            return
+    raise AssertionError("platform-field пересоздаётся при вводе")
+
+
 async def tsd_qty(page: Page, digits: str) -> None:
     """Набор количества на экранной клавиатуре + подтверждение."""
     for ch in digits:
@@ -426,11 +455,10 @@ async def tsd_seed_warehouse(
     )
     # Сущности созданы REST-зеркалом мимо витрины ресурса: push-события
     # для каталога нет, autoload склада уже отстрелял — перезагружаем
-    # страницу, чтобы список складов подтянул созданный.
+    # страницу, чтобы список складов подтянул созданный. Сид общий для
+    # ТСД и SPA — ждём только поднятый realtime-канал, без привязки
+    # к конкретному приложению.
     await page.reload(wait_until="domcontentloaded")
-    await expect(page.locator("stock-tsd-home-page")).to_be_visible(
-        timeout=30_000
-    )
     await tsd_wait_ws_open(page)
     return {
         "warehouse": warehouse,

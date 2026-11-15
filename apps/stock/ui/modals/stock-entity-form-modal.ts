@@ -24,7 +24,7 @@ type Draft = Record<string, unknown>;
 export interface StockEntityFormField {
     key: string;
     label: string;
-    type?: 'string' | 'number' | 'boolean' | 'enum' | undefined;
+    type?: 'string' | 'number' | 'boolean' | 'enum' | 'date' | undefined;
     required?: boolean | undefined;
     options?: { value: string; label: string }[] | undefined;
 }

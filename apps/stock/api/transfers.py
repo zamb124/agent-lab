@@ -15,6 +15,7 @@ from apps.stock.models import (
     StockWave,
 )
 from apps.stock.models.api import (
+    StockDecisionsListPayload,
     StockItemsResponse,
     StockMoveApplyDecisionPayload,
     StockMoveLineExceptionPayload,
@@ -40,6 +41,7 @@ from apps.stock.models.move_line import (
     StockMoveLineExceptionResult,
 )
 from apps.stock.realtime.operations import (
+    op_decisions_list,
     op_move_apply_decision,
     op_move_lines_assign,
     op_move_lines_claim,
@@ -158,6 +160,15 @@ async def apply_decision(
     di: Di, body: StockMoveApplyDecisionPayload
 ) -> StockDecision:
     return await op_move_apply_decision(body, user=_user(), di=di)
+
+
+@router.post(
+    "/decisions/list", response_model=StockItemsResponse[StockDecision]
+)
+async def decisions_list(
+    di: Di, body: StockDecisionsListPayload
+) -> StockItemsResponse[StockDecision]:
+    return await op_decisions_list(body, user=_user(), di=di)
 
 
 # --- Очередь заданий операторов ---

@@ -163,6 +163,7 @@ class ScanService:
                     resolution,
                     product_id=lot.product_id,
                     lot_id=lot.lot_id,
+                    lot_name=resolution.lot_name or lot.name,
                     quantity=(
                         Decimal("1")
                         if product is not None
@@ -683,6 +684,9 @@ class ScanService:
             drafts=list(context.lines),
             operation_type=operation_type,
         )
+        by_product: dict[str, list[ScanLineDraft]] = {}
+        for draft in resolved_drafts:
+            by_product.setdefault(draft.product_id, []).append(draft)
         specs: list[StockMoveSpec] = []
         for product_id, product_drafts in by_product.items():
             product = await CatalogProduct.by_id(company_id, product_id)
@@ -814,7 +818,7 @@ class ScanService:
             count_locations = await StockLocation.found_in_company_by_ids(
                 company_id, count_location_ids
             )
-            for line in context.lines:
+            for line in count_lines:
                 if line.location_id is None:
                     continue
                 # Пересчёт допустим только на ячейках, хранящих остаток:
@@ -874,7 +878,7 @@ class ScanService:
             # от этой отметки (``last_count_at`` на локации).
             await StockLocation.touch_counted(
                 company_id,
-                [ln.location_id for ln in context.lines if ln.location_id],
+                [ln.location_id for ln in count_lines if ln.location_id],
                 at=utcnow(),
             )
             # Задание пересчёта исполнено фактом подсчёта: закрываем

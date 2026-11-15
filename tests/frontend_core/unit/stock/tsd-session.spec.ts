@@ -131,6 +131,58 @@ describe('stock/tsd_session reducer', () => {
             .toThrow(/payload required/);
     });
 
+    it('stepApplied со строгим префиксом lines не откатывает записанные строки', () => {
+        // Контекст — эхо состояния: ответ scan_step, ушедший до
+        // завершения lot/qty-подтверждения, прилетает со старым хвостом
+        // lines. Замена им теряет уже записанную строку — префикс
+        // входящих lines значит устаревшее эхо.
+        const lines = [
+            { product_id: 'p1', quantity: '1' },
+            { product_id: 'p2', quantity: '1' },
+        ];
+        let state = reduce(initial(), ev(stockTsdSessionSlice.events.STEP_APPLIED, {
+            context: context({ step: 'product', lines }),
+            resolution: null,
+            barcode: '',
+            error: null,
+            hint: '',
+            expected: null,
+        }));
+        state = reduce(state, ev(stockTsdSessionSlice.events.STEP_APPLIED, {
+            context: context({ step: 'dest', lines: [lines[0]] }),
+            resolution: null,
+            barcode: 'BIN-1',
+            error: null,
+            hint: '',
+            expected: null,
+        }));
+        expect(state.context?.step).toBe('dest');
+        expect(state.context?.lines).toHaveLength(2);
+    });
+
+    it('stepApplied с расходящимся хвостом lines берёт входящий контекст', () => {
+        const existing = [{ product_id: 'p1', quantity: '1' }];
+        const incoming = [{ product_id: 'p9', quantity: '2' }];
+        let state = reduce(initial(), ev(stockTsdSessionSlice.events.STEP_APPLIED, {
+            context: context({ lines: existing }),
+            resolution: null,
+            barcode: '',
+            error: null,
+            hint: '',
+            expected: null,
+        }));
+        state = reduce(state, ev(stockTsdSessionSlice.events.STEP_APPLIED, {
+            context: context({ step: 'dest', lines: incoming }),
+            resolution: null,
+            barcode: 'BIN-1',
+            error: null,
+            hint: '',
+            expected: null,
+        }));
+        expect(state.context?.lines).toHaveLength(1);
+        expect(state.context?.lines?.[0]?.product_id).toBe('p9');
+    });
+
     it('lineRemoved убирает строку на review без потери сессии', () => {
         const lines = [
             { product_id: 'p1', quantity: '1' },

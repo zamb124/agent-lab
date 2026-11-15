@@ -682,10 +682,46 @@ services:
         label_ru: "ТСД: расхождения по документу"
         label_en: "Scanner (TSD): document exception"
         order: 17
+      tsd-document:
+        label_ru: "ТСД: карточка документа"
+        label_en: "Scanner (TSD): document card"
+        order: 18
       tsd-context-chips:
         label_ru: "ТСД: контекстные подсказки"
         label_en: "Scanner (TSD): context chips"
-        order: 18
+        order: 19
+      full-lifecycle:
+        label_ru: Полный цикл склада
+        label_en: Full warehouse lifecycle
+        order: 20
+      tsd-receive-multiline:
+        label_ru: "ТСД: приёмка нескольких позиций"
+        label_en: "Scanner (TSD): multi-line receiving"
+        order: 21
+      tsd-count-zero:
+        label_ru: "ТСД: пересчёт до нуля"
+        label_en: "Scanner (TSD): count to zero"
+        order: 22
+      tsd-hid-scan:
+        label_ru: "ТСД: HID-сканер"
+        label_en: "Scanner (TSD): HID scanner"
+        order: 23
+      tsd-offline-outbox:
+        label_ru: "ТСД: офлайн-очередь"
+        label_en: "Scanner (TSD): offline outbox"
+        order: 24
+      tsd-inquiry:
+        label_ru: "ТСД: свободный осмотр"
+        label_en: "Scanner (TSD): free inquiry"
+        order: 25
+      tsd-document-container-move:
+        label_ru: "ТСД: тара по документу"
+        label_en: "Scanner (TSD): document container move"
+        order: 26
+      tsd-task-switch:
+        label_ru: "ТСД: смена задания"
+        label_en: "Scanner (TSD): task switching"
+        order: 27
 
   geo:
     label_ru: Geo

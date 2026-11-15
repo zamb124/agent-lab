@@ -83,6 +83,20 @@ class StockDecision(PlatformModel):
         ).order_by("-created_at").first()
 
     @classmethod
+    async def list_by_created_at_desc_for_warehouse(
+        cls,
+        company_id: str,
+        warehouse_id: str,
+        status: StockDecisionStatus | None = None,
+        limit: int = 200,
+    ) -> list[Self]:
+        """Решения склада, ORDER BY created_at DESC. status None не фильтрует."""
+        q = cls.objects.filter(company_id=company_id, warehouse_id=warehouse_id)
+        if status is not None:
+            q = q.filter(status=status)
+        return await q.order_by("-created_at").limit(limit).all()
+
+    @classmethod
     async def mark_applied(cls, decision_id: str, chosen_location_id: str) -> None:
         _ = await cls.objects.filter(decision_id=decision_id).update(
             using=STOCK_DB,

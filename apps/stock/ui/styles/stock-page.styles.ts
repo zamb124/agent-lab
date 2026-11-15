@@ -97,9 +97,48 @@ export const stockPageStyles = css`
     .icon-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
     .icon-btn.danger:hover { color: var(--danger, #f87171); }
 
+    /* --- Бейджи состояний (волны, партии, рефлекс-решения) --- */
+    .lot-badge, .wave-state, .decision-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 10px;
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        font-weight: var(--font-medium);
+        white-space: nowrap;
+    }
+    .lot-badge.ok { background: var(--success-bg, #dcfce7); color: var(--success-text, #166534); }
+    .lot-badge.soon, .date-soon { background: var(--warning-bg, #fef9c3); color: var(--warning-text, #854d0e); }
+    .lot-badge.expired, .lot-badge.blocked, .date-expired { background: var(--danger-bg, #fee2e2); color: var(--danger-text, #991b1b); }
+    .date-soon, .date-expired { padding: 2px 8px; border-radius: var(--radius-full); }
+    .wave-state-draft { background: var(--surface-2); color: var(--text-secondary); }
+    .wave-state-released { background: var(--info-bg, #dbeafe); color: var(--info-text, #1e40af); }
+    .wave-state-done { background: var(--success-bg, #dcfce7); color: var(--success-text, #166534); }
+    .decision-suggested { background: var(--warning-bg, #fef9c3); color: var(--warning-text, #854d0e); }
+    .decision-applied { background: var(--success-bg, #dcfce7); color: var(--success-text, #166534); }
+    .decision-rejected { background: var(--surface-2); color: var(--text-tertiary); }
+
+    .decision-apply {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+    .decision-apply platform-field { min-width: 160px; }
+
+    .wave-create-bar {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--space-3);
+        margin-top: var(--space-3);
+        flex-wrap: wrap;
+    }
+    .wave-create-bar platform-field { flex: 1 1 240px; max-width: 360px; }
+
     @media (max-width: 767px) {
         .wrap { padding: var(--space-3); }
         .toolbar platform-modal-search-field { max-width: none; }
         .toolbar platform-searchable-combobox { max-width: none; flex: 1 1 100%; }
+        .decision-apply { flex-direction: column; align-items: stretch; }
+        .wave-create-bar platform-field { max-width: none; }
     }
 `;

@@ -12,6 +12,7 @@ from apps.stock.models.api import (
     StockContainerTypeCreatePayload,
     StockContainerTypesListPayload,
     StockContainerTypeUpdatePayload,
+    StockDecisionsListPayload,
     StockLocationCreatePayload,
     StockLocationIdPayload,
     StockLocationsCountDuePayload,
@@ -63,6 +64,7 @@ from apps.stock.models.api import (
     StockScanAdhocCommitPayload,
     StockScanCommitPayload,
     StockScanCountCommitPayload,
+    StockScanLotPayload,
     StockScanOpenPayload,
     StockScanQuantityPayload,
     StockScanStepPayload,
@@ -99,6 +101,7 @@ from apps.stock.realtime.operations import (
     op_containers_item,
     op_containers_list,
     op_containers_move,
+    op_decisions_list,
     op_locations_count_due,
     op_locations_create,
     op_locations_item,
@@ -150,6 +153,7 @@ from apps.stock.realtime.operations import (
     op_scan_adhoc_commit,
     op_scan_commit,
     op_scan_count_commit,
+    op_scan_lot,
     op_scan_open,
     op_scan_quantity,
     op_scan_step,
@@ -312,6 +316,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     "stock/move/apply_decision_requested": Operation(
         payload_model=StockMoveApplyDecisionPayload, fn=op_move_apply_decision
     ),
+    "stock/decisions/list_requested": Operation(
+        payload_model=StockDecisionsListPayload, fn=op_decisions_list
+    ),
     "stock/quants/list_requested": Operation(
         payload_model=StockQuantsListPayload, fn=op_quants_list
     ),
@@ -466,6 +473,9 @@ STOCK_OPERATIONS: dict[str, RegisteredOperation[StockDi]] = {
     ),
     "stock/scan/quantity_requested": Operation(
         payload_model=StockScanQuantityPayload, fn=op_scan_quantity
+    ),
+    "stock/scan/lot_requested": Operation(
+        payload_model=StockScanLotPayload, fn=op_scan_lot
     ),
     "stock/scan/commit_requested": Operation(
         payload_model=StockScanCommitPayload, fn=op_scan_commit

@@ -28,7 +28,15 @@ interface NavNodeSpec {
 
 const NAV_TREE: NavNodeSpec[] = [
     { id: 'stock_home', icon: 'box', label_key: 'sidebar.nav.stock_home', route: 'stock_home' },
-    { id: 'stock_transfers', icon: 'truck', label_key: 'sidebar.nav.stock_transfers', route: 'stock_transfers' },
+    {
+        id: 'stock_transfers',
+        icon: 'truck',
+        label_key: 'sidebar.nav.stock_transfers',
+        children: [
+            { id: 'stock_transfers_list', label_key: 'sidebar.nav.stock_transfers_list', route: 'stock_transfers' },
+            { id: 'stock_waves', label_key: 'sidebar.nav.stock_waves', route: 'stock_waves' },
+        ],
+    },
     { id: 'stock_products', icon: 'tag', label_key: 'sidebar.nav.stock_products', route: 'stock_products' },
     {
         id: 'stock_locations',
@@ -40,6 +48,7 @@ const NAV_TREE: NavNodeSpec[] = [
             { id: 'stock_moves', label_key: 'sidebar.nav.stock_moves', route: 'stock_moves' },
             { id: 'stock_packages', label_key: 'sidebar.nav.stock_packages', route: 'stock_packages' },
             { id: 'stock_inventory', label_key: 'sidebar.nav.stock_inventory', route: 'stock_inventory' },
+            { id: 'stock_lots', label_key: 'sidebar.nav.stock_lots', route: 'stock_lots' },
         ],
     },
     {
@@ -48,6 +57,8 @@ const NAV_TREE: NavNodeSpec[] = [
         label_key: 'sidebar.nav.stock_settings',
         children: [
             { id: 'stock_warehouses', label_key: 'sidebar.nav.stock_warehouses', route: 'stock_warehouses' },
+            { id: 'stock_op_types', label_key: 'sidebar.nav.stock_op_types', route: 'stock_op_types' },
+            { id: 'stock_decisions', label_key: 'sidebar.nav.stock_decisions', route: 'stock_decisions' },
             { id: 'stock_uoms', label_key: 'sidebar.nav.stock_uoms', route: 'stock_uoms' },
             { id: 'stock_storage_types', label_key: 'sidebar.nav.stock_storage_types', route: 'stock_storage_types' },
             { id: 'stock_container_types', label_key: 'sidebar.nav.stock_container_types', route: 'stock_container_types' },
@@ -73,7 +84,8 @@ const NAV_TREE: NavNodeSpec[] = [
 function activeItemId(routeKey: string): string {
     switch (routeKey) {
         case 'stock_transfer':
-            return 'stock_transfers';
+        case 'stock_transfers':
+            return 'stock_transfers_list';
         case 'stock_locations':
         case 'stock_location':
             return 'stock_locations_map';

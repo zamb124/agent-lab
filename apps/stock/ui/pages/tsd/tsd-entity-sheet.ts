@@ -15,9 +15,11 @@ import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-regist
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     ScanResolution,
     StockLocation,
+    StockLot,
     StockProductView,
     StockQuant,
     StockResource,
@@ -41,6 +43,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         _transfer: { state: true },
         _resource: { state: true },
         _containerQuants: { state: true },
+        _lot: { state: true },
         _failed: { state: true },
     };
 
@@ -49,6 +52,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     declare private _transfer: StockTransferDetail | null;
     declare private _resource: StockResource | null;
     declare private _containerQuants: StockQuant[];
+    declare private _lot: StockLot | null;
     declare private _failed: boolean;
 
     private _contextSel: SelectController<StockTsdContextState>;
@@ -63,6 +67,8 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     private _transferItem: ControllerFor<'stock/transfer_item'>;
     private _resourceLogin: ControllerFor<'stock/resource_login'>;
     private _scanOpen: ControllerFor<'stock/scan_open'>;
+    private _lotsList: ControllerFor<'stock/lots_list'>;
+    private _transferReturn: ControllerFor<'stock/transfer_return'>;
     private _session: ControllerFor<'stock/tsd_session'>;
     private _context: ControllerFor<'stock/tsd_context'>;
 
@@ -138,6 +144,30 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                 flex-direction: column;
                 gap: var(--space-2);
             }
+            .lot-card {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-lg);
+                background: var(--surface-2);
+            }
+            .lot-row {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: var(--space-3);
+            }
+            .lot-label {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .lot-value {
+                font-size: var(--text-base);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .lot-expired { color: var(--danger, #f87171); }
             .quant-row {
                 display: flex;
                 align-items: center;
@@ -234,6 +264,8 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._transferItem = this.useOp('stock/transfer_item');
         this._resourceLogin = this.useOp('stock/resource_login');
         this._scanOpen = this.useOp('stock/scan_open');
+        this._lotsList = this.useOp('stock/lots_list');
+        this._transferReturn = this.useOp('stock/transfer_return');
         this._session = this.useSlice('stock/tsd_session');
         this._context = this.useSlice('stock/tsd_context');
         this._product = null;
@@ -291,6 +323,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._transfer = null;
         this._resource = null;
         this._containerQuants = [];
+        this._lot = null;
         this._failed = false;
         const kind = this._entityKind;
         try {
@@ -307,6 +340,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                         : { product_id: productId, warehouse_id: warehouseId },
                 );
                 if (warehouseId !== '') this._locations.load({ warehouse_id: warehouseId, include_virtual: true });
+                if (kind === 'lot') void this._loadLot(productId);
             } else if (kind === 'location') {
                 this._location = await this._locationItem.run({ location_id: this._entityId });
                 this._loadQuants({ location_id: this._entityId });
@@ -326,6 +360,44 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
 
     private _loadQuants(query: Record<string, unknown>): void {
         this._quants.load(query);
+    }
+
+    private async _loadLot(productId: string): Promise<void> {
+        const result = await this._lotsList.run({ product_id: productId });
+        const items = isPlainRecord(result) && Array.isArray(result.items) ? result.items : [];
+        this._lot = (items.find((l) => isPlainRecord(l) && l.lot_id === this._entityId) ?? null) as StockLot | null;
+    }
+
+    private _renderLotCard(): TemplateResult | string {
+        const lot = this._lot;
+        if (this._entityKind !== 'lot') return '';
+        if (lot === null) {
+            return this._lotsList.busy
+                ? html`<div class="lot-card"><div class="skeleton"></div></div>`
+                : '';
+        }
+        const exp = typeof lot.expiration_at === 'string' && lot.expiration_at !== '' ? lot.expiration_at.slice(0, 10) : null;
+        const expired = exp !== null && new Date(lot.expiration_at as string).getTime() < Date.now();
+        return html`
+            <div class="lot-card">
+                <div class="lot-row">
+                    <span class="lot-label">${this.t('entity.lot_name')}</span>
+                    <span class="lot-value">${lot.name}</span>
+                </div>
+                ${exp !== null ? html`
+                    <div class="lot-row">
+                        <span class="lot-label">${this.t('entity.lot_expiration')}</span>
+                        <span class="lot-value ${expired ? 'lot-expired' : ''}">${exp}${expired ? ` · ${this.t('entity.lot_expired')}` : ''}</span>
+                    </div>
+                ` : ''}
+                ${typeof lot.best_before_at === 'string' && lot.best_before_at !== '' ? html`
+                    <div class="lot-row">
+                        <span class="lot-label">${this.t('entity.lot_best_before')}</span>
+                        <span class="lot-value">${lot.best_before_at.slice(0, 10)}</span>
+                    </div>
+                ` : ''}
+            </div>
+        `;
     }
 
     private _locationName(locationId: string): string | null {
@@ -454,6 +526,19 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
         this._startFlow({ flow: 'receive', step: 'dest', ...this._scannedProduct() });
     }
 
+    private async _startReturn(): Promise<void> {
+        // Возврат — факт, а не заявка: обратная накладная создаётся и
+        // проводится одной полосой, исполнимых строк на ней нет.
+        // Оператору остаётся подтверждение с номером документа.
+        const created = await tsdOpRetry(() => this._transferReturn.run({
+            transfer_id: this._entityId,
+            move_quantities: null,
+            idempotency_key: null,
+        }));
+        if (!isPlainRecord(created) || typeof created.transfer_id !== 'string') return;
+        this._requestClose();
+    }
+
     private async _openDocument(): Promise<void> {
         const warehouseId = this._contextSel.value.warehouse_id;
         // Открытие документа переписывает session — скан посреди open
@@ -492,12 +577,20 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
     private _renderActions(): TemplateResult | string {
         const kind = this._entityKind;
         if (kind === 'document') {
+            const done = this._transfer?.transfer.state === 'done';
             return html`
                 <div class="actions">
                     <button class="action" ?disabled=${this._scanOpen.busy} @click=${() => void this._openDocument()}>
                         ${this._scanOpen.busy ? html`<platform-spinner size="s"></platform-spinner>` : html`<platform-icon name="play" size="20"></platform-icon>`}
                         ${this.t('entity.action_open_document')}
                     </button>
+                    ${done ? html`
+                        <button class="action secondary" data-action="return" ?disabled=${this._transferReturn.busy}
+                            @click=${() => void this._startReturn()}>
+                            ${this._transferReturn.busy ? html`<platform-spinner size="s"></platform-spinner>` : html`<platform-icon name="rotate-left" size="20"></platform-icon>`}
+                            ${this.t('entity.action_return')}
+                        </button>
+                    ` : ''}
                 </div>
             `;
         }
@@ -599,6 +692,7 @@ export class StockTsdEntitySheet extends PlatformBottomSheet {
                     </div>
                 </div>
                 ${this._failed ? html`<div class="empty">${this.t('entity.load_failed')}</div>` : ''}
+                ${this._renderLotCard()}
                 ${this._renderQuants()}
                 ${this._renderActions()}
             </div>
