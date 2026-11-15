@@ -496,13 +496,15 @@ applications:
       - --http
       - auto
       - --ws
+    # Лимит под in-memory CSR-графы режимов маршрута: ~950Mi транзиент сборки +
+    # ~400Mi резидент × 4 моды поверх granian-базы. Сборки сериализованы локом.
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
+        memory: 512Mi
       limits:
         cpu: "1"
-        memory: 1Gi
+        memory: 3Gi
   guest-runtime:
     nodeName: master
     enabled: true
