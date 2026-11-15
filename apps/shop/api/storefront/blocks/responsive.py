@@ -49,7 +49,7 @@ body[data-preset=compact] .item{padding-left:12px;padding-right:12px}
 #sheet .panel .big{margin-top:auto}
 @keyframes drawerIn{from{transform:translateX(56px);opacity:.5}}
 #csheet.show{display:grid;place-items:center}
-#csheet .panel{position:relative;inset:auto;transform:none;width:min(620px,94vw);max-height:88vh;border-radius:26px;padding:18px 24px 30px;animation:zoomIn .2s ease}
+#csheet .panel{position:relative;inset:auto;transform:none;width:min(620px,94vw);max-height:88vh;max-height:88dvh;border-radius:26px;padding:18px 24px 30px;animation:zoomIn .2s ease}
 @keyframes zoomIn{from{transform:scale(.95) translateY(14px);opacity:0}}
 .toast{bottom:44px}
 .bnrs{gap:14px}

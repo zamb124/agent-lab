@@ -9,7 +9,7 @@
 в shell как есть — без экранирования скобок.
 """
 
-CSS: str = """.amapbox{position:relative;height:52vh;min-height:320px;border-radius:18px;overflow:hidden;margin:4px 0 12px}
+CSS: str = """.amapbox{position:relative;height:52vh;height:52dvh;min-height:320px;border-radius:18px;overflow:hidden;margin:4px 0 12px}
 .amapbox platform-map{display:block;width:100%;height:100%}
 .ampin{position:absolute;left:50%;top:50%;transform:translate(-50%,-96%);pointer-events:none;z-index:5;color:var(--accent);transition:color .15s ease}
 .ampin svg{width:42px;height:42px;fill:currentColor;filter:drop-shadow(0 5px 10px rgba(0,0,0,.45))}

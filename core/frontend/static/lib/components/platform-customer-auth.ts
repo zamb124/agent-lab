@@ -246,7 +246,9 @@ export class PlatformCustomerAuth extends PlatformElement {
             padding: 12px 24px calc(26px + env(safe-area-inset-bottom));
             font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             box-shadow: 0 -16px 56px rgba(0, 0, 0, 0.32);
-            max-height: min(88vh, 720px); overflow-y: auto;
+            max-height: min(88vh, 720px);
+            max-height: min(88dvh, 720px);
+            overflow-y: auto;
             animation: pca-rise 0.34s cubic-bezier(0.32, 0.72, 0.24, 1);
             -webkit-tap-highlight-color: transparent;
         }

@@ -6,7 +6,7 @@
 
 CSS: str = """.sheet{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);display:none;z-index:70}
 .sheet.show{display:block}
-.panel{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease;box-shadow:var(--shadow-lg)}
+.panel{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;max-height:88dvh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease;box-shadow:var(--shadow-lg)}
 .panel.drag{transition:none}
 .grab{width:38px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 12px;touch-action:none}
 @keyframes up{from{transform:translateX(-50%) translateY(40px)}}
