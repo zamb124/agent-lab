@@ -72,20 +72,24 @@ class GeoGarHouse(PlatformModel):
         """Батч-upsert активных домов; ``path`` на конфликте сохраняется.
 
         Полный импорт перед разбором сносит таблицу — конфликтов нет;
-        дельта обновляет поля дома, не затирая PATH иерархии.
+        дельта обновляет поля дома, не затирая PATH иерархии. ГАР эмитит
+        повторные строки одного OBJECTID — дедуп внутри чанка,
+        побеждает последняя.
         """
         if not rows:
             return 0
         written = 0
         cols = 8
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = {
+                house.object_id: house for house in rows[offset : offset + chunk_size]
+            }
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
-            for house in chunk:
+            for house in deduped.values():
                 params.extend(
                     [
                         region,
@@ -115,7 +119,7 @@ class GeoGarHouse(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written
 
     @classmethod
@@ -159,19 +163,22 @@ class GeoGarHouse(PlatformModel):
 
         Рядки иерархии чужих объектов промахиваются мимо домов — это
         и есть фильтрация AS_ADM_HIERARCHY без house_ids в памяти.
+        Один object_id встречается в иерархии повторно (несколько
+        родительских веток) — дедуп внутри чанка, последняя ветка
+        побеждает детерминированно.
         """
         if not rows:
             return 0
         applied = 0
         cols = 2
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = dict(rows[offset : offset + chunk_size])
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
-            for object_id, path in chunk:
+            for object_id, path in deduped.items():
                 params.extend([object_id, path])
             params.append(region)
             _ = await execute_raw(
@@ -184,7 +191,7 @@ class GeoGarHouse(PlatformModel):
                 params,
                 using="geo",
             )
-            applied += len(chunk)
+            applied += len(deduped)
         return applied
 
     @classmethod

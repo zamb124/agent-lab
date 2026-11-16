@@ -91,21 +91,25 @@ class GeoAddressEnrich(PlatformModel):
 
         Импортёр ГАР раскладывает сотни тысяч матчей за тик — покадровый
         ``upsert_by_object`` дал бы SELECT+INSERT на строку; multirow
-        VALUES-INSERT сливает чанк одним запросом.
+        VALUES-INSERT сливает чанк одним запросом. Несколько домов ГАР
+        могут сматчиться на один OSM-объект — дедуп внутри чанка,
+        последний матч побеждает.
         """
         if not rows:
             return 0
         written = 0
         cols = 5
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = {
+                (row[0], row[1]): row for row in rows[offset : offset + chunk_size]
+            }
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
             now = datetime.now(UTC)
-            for row in chunk:
+            for row in deduped.values():
                 params.extend([row[0], row[1], row[2], row[3], now])
             _ = await execute_raw(
                 f"""
@@ -123,27 +127,33 @@ class GeoAddressEnrich(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written
 
     @classmethod
     async def bulk_set_cadastral(
         cls, rows: list[tuple[str, int, str]], *, chunk_size: int = 5000
     ) -> int:
-        """Пакетный upsert ``cadastral_number`` по (osm_type, osm_id, kn)."""
+        """Пакетный upsert ``cadastral_number`` по (osm_type, osm_id, kn).
+
+        Повторные ключи объекта внутри чанка дедупятся — последний
+        побеждает (ON CONFLICT не терпит дубликатов в VALUES).
+        """
         if not rows:
             return 0
         written = 0
         cols = 4
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = {
+                (row[0], row[1]): row for row in rows[offset : offset + chunk_size]
+            }
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
             now = datetime.now(UTC)
-            for row in chunk:
+            for row in deduped.values():
                 params.extend([row[0], row[1], row[2], now])
             _ = await execute_raw(
                 f"""
@@ -159,5 +169,5 @@ class GeoAddressEnrich(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written

@@ -46,19 +46,23 @@ class GeoGarAddrObject(PlatformModel):
         rows: Sequence[tuple[int, str]],
         chunk_size: int = _BATCH,
     ) -> int:
-        """Батч-upsert имён ``(object_id, name)``; конфликт — новое имя."""
+        """Батч-upsert имён ``(object_id, name)``; конфликт — новое имя.
+
+        ГАР эмитит повторные строки одного OBJECTID (варианты имени) —
+        дедуп внутри чанка, побеждает последняя.
+        """
         if not rows:
             return 0
         written = 0
         cols = 3
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = dict(rows[offset : offset + chunk_size])
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
-            for object_id, name in chunk:
+            for object_id, name in deduped.items():
                 params.extend([region, object_id, name])
             _ = await execute_raw(
                 f"""
@@ -70,7 +74,7 @@ class GeoGarAddrObject(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written
 
     @classmethod

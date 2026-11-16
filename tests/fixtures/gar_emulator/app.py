@@ -16,12 +16,12 @@ ITEMS). Полная выгрузка — снимок на версию; дел
 
 import io
 import zipfile
-
-from core.types import JsonObject
 from typing import Final
 
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
+
+from core.types import JsonObject
 
 _VERSIONS: Final = (98, 99, 100)
 _LAST: Final = 100
@@ -56,16 +56,25 @@ _FULL_GONE: Final = (106,)
 app = FastAPI(title="platform-gar-emulator")
 
 
-def _addr_xml() -> str:
-    rows = "".join(
+def _addr_obj_row(oid: int, typename: str, name: str, level: int) -> str:
+    return (
         f'<OBJECT ID="{oid}" OBJECTID="{oid}" '
         + f'OBJECTGUID="00000000-0000-0000-0000-{oid:012d}" '
         + f'NAME="{name}" TYPENAME="{typename}" LEVEL="{level}" '
         + 'ISACTUAL="1" ISACTIVE="1"/>'
+    )
+
+
+def _addr_xml() -> str:
+    rows = "".join(
+        _addr_obj_row(oid, typename, name, level)
         for (oid, typename, name), level in zip(
             _ADDR_OBJECTS, (1, 8, 8, 8, 8, 8), strict=True
         )
     )
+    # Как реальный ГАР: повторная строка того же OBJECTID (вариант имени)
+    # в одной таблице — upsert обязан дедупить чанк.
+    rows += _addr_obj_row(10, "ул.", "Тверская", 8)
     return f"<ADDRESSOBJECTS>{rows}</ADDRESSOBJECTS>"
 
 
@@ -119,6 +128,8 @@ def _zip_bytes(version: int, *, delta: bool) -> bytes:
             )
         else:
             all_ids = tuple(house[0] for house in _HOUSES if house[0] != 106)
+            # Повтор OBJECTID дома — как реальный ГАР: upsert дедупит чанк.
+            all_ids += (101,)
             archive.writestr(
                 f"77/AS_ADDR_OBJ_{version}_FULL.XML", _addr_xml()
             )

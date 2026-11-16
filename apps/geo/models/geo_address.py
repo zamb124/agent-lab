@@ -120,19 +120,23 @@ class GeoAddress(PlatformModel):
         Запись сразу и в enrich-таблицу, и в живые колонки — как у оверлеев
         админа: эффект виден до следующего импорта, своп поколения значения
         перенакатает из ``geo_address_enrich``. Полей админа касаться нельзя.
+        Повторные ключи объекта внутри чанка дедупятся — последний матч
+        побеждает детерминированно.
         """
         if not rows:
             return 0
         written = 0
         cols = 4
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = {
+                (row[0], row[1]): row for row in rows[offset : offset + chunk_size]
+            }
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
-            for row in chunk:
+            for row in deduped.values():
                 params.extend([row[0], row[1], row[2], row[3]])
             params.append(generation)
             _ = await execute_raw(
@@ -147,7 +151,7 @@ class GeoAddress(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written
 
     @classmethod
@@ -186,19 +190,25 @@ class GeoAddress(PlatformModel):
         generation: int,
         chunk_size: int = 5000,
     ) -> int:
-        """Простановка ``cadastral_number`` на живых строках (osm_type, osm_id, kn)."""
+        """Простановка ``cadastral_number`` на живых строках (osm_type, osm_id, kn).
+
+        Повторные ключи объекта внутри чанка дедупятся — последний
+        побеждает детерминированно.
+        """
         if not rows:
             return 0
         written = 0
         cols = 3
         for offset in range(0, len(rows), chunk_size):
-            chunk = rows[offset : offset + chunk_size]
+            deduped = {
+                (row[0], row[1]): row for row in rows[offset : offset + chunk_size]
+            }
             values = ",".join(
                 "(" + ",".join(f"${j * cols + k}" for k in range(1, cols + 1)) + ")"
-                for j in range(len(chunk))
+                for j in range(len(deduped))
             )
             params: list[SqlParameterValue] = []
-            for row in chunk:
+            for row in deduped.values():
                 params.extend([row[0], row[1], row[2]])
             params.append(generation)
             _ = await execute_raw(
@@ -213,5 +223,5 @@ class GeoAddress(PlatformModel):
                 params,
                 using="geo",
             )
-            written += len(chunk)
+            written += len(deduped)
         return written
