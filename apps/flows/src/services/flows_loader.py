@@ -52,6 +52,13 @@ from core.types import (
 logger = get_logger(__name__)
 
 FLOW_CONFIG_FILE_NAMES: tuple[str, ...] = ("flow.yaml", "flow.yml", "flow.json")
+_CODE_SUFFIX_TO_LANGUAGE: dict[str, str] = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".go": "go",
+    ".cs": "csharp",
+}
 
 
 def find_bundle_flow_config(bundle_dir: Path) -> Path | None:
@@ -528,6 +535,7 @@ class FlowsLoader:
             # Инлайним промпт и схему structured output из файлов
             raw_node = self._inline_prompt_from_file(raw_node, bundle_dir)
             raw_node = self._inline_output_schema_file(raw_node, bundle_dir)
+            raw_node = self._inline_code_from_file(raw_node, bundle_dir)
             raw_node = await self._materialize_node_files(raw_node, node_id, bundle_dir.name)
 
             # Конвертируем tools в List[ToolReference]
@@ -732,6 +740,7 @@ class FlowsLoader:
             # Инлайним промпт из .md файла если prompt - это путь к файлу
             node = self._inline_prompt_from_file(node, bundle_dir)
             node = self._inline_output_schema_file(node, bundle_dir)
+            node = self._inline_code_from_file(node, bundle_dir)
 
             # Инлайним function -> code
             self._inline_function_to_code(node, node_id)
@@ -746,48 +755,50 @@ class FlowsLoader:
         return nodes
 
     def _inline_prompt_from_file(self, node: JsonObject, bundle_dir: Path) -> JsonObject:
-        """
-        Инлайнит промпт из файла.
-
-        Поддерживает только prompt: "prompts/file.md".
-        После обработки prompt содержит текст.
-        """
+        """Инлайнит prompt: \"prompts/file.md\". Текст промпта после загрузки — в поле prompt."""
         if "prompt_file" in node:
             raise ValueError("node.prompt_file is forbidden; use node.prompt")
-
         prompt = node.get("prompt")
-        if not prompt or not isinstance(prompt, str):
+        if not isinstance(prompt, str) or prompt == "" or not prompt.endswith(".md"):
             return node
-
-        if not prompt.endswith(".md"):
-            return node
-
         prompt_path = bundle_dir / prompt
-        if not prompt_path.exists():
+        if not prompt_path.is_file():
             raise ValueError(f"Prompt file not found: {prompt_path}")
-
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            node["prompt"] = f.read()
-
+        node["prompt"] = prompt_path.read_text(encoding="utf-8")
         return node
 
     def _inline_output_schema_file(self, node: JsonObject, bundle_dir: Path) -> JsonObject:
-        """
-        Подставляет output_schema из JSON рядом с flow (как промпт из .md).
-        Поле output_schema_file удаляется после загрузки.
-        """
+        """Подставляет output_schema из JSON рядом с flow и удаляет output_schema_file."""
         ref = node.get("output_schema_file")
-        if not ref or not isinstance(ref, str):
+        if not isinstance(ref, str) or ref == "":
             return node
         if node.get("output_schema") is not None:
             del node["output_schema_file"]
             return node
         schema_path = bundle_dir / ref
-        if not schema_path.exists():
+        if not schema_path.is_file():
             raise ValueError(f"output_schema file not found: {schema_path}")
-        with open(schema_path, "r", encoding="utf-8") as f:
-            node["output_schema"] = parse_json_object(f.read(), f"{schema_path}.output_schema")
+        node["output_schema"] = parse_json_object(
+            schema_path.read_text(encoding="utf-8"),
+            f"{schema_path}.output_schema",
+        )
         del node["output_schema_file"]
+        return node
+
+    def _inline_code_from_file(self, node: JsonObject, bundle_dir: Path) -> JsonObject:
+        """Инлайнит code: \"code/file.py\". Многострочный code остаётся исходником."""
+        code = node.get("code")
+        if not isinstance(code, str) or code == "" or "\n" in code:
+            return node
+        language = _CODE_SUFFIX_TO_LANGUAGE.get(Path(code).suffix)
+        if language is None:
+            return node
+        code_path = bundle_dir / code
+        if not code_path.is_file():
+            raise ValueError(f"Code file not found: {code_path}")
+        node["code"] = code_path.read_text(encoding="utf-8")
+        if "language" not in node:
+            node["language"] = language
         return node
 
     def _merge_node_with_cache(
@@ -842,7 +853,8 @@ class FlowsLoader:
 
         # Инлайним prompt из файла если это путь к .md
         merged = self._inline_prompt_from_file(merged, bundle_dir)
-        return self._inline_output_schema_file(merged, bundle_dir)
+        merged = self._inline_output_schema_file(merged, bundle_dir)
+        return self._inline_code_from_file(merged, bundle_dir)
 
     def _inline_function_to_code(self, node: JsonObject, node_id: str) -> None:
         """
@@ -920,6 +932,7 @@ class FlowsLoader:
 
                     node = self._inline_prompt_from_file(node, bundle_dir)
                     node = self._inline_output_schema_file(node, bundle_dir)
+                    node = self._inline_code_from_file(node, bundle_dir)
 
                     self._inline_function_to_code(node, f"{branch_id}.{node_id}")
                     node = await self._materialize_node_files(

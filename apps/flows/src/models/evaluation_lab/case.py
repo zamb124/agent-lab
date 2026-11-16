@@ -75,6 +75,13 @@ class EvaluationCase(CompanyScopedModel):
         return self
 
     @classmethod
+    async def by_suite_and_name(cls, suite_id: str, name: str) -> Self | None:
+        """Кейс набора с этим именем. Нет строки — None. Пустой suite_id или name — ValueError."""
+        if suite_id == "" or name == "":
+            raise ValueError("suite_id and name are required")
+        return await cls.objects.filter(suite_id=suite_id, name=name).first()
+
+    @classmethod
     async def list_by_sort_order_created_at_and_case_id_asc(cls, suite_id: str) -> list[Self]:
         """Кейсы набора, ORDER BY sort_order, created_at, case_id ASC. Предела нет. Пустой suite_id — ValueError."""
         if suite_id == "":

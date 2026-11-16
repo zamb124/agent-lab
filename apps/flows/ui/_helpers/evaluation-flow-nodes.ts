@@ -38,6 +38,7 @@ interface FlowUpdateBody {
     speech: Record<string, unknown> | null;
     chat: Record<string, unknown> | null;
     employee: Record<string, unknown> | undefined;
+    base_version: string;
 }
 
 /**
@@ -174,8 +175,9 @@ function flowUpdateBodyBase(flow: unknown): FlowUpdateBody {
     const flowId = asString(flow.flow_id);
     const name = asString(flow.name);
     const entry = asString(flow.entry);
-    if (flowId.length === 0 || name.length === 0 || entry.length === 0) {
-        throw new Error('flowUpdateBodyBase: flow_id, name and entry required');
+    const version = asString(flow.version);
+    if (flowId.length === 0 || name.length === 0 || entry.length === 0 || version.length === 0) {
+        throw new Error('flowUpdateBodyBase: flow_id, name, entry and version required');
     }
     return {
         flow_id: flowId,
@@ -195,6 +197,7 @@ function flowUpdateBodyBase(flow: unknown): FlowUpdateBody {
         speech: isPlainObject(flow.speech) ? flow.speech : null,
         chat: isPlainObject(flow.chat) ? flow.chat : null,
         employee: isPlainObject(flow.employee) ? flow.employee : undefined,
+        base_version: version,
     };
 }
 

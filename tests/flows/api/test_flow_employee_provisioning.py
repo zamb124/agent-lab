@@ -73,28 +73,36 @@ async def test_update_toggles_employee(client, di, unique_id, system_user_id):
 
     create = await client.post("/flows/api/v1/flows/", json=_create_body(flow_id))
     assert create.status_code == 200
+    version = create.json()["version"]
 
     # включаем employee
     on = await client.put(
         f"/flows/api/v1/flows/{flow_id}",
-        json=_create_body(
-            flow_id,
-            employee={
-                "enabled": True,
-                "roles": ["member", "flow_operator"],
-                "curator_user_ids": [system_user_id],
-                "avatar_url": "https://example.com/a.png",
-            },
-        ),
+        json={
+            **_create_body(
+                flow_id,
+                employee={
+                    "enabled": True,
+                    "roles": ["member", "flow_operator"],
+                    "curator_user_ids": [system_user_id],
+                    "avatar_url": "https://example.com/a.png",
+                },
+            ),
+            "base_version": version,
+        },
     )
     assert on.status_code == 200
+    version = on.json()["version"]
     user = await User.get(emp_id)
     assert user is not None and user.status == UserStatus.ACTIVE
     assert user.avatar_url == "https://example.com/a.png"
     assert set(user.companies["system"]) == {"member", "flow_operator"}
 
     # выключаем
-    off = await client.put(f"/flows/api/v1/flows/{flow_id}", json=_create_body(flow_id))
+    off = await client.put(
+        f"/flows/api/v1/flows/{flow_id}",
+        json={**_create_body(flow_id), "base_version": version},
+    )
     assert off.status_code == 200
     user_off = await User.get(emp_id)
     assert user_off is not None and user_off.status == UserStatus.INACTIVE

@@ -42,6 +42,7 @@ GATES: tuple[Gate, ...] = (
     Gate("backend.rest_handlers_call_ops", _py("scripts.gates.backend.rest_handlers_call_ops"), _LINT),
     Gate("backend.dependency_injection", _py("scripts.gates.backend.dependency_injection"), _LINT),
     Gate("backend.forbidden_paths", _py("scripts.gates.backend.forbidden_paths"), _LINT),
+    Gate("backend.sdk_isolation", _py("scripts.gates.backend.sdk_isolation"), _LINT),
     Gate("backend.ratchet_counts", _py("scripts.gates.backend.ratchet_counts"), _LINT),
     Gate("backend.model_files", _py("scripts.gates.backend.model_files"), _LINT),
     Gate("backend.model_method_order_names", _py("scripts.gates.backend.model_method_order_names"), _LINT),

@@ -858,6 +858,7 @@
     "not_found": "Not found",
     "forbidden": "Access denied",
     "conflict": "Conflict",
+    "flow_version_conflict": "The flow changed since this version. Pull the current version and retry.",
     "unavailable": "Service unavailable",
     "upstream": "Upstream error",
     "internal": "Internal error",

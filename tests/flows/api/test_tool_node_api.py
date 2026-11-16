@@ -257,7 +257,7 @@ class TestUpdateFlowWithCodeNode:
     async def test_update_flow_add_tool_node(self, client, app, unique_id, auth_headers_system):
         """Обновление flow: добавление CodeNode."""
         flow_id = f"test_update_tool_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
@@ -294,6 +294,7 @@ class TestUpdateFlowWithCodeNode:
                     {"from_node": "start", "to_node": "process"},
                     {"from_node": "process", "to_node": None},
                 ],
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 200
@@ -309,7 +310,7 @@ class TestUpdateFlowWithCodeNode:
         """PUT принимает полный GraphNodeConfig; layout-only patch не является контрактом flow."""
         flow_id = f"test_pos_only_{unique_id}"
         code = "async def run(args, state):\n    state['k'] = 1\n    return state"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             headers=auth_headers_system,
             json={
@@ -329,6 +330,7 @@ class TestUpdateFlowWithCodeNode:
                 "entry": "formatter",
                 "nodes": {"formatter": {"pos_x": 400, "pos_y": 200}},
                 "edges": [{"from_node": "formatter", "to_node": None}],
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 422, response.text
@@ -340,7 +342,7 @@ class TestUpdateFlowWithCodeNode:
     ):
         """PUT сохраняет nodes_mode/edges_mode/variables_mode у skill (иначе UI мержит ноды как replace)."""
         flow_id = f"test_skill_modes_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             headers=auth_headers_system,
             json={
@@ -390,6 +392,7 @@ class TestUpdateFlowWithCodeNode:
                         "variables_mode": "merge",
                     }
                 },
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 200, response.text

@@ -81,6 +81,7 @@ class TestAgentVersionsList:
             },
         )
         assert create_resp.status_code == 200
+        version = create_resp.json()["version"]
         for i in range(2, 4):
             update_resp = await client.put(
                 f"/flows/api/v1/flows/{flow_id}",
@@ -90,9 +91,11 @@ class TestAgentVersionsList:
                     "entry": "main",
                     "nodes": {"main": {"type": "llm_node", "prompt": f"Prompt v{i}"}},
                     "edges": [],
+                    "base_version": version,
                 },
             )
             assert update_resp.status_code == 200, f"Update {i} failed: {update_resp.text}"
+            version = update_resp.json()["version"]
         resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
         assert resp.status_code == 200
         versions_data = resp.json()
@@ -144,6 +147,7 @@ class TestAgentGetVersion:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Updated prompt"}},
                 "edges": [],
+                "base_version": first_version,
             },
         )
         version_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions/{first_version}")
@@ -211,6 +215,7 @@ class TestAgentGetVersion:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Simple"}},
                 "edges": [],
+                "base_version": first_version,
             },
         )
         version_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions/{first_version}")
@@ -250,6 +255,7 @@ class TestAgentRollback:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "v2"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         latest_before = await client.get(f"/flows/api/v1/flows/{flow_id}")
@@ -287,7 +293,7 @@ class TestAgentRollback:
     async def test_rollback_preserves_version_history(self, client, unique_id):
         """Rollback не удаляет версии, только меняет указатель latest."""
         flow_id = f"test_rollback_history_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
@@ -297,8 +303,9 @@ class TestAgentRollback:
                 "edges": [],
             },
         )
+        version = created.json()["version"]
         for i in range(2, 4):
-            await client.put(
+            updated = await client.put(
                 f"/flows/api/v1/flows/{flow_id}",
                 json={
                     "flow_id": flow_id,
@@ -306,8 +313,10 @@ class TestAgentRollback:
                     "entry": "main",
                     "nodes": {"main": {"type": "llm_node", "prompt": f"v{i}"}},
                     "edges": [],
+                    "base_version": version,
                 },
             )
+            version = updated.json()["version"]
         versions_before = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
         count_before = len(versions_before.json()["items"])
         assert count_before == 3
@@ -348,6 +357,7 @@ class TestA2AVersionQueryParam:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "v2"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         card_v1_resp = await client.get(f"/flows/api/v1/{flow_id}?v={v1}")
@@ -386,6 +396,7 @@ class TestA2AVersionQueryParam:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "You are v2 agent"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         mock_llm_with_queue([{"type": "text", "content": "Response from agent"}])
@@ -465,6 +476,7 @@ class TestA2AVersionMetadata:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "v2"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         mock_llm_with_queue([{"type": "text", "content": "Response"}])
@@ -509,6 +521,7 @@ class TestA2AVersionMetadata:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "v2"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         versions_resp2 = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
@@ -591,6 +604,7 @@ class TestA2AVersionStream:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Updated stream test"}},
                 "edges": [],
+                "base_version": v1,
             },
         )
         mock_llm_with_queue([{"type": "text", "content": "Streaming response from v1"}])

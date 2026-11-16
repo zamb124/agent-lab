@@ -334,6 +334,7 @@ async def _setup_flow_update(ctx: LiveCtx) -> JsonObject:
         "variables": {},
         "tags": current.get("tags") if isinstance(current.get("tags"), list) else [],
         "branches": current.get("branches") if isinstance(current.get("branches"), dict) else {},
+        "base_version": _str_field(current, "version"),
     }
 
 
@@ -370,6 +371,7 @@ async def _setup_version(ctx: LiveCtx) -> JsonObject:
             "variables": {},
             "tags": [],
             "branches": {},
+            "base_version": _str_field(current, "version"),
         },
     )
     await _expect_json(put, ok=(200,), label="flow_version_seed")
@@ -1779,6 +1781,7 @@ _CASES: dict[str, OpCase] = {
         expect="failed",
     ),
     "flows/flow_ui/schema_requested": _op("GET", f"{_API}/flow-ui/schema", "none", _empty, same=True),
+    "flows/schema/item_requested": _op("GET", f"{_API}/schema", "none", _empty, same=True),
     "flows/flow_ui/templates_requested": _op(
         "GET", f"{_API}/flow-ui/templates", "query", _setup_flow_ui_templates, same=True,
     ),

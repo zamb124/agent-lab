@@ -17,7 +17,7 @@ import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
-import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
+import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp, flowContractSchemaOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
          branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
 import { flowUiSchemaOp, flowUiTemplatesOp, flowUiAssistOp } from '../events/resources/flow-ui.resource.js';
@@ -245,6 +245,7 @@ export class FlowsApp extends PlatformApp {
         flowReloadFromBundleOp,
         flowVersionsListOp,
         flowStoreBundlesOp,
+        flowContractSchemaOp,
         flowValidateOp,
         branchCreateOp,
         branchUpdateOp,

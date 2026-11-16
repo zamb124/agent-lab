@@ -19,6 +19,7 @@ from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.services.flow_ui_assist_service import FlowUIAssistService
 from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
+from apps.flows.src.services.flow_write_service import FlowWriteService
 from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
 from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
@@ -221,6 +222,7 @@ class FlowsDi(
     workflow_runtime: DurableWorkflowRuntime
     flow_factory: FlowFactory
     flow_access_service: FlowAccessService
+    flow_write_service: FlowWriteService
     flow_ui_assist_service: FlowUIAssistService
     flow_ui_share_service: FlowUIShareService
     variables_service: VariablesService

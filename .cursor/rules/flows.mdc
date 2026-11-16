@@ -70,8 +70,9 @@ Flows (`apps/flows`, порт 8001, база `platform_agents`) — владел
 
 ### Bundles
 
-1. `apps/flows/bundles/<id>/flow.yaml` (или `flow.json`; одновременно оба — ошибка) → `FlowConfig.source == "file"`; `find_bundle_flow_config`/`read_bundle_flow_config` в `flows_loader.py` — единственная точка резолва; `POST .../reload-from-bundle` (`FlowReloadFromBundleRequest`: `flow_id`, опционально `bundle_id`/`name`/`description`) → `FlowsLoader.reload_flow_bundle` — тот же путь, что `company/init`; `bundle_id` пуст — каталог = `flow_id`; иначе установка под другим `flow_id` (`source=api`, зависимости без remap); перезапись — `can_edit`, установка каталожного bundle — член компании с dual-write; нет tuples и нет каталога — 403.
-2. `depends_on_flow_ids` ставит зависимости до зависимого flow; `FlowsLoader` инлайнит `prompt` (`prompts/*.md`), `output_schema_file`, `store_card_image` (→ S3, `store_card_image_url`).
+1. `apps/flows/bundles/<id>/flow.yaml` (или `flow.json`; одновременно оба — ошибка) → `FlowConfig.source == "file"`; `find_bundle_flow_config`/`read_bundle_flow_config` и инлайн `prompt`/`code`/`output_schema_file` живут в `flows_loader.py`; CLI держит свою копию в `platform_sdk.bundle` → `sdk.mdc`; `POST .../reload-from-bundle` (`FlowReloadFromBundleRequest`: `flow_id`, опционально `bundle_id`/`name`/`description`) → `FlowsLoader.reload_flow_bundle` — тот же путь, что `company/init`; `bundle_id` пуст — каталог = `flow_id`; иначе установка под другим `flow_id` (`source=api`, зависимости без remap); перезапись — `can_edit`, установка каталожного bundle — член компании с dual-write; нет tuples и нет каталога — 403.
+2. `depends_on_flow_ids` ставит зависимости до зависимого flow; `FlowsLoader` инлайнит `prompt` (`prompts/*.md`), `code` (`code/*`), `output_schema_file`, `store_card_image` (→ S3, `store_card_image_url`). `function: module.func` остаётся шагом `FlowsLoader`.
+3. `PUT /flows/{flow_id}` без `base_version` перезаписывает текущую версию (`FlowWriteService.replace_current`). Переданный и не совпавший `base_version` — `flow_version_conflict`.
 
 ### Evaluation Lab
 

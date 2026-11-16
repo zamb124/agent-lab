@@ -828,9 +828,6 @@ async def op_flows_update(
 ) -> FlowResponse:
     _ = user
     _ = await require_edit_flow(di, payload.flow_id)
-    existing = await FlowConfig.current_for_flow(payload.flow_id)
-    if existing is None:
-        raise_not_found(PlatformNotFoundError("Flow not found"))
     try:
         variables = flow_variable_models(payload.variables, "variables")
     except ValueError as exc:
@@ -840,37 +837,19 @@ async def op_flows_update(
         for branch_id, branch_req in payload.branches.items()
     }
     nodes = await inline_tools_in_nodes(graph_nodes_payload(payload.nodes), di)
-    speech_merged = payload.speech if payload.speech is not None else existing.speech
-    interface_merged = payload.interface if payload.interface is not None else existing.interface
-    assert_interface_publishable(interface_merged)
-    assert_branch_interfaces_publishable(branches)
-    description = payload.description if payload.description is not None else ""
-    flow_config = FlowConfig(
-        flow_id=payload.flow_id,
-        name=payload.name,
-        description=description,
-        entry=payload.entry,
-        nodes=nodes,
-        edges=payload.edges,
-        variables=variables,
-        tags=payload.tags,
-        branches=branches,
-        source=existing.source,
-        triggers=payload.triggers,
-        resources=payload.resources,
-        metadata=existing.metadata,
-        store_card_image_url=payload.store_card_image_url,
-        speech=speech_merged,
-        interface=interface_merged,
-        employee=payload.employee,
-    )
-    await persist_flow_with_authz(di, flow_config)
-    await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
-    await publish_event_to_user(
-        user_id=company_scope().user_id,
-        type="flows/flow/updated",
-        payload={"flow_id": payload.flow_id, "version": flow_config.version},
-    )
+    try:
+        flow_config = await di.flow_write_service.replace_current(
+            payload,
+            nodes=nodes,
+            variables=variables,
+            branches=branches,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc, error_code=exc.error_code, error_params=exc.error_params)
+    except ValueError as exc:
+        raise_invalid(exc)
     return _flow_item_response(
         flow_config,
         has_bundle_update=False,

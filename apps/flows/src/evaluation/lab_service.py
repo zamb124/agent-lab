@@ -669,7 +669,23 @@ class EvaluationLabService:
             raise EvaluationLabValidationError(f"Unsupported case import format: {request.format}")
         cases: list[EvaluationCase] = []
         for case_request in case_requests:
-            cases.append(await self.create_case(suite_id, case_request))
+            existing = await EvaluationCase.by_suite_and_name(suite_id, case_request.name)
+            if existing is None:
+                cases.append(await self.create_case(suite_id, case_request))
+                continue
+            cases.append(
+                await self.update_case(
+                    suite_id,
+                    existing.case_id,
+                    EvaluationCaseUpdateRequest.model_validate(
+                        {
+                            **case_request.model_dump(),
+                            "suite_id": suite_id,
+                            "case_id": existing.case_id,
+                        }
+                    ),
+                )
+            )
         return EvaluationCaseImportResult(cases=cases)
 
     async def create_case_from_dialog(

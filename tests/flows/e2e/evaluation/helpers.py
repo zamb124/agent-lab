@@ -74,6 +74,7 @@ async def put_flow_nodes(
             "variables": {},
             "tags": flow.get("tags") or [],
             "branches": flow.get("branches") or {},
+            "base_version": flow["version"],
         },
     )
     assert put_response.status_code == 200, put_response.text

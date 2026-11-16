@@ -34,6 +34,15 @@ class _MinimalLaraToolState:
         self.context_id = cid
 
 
+def _flow_update_body(flow_config: FlowConfig, label: str) -> JsonObject:
+    body = require_json_object(flow_config.model_dump(mode="json"), label)
+    version = body.get("version")
+    if not isinstance(version, str) or version == "":
+        raise ValueError("flow version is required to apply a patch")
+    body["base_version"] = version
+    return body
+
+
 _FLOW_CONFIG_RESPONSE_KEYS = frozenset(
     {
         "flow_id",
@@ -309,10 +318,7 @@ class LaraFacade:
             _ = await self._client.put(
                 "flows",
                 f"/flows/api/v1/flows/{encoded_flow_id}",
-                json=require_json_object(
-                    flow_config.model_dump(mode="json"),
-                    "flows.node.patch.flow_config",
-                ),
+                json=_flow_update_body(flow_config, "flows.node.patch.flow_config"),
             )
             return {"flow_id": flow_id, "node_id": node_id, "patch": patch}
 
@@ -402,10 +408,7 @@ class LaraFacade:
             _ = await self._client.put(
                 "flows",
                 f"/flows/api/v1/flows/{encoded_flow_id}",
-                json=require_json_object(
-                    flow_after.model_dump(mode="json"),
-                    "flows.flow.patch.after",
-                ),
+                json=_flow_update_body(flow_after, "flows.flow.patch.after"),
             )
             return {"flow_id": flow_id, "patch": patch}
 

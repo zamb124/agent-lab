@@ -1,0 +1,34 @@
+---
+description: "CLI platform (пакет sdk/): bundle агента, коды выхода, изоляция от apps и core. Читать при правке sdk/** и сборке bundle"
+globs:
+  - "sdk/**/*.py"
+  - "apps/flows/src/services/flows_loader.py"
+alwaysApply: false
+---
+
+# CLI platform
+
+Пакет `sdk/` (`platform_sdk`, команда `platform`) — API платформы для внешнего агента. Платформа исполняет flow. Источник правды схемы — каталог bundle в git.
+
+## Модель
+
+- Bundle: `flow.yaml` (или `flow.yml` / `flow.json`, ровно один), `prompts/*.md`, `code/*.{py,js,ts,go,cs}`, `schemas/*.output.json`, `evals/suite.yaml`, `evals/cases.jsonl`.
+- `node.prompt`, заканчивающийся на `.md` без перевода строки, и `node.code` с суффиксом языка — путь внутри bundle. `output_schema_file` читается и удаляется. Сборщик CLI — `platform_sdk.bundle`. Сервер держит свою копию этих шагов в `FlowsLoader` и добавляет `function`, `store_card_image`, `nodes.json`, inline tools.
+- `function: module.func` в CLI — ошибка `bundle_function_not_supported`.
+- `.platform/lock.json` хранит `base_version`. Секретов в bundle нет: только `@var:`.
+- `PUT /flows/{flow_id}` без `base_version` перезаписывает текущую версию. Чужой `base_version` — `flow_version_conflict` (409). CLI передаёт версию из `.platform/lock.json`.
+
+## Инварианты
+
+1. Пакет не импортирует `apps/` и `core/`. JSON-типы — `sdk/platform_sdk/json_types.py`.
+2. Успех — stdout. `--json` или не-TTY — компактный JSON. Прогресс — stderr. Ошибка — один JSON в stderr (`error_code`, `error_detail`, `error_params`, `request_id`, `trace_id`, `http_status`, `retryable`, `hint`).
+3. Коды выхода: 0 успех, 2 bundle/аргументы, 3 невалидный payload, 4 401/403, 5 404, 6 конфликт, 7 сеть и 502/503/504, 8 прогон failed/canceled, 9 `INPUT_REQUIRED`, 10 evaluation не прошёл, 1 внутреннее.
+4. Повторяются GET и опросы. `push` не повторяется. `eval run` передаёт `idempotency_key`. Обрыв SSE продолжается `wait`, команда заново не отправляется.
+5. Текст для агента — `sdk/platform_sdk/guide/SKILL.md`. `.cursor/skills/platform-cli/SKILL.md` только ссылается на него.
+
+## Гейты
+
+- `scripts/gates/backend/sdk_isolation.py` (`make lint`) — `sdk/**/*.py` не импортирует `apps` и `core`.
+- `tests/sdk/test_bundle.py` — сборка и раскладка bundle.
+- `tests/flows/api/test_flow_contract_schema.py` — `GET /flows/api/v1/schema`.
+- `tests/flows/api/test_flow_base_version.py` — перезапись без `base_version` и 409 при чужой версии.

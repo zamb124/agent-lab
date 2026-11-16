@@ -2949,6 +2949,7 @@ class TestEvaluationLabAPI:
                     "variables": {},
                     "tags": flow.tags or [],
                     "branches": {},
+                    "base_version": flow.version,
                 },
             )
             assert put_response.status_code == 200, put_response.text

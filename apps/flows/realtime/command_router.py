@@ -236,6 +236,7 @@ from apps.flows.realtime.resource_operations import (
     op_flows_resources_remove,
     op_flows_resources_update,
 )
+from apps.flows.realtime.schema_operations import op_flows_schema
 from apps.flows.realtime.session_operations import (
     op_flows_sessions_list,
     op_flows_sessions_remove,
@@ -454,6 +455,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowsDi]] = {
     "flows/flows/validate_requested": Operation(
         payload_model=FlowValidateRequest, fn=op_flows_validate
     ),
+    "flows/schema/item_requested": Operation(payload_model=EmptyPayload, fn=op_flows_schema),
     "flows/flows/reload_from_bundle_requested": Operation(
         payload_model=FlowReloadFromBundleRequest, fn=op_flows_reload_from_bundle
     ),

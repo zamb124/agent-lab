@@ -137,6 +137,8 @@ apps/<svc>/
 
 `core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/gates/backend/cross_service_imports.py`.
 
+`sdk/` — `platform` → `sdk.mdc`. `scripts/gates/backend/sdk_isolation.py`.
+
 `core/` — общая библиотека и wire-контракты платформы. Состав top-level модулей документируется здесь: новый модуль — сначала запись в этом списке. Канон: `a2a`, `ai`, `api`, `app`, `app_state`, `auth`, `authz`, `billing`, `cache`, `calendar`, `capabilities`, `catalog`, `clients`, `code_contract`, `config`, `context`, `customers`, `data_tables`, `datasources`, `db`, `di`, `docs`, `documents`, `errors`, `events`, `facet_query`, `files`, `frontend`, `geoip`, `guest_runtime`, `http`, `i18n`, `identity`, `imports`, `integrations`, `internal_context_headers`, `lanes`, `llm_context`, `logging`, `mail`, `middleware`, `models`, `namespace`, `observability`, `office`, `pagination`, `payments`, `platform_brand`, `push`, `rag`, `rag_indexing_schema`, `realtime`, `redis_inventory`, `request_scope`, `scheduler`, `search`, `secrets`, `short_links`, `tasks`, `test_scope`, `text_transforms`, `tracing`, `types`, `ui_document`, `utils`, `variables`, `viz`, `voice`, `websocket`, `worktracker`. Клиенты к сервисам и внешним API — только `core/clients/`. Код для одного сервиса живёт в `apps/<svc>`: `ExecutionState` и контракты его полей — `apps/flows/src/state`, звонки LiveKit — `apps/sync`, схема поисковых провайдеров компании — `apps/search`.
 
 ## Типизация
@@ -254,6 +256,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `testing.mdc` | реальная инфраструктура; единственный мок — `MockLLM`; тест — инвариант |
 | `code_search.mdc` | rule → граф → семантика → grep → read |
 | `scripts.mdc` | пакеты `scripts/`, реестр гейтов, запуск через `python -m` |
+| `sdk.mdc` | CLI `platform` |
 | `figma.mdc` | Figma — `figma-console` + Desktop Bridge плагин, Plugin API без токена |
 | `namespace.mdc` | kind company_workspace/personal/technical |
 | `files.mdc` | байты — chunked Files API; Documents bind; `FileReader.read`; S3 URL наружу запрещены |

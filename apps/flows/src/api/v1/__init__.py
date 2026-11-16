@@ -28,6 +28,7 @@ from .platform_events import router as platform_events_router
 from .prompts import router as prompts_router
 from .registry import router as registry_router
 from .resources import router as resources_router
+from .schema import router as schema_router
 from .sessions import router as sessions_router
 from .tasks import router as tasks_router
 from .tool_runtime import router as tool_runtime_router
@@ -42,6 +43,7 @@ api_v1_router.include_router(agent_skills_router)
 api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(lara_actions_router)
 api_v1_router.include_router(llm_context_router)
+api_v1_router.include_router(schema_router)
 api_v1_router.include_router(flows_router, prefix="/flows")
 api_v1_router.include_router(branches_router)
 api_v1_router.include_router(code_agent_router, prefix="/flows")

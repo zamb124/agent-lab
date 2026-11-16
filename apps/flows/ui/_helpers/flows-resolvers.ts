@@ -262,7 +262,11 @@ export function buildFlowPublishBody(state: unknown): Record<string, unknown> | 
     const data = isPlainObject(state.branchData) ? state.branchData : {};
     const branchId = asString(state.currentBranchId);
     const isBase = !branchId || branchId === 'base';
-    const body: Record<string, unknown> = { ...state.flowConfig };
+    const version = asString(state.flowConfig.version);
+    if (version.length === 0) {
+        throw new Error('buildFlowPublishBody: version required');
+    }
+    const body: Record<string, unknown> = { ...state.flowConfig, base_version: version };
     if (isBase) {
         body.nodes = data.nodes;
         body.edges = data.edges;

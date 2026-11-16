@@ -94,7 +94,7 @@ class TestFlowVariables:
     async def test_update_agent_preserves_variables(self, client, app, unique_id):
         """PUT сохраняет все поля variables"""
         flow_id = f"test_upd_vars_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
@@ -122,6 +122,7 @@ class TestFlowVariables:
                         "public": True,
                     }
                 },
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 200

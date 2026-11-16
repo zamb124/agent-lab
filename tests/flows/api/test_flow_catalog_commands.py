@@ -100,7 +100,10 @@ async def test_catalog_rest_and_op_share_payload(
     with _system_scope(system_user_id) as user:
         updated = await op_flows_update(
             FlowCreateRequest.model_validate(
-                _create_body(flow_id, "Catalog Command Updated", "second")
+                {
+                    **_create_body(flow_id, "Catalog Command Updated", "second"),
+                    "base_version": created["version"],
+                }
             ),
             user=user,
             di=di,
@@ -110,7 +113,10 @@ async def test_catalog_rest_and_op_share_payload(
     put_http = await client.put(
         f"/flows/api/v1/flows/{flow_id}",
         headers=auth_headers_system,
-        json=_create_body(flow_id, "Catalog Command REST", "third"),
+        json={
+            **_create_body(flow_id, "Catalog Command REST", "third"),
+            "base_version": updated.version,
+        },
     )
     assert put_http.status_code == 200, put_http.text
     assert put_http.json()["name"] == "Catalog Command REST"

@@ -4548,7 +4548,7 @@ async def flows_e2e_set_conversation_setting(
         settings = {}
         conversation["settings"] = settings
     settings[name] = value
-    payload = {**flow, "flow_id": flow_id, "interface": interface}
+    payload = {**flow, "flow_id": flow_id, "interface": interface, "base_version": flow["version"]}
     async with _flows_client(origin, auth_token) as client:
         response = await client.put(
             f"/flows/api/v1/flows/{flow_id}",

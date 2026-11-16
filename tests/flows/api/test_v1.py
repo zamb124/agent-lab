@@ -81,7 +81,7 @@ class _TestFlowsAPIDuplicate:
     async def test_update_agent(self, client, app, unique_id, auth_headers_system):
         """Обновление agent."""
         flow_id = f"update_test_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             headers=auth_headers_system,
             json={
@@ -101,6 +101,7 @@ class _TestFlowsAPIDuplicate:
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Updated prompt", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 200
@@ -222,7 +223,7 @@ class _TestFlowsAPIDuplicate:
     ):
         """Ошибка при обновлении agent с несуществующим tool."""
         flow_id = f"update_invalid_tool_{unique_id}"
-        await client.post(
+        created = await client.post(
             "/flows/api/v1/flows/",
             headers=auth_headers_system,
             json={
@@ -248,6 +249,7 @@ class _TestFlowsAPIDuplicate:
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],
+                "base_version": created.json()["version"],
             },
         )
         assert response.status_code == 400

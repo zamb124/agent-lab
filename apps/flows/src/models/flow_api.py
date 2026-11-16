@@ -41,6 +41,7 @@ class FlowCreateRequest(BaseModel):
     speech: FlowSpeechSettings | None = None
     interface: FlowUIDocument | None = None
     employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
+    base_version: str | None = None
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
@@ -354,3 +355,18 @@ FLOW_RESOURCE_TYPE_CARDS: tuple[FlowResourceTypeCard, ...] = (
         color="#f59e0b",
     ),
 )
+
+
+class FlowContractSchema(StrictBaseModel):
+    """JSON Schema контракта, который CLI и IDE читают с сервера."""
+
+    flow_create: JsonObject
+    graph_node: JsonObject
+    edge: JsonObject
+    branch: JsonObject
+    trigger: JsonObject
+    resource_reference: JsonObject
+    evaluation_case: JsonObject
+    evaluation_check: JsonObject
+    evaluation_suite: JsonObject
+    evaluation_rubric: JsonObject

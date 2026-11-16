@@ -136,6 +136,15 @@ export const flowStoreBundlesOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/flows/api/v1/flows/store/bundles' },
 });
 
+export const flowContractSchemaOp = createAsyncOp({
+    name: 'flows/flow_contract_schema',
+    silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/schema/item_requested',
+    restMirror: { method: 'GET', path: '/flows/api/v1/schema' },
+});
+
 export const flowValidateOp = createAsyncOp({
     name: 'flows/flow_validate',
     silent: true,
@@ -203,7 +212,8 @@ declare module '@platform/lib/events/factory-registry.js' {
         'flows/flow_reload_from_bundle': typeof flowReloadFromBundleOp;
         'flows/flow_versions_list': typeof flowVersionsListOp;
         'flows/flow_store_bundles': typeof flowStoreBundlesOp;
-        'flows/flow_validate': typeof flowValidateOp;
+        'flows/flow_contract_schema': typeof flowContractSchemaOp,
+        'flows/flow_validate': typeof flowValidateOp,
         'flows/flow_voice_session_query': typeof flowVoiceSessionQueryOp;
         'flows/flow_preview_share': typeof flowPreviewShareOp;
         'flows/branch_create': typeof branchCreateOp;
