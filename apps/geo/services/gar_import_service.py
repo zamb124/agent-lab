@@ -41,6 +41,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
+from time import monotonic
 from typing import IO, ClassVar, NamedTuple, Protocol, TypeVar
 from xml.etree.ElementTree import Element
 
@@ -209,6 +210,11 @@ _QUEUE_BATCHES = 8
 _PUT_TIMEOUT_SECONDS = 0.5
 _MATCH_PAGE = 5000
 _PROGRESS_LOG_PAGES = 20
+# CPU-долгие циклы матча отдают loop receiver'у TaskIQ по времени,
+# не по счётчику: одна итерация (сотни кандидатов × SequenceMatcher)
+# стоит десятки мс, фиксированный шаг в строках давал бы stall
+# в секунды — socket timeout XREADGROUP и смерть worker-0 (прод).
+_CPU_YIELD_SECONDS = 0.05
 
 _RowT = TypeVar("_RowT")
 
@@ -667,8 +673,12 @@ class GarImportService:
             region=region, generation=generation
         )
         by_num: dict[str, list[GeoAddressMatchRow]] = {}
+        last_yield = monotonic()
         for row in candidates:
             by_num.setdefault(_norm(row.housenumber), []).append(row)
+            if monotonic() - last_yield > _CPU_YIELD_SECONDS:
+                await asyncio.sleep(0)
+                last_yield = monotonic()
         houses = 0
         matched = 0
         unresolved_count = 0
@@ -700,6 +710,9 @@ class GarImportService:
             matched_rows: list[tuple[str, int, str, str]] = []
             unresolved: list[JsonObject] = []
             for house in page:
+                if monotonic() - last_yield > _CPU_YIELD_SECONDS:
+                    await asyncio.sleep(0)
+                    last_yield = monotonic()
                 canonical = _canonical_name(addr_names, house.path, house)
                 street_name, path_names = self._street_of(
                     house.path, addr_names
