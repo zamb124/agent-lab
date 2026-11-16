@@ -69,7 +69,13 @@ from core.types import JsonObject
 _SOURCE = "gar"
 UNRESOLVED_KIND = "gar_unresolved"
 
-_MEMBER_RE_TEMPLATE = r"(^|/){code}/(AS_ADDR_OBJ|AS_HOUSES|AS_ADM_HIERARCHY)_[^/]*\.XML$"
+# Только основные таблицы ``<TABLE>_<YYYYMMDD>_<uuid>.XML``: ``_PARAMS``/
+# ``_DIVISION``-сородичи несут тот же OBJECTID без NAME/HOUSENUM/OBJECTGUID —
+# их upsert затёр бы реальные поля пустыми (были: весь регион с пустыми
+# именами/номерами домов). Цифра после ``_`` — дата версии, а не суффикс.
+_MEMBER_RE_TEMPLATE = (
+    r"(^|/){code}/(AS_ADDR_OBJ|AS_HOUSES|AS_ADM_HIERARCHY)_\d[^/]*\.XML$"
+)
 
 _logger = get_logger(__name__)
 

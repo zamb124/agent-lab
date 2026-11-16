@@ -112,7 +112,17 @@ def _hierarchy_xml(ids: tuple[int, ...]) -> str:
 
 
 def _zip_bytes(version: int, *, delta: bool) -> bytes:
-    """Сборка архива региона 77: полная — снимок, дельта — изменения."""
+    """Сборка архива региона 77: полная — снимок, дельта — изменения.
+
+    ``*_PARAMS``-сородичи основных таблиц присутствуют как в реальной
+    выгрузке: их OBJECTID совпадает с объектами, а NAME/HOUSENUM/
+    OBJECTGUID отсутствуют — парсер обязан их игнорировать, иначе
+    пустые строки затирают реальные поля.
+    """
+    params = (
+        '<PARAMS><PARAM OBJECTID="10" TYPEID="1" VALUE="101000"/>'
+        + '<PARAM OBJECTID="101" TYPEID="1" VALUE="101000"/></PARAMS>'
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
         if delta:
@@ -121,6 +131,9 @@ def _zip_bytes(version: int, *, delta: bool) -> bytes:
             archive.writestr(
                 f"77/AS_HOUSES_{version}_DELTA.XML",
                 _houses_xml(house_ids, gone_ids),
+            )
+            archive.writestr(
+                f"77/AS_HOUSES_PARAMS_{version}_DELTA.XML", params
             )
             archive.writestr(
                 f"77/AS_ADM_HIERARCHY_{version}_DELTA.XML",
@@ -134,8 +147,14 @@ def _zip_bytes(version: int, *, delta: bool) -> bytes:
                 f"77/AS_ADDR_OBJ_{version}_FULL.XML", _addr_xml()
             )
             archive.writestr(
+                f"77/AS_ADDR_OBJ_PARAMS_{version}_FULL.XML", params
+            )
+            archive.writestr(
                 f"77/AS_HOUSES_{version}_FULL.XML",
                 _houses_xml(all_ids, _FULL_GONE),
+            )
+            archive.writestr(
+                f"77/AS_HOUSES_PARAMS_{version}_FULL.XML", params
             )
             archive.writestr(
                 f"77/AS_ADM_HIERARCHY_{version}_FULL.XML",
