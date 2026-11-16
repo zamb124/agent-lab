@@ -105,6 +105,40 @@ class AIModelRecord(PlatformModel):
         return await cls.objects.filter(provider=provider).delete()
 
 
+_REASONING_EFFORT_CHEAPEST_FIRST: tuple[str, ...] = (
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+)
+
+
+def compatible_reasoning_effort(raw: JsonObject, effort: str) -> str:
+    """Усилие, которое каталог модели принимает.
+
+    ``none`` при ``reasoning.mandatory`` заменяется на самое дешёвое значение из
+    ``supported_efforts``: иначе эндпоинт отвечает 400.
+    """
+    reasoning = raw.get("reasoning")
+    if not isinstance(reasoning, dict):
+        return effort
+    supported: set[str] = set()
+    supported_raw = reasoning.get("supported_efforts")
+    if isinstance(supported_raw, list):
+        for item in supported_raw:
+            if isinstance(item, str):
+                supported.add(item)
+    if effort in supported:
+        return effort
+    if reasoning.get("mandatory") is True and supported:
+        for name in _REASONING_EFFORT_CHEAPEST_FIRST:
+            if name in supported:
+                return name
+    return effort
+
+
 class ResolvedAIModel(BaseModel):
     capability: AICapability
     provider: str | None

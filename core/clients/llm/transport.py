@@ -24,6 +24,7 @@ from a2a.types import (
 )
 
 from core.a2a.codec import struct_from_mapping
+from core.ai.models.model_record import AIModelRecord, compatible_reasoning_effort
 from core.clients.llm.errors import (
     INTER_CHUNK_WARN_SECONDS as _INTER_CHUNK_WARN_SECONDS,
 )
@@ -67,6 +68,26 @@ from core.types import (
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
+
+
+async def _apply_catalog_reasoning_effort(client: LLMTransportClient, body: JsonObject) -> None:
+    effort = body.get("reasoning_effort")
+    if not isinstance(effort, str) or effort == "":
+        return
+    record = await AIModelRecord.by_provider_and_model_id(client.llm_provider, client.model)
+    if record is None:
+        return
+    adjusted = compatible_reasoning_effort(record.raw, effort)
+    if adjusted == effort:
+        return
+    logger.info(
+        "llm.reasoning_effort_adjusted",
+        provider=client.llm_provider,
+        model=client.model,
+        requested=effort,
+        effort=adjusted,
+    )
+    body["reasoning_effort"] = adjusted
 
 
 class LLMInvokeTransportResult(NamedTuple):
@@ -184,6 +205,7 @@ async def stream_once(
     if extra_body:
         for key, extra_body_value in extra_body.items():
             body[key] = extra_body_value
+    await _apply_catalog_reasoning_effort(client, body)
 
     logger.debug(
         "llm.request_prepared",
@@ -711,6 +733,7 @@ async def invoke_once(
     if extra_body:
         for key, extra_body_value in extra_body.items():
             body[key] = extra_body_value
+    await _apply_catalog_reasoning_effort(client, body)
 
     logger.info(
         "llm.invoke_request_prepared",
