@@ -9,13 +9,28 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar, Self
+from typing import ClassVar, NamedTuple
 
 from oxyde import Field as DbField
 from oxyde import execute_raw
 
 from core.models.platform_model import PlatformModel
 from core.types import JsonObject, SqlParameterValue
+
+
+class GeoAddressMatchRow(NamedTuple):
+    """Проекция адреса для матча внешних источников — только поля матча.
+
+    ORM-строка весит ~KB на полный набор колонок; на сотнях тысяч
+    кандидатов региона проекция держит by_num в десятках MiB.
+    """
+
+    osm_type: str
+    osm_id: int
+    display_name: str
+    city: str
+    street: str
+    housenumber: str
 
 
 class GeoAddress(PlatformModel):
@@ -47,35 +62,50 @@ class GeoAddress(PlatformModel):
     created_at: datetime = DbField()
 
     @classmethod
-    async def list_for_enrich_match(cls, *, region: str, generation: int) -> list[Self]:
+    async def list_for_enrich_match(
+        cls, *, region: str, generation: int
+    ) -> list[GeoAddressMatchRow]:
         """Кандидаты матча внешних источников: все адреса региона живых поколений."""
-        return (
-            await cls.objects.filter(region=region, generation__in=[0, generation])
-            .all()
+        rows: list[dict[str, object]] = await execute_raw(
+            """
+            SELECT osm_type, osm_id, display_name, city, street, housenumber
+            FROM geo_addresses
+            WHERE region = $1 AND generation IN (0, $2)
+            """,
+            [region, generation],
+            using="geo",
         )
+        return [
+            GeoAddressMatchRow(
+                osm_type=str(row["osm_type"]),
+                osm_id=int(str(row["osm_id"])),
+                display_name=str(row["display_name"]),
+                city=str(row["city"]),
+                street=str(row["street"]),
+                housenumber=str(row["housenumber"]),
+            )
+            for row in rows
+        ]
 
     @classmethod
-    async def clear_gar_attrs(
-        cls, *, guids: list[str], generation: int, chunk_size: int = 5000
-    ) -> int:
-        """Очистка ``gar_guid``/``canonical_name`` у выведенных из ФИАС объектов."""
-        cleared = 0
-        for offset in range(0, len(guids), chunk_size):
-            chunk = guids[offset : offset + chunk_size]
-            placeholders = ",".join(f"${k + 1}" for k in range(len(chunk)))
-            result = await execute_raw(
-                f"""
-                UPDATE geo_addresses
-                SET gar_guid = '', canonical_name = ''
-                WHERE gar_guid IN ({placeholders})
-                  AND generation IN (0, ${len(chunk) + 1})
-                RETURNING id
-                """,
-                [*chunk, generation],
-                using="geo",
-            )
-            cleared += len(result)
-        return cleared
+    async def clear_stale_gar_attrs(cls, *, generation: int) -> int:
+        """Очистка ``gar_guid``/``canonical_name`` у объектов, которых нет
+        среди активных домов ГАР (выведены из ФИАС или никогда не были)."""
+        rows = await execute_raw(
+            """
+            UPDATE geo_addresses
+            SET gar_guid = '', canonical_name = ''
+            WHERE gar_guid <> '' AND generation IN (0, $1)
+              AND gar_guid NOT IN (
+                  SELECT guid FROM geo_gar_houses
+                  WHERE active AND guid <> ''
+              )
+            RETURNING id
+            """,
+            [generation],
+            using="geo",
+        )
+        return len(rows)
 
     @classmethod
     async def bulk_set_gar_attrs(

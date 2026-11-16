@@ -1595,7 +1595,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) input[type='search'] {
-                color: var(--marketing-page-bg);
+                color: var(--text-primary);
             }
 
             :host-context([data-theme="light"]) input[type='search']::placeholder {
@@ -1616,7 +1616,7 @@ export class PublicSearchPage extends PlatformPage {
 
             :host-context([data-theme="light"]) .mode-chip:hover,
             :host-context([data-theme="light"]) .suggest-chip:hover {
-                color: var(--marketing-page-bg);
+                color: var(--text-primary);
                 background: color-mix(in srgb, var(--accent) 14%, transparent);
             }
 
@@ -2215,8 +2215,6 @@ export class PublicSearchPage extends PlatformPage {
         this._lastSerpCacheKey = '';
         this._serpRects = new Map();
         /** @type {string | undefined} */
-        this._serpOrderSignature = undefined;
-        /** @type {string | undefined} */
         this._serpDataSignature = undefined;
         /** @type {string | undefined} */
         this._measuredAnswer = undefined;
@@ -2239,8 +2237,7 @@ export class PublicSearchPage extends PlatformPage {
     private _serpObservedSentinel: HTMLElement | null;
     private _serpLoadBlocked: boolean;
     private _lastSerpCacheKey: string;
-    private _serpRects: Map<string, DOMRect>;
-    private _serpOrderSignature: string | undefined;
+    private _serpRects: Map<string, { top: number; left: number }>;
     private _serpDataSignature: string | undefined;
     private _measuredAnswer: string | undefined;
     private _releaseSearchInputViewport: (() => void) | null;
@@ -2314,7 +2311,7 @@ export class PublicSearchPage extends PlatformPage {
         // Layout-чтения (FLIP-rects, scrollHeight) — только при смене данных:
         // иначе каждый стрим-токен гоняет forced reflow, и sticky topbar
         // с backdrop-filter перерисовывается десятки раз в секунду.
-        const resultsSig = `${stream.rank_stage}|${stream.results.map((item) => item.url).join('|')}`;
+        const resultsSig = `${stream.rank_stage}|${stream.results.map((item) => item.url).join('|')}|${stream.result_insights.map((item) => item.url).join('|')}`;
         if (resultsSig !== this._serpDataSignature) {
             this._serpDataSignature = resultsSig;
             this._animateSerpReorder();
@@ -2328,52 +2325,53 @@ export class PublicSearchPage extends PlatformPage {
     /**
      * FLIP-переупорядочивание SERP: когда refined-этап меняет порядок карточек
      * (keyed repeat переносит те же DOM-узлы), плавно анимируем их из прошлой
-     * позиции в новую. Анимация запускается только при смене порядка, чтобы
-     * стриминг ответа над списком не дёргал карточки.
+     * позиции в новую. Позиции хранятся относительно .source-list: рост
+     * answer-панели над списком и скролл сдвигают контейнер и карточки
+     * одинаково и в дельту не входят — иначе каждый батч стрима гонял бы
+     * весь список на накопленный сдвиг.
      */
     _animateSerpReorder() {
+        const list = this.renderRoot.querySelector('.source-list');
+        if (!(list instanceof HTMLElement)) {
+            this._serpRects = new Map();
+            return;
+        }
+        const listRect = list.getBoundingClientRect();
         const cards = this.renderRoot.querySelectorAll('.source-card[data-url]');
-        const nextRects = new Map<string, DOMRect>();
-        const order: string[] = [];
+        const nextRects = new Map<string, { top: number; left: number }>();
         for (const el of cards) {
             const url = el.getAttribute('data-url');
             if (url === null) {
                 continue;
             }
-            order.push(url);
-            nextRects.set(url, el.getBoundingClientRect());
+            const rect = el.getBoundingClientRect();
+            nextRects.set(url, { top: rect.top - listRect.top, left: rect.left - listRect.left });
         }
-        const orderSignature = order.join('|');
         const prevRects = this._serpRects;
-        const orderChanged = this._serpOrderSignature !== undefined
-            && orderSignature !== this._serpOrderSignature;
-        if (orderChanged) {
-            for (const el of cards) {
-                const url = el.getAttribute('data-url');
-                if (url === null) {
-                    continue;
-                }
-                const oldRect = prevRects.get(url);
-                const newRect = nextRects.get(url);
-                if (oldRect === undefined || newRect === undefined) {
-                    continue;
-                }
-                const dx = oldRect.left - newRect.left;
-                const dy = oldRect.top - newRect.top;
-                if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
-                    continue;
-                }
-                el.animate(
-                    [
-                        { transform: `translate(${dx}px, ${dy}px)` },
-                        { transform: 'translate(0, 0)' },
-                    ],
-                    { duration: 340, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
-                );
-            }
-        }
         this._serpRects = nextRects;
-        this._serpOrderSignature = orderSignature;
+        for (const el of cards) {
+            const url = el.getAttribute('data-url');
+            if (url === null) {
+                continue;
+            }
+            const oldRect = prevRects.get(url);
+            const newRect = nextRects.get(url);
+            if (oldRect === undefined || newRect === undefined) {
+                continue;
+            }
+            const dx = oldRect.left - newRect.left;
+            const dy = oldRect.top - newRect.top;
+            if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
+                continue;
+            }
+            el.animate(
+                [
+                    { transform: `translate(${dx}px, ${dy}px)` },
+                    { transform: 'translate(0, 0)' },
+                ],
+                { duration: 340, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
+            );
+        }
     }
 
     _measureAnswerOverflow() {
@@ -2384,9 +2382,12 @@ export class PublicSearchPage extends PlatformPage {
             }
             return;
         }
+        if (this._answerOverflow) {
+            return;
+        }
         const overflow = el.scrollHeight > ANSWER_COLLAPSE_THRESHOLD_PX;
-        if (overflow !== this._answerOverflow) {
-            this._answerOverflow = overflow;
+        if (overflow) {
+            this._answerOverflow = true;
         }
     }
 

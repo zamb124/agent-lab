@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from apps.geo.config import GeoSettings
 from apps.geo.db.import_lock import geo_import_lock
-from apps.geo.models.geo_address import GeoAddress
+from apps.geo.models.geo_address import GeoAddress, GeoAddressMatchRow
 from apps.geo.models.geo_address_enrich import GeoAddressEnrich
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.models.geo_region import GeoRegion
@@ -129,7 +129,7 @@ class DataMosImportService:
         region: str,
         dataset_id: str,
         kind: str,
-        candidates: list[GeoAddress],
+        candidates: list[GeoAddressMatchRow],
     ) -> JsonObject:
         """Страницы датасета: ``$skip``-курсор → строки → enrich-матч."""
         cursor_key = f"{region}:{dataset_id}"
@@ -145,7 +145,7 @@ class DataMosImportService:
             and skip > 0
         ):
             return {"status": "current", "skip": skip}
-        by_num: dict[str, list[GeoAddress]] = {}
+        by_num: dict[str, list[GeoAddressMatchRow]] = {}
         for row in candidates:
             by_num.setdefault(address_match.norm(row.housenumber), []).append(row)
         matched = 0
@@ -211,7 +211,7 @@ class DataMosImportService:
         *,
         kind: str,
         row: JsonObject,
-        by_num: dict[str, list[GeoAddress]],
+        by_num: dict[str, list[GeoAddressMatchRow]],
     ) -> int:
         """Одна строка датасета → enrich при уверенном матче адреса."""
         if kind != "address":
@@ -246,11 +246,11 @@ class DataMosImportService:
         self,
         street: str,
         housenum: str,
-        by_num: dict[str, list[GeoAddress]],
-    ) -> GeoAddress | None:
+        by_num: dict[str, list[GeoAddressMatchRow]],
+    ) -> GeoAddressMatchRow | None:
         """Лучший кандидат по номеру дома + схожести улицы; ``None`` — промах."""
         target = address_match.street_norm(street)
-        best: GeoAddress | None = None
+        best: GeoAddressMatchRow | None = None
         best_score = 0.0
         for candidate in by_num.get(address_match.norm(housenum), []):
             cand_street = address_match.street_norm(candidate.street)

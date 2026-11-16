@@ -3,6 +3,8 @@
 from apps.geo.models.geo_address import GeoAddress
 from apps.geo.models.geo_barrier import GeoBarrier
 from apps.geo.models.geo_enrich_item import GeoEnrichItem, GeoEnrichStatus
+from apps.geo.models.geo_gar_addr_object import GeoGarAddrObject
+from apps.geo.models.geo_gar_house import GeoGarHouse
 from apps.geo.models.geo_import_state import GeoImportState, GeoImportStatus
 from apps.geo.models.geo_region import GeoRegion, GeoRegionKind
 from apps.geo.models.geo_road_edge import GeoRoadEdge
@@ -16,6 +18,8 @@ from apps.geo.models.geo_turn_restriction import GeoTurnRestriction
 __all__ = [
     "GeoAddress",
     "GeoBarrier",
+    "GeoGarAddrObject",
+    "GeoGarHouse",
     "GeoCursorStatus",
     "GeoEnrichItem",
     "GeoEnrichStatus",

@@ -66,11 +66,22 @@ class GeoAddressEnrich(PlatformModel):
         return await cls.objects.filter(osm_type=osm_type, osm_id=osm_id).delete()
 
     @classmethod
-    async def delete_by_guids(cls, guids: list[str]) -> int:
-        """Снятие enrich-строк по GAR GUID'ам (объекты, выведенные из ФИАС)."""
-        if not guids:
-            return 0
-        return await cls.objects.filter(gar_guid__in=guids).delete()
+    async def delete_stale_gar(cls) -> int:
+        """Снятие enrich-строк, чей ``gar_guid`` не подтверждён ни одним
+        активным домом ГАР (объект выведен из ФИАС)."""
+        rows = await execute_raw(
+            """
+            DELETE FROM geo_address_enrich
+            WHERE gar_guid <> ''
+              AND gar_guid NOT IN (
+                  SELECT guid FROM geo_gar_houses
+                  WHERE active AND guid <> ''
+              )
+            RETURNING id
+            """,
+            using="geo",
+        )
+        return len(rows)
 
     @classmethod
     async def bulk_upsert(

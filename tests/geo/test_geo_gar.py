@@ -17,6 +17,7 @@ from oxyde import execute_raw
 from apps.geo.config import GeoSettings
 from apps.geo.models.geo_address_enrich import GeoAddressEnrich
 from apps.geo.models.geo_enrich_item import GeoEnrichItem, GeoEnrichStatus
+from apps.geo.models.geo_gar_house import GeoGarHouse
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.models.geo_source import GeoSource, GeoSourceKind
 from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
@@ -54,6 +55,8 @@ async def _clean():
     _ = await execute_raw(
         "DELETE FROM geo_enrich_queue WHERE kind = 'gar_unresolved'", using="geo"
     )
+    _ = await execute_raw("DELETE FROM geo_gar_houses", using="geo")
+    _ = await execute_raw("DELETE FROM geo_gar_addr_objects", using="geo")
     _ = await execute_raw(
         "DELETE FROM geo_source_cursors WHERE source = 'gar'", using="geo"
     )
@@ -170,14 +173,48 @@ async def test_gar_delta_chain_merges_state_and_deactivates(
     assert cursor.cursor == "100"
 
 
+async def test_gar_parsed_cursor_resumes_match(
+    service: GarImportService, _seed_addresses: None
+) -> None:
+    """Курсор ``{v}:parsed``: таблицы применены, матч доигрывается без повторного разбора."""
+    _ = await service.run_sync()
+    _ = await GeoSourceCursor.upsert_progress(
+        source="gar",
+        region=_REGION,
+        cursor="100:parsed",
+        rows_done=6,
+        status=GeoCursorStatus.RUNNING,
+    )
+    _ = await execute_raw("DELETE FROM geo_address_enrich", using="geo")
+    _ = await execute_raw(
+        "DELETE FROM geo_enrich_queue WHERE kind = 'gar_unresolved'", using="geo"
+    )
+    _ = await execute_raw(
+        "UPDATE geo_addresses SET gar_guid = '', canonical_name = '' "
+        "WHERE generation = $1",
+        [_GEN],
+        using="geo",
+    )
+    result = await service.run_sync()
+    region = result.regions[_REGION]
+    assert region.status == "done"
+    assert region.mode == "resume"
+    assert region.matched == 4
+    assert region.unresolved == 1
+    cursor = await GeoSourceCursor.by_source_region("gar", _REGION)
+    assert cursor is not None
+    assert cursor.status == GeoCursorStatus.DONE
+    assert cursor.cursor == "100"
+
+
 async def test_gar_stateless_cursor_falls_back_to_full(
-    service: GarImportService, settings: GeoSettings, _seed_addresses: None
+    service: GarImportService, _seed_addresses: None
 ) -> None:
     _ = await GeoSourceCursor.upsert_progress(
         source="gar", region=_REGION, cursor="97", rows_done=0,
         status=GeoCursorStatus.DONE,
     )
-    assert not (Path(settings.gar_work_dir) / f"state_{_REGION}.json").exists()
+    assert not await GeoGarHouse.has_region_rows(region=_REGION)
     result = await service.run_sync()
     assert result.regions[_REGION].mode == "full"
 

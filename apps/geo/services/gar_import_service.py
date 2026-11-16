@@ -5,33 +5,43 @@
 память не зависит от размера выгрузки). Каноническое имя дома собирается из
 материализованного ``PATH`` иерархии: цепочка «тип имя» + «д. N».
 
+Bounded memory end-to-end: состояние региона — таблицы
+``geo_gar_addr_objects``/``geo_gar_houses``, а не Python-коллекции и
+``state_{region}.json``. Парсер-тред льёт строки батчами в очередь с
+backpressure, консьюмер пишет их в Postgres; иерархия доливает ``path``
+UPDATE FROM VALUES без ``house_ids`` в памяти. Матч читает дома
+keyset-страницами ``object_id``, имена для PATH страницы подтягивает
+одним запросом, результаты (enrich, живые колонки, очередь промахов)
+сливаются чанками.
+
+Дельта-архивы инкрементальны: PATH и имена живут в таблицах состояния,
+дельта мержится upsert'ами. Курсор ``geo_source_cursors(source='gar')`` —
+последний применённый VersionId; ``{v}:parsed`` — полный архив применён,
+матч не завершён (резюме без повторного разбора); ``{v}:applying`` —
+полный импорт оборван на записи (база частична — только повторная
+полная выгрузка). Применение идемпотентно: перезапуск переигрывает
+версию с нуля.
+
 Матч к ``geo_addresses``: регион + нормализованный номер дома → схожесть
 улицы (``NAME`` ⊆ street, иначе SequenceMatcher). Матч → upsert
 ``geo_address_enrich`` и живые колонки ``gar_guid``/``canonical_name`` —
 админ-поля не трогаются; промах → ``geo_enrich_queue`` kind
-``gar_unresolved`` (паркуется до появления резолвера).
-
-Дельта-архивы инкрементальны: PATH дома разрешается через персистентное
-состояние ``state_{region}.json`` в ``gar_work_dir`` (addr-имена, дома,
-иерархия), дельта мержится в него. Курсор без файла состояния → полная
-выгрузка: контекст цепочки восстановить неоткуда.
-
-Курсор ``geo_source_cursors(source='gar')`` — последний применённый
-VersionId. Свежее → цепочка дельт ``GetAllDownloadFileInfo``; цепочка
-длиннее ``gar_max_delta_chain``, курсора нет или state-файл потерян →
-полная выгрузка. Применение идемпотентно: перезапуск переигрывает версию
-с нуля.
+``gar_unresolved`` (паркуется до появления резолвера). Снятие enrich —
+``delete_stale_gar``: guid, не подтверждённый активным домом ни одного
+региона, теряет и enrich-строку, и живые колонки.
 """
 
 from __future__ import annotations
 
 import asyncio
+import queue
 import re
+import threading
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import IO, ClassVar, NamedTuple, Protocol
+from typing import IO, ClassVar, NamedTuple, Protocol, TypeVar
 from xml.etree.ElementTree import Element
 
 import defusedxml.ElementTree as _det
@@ -40,9 +50,11 @@ from remotezip import RemoteZip
 
 from apps.geo.config import GeoSettings
 from apps.geo.db.import_lock import geo_import_lock
-from apps.geo.models.geo_address import GeoAddress
+from apps.geo.models.geo_address import GeoAddress, GeoAddressMatchRow
 from apps.geo.models.geo_address_enrich import GeoAddressEnrich
 from apps.geo.models.geo_enrich_item import GeoEnrichItem
+from apps.geo.models.geo_gar_addr_object import GeoGarAddrObject
+from apps.geo.models.geo_gar_house import GarHouseRow, GeoGarHouse
 from apps.geo.models.geo_import_state import GeoImportState
 from apps.geo.models.geo_source import GeoSource
 from apps.geo.models.geo_source_cursor import GeoCursorStatus, GeoSourceCursor
@@ -99,46 +111,43 @@ class _ApplyCounts(BaseModel):
     enqueued: int = 0
 
 
-class _HouseRow(NamedTuple):
-    """Дом из ``AS_HOUSES``: стабильный ключ — ``OBJECTID``.
+class _AddrChunk(NamedTuple):
+    """Батч имён AS_ADDR_OBJ ``(object_id, name)``."""
 
-    NamedTuple, не BaseModel: миллион+ строк Москвы — pydantic-объект
-    стоит ~400B против ~120B у tuple; разница — сотни MiB в пике.
-    """
-
-    object_id: int
-    guid: str
-    housenum: str
-    addnum1: str
-    addnum2: str
+    rows: list[tuple[int, str]]
 
 
-class _ParsedArchive(BaseModel):
-    """Результат разбора архива одного региона.
+class _HouseChunk(NamedTuple):
+    """Батч активных домов AS_HOUSES."""
 
-    ``houses`` — активные дома этого архива (область матча); ``gone_houses``
-    — деактивированные OBJECTID для чистки состояния; ``addr_names`` и
-    ``paths`` — строки адресных объектов и иерархии этого архива.
-    """
-
-    addr_names: dict[int, str]
-    houses: list[_HouseRow]
-    paths: dict[int, str]
-    gone_houses: list[int]
+    rows: list[GarHouseRow]
 
 
-class _GarState(BaseModel):
-    """Персистентное состояние региона: контекст для инкрементальных дельт.
+class _GoneChunk(NamedTuple):
+    """Батч OBJECTID выведенных из ФИАС домов."""
 
-    ``houses`` — ``object_id → guid``: единственное поле дома, нужное
-    состоянию (снятие enrich по guid при деактивации). Полные рядки
-    живут только в разбираемом архиве — хранить их в состоянии значит
-    удвоить постоянную память синка.
-    """
+    rows: list[int]
 
-    addr_names: dict[int, str] = {}
-    houses: dict[int, str] = {}
-    paths: dict[int, str] = {}
+
+class _HierChunk(NamedTuple):
+    """Батч иерархии ``(object_id, PATH)``."""
+
+    rows: list[tuple[int, str]]
+
+
+class _StreamDone(NamedTuple):
+    """Конец потока разбора."""
+
+
+class _StreamError(NamedTuple):
+    """Ошибка потока разбора — консьюмер пробрасывает."""
+
+    error: BaseException
+
+
+_Batch = (
+    _AddrChunk | _HouseChunk | _GoneChunk | _HierChunk | _StreamDone | _StreamError
+)
 
 
 class _DefusedElementTree(Protocol):
@@ -189,86 +198,161 @@ def _active(attrs: dict[str, str]) -> bool:
     return attrs.get("ISACTUAL", "1") == "1" and attrs.get("ISACTIVE", "1") == "1"
 
 
-def _parse_archive(archive: zipfile.ZipFile, region_code: str) -> _ParsedArchive:
-    """Потоковый разбор ``gar_xml.zip``: три таблицы директории региона.
+_STREAM_BATCH = 5000
+_QUEUE_BATCHES = 8
+_PUT_TIMEOUT_SECONDS = 0.5
+_MATCH_PAGE = 5000
+_PROGRESS_LOG_PAGES = 20
 
-    Порядок членов в zip не гарантирован — таблицы разбираются явно по
-    имени: сначала справочник адресообразующих объектов и дома, затем
-    иерархия отфильтровывается по OBJECTID найденных домов.
-    """
-    member_re = re.compile(_MEMBER_RE_TEMPLATE.format(code=re.escape(region_code)), re.IGNORECASE)
-    addr_names: dict[int, str] = {}
-    houses: list[_HouseRow] = []
-    paths: dict[int, str] = {}
-    gone_houses: list[int] = []
+_RowT = TypeVar("_RowT")
+
+
+def _push(
+    out: queue.Queue[_Batch], item: _Batch, stop: threading.Event
+) -> bool:
+    """Батч в очередь с backpressure; ``False`` — консьюмер остановил поток."""
+    while not stop.is_set():
+        try:
+            out.put(item, timeout=_PUT_TIMEOUT_SECONDS)
+            return True
+        except queue.Full:
+            continue
+    return False
+
+
+def _stream_table(
+    archive: zipfile.ZipFile,
+    members: dict[str, str],
+    kind: str,
+    out: queue.Queue[_Batch],
+    stop: threading.Event,
+    row_of: Callable[[dict[str, str]], _RowT | None],
+    chunk_of: Callable[[list[_RowT]], _Batch],
+) -> bool:
+    """Строки таблиц ``kind`` → батчи в очередь; ``False`` — останов."""
+    for name, member_kind in members.items():
+        if member_kind != kind or stop.is_set():
+            continue
+        batch: list[_RowT] = []
+        with archive.open(name) as stream:
+            for attrs in _iter_row_attrs(stream):
+                row = row_of(attrs)
+                if row is not None:
+                    batch.append(row)
+                if len(batch) >= _STREAM_BATCH:
+                    if not _push(out, chunk_of(batch), stop):
+                        return False
+                    batch = []
+        if batch and not _push(out, chunk_of(batch), stop):
+            return False
+    return True
+
+
+def _addr_row(attrs: dict[str, str]) -> tuple[int, str] | None:
+    """Активная строка AS_ADDR_OBJ → ``(object_id, "тип имя")``."""
+    if not _active(attrs):
+        return None
+    name_part = attrs.get("NAME", "")
+    type_part = attrs.get("TYPENAME", "")
+    return int(attrs["OBJECTID"]), f"{type_part} {name_part}".strip()
+
+
+def _hier_row(attrs: dict[str, str]) -> tuple[int, str]:
+    """Строка AS_ADM_HIERARCHY → ``(object_id, PATH)``."""
+    return int(attrs["OBJECTID"]), attrs.get("PATH", "")
+
+
+def _stream_houses(
+    archive: zipfile.ZipFile,
+    members: dict[str, str],
+    out: queue.Queue[_Batch],
+    stop: threading.Event,
+) -> bool:
+    """AS_HOUSES: активные → ``_HouseChunk``, выведенные → ``_GoneChunk``."""
+    houses: list[GarHouseRow] = []
+    gone: list[int] = []
+    for name, member_kind in members.items():
+        if member_kind != "AS_HOUSES" or stop.is_set():
+            continue
+        with archive.open(name) as stream:
+            for attrs in _iter_row_attrs(stream):
+                object_id = int(attrs["OBJECTID"])
+                if _active(attrs):
+                    houses.append(
+                        GarHouseRow(
+                            object_id=object_id,
+                            guid=attrs.get("OBJECTGUID", ""),
+                            housenum=attrs.get("HOUSENUM", ""),
+                            addnum1=attrs.get("ADDNUM1", ""),
+                            addnum2=attrs.get("ADDNUM2", ""),
+                        )
+                    )
+                    if len(houses) >= _STREAM_BATCH:
+                        if not _push(out, _HouseChunk(rows=houses), stop):
+                            return False
+                        houses = []
+                else:
+                    gone.append(object_id)
+                    if len(gone) >= _STREAM_BATCH:
+                        if not _push(out, _GoneChunk(rows=gone), stop):
+                            return False
+                        gone = []
+    if houses and not _push(out, _HouseChunk(rows=houses), stop):
+        return False
+    return not gone or _push(out, _GoneChunk(rows=gone), stop)
+
+
+def _stream_zip(
+    archive: zipfile.ZipFile,
+    region_code: str,
+    out: queue.Queue[_Batch],
+    stop: threading.Event,
+) -> None:
+    """Таблицы директории региона → батчи: имена → дома → иерархия."""
+    member_re = re.compile(
+        _MEMBER_RE_TEMPLATE.format(code=re.escape(region_code)), re.IGNORECASE
+    )
     members: dict[str, str] = {}
     for name in archive.namelist():
         match = member_re.match(name)
         if match is not None:
             members[name] = match.group(2)
-    for name, kind in members.items():
-        if kind != "AS_ADDR_OBJ":
-            continue
-        with archive.open(name) as stream:
-            for attrs in _iter_row_attrs(stream):
-                if not _active(attrs):
-                    continue
-                name_part = attrs.get("NAME", "")
-                type_part = attrs.get("TYPENAME", "")
-                addr_names[int(attrs["OBJECTID"])] = (
-                    f"{type_part} {name_part}".strip()
-                )
-    house_ids: set[int] = set()
-    for name, kind in members.items():
-        if kind != "AS_HOUSES":
-            continue
-        with archive.open(name) as stream:
-            for attrs in _iter_row_attrs(stream):
-                object_id = int(attrs["OBJECTID"])
-                if not _active(attrs):
-                    gone_houses.append(object_id)
-                    continue
-                houses.append(
-                    _HouseRow(
-                        object_id=object_id,
-                        guid=attrs.get("OBJECTGUID", ""),
-                        housenum=attrs.get("HOUSENUM", ""),
-                        addnum1=attrs.get("ADDNUM1", ""),
-                        addnum2=attrs.get("ADDNUM2", ""),
-                    )
-                )
-                house_ids.add(object_id)
-    for name, kind in members.items():
-        if kind != "AS_ADM_HIERARCHY":
-            continue
-        with archive.open(name) as stream:
-            for attrs in _iter_row_attrs(stream):
-                object_id = int(attrs["OBJECTID"])
-                if object_id in house_ids:
-                    paths[object_id] = attrs.get("PATH", "")
-    del house_ids
-    return _ParsedArchive(
-        addr_names=addr_names, houses=houses, paths=paths, gone_houses=gone_houses
+    if not _stream_table(
+        archive, members, "AS_ADDR_OBJ", out, stop, _addr_row, _AddrChunk
+    ):
+        return
+    if not _stream_houses(archive, members, out, stop):
+        return
+    _ = _stream_table(
+        archive, members, "AS_ADM_HIERARCHY", out, stop, _hier_row, _HierChunk
     )
 
 
-def _parse_local(path: str, region_code: str) -> _ParsedArchive:
-    """Разбор локального zip (``file://`` — тесты и ручные импорты)."""
-    with zipfile.ZipFile(path) as archive:
-        return _parse_archive(archive, region_code)
+def _stream_archive(
+    url: str,
+    region_code: str,
+    *,
+    timeout: float,
+    out: queue.Queue[_Batch],
+    stop: threading.Event,
+) -> None:
+    """Тред-производитель разбора: локальный zip либо HTTP Range.
 
-
-def _parse_remote(
-    url: str, region_code: str, *, timeout: float
-) -> _ParsedArchive:
-    """Разбор zip по HTTP Range: central directory + только members региона.
-
-    Полный ``gar_xml.zip`` (~54 GiB) на диск не скачивается — remotezip читает
-    каталог архива и байтовые диапазоны выбранных файлов. Это устраняет и
-    расход PVC, и cgroup-OOM на dirty page cache при стриминге записи.
+    Полный ``gar_xml.zip`` (~54 GiB) на диск не скачивается — remotezip
+    читает central directory и байтовые диапазоны членов региона. Конец
+    потока и ошибка уходят в очередь — консьюмер никогда не висит на get.
     """
-    with RemoteZip(url, timeout=timeout) as archive:
-        return _parse_archive(archive, region_code)
+    try:
+        if url.startswith("file://"):
+            with zipfile.ZipFile(url.removeprefix("file://")) as archive:
+                _stream_zip(archive, region_code, out, stop)
+        else:
+            with RemoteZip(url, timeout=timeout) as archive:
+                _stream_zip(archive, region_code, out, stop)
+    except Exception as exc:
+        _ = _push(out, _StreamError(error=exc), stop)
+        return
+    _ = _push(out, _StreamDone(), stop)
 
 
 _norm = address_match.norm
@@ -276,7 +360,7 @@ _street_norm = address_match.street_norm
 
 
 def _canonical_name(
-    addr_names: dict[int, str], path: str, house: _HouseRow
+    addr_names: dict[int, str], path: str, house: GarHouseRow
 ) -> str:
     """«г. Москва, ул. Тверская, д. 1» из материализованного PATH."""
     parts: list[str] = []
@@ -314,7 +398,7 @@ class GarImportService:
         async with geo_import_lock(self._settings.database.geo_url) as acquired:
             if not acquired:
                 return GarSyncResult(skipped="locked")
-            await asyncio.to_thread(self._gc_orphan_archives)
+            await asyncio.to_thread(self._gc_work_dir)
             async with get_httpx_client(
                 timeout=self._settings.gar_http_timeout_seconds
             ) as client:
@@ -331,6 +415,12 @@ class GarImportService:
                         code=code,
                         last=last,
                         infos=all_infos,
+                    )
+                if any(sync.status == "done" for sync in regions.values()):
+                    generation = await GeoImportState.active_generation()
+                    _ = await GeoAddressEnrich.delete_stale_gar()
+                    _ = await GeoAddress.clear_stale_gar_attrs(
+                        generation=generation
                     )
                 return GarSyncResult(regions=regions)
 
@@ -361,57 +451,79 @@ class GarImportService:
         last: _VersionInfo,
         infos: list[_VersionInfo],
     ) -> GarRegionSync:
-        """План по курсору: дельта-цепочка к ``last`` или полная выгрузка."""
+        """План по курсору: резюме матча, дельта-цепочка или полная выгрузка."""
         cursor = await GeoSourceCursor.by_source_region(_SOURCE, region)
-        done_version = (
-            int(cursor.cursor)
-            if cursor is not None and cursor.cursor.isdigit()
-            else 0
-        )
-        if done_version >= last.version_id and (
-            cursor is not None and cursor.status == GeoCursorStatus.DONE
+        raw = cursor.cursor if cursor is not None else ""
+        done_version = int(raw) if raw.isdigit() else 0
+        if (
+            cursor is not None
+            and cursor.status == GeoCursorStatus.DONE
+            and done_version >= last.version_id
         ):
             return GarRegionSync(status="current", version=done_version)
-        pending = [info for info in infos if info.version_id > done_version]
-        state_path = self._state_path(region)
-        chain_ok = (
-            bool(pending)
-            and pending[-1].version_id >= last.version_id
-            and len(pending) <= self._settings.gar_max_delta_chain
-            and all(info.delta_url for info in pending)
-            and state_path.exists()
-        )
         try:
+            if raw == f"{last.version_id}:parsed" and (
+                await GeoGarHouse.has_region_rows(region=region)
+            ):
+                counts = await self._match_and_apply(
+                    region=region, version=last.version_id
+                )
+                await self._cursor_done(
+                    region=region, version=last.version_id, matched=counts.matched
+                )
+                return GarRegionSync(
+                    status="done",
+                    mode="resume",
+                    version=last.version_id,
+                    matched=counts.matched,
+                    unresolved=counts.unresolved,
+                )
+            pending = [info for info in infos if info.version_id > done_version]
+            applying = raw.endswith(":applying") or raw.endswith(":parsed")
+            chain_ok = (
+                not applying
+                and bool(pending)
+                and pending[-1].version_id >= last.version_id
+                and len(pending) <= self._settings.gar_max_delta_chain
+                and all(info.delta_url for info in pending)
+                and await GeoGarHouse.has_region_rows(region=region)
+            )
             if chain_ok:
-                applied = 0
                 matched = 0
                 unresolved = 0
                 for info in pending:
-                    counts = await self._apply_archive(
+                    _ = await self._apply_archive(
                         url=info.delta_url,
                         region=region,
                         code=code,
                         version=info.version_id,
                         mode="delta",
                     )
-                    applied += 1
+                    counts = await self._match_and_apply(
+                        region=region, version=info.version_id
+                    )
                     matched += counts.matched
                     unresolved += counts.unresolved
-                _ = await GeoSourceCursor.upsert_progress(
-                    source=_SOURCE,
+                    _ = await GeoSourceCursor.upsert_progress(
+                        source=_SOURCE,
+                        region=region,
+                        cursor=str(info.version_id),
+                        rows_done=matched,
+                        status=GeoCursorStatus.RUNNING,
+                    )
+                await self._cursor_done(
                     region=region,
-                    cursor=str(pending[-1].version_id),
-                    rows_done=matched,
-                    status=GeoCursorStatus.DONE,
+                    version=pending[-1].version_id,
+                    matched=matched,
                 )
                 return GarRegionSync(
                     status="done",
                     mode="delta",
-                    versions=applied,
+                    versions=len(pending),
                     matched=matched,
                     unresolved=unresolved,
                 )
-            counts = await self._apply_archive(
+            houses = await self._apply_archive(
                 url=last.full_url,
                 region=region,
                 code=code,
@@ -421,9 +533,15 @@ class GarImportService:
             _ = await GeoSourceCursor.upsert_progress(
                 source=_SOURCE,
                 region=region,
-                cursor=str(last.version_id),
-                rows_done=counts.matched,
-                status=GeoCursorStatus.DONE,
+                cursor=f"{last.version_id}:parsed",
+                rows_done=houses,
+                status=GeoCursorStatus.RUNNING,
+            )
+            counts = await self._match_and_apply(
+                region=region, version=last.version_id
+            )
+            await self._cursor_done(
+                region=region, version=last.version_id, matched=counts.matched
             )
             return GarRegionSync(
                 status="done",
@@ -438,6 +556,18 @@ class GarImportService:
             )
             raise
 
+    async def _cursor_done(
+        self, *, region: str, version: int, matched: int
+    ) -> None:
+        """Курсор на применённую версию: тик завершён."""
+        _ = await GeoSourceCursor.upsert_progress(
+            source=_SOURCE,
+            region=region,
+            cursor=str(version),
+            rows_done=matched,
+            status=GeoCursorStatus.DONE,
+        )
+
     async def _apply_archive(
         self,
         *,
@@ -446,133 +576,164 @@ class GarImportService:
         code: str,
         version: int,
         mode: str,
-    ) -> _ApplyCounts:
-        """Распарсить (Range/локально) → merge состояния → матч → enrich."""
-        if url.startswith("file://"):
-            parsed = await asyncio.to_thread(
-                _parse_local, url.removeprefix("file://"), code
+    ) -> int:
+        """Стриминг-разбор архива → таблицы состояния; возвращает число домов."""
+        if mode == "full":
+            _ = await GeoGarHouse.delete_region(region=region)
+            _ = await GeoGarAddrObject.delete_region(region=region)
+            _ = await GeoSourceCursor.upsert_progress(
+                source=_SOURCE,
+                region=region,
+                cursor=f"{version}:applying",
+                rows_done=0,
+                status=GeoCursorStatus.RUNNING,
             )
-        else:
-            parsed = await asyncio.to_thread(
-                _parse_remote,
+        out: queue.Queue[_Batch] = queue.Queue(maxsize=_QUEUE_BATCHES)
+        stop = threading.Event()
+        producer = asyncio.create_task(
+            asyncio.to_thread(
+                _stream_archive,
                 url,
                 code,
                 timeout=self._settings.gar_http_timeout_seconds,
+                out=out,
+                stop=stop,
             )
-        state, removed_guids = self._merge_state(region, parsed, mode=mode)
-        return await self._match_and_apply(
-            region=region,
-            version=version,
-            state=state,
-            houses=parsed.houses,
-            removed_guids=removed_guids,
         )
-
-    def _state_path(self, region: str) -> Path:
-        """Файл персистентного состояния региона в ``gar_work_dir``."""
-        return Path(self._settings.gar_work_dir) / f"state_{region}.json"
-
-    def _merge_state(
-        self, region: str, parsed: _ParsedArchive, *, mode: str
-    ) -> tuple[_GarState, list[str]]:
-        """Слияние архива с состоянием региона; ``full`` заменяет его целиком.
-
-        Возвращает состояние и GUID'ы домов, выведенных из ФИАС — их
-        enrich-строки снимаются: источник больше не подтверждает объект.
-        """
-        state_path = self._state_path(region)
-        previous = (
-            _GarState.model_validate_json(state_path.read_text())
-            if state_path.exists()
-            else _GarState()
-        )
-        if mode == "full":
-            state = _GarState(
-                addr_names=parsed.addr_names,
-                houses={house.object_id: house.guid for house in parsed.houses},
-                paths=parsed.paths,
+        houses = 0
+        try:
+            while True:
+                batch = await asyncio.to_thread(out.get)
+                if isinstance(batch, _StreamDone):
+                    break
+                if isinstance(batch, _StreamError):
+                    raise batch.error
+                if isinstance(batch, _AddrChunk):
+                    _ = await GeoGarAddrObject.bulk_upsert_names(
+                        region=region, rows=batch.rows
+                    )
+                elif isinstance(batch, _HouseChunk):
+                    houses += len(batch.rows)
+                    _ = await GeoGarHouse.bulk_upsert_active(
+                        region=region, version=version, rows=batch.rows
+                    )
+                elif isinstance(batch, _GoneChunk):
+                    if mode == "delta":
+                        _ = await GeoGarHouse.bulk_deactivate(
+                            region=region,
+                            version=version,
+                            object_ids=batch.rows,
+                        )
+                else:
+                    _ = await GeoGarHouse.bulk_set_paths(
+                        region=region, rows=batch.rows
+                    )
+            await producer
+        except BaseException:
+            stop.set()
+            producer.add_done_callback(
+                lambda task: None if task.cancelled() else task.exception()
             )
-            removed_guids = [
-                guid
-                for object_id, guid in previous.houses.items()
-                if object_id not in state.houses and guid
-            ]
-        else:
-            state = previous
-            state.addr_names.update(parsed.addr_names)
-            state.paths.update(parsed.paths)
-            for house in parsed.houses:
-                state.houses[house.object_id] = house.guid
-            removed_guids: list[str] = []
-            for gone_id in parsed.gone_houses:
-                gone = state.houses.pop(gone_id, None)
-                if gone:
-                    removed_guids.append(gone)
-                _ = state.paths.pop(gone_id, None)
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        _ = state_path.write_text(state.model_dump_json())
-        return state, removed_guids
+            raise
+        return houses
 
-    def _gc_orphan_archives(self) -> None:
-        """Снос ``gar_*.zip``, оставшихся после SIGKILL воркера (OOM/эвикт).
+    def _gc_work_dir(self) -> None:
+        """Снос артефактов ``gar_work_dir`` после SIGKILL воркера (OOM/эвикт).
 
-        ``finally: unlink`` не срабатывает при kill — без прохода при старте
-        мёртвые десятки GiB копятся на PVC бессрочно.
+        ``gar_*.zip`` — недокачанные архивы старого пути загрузки;
+        ``state_*.json`` — состояние до-табличной эпохи: таблицы его
+        заменили, файлы мёртвым грузом лежали бы на PVC бессрочно.
         """
         work_dir = Path(self._settings.gar_work_dir)
         if not work_dir.is_dir():
             return
         for orphan in work_dir.glob("gar_*.zip"):
             orphan.unlink(missing_ok=True)
+        for legacy in work_dir.glob("state_*.json"):
+            legacy.unlink(missing_ok=True)
 
     async def _match_and_apply(
-        self,
-        *,
-        region: str,
-        version: int,
-        state: _GarState,
-        houses: list[_HouseRow],
-        removed_guids: list[str],
+        self, *, region: str, version: int
     ) -> _ApplyCounts:
-        """Матч домов к справочнику → enrich bulk + живые колонки + очередь."""
+        """Матч домов архива к справочнику keyset-страницами → enrich/очередь."""
         generation = await GeoImportState.active_generation()
-        _ = await GeoAddressEnrich.delete_by_guids(removed_guids)
-        _ = await GeoAddress.clear_gar_attrs(
-            guids=removed_guids, generation=generation
-        )
         candidates = await GeoAddress.list_for_enrich_match(
             region=region, generation=generation
         )
-        by_num: dict[str, list[GeoAddress]] = {}
+        by_num: dict[str, list[GeoAddressMatchRow]] = {}
         for row in candidates:
             by_num.setdefault(_norm(row.housenumber), []).append(row)
-        matched_rows: list[tuple[str, int, str, str]] = []
-        unresolved: list[JsonObject] = []
-        for house in houses:
-            path = state.paths.get(house.object_id, "")
-            canonical = _canonical_name(state.addr_names, path, house)
-            street_name, path_names = self._street_of(path, state.addr_names)
-            hit = self._match_house(house, street_name, path_names, by_num)
-            if hit is None:
-                unresolved.append(
-                    {
-                        "gar_objectid": str(house.object_id),
-                        "gar_guid": house.guid,
-                        "canonical_name": canonical,
-                        "street": street_name,
-                        "housenum": house.housenum,
-                        "region": region,
-                    }
+        houses = 0
+        matched = 0
+        unresolved_count = 0
+        enqueued = 0
+        written = 0
+        last_object_id = 0
+        pages = 0
+        while True:
+            page = await GeoGarHouse.match_page(
+                region=region,
+                version=version,
+                last_object_id=last_object_id,
+                limit=_MATCH_PAGE,
+            )
+            if not page:
+                break
+            pages += 1
+            houses += len(page)
+            last_object_id = page[-1].object_id
+            name_ids = {
+                int(raw_id)
+                for house in page
+                for raw_id in house.path.split(".")
+                if raw_id.isdigit()
+            }
+            addr_names = await GeoGarAddrObject.names_for(
+                region=region, object_ids=sorted(name_ids)
+            )
+            matched_rows: list[tuple[str, int, str, str]] = []
+            unresolved: list[JsonObject] = []
+            for house in page:
+                canonical = _canonical_name(addr_names, house.path, house)
+                street_name, path_names = self._street_of(
+                    house.path, addr_names
                 )
-                continue
-            matched_rows.append((hit.osm_type, hit.osm_id, house.guid, canonical))
-        written = await GeoAddressEnrich.bulk_upsert(matched_rows)
-        _ = await GeoAddress.bulk_set_gar_attrs(matched_rows, generation=generation)
-        enqueued = await GeoEnrichItem.enqueue_missing(
-            kind=UNRESOLVED_KIND,
-            payloads=unresolved,
-            dedupe_field="gar_objectid",
-        )
+                hit = self._match_house(house, street_name, path_names, by_num)
+                if hit is None:
+                    unresolved.append(
+                        {
+                            "gar_objectid": str(house.object_id),
+                            "gar_guid": house.guid,
+                            "canonical_name": canonical,
+                            "street": street_name,
+                            "housenum": house.housenum,
+                            "region": region,
+                        }
+                    )
+                    continue
+                matched_rows.append(
+                    (hit.osm_type, hit.osm_id, house.guid, canonical)
+                )
+            matched += len(matched_rows)
+            unresolved_count += len(unresolved)
+            written += await GeoAddressEnrich.bulk_upsert(matched_rows)
+            _ = await GeoAddress.bulk_set_gar_attrs(
+                matched_rows, generation=generation
+            )
+            enqueued += await GeoEnrichItem.enqueue_missing(
+                kind=UNRESOLVED_KIND,
+                payloads=unresolved,
+                dedupe_field="gar_objectid",
+            )
+            if pages % _PROGRESS_LOG_PAGES == 0:
+                _logger.info(
+                    "geo.gar.match_progress",
+                    region=region,
+                    version=version,
+                    houses=houses,
+                    matched=matched,
+                    unresolved=unresolved_count,
+                )
         await GeoStats.set_rows(
             generation=0,
             source=_SOURCE,
@@ -585,20 +746,20 @@ class GarImportService:
             source=_SOURCE,
             region=region,
             entity="unresolved",
-            rows=len(unresolved),
+            rows=unresolved_count,
         )
         _logger.info(
             "geo.gar.apply_done",
             region=region,
             version=version,
-            houses=len(houses),
-            matched=len(matched_rows),
-            unresolved=len(unresolved),
+            houses=houses,
+            matched=matched,
+            unresolved=unresolved_count,
         )
         return _ApplyCounts(
-            houses=len(houses),
-            matched=len(matched_rows),
-            unresolved=len(unresolved),
+            houses=houses,
+            matched=matched,
+            unresolved=unresolved_count,
             enqueued=enqueued,
         )
 
@@ -618,11 +779,11 @@ class GarImportService:
 
     def _match_house(
         self,
-        house: _HouseRow,
+        house: GarHouseRow,
         street_name: str,
         path_names: set[str],
-        by_num: dict[str, list[GeoAddress]],
-    ) -> GeoAddress | None:
+        by_num: dict[str, list[GeoAddressMatchRow]],
+    ) -> GeoAddressMatchRow | None:
         """Лучший кандидат по номеру дома + схожести улицы; ``None`` — промах."""
         variants = {_norm(house.housenum)}
         if house.addnum1:
@@ -631,7 +792,7 @@ class GarImportService:
         if house.addnum2:
             variants.add(_norm(f"{house.housenum}стр{house.addnum2}"))
             variants.add(_norm(f"{house.housenum}{house.addnum2}"))
-        best: GeoAddress | None = None
+        best: GeoAddressMatchRow | None = None
         best_score = 0.0
         street_norm = _street_norm(street_name)
         for variant in variants:
