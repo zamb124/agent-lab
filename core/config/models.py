@@ -1841,12 +1841,27 @@ class MailLocalDevConfig(BaseModel):
     mailbox_passwords: dict[str, str] = Field(default_factory=dict)
 
 
+class MailTlsConfig(BaseModel):
+    """TLS для IMAP-подключений к generic IMAP/SMTP серверам.
+
+    ``extra_ca_file`` — PEM с дополнительным CA для self-hosted почты с
+    private CA (цепочка проверяется по-настоящему, hostname — по
+    ``check_hostname``). ``check_hostname=False`` допустимо только когда
+    CN сертификата не содержит имя хоста (например, self-signed тестовый
+    MTA на loopback).
+    """
+
+    extra_ca_file: str | None = None
+    check_hostname: bool = True
+
+
 class MailConfig(BaseModel):
     """Платформенная почта: system auto-seed + live test gates."""
 
     system: MailSystemConfig = Field(default_factory=MailSystemConfig)
     live_test: MailLiveTestConfig = Field(default_factory=MailLiveTestConfig)
     local_dev: MailLocalDevConfig = Field(default_factory=MailLocalDevConfig)
+    tls: MailTlsConfig = Field(default_factory=MailTlsConfig)
 
 
 class GoogleWorkspaceSystemConfig(BaseModel):

@@ -69,6 +69,30 @@ describe('platform-button', () => {
         const height = qs(shadow(el), 'button').getBoundingClientRect().height;
         expect(height).to.be.closeTo(32, 1);
     });
+
+    it('density="compact" applies compact padding to the inner button', async () => {
+        const el = await fixture<TestEl>(html`<platform-button density="compact">x</platform-button>`);
+        const cs = getComputedStyle(qs(shadow(el), 'button'));
+        expect(cs.paddingTop).to.equal('6px');
+        expect(cs.paddingRight).to.equal('16px');
+    });
+
+    it('density="dense" applies dense padding to the inner button', async () => {
+        const el = await fixture<TestEl>(html`<platform-button density="dense">x</platform-button>`);
+        const cs = getComputedStyle(qs(shadow(el), 'button'));
+        expect(cs.paddingTop).to.equal('4px');
+        expect(cs.paddingRight).to.equal('12px');
+    });
+
+    it('size attribute is rejected — use density instead', async () => {
+        const el = await fixture<TestEl>(html`<platform-button>x</platform-button>`);
+        expect(() => el.attributeChangedCallback('size', null, 'sm')).to.throw('density');
+    });
+
+    it('busy attribute is rejected — use loading instead', async () => {
+        const el = await fixture<TestEl>(html`<platform-button>x</platform-button>`);
+        expect(() => el.attributeChangedCallback('busy', null, '')).to.throw('loading');
+    });
 });
 
 describe('platform-switch', () => {

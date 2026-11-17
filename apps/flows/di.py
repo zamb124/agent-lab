@@ -124,6 +124,7 @@ def tool_registry(
     node_constructor: NodeConstructor,
     flow_factory: FlowFactory,
     billing_service: BillingService,
+    mail_service: MailService,
 ) -> ToolRegistry:
     registry = ToolRegistry(
         clients=builtin_tool_clients(
@@ -135,6 +136,7 @@ def tool_registry(
             lara_facade=lara_facade,
             tool_approval_store=tool_approval_store,
             billing_service=billing_service,
+            mail_service=mail_service,
         ),
         node_constructor=node_constructor,
         flow_factory=flow_factory,

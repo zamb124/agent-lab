@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from core.mail.exceptions import (
     MailError,
     MailMailboxNotFoundError,
@@ -37,12 +39,18 @@ from core.mail.models import (
     OutboundMailMessage,
 )
 from core.mail.threads import message_belongs_to_thread_ids
+from core.mail.transport.idle_session import MailIdleSession
 
 
 class _FakeIdleSession:
+    mailbox: str
+    _wake: MailIdleWake
+
     def __init__(self, *, mailbox: str, wake: MailIdleWake | None = None) -> None:
         self.mailbox = mailbox
-        self._wake = wake if wake is not None else MailIdleWake(kind=MailIdleWakeKind.TIMEOUT)
+        self._wake = (
+            wake if wake is not None else MailIdleWake(kind=MailIdleWakeKind.TIMEOUT)
+        )
 
     async def wait_wake(self, *, timeout_seconds: float) -> MailIdleWake:
         _ = timeout_seconds
@@ -53,6 +61,8 @@ class _FakeIdleSession:
 
 
 class RecordingMailServerPort:
+    supports_provision: bool
+
     def __init__(self, *, supports_provision: bool = True) -> None:
         self.supports_provision = supports_provision
         self.mailboxes: dict[str, MailboxInfo] = {}
@@ -660,6 +670,9 @@ class RecordingMailServerPort:
         binding_secret: MailboxSecret,
         *,
         mailbox: str,
-    ) -> _FakeIdleSession:
+    ) -> MailIdleSession:
         _ = binding_secret
-        return _FakeIdleSession(mailbox=mailbox, wake=self.idle_wake)
+        return cast(
+            MailIdleSession,
+            cast(object, _FakeIdleSession(mailbox=mailbox, wake=self.idle_wake)),
+        )

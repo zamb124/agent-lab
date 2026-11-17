@@ -589,19 +589,19 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                                     <span class="criterion-index">${this.t('reflection_node_editor.exit_item')} ${index + 1}</span>
                                     <div class="exit-actions">
                                         <platform-button
-                                            size="sm"
+                                            density="compact"
                                             variant="ghost"
                                             ?disabled=${index === 0}
                                             @click=${() => this._onMoveExit(index, -1)}
                                         >${this.t('reflection_node_editor.exit_move_up')}</platform-button>
                                         <platform-button
-                                            size="sm"
+                                            density="compact"
                                             variant="ghost"
                                             ?disabled=${index >= exits.length - 1}
                                             @click=${() => this._onMoveExit(index, 1)}
                                         >${this.t('reflection_node_editor.exit_move_down')}</platform-button>
                                         <platform-button
-                                            size="sm"
+                                            density="compact"
                                             variant="ghost"
                                             ?disabled=${exits.length <= 1}
                                             @click=${() => this._onRemoveExit(index)}
@@ -679,7 +679,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                             </div>
                         `;
                     })}
-                    <platform-button size="sm" variant="secondary" @click=${this._onAddExit}>
+                    <platform-button density="compact" variant="secondary" @click=${this._onAddExit}>
                         ${this.t('reflection_node_editor.exit_add')}
                     </platform-button>
                 </div>
@@ -884,7 +884,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                                     <div class="criterion-head">
                                         <span class="criterion-index">${this.t('reflection_node_editor.criteria')} ${index + 1}</span>
                                         <platform-button
-                                            size="sm"
+                                            density="compact"
                                             variant="ghost"
                                             ?disabled=${criteria.length <= 1}
                                             @click=${() => this._onRemoveCriterion(index)}
@@ -930,7 +930,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                             `;
                         })}
                     </div>
-                    <platform-button size="sm" variant="secondary" @click=${this._onAddCriterion}>
+                    <platform-button density="compact" variant="secondary" @click=${this._onAddCriterion}>
                         ${this.t('reflection_node_editor.criteria_add')}
                     </platform-button>
                 </div>

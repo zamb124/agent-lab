@@ -54,6 +54,10 @@ flows:
     public: true
     description: "Разбор меню из фото, PDF, Word, Excel и CSV в JSON через read_file summarization; crop только у фото страницы"
 
+  - id: shop_outreach
+    public: true
+    description: "B2B outreach: поиск предприятий общепита, извлечение email, CRM-дедупликация, продающее HTML-письмо через mail_send (dry-run по умолчанию)"
+
   # Telegram Demo
   - id: telegram_demo
     public: true

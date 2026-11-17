@@ -14,9 +14,11 @@ from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.services.tool_approval import ToolApprovalStore
 from core.billing.service import BillingService
+from core.clients.mail_client import MailClient
 from core.clients.worktracker_client import WorktrackerClient
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
 from core.integrations.oauth_service import OAuthService
+from core.mail.service import MailService
 from core.worktracker.service import WorkItemService
 
 BuiltinToolClient: TypeAlias = (
@@ -27,6 +29,7 @@ BuiltinToolClient: TypeAlias = (
     | FlowsClient
     | LaraClient
     | BillingService
+    | MailClient
 )
 
 
@@ -40,6 +43,7 @@ def builtin_tool_clients(
     lara_facade: LaraFacade,
     tool_approval_store: ToolApprovalStore,
     billing_service: BillingService,
+    mail_service: MailService,
 ) -> tuple[BuiltinToolClient, ...]:
     """Собирает клиенты из уже выбранных process-сервисов."""
     return (
@@ -56,4 +60,5 @@ def builtin_tool_clients(
         ),
         LaraClient(lara_facade),
         billing_service,
+        MailClient(mail_service),
     )

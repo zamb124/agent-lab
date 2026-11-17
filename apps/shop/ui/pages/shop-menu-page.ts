@@ -930,9 +930,9 @@ export class ShopMenuPage extends PlatformPage {
                                 }}></platform-field>`)}
                     </div>
                     <div class="import-actions">
-                        <platform-button size="sm" variant="primary" ?loading=${this._importPublishOp.busy}
+                        <platform-button density="compact" variant="primary" ?loading=${this._importPublishOp.busy}
                             @click=${() => this._publishImport([item.item_id])}>${this.t('menu.import_publish_one')}</platform-button>
-                        <platform-button size="sm" variant="secondary" ?loading=${this._importDiscardOp.busy}
+                        <platform-button density="compact" variant="secondary" ?loading=${this._importDiscardOp.busy}
                             @click=${() => this._discardImport(item.item_id)}>${this.t('menu.import_discard')}</platform-button>
                     </div>
                 </div>
@@ -957,7 +957,7 @@ export class ShopMenuPage extends PlatformPage {
                 <div class="panel-title">${this.t('menu.import_button')}</div>
                 <div class="panel-hint">${this.t('menu.import_capabilities')}</div>
                 <div class="panel-actions">
-                    <platform-button size="sm" variant="accent" ?loading=${this._uploadOp.busy || this._importStartOp.busy || parsing}
+                    <platform-button density="compact" variant="accent" ?loading=${this._uploadOp.busy || this._importStartOp.busy || parsing}
                         @click=${() => this.renderRoot.querySelector<HTMLInputElement>('#menu-import-files')?.click()}>
                         ${this.t('menu.import_start')}
                     </platform-button>
@@ -965,12 +965,12 @@ export class ShopMenuPage extends PlatformPage {
                         accept="image/*,application/pdf,.csv,.tsv,.xls,.xlsx,.doc,.docx"
                         style="display:none" @change=${(event: Event) => this._startImport(event)}>
                     ${draft !== null && draft.items.length > 0 ? html`
-                        <platform-button size="sm" variant="primary" ?loading=${this._importPublishOp.busy}
+                        <platform-button density="compact" variant="primary" ?loading=${this._importPublishOp.busy}
                             @click=${() => this._publishImport([])}>${this.t('menu.import_publish_all')} · ${draft.items.length}</platform-button>
-                        <platform-button size="sm" variant="secondary" ?loading=${this._importDiscardOp.busy}
+                        <platform-button density="compact" variant="secondary" ?loading=${this._importDiscardOp.busy}
                             @click=${() => this._discardImport(null)}>${this.t('menu.import_discard_all')}</platform-button>
                     ` : nothing}
-                    <platform-button size="sm" variant="secondary" @click=${() => { this._importOpen = false; }}>${this.t('menu.import_close')}</platform-button>
+                    <platform-button density="compact" variant="secondary" @click=${() => { this._importOpen = false; }}>${this.t('menu.import_close')}</platform-button>
                 </div>
                 ${parsing ? html`<div class="panel-hint">${this.t('menu.import_parsing')}</div>` : nothing}
                 ${failed ? html`<div class="panel-hint">${draft.failure_reason === 'menu_unreadable' ? this.t('menu.import_failed') : draft.failure_reason}</div>` : nothing}
@@ -1052,6 +1052,7 @@ export class ShopMenuPage extends PlatformPage {
                 </div>
                 <span class="price">${this._money(p.price_minor)}</span>
                 <platform-switch
+                    size="sm"
                     title=${this.t('menu.col_available')}
                     ?checked=${p.is_available && !p.is_archived}
                     ?disabled=${p.is_archived}
@@ -1108,18 +1109,18 @@ export class ShopMenuPage extends PlatformPage {
                 >
                     <div slot="actions" class="head-actions">
                         ${missingDesc > 0 ? html`
-                            <platform-button size="sm" variant="accent" ?loading=${this._aiDescribeBatchOp.busy}
+                            <platform-button density="compact" variant="accent" ?loading=${this._aiDescribeBatchOp.busy}
                                 @click=${() => this._runAiBatch()}>
                                 <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missingDesc}
                             </platform-button>
                         ` : nothing}
-                        <platform-button size="sm" variant="secondary" @click=${() => this._openBadgeEditor()}>
+                        <platform-button density="compact" variant="secondary" @click=${() => this._openBadgeEditor()}>
                             <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
                         </platform-button>
-                        <platform-button size="sm" variant="secondary" @click=${() => this._toggleImport()}>
+                        <platform-button density="compact" variant="secondary" @click=${() => this._toggleImport()}>
                             <platform-icon name="import" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
-                        <platform-button size="sm" variant="primary" @click=${() => this._openProductModal()}>
+                        <platform-button density="compact" variant="primary" @click=${() => this._openProductModal()}>
                             <platform-icon name="plus" size="14"></platform-icon> ${this.t('menu.add_product')}
                         </platform-button>
                     </div>
@@ -1138,7 +1139,7 @@ export class ShopMenuPage extends PlatformPage {
                         <div class="badge-add">
                             <platform-field
                                 type="string"
-                                mode="edit"
+                                mode="edit" pill-density="compact"
                                 label=${this.t('menu.badge_label')}
                                 .value=${this._newBadgeLabel}
                                 @change=${(event: CustomEvent<{ value?: unknown }>) => {
@@ -1151,7 +1152,7 @@ export class ShopMenuPage extends PlatformPage {
                                         title=${name} @click=${() => { this._newBadgeIcon = name; }}
                                     >${this._iconSvg(path)}</button>`)}
                             </span>
-                            <platform-button size="sm" variant="primary" ?loading=${this._shopUpdateOp.busy}
+                            <platform-button density="compact" variant="primary" ?loading=${this._shopUpdateOp.busy}
                                 ?disabled=${this._newBadgeLabel.trim() === '' || this._newBadgeIcon === ''}
                                 @click=${() => this._addBadgeDef()}
                             >${this.t('menu.badge_add')}</platform-button>

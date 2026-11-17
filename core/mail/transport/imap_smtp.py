@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 from collections.abc import Awaitable, Sequence
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
@@ -89,6 +90,22 @@ class _ImapSdk(Protocol):
 
 def _imap_sdk(client: aioimaplib.IMAP4_SSL) -> _ImapSdk:
     return typed_view(client, aioimaplib.IMAP4_SSL, _ImapSdk)
+
+
+_LOGOUT_TIMEOUT_SECONDS = 2.0
+
+
+async def _imap_logout_quietly(client: aioimaplib.IMAP4_SSL) -> None:
+    """LOGOUT — best-effort teardown.
+
+    Часть серверов не отвечает на LOGOUT (GreenMail) или закрывает сокет
+    первым: операция уже завершена, и ожидание/ошибка ответа не должны
+    превращать её в failure. Реальный баг, пойманный wire-тестом.
+    """
+    try:
+        _ = await asyncio.wait_for(client.logout(), timeout=_LOGOUT_TIMEOUT_SECONDS)
+    except Exception:
+        pass
 
 
 def _io_error_detail(exc: Exception) -> str:
@@ -397,12 +414,14 @@ class ImapSmtpTransport:
         smtp_host: str,
         smtp_port: int,
         use_ssl: bool = True,
+        imap_ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         self._imap_host: Final[str] = imap_host
         self._imap_port: Final[int] = imap_port
         self._smtp_host: Final[str] = smtp_host
         self._smtp_port: Final[int] = smtp_port
         self._use_ssl: Final[bool] = use_ssl
+        self._imap_ssl_context: Final[ssl.SSLContext | None] = imap_ssl_context
 
     async def _connect_smtp(self, *, timeout: float = 30.0) -> aiosmtplib.SMTP:
         last_error: Exception | None = None
@@ -426,7 +445,11 @@ class ImapSmtpTransport:
     async def _connect_imap(self, *, timeout: float = 30.0) -> aioimaplib.IMAP4_SSL:
         last_error: Exception | None = None
         for attempt in range(3):
-            client = aioimaplib.IMAP4_SSL(host=self._imap_host, port=self._imap_port)
+            client = aioimaplib.IMAP4_SSL(
+                host=self._imap_host,
+                port=self._imap_port,
+                ssl_context=self._imap_ssl_context,
+            )
             _imap_sdk(client).timeout = timeout
             try:
                 await client.wait_hello_from_server()
@@ -450,7 +473,7 @@ class ImapSmtpTransport:
                 f"IMAP login failed for {binding_secret.email_address}: {_io_error_detail(exc)}"
             ) from exc
         if login_response.result != "OK":
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
             raise MailTransportError(
                 f"IMAP login failed for {binding_secret.email_address}: {login_response}"
             )
@@ -458,7 +481,7 @@ class ImapSmtpTransport:
 
     async def check_imap_hello(self) -> None:
         client = await self._connect_imap(timeout=15.0)
-        _ = await client.logout()
+        await _imap_logout_quietly(client)
 
     async def check_smtp_connect(self) -> None:
         smtp = await self._connect_smtp(timeout=15.0)
@@ -466,7 +489,7 @@ class ImapSmtpTransport:
 
     async def check_imap_login(self, secret: MailboxSecret) -> None:
         client = await self._login_imap(secret)
-        _ = await client.logout()
+        await _imap_logout_quietly(client)
 
     async def check_smtp(self, secret: MailboxSecret) -> None:
         smtp = await self._connect_smtp()
@@ -568,7 +591,7 @@ class ImapSmtpTransport:
                     f"IMAP APPEND to Sent failed for mailbox={sent_name!r}: {append_response}"
                 )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def _select_exact(
         self,
@@ -678,7 +701,7 @@ class ImapSmtpTransport:
         try:
             return await self._list_folders_on_client(client)
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def create_imap_folder(
         self,
@@ -693,7 +716,7 @@ class ImapSmtpTransport:
         try:
             await self._create_folder_on_client(client, name=name, role=role)
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def ensure_standard_imap_folders(
         self,
@@ -717,7 +740,7 @@ class ImapSmtpTransport:
                 existing_names.add(folder_name)
             return await self._list_folders_on_client(client)
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def fetch_messages(
         self,
@@ -787,7 +810,7 @@ class ImapSmtpTransport:
             newest_first = list(reversed(messages[-query.limit :]))
             return newest_first
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def fetch_message_by_uid(
         self,
@@ -813,7 +836,7 @@ class ImapSmtpTransport:
             inbound = _apply_flags_to_inbound(inbound, flags)
             return inbound
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def search_messages_by_thread_ids(
         self,
@@ -875,7 +898,7 @@ class ImapSmtpTransport:
                     break
             return messages
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def mark_message_seen(
         self,
@@ -895,7 +918,7 @@ class ImapSmtpTransport:
                     f"IMAP UID STORE +FLAGS (\\Seen) failed for uid={uid}: {store_response}"
                 )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def mark_message_unseen(
         self,
@@ -915,7 +938,7 @@ class ImapSmtpTransport:
                     f"IMAP UID STORE -FLAGS (\\Seen) failed for uid={uid}: {store_response}"
                 )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def fetch_uids_since(
         self,
@@ -978,7 +1001,7 @@ class ImapSmtpTransport:
                 messages=messages,
             )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def uid_store_flags(
         self,
@@ -1013,7 +1036,7 @@ class ImapSmtpTransport:
                         f"IMAP UID STORE -FLAGS failed for uid={uid}: {store_response}"
                     )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def uid_move(
         self,
@@ -1073,7 +1096,7 @@ class ImapSmtpTransport:
                 destination_uid=destination_uid,
             )
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def uid_expunge(
         self,
@@ -1105,7 +1128,7 @@ class ImapSmtpTransport:
             if expunge_all.result != "OK":
                 raise MailTransportError(f"IMAP EXPUNGE failed: {expunge_all}")
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def append_message(
         self,
@@ -1147,7 +1170,7 @@ class ImapSmtpTransport:
                         uid = found[-1]
             return MailAppendResult(folder=mailbox, uid=uid, message_id=message_id)
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def uid_search(
         self,
@@ -1167,7 +1190,7 @@ class ImapSmtpTransport:
                 )
             return _parse_uid_list(list(search_response.lines))
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def fetch_flags_for_uids(
         self,
@@ -1221,7 +1244,7 @@ class ImapSmtpTransport:
                             result[uid] = _extract_message_flags_from_fetch(list(one.lines))
             return result
         finally:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
 
     async def open_idle_session(
         self,
@@ -1235,6 +1258,6 @@ class ImapSmtpTransport:
         try:
             _ = await self._select_exact(client, mailbox)
         except Exception:
-            _ = await client.logout()
+            await _imap_logout_quietly(client)
             raise
         return MailIdleSession(client, mailbox=mailbox)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ssl
+
 from core.ai.company_settings import decrypt_secret
 from core.mail.exceptions import MailConfigError
 from core.mail.models import CompanyMailConnection, MailProvider
@@ -17,6 +19,7 @@ def build_mail_server_port(
     protected_local_parts: frozenset[str],
     delete_prefix_required: str | None = None,
     allow_delete: bool = True,
+    imap_ssl_context: ssl.SSLContext | None = None,
 ) -> MailServerPort:
     transport = ImapSmtpTransport(
         imap_host=connection.imap_host,
@@ -24,6 +27,7 @@ def build_mail_server_port(
         smtp_host=connection.smtp_host,
         smtp_port=connection.smtp_port,
         use_ssl=connection.use_ssl,
+        imap_ssl_context=imap_ssl_context,
     )
     if connection.provider == MailProvider.GENERIC_IMAP_SMTP:
         return GenericImapSmtpMailServerPort(transport)

@@ -281,7 +281,7 @@ export class WikiHistoryPage extends PlatformPage {
                         <h1 class="title">${this.t('history.title')}</h1>
                         <platform-button
                             variant="ghost"
-                            size="sm"
+                            density="compact"
                             data-wiki-history-back
                             @click=${() => this.navigate('wiki_page', { pageId: this.pageId })}
                         >${this.t('history.back_to_page')}</platform-button>
@@ -317,7 +317,7 @@ export class WikiHistoryPage extends PlatformPage {
             return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
-            <platform-button variant="primary" size="sm" data-wiki-restore @click=${() => this._restore()}>
+            <platform-button variant="primary" density="compact" data-wiki-restore @click=${() => this._restore()}>
                 ${this.t('history.restore')}
             </platform-button>
             ${this._diffRows.map((row) => html`

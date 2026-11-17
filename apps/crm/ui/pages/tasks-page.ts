@@ -234,14 +234,14 @@ export class CRMTasksPage extends CRMNamespacePage {
                     <div slot="actions" class="toolbar">
                         <platform-button
                             variant=${this._viewMode === 'list' ? 'secondary' : 'ghost'}
-                            size="sm"
+                            density="compact"
                             @click=${() => { this._viewMode = 'list'; }}
                         >
                             <platform-icon name="list" size="16"></platform-icon>
                         </platform-button>
                         <platform-button
                             variant=${this._viewMode === 'board' ? 'secondary' : 'ghost'}
-                            size="sm"
+                            density="compact"
                             @click=${() => { this._viewMode = 'board'; }}
                         >
                             <platform-icon name="layers" size="16"></platform-icon>

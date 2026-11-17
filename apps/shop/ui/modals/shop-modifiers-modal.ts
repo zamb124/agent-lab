@@ -132,7 +132,7 @@ export class ShopModifiersModal extends PlatformModal {
             .group-body { border-top: 1px solid var(--glass-border-subtle); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
             .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); align-items: end; }
             .opt-row {
-                display: grid; grid-template-columns: 30px 2fr 90px auto auto auto;
+                display: grid; grid-template-columns: 30px minmax(0, 2fr) 90px auto auto auto;
                 gap: var(--space-2); align-items: center;
                 padding: var(--space-1) 0;
                 border-bottom: 1px solid var(--glass-border-subtle);
@@ -162,6 +162,7 @@ export class ShopModifiersModal extends PlatformModal {
 
     constructor() {
         super();
+        this.size = 'lg';
         this._groups = [];
         this._openGroupId = '';
         this._newGroupName = '';
@@ -367,8 +368,8 @@ export class ShopModifiersModal extends PlatformModal {
                     <span class="name">${g.name}</span>
                     <span class="badges">${this._badges(g)}</span>
                     ${attached
-                        ? html`<platform-button size="sm" variant="ghost" @click=${(e: Event) => { e.stopPropagation(); void this._detach(g); }}>${this.t('modifiers.detach')}</platform-button>`
-                        : html`<platform-button size="sm" variant="secondary" @click=${(e: Event) => { e.stopPropagation(); void this._attach(g); }}>${this.t('modifiers.attach')}</platform-button>`}
+                        ? html`<platform-button density="compact" variant="ghost" @click=${(e: Event) => { e.stopPropagation(); void this._detach(g); }}>${this.t('modifiers.detach')}</platform-button>`
+                        : html`<platform-button density="compact" variant="secondary" @click=${(e: Event) => { e.stopPropagation(); void this._attach(g); }}>${this.t('modifiers.attach')}</platform-button>`}
                 </div>
                 ${open ? this._renderGroupBody(g, attached) : ''}
             </div>`;
@@ -382,6 +383,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="string"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.field_name')}
                         .value=${g.name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -392,6 +394,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="enum"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.field_selection')}
                         .value=${g.selection_mode}
                         .config=${{ values: [
@@ -406,6 +409,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="number"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.field_min')}
                         .value=${String(g.min_selected)}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -416,6 +420,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="number"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.field_max')}
                         .value=${g.max_selected === null ? '' : String(g.max_selected)}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -427,6 +432,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="enum"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.field_price_mode')}
                         .value=${g.price_mode}
                         .config=${{ values: [
@@ -454,6 +460,7 @@ export class ShopModifiersModal extends PlatformModal {
                         <platform-field
                             type="string"
                             mode="edit"
+                            pill-density="compact"
                             .value=${o.name}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 const v = _str(e).trim();
@@ -463,6 +470,7 @@ export class ShopModifiersModal extends PlatformModal {
                         <platform-field
                             type="number"
                             mode="edit"
+                            pill-density="compact"
                             .value=${(o.price_minor / 100).toString()}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 const v = Math.round(parseFloat(_str(e).replace(',', '.')) * 100);
@@ -470,31 +478,35 @@ export class ShopModifiersModal extends PlatformModal {
                             }}
                         ></platform-field>
                         <platform-switch
+                            size="sm"
+                            label=${this.t('modifiers.is_default')}
                             ?checked=${o.is_default}
-                            title=${this.t('modifiers.is_default')}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => void this._patchOption(o, { is_default: Boolean(e.detail.value) })}
                         ></platform-switch>
                         <platform-switch
+                            size="sm"
+                            label=${this.t('modifiers.is_available')}
                             ?checked=${o.is_available}
-                            title=${this.t('modifiers.is_available')}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => void this._patchOption(o, { is_available: Boolean(e.detail.value) })}
                         ></platform-switch>
-                        <platform-button size="sm" variant="ghost" @click=${() => void this._removeOption(o)}>
+                        <platform-button icon-only density="dense" variant="ghost-danger"
+                            aria-label=${this.t('modifiers.option_remove')}
+                            @click=${() => void this._removeOption(o)}>
                             <platform-icon name="trash" size="14"></platform-icon>
                         </platform-button>
                     </div>
                     ${this.nutritionEnabled ? html`
                         <div class="opt-nutri">
-                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_kcal')}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('modifiers.delta_kcal')}
                                 .value=${this._numStr(o.nutrition_delta.kcal)}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'kcal', _str(e))}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_protein')}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('modifiers.delta_protein')}
                                 .value=${this._numStr(o.nutrition_delta.protein_g)}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'protein_g', _str(e))}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_fat')}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('modifiers.delta_fat')}
                                 .value=${this._numStr(o.nutrition_delta.fat_g)}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'fat_g', _str(e))}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('modifiers.delta_carb')}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('modifiers.delta_carb')}
                                 .value=${this._numStr(o.nutrition_delta.carb_g)}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchNutritionDelta(o, 'carb_g', _str(e))}></platform-field>
                         </div>` : ''}`)}
@@ -502,6 +514,7 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="string"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.option_name')}
                         .value=${this._newOptionName}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newOptionName = _str(e); }}
@@ -509,20 +522,21 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="number"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.option_price')}
                         .value=${this._newOptionPrice}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newOptionPrice = _str(e); }}
                     ></platform-field>
-                    <platform-button size="sm" variant="secondary" ?disabled=${this._optionCreateOp.busy} @click=${() => void this._addOption(g)}>
+                    <platform-button density="compact" variant="secondary" ?loading=${this._optionCreateOp.busy} @click=${() => void this._addOption(g)}>
                         ${this.t('modifiers.option_add')}
                     </platform-button>
                 </div>
                 <div class="group-actions">
-                    <platform-button size="sm" variant="accent" ?disabled=${this._suggestBusyFor !== ''} @click=${() => void this._suggest(g)}>
+                    <platform-button density="compact" variant="accent" ?disabled=${this._suggestBusyFor !== ''} @click=${() => void this._suggest(g)}>
                         <platform-icon name="sparkle" size="14"></platform-icon>
                         ${this._suggestBusyFor === g.shop_modifier_group_id ? this.t('modifiers.ai_busy') : this.t('modifiers.ai_suggest')}
                     </platform-button>
-                    <platform-button size="sm" variant="ghost-danger" @click=${() => void this._removeGroup(g)}>
+                    <platform-button density="compact" variant="ghost-danger" @click=${() => void this._removeGroup(g)}>
                         <platform-icon name="trash" size="14"></platform-icon> ${this.t('modifiers.group_remove')}
                     </platform-button>
                 </div>
@@ -544,11 +558,12 @@ export class ShopModifiersModal extends PlatformModal {
                     <platform-field
                         type="string"
                         mode="edit"
+                        pill-density="compact"
                         label=${this.t('modifiers.new_group')}
                         .value=${this._newGroupName}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newGroupName = _str(e); }}
                     ></platform-field>
-                    <platform-button size="sm" variant="secondary" ?disabled=${this._groupCreateOp.busy} @click=${() => void this._createGroup()}>
+                    <platform-button density="compact" variant="secondary" ?loading=${this._groupCreateOp.busy} @click=${() => void this._createGroup()}>
                         ${this.t('modifiers.group_create')}
                     </platform-button>
                 </div>

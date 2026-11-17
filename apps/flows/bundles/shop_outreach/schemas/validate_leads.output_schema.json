@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "properties": {
+    "leads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "email": {"type": "string"},
+          "business_name": {"type": "string"},
+          "business_type": {
+            "type": "string",
+            "enum": ["restaurant", "cafe", "bar", "bakery", "canteen", "delivery", "shop", "other"]
+          },
+          "keep": {"type": "boolean"},
+          "reason": {"type": "string"}
+        },
+        "required": ["email", "business_name", "business_type", "keep"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["leads"],
+  "additionalProperties": false
+}

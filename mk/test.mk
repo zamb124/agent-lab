@@ -63,8 +63,8 @@ test-up: runtime-bootstrap ui-build
 	@echo "Preflight: зачистка stale pytest/granian/taskiq/code-runner процессов..."
 	@uv run python -m scripts.testing.process_preflight_cleanup
 	@uv run python -m scripts.testing.ensure_compose_images
-	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test redis-realtime-test centrifugo-test seaweedfs-test seaweedfs-test-ext onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
-	@echo "Ожидание готовности сервисов (postgres, redis, redis-realtime, centrifugo, seaweedfs, seaweedfs-ext, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test redis-realtime-test centrifugo-test seaweedfs-test seaweedfs-test-ext onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test greenmail-test
+	@echo "Ожидание готовности сервисов (postgres, redis, redis-realtime, centrifugo, seaweedfs, seaweedfs-ext, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana, greenmail)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.testing.db_reset
@@ -83,7 +83,7 @@ test-reset:
 
 test-down:
 	@uv run python -m scripts.testing.stack down
-	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test redis-realtime-test centrifugo-test seaweedfs-test seaweedfs-test-ext onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test openfga-test
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test redis-realtime-test centrifugo-test seaweedfs-test seaweedfs-test-ext onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test openfga-test greenmail-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

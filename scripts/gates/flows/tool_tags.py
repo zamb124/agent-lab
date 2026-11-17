@@ -29,6 +29,7 @@ TOOL_TAG_WHITELIST: frozenset[str] = frozenset(
         "text",
         "stock",
         "misc",
+        "mail",
     }
 )
 

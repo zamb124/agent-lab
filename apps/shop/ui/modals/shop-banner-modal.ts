@@ -109,8 +109,9 @@ export class ShopBannerModal extends PlatformModal {
             .fields { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
             .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
-            .toggle-row { display: flex; align-items: center; gap: var(--space-2); }
-            .toggle-row span { font-size: var(--text-sm); color: var(--text-primary); }
+            .hint { font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.5; }
+            .hint.warn { color: var(--warning); }
+            .load-err { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--error); }
             .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
             @media (max-width: 560px) {
                 .top { grid-template-columns: 1fr; }
@@ -177,7 +178,7 @@ export class ShopBannerModal extends PlatformModal {
 
     private async _load(): Promise<void> {
         const [products, categories, shelves] = await Promise.all([
-            this._productsOp.run({ shop_id: this.shopId, limit: 500 }),
+            this._productsOp.run({ shop_id: this.shopId }),
             this._categoriesOp.run({ shop_id: this.shopId }),
             this._shelvesOp.run({ shop_id: this.shopId }),
         ]);
@@ -196,7 +197,8 @@ export class ShopBannerModal extends PlatformModal {
         const sItems = (shelves as { items?: { shop_shelf_id?: string; title?: string; kind?: string }[] } | null)?.items;
         this._shelves = Array.isArray(sItems)
             ? sItems
-                .filter((s): s is { shop_shelf_id: string; title: string; kind: string } => typeof s.shop_shelf_id === 'string')
+                .filter((s): s is { shop_shelf_id: string; title: string; kind: string } =>
+                    typeof s.shop_shelf_id === 'string' && typeof s.title === 'string' && typeof s.kind === 'string')
                 .map((s) => ({ id: s.shop_shelf_id, name: s.title !== '' ? s.title : this.t(`feed.kind.${s.kind}`) }))
             : [];
     }
@@ -205,10 +207,45 @@ export class ShopBannerModal extends PlatformModal {
         return this.banner !== null && this.banner !== undefined && typeof this.banner.shop_banner_id === 'string';
     }
 
+    private _linkNeedsTarget(): boolean {
+        return this._linkType === 'product' || this._linkType === 'category' || this._linkType === 'shelf';
+    }
+
     private _linkRows(): NamedRow[] {
         if (this._linkType === 'product') return this._products;
         if (this._linkType === 'category') return this._categories;
         return this._shelves;
+    }
+
+    private _linkSourceOp(): OpController {
+        if (this._linkType === 'category') return this._categoriesOp;
+        if (this._linkType === 'shelf') return this._shelvesOp;
+        return this._productsOp;
+    }
+
+    private get _loadFailed(): boolean {
+        return this._productsOp.error !== null || this._categoriesOp.error !== null || this._shelvesOp.error !== null;
+    }
+
+    /** Сохранённая цель ссылки отсутствует в загруженном списке — удалена из меню. */
+    private _linkMissing(): boolean {
+        if (this._linkRef === '' || !this._linkNeedsTarget()) return false;
+        const op = this._linkSourceOp();
+        if (op.busy || op.error !== null) return false;
+        return !this._linkRows().some((r) => r.id === this._linkRef);
+    }
+
+    private _linkOptions(): { value: string; label: string }[] {
+        const options = this._linkRows().map((r) => ({ value: r.id, label: r.name }));
+        if (this._linkMissing()) {
+            options.unshift({ value: this._linkRef, label: this.t('feed.link_target_missing') });
+        }
+        return options;
+    }
+
+    private _linkHint(): string {
+        if (this._linkMissing()) return this.t('feed.hint_link_missing');
+        return this.t(`feed.hint_link_${this._linkType}`);
     }
 
     private _buildLink(): string {
@@ -228,7 +265,8 @@ export class ShopBannerModal extends PlatformModal {
 
     private get _valid(): boolean {
         if (this._linkType === 'url' && this._linkUrl.trim() !== '' && !/^https?:\/\//.test(this._linkUrl.trim())) return false;
-        if (this._linkType !== 'none' && this._linkType !== 'url' && this._linkRef === '') return false;
+        if (this._linkNeedsTarget() && this._linkRef === '') return false;
+        if (this._windowOn && (!_TIME_RE.test(this._timeFrom) || !_TIME_RE.test(this._timeTo))) return false;
         return true;
     }
 
@@ -286,49 +324,56 @@ export class ShopBannerModal extends PlatformModal {
                     </button>
                     <input id="banner-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadImage(e)}>
                     <div class="fields">
-                        <platform-field type="string" mode="edit" label=${this.t('feed.field_title')} .value=${this._title}
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_title')} .value=${this._title}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._title = _str(e); }}></platform-field>
-                        <platform-field type="string" mode="edit" label=${this.t('feed.field_subtitle')} .value=${this._subtitle}
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_subtitle')} .value=${this._subtitle}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._subtitle = _str(e); }}></platform-field>
                     </div>
                 </div>
                 <div class="sec-title">${this.t('feed.link_title')}</div>
                 <div class="grid">
-                    <platform-field type="enum" mode="edit" label=${this.t('feed.field_link_type')} .value=${this._linkType}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('feed.field_link_type')} .value=${this._linkType}
                         .config=${{ values: LINK_TYPES.map((t) => ({ value: t, label: this.t(`feed.link.${t}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => {
                             this._linkType = _str(e) as LinkType;
                             this._linkRef = '';
                         }}></platform-field>
                     ${this._linkType === 'url' ? html`
-                        <platform-field type="string" mode="edit" label=${this.t('feed.field_link_url')} .value=${this._linkUrl}
+                        <platform-field type="string" mode="edit" pill-density="compact" input-type="url" label=${this.t('feed.field_link_url')} .value=${this._linkUrl}
+                            placeholder="https://"
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._linkUrl = _str(e); }}></platform-field>
                     ` : nothing}
-                    ${this._linkType !== 'none' && this._linkType !== 'url' ? html`
-                        <platform-field type="enum" mode="edit" label=${this.t('feed.field_link_target')} .value=${this._linkRef}
-                            .config=${{ values: this._linkRows().map((r) => ({ value: r.id, label: r.name })) }}
+                    ${this._linkNeedsTarget() ? html`
+                        <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t(`feed.link_target_label.${this._linkType}`)} .value=${this._linkRef}
+                            ?disabled=${this._linkSourceOp().busy}
+                            placeholder=${this._linkSourceOp().busy ? this.t('feed.link_target_loading') : this.t('feed.link_target_placeholder')}
+                            .config=${{ values: this._linkOptions() }}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._linkRef = _str(e); }}></platform-field>
                     ` : nothing}
                 </div>
-                <div class="toggle-row">
-                    <platform-switch ?checked=${this._windowOn}
-                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._windowOn = Boolean(e.detail.value); }}></platform-switch>
-                    <span>${this.t('feed.window_toggle')}</span>
-                </div>
-                ${this._windowOn ? html`
-                    <div class="grid">
-                        <platform-field type="string" mode="edit" label=${this.t('feed.field_time_from')} .value=${this._timeFrom}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._timeFrom = _str(e); }}></platform-field>
-                        <platform-field type="string" mode="edit" label=${this.t('feed.field_time_to')} .value=${this._timeTo}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._timeTo = _str(e); }}></platform-field>
+                <div class="hint${this._linkMissing() ? ' warn' : ''}">${this._linkHint()}</div>
+                ${this._linkNeedsTarget() && this._loadFailed ? html`
+                    <div class="load-err">
+                        <span>${this.t('feed.link_load_failed')}</span>
+                        <platform-button variant="ghost" density="compact" @click=${() => { void this._load(); }}>${this.t('feed.retry')}</platform-button>
                     </div>
                 ` : nothing}
-                ${this._editing ? html`
-                    <div class="toggle-row">
-                        <platform-switch ?checked=${this._isActive}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isActive = Boolean(e.detail.value); }}></platform-switch>
-                        <span>${this.t('feed.field_active')}</span>
+                <platform-switch size="sm" label=${this.t('feed.window_toggle')} ?checked=${this._windowOn}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._windowOn = Boolean(e.detail.value); }}></platform-switch>
+                ${this._windowOn ? html`
+                    <div class="grid">
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_time_from')} .value=${this._timeFrom}
+                            placeholder="12:00"
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._timeFrom = _str(e); }}></platform-field>
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_time_to')} .value=${this._timeTo}
+                            placeholder="18:00"
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._timeTo = _str(e); }}></platform-field>
                     </div>
+                    <div class="hint">${this.t('feed.hint_window')}</div>
+                ` : nothing}
+                ${this._editing ? html`
+                    <platform-switch size="sm" label=${this.t('feed.field_active')} ?checked=${this._isActive}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isActive = Boolean(e.detail.value); }}></platform-switch>
                 ` : nothing}
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>

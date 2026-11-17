@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import ssl
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -255,6 +256,7 @@ class MailService:
         self._rag_client: Final[RagClient | None] = rag_client
         self._mail_config: Final[MailConfig] = mail_config
         self._port_override: Final[MailServerPort | None] = port_override
+        self._imap_ssl_context_cache: ssl.SSLContext | None = None
         self._files_service: Final[FilesService | None] = files_service
         self._attachment_file_index: Final[MailAttachmentFileIndex | None] = attachment_file_index
         self._backfill_batch_size: Final[int] = mail_sync_backfill_batch_size
@@ -275,6 +277,18 @@ class MailService:
             if part.strip()
         )
 
+    def _imap_ssl_context(self) -> ssl.SSLContext | None:
+        tls = self._mail_config.tls
+        if tls.extra_ca_file is None and tls.check_hostname:
+            return None
+        if self._imap_ssl_context_cache is None:
+            context = ssl.create_default_context()
+            if tls.extra_ca_file is not None:
+                context.load_verify_locations(cafile=tls.extra_ca_file)
+            context.check_hostname = tls.check_hostname
+            self._imap_ssl_context_cache = context
+        return self._imap_ssl_context_cache
+
     def _port_for(self, connection: CompanyMailConnection) -> MailServerPort:
         if self._port_override is not None:
             return self._port_override
@@ -287,6 +301,7 @@ class MailService:
             protected_local_parts=self._protected_local_parts(),
             delete_prefix_required=delete_prefix,
             allow_delete=live.allow_delete if live.enabled else True,
+            imap_ssl_context=self._imap_ssl_context(),
         )
 
     def port_for_connection(self, connection: CompanyMailConnection) -> MailServerPort:
@@ -2684,6 +2699,7 @@ class MailService:
                 body_text=payload.body_text,
                 body_html=payload.body_html,
                 message_id=payload.message_id,
+                from_address=payload.from_address,
                 in_reply_to=payload.in_reply_to,
                 references=payload.references,
                 attachments=resolved_attachments,

@@ -153,7 +153,7 @@ export class GeoAddressesPage extends PlatformPage {
                     ></platform-field>
                 </div>
                 <platform-button
-                    size="sm"
+                    density="compact"
                     variant="primary"
                     @click=${() => this._openEditor(null)}
                 >
@@ -194,7 +194,7 @@ export class GeoAddressesPage extends PlatformPage {
                                       <td class="muted">${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}</td>
                                       <td class="actions">
                                           <platform-button
-                                              size="sm"
+                                              density="compact"
                                               variant="ghost"
                                               title=${this.t('addresses.edit')}
                                               @click=${() => this._openEditor(a)}
@@ -202,10 +202,10 @@ export class GeoAddressesPage extends PlatformPage {
                                               <platform-icon name="edit" size="14"></platform-icon>
                                           </platform-button>
                                           <platform-button
-                                              size="sm"
+                                              density="compact"
                                               variant="ghost"
                                               title=${this.t('addresses.hide')}
-                                              ?busy=${this._removeCtl.busy}
+                                              ?loading=${this._removeCtl.busy}
                                               @click=${() => this._removeAddress(a)}
                                           >
                                               <platform-icon name="trash" size="14"></platform-icon>
@@ -250,10 +250,10 @@ export class GeoAddressesPage extends PlatformPage {
                                       <td class="muted">${o.updated_at.slice(0, 16).replace('T', ' ')}</td>
                                       <td class="actions">
                                           <platform-button
-                                              size="sm"
+                                              density="compact"
                                               variant="ghost"
                                               title=${this.t('audit.revert')}
-                                              ?busy=${this._revertCtl.busy ||
+                                              ?loading=${this._revertCtl.busy ||
                                               this._unsuppressCtl.busy ||
                                               this._edgeOpenCtl.busy}
                                               @click=${() => this._revert(o)}

@@ -148,10 +148,10 @@ export class ShopTablesEditor extends PlatformElement {
                     </div>`
                 : html`<div class="hint">${this.t('settings.tables_empty')}</div>`}
             <div class="add-row">
-                <platform-field type="string" mode="edit" label=${this.t('settings.field_table')} .value=${this._newLabel}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_table')} .value=${this._newLabel}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newLabel = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
-                <platform-button size="sm" variant="secondary" ?busy=${this._createOp.busy}
+                <platform-button density="compact" variant="secondary" ?loading=${this._createOp.busy}
                     ?disabled=${this._newLabel.trim() === ''} @click=${() => this._add()}>
                     ${this.t('settings.table_add')}
                 </platform-button>

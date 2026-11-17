@@ -995,7 +995,7 @@ export class WikiPageView extends PlatformPage {
                             <div class="cover-actions">
                                 <platform-button
                                     variant="secondary"
-                                    size="sm"
+                                    density="compact"
                                     icon-only
                                     title=${this.t('page.change_cover')}
                                     aria-label=${this.t('page.change_cover')}
@@ -1005,7 +1005,7 @@ export class WikiPageView extends PlatformPage {
                                 </platform-button>
                                 <platform-button
                                     variant="secondary"
-                                    size="sm"
+                                    density="compact"
                                     icon-only
                                     title=${this.t('page.remove_cover')}
                                     aria-label=${this.t('page.remove_cover')}

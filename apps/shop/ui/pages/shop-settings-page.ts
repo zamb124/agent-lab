@@ -892,14 +892,14 @@ export class ShopSettingsPage extends PlatformPage {
                                     <platform-icon name="copy" size="14"></platform-icon>
                                 </button>
                             </span>
-                            <platform-button size="sm" variant="secondary" @click=${() => { window.open(publicPath, '_blank', 'noopener'); }}>
+                            <platform-button density="compact" variant="secondary" @click=${() => { window.open(publicPath, '_blank', 'noopener'); }}>
                                 <platform-icon name="external-link" size="14"></platform-icon> ${this.t('settings.open_storefront')}
                             </platform-button>
-                            <platform-button size="sm" variant="secondary" ?busy=${this._suspendOp.busy} @click=${() => this._suspend()}>
+                            <platform-button density="compact" variant="secondary" ?loading=${this._suspendOp.busy} @click=${() => this._suspend()}>
                                 ${this.t('settings.suspend_button')}
                             </platform-button>`
                         : html`
-                            <platform-button variant="primary" ?busy=${this._publishOp.busy} @click=${() => this._publish()}>
+                            <platform-button variant="primary" ?loading=${this._publishOp.busy} @click=${() => this._publish()}>
                                 ${this.t('settings.publish_button')}
                             </platform-button>`}
                 </div>
@@ -945,11 +945,11 @@ export class ShopSettingsPage extends PlatformPage {
                                 <div class="hint">${this.t('settings.qr_hint')}</div>
                                 <div class="row">
                                     <a class="qr-link" href="/shop/api/v1/public/storefront/${encodeURIComponent(slug)}/qr.svg" download="storefront-qr.svg">
-                                        <platform-button size="sm" variant="secondary">
+                                        <platform-button density="compact" variant="secondary">
                                             <platform-icon name="download" size="14"></platform-icon> ${this.t('settings.qr_download')}
                                         </platform-button>
                                     </a>
-                                    <platform-button size="sm" variant="secondary" @click=${() => this.navigate('shop_builder', { shopId: this.shopId })}>
+                                    <platform-button density="compact" variant="secondary" @click=${() => this.navigate('shop_builder', { shopId: this.shopId })}>
                                         <platform-icon name="edit" size="14"></platform-icon> ${this.t('settings.theme_link')}
                                     </platform-button>
                                 </div>
@@ -968,7 +968,7 @@ export class ShopSettingsPage extends PlatformPage {
                         <div class="advanced-title">${this.t('settings.embed_title')}</div>
                         <code class="embed">&lt;iframe src="${storefrontUrl}?embed=1" style="width:100%;max-width:480px;height:640px;border:0;border-radius:16px"&gt;&lt;/iframe&gt;</code>
                         <div>
-                            <platform-button size="sm" variant="secondary"
+                            <platform-button density="compact" variant="secondary"
                                 @click=${() => this._copyLink(`<iframe src="${storefrontUrl}?embed=1" style="width:100%;max-width:480px;height:640px;border:0;border-radius:16px"></iframe>`)}>
                                 <platform-icon name="copy" size="14"></platform-icon> ${this.t('settings.copy_code')}
                             </platform-button>
@@ -981,10 +981,10 @@ export class ShopSettingsPage extends PlatformPage {
                             <div class="domain-row"><span>${d.domain}</span><span class="hint">${d.status}</span></div>
                         `)}
                         <div class="row">
-                            <platform-field type="string" mode="edit" label=${this.t('settings.field_domain')} .value=${this._newDomain}
+                            <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_domain')} .value=${this._newDomain}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._newDomain = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                             ></platform-field>
-                            <platform-button size="sm" variant="secondary" ?busy=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
+                            <platform-button density="compact" variant="secondary" ?loading=${this._domainAddOp.busy} ?disabled=${this._newDomain.trim() === ''} @click=${() => this._addDomain()}>
                                 ${this.t('settings.domain_add')}
                             </platform-button>
                         </div>
@@ -1010,27 +1010,27 @@ export class ShopSettingsPage extends PlatformPage {
                 ></shop-brand-editor>
             </div>
             <div class="card">
-                <platform-field type="string" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_name')} .value=${this._name}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
-                <platform-field type="text" mode="edit" label=${this.t('settings.field_description')} .value=${this._description}
+                <platform-field type="text" mode="edit" pill-density="compact" label=${this.t('settings.field_description')} .value=${this._description}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
                 <div class="row" style="justify-content: flex-end">
-                    <platform-button size="sm" variant="accent" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
+                    <platform-button density="compact" variant="accent" ?loading=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
                         title=${this.t('settings.ai_describe_hint')}
                         @click=${() => this._aiDescribeShop()}
                     ><platform-icon name="sparkle" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
                 </div>
             </div>
             <div class="card">
-                <platform-field type="string" mode="edit" label=${this.t('settings.field_phone')} .value=${this._phone}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_phone')} .value=${this._phone}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._phone = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
-                <platform-field type="string" mode="edit" label=${this.t('settings.field_city')} .value=${this._city}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_city')} .value=${this._city}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._city = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
-                <platform-field type="string" mode="edit" label=${this.t('settings.field_address')} .value=${this._address}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_address')} .value=${this._address}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._address = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
             </div>
@@ -1094,16 +1094,16 @@ export class ShopSettingsPage extends PlatformPage {
                 ? html`
                     <div class="card">
                         <div class="option-fields">
-                            <platform-field type="number" mode="edit" label=${this.t('settings.field_delivery_fee')} .value=${this._deliveryFee}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('settings.field_delivery_fee')} .value=${this._deliveryFee}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._deliveryFee = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                             ></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('settings.field_min_order')} .value=${this._minOrder}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('settings.field_min_order')} .value=${this._minOrder}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                             ></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('settings.field_prep_minutes')} .value=${this._prepMinutes}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('settings.field_prep_minutes')} .value=${this._prepMinutes}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._prepMinutes = typeof e.detail.value === 'number' ? String(e.detail.value) : typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                             ></platform-field>
-                            <platform-field type="enum" mode="edit" label=${this.t('settings.field_courier_mode')} .value=${this._courierMode}
+                            <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('settings.field_courier_mode')} .value=${this._courierMode}
                                 .config=${{ values: ['scooter', 'bike', 'foot', 'car'].map((m) => ({ value: m, label: this.t(`settings.courier_mode_${m}`) })) }}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._courierMode = typeof e.detail.value === 'string' ? e.detail.value : 'scooter'; }}
                             ></platform-field>
@@ -1139,18 +1139,18 @@ export class ShopSettingsPage extends PlatformPage {
                 </div>
                 <div class="hint" style="margin: var(--space-2) 0">${this.t('settings.zone_pin_hint')}</div>
                 <div class="option-fields">
-                    <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lat')} .value=${this._shopPoint?.[1] ?? ''}
+                    <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('settings.field_shop_lat')} .value=${this._shopPoint?.[1] ?? ''}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lat', e.detail.value)}
                     ></platform-field>
-                    <platform-field type="number" mode="edit" label=${this.t('settings.field_shop_lng')} .value=${this._shopPoint?.[0] ?? ''}
+                    <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('settings.field_shop_lng')} .value=${this._shopPoint?.[0] ?? ''}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._setShopCoord('lng', e.detail.value)}
                     ></platform-field>
                 </div>
                 <div class="zone-toolbar">
                     ${[this._city, this._address].filter(Boolean).join(', ').trim()
                         ? html`
-                            <platform-button size="sm" variant="secondary"
-                                ?busy=${this._zoneLocating}
+                            <platform-button density="compact" variant="secondary"
+                                ?loading=${this._zoneLocating}
                                 @click=${() => this._locateShopAddress()}>
                                 <platform-icon name="pin" size="14"></platform-icon>
                                 ${this.t('settings.zone_locate')}
@@ -1172,7 +1172,7 @@ export class ShopSettingsPage extends PlatformPage {
                             <span class="option-title">${shop.telegram_chat_id
                                 ? this.t('settings.telegram_bound')
                                 : this.t('settings.telegram_connected')}</span>
-                            <platform-button size="sm" variant="secondary" ?busy=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
+                            <platform-button density="compact" variant="secondary" ?loading=${this._telegramDisconnectOp.busy} @click=${() => this._disconnectTelegram()}>
                                 ${this.t('settings.telegram_disconnect')}
                             </platform-button>
                         </div>
@@ -1194,11 +1194,11 @@ export class ShopSettingsPage extends PlatformPage {
                                 <span class="step-text">${this.t('settings.tg_step_3')}</span>
                             </div>
                         </div>
-                        <platform-field type="string" mode="edit" label=${this.t('settings.field_bot_token')} .value=${this._botToken}
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('settings.field_bot_token')} .value=${this._botToken}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._botToken = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                         ></platform-field>
                         <div class="row" style="justify-content: flex-end">
-                            <platform-button variant="primary" ?busy=${this._telegramConnectOp.busy} ?disabled=${this._botToken.trim().length < 20} @click=${() => this._connectTelegram()}>
+                            <platform-button variant="primary" ?loading=${this._telegramConnectOp.busy} ?disabled=${this._botToken.trim().length < 20} @click=${() => this._connectTelegram()}>
                                 ${this.t('settings.telegram_connect')}
                             </platform-button>
                         </div>
@@ -1213,7 +1213,7 @@ export class ShopSettingsPage extends PlatformPage {
                 ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     <platform-empty-state icon="store" title=${this.t('settings.shop_not_found')}>
-                        <platform-button size="sm" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('settings.retry')}</platform-button>
+                        <platform-button density="compact" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('settings.retry')}</platform-button>
                     </platform-empty-state>`;
         }
         const section = this._section;
@@ -1250,8 +1250,8 @@ export class ShopSettingsPage extends PlatformPage {
                             ? html`
                                 <div class="savebar">
                                     <span class="savebar-text">${this.t('settings.unsaved')}</span>
-                                    <platform-button size="sm" variant="secondary" @click=${() => this._cancel()}>${this.t('settings.cancel')}</platform-button>
-                                    <platform-button size="sm" variant="primary" ?busy=${this._updateOp.busy} @click=${() => this._save()}>${this.t('settings.save')}</platform-button>
+                                    <platform-button density="compact" variant="secondary" @click=${() => this._cancel()}>${this.t('settings.cancel')}</platform-button>
+                                    <platform-button density="compact" variant="primary" ?loading=${this._updateOp.busy} @click=${() => this._save()}>${this.t('settings.save')}</platform-button>
                                 </div>`
                             : nothing}
                     </div>

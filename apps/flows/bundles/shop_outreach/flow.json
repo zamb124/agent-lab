@@ -1,0 +1,238 @@
+{
+  "flow_id": "shop_outreach",
+  "name": "Shop Outreach — поиск заведений и продающее письмо",
+  "description": "Агент поиска B2B-лидов для меню-платформы: генерирует поисковые запросы по предприятиям общепита города, краулит сайты и страницы контактов, извлекает email, дедуплицирует через CRM entities (entity_type=lead) и шлёт продающее HTML-письмо из доступного ящика компании через mail_send. По умолчанию dry-run: переменная send_enabled включает реальную отправку, test_recipient направляет весь прогон на один тестовый адрес. Бренд/отправитель/шаблон — переменные flow, перенастраиваются под любую компанию без правки кода.",
+  "tags": [
+    "outreach",
+    "mail",
+    "crm",
+    "web",
+    "shop"
+  ],
+  "permission": [],
+  "branches": {},
+  "entry": "bootstrap",
+  "nodes": {
+    "bootstrap": {
+      "type": "code",
+      "code": "\nimport re\nfrom datetime import datetime, timezone\n\n_EMAIL_RE = r\"[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}\"\n_URL_RE = r\"https?://[^\\s<>'\\\"\\)\\]]+\"\n\n\ndef _variables(state):\n    raw = state.variables\n    return dict(raw) if isinstance(raw, dict) else {}\n\n\ndef _bool(value, default=False):\n    if value is None:\n        return default\n    if isinstance(value, bool):\n        return value\n    if isinstance(value, str):\n        return value.strip().lower() in (\"1\", \"true\", \"yes\", \"on\")\n    return bool(value)\n\n\nasync def run(args, state):\n    variables = _variables(state)\n    send_enabled = _bool(variables.get(\"send_enabled\"), False)\n    test_recipient = str(variables.get(\"test_recipient\") or \"\").strip().lower()\n    if test_recipient and not re.fullmatch(_EMAIL_RE, test_recipient):\n        raise ValueError(\"test_recipient не является валидным email: \" + test_recipient)\n\n    content = str(state.get(\"content\") or \"\")\n    seed_emails = []\n    for match in re.finditer(_EMAIL_RE, content):\n        address = match.group(0).strip().lower()\n        if address != test_recipient and address not in seed_emails:\n            seed_emails.append(address)\n\n    seed_urls = []\n    for match in re.finditer(_URL_RE, content, re.IGNORECASE):\n        url = match.group(0).rstrip(\".,;\")\n        if url not in seed_urls:\n            seed_urls.append(url)\n\n    today = datetime.now(timezone.utc).strftime(\"%Y-%m-%d\")\n    session_id = str(state.get(\"session_id\") or \"manual\")\n    state[\"campaign_id\"] = \"outreach:\" + session_id + \":\" + today\n    state[\"send_enabled\"] = send_enabled\n    state[\"test_recipient\"] = test_recipient\n    state[\"seed_mode\"] = len(seed_emails) > 0\n    seed_leads = [\n        {\n            \"email\": address,\n            \"business_name\": \"\",\n            \"business_type\": \"\",\n            \"source_url\": \"\",\n            \"page_url\": \"\",\n            \"confidence\": 1.0,\n        }\n        for address in seed_emails\n    ]\n    state[\"seed_leads\"] = seed_leads\n    state[\"seed_urls\"] = seed_urls\n    state[\"leads\"] = list(seed_leads)\n    state[\"leads_to_send\"] = []\n    state[\"skipped_leads\"] = []\n    state[\"send_results\"] = []\n    state[\"node_errors\"] = []\n    return state\n",
+      "entrypoint": "run"
+    },
+    "plan_queries": {
+      "type": "llm_node",
+      "prompt": "prompts/plan_queries.md",
+      "llm": {
+        "provider": "linnex_llm",
+        "model": "auto",
+        "temperature": 0.4
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/plan_queries.output_schema.json",
+      "output_key": "response"
+    },
+    "search_links": {
+      "type": "code",
+      "code": "\nimport json\nfrom urllib.parse import urlparse\n\n\ndef _domain(url):\n    try:\n        host = urlparse(url).hostname or \"\"\n    except Exception:\n        return \"\"\n    return host.lower().removeprefix(\"www.\")\n\n\nasync def run(args, state):\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    per_query_limit = int(variables.get(\"per_query_limit\") or 6)\n    max_leads = int(variables.get(\"max_leads\") or 25)\n    query_count = int(variables.get(\"query_count\") or 6)\n    banned = set()\n    for raw in variables.get(\"banned_domains\") or []:\n        banned.add(str(raw).strip().lower())\n\n    def _banned(url):\n        host = _domain(url)\n        if not host:\n            return True\n        for bad in banned:\n            if host == bad or host.endswith(\".\" + bad):\n                return True\n        return False\n\n    queries = []\n    raw_response = state.get(\"response\")\n    if isinstance(raw_response, str) and raw_response.strip():\n        payload = json.loads(raw_response)\n        for item in payload.get(\"queries\") or []:\n            query = str(item).strip()\n            if query:\n                queries.append(query)\n    for item in variables.get(\"extra_queries\") or []:\n        query = str(item).strip()\n        if query:\n            queries.append(query)\n    queries = queries[:query_count]\n    if not queries and not state.get(\"seed_urls\"):\n        raise ValueError(\"search_links: нет поисковых запросов\")\n\n    errors = list(state.get(\"node_errors\") or [])\n\n    async def _search(query):\n        raw = await tools.web_search(\n            query=query,\n            providers=[\"auto\"],\n            provider_strategy=\"merge\",\n            language=\"ru\",\n            region=\"ru\",\n            limit=per_query_limit,\n        )\n        found = []\n        for item in raw.get(\"results\") or []:\n            url = str(item.get(\"url\") or \"\").strip()\n            if url:\n                found.append(url)\n        return found\n\n    flat = []\n    for url in state.get(\"seed_urls\") or []:\n        flat.append(str(url))\n    for query in queries:\n        try:\n            flat.extend(await _search(query))\n        except Exception as exc:\n            errors.append(\"web_search:\" + query + \": \" + str(exc)[:200])\n    if not flat and queries:\n        ddg = await tools.browser_duckduckgo_links_batch(\n            queries=queries, per_query_limit=per_query_limit\n        )\n        if isinstance(ddg, dict) and ddg.get(\"success\") is True:\n            for url in ddg.get(\"urls\") or []:\n                flat.append(str(url))\n\n    seen_domains = set()\n    candidate_urls = []\n    for url in flat:\n        if _banned(url):\n            continue\n        host = _domain(url)\n        if host in seen_domains:\n            continue\n        seen_domains.add(host)\n        candidate_urls.append(url)\n        if len(candidate_urls) >= max_leads:\n            break\n\n    state[\"candidate_urls\"] = candidate_urls\n    state[\"node_errors\"] = errors\n    state[\"search_stats\"] = {\"queries\": queries, \"raw_urls\": len(flat)}\n    return state\n",
+      "entrypoint": "run"
+    },
+    "fetch_pages": {
+      "type": "code",
+      "code": "\nimport asyncio\nimport re\nfrom urllib.parse import urlparse\n\n_LINK_RE = r\"\\]\\((https?://[^)\\s]+|/[^)\\s]{1,80})\"\n_CONTACT_HINT = r\"contact|kontakt|kontakty|contacts|about|o-nas|o_nas|feedback|svyaz\"\n\n\ndef _base(url):\n    parsed = urlparse(url)\n    return parsed.scheme + \"://\" + (parsed.hostname or \"\")\n\n\nasync def run(args, state):\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    max_pages = int(variables.get(\"max_pages\") or 12)\n\n    targets = []\n    seen = set()\n    for url in state.get(\"candidate_urls\") or []:\n        base = _base(str(url))\n        if base in seen:\n            continue\n        seen.add(base)\n        targets.append(base)\n\n    errors = list(state.get(\"node_errors\") or [])\n    spent = 0\n\n    async def _fetch(url):\n        try:\n            raw = await tools.browser_page_markdown(\n                url=url, ingest_source=\"shop_outreach\", max_markdown_chars=20000\n            )\n        except Exception as exc:\n            return {\"url\": url, \"text\": \"\", \"error\": str(exc)[:200]}\n        if not isinstance(raw, dict) or raw.get(\"success\") is not True:\n            err = raw.get(\"error\") if isinstance(raw, dict) else \"fetch failed\"\n            return {\"url\": url, \"text\": \"\", \"error\": str(err)[:200]}\n        return {\"url\": url, \"text\": str(raw.get(\"markdown\") or \"\")}\n\n    home_results = await asyncio.gather(*[_fetch(t) for t in targets[:max_pages]])\n    spent = len(home_results)\n    pages = []\n    contact_urls = []\n    for page in home_results:\n        if page[\"error\"]:\n            errors.append(\"fetch:\" + page[\"url\"] + \": \" + page[\"error\"])\n            continue\n        pages.append(page)\n        base = _base(page[\"url\"])\n        found = 0\n        for match in re.finditer(_LINK_RE, page[\"text\"]):\n            link = match.group(1)\n            if link.startswith(\"/\"):\n                link = base + link\n            if not link.startswith(base):\n                continue\n            if not re.search(_CONTACT_HINT, link, re.IGNORECASE):\n                continue\n            if link.rstrip(\"/\") == base.rstrip(\"/\"):\n                continue\n            if link not in contact_urls:\n                contact_urls.append(link)\n                found += 1\n                if found >= 2:\n                    break\n\n    remaining = max(0, max_pages - spent)\n    if remaining and contact_urls:\n        contact_results = await asyncio.gather(\n            *[_fetch(u) for u in contact_urls[:remaining]]\n        )\n        for page in contact_results:\n            if page[\"error\"]:\n                errors.append(\"fetch:\" + page[\"url\"] + \": \" + page[\"error\"])\n                continue\n            pages.append(page)\n\n    state[\"pages\"] = pages\n    state[\"node_errors\"] = errors\n    return state\n",
+      "entrypoint": "run"
+    },
+    "extract_contacts": {
+      "type": "code",
+      "code": "\nimport json\nimport re\nfrom urllib.parse import urlparse\n\n_EMAIL_RE = r\"[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}\"\n_MAILTO_RE = r\"mailto:\\s*([A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,})\"\n_OBFUSCATED_RE = (\n    r\"([A-Za-z0-9._%+\\-]{1,64})\\s*(?:\\[at\\]|\\(at\\)|\\s+at\\s+|\\s+собака\\s+)\"\n    r\"\\s*([A-Za-z0-9.\\-]{2,})\\s*(?:\\[dot\\]|\\(dot\\)|\\s+dot\\s+|\\s+точка\\s+)\\s*([A-Za-z]{2,})\"\n)\n_HEADING_RE = r\"^#\\s+(.{3,80})$\"\n\n_BAD_LOCALS = {\n    \"noreply\", \"no-reply\", \"donotreply\", \"mailer-daemon\", \"postmaster\",\n    \"hostmaster\", \"webmaster\", \"sentry\", \"wordpress\", \"example\", \"test\",\n    \"admin@example\", \"your-email\",\n}\n_BAD_DOMAIN_PARTS = (\n    \"sentry\", \"wixpress\", \"example.\", \"localhost\", \"w3.org\", \"schema.org\",\n    \"godaddy\", \"gstatic\", \"jquery\", \"bootstrap\", \"cloudflare\", \"gravatar\",\n    \"yourdomain\", \"domain.tld\", \"email.com\",\n)\n_BAD_TLDS = {\"png\", \"jpg\", \"jpeg\", \"gif\", \"svg\", \"webp\", \"css\", \"js\", \"json\", \"ico\"}\n_GOOD_LOCALS = {\n    \"info\", \"mail\", \"hello\", \"contact\", \"contacts\", \"zakaz\", \"order\",\n    \"welcome\", \"cafe\", \"rest\", \"restaurant\", \"bar\", \"food\", \"eda\", \"reception\",\n    \"booking\", \"office\", \"msk\", \"moscow\", \"sales\", \"priem\", \"write\",\n}\n_MAIL_HOSTS = {\n    \"gmail.com\", \"yandex.ru\", \"ya.ru\", \"mail.ru\", \"bk.ru\", \"inbox.ru\",\n    \"list.ru\", \"rambler.ru\", \"outlook.com\", \"hotmail.com\", \"icloud.com\",\n    \"yahoo.com\", \"proton.me\", \"protonmail.com\",\n}\n\n\ndef _valid_email(raw):\n    address = raw.strip().lower().strip(\".,;:()[]<>\")\n    if not re.fullmatch(_EMAIL_RE, address):\n        return None\n    local, _, domain = address.partition(\"@\")\n    if local in _BAD_LOCALS or local.startswith(\"noreply\"):\n        return None\n    for bad in _BAD_DOMAIN_PARTS:\n        if bad in domain:\n            return None\n    tld = domain.rsplit(\".\", 1)[-1]\n    if tld in _BAD_TLDS:\n        return None\n    if re.match(r\"^\\d+x?$\", domain.split(\".\")[0]):\n        return None\n    return address\n\n\ndef _domain_of(url):\n    try:\n        return (urlparse(url).hostname or \"\").lower().removeprefix(\"www.\")\n    except Exception:\n        return \"\"\n\n\nasync def run(args, state):\n    pages = list(state.get(\"pages\") or [])\n    banned = set()\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    for raw in variables.get(\"banned_email_domains\") or []:\n        banned.add(str(raw).strip().lower())\n\n    best = {}\n    for page in pages:\n        url = str(page.get(\"url\") or \"\")\n        text = str(page.get(\"text\") or \"\")\n        site_host = _domain_of(url)\n        if not text:\n            continue\n        title = \"\"\n        heading = re.search(_HEADING_RE, text, re.MULTILINE)\n        if heading is not None:\n            title = heading.group(1).strip()\n\n        mailto_hits = {m.group(1).lower() for m in re.finditer(_MAILTO_RE, text, re.IGNORECASE)}\n        found = set()\n        for match in re.finditer(_EMAIL_RE, text):\n            found.add(match.group(0))\n        for match in re.finditer(_OBFUSCATED_RE, text, re.IGNORECASE):\n            found.add(match.group(1) + \"@\" + match.group(2) + \".\" + match.group(3))\n\n        contact_page = bool(_CONTACT_HIT_RE_search(url))\n        for raw_email in found:\n            email = _valid_email(raw_email)\n            if email is None:\n                continue\n            _, _, mail_domain = email.partition(\"@\")\n            if mail_domain in banned:\n                continue\n            score = 1.0\n            if email in mailto_hits:\n                score += 2.0\n            if contact_page:\n                score += 1.0\n            local = email.partition(\"@\")[0]\n            if local in _GOOD_LOCALS:\n                score += 1.0\n            if mail_domain == site_host or mail_domain.endswith(\".\" + site_host) or site_host.endswith(\".\" + mail_domain):\n                score += 1.5\n            elif mail_domain not in _MAIL_HOSTS:\n                score -= 1.0\n            lead = {\n                \"email\": email,\n                \"business_name\": \"\",\n                \"name_hint\": title,\n                \"business_type\": \"\",\n                \"source_url\": url,\n                \"page_url\": url,\n                \"site_domain\": site_host,\n                \"confidence\": round(score, 2),\n            }\n            prev = best.get(email)\n            if prev is None or lead[\"confidence\"] > prev[\"confidence\"]:\n                best[email] = lead\n\n    leads = sorted(best.values(), key=lambda x: -x[\"confidence\"])\n    state[\"leads\"] = leads\n    state[\"leads_json\"] = json.dumps(leads, ensure_ascii=False)\n    return state\n\n\ndef _CONTACT_HIT_RE_search(url):\n    return re.search(r\"contact|kontakt|about|o-nas|feedback|svyaz\", url, re.IGNORECASE)\n",
+      "entrypoint": "run"
+    },
+    "validate_leads": {
+      "type": "llm_node",
+      "prompt": "prompts/validate_leads.md",
+      "llm": {
+        "provider": "linnex_llm",
+        "model": "auto",
+        "temperature": 0.1
+      },
+      "tools": [],
+      "structured_output": true,
+      "output_schema_file": "schemas/validate_leads.output_schema.json",
+      "output_key": "response"
+    },
+    "merge_validated": {
+      "type": "code",
+      "code": "\nimport json\n\n\nasync def run(args, state):\n    leads = list(state.get(\"leads\") or [])\n    raw_response = state.get(\"response\")\n    if not isinstance(raw_response, str) or not raw_response.strip():\n        raise ValueError(\"validate_leads: пустой ответ LLM\")\n    payload = json.loads(raw_response)\n    verdicts = {}\n    for item in payload.get(\"leads\") or []:\n        email = str(item.get(\"email\") or \"\").strip().lower()\n        if email:\n            verdicts[email] = item\n\n    kept = []\n    rejected = []\n    for lead in leads:\n        verdict = verdicts.get(lead[\"email\"])\n        if verdict is None:\n            lead[\"reject_reason\"] = \"llm_skip\"\n            rejected.append(lead)\n            continue\n        if verdict.get(\"keep\") is not True:\n            lead[\"reject_reason\"] = str(verdict.get(\"reason\") or \"llm_reject\")\n            rejected.append(lead)\n            continue\n        name = str(verdict.get(\"business_name\") or \"\").strip()\n        lead[\"business_name\"] = name or str(lead.get(\"name_hint\") or \"\").strip()\n        lead[\"business_type\"] = str(verdict.get(\"business_type\") or \"other\").strip()\n        kept.append(lead)\n\n    seeds = list(state.get(\"seed_leads\") or [])\n    if seeds and not leads:\n        kept = seeds\n    elif seeds:\n        known = {item[\"email\"] for item in kept}\n        for seed in seeds:\n            if seed[\"email\"] not in known:\n                kept.append(seed)\n\n    state[\"leads\"] = kept\n    state[\"rejected_leads\"] = rejected\n    return state\n",
+      "entrypoint": "run"
+    },
+    "dedupe_upsert_crm": {
+      "type": "code",
+      "code": "\n_FINAL_STATUSES = {\"sent\", \"suppressed\"}\n\n\nasync def run(args, state):\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    entity_type = str(variables.get(\"crm_entity_type\") or \"lead\").strip()\n    namespace = str(variables.get(\"crm_namespace\") or \"\").strip() or None\n    campaign_id = str(state.get(\"campaign_id\") or \"\")\n    max_leads = int(variables.get(\"max_leads\") or 25)\n\n    errors = list(state.get(\"node_errors\") or [])\n    to_send = []\n    skipped = []\n\n    for lead in list(state.get(\"leads\") or [])[:max_leads]:\n        email = lead[\"email\"]\n        existing = None\n        existing_status = \"\"\n        existing_description = \"\"\n        try:\n            hits = await tools.crm_search_entities(\n                query=email, entity_type=entity_type, namespace=namespace, limit=5\n            )\n            for hit in hits.get(\"hits\") or []:\n                probe = str(hit.get(\"name\") or \"\") + \" \" + str(hit.get(\"description\") or \"\")\n                if email in probe:\n                    existing = hit\n                    break\n        except Exception as exc:\n            errors.append(\"crm_search:\" + email + \": \" + str(exc)[:200])\n\n        if existing is not None:\n            entity_id = str(existing.get(\"entity_id\") or \"\")\n            try:\n                full = await tools.crm_get_entity(entity_id=entity_id)\n                entity = full.get(\"entity\") or {}\n                existing_status = str(entity.get(\"status\") or \"\").strip().lower()\n                existing_description = str(entity.get(\"description\") or \"\")\n            except Exception as exc:\n                errors.append(\"crm_get:\" + email + \": \" + str(exc)[:200])\n            if existing_status in _FINAL_STATUSES:\n                skipped.append({\"email\": email, \"reason\": \"status:\" + existing_status, \"entity_id\": entity_id})\n                continue\n            lead[\"entity_id\"] = entity_id\n            lead[\"entity_description\"] = existing_description\n            to_send.append(lead)\n            continue\n\n        name = str(lead.get(\"business_name\") or \"\").strip() or email\n        description = (\n            email + \" | \" + str(lead.get(\"site_domain\") or \"\")\n            + \" | source: \" + str(lead.get(\"source_url\") or \"\")\n        )\n        try:\n            created = await tools.crm_create_entity(\n                entity_type=entity_type,\n                name=name,\n                entity_subtype=str(lead.get(\"business_type\") or \"\").strip() or None,\n                namespace=namespace,\n                description=description,\n                attributes={\n                    \"email\": email,\n                    \"website\": str(lead.get(\"site_domain\") or \"\"),\n                    \"source_url\": str(lead.get(\"source_url\") or \"\"),\n                    \"confidence\": lead.get(\"confidence\"),\n                    \"outreach_campaign\": campaign_id,\n                },\n                tags=[\"outreach\", campaign_id, str(lead.get(\"business_type\") or \"other\")],\n            )\n            entity = created.get(\"entity\") or {}\n            lead[\"entity_id\"] = str(entity.get(\"entity_id\") or \"\")\n            lead[\"entity_description\"] = description\n            to_send.append(lead)\n        except Exception as exc:\n            errors.append(\"crm_create:\" + email + \": \" + str(exc)[:200])\n            skipped.append({\"email\": email, \"reason\": \"crm_error\"})\n\n    state[\"leads_to_send\"] = to_send\n    state[\"skipped_leads\"] = skipped\n    state[\"node_errors\"] = errors\n    return state\n",
+      "entrypoint": "run"
+    },
+    "render_preview": {
+      "type": "code",
+      "code": "\nimport json\nfrom datetime import datetime, timezone\n\n\ndef _render(template, lead, variables, campaign_marker):\n    name = str(lead.get(\"business_name\") or \"\").strip()\n    if not name:\n        name = str(lead.get(\"name_hint\") or \"\").strip() or \"ваше заведение\"\n    out = template\n    out = out.replace(\"{{business_name}}\", name)\n    out = out.replace(\"{{landing_url}}\", str(variables.get(\"landing_url\") or \"\"))\n    out = out.replace(\"{{sender_display_name}}\", str(variables.get(\"sender_display_name\") or \"\"))\n    out = out.replace(\"{{campaign_marker}}\", campaign_marker)\n    return out\n\n\nasync def run(args, state):\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    campaign_id = str(state.get(\"campaign_id\") or \"\")\n    template_html = str(variables.get(\"email_template_html\") or \"\")\n    template_text = str(variables.get(\"email_text_template\") or \"\")\n    subject_template = str(variables.get(\"email_subject_template\") or \"\")\n    if not template_html.strip() or not template_text.strip():\n        raise ValueError(\"email_template_html/email_text_template обязательны\")\n\n    leads = list(state.get(\"leads_to_send\") or [])\n    rendered = []\n    for lead in leads:\n        marker = campaign_id + \"/\" + lead[\"email\"]\n        rendered.append(\n            {\n                \"email\": lead[\"email\"],\n                \"entity_id\": lead.get(\"entity_id\") or \"\",\n                \"entity_description\": lead.get(\"entity_description\") or \"\",\n                \"business_name\": str(lead.get(\"business_name\") or \"\").strip(),\n                \"subject\": _render(subject_template, lead, variables, marker),\n                \"body_text\": _render(template_text, lead, variables, marker),\n                \"body_html\": _render(template_html, lead, variables, marker),\n            }\n        )\n\n    state[\"rendered_emails\"] = rendered\n    found = len(state.get(\"leads\") or [])\n    skipped = list(state.get(\"skipped_leads\") or [])\n    rejected = list(state.get(\"rejected_leads\") or [])\n    stats = {\n        \"send_enabled\": bool(state.get(\"send_enabled\")),\n        \"test_recipient\": str(state.get(\"test_recipient\") or \"\"),\n        \"found\": found,\n        \"rejected\": len(rejected),\n        \"to_send\": len(leads),\n        \"skipped\": skipped,\n        \"sent\": 0,\n        \"failed\": 0,\n        \"errors\": list(state.get(\"node_errors\") or []),\n        \"leads\": [\n            {\n                \"email\": item[\"email\"],\n                \"business_name\": item.get(\"business_name\") or \"\",\n                \"business_type\": item.get(\"business_type\") or \"\",\n            }\n            for item in rendered\n        ],\n        \"preview_subject\": rendered[0][\"subject\"] if rendered else \"\",\n        \"preview_body_text\": rendered[0][\"body_text\"][:1200] if rendered else \"\",\n    }\n    state[\"run_stats_json\"] = json.dumps(stats, ensure_ascii=False)\n    return state\n",
+      "entrypoint": "run"
+    },
+    "send_batch": {
+      "type": "code",
+      "code": "\nimport json\nfrom datetime import datetime, timezone\n\n\nasync def run(args, state):\n    variables = dict(state.variables) if isinstance(state.variables, dict) else {}\n    max_sends = int(variables.get(\"max_sends_per_run\") or 10)\n    sender_local_part = str(variables.get(\"sender_local_part\") or \"\").strip() or None\n    sender_display_name = str(variables.get(\"sender_display_name\") or \"\").strip() or None\n    test_recipient = str(state.get(\"test_recipient\") or \"\").strip() or None\n\n    rendered = list(state.get(\"rendered_emails\") or [])\n    if test_recipient:\n        rendered = rendered[:1]\n    else:\n        rendered = rendered[:max_sends]\n\n    results = []\n    errors = list(state.get(\"node_errors\") or [])\n    sent_ok = 0\n    for item in rendered:\n        to = [test_recipient] if test_recipient else [item[\"email\"]]\n        record = {\"to\": to[0], \"lead_email\": item[\"email\"], \"ok\": False}\n        try:\n            res = await tools.mail_send(\n                to_addresses=to,\n                subject=item[\"subject\"],\n                body_text=item[\"body_text\"],\n                body_html=item[\"body_html\"],\n                from_local_part=sender_local_part,\n                sender_display_name=sender_display_name,\n            )\n            record[\"ok\"] = True\n            record[\"message_id\"] = str(res.get(\"message_id\") or \"\")\n            record[\"from_address\"] = str(res.get(\"from_address\") or \"\")\n            sent_ok += 1\n        except Exception as exc:\n            record[\"error\"] = str(exc)[:300]\n            errors.append(\"mail_send:\" + item[\"email\"] + \": \" + str(exc)[:200])\n        results.append(record)\n\n        entity_id = item.get(\"entity_id\") or \"\"\n        if entity_id:\n            audit = \"sent \" + datetime.now(timezone.utc).isoformat()\n            if record.get(\"message_id\"):\n                audit += \" message_id=\" + record[\"message_id\"]\n            if record.get(\"error\"):\n                audit += \" error=\" + record[\"error\"][:160]\n            base_desc = item.get(\"entity_description\") or item[\"email\"]\n            try:\n                await tools.crm_update_entity(\n                    entity_id=entity_id,\n                    status=\"sent\" if record[\"ok\"] else \"send_failed\",\n                    description=base_desc + \"\\n\" + audit,\n                )\n            except Exception as exc:\n                errors.append(\"crm_update:\" + item[\"email\"] + \": \" + str(exc)[:200])\n\n    stats = json.loads(str(state.get(\"run_stats_json\") or \"{}\"))\n    stats[\"sent\"] = sent_ok\n    stats[\"failed\"] = len(results) - sent_ok\n    stats[\"send_results\"] = results\n    stats[\"errors\"] = errors\n    state[\"send_results\"] = results\n    state[\"node_errors\"] = errors\n    state[\"run_stats_json\"] = json.dumps(stats, ensure_ascii=False)\n    return state\n",
+      "entrypoint": "run"
+    },
+    "final_report": {
+      "type": "llm_node",
+      "prompt": "prompts/final_report.md",
+      "llm": {
+        "provider": "linnex_llm",
+        "model": "auto",
+        "temperature": 0.3
+      },
+      "tools": [],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from_node": "bootstrap",
+      "to_node": "plan_queries",
+      "condition": {
+        "type": "simple",
+        "variable": "seed_mode",
+        "operator": "==",
+        "value": false
+      }
+    },
+    {
+      "from_node": "bootstrap",
+      "to_node": "dedupe_upsert_crm",
+      "condition": {
+        "type": "simple",
+        "variable": "seed_mode",
+        "operator": "==",
+        "value": true
+      }
+    },
+    {
+      "from_node": "plan_queries",
+      "to_node": "search_links"
+    },
+    {
+      "from_node": "search_links",
+      "to_node": "fetch_pages"
+    },
+    {
+      "from_node": "fetch_pages",
+      "to_node": "extract_contacts"
+    },
+    {
+      "from_node": "extract_contacts",
+      "to_node": "validate_leads"
+    },
+    {
+      "from_node": "validate_leads",
+      "to_node": "merge_validated"
+    },
+    {
+      "from_node": "merge_validated",
+      "to_node": "dedupe_upsert_crm"
+    },
+    {
+      "from_node": "dedupe_upsert_crm",
+      "to_node": "render_preview"
+    },
+    {
+      "from_node": "render_preview",
+      "to_node": "send_batch",
+      "condition": {
+        "type": "simple",
+        "variable": "send_enabled",
+        "operator": "==",
+        "value": true
+      }
+    },
+    {
+      "from_node": "render_preview",
+      "to_node": "final_report",
+      "condition": {
+        "type": "simple",
+        "variable": "send_enabled",
+        "operator": "==",
+        "value": false
+      }
+    },
+    {
+      "from_node": "send_batch",
+      "to_node": "final_report"
+    },
+    {
+      "from_node": "final_report",
+      "to_node": null
+    }
+  ],
+  "variables": {
+    "send_enabled": false,
+    "test_recipient": "",
+    "sender_local_part": "sales",
+    "sender_display_name": "Linnex",
+    "landing_url": "https://linnex.io",
+    "queries_city": "Москва",
+    "business_scope": "рестораны, кафе, кофейни, бары, пекарни, кондитерские, столовые, службы доставки еды",
+    "query_count": 6,
+    "per_query_limit": 6,
+    "max_leads": 25,
+    "max_pages": 12,
+    "max_sends_per_run": 10,
+    "extra_queries": [],
+    "crm_entity_type": "lead",
+    "crm_namespace": "",
+    "email_subject_template": "Бесплатное онлайн-меню для {{business_name}} — {{sender_display_name}}",
+    "email_template_html": "<!DOCTYPE html>\n<html lang=\"ru\" xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n<title>{{sender_display_name}} — бесплатное онлайн-меню</title>\n<!--[if mso]>\n<style>table{border-collapse:collapse}td{font-family:Arial,Helvetica,sans-serif}</style>\n<![endif]-->\n</head>\n<body style=\"margin:0;padding:0;background-color:#0b1120;-webkit-text-size-adjust:100%;\">\n<div style=\"display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;\">\nБесплатное онлайн-меню для {{business_name}} — своё меню за 5 минут, свой домен, QR для столиков, заказы без комиссии.\n</div>\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#0b1120\">\n<tr><td align=\"center\" style=\"padding:28px 14px;\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:600px;\">\n\n  <tr><td style=\"padding:0 8px 18px 14px;\">\n    <span style=\"font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b;letter-spacing:0.06em;text-transform:uppercase;\">{{sender_display_name}} · платформа меню</span>\n  </td></tr>\n\n  <tr><td bgcolor=\"#111c33\" style=\"background:#111c33;border-radius:18px;padding:36px 34px 30px;border:1px solid #1e2a47;\">\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#34d399;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;padding-bottom:14px;\">Бесплатно · навсегда · без комиссии</div>\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:38px;color:#f8fafc;font-weight:bold;\">Онлайн-меню<br>для {{business_name}}</div>\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#94a3b8;padding-top:14px;\">\n      Гости сканируют QR-код и сразу видят ваше меню с фото и ценами —\n      на своём домене, в вашем стиле. Платформа полностью бесплатна.\n    </div>\n    <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"padding-top:26px;\">\n      <tr><td bgcolor=\"#34d399\" style=\"background:#34d399;border-radius:10px;\">\n        <a href=\"{{landing_url}}\" target=\"_blank\" style=\"display:inline-block;padding:14px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#052e1f;text-decoration:none;\">Открыть меню бесплатно &rarr;</a>\n      </td></tr>\n    </table>\n  </td></tr>\n\n  <tr><td style=\"height:18px;line-height:18px;\">&nbsp;</td></tr>\n\n  <tr><td>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">\n      <tr>\n        <td width=\"50%\" style=\"padding:0 7px 14px 0;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">0 &#8381;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">Бесплатно навсегда</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Без подписок, комиссий и скрытых платежей — базовые возможности бесплатны всегда.</div>\n          </td></tr></table>\n        </td>\n        <td width=\"50%\" style=\"padding:0 0 14px 7px;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">&#8987;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">Меню за 5 минут</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Каталог, фото, цены и модификаторы — настройте своё меню без дизайнера и программиста.</div>\n          </td></tr></table>\n        </td>\n      </tr>\n      <tr>\n        <td width=\"50%\" style=\"padding:0 7px 14px 0;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">&#127760;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">Свой домен</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Прикрутите домен заведения — меню будет жить на вашем адресе, а не на чужом.</div>\n          </td></tr></table>\n        </td>\n        <td width=\"50%\" style=\"padding:0 0 14px 7px;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">&#9741;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">QR-меню для столиков</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Гость сканирует код на столе и смотрит меню с телефона — печатать новые меню больше не нужно.</div>\n          </td></tr></table>\n        </td>\n      </tr>\n      <tr>\n        <td width=\"50%\" style=\"padding:0 7px 0 0;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">&#128181;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">Заказы без комиссии</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Принимайте заказы напрямую — 100% выручки остаётся у вас, а не у агрегатора.</div>\n          </td></tr></table>\n        </td>\n        <td width=\"50%\" style=\"padding:0 0 0 7px;\" bgcolor=\"#0e1729\">\n          <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:20px 20px 18px;border:1px solid #1e2a47;\">\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:22px;color:#34d399;\">&#10024;</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#e2e8f0;padding-top:8px;\">Акции и оформление</div>\n            <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;padding-top:5px;\">Промо-блоки, темы и брендирование — меню выглядит как продолжение вашего заведения.</div>\n          </td></tr></table>\n        </td>\n      </tr>\n    </table>\n  </td></tr>\n\n  <tr><td style=\"height:18px;line-height:18px;\">&nbsp;</td></tr>\n\n  <tr><td bgcolor=\"#0e1729\" style=\"background:#0e1729;border-radius:14px;padding:24px 30px;border:1px solid #1e2a47;\">\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#f8fafc;padding-bottom:12px;\">Как начать — три шага</div>\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:22px;color:#94a3b8;\">\n      <span style=\"color:#34d399;font-weight:bold;\">1.</span> Зарегистрируйтесь по кнопке выше &nbsp;&middot;&nbsp;\n      <span style=\"color:#34d399;font-weight:bold;\">2.</span> Загрузите позиции и фото &nbsp;&middot;&nbsp;\n      <span style=\"color:#34d399;font-weight:bold;\">3.</span> Распечатайте QR и поставьте на столы\n    </div>\n  </td></tr>\n\n  <tr><td style=\"padding:26px 18px 8px;text-align:center;\">\n    <a href=\"{{landing_url}}\" target=\"_blank\" style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#34d399;text-decoration:underline;\">{{landing_url}}</a>\n  </td></tr>\n\n  <tr><td style=\"padding:22px 14px 6px;border-top:1px solid #1e2a47;\">\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;color:#64748b;\">\n      Вы получили это письмо, потому что мы нашли публичный контакт {{business_name}}\n      в открытых источниках и подумали, что бесплатное онлайн-меню может быть полезно.\n      Если тема не актуальна — просто ответьте &laquo;стоп&raquo;, и мы больше не напишем.\n    </div>\n    <div style=\"font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;color:#475569;padding-top:8px;\">\n      {{sender_display_name}} &middot; {{campaign_marker}}\n    </div>\n  </td></tr>\n\n</table>\n</td></tr></table>\n</body>\n</html>\n",
+    "email_text_template": "Здравствуйте!\n\nЭто {{sender_display_name}} — бесплатная платформа онлайн-меню для ресторанов, кафе и магазинов.\n\nДля {{business_name}} это может быть особенно актуально:\n\n- 0 ₽ навсегда — без подписок и комиссий;\n- своё меню за 5 минут — каталог, фото, цены, модификаторы;\n- свой домен — меню живёт на вашем адресе;\n- QR-меню для столиков — гости заказывают с телефона;\n- заказы без комиссии — 100% выручки у вас;\n- акции и оформление под ваш бренд.\n\nПопробовать бесплатно: {{landing_url}}\n\nКак начать: зарегистрируйтесь, загрузите позиции, распечатайте QR на столы.\n\n—\nПисьмо отправлено {{sender_display_name}}. Мы нашли публичный контакт\n{{business_name}} в открытых источниках. Не актуально? Ответьте «стоп» —\nбольше не напишем.\n{{campaign_marker}}\n",
+    "banned_domains": [
+      "yandex.ru",
+      "yandex.com",
+      "maps.yandex.ru",
+      "2gis.ru",
+      "zoon.ru",
+      "tripadvisor.ru",
+      "tripadvisor.com",
+      "restoclub.ru",
+      "afisha.ru",
+      "wikipedia.org",
+      "vk.com",
+      "vkontakte.ru",
+      "t.me",
+      "telegram.me",
+      "instagram.com",
+      "facebook.com",
+      "youtube.com",
+      "ok.ru",
+      "odnoklassniki.ru",
+      "pinterest.com",
+      "google.com",
+      "google.ru",
+      "booking.com",
+      "delivery-club.ru",
+      "sbermarket.ru",
+      "rbc.ru",
+      "vc.ru",
+      "dzen.ru",
+      "hh.ru",
+      "rabota.ru",
+      "avito.ru",
+      "ria.ru",
+      "kommersant.ru",
+      "lenta.ru",
+      "gazeta.ru",
+      "tinkoff.ru",
+      "banki.ru"
+    ],
+    "banned_email_domains": [
+      "yandex.ru",
+      "2gis.ru",
+      "sentry.io",
+      "wixpress.com",
+      "example.com"
+    ]
+  }
+}

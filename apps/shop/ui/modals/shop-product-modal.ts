@@ -155,8 +155,6 @@ export class ShopProductModal extends PlatformModal {
             .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
             .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
             .nutri-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
-            .toggle-row { display: flex; align-items: center; gap: var(--space-2); }
-            .toggle-row span { font-size: var(--text-sm); color: var(--text-primary); }
             .ov-field { position: relative; }
             .ov-field > platform-catalog-source-badge { position: absolute; top: -9px; right: 0; z-index: 1; }
             .photo-box platform-catalog-source-badge { position: absolute; top: -9px; right: -4px; z-index: 2; }
@@ -451,25 +449,25 @@ export class ShopProductModal extends PlatformModal {
                     </button>
                     <div class="fields">
                         <div class="ov-field">
-                            <platform-field type="string" mode="edit" label=${this.t('menu.field_name')} .value=${this._name}
+                            <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('menu.field_name')} .value=${this._name}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = _str(e); }}></platform-field>
                             ${this._badge('name')}
                         </div>
                         <div class="row2">
-                            <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._price}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.field_price')} .value=${this._price}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._price = _str(e); }}></platform-field>
-                            <platform-field type="string" mode="edit" label=${this.t('menu.field_portion')} .value=${this._portion}
+                            <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('menu.field_portion')} .value=${this._portion}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._portion = _str(e); }}></platform-field>
                         </div>
                     </div>
                     <div class="photo-actions">
                         <input id="photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
                         ${this._photoFileId !== ''
-                            ? html`<platform-button size="sm" variant="accent" ?loading=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
+                            ? html`<platform-button density="compact" variant="accent" ?loading=${this._aiEnhanceOp.busy} @click=${() => this._enhancePhoto()}>
                                   <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_enhance')}
                               </platform-button>`
                             : nothing}
-                        <platform-button size="sm" variant="accent" ?loading=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
+                        <platform-button density="compact" variant="accent" ?loading=${this._aiGenerateOp.busy} ?disabled=${this._name.trim() === ''}
                             title=${this.t('menu.ai_generate_hint')} @click=${() => this._generatePhoto()}>
                             <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_generate')}
                         </platform-button>
@@ -477,11 +475,11 @@ export class ShopProductModal extends PlatformModal {
                 </div>
                 <div class="desc-row">
                     <div class="ov-field">
-                        <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._description}
+                        <platform-field type="text" mode="edit" pill-density="compact" label=${this.t('menu.field_description')} .value=${this._description}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = _str(e); }}></platform-field>
                         ${this._badge('description')}
                     </div>
-                    <platform-button size="sm" variant="accent" class="desc-ai" ?loading=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
+                    <platform-button density="compact" variant="accent" class="desc-ai" ?loading=${this._aiDescribeOp.busy} ?disabled=${this._name.trim() === ''}
                         @click=${() => this._describeWithAi()}>
                         <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('menu.ai_describe')}
                     </platform-button>
@@ -491,7 +489,7 @@ export class ShopProductModal extends PlatformModal {
                           <button type="button" class="bchip ${this._badges.includes(b.key) ? 'on' : ''}"
                               @click=${() => this._toggleBadge(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`)}</div>`
                     : nothing}
-                <platform-field type="array" mode="edit" label=${this.t('menu.field_ingredients')}
+                <platform-field type="array" mode="edit" pill-density="compact" label=${this.t('menu.field_ingredients')}
                     .value=${this._ingredients}
                     .config=${{ preserve_case: true }}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -510,23 +508,20 @@ export class ShopProductModal extends PlatformModal {
                     ? html`
                         <div class="sec-title">${this.t('menu.nutrition_title')}</div>
                         <div class="nutri-grid">
-                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_kcal')} .value=${this._kcal}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.nutri_kcal')} .value=${this._kcal}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._kcal = _str(e); }}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_protein')} .value=${this._protein}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.nutri_protein')} .value=${this._protein}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._protein = _str(e); }}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_fat')} .value=${this._fat}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.nutri_fat')} .value=${this._fat}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._fat = _str(e); }}></platform-field>
-                            <platform-field type="number" mode="edit" label=${this.t('menu.nutri_carb')} .value=${this._carb}
+                            <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('menu.nutri_carb')} .value=${this._carb}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => { this._carb = _str(e); }}></platform-field>
                         </div>`
                     : nothing}
                 ${this._editing
                     ? html`
-                        <div class="toggle-row">
-                            <platform-switch ?checked=${this._isAvailable}
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isAvailable = Boolean(e.detail.value); }}></platform-switch>
-                            <span>${this.t('menu.field_available')}</span>
-                        </div>`
+                        <platform-switch size="sm" label=${this.t('menu.field_available')} ?checked=${this._isAvailable}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isAvailable = Boolean(e.detail.value); }}></platform-switch>`
                     : nothing}
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>

@@ -667,7 +667,7 @@ export class ShopBuilderPage extends PlatformPage {
             <div class="section">
                 <div class="feed-head">
                     <div class="label" style="margin-bottom:0">${this.t('feed.shelves_label')}</div>
-                    <platform-button size="sm" variant="secondary" @click=${() => this._openShelfModal()}>
+                    <platform-button density="compact" variant="secondary" @click=${() => this._openShelfModal()}>
                         <platform-icon name="plus" size="14"></platform-icon> ${this.t('feed.shelf_add')}
                     </platform-button>
                 </div>
@@ -691,7 +691,7 @@ export class ShopBuilderPage extends PlatformPage {
             <div class="section">
                 <div class="feed-head">
                     <div class="label" style="margin-bottom:0">${this.t('feed.banners_label')}</div>
-                    <platform-button size="sm" variant="secondary" @click=${() => this._openBannerModal()}>
+                    <platform-button density="compact" variant="secondary" @click=${() => this._openBannerModal()}>
                         <platform-icon name="plus" size="14"></platform-icon> ${this.t('feed.banner_add')}
                     </platform-button>
                 </div>
@@ -724,7 +724,7 @@ export class ShopBuilderPage extends PlatformPage {
                 ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     <platform-empty-state icon="store" title=${this.t('builder.shop_not_found')}>
-                        <platform-button size="sm" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('builder.retry')}</platform-button>
+                        <platform-button density="compact" variant="secondary" @click=${() => { this._shops.load(); }}>${this.t('builder.retry')}</platform-button>
                     </platform-empty-state>`;
         }
         const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
@@ -820,7 +820,7 @@ export class ShopBuilderPage extends PlatformPage {
                                 <div class="lprow">
                                     <platform-field
                                         type="number"
-                                        mode="edit"
+                                        mode="edit" pill-density="compact"
                                         label=${this.t('builder.loyalty_goal')}
                                         .value=${String(this._loyGoal)}
                                         @change=${(e: CustomEvent<{ value?: unknown }>) => {
@@ -831,7 +831,7 @@ export class ShopBuilderPage extends PlatformPage {
                                     <div class="rpair">
                                     <platform-field
                                         type="number"
-                                        mode="edit"
+                                        mode="edit" pill-density="compact"
                                         label=${this._loyKind === 'discount_percent'
                                             ? this.t('builder.loyalty_reward_pct')
                                             : this.t('builder.loyalty_reward_sum')}

@@ -188,7 +188,7 @@ export class ShopPromosPage extends PlatformPage {
         if (this.shopId === '') return;
         await Promise.all([
             this._promosOp.run({ shop_id: this.shopId }),
-            this._productsOp.run({ shop_id: this.shopId, limit: 500 }),
+            this._productsOp.run({ shop_id: this.shopId }),
             this._shops.load(),
         ]);
     }
@@ -409,49 +409,49 @@ export class ShopPromosPage extends PlatformPage {
             <div class="card">
                 <div class="sec-title">${d.id === null ? this.t('promos.new') : this.t('promos.edit_title')}</div>
                 <div class="row">
-                    <platform-field type="string" mode="edit" label=${this.t('promos.field_name')} .value=${d.name}
+                    <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('promos.field_name')} .value=${d.name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ name: _str(e) })}></platform-field>
-                    <platform-field type="enum" mode="edit" label=${this.t('promos.template')} .value=${d.template}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('promos.template')} .value=${d.template}
                         .config=${{ values: TEMPLATES.map((tp) => ({ value: tp, label: this.t(`promos.tpl.${tp}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ template: _str(e) as Template })}></platform-field>
                 </div>
                 <div class="row">
                     ${d.template === 'percent_order' || d.template === 'percent_items' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.field_pct')} .value=${d.pct}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.field_pct')} .value=${d.pct}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ pct: _str(e) })}></platform-field>` : nothing}
                     ${d.template === 'amount_order' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.field_amount')} .value=${d.amount}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.field_amount')} .value=${d.amount}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ amount: _str(e) })}></platform-field>` : nothing}
                     ${d.template === 'n_plus_m_free' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.field_n')} .value=${d.n}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.field_n')} .value=${d.n}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ n: _str(e) })}></platform-field>
-                        <platform-field type="number" mode="edit" label=${this.t('promos.field_m')} .value=${d.m}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.field_m')} .value=${d.m}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ m: _str(e) })}></platform-field>` : nothing}
                     ${d.template === 'fixed_bundle_price' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.field_price')} .value=${d.price}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.field_price')} .value=${d.price}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ price: _str(e) })}></platform-field>` : nothing}
                 </div>
                 ${d.template === 'fixed_bundle_price' ? html`
                     <div class="sec-title">${this.t('promos.bundle_items')}</div>
                     ${d.bundle.map((it, idx) => html`
                         <div class="bundle-row">
-                            <platform-field type="enum" mode="edit" .value=${it.product_id}
+                            <platform-field type="enum" mode="edit" pill-density="compact" .value=${it.product_id}
                                 .config=${{ values: products.map((p) => ({ value: p.product_id, label: p.name })) }}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                     const bundle = d.bundle.map((x, i) => i === idx ? { ...x, product_id: _str(e) } : x);
                                     this._patchDraft({ bundle });
                                 }}></platform-field>
-                            <platform-field type="number" mode="edit" .value=${String(it.qty)}
+                            <platform-field type="number" mode="edit" pill-density="compact" .value=${String(it.qty)}
                                 @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                     const qty = parseInt(_str(e), 10) || 1;
                                     const bundle = d.bundle.map((x, i) => i === idx ? { ...x, qty } : x);
                                     this._patchDraft({ bundle });
                                 }}></platform-field>
-                            <platform-button size="sm" variant="secondary"
+                            <platform-button density="compact" variant="secondary"
                                 @click=${() => this._patchDraft({ bundle: d.bundle.filter((_, i) => i !== idx) })}>
                                 <platform-icon name="close" size="14"></platform-icon></platform-button>
                         </div>`)}
-                    <platform-button size="sm" variant="secondary"
+                    <platform-button density="compact" variant="secondary"
                         @click=${() => this._patchDraft({ bundle: [...d.bundle, { product_id: '', qty: 1 }] })}>
                         ${this.t('promos.bundle_add')}</platform-button>` : nothing}
                 ${needsScope ? html`
@@ -459,24 +459,24 @@ export class ShopPromosPage extends PlatformPage {
                     <div class="hint">${this.t('promos.scope_hint')}</div>
                     ${this._chips(products, d.scopeIds, (id) => this._toggleIn(d.scopeIds, id))}` : nothing}
                 <div class="row">
-                    <platform-field type="enum" mode="edit" label=${this.t('promos.condition')} .value=${d.condType}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('promos.condition')} .value=${d.condType}
                         .config=${{ values: CONDS.map((c) => ({ value: c, label: this.t(`promos.cond.${c}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ condType: _str(e) as CondType })}></platform-field>
                     ${d.condType === 'min_total' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.cond_sum')} .value=${d.condMinor}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.cond_sum')} .value=${d.condMinor}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ condMinor: _str(e) })}></platform-field>` : nothing}
                     ${d.condType === 'min_qty' ? html`
-                        <platform-field type="number" mode="edit" label=${this.t('promos.cond_n')} .value=${d.condN}
+                        <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.cond_n')} .value=${d.condN}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ condN: _str(e) })}></platform-field>` : nothing}
                 </div>
                 ${d.condType === 'items_present' ? this._chips(products, d.condIds, (id) => this._toggleIn(d.condIds, id)) : nothing}
                 <div class="row">
-                    <platform-switch ?checked=${d.scheduleOn} label=${this.t('promos.schedule')}
+                    <platform-switch size="sm" ?checked=${d.scheduleOn} label=${this.t('promos.schedule')}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ scheduleOn: Boolean(e.detail.value) })}></platform-switch>
                     ${d.scheduleOn ? html`
-                        <platform-field type="string" mode="edit" label=${this.t('promos.time_from')} .value=${d.timeFrom}
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('promos.time_from')} .value=${d.timeFrom}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ timeFrom: _str(e) })}></platform-field>
-                        <platform-field type="string" mode="edit" label=${this.t('promos.time_to')} .value=${d.timeTo}
+                        <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('promos.time_to')} .value=${d.timeTo}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ timeTo: _str(e) })}></platform-field>` : nothing}
                 </div>
                 ${d.scheduleOn ? html`
@@ -489,15 +489,15 @@ export class ShopPromosPage extends PlatformPage {
                                 }}>${this.t(`settings.day_${day}`)}</button>`)}
                     </div>` : nothing}
                 <div class="row">
-                    <platform-field type="number" mode="edit" label=${this.t('promos.priority')} .value=${d.priority}
+                    <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('promos.priority')} .value=${d.priority}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ priority: _str(e) })}></platform-field>
-                    <platform-field type="enum" mode="edit" label=${this.t('promos.stacking')} .value=${d.stacking}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('promos.stacking')} .value=${d.stacking}
                         .config=${{ values: [
                             { value: 'all', label: this.t('promos.stacking_all') },
                             { value: 'exclusive', label: this.t('promos.stacking_exclusive') },
                         ] }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ stacking: _str(e) === 'exclusive' ? 'exclusive' : 'all' })}></platform-field>
-                    <platform-switch ?checked=${d.isActive} label=${this.t('promos.active')}
+                    <platform-switch size="sm" ?checked=${d.isActive} label=${this.t('promos.active')}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchDraft({ isActive: Boolean(e.detail.value) })}></platform-switch>
                 </div>
                 <div class="actions">
@@ -524,9 +524,9 @@ export class ShopPromosPage extends PlatformPage {
                     ${p.stacking === 'exclusive' ? html`<span class="badge excl">${this.t('promos.stacking_exclusive')}</span>` : nothing}
                     ${scheduled ? html`<span class="badge">${this.t('promos.scheduled')}</span>` : nothing}
                 </div>
-                <platform-switch ?checked=${p.is_active} ?disabled=${this._updateOp.busy}
+                <platform-switch size="sm" ?checked=${p.is_active} ?disabled=${this._updateOp.busy}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => void this._toggle(p, Boolean(e.detail.value))}></platform-switch>
-                <platform-button size="sm" variant="secondary"
+                <platform-button density="compact" variant="secondary"
                     @click=${() => { this._draft = this._draftFrom(p); }}>${this.t('promos.edit')}</platform-button>
                 <platform-button icon-only density="compact" variant="ghost-danger" ?loading=${this._removeOp.busy}
                     title=${this.t('promos.remove')}
@@ -546,7 +546,7 @@ export class ShopPromosPage extends PlatformPage {
                     section=${this.t('routes.shop_promos')}
                 >
                     ${this._draft === null ? html`
-                        <platform-button slot="actions" size="sm" variant="primary" @click=${() => { this._draft = this._newDraft(); }}>
+                        <platform-button slot="actions" density="compact" variant="primary" @click=${() => { this._draft = this._newDraft(); }}>
                             ${this.t('promos.new')}</platform-button>` : nothing}
                 </shop-page-head>
                 <div class="hint">${this.t('promos.hint')}</div>

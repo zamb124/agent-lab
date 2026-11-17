@@ -192,7 +192,7 @@ export class ShopHomePage extends PlatformPage {
             <div class="wrap">
                 <div class="page-head">
                     <h1>${this.t('home.title')}</h1>
-                    <platform-button size="sm" variant="secondary" ?loading=${this._demosOp.busy} @click=${() => this._seedDemos()}>
+                    <platform-button density="compact" variant="secondary" ?loading=${this._demosOp.busy} @click=${() => this._seedDemos()}>
                         <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('home.demos_add')}
                     </platform-button>
                 </div>
@@ -231,7 +231,7 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`
                                                 <div class="publish-cta">
                                                     <span class="hint">${this.t('home.ready_hint')}</span>
-                                                    <platform-button size="sm" variant="primary" ?loading=${this._publishOp.busy} @click=${() => this._publish(shopId)}>
+                                                    <platform-button density="compact" variant="primary" ?loading=${this._publishOp.busy} @click=${() => this._publish(shopId)}>
                                                         ${this.t('home.publish')}
                                                     </platform-button>
                                                 </div>`
@@ -242,11 +242,11 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`<a class="hint" href="/shop/api/v1/public/s/${encodeURIComponent(String(shop.slug))}" target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
                                             : nothing}
                                         <div class="actions">
-                                            <platform-button class="primary" block size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
+                                            <platform-button class="primary" block density="compact" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
                                                 <platform-icon name="book-open" size="14"></platform-icon> ${this.t('home.open_menu')}
                                             </platform-button>
                                             ${(!shop.description || !shop.cover_file_id)
-                                                ? html`<platform-button size="sm" variant="accent" ?loading=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
+                                                ? html`<platform-button density="compact" variant="accent" ?loading=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
                                                       <platform-icon name="sparkle" size="14"></platform-icon> ${this.t('home.ai_autofill')}
                                                   </platform-button>`
                                                 : nothing}
@@ -272,7 +272,7 @@ export class ShopHomePage extends PlatformPage {
                                 <div class="create-title">${this.t('home.create_title')}</div>
                                 <platform-field
                                     type="string"
-                                    mode="edit"
+                                    mode="edit" pill-density="compact"
                                     label=${this.t('home.field_name')}
                                     .value=${this._newName}
                                     @change=${(event: CustomEvent<{ value?: unknown }>) => {
@@ -282,7 +282,7 @@ export class ShopHomePage extends PlatformPage {
                                 ></platform-field>
                                 <platform-field
                                     type="string"
-                                    mode="edit"
+                                    mode="edit" pill-density="compact"
                                     label=${this.t('home.field_slug')}
                                     hint=${this.t('home.field_slug_hint')}
                                     .value=${this._newSlug}

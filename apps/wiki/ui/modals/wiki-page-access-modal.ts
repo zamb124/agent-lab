@@ -465,7 +465,7 @@ export class WikiPageAccessModal extends PlatformModal {
                           ${this.t('access.inherited')}
                           <platform-button
                               variant="ghost"
-                              size="sm"
+                              density="compact"
                               data-wiki-inherited-open
                               @click=${() => {
                                   void this.close();
@@ -561,7 +561,7 @@ export class WikiPageAccessModal extends PlatformModal {
                     <div class="hint">${this.t('access.link_hidden')}</div>
                     <platform-button
                         variant="ghost"
-                        size="sm"
+                        density="compact"
                         data-wiki-rotate-link
                         @click=${() => this._rotateLink()}
                     >${this.t('access.link_rotate')}</platform-button>
@@ -573,7 +573,7 @@ export class WikiPageAccessModal extends PlatformModal {
                             <platform-button
                                 variant="ghost"
                                 icon-only
-                                size="sm"
+                                density="compact"
                                 data-wiki-copy-link
                                 title=${this.t('access.link_copy')}
                                 aria-label=${this.t('access.link_copy')}
@@ -584,7 +584,7 @@ export class WikiPageAccessModal extends PlatformModal {
                             <platform-button
                                 variant="ghost"
                                 icon-only
-                                size="sm"
+                                density="compact"
                                 data-wiki-open-site
                                 title=${this.t('access.link_open_site')}
                                 aria-label=${this.t('access.link_open_site')}

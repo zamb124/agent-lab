@@ -124,6 +124,13 @@ COMMON_TEST_ENV: dict[str, str] = {
     "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",
     "CALLS__LIVEKIT_API_SECRET": TEST_LIVEKIT_API_SECRET,
+    # Реальный GreenMail MTA (docker-compose): IMAPS-cert — self-signed из образа,
+    # PEM закоммичен в tests/certs/greenmail-test-ca.pem; hostname-check off,
+    # потому что CN серта не содержит localhost (цепочка всё равно верифицируется).
+    "MAIL__TLS__EXTRA_CA_FILE": str(
+        Path(__file__).resolve().parents[2] / "tests/certs/greenmail-test-ca.pem"
+    ),
+    "MAIL__TLS__CHECK_HOSTNAME": "false",
     "S3__ENABLED": "true",
     "S3__ENDPOINT_URL": "http://localhost:19002",
     "S3__BUCKET_NAME": "test-bucket",
@@ -621,6 +628,11 @@ EXTERNAL_READINESS: tuple[ExternalReadiness, ...] = (
     ExternalReadiness(
         name="test-a2a-agent",
         url="http://localhost:18052/health",
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    ExternalReadiness(
+        name="greenmail",
+        url="http://localhost:38080/api/service/readiness",
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
 )

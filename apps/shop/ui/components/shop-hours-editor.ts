@@ -220,6 +220,7 @@ export class ShopHoursEditor extends PlatformElement {
                                     ></platform-field>
                                 </span>`}
                         <platform-switch
+                            size="sm"
                             ?checked=${!day.closed}
                             title=${this.t('settings.day_toggle')}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => this._onToggle(index, e)}

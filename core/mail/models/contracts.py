@@ -399,6 +399,7 @@ class MailSendPayload(StrictBaseModel):
     body_text: str
     body_html: str | None = None
     message_id: str | None = None
+    from_address: str | None = None
     in_reply_to: str | None = None
     references: str | None = None
     attachments: list[MailAttachment] = Field(default_factory=list)

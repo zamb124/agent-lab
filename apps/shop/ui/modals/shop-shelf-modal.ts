@@ -107,8 +107,6 @@ export class ShopShelfModal extends PlatformModal {
             }
             .chip.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
             .sec-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
-            .toggle-row { display: flex; align-items: center; gap: var(--space-2); }
-            .toggle-row span { font-size: var(--text-sm); color: var(--text-primary); }
             .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
             .hint { font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.5; }
         `,
@@ -155,7 +153,7 @@ export class ShopShelfModal extends PlatformModal {
 
     private async _load(): Promise<void> {
         const [products, categories] = await Promise.all([
-            this._productsOp.run({ shop_id: this.shopId, limit: 500 }),
+            this._productsOp.run({ shop_id: this.shopId }),
             this._categoriesOp.run({ shop_id: this.shopId }),
         ]);
         const pItems = (products as { items?: unknown } | null)?.items;
@@ -219,25 +217,25 @@ export class ShopShelfModal extends PlatformModal {
         return html`
             <div class="body">
                 <div class="grid">
-                    <platform-field type="enum" mode="edit" label=${this.t('feed.field_kind')} .value=${this._kind}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('feed.field_kind')} .value=${this._kind}
                         ?disabled=${this._editing}
                         .config=${{ values: KINDS.map((k) => ({ value: k, label: this.t(`feed.kind.${k}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._kind = _str(e) as ShelfKind; }}></platform-field>
-                    <platform-field type="enum" mode="edit" label=${this.t('feed.field_layout')} .value=${this._layout}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('feed.field_layout')} .value=${this._layout}
                         .config=${{ values: LAYOUTS.map((l) => ({ value: l, label: this.t(`feed.layout.${l}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._layout = _str(e) as ShelfLayout; }}></platform-field>
-                    <platform-field type="enum" mode="edit" label=${this.t('feed.field_placement')} .value=${this._placement}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('feed.field_placement')} .value=${this._placement}
                         .config=${{ values: PLACEMENTS.map((p) => ({ value: p, label: this.t(`feed.placement.${p}`) })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._placement = _str(e) as ShelfPlacement; }}></platform-field>
-                    <platform-field type="number" mode="edit" label=${this.t('feed.field_limit')} .value=${this._limit}
+                    <platform-field type="number" mode="edit" pill-density="compact" label=${this.t('feed.field_limit')} .value=${this._limit}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._limit = _str(e); }}></platform-field>
                 </div>
-                <platform-field type="string" mode="edit" label=${this.t('feed.field_title')} .value=${this._title}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_title')} .value=${this._title}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._title = _str(e); }}></platform-field>
-                <platform-field type="string" mode="edit" label=${this.t('feed.field_subtitle')} .value=${this._subtitle}
+                <platform-field type="string" mode="edit" pill-density="compact" label=${this.t('feed.field_subtitle')} .value=${this._subtitle}
                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._subtitle = _str(e); }}></platform-field>
                 ${this._needsCategory ? html`
-                    <platform-field type="enum" mode="edit" label=${this.t('feed.field_category')} .value=${this._categoryId}
+                    <platform-field type="enum" mode="edit" pill-density="compact" label=${this.t('feed.field_category')} .value=${this._categoryId}
                         .config=${{ values: this._categories.map((c) => ({ value: c.shop_category_id, label: c.name })) }}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._categoryId = _str(e); }}></platform-field>
                 ` : nothing}
@@ -254,11 +252,8 @@ export class ShopShelfModal extends PlatformModal {
                     <div class="hint">${this.t(`feed.hint_${this._kind}`)}</div>
                 ` : nothing}
                 ${this._editing ? html`
-                    <div class="toggle-row">
-                        <platform-switch ?checked=${this._isActive}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isActive = Boolean(e.detail.value); }}></platform-switch>
-                        <span>${this.t('feed.field_active')}</span>
-                    </div>
+                    <platform-switch size="sm" label=${this.t('feed.field_active')} ?checked=${this._isActive}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => { this._isActive = Boolean(e.detail.value); }}></platform-switch>
                 ` : nothing}
                 <div class="actions">
                     <platform-button variant="secondary" @click=${() => this.close()}>${this.t('menu.cancel')}</platform-button>

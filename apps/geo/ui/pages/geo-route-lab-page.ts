@@ -474,14 +474,14 @@ export class GeoRouteLabPage extends PlatformPage {
                 ${this._tool !== 'route' && this._points.length > 0
                     ? html`
                         <div class="map-actions">
-                            <platform-button size="sm" variant="ghost" @click=${this._resetPoints}>
+                            <platform-button density="compact" variant="ghost" @click=${this._resetPoints}>
                                 ${this.t('route_lab.reset')}
                             </platform-button>
                             <platform-button
-                                size="sm"
+                                density="compact"
                                 variant="secondary"
                                 ?disabled=${!canCompute}
-                                ?busy=${busy}
+                                ?loading=${busy}
                                 data-action="compute"
                                 @click=${() => (this._tool === 'matrix' ? this._computeMatrix() : this._computeOrder())}
                             >

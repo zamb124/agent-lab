@@ -584,13 +584,13 @@ export class WikiPagePanel extends PlatformElement {
             <div class="revision-actions">
                 <platform-button
                     variant="primary"
-                    size="sm"
+                    density="compact"
                     data-wiki-revision-restore
                     @click=${() => this._restoreRevision()}
                 >${this.t('history.restore')}</platform-button>
                 <platform-button
                     variant="ghost"
-                    size="sm"
+                    density="compact"
                     data-wiki-revision-compare
                     @click=${() => this.navigate('wiki_page_history', { pageId: this.pageId })}
                 >${this.t('history.compare')}</platform-button>

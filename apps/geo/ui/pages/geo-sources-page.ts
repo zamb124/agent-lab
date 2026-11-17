@@ -183,11 +183,11 @@ export class GeoSourcesPage extends PlatformPage {
                 <div class="card-head">
                     <div class="card-title">${this.t('sources.import_title')}</div>
                     <div class="card-actions">
-                        <platform-button size="sm" variant="ghost" ?busy=${this._runCtl.busy} @click=${() => this._runImport('tiles')}>
+                        <platform-button density="compact" variant="ghost" ?loading=${this._runCtl.busy} @click=${() => this._runImport('tiles')}>
                             <platform-icon name="download" size="14"></platform-icon>
                             ${this.t('sources.tiles_run')}
                         </platform-button>
-                        <platform-button size="sm" variant="secondary" ?busy=${this._runCtl.busy} @click=${() => this._runImport('osm')}>
+                        <platform-button density="compact" variant="secondary" ?loading=${this._runCtl.busy} @click=${() => this._runImport('osm')}>
                             <platform-icon name="refresh" size="14"></platform-icon>
                             ${this.t('sources.import_run')}
                         </platform-button>
@@ -236,7 +236,7 @@ export class GeoSourcesPage extends PlatformPage {
                                 <td><span class="pill ${s.enabled ? '' : 'off'}">${s.enabled ? this.t('sources.on') : this.t('sources.off')}</span></td>
                                 <td>
                                     ${s.enabled && s.kind !== 'manual'
-                                        ? html`<platform-button size="sm" variant="ghost" ?busy=${this._runCtl.busy} @click=${() => this._runImport(s.name)}>
+                                        ? html`<platform-button density="compact" variant="ghost" ?loading=${this._runCtl.busy} @click=${() => this._runImport(s.name)}>
                                               <platform-icon name="play" size="14"></platform-icon>
                                               ${this.t('sources.run_source')}
                                           </platform-button>`
@@ -309,7 +309,7 @@ export class GeoSourcesPage extends PlatformPage {
                         ${(res?.pending ?? 0) > 0
                             ? html`<span class="pill warn">${this.t('sources.enrich_pending', { count: res?.pending ?? 0 })}</span>`
                             : ''}
-                        <platform-button size="sm" variant="ghost" ?busy=${this._runCtl.busy} @click=${() => this._runImport('enrich')}>
+                        <platform-button density="compact" variant="ghost" ?loading=${this._runCtl.busy} @click=${() => this._runImport('enrich')}>
                             <platform-icon name="play" size="14"></platform-icon>
                             ${this.t('sources.enrich_run')}
                         </platform-button>
@@ -386,7 +386,7 @@ export class GeoSourcesPage extends PlatformPage {
             <div class="card">
                 <div class="card-head">
                     <div class="card-title">${this.t('sources.regions_title')}</div>
-                    <platform-button size="sm" variant="secondary" @click=${() => this._openRegionEditor(null)}>
+                    <platform-button density="compact" variant="secondary" @click=${() => this._openRegionEditor(null)}>
                         <platform-icon name="plus" size="14"></platform-icon>
                         ${this.t('sources.add_region')}
                     </platform-button>

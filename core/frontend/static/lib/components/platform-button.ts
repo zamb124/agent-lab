@@ -3,7 +3,7 @@
  * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-spinner.js';
 
@@ -64,14 +64,14 @@ export class PlatformButton extends PlatformElement {
             text-overflow: ellipsis;
         }
 
-        :host([density="compact"]) button {
-            padding: var(--btn-padding);
-            font-size: var(--btn-font-size);
+        :host([density="compact"]) {
+            --btn-padding: 6px 16px;
+            --btn-font-size: var(--text-sm);
         }
 
-        :host([density="dense"]) button {
-            padding: var(--btn-padding);
-            font-size: var(--btn-font-size);
+        :host([density="dense"]) {
+            --btn-padding: 4px 12px;
+            --btn-font-size: var(--text-xs);
         }
 
         :host([icon-only]) button {
@@ -244,6 +244,36 @@ export class PlatformButton extends PlatformElement {
         this.secondary = false;
         this.danger = false;
         this.ghost = false;
+    }
+
+    static override get observedAttributes(): string[] {
+        return [...super.observedAttributes, 'size', 'busy'];
+    }
+
+    override attributeChangedCallback(name: string, old: string | null, value: string | null): void {
+        if (value !== null && name === 'size') {
+            throw new Error(
+                'platform-button: "size" attribute is not supported — use density="compact" or density="dense"',
+            );
+        }
+        if (value !== null && name === 'busy') {
+            throw new Error(
+                'platform-button: "busy" attribute is not supported — use the "loading" property',
+            );
+        }
+        super.attributeChangedCallback(name, old, value);
+    }
+
+    override willUpdate(changedProps: PropertyValues<this>): void {
+        super.willUpdate(changedProps);
+        if (changedProps.has('density')) {
+            const v = this.density;
+            if (v !== 'default' && v !== 'compact' && v !== 'dense') {
+                throw new Error(
+                    `platform-button: density must be "default", "compact" or "dense", got "${v}"`,
+                );
+            }
+        }
     }
 
     _isGhostVariant(): boolean {

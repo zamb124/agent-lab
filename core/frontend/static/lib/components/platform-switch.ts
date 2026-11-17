@@ -1,5 +1,5 @@
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class PlatformSwitch extends PlatformElement {
@@ -103,6 +103,18 @@ export class PlatformSwitch extends PlatformElement {
         this.disabled = false;
         this.label = '';
         this.size = 'md';
+    }
+
+    override willUpdate(changedProps: PropertyValues<this>): void {
+        super.willUpdate(changedProps);
+        if (changedProps.has('size')) {
+            const v = this.size;
+            if (v !== 'md' && v !== 'sm') {
+                throw new Error(
+                    `platform-switch: size must be "md" or "sm", got "${v}"`,
+                );
+            }
+        }
     }
 
     _toggle(): void {
