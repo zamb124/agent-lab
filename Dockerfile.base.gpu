@@ -64,6 +64,8 @@ RUN mkdir -p /etc/apt/keyrings && \
     rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock README.md ./
+# sdk — workspace-мембер (platform-sdk): uv export резолвит его по пути.
+COPY sdk/ ./sdk/
 
 # GIL venv для litserve и других ML-сервисов.
 ENV VIRTUAL_ENV=/opt/venv

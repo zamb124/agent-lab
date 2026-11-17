@@ -113,6 +113,9 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
 
 # Копируем только файлы зависимостей
 COPY pyproject.toml uv.lock README.md ./
+# sdk — workspace-мембер (platform-sdk): uv export резолвит его по пути,
+# без исходника export падает "Distribution not found at: file:///app/sdk".
+COPY sdk/ ./sdk/
 
 # Базовый venv для уровня base-image (cp314t free-threaded). Наследуется в child images.
 ENV VIRTUAL_ENV=/opt/venv
